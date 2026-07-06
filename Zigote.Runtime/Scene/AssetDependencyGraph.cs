@@ -1,0 +1,85 @@
+using Zigote.Core.Assets;
+using Zigote.Vfx;
+
+namespace Zigote.Runtime.Scene;
+
+/// <summary>One scene reference to an asset file: which node needs it and in what role.</summary>
+public sealed record AssetDependency(string Path, SceneNode? Node, string Role);
+
+/// <summary>
+///     The set of asset files a scene actually reaches, with reverse lookup (path → dependents).
+///     Game export stages only these files instead of the whole asset tree; the editor can use
+///     <see cref="DependentsOf" /> for safe-delete warnings and batch updates.
+/// </summary>
+public sealed class AssetDependencyGraph
+{
+    // Paths are kept exactly as the scene spells them (ordinal): the runtime opens files by that
+    // string, so staging must preserve the spelling even on case-insensitive source filesystems.
+    private readonly Dictionary<string, List<AssetDependency>>
+        _byPath = new(StringComparer.Ordinal);
+
+    public IReadOnlyCollection<string> Files => _byPath.Keys;
+
+    public IReadOnlyList<AssetDependency> DependentsOf(string path)
+    {
+        return _byPath.TryGetValue(path, out var list) ? list : [];
+    }
+
+    /// <summary>Reverse lookup by stable asset id, resolved through the registry (rename-proof).</summary>
+    public IReadOnlyList<AssetDependency> DependentsOf(AssetId id, AssetRegistry registry)
+    {
+        return registry.Resolve(id) is { } path ? DependentsOf(path) : [];
+    }
+
+    public static AssetDependencyGraph Build(SceneGraph scene)
+    {
+        var graph = new AssetDependencyGraph();
+        graph.Add(scene.EnvironmentPath, null, "environment");
+        Walk(graph, scene.Root);
+        return graph;
+    }
+
+    /// <summary>
+    ///     Add a detached subtree's references — e.g. a <c>.prefab</c> template, so export also stages
+    ///     the assets of prefabs that are only spawned at runtime via the World scripting API.
+    /// </summary>
+    public void AddTree(SceneNode root)
+    {
+        Walk(this, root);
+    }
+
+    private static void Walk(AssetDependencyGraph graph, SceneNode node)
+    {
+        graph.Add(node.MeshPath, node, "mesh");
+        graph.Add(node.TexturePath, node, "texture"); // Mesh material map AND Sprite-node texture
+        graph.Add(node.MetallicRoughnessTexturePath, node, "texture-mr");
+        graph.Add(node.NormalTexturePath, node, "texture-normal");
+        graph.Add(node.AudioClipPath, node, "audio");
+        graph.Add(node.SpriteShaderPath, node, "sprite-shader"); // custom 2D material WGSL
+
+        // Baked VFX emitters may reference a sprite texture inside their emitter-asset JSON.
+        if (!string.IsNullOrEmpty(node.VfxBakedJson))
+            try
+            {
+                graph.Add(
+                    VfxAssetJson.Deserialize(node.VfxBakedJson).TexturePath,
+                    node,
+                    "vfx-texture"
+                );
+            }
+            catch (Exception)
+            {
+                // A corrupt baked blob fails loudly at runtime; dependency collection stays best-effort.
+            }
+
+        foreach (var child in node.Children) Walk(graph, child);
+    }
+
+    private void Add(string? path, SceneNode? node, string role)
+    {
+        // '#'-prefixed paths are built-in primitives (#cube/#sphere/…), not files.
+        if (string.IsNullOrWhiteSpace(path) || path.StartsWith('#')) return;
+        if (!_byPath.TryGetValue(path, out var list)) _byPath[path] = list = [];
+        list.Add(new AssetDependency(path, node, role));
+    }
+}

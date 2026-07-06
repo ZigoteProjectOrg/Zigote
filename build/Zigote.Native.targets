@@ -1,0 +1,140 @@
+<Project>
+  <!--
+    Centralized build of the native Zig engine (libzigote) + per-RID copy into the output.
+    Imported by Zigote.Core (the single project that owns the native dependency). Replaces the
+    inline target that used to live in Zigote.Core.csproj.
+
+    Responsibilities:
+      * Build libzigote via `zig build shared-lib`, optimized, only when Zig sources change.
+      * Cross-compile to the publish RID when it differs from the host (mac<->mac and ->linux work
+        from any host; win-x64 needs a Windows host because of the MSVC ABI + wgpu .lib).
+      * Copy exactly one native lib (the target platform's) into the output.
+      * Force a rebuild when the build flags (optimize / 3D / target) change — the up-to-date check
+        only watches sources, so a flag flip would otherwise be silently ignored.
+  -->
+
+  <PropertyGroup>
+    <ZigEngineDir>$(MSBuildThisFileDirectory)..\Zigote.Engine</ZigEngineDir>
+    <ZigOutLib>$(ZigEngineDir)\zig-out\lib</ZigOutLib>
+    <ZigOutBin>$(ZigEngineDir)\zig-out\bin</ZigOutBin>
+
+    <!-- Native optimization level. ReleaseFast for Release C# builds — the forward+ renderer is a
+         tight per-pixel/per-draw path, so optimize for speed, not size (ReleaseSmall is ~-Os and
+         leaves real performance on the table). ReleaseSafe otherwise keeps bounds/overflow checks
+         for day-to-day iteration; set ZigOptimize=ReleaseFast for profiling-representative runs, or
+         ZigOptimize=Debug for fast incremental native builds while editing the Zig engine. -->
+    <ZigOptimize Condition="'$(ZigOptimize)' == '' And '$(Configuration)' == 'Release'">ReleaseFast</ZigOptimize>
+    <ZigOptimize Condition="'$(ZigOptimize)' == ''">ReleaseSafe</ZigOptimize>
+    <!-- ReleaseFast strips debug info by default (build.zig gates it on the optimize mode; ELF would
+         otherwise embed ~90 MB of DWARF into libzigote.so). Set ZigStrip=false for a symbolized
+         ReleaseFast build (profiling); Debug/ReleaseSafe keep symbols regardless. -->
+    <ZigStripArg Condition="'$(ZigStrip)' != ''">-Dstrip=$(ZigStrip)</ZigStripArg>
+    <!-- Enable3D=false builds the lean 2D-only native lib (drops the Assimp model importer). -->
+    <Enable3D Condition="'$(Enable3D)' == ''">true</Enable3D>
+    <!-- EnablePhysics3D=false drops the Jolt 3D-physics FFI; EnableEcs=false drops the flecs ECS FFI.
+         Both default true (full engine). Independent of Enable3D — a pure-2D/UI app (2D physics is
+         pure-C# Zigote.Physics2D; a widget app never touches World/ECS) can drop them for ~several MB.
+         Game exports must leave these on (games need Jolt + the flecs-backed World at runtime). -->
+    <EnablePhysics3D Condition="'$(EnablePhysics3D)' == ''">true</EnablePhysics3D>
+    <EnableEcs Condition="'$(EnableEcs)' == ''">true</EnableEcs>
+  </PropertyGroup>
+
+  <!-- Resolve the target OS/arch from the publish RID (when set) or the host OS (plain build),
+       then the zig target triple + native lib filename. -->
+  <PropertyGroup>
+    <!-- Prefer an explicit ZigTargetRid (publish.sh passes it as a global property so it reliably
+         reaches this referenced project) over RuntimeIdentifier, which doesn't always propagate from
+         the app's `dotnet publish -r` down to a ProjectReference's evaluation. -->
+    <_Rid Condition="'$(ZigTargetRid)' != ''">$(ZigTargetRid)</_Rid>
+    <_Rid Condition="'$(_Rid)' == ''">$(RuntimeIdentifier)</_Rid>
+
+    <_RidOS Condition="$(_Rid.StartsWith('osx'))">macos</_RidOS>
+    <_RidOS Condition="$(_Rid.StartsWith('win'))">windows</_RidOS>
+    <_RidOS Condition="$(_Rid.StartsWith('linux'))">linux</_RidOS>
+    <_RidArch Condition="$(_Rid.EndsWith('-arm64'))">aarch64</_RidArch>
+    <_RidArch Condition="$(_Rid.EndsWith('-x64'))">x86_64</_RidArch>
+
+    <_HostOS Condition="$([MSBuild]::IsOSPlatform('OSX'))">macos</_HostOS>
+    <_HostOS Condition="$([MSBuild]::IsOSPlatform('Windows'))">windows</_HostOS>
+    <_HostOS Condition="$([MSBuild]::IsOSPlatform('Linux'))">linux</_HostOS>
+
+    <ZigTargetOS Condition="'$(_RidOS)' != ''">$(_RidOS)</ZigTargetOS>
+    <ZigTargetOS Condition="'$(ZigTargetOS)' == ''">$(_HostOS)</ZigTargetOS>
+
+    <ZigNativeLib Condition="'$(ZigTargetOS)' == 'macos'">libzigote.dylib</ZigNativeLib>
+    <ZigNativeLib Condition="'$(ZigTargetOS)' == 'linux'">libzigote.so</ZigNativeLib>
+    <ZigNativeLib Condition="'$(ZigTargetOS)' == 'windows'">zigote.dll</ZigNativeLib>
+
+    <!-- Zig installs Windows DLLs into zig-out/bin (import lib + others in zig-out/lib); .so/.dylib
+         go to zig-out/lib. ZigOutDir is where the loadable lib for this target lands. -->
+    <ZigOutDir Condition="'$(ZigTargetOS)' == 'windows'">$(ZigOutBin)</ZigOutDir>
+    <ZigOutDir Condition="'$(ZigOutDir)' == ''">$(ZigOutLib)</ZigOutDir>
+
+    <!-- zig target triple, used only when cross-compiling (RID OS present and != host OS). Windows
+         cross uses the GNU ABI: MSVC needs the MSVC SDK (unavailable when cross-compiling from
+         macOS/Linux). A native Windows host builds without -Dtarget (ZigCross stays false). -->
+    <_ZigTriple Condition="'$(_RidOS)' == 'macos' And '$(_RidArch)' != ''">$(_RidArch)-macos</_ZigTriple>
+    <_ZigTriple Condition="'$(_RidOS)' == 'linux' And '$(_RidArch)' != ''">$(_RidArch)-linux-gnu</_ZigTriple>
+    <_ZigTriple Condition="'$(_RidOS)' == 'windows' And '$(_RidArch)' != ''">$(_RidArch)-windows-gnu</_ZigTriple>
+    <ZigCross Condition="'$(_RidOS)' != '' And '$(_RidOS)' != '$(_HostOS)'">true</ZigCross>
+    <ZigTargetArg Condition="'$(ZigCross)' == 'true'">-Dtarget=$(_ZigTriple)</ZigTargetArg>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Watch the engine's own Zig sources + build files for the up-to-date check. Exclude the
+         dependency/build caches (zig-pkg/zig-cache/zig-out) so the check stays fast. -->
+    <ZigSourceFiles Include="$(ZigEngineDir)\src\**\*.zig" />
+    <!-- WGSL shaders are @embedFile'd into the library, so editing one must retrigger the native
+         build + output copy. Without this an edited shader silently keeps rendering the old code
+         (the incremental up-to-date check only saw .zig sources). -->
+    <ZigSourceFiles Include="$(ZigEngineDir)\src\**\*.wgsl" />
+    <ZigSourceFiles Include="$(ZigEngineDir)\libraries\**\*.zig" />
+    <ZigSourceFiles Include="$(ZigEngineDir)\build.zig" />
+    <ZigSourceFiles Include="$(ZigEngineDir)\build.zig.zon" />
+    <UpToDateCheckInput Include="@(ZigSourceFiles)" />
+  </ItemGroup>
+
+  <!-- Force a native rebuild when the build flags change (the up-to-date check only watches sources).
+       We stamp the resolved flags next to zig-out and delete the outputs when they differ. -->
+  <Target Name="ZigFlagsGuard" BeforeTargets="BuildZigEngine">
+    <PropertyGroup>
+      <_ZigFlags>$(ZigOptimize)|$(Enable3D)|$(EnablePhysics3D)|$(EnableEcs)|$(_ZigTriple)|$(ZigCross)|$(ZigStrip)</_ZigFlags>
+      <_ZigFlagsFile>$(ZigEngineDir)\zig-out\.zig-build-flags</_ZigFlagsFile>
+      <_PrevZigFlags Condition="Exists('$(_ZigFlagsFile)')">$([System.IO.File]::ReadAllText('$(_ZigFlagsFile)').Trim())</_PrevZigFlags>
+    </PropertyGroup>
+    <!-- Delete ALL stale native libs on a flag flip, including the versioned variants build.zig emits
+         (libzigote.0.dylib / libzigote.0.1.0.dylib, libzigote.so.0.1.0). Deleting only the top-level
+         symlink left the real versioned file behind, which a later up-to-date check could treat as
+         current — so a lean (e.g. -Denable3d=false) lib could survive a flip back to the full editor set. -->
+    <ItemGroup Condition="'$(_PrevZigFlags)' != '$(_ZigFlags)'">
+      <_StaleNativeLib Include="$(ZigOutLib)\libzigote*.dylib;$(ZigOutLib)\libzigote*.so*;$(ZigOutBin)\zigote*.dll" />
+    </ItemGroup>
+    <Delete Condition="'$(_PrevZigFlags)' != '$(_ZigFlags)'" Files="@(_StaleNativeLib)" />
+    <MakeDir Directories="$(ZigEngineDir)\zig-out" />
+    <WriteLinesToFile Condition="'$(_PrevZigFlags)' != '$(_ZigFlags)'"
+                      File="$(_ZigFlagsFile)" Lines="$(_ZigFlags)" Overwrite="true" />
+  </Target>
+
+  <Target Name="BuildZigEngine" BeforeTargets="BeforeBuild"
+          Inputs="@(ZigSourceFiles)" Outputs="$(ZigOutDir)\$(ZigNativeLib)">
+    <Message Importance="high" Text="Zigote native: zig build shared-lib -Doptimize=$(ZigOptimize) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigStripArg)" />
+    <Exec Command="zig build shared-lib -Doptimize=$(ZigOptimize) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigStripArg)"
+          WorkingDirectory="$(ZigEngineDir)" />
+  </Target>
+
+  <!-- Copy the target platform's native lib (and, on Windows, the wgpu_native.dll it links against)
+       into the output / publish dir. .NET resolves @(Content) transitively into referencing apps. -->
+  <ItemGroup>
+    <!-- No Exists() guard: these are produced by BuildZigEngine (which runs BeforeBuild), so the file
+         is present by the time MSBuild copies content. An Exists() check is evaluated at project load
+         — before the build — and would drop the lib on a fresh/target-switched build. -->
+    <Content Include="$(ZigOutDir)\$(ZigNativeLib)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>$(ZigNativeLib)</Link>
+    </Content>
+    <Content Include="$(ZigOutBin)\wgpu_native.dll" Condition="'$(ZigTargetOS)' == 'windows'">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>wgpu_native.dll</Link>
+    </Content>
+  </ItemGroup>
+</Project>

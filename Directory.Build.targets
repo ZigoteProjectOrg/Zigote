@@ -1,0 +1,11 @@
+<Project>
+    <!--
+      Repo-wide import so the publish-time font subsetting in build/Zigote.Fonts.targets applies to EVERY
+      app that bundles the fonts (editor, player, galleries, and any future app) — not just the handful
+      that used to import it by hand. StripBundledFonts runs AfterTargets="Publish" and is a clean no-op
+      for projects with no Fonts/ output, so importing it everywhere is safe. Dev `dotnet build` is
+      unaffected (publish-only). The game exporter's generated Game.csproj stages outside this tree, so it
+      imports the same file explicitly.
+    -->
+    <Import Project="$(MSBuildThisFileDirectory)build/Zigote.Fonts.targets"/>
+</Project>

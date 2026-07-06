@@ -1,0 +1,59 @@
+<Project>
+  <!--
+    Subset the bundled text fonts to the glyphs the UI actually uses, shrinking release artifacts
+    (Iosevka's bundled 6-face .ttc drops from ~66 MB to a couple hundred KB). Runs after Publish only,
+    so day-to-day dev builds stay fast and full-coverage fonts are kept for the editor.
+
+    Applied repo-wide via Directory.Build.targets, so EVERY app that bundles the fonts (editor, player,
+    galleries, and any future app) gets it — not just the ones that imported it by hand. It is a clean
+    no-op for projects with no Fonts/ output. The game exporter's generated Game.csproj stages under the
+    temp dir (outside the tree) so it imports this file explicitly.
+
+    Icon/emoji fonts are intentionally NOT subset (their glyphs live in PUA / emoji ranges we don't
+    enumerate) — files matching *Icon*/*Emoji* are excluded. Override FontUnicodes / FontSubsetTool per
+    project if needed; pass -p:EnableFontStripping=false to ship fonts unsubset on purpose.
+  -->
+  <PropertyGroup>
+    <!-- Unicode ranges to keep in text fonts: Basic Latin + Latin-1 + Latin Extended-A, punctuation,
+         currency, arrows, math + box-drawing + geometric shapes (code editor / Iosevka), and Cyrillic
+         (ru/de/en localization). -->
+    <FontUnicodes Condition="'$(FontUnicodes)' == ''">U+0000-00FF,U+0100-017F,U+2000-206F,U+20A0-20BF,U+2190-21FF,U+2200-22FF,U+2500-257F,U+25A0-25FF,U+0400-04FF</FontUnicodes>
+    <!-- harfbuzz's hb-subset (brew install harfbuzz). Set to e.g. 'pyftsubset' to use fonttools. -->
+    <FontSubsetTool Condition="'$(FontSubsetTool)' == ''">hb-subset</FontSubsetTool>
+    <EnableFontStripping Condition="'$(EnableFontStripping)' == ''">true</EnableFontStripping>
+  </PropertyGroup>
+
+  <Target Name="StripBundledFonts" AfterTargets="Publish" Condition="'$(EnableFontStripping)' == 'true'">
+    <!-- Separator-safe base dir: NormalizeDirectory guarantees a trailing slash regardless of how
+         PublishDir was set (a slash-less '-o' path would otherwise turn 'PublishDir'+'Fonts' into a
+         bogus path, so the glob matched nothing and the fonts silently shipped unsubset). -->
+    <PropertyGroup>
+      <_FontsDir>$([MSBuild]::NormalizeDirectory('$(PublishDir)', 'Fonts'))</_FontsDir>
+    </PropertyGroup>
+    <ItemGroup>
+      <_TextFonts Include="$(_FontsDir)**\*.ttf;$(_FontsDir)**\*.ttc"
+                  Exclude="$(_FontsDir)**\*Icon*;$(_FontsDir)**\*Emoji*;$(_FontsDir)**\*emoji*" />
+    </ItemGroup>
+
+    <!-- Nothing to strip (fontless project, or one that ships pre-subset fonts) — clean no-op. -->
+    <Message Condition="'@(_TextFonts)' == ''" Importance="low"
+             Text="Font stripping: no bundled text fonts under $(_FontsDir) — skipping." />
+
+    <!-- Detect the subsetter only when there is actually something to subset. -->
+    <Exec Condition="'@(_TextFonts)' != ''" Command="$(FontSubsetTool) --version" ContinueOnError="true"
+          StandardOutputImportance="low" StandardErrorImportance="low">
+      <Output TaskParameter="ExitCode" PropertyName="_FontToolExit" />
+    </Exec>
+
+    <!-- Fail the publish loudly rather than silently shipping full-coverage fonts. -->
+    <Error Condition="'@(_TextFonts)' != '' and '$(_FontToolExit)' != '0'"
+           Text="Font stripping failed: subsetter '$(FontSubsetTool)' not found, so the bundled text fonts (Iosevka alone is ~66 MB) would ship unsubset. Install harfbuzz (e.g. 'brew install harfbuzz'), set -p:FontSubsetTool=pyftsubset, or pass -p:EnableFontStripping=false to ship them unsubset on purpose." />
+
+    <!-- hb-subset rewrites each font in place with only the requested unicodes. No ContinueOnError:
+         a genuine subset failure should fail the publish, not silently leave a full font behind. -->
+    <Exec Condition="'@(_TextFonts)' != '' and '$(_FontToolExit)' == '0'"
+          Command="$(FontSubsetTool) --unicodes=$(FontUnicodes) &quot;%(_TextFonts.FullPath)&quot; --output-file=&quot;%(_TextFonts.FullPath)&quot;" />
+    <Message Condition="'@(_TextFonts)' != '' and '$(_FontToolExit)' == '0'" Importance="high"
+             Text="Font stripping: subset %(_TextFonts.Filename)%(_TextFonts.Extension)" />
+  </Target>
+</Project>

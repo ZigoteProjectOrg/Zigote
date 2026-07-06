@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <RootNamespace>Zigote.Modules.UI.CodeEditor</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Include="Highlighting.fs"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="FParsec" Version="2.0.0-beta2"/>
+        <PackageReference Update="FSharp.Core" Version="11.0.101-preview5.26302.115"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
+    </ItemGroup>
+
+</Project>

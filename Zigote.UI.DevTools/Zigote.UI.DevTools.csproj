@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>Zigote.UI.DevTools</RootNamespace>
+        <AssemblyName>Zigote.UI.DevTools</AssemblyName>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Zigote.UI.Charts\Zigote.UI.Charts.csproj"/>
+    </ItemGroup>
+</Project>

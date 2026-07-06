@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>Zigote.Graphs.Vfx</RootNamespace>
+        <AssemblyName>Zigote.Graphs.Vfx</AssemblyName>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Zigote.Core\Zigote.Core.csproj"/>
+        <ProjectReference Include="..\Zigote.Vfx\Zigote.Vfx.csproj"/>
+        <ProjectReference Include="..\Zigote.Graphs.Core\Zigote.Graphs.Core.csproj"/>
+        <ProjectReference Include="..\Zigote.Graphs.Registry\Zigote.Graphs.Registry.csproj"/>
+    </ItemGroup>
+</Project>

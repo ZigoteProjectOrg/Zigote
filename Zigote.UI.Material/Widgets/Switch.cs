@@ -1,0 +1,236 @@
+using Zigote.Core.Animation;
+using Zigote.Core.Events;
+using Zigote.UI.Semantics;
+using Zigote.UI.Host;
+
+namespace Zigote.UI.Material;
+
+/// <summary>
+///     A flat, macOS-style toggle switch. Capsule track tinted by the accent when on, a neutral fill
+///     when off, with a white knob that animates between ends via a self-owned AnimationController.
+/// </summary>
+public class Switch : RenderWidget, ITickerProvider
+{
+    private readonly AnimationController _anim;
+    private bool _hovered;
+    private bool _pressed;
+    private Size _size;
+    private ThemeData _theme = ThemeData.Dark;
+    private Ticker? _ticker;
+    private bool _value;
+    private float _trackW = ControlMetrics.SwitchWidth;
+    private float _trackH = ControlMetrics.SwitchHeight;
+
+    public Switch(bool value, Action<bool>? onChanged = null)
+    {
+        _value = value;
+        OnChanged = onChanged;
+        _anim = new AnimationController(0.15f, this) { Curve = Curves.EaseOut };
+        _anim.OnTick += MarkNeedsPaint;
+        // Jump to initial position without animating.
+        if (value) _anim.Complete();
+        else _anim.Dismiss();
+    }
+
+    public bool Value
+    {
+        get => _value;
+        set
+        {
+            if (_value == value) return;
+            _value = value;
+            // Snap the knob to match — an external/controlled set is a config update, not a user
+            // toggle. (Toggle() sets the field directly and animates, so a controlled re-render that
+            // echoes the new value hits the early-return above and doesn't cut its animation short.)
+            if (value) _anim.Complete();
+            else _anim.Dismiss();
+            MarkNeedsPaint();
+        }
+    }
+
+    public Action<bool>? OnChanged { get; set; }
+    public bool Enabled { get; set; } = true;
+
+    public float TrackW
+    {
+        get => _trackW;
+        set
+        {
+            if (value == _trackW) return;
+            _trackW = value;
+            MarkNeedsLayout();
+        }
+    }
+
+    public float TrackH
+    {
+        get => _trackH;
+        set
+        {
+            if (value == _trackH) return;
+            _trackH = value;
+            MarkNeedsLayout();
+        }
+    }
+
+    public override bool Focusable => true;
+
+    /// <summary>Optional accessible name (e.g. the setting this switch toggles).</summary>
+    public string? SemanticsLabel { get; set; }
+
+    public Ticker CreateTicker(Action<float> onTick)
+    {
+        _ticker?.Dispose();
+        _ticker = new Ticker(onTick);
+        return _ticker;
+    }
+
+    public override void DescribeSemantics(SemanticsConfiguration config)
+    {
+        config.Role = SemanticsRole.Switch;
+        config.Label = SemanticsLabel;
+        config.Actions = SemanticsAction.Tap | SemanticsAction.Focus;
+        config.AddFlag(SemanticsFlags.Checkable)
+            .AddFlag(SemanticsFlags.Checked, Value)
+            .AddFlag(SemanticsFlags.Focusable, Enabled)
+            .AddFlag(SemanticsFlags.Focused, Focused)
+            .AddFlag(SemanticsFlags.Disabled, !Enabled);
+    }
+
+    public override void Attach(App owner, Widget? parent)
+    {
+        base.Attach(owner, parent);
+        // Detach disposed the ticker; rebind so the knob still animates after a detach→re-attach cycle
+        // (overlay push/pop, Root swap, keyed list remove/re-add).
+        _anim.AttachTicker(this);
+    }
+
+    public override void Detach()
+    {
+        base.Detach();
+        _ticker?.Dispose();
+        _ticker = null;
+    }
+
+    public override void UpdateFrom(Widget newWidget)
+    {
+        if (newWidget is Switch s)
+        {
+            Value = s.Value; // the setter snaps the knob if the value changed (config update)
+            OnChanged = s.OnChanged;
+            Enabled = s.Enabled;
+        }
+    }
+
+    public override int DebugStateHash()
+    {
+        return HashCode.Combine(
+            Value,
+            _anim.Progress.GetHashCode(),
+            _hovered,
+            _pressed,
+            Focused
+        );
+    }
+
+    public override Size Measure(Constraints c)
+    {
+        _theme = ThemeProvider.Of(BuildContext.Current);
+        _size = c.Constrain(new Size(TrackW, TrackH));
+        return _size;
+    }
+
+    public override void Layout(Offset origin)
+    {
+        Bounds = new Rect(
+            origin.X,
+            origin.Y,
+            _size.Width,
+            _size.Height
+        );
+    }
+
+    public override void Paint(PaintList paint)
+    {
+        var r = TrackH / 2f;
+
+        // Capsule track: accent when on, neutral fill when off.
+        var track = Value ? _theme.Primary : _theme.Fill1;
+        if (Enabled) track = StateStyle.Fill(track, _hovered, _pressed);
+        else track = StateStyle.Disabled(track);
+        paint.AddRect(Bounds, track, Radii.Capsule);
+
+        // White knob, inset from the track edges, slides across the travel distance.
+        var inset = Spacing.Xxs;
+        var thumbR = r - inset;
+        var travel = TrackW - TrackH;
+        var thumbCx = Bounds.X + r + travel * _anim.Value;
+        var thumbCy = Bounds.Y + r;
+        var knob = Enabled ? new Color(1f, 1f, 1f) : StateStyle.Disabled(new Color(1f, 1f, 1f));
+        var thumbRect = new Rect(
+            thumbCx - thumbR,
+            thumbCy - thumbR,
+            thumbR * 2f,
+            thumbR * 2f
+        );
+        paint.AddElevation(thumbRect, Radii.Capsule, Elevation.Z1);
+        paint.AddRect(thumbRect, knob, Radii.Capsule);
+
+        if (Focused && Enabled)
+            paint.AddFocusRing(Bounds, Radii.Capsule, _theme);
+    }
+
+    private void Toggle()
+    {
+        if (!Enabled) return;
+        // Set the field directly (not via Value, which would snap) and animate to the new position.
+        _value = !_value;
+        if (_value) _anim.Forward();
+        else _anim.Reverse();
+        MarkNeedsPaint();
+        OnChanged?.Invoke(_value);
+    }
+
+    public override void OnPointerEnter()
+    {
+        if (_hovered) return;
+        _hovered = true;
+        MarkNeedsPaint();
+    }
+
+    public override void OnPointerExit()
+    {
+        if (!_hovered && !_pressed) return;
+        _hovered = false;
+        _pressed = false;
+        MarkNeedsPaint();
+    }
+
+    public override void OnPointerDown(Offset point)
+    {
+        if (!Enabled || _pressed) return;
+        _pressed = true;
+        MarkNeedsPaint();
+    }
+
+    public override void OnPointerUp(Offset point)
+    {
+        if (_pressed && Enabled && Bounds.Contains(point.X, point.Y))
+            Toggle();
+        if (_pressed)
+        {
+            _pressed = false;
+            MarkNeedsPaint();
+        }
+    }
+
+    public override void OnKey(char keyChar, uint scancode, bool down, Modifiers mods)
+    {
+        if (scancode is 44 or 40) // Space or Enter
+        {
+            _pressed = down;
+            MarkNeedsPaint();
+            if (!down) Toggle();
+        }
+    }
+}

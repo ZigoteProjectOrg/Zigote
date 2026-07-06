@@ -1,0 +1,60 @@
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# JetBrains IDEs (Rider)
+.idea/
+*.sln.DotSettings.user
+
+# .NET / C# Core / Visual Studio
+bin/
+obj/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build results
+# NOTE: no bare [Dd]ebug/ / [Rr]elease/ here — [Bb]in/ + [Oo]bj/ already cover .NET output,
+# and the bare pattern silently untracked the Zigote.UI/Debug/ SOURCE directory.
+x64/
+x86/
+[Bb]uild/
+bld/
+[Bb]in/
+[Oo]bj/
+[Tt]est[Rr]esults/
+*.dll
+*.exe
+*.pdb
+*.mdb
+*.idb
+*.ilk
+*.cache
+
+# NuGet Packages
+*.nupkg
+packages/
+*.nuget.props
+*.nuget.targets
+
+# Zig (Zigote.Engine)
+.zig-cache/
+zig-out/
+zig-cache/
+*.o
+*.a
+*.so
+*.dylib
+
+# The repo-root build/ dir is tooling (MSBuild targets + scripts), not build output.
+!/build/
+
+# Example / demo apps carry large binary assets (models, textures) that blow past
+# GitHub's file-size limits; kept out of the repo and distributed separately.
+/examples/

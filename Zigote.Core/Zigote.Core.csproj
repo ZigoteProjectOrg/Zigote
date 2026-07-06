@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>Zigote.Core</RootNamespace>
+        <AssemblyName>Zigote.Core</AssemblyName>
+    </PropertyGroup>
+
+    <!-- Native Zig engine build + per-RID copy + Enable3D rebuild guard. -->
+    <Import Project="..\build\Zigote.Native.targets"/>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Zigote.Generators\Zigote.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false"/>
+        <AdditionalFiles Include="..\Zigote.Engine\src\ffi\*.zig"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+            <_Parameter1>Zigote.ECS</_Parameter1>
+        </AssemblyAttribute>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Compile Remove="Types\FrameArena.cs"/>
+    </ItemGroup>
+
+</Project>

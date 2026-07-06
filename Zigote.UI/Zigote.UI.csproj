@@ -1,0 +1,57 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>Zigote.UI</RootNamespace>
+        <AssemblyName>Zigote.UI</AssemblyName>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Zigote.Core\Zigote.Core.csproj"/>
+    </ItemGroup>
+    <!-- Bundled, cross-platform fonts (no system-font dependency). Zigote.UI is their canonical home;
+         the native engine loads them from Fonts/ next to the executable. Marked CopyToOutputDirectory so
+         they flatten into Fonts/ for UI itself AND propagate to every app that references Zigote.UI
+         (editor, player, galleries, smoke test) — one source of truth, no per-app duplication.
+         Inter = default UI face; Iosevka = code/monospace; Material Icons = glyphs; Noto Emoji bundled. -->
+    <ItemGroup>
+        <Content Include="Fonts\Inter\static\Inter_18pt-Regular.ttf" Link="Fonts\Inter-Regular.ttf">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+        <Content Include="Fonts\PkgTTC-SGr-Iosevka-34\SGr-Iosevka-Regular.ttc" Link="Fonts\Iosevka-Regular.ttc">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+        <Content Include="Fonts\Noto_Emoji\static\NotoEmoji-Regular.ttf" Link="Fonts\NotoEmoji-Regular.ttf">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+        <Content Include="Fonts\MaterialIcons\MaterialIcons-Regular.ttf" Link="Fonts\MaterialIcons-Regular.ttf">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
+    <!-- Font licenses travel with the fonts: Inter/Iosevka/Noto Emoji are OFL 1.1 (the license text
+         must accompany any redistribution of the font files) and Material Icons is Apache-2.0. -->
+    <ItemGroup>
+        <Content Include="Fonts\Inter\OFL.txt" Link="Fonts\LICENSE-Inter-OFL.txt">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+        <Content Include="Fonts\PkgTTC-SGr-Iosevka-34\OFL.txt" Link="Fonts\LICENSE-Iosevka-OFL.txt">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+        <Content Include="Fonts\Noto_Emoji\OFL.txt" Link="Fonts\LICENSE-NotoEmoji-OFL.txt">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+        <Content Include="Fonts\MaterialIcons\LICENSE.txt" Link="Fonts\LICENSE-MaterialIcons-Apache2.txt">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
+    <!-- Same texts embedded for the runtime LicenseRegistry (FontLicenses), so an app's in-app
+         licenses screen works even if the loose Fonts/LICENSE-*.txt files are dropped. -->
+    <ItemGroup>
+        <EmbeddedResource Include="Fonts\Inter\OFL.txt" LogicalName="Zigote.UI.Fonts.Inter.OFL"/>
+        <EmbeddedResource Include="Fonts\PkgTTC-SGr-Iosevka-34\OFL.txt" LogicalName="Zigote.UI.Fonts.Iosevka.OFL"/>
+        <EmbeddedResource Include="Fonts\Noto_Emoji\OFL.txt" LogicalName="Zigote.UI.Fonts.NotoEmoji.OFL"/>
+        <EmbeddedResource Include="Fonts\MaterialIcons\LICENSE.txt" LogicalName="Zigote.UI.Fonts.MaterialIcons.LICENSE"/>
+    </ItemGroup>
+</Project>

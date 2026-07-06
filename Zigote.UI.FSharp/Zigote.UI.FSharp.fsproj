@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <RootNamespace>Zigote.UI.FSharp</RootNamespace>
+        <AssemblyName>Zigote.UI.FSharp</AssemblyName>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Include="Vdom.fs"/>
+        <Compile Include="Cmd.fs"/>
+        <Compile Include="Host.fs"/>
+        <Compile Include="Reactive.fs"/>
+        <Compile Include="AttrCore.fs"/>
+        <!-- Per-widget attr vocabularies (text/column/button/…) generated from the widget spec by
+             the Zigote.UI.FSharp.Codegen tool (see its Program.cs for the regenerate command). -->
+        <Compile Include="Attrs.g.fs"/>
+        <Compile Include="Ui.fs"/>
+        <Compile Include="Program.fs"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Update="FSharp.Core" Version="11.0.101-preview5.26302.115"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Zigote.Core\Zigote.Core.csproj"/>
+        <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
+        <!-- Build-order only (not a code reference): builds the generator first so the target below can
+             verify Attrs.g.fs is in sync. Turns spec drift into a build failure, not just a test failure. -->
+        <ProjectReference Include="..\Zigote.UI.FSharp.Codegen\Zigote.UI.FSharp.Codegen.csproj"
+                          ReferenceOutputAssembly="false" PrivateAssets="all"/>
+    </ItemGroup>
+
+    <!--
+      Fail the build on ANY generator failure: a stale Attrs.g.fs (exit 1), a structurally-invalid
+      spec that Validate() rejects (nonzero), or bad args. If the tool isn't built yet the Exec is
+      skipped (empty exit code), so partial builds are never broken. This makes `dotnet build` — and,
+      transitively, `dotnet test`/the gallery build — enforce that the generated DSL is in sync.
+    -->
+    <Target Name="VerifyGeneratedAttrsInSync" AfterTargets="ResolveProjectReferences" BeforeTargets="CoreCompile">
+        <PropertyGroup>
+            <_CodegenDll>$(MSBuildThisFileDirectory)..\Zigote.UI.FSharp.Codegen\bin\$(Configuration)\$(TargetFramework)\Zigote.UI.FSharp.Codegen.dll</_CodegenDll>
+        </PropertyGroup>
+        <Exec Condition="Exists('$(_CodegenDll)')"
+              Command="dotnet &quot;$(_CodegenDll)&quot; --check &quot;$(MSBuildThisFileDirectory)Attrs.g.fs&quot;"
+              ContinueOnError="true">
+            <Output TaskParameter="ExitCode" PropertyName="_CodegenCheckExit"/>
+        </Exec>
+        <Error Condition="'$(_CodegenCheckExit)' != '0' and '$(_CodegenCheckExit)' != ''"
+               Text="Attrs.g.fs is out of sync with (or invalid against) the widget spec — regenerate/fix via Zigote.UI.FSharp.Codegen (Spec.cs). Codegen --check exit: $(_CodegenCheckExit)."/>
+    </Target>
+
+</Project>

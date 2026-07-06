@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!-- Boot smoke test harness. Boots the real renderer (SDL3 window + wgpu device + swapchain),
+         renders a bounded number of frames, and exits 0: the one thing the headless/logic-only
+         xUnit suite (Zigote.Tests) deliberately cannot cover. Intentionally a separate runnable
+         app, NOT referenced by Zigote.Tests, so `dotnet test` stays headless. Needs a GPU/display;
+         run it with `dotnet run` on this project (frame count via argv[0] or ZIGOTE_SMOKE_FRAMES).
+         Exit codes: 0 = rendered all frames, 1 = quit early, 2 = failed to boot/render. -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
+        <ProjectReference Include="..\Zigote.Vfx\Zigote.Vfx.csproj"/>
+        <ProjectReference Include="..\Zigote.Render2D\Zigote.Render2D.csproj"/>
+    </ItemGroup>
+
+    <!-- zigote_init requires a valid main font face (FreeType). The bundled fonts are owned by
+         Zigote.UI (their canonical home) and flow into Fonts/ next to this exe transitively via the
+         Zigote.UI project reference — Inter (UI) + Iosevka (code) + Material Icons mirror a real app
+         boot so the always-on FPS badge and any icon path render. -->
+    <ItemGroup>
+        <Using Include="Zigote.UI.Material"/>
+    </ItemGroup>
+
+</Project>

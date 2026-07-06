@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>Zigote.UI.FSharp.Codegen</RootNamespace>
+        <AssemblyName>Zigote.UI.FSharp.Codegen</AssemblyName>
+    </PropertyGroup>
+
+    <!--
+      Emits the F# attr DSL (Attrs.g.fs) from a spec whose property references are EXPRESSION TREES
+      (Spec.cs): a renamed/removed widget property fails THIS project's compilation, the earliest
+      possible drift signal. At run time the spec is additionally validated against the compiled
+      widget types via reflection, and uncovered settable properties are reported.
+      The F# layer does NOT reference this tool; it compiles the committed Attrs.g.fs. Regenerate with
+      dotnet run against this project (see Program.cs Main and the generated file header).
+    -->
+    <ItemGroup>
+        <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
+    </ItemGroup>
+
+</Project>

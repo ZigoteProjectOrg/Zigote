@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>Zigote.Tests</RootNamespace>
+        <AssemblyName>Zigote.Tests</AssemblyName>
+        <IsPackable>false</IsPackable>
+        <IsTestProject>true</IsTestProject>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.7.0"/>
+        <PackageReference Include="xunit" Version="2.9.3"/>
+        <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0-pre.4">
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Pure-logic units under test. Referencing Core triggers the Zig build (it is the native
+             host), but the tests here are CPU-only: ABI layout, math, layout, undo, reconciliation —
+             none load the native library at runtime. -->
+        <ProjectReference Include="..\Zigote.Core\Zigote.Core.csproj"/>
+        <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Charts\Zigote.UI.Charts.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.DevTools\Zigote.UI.DevTools.csproj"/>
+        <ProjectReference Include="..\Zigote.ECS\Zigote.ECS.csproj"/>
+        <ProjectReference Include="..\Zigote.Network\Zigote.Network.csproj"/>
+        <ProjectReference Include="..\Zigote.Editor\Zigote.Editor.csproj"/>
+        <ProjectReference Include="..\Zigote.Graphs.Core\Zigote.Graphs.Core.csproj"/>
+        <ProjectReference Include="..\Zigote.Graphs.Commands\Zigote.Graphs.Commands.csproj"/>
+        <!-- F# FParsec-based syntax highlighter + JSON parser. -->
+        <ProjectReference Include="..\Zigote.Modules.UI.CodeEditor\Zigote.Modules.UI.CodeEditor.fsproj"/>
+        <ProjectReference Include="..\Zigote.Graphs.Shading\Zigote.Graphs.Shading.csproj"/>
+        <ProjectReference Include="..\Zigote.Vfx\Zigote.Vfx.csproj"/>
+        <ProjectReference Include="..\Zigote.Graphs.Vfx\Zigote.Graphs.Vfx.csproj"/>
+        <ProjectReference Include="..\Zigote.Cinematics\Zigote.Cinematics.csproj"/>
+        <ProjectReference Include="..\Zigote.Scripting\Zigote.Scripting.csproj"/>
+        <ProjectReference Include="..\Zigote.Render2D\Zigote.Render2D.csproj"/>
+        <ProjectReference Include="..\Zigote.Runtime\Zigote.Runtime.csproj"/>
+        <ProjectReference Include="..\Zigote.World\Zigote.World.csproj"/>
+        <ProjectReference Include="..\Zigote.Save\Zigote.Save.csproj"/>
+        <ProjectReference Include="..\Zigote.Physics2D\Zigote.Physics2D.csproj"/>
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Zigote.UI.Material"/>
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Remove="FrameArenaTests.cs"/>
+    </ItemGroup>
+</Project>

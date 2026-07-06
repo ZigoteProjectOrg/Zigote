@@ -1,0 +1,331 @@
+using Zigote.Core.Native;
+
+namespace Zigote.Core.Events;
+
+public enum MouseButton
+{
+    Left,
+    Right,
+    Middle,
+}
+
+[Flags]
+public enum Modifiers
+{
+    None = 0,
+    Shift = 1,
+    Ctrl = 2,
+    Alt = 4,
+    Cmd = 8, // ⌘ on macOS, Super/Win elsewhere — the platform "command" modifier
+}
+
+public static class ModifiersExtensions
+{
+    /// <summary>
+    ///     The platform "command" modifier for shortcuts (copy/paste/select-all):
+    ///     <see cref="Modifiers.Cmd" />
+    ///     on macOS, <see cref="Modifiers.Ctrl" /> elsewhere. Accepting either keeps shortcuts working
+    ///     across platforms and matches the ⌘-labelled hints shown in menus.
+    /// </summary>
+    public static bool HasCommand(this Modifiers m)
+    {
+        return m.HasFlag(Modifiers.Ctrl) || m.HasFlag(Modifiers.Cmd);
+    }
+}
+
+public abstract class InputEvent
+{
+    /// <summary>
+    ///     SDL window id this event belongs to; 0 = unknown, treated as the main window. Hosts with
+    ///     secondary OS windows route events to the right widget tree by comparing against
+    ///     <c>ZigoteEngine.MainWindowId</c> / <c>NativeWindow.Id</c>.
+    /// </summary>
+    public uint WindowId { get; internal set; }
+}
+
+public sealed class MouseMoveEvent : InputEvent
+{
+    public MouseMoveEvent()
+    {
+    }
+
+    public MouseMoveEvent(float x, float y)
+    {
+        X = x;
+        Y = y;
+    }
+
+    public float X { get; private set; }
+    public float Y { get; private set; }
+
+    // Overwrite in place so PollEventsInto can reuse a pooled instance (see EventPool) instead of
+    // allocating a fresh MouseMoveEvent for every move — mouse-moves flood faster than the frame rate
+    // during a drag, so this is the dominant input-rate allocation.
+    internal void Reuse(float x, float y, uint windowId)
+    {
+        X = x;
+        Y = y;
+        WindowId = windowId;
+    }
+}
+
+public sealed class MouseDownEvent(float x, float y, MouseButton button) : InputEvent
+{
+    public float X { get; } = x;
+    public float Y { get; } = y;
+    public MouseButton Button { get; } = button;
+}
+
+public sealed class MouseUpEvent(float x, float y, MouseButton button) : InputEvent
+{
+    public float X { get; } = x;
+    public float Y { get; } = y;
+    public MouseButton Button { get; } = button;
+}
+
+public sealed class ScrollEvent : InputEvent
+{
+    public ScrollEvent()
+    {
+    }
+
+    public ScrollEvent(float x, float y, float scrollX, float scrollY)
+    {
+        X = x;
+        Y = y;
+        ScrollX = scrollX;
+        ScrollY = scrollY;
+    }
+
+    public float X { get; private set; }
+    public float Y { get; private set; }
+    public float ScrollX { get; private set; }
+    public float ScrollY { get; private set; }
+
+    // Reused across polls like MouseMoveEvent (momentum scroll also fires faster than frame rate).
+    internal void Reuse(float x, float y, float scrollX, float scrollY, uint windowId)
+    {
+        X = x;
+        Y = y;
+        ScrollX = scrollX;
+        ScrollY = scrollY;
+        WindowId = windowId;
+    }
+}
+
+public sealed class KeyEvent(
+    bool down,
+    char keyChar,
+    uint scancode,
+    Modifiers modifiers,
+    bool repeat = false)
+    : InputEvent
+{
+    public bool Down { get; } = down;
+    public char KeyChar { get; } = keyChar;
+    public uint Scancode { get; } = scancode;
+    public Modifiers Modifiers { get; } = modifiers;
+
+    /// <summary>
+    ///     True when this key-down is an OS auto-repeat from a held key, not the initial press. Always
+    ///     false for key-up. Shortcut handlers that should fire once per press (toggles) gate on this.
+    /// </summary>
+    public bool Repeat { get; } = repeat;
+
+    /// <summary>The physical (layout-independent) key, decoded from <see cref="Scancode" />.</summary>
+    public KeyCode Key => (KeyCode)Scancode;
+}
+
+public sealed class TextInputEvent(string text) : InputEvent
+{
+    public string Text { get; } = text;
+}
+
+/// <summary>
+///     Transient IME pre-edit text. The text is displayed at the caret but is not committed to the
+///     document until a subsequent <see cref="TextInputEvent" /> arrives.
+/// </summary>
+public sealed class TextCompositionEvent(string text, int selectionStart, int selectionLength)
+    : InputEvent
+{
+    public string Text { get; } = text;
+    public int SelectionStart { get; } = selectionStart;
+    public int SelectionLength { get; } = selectionLength;
+}
+
+public sealed class ResizeEvent(uint width, uint height) : InputEvent
+{
+    public uint Width { get; } = width;
+    public uint Height { get; } = height;
+}
+
+public sealed class QuitEvent : InputEvent;
+
+/// <summary>
+///     The OS window gained or lost keyboard focus. Hosts use it to throttle background rendering;
+///     it is not routed to widgets (widget-level focus is <see cref="Zigote.Core" />-agnostic App
+///     state).
+/// </summary>
+public sealed class WindowFocusEvent(bool focused) : InputEvent
+{
+    public bool Focused { get; } = focused;
+}
+
+/// <summary>
+///     The user asked to close a window (titlebar ✕). <see cref="InputEvent.WindowId" /> says which.
+///     The host decides: quit for the main window, destroy for a secondary one.
+/// </summary>
+public sealed class WindowCloseEvent : InputEvent;
+
+/// <summary>The OS light/dark appearance reported by SDL.</summary>
+public enum SystemTheme
+{
+    Unknown = 0,
+    Light = 1,
+    Dark = 2,
+}
+
+/// <summary>The OS switched its light/dark appearance while the app was running.</summary>
+public sealed class SystemThemeEvent(SystemTheme theme) : InputEvent
+{
+    public SystemTheme Theme { get; } = theme;
+}
+
+/// <summary>
+///     The host's scroll orientation ("natural scroll" OS setting), as reported by SDL's wheel
+///     direction flag. <see cref="Unknown" /> until the user first scrolls, since SDL exposes it
+///     only per wheel event rather than as a queryable setting.
+/// </summary>
+public enum ScrollOrientation
+{
+    Unknown = 0,
+    Normal = 1,
+    Flipped = 2,
+}
+
+// ── OS → app drag-and-drop ──────────────────────────────────────────────────────
+//
+// An external drop of N items arrives as: DropBeginEvent, then N DropFileEvent / DropTextEvent, then
+// DropCompleteEvent. DropPositionEvent fires while a drag hovers over the window (for drag-over
+// feedback). The App aggregates a begin…complete run into a single OnDrop delivery; individual widgets
+// don't see the raw sequence.
+
+/// <summary>A drag payload entered the window; the item events that follow belong to this drop.</summary>
+public sealed class DropBeginEvent : InputEvent;
+
+/// <summary>One file (of possibly many) was dropped on the window. <see cref="X" />/<see cref="Y" /> are
+/// window-relative, in the same logical-pixel space as pointer events.</summary>
+public sealed class DropFileEvent(string path, float x, float y) : InputEvent
+{
+    public string Path { get; } = path;
+    public float X { get; } = x;
+    public float Y { get; } = y;
+}
+
+/// <summary>Plain text was dropped on the window (e.g. a selection dragged from another app).</summary>
+public sealed class DropTextEvent(string text, float x, float y) : InputEvent
+{
+    public string Text { get; } = text;
+    public float X { get; } = x;
+    public float Y { get; } = y;
+}
+
+/// <summary>The pointer moved over the window while carrying a drag payload. Used to highlight the
+/// drop target the pointer is currently over; no data is available until the drop completes.</summary>
+public sealed class DropPositionEvent(float x, float y) : InputEvent
+{
+    public float X { get; } = x;
+    public float Y { get; } = y;
+}
+
+/// <summary>The drag payload was released (or left the window); the accumulated item run is complete.</summary>
+public sealed class DropCompleteEvent(float x, float y) : InputEvent
+{
+    public float X { get; } = x;
+    public float Y { get; } = y;
+}
+
+/// <summary>
+///     Converts raw <see cref="ZgEvent" /> structs into typed <see cref="InputEvent" />
+///     instances.
+/// </summary>
+internal static class EventDecoder
+{
+    /// <param name="textBase">
+    ///     Base of the poll text buffer (<c>zigote_poll_text_ptr</c>) for the just-polled batch; text
+    ///     events slice their UTF-8 payload out of it. Passed as <see cref="nint" /> so the caller may
+    ///     be an iterator (which cannot hold a raw pointer across <c>yield</c>).
+    /// </param>
+    public static unsafe InputEvent? Decode(in ZgEvent e, nint textBase)
+    {
+        var evt = DecodeKind(e, textBase);
+        if (evt is not null) evt.WindowId = e.WindowId;
+        return evt;
+    }
+
+    private static unsafe InputEvent? DecodeKind(in ZgEvent e, nint textBase)
+    {
+        return (EventKind)e.Kind switch {
+            EventKind.MouseMove => new MouseMoveEvent(e.X, e.Y),
+            EventKind.MouseDown => new MouseDownEvent(e.X, e.Y, DecodeButton(e.Button)),
+            EventKind.MouseUp => new MouseUpEvent(e.X, e.Y, DecodeButton(e.Button)),
+            EventKind.Scroll => new ScrollEvent(
+                e.X,
+                e.Y,
+                e.ScrollX,
+                e.ScrollY
+            ),
+            // For key events the (mouse-unused) Button byte carries the SDL auto-repeat flag.
+            EventKind.KeyDown => new KeyEvent(
+                true,
+                (char)e.KeyChar,
+                e.KeyScancode,
+                DecodeMods(e.Modifiers),
+                e.Button != 0
+            ),
+            EventKind.KeyUp => new KeyEvent(
+                false,
+                (char)e.KeyChar,
+                e.KeyScancode,
+                DecodeMods(e.Modifiers),
+                e.Button != 0
+            ),
+            EventKind.TextInput => new TextInputEvent(e.GetTextInput((byte*)textBase)),
+            EventKind.TextEditing => new TextCompositionEvent(
+                e.GetTextInput((byte*)textBase),
+                (int)e.CompositionStart,
+                (int)e.CompositionLength
+            ),
+            EventKind.Resize => new ResizeEvent(e.ResizeW, e.ResizeH),
+            // The (mouse-unused) Button byte carries gained (1) / lost (0).
+            EventKind.WindowFocus => new WindowFocusEvent(e.Button != 0),
+            EventKind.WindowClose => new WindowCloseEvent(),
+            // The (mouse-unused) Button byte carries the theme value (0 unknown / 1 light / 2 dark).
+            EventKind.SystemTheme => new SystemThemeEvent((SystemTheme)e.Button),
+            EventKind.DropBegin => new DropBeginEvent(),
+            EventKind.DropFile => new DropFileEvent(e.GetTextInput((byte*)textBase), e.X, e.Y),
+            EventKind.DropText => new DropTextEvent(e.GetTextInput((byte*)textBase), e.X, e.Y),
+            EventKind.DropPosition => new DropPositionEvent(e.X, e.Y),
+            EventKind.DropComplete => new DropCompleteEvent(e.X, e.Y),
+            EventKind.Quit => new QuitEvent(),
+            _ => null,
+        };
+    }
+
+    private static MouseButton DecodeButton(byte b)
+    {
+        return b switch {
+            1 => MouseButton.Right,
+            2 => MouseButton.Middle,
+            _ => MouseButton.Left,
+        };
+    }
+
+    private static Modifiers DecodeMods(byte m)
+    {
+        return ((m & 1) != 0 ? Modifiers.Shift : Modifiers.None) |
+               ((m & 2) != 0 ? Modifiers.Ctrl : Modifiers.None) |
+               ((m & 4) != 0 ? Modifiers.Alt : Modifiers.None) |
+               ((m & 8) != 0 ? Modifiers.Cmd : Modifiers.None);
+    }
+}

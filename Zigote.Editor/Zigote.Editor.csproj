@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>Zigote.Editor</RootNamespace>
+        <AssemblyName>Zigote.Editor</AssemblyName>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Charts\Zigote.UI.Charts.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.DevTools\Zigote.UI.DevTools.csproj"/>
+        <ProjectReference Include="..\Zigote.Game\Zigote.Game.csproj"/>
+        <ProjectReference Include="..\Zigote.Graphs.Editor\Zigote.Graphs.Editor.csproj"/>
+        <ProjectReference Include="..\Zigote.Scripting\Zigote.Scripting.csproj"/>
+        <ProjectReference Include="..\Zigote.Runtime\Zigote.Runtime.csproj"/>
+        <!-- F# module: FParsec-based syntax highlighting for the code editor. -->
+        <ProjectReference Include="..\Zigote.Modules.UI.CodeEditor\Zigote.Modules.UI.CodeEditor.fsproj"/>
+        <ProjectReference Include="..\Zigote.Graphs.Shading\Zigote.Graphs.Shading.csproj"/>
+        <ProjectReference Include="..\Zigote.Vfx\Zigote.Vfx.csproj"/>
+        <ProjectReference Include="..\Zigote.Graphs.Vfx\Zigote.Graphs.Vfx.csproj"/>
+        <ProjectReference Include="..\Zigote.ECS\Zigote.ECS.csproj"/>
+        <ProjectReference Include="..\Zigote.Cinematics\Zigote.Cinematics.csproj"/>
+    </ItemGroup>
+    <!-- Fonts are bundled by Zigote.UI (their canonical home) and flow into this app's Fonts/ output
+         transitively via the Zigote.UI project reference — no per-app font list. Publish-time font
+         subsetting is applied repo-wide by Directory.Build.targets, not imported per app. The native
+         libzigote is copied transitively from Zigote.Core's RID-aware Content. -->
+    <ItemGroup>
+        <Using Include="Zigote.UI.Material"/>
+    </ItemGroup>
+</Project>

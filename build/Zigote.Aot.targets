@@ -1,0 +1,46 @@
+<Project>
+  <!--
+    NativeAOT publish configuration for the standalone UI apps (the galleries). Imported by a project
+    that opts in; the whole thing is gated behind ZigoteAot so plain `dotnet build`/`dotnet run` and the
+    normal self-contained publish stay JIT — AOT is a publish-time choice (ilc compilation is slow, and
+    it changes reflection semantics). Turn it on with `-p:ZigoteAot=true` (build/publish.sh AOT flag).
+
+    Only apps with NO runtime assembly loading can use this. The editor CANNOT: it compiles user scripts
+    with `dotnet build` and loads them into a collectible AssemblyLoadContext at runtime — a hard JIT
+    dependency NativeAOT has no equivalent for. Game exports go AOT through the exporter's own generated
+    project (with static script registration) instead — see Zigote.Editor/Export/GameExporter.cs.
+
+    Native libzigote is @(Content) from Zigote.Core and lands next to the AOT binary transitively; fonts
+    are subset by build/Zigote.Fonts.targets (repo-wide via Directory.Build.targets) after publish.
+  -->
+  <PropertyGroup Condition="'$(ZigoteAot)' == 'true'">
+    <PublishAot>true</PublishAot>
+    <!-- The UI stack does reflection over rooted widget/theme types (WidgetDebug property dumps, the
+         DevTools inspector, the reflection late-bind of DevTools.Install). Those types are kept via
+         TrimmerRootAssembly below, so the residual analysis warnings are noise — suppress them to keep
+         the publish log readable. -->
+    <SuppressTrimAnalysisWarnings>true</SuppressTrimAnalysisWarnings>
+    <!-- Keep ICU: the C# gallery formats ru/zh/ja/ar numbers & dates through CultureInfo, so we must
+         NOT set InvariantGlobalization. A project with no culture-dependent formatting may override it. -->
+    <InvariantGlobalization Condition="'$(InvariantGlobalization)' == ''">false</InvariantGlobalization>
+  </PropertyGroup>
+
+  <!-- Root the whole UI stack. WidgetDebug/DevTools reflect over public widget & theme properties by name
+       and Type.GetType-late-bind DevTools.Install; without rooting, the trimmer would strip those members
+       and the inspector/HUD would silently degrade under AOT. Cheap to keep (UI assemblies are small). -->
+  <ItemGroup Condition="'$(ZigoteAot)' == 'true'">
+    <TrimmerRootAssembly Include="Zigote.UI" />
+    <TrimmerRootAssembly Include="Zigote.UI.Material" />
+    <TrimmerRootAssembly Include="Zigote.UI.Charts" />
+    <TrimmerRootAssembly Include="Zigote.UI.DevTools" />
+  </ItemGroup>
+
+  <!-- Homebrew's .NET links Homebrew-provided libs (ssl/crypto/brotli/…) into NativeAOT binaries but
+       omits their search paths; keg-only openssl needs its own entry. Mirrors the game exporter. -->
+  <ItemGroup Condition="'$(ZigoteAot)' == 'true' AND $([MSBuild]::IsOSPlatform('OSX'))">
+    <LinkerArg Include="-L/opt/homebrew/lib" Condition="Exists('/opt/homebrew/lib')" />
+    <LinkerArg Include="-L/opt/homebrew/opt/openssl@3/lib" Condition="Exists('/opt/homebrew/opt/openssl@3/lib')" />
+    <LinkerArg Include="-L/usr/local/lib" Condition="Exists('/usr/local/lib')" />
+    <LinkerArg Include="-L/usr/local/opt/openssl@3/lib" Condition="Exists('/usr/local/opt/openssl@3/lib')" />
+  </ItemGroup>
+</Project>

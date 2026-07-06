@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>Zigote.Graphs.Shading</RootNamespace>
+        <AssemblyName>Zigote.Graphs.Shading</AssemblyName>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Zigote.Graphs.Core\Zigote.Graphs.Core.csproj"/>
+        <ProjectReference Include="..\Zigote.Graphs.Registry\Zigote.Graphs.Registry.csproj"/>
+        <ProjectReference Include="..\Zigote.Core\Zigote.Core.csproj"/>
+    </ItemGroup>
+</Project>

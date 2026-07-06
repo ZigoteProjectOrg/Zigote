@@ -1,0 +1,4 @@
+# Generated F# sources — their canonical formatting is the code generator's emitter output.
+# Reformatting them makes the committed file diverge from the generator and breaks the
+# staleness --check (e.g. Zigote.UI.FSharp/Attrs.g.fs from Zigote.UI.FSharp.Codegen).
+*.g.fs

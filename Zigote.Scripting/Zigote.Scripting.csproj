@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>Zigote.Scripting</RootNamespace>
+        <AssemblyName>Zigote.Scripting</AssemblyName>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Zigote.Core\Zigote.Core.csproj"/>
+        <!-- Scripting can build full widget HUDs (Hud.Root), so it references the widget framework.
+             Zigote.UI depends only on Zigote.Core, so this introduces no dependency cycle. -->
+        <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
+        <ProjectReference Include="..\Zigote.Vfx\Zigote.Vfx.csproj"/>
+        <ProjectReference Include="..\Zigote.ECS\Zigote.ECS.csproj"/>
+        <ProjectReference Include="..\Zigote.Cinematics\Zigote.Cinematics.csproj"/>
+        <!-- 2D sprite types (SpriteDraw/SpriteTexture/Material2D/atlas) for the Sprites provider. -->
+        <ProjectReference Include="..\Zigote.Render2D\Zigote.Render2D.csproj"/>
+        <!-- Pure gameplay modules scripts use directly (no provider needed for Physics2D — games own
+             their world instance; Save gets a thin provider for the host-published save directory). -->
+        <ProjectReference Include="..\Zigote.Save\Zigote.Save.csproj"/>
+        <ProjectReference Include="..\Zigote.Physics2D\Zigote.Physics2D.csproj"/>
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Zigote.UI.Material"/>
+    </ItemGroup>
+</Project>

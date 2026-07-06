@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Charts\Zigote.UI.Charts.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Localizations\Zigote.UI.Localizations.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.DevTools\Zigote.UI.DevTools.csproj"/>
+        <ProjectReference Include="..\Zigote.Generators\Zigote.Generators.csproj"
+                          OutputItemType="Analyzer" ReferenceOutputAssembly="false"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="assets/**" CopyToOutputDirectory="PreserveNewest"/>
+        <!-- ARB catalogs → the generated compile-safe GalleryL10n class (LocalizationsGenerator). -->
+        <AdditionalFiles Include="l10n/*.arb"/>
+    </ItemGroup>
+
+    <!-- NativeAOT publish opt-in (gated behind ZigoteAot; build/publish.sh AOT flag). Plain build/run
+         stays JIT. Localizations formats via CultureInfo + is late-resolved, so root it on top of the
+         shared UI-stack roots. -->
+    <Import Project="..\build\Zigote.Aot.targets"/>
+    <ItemGroup Condition="'$(ZigoteAot)' == 'true'">
+        <TrimmerRootAssembly Include="Zigote.UI.Localizations"/>
+    </ItemGroup>
+
+</Project>

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>Zigote.Graphs.Editor</RootNamespace>
+        <AssemblyName>Zigote.Graphs.Editor</AssemblyName>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
+        <ProjectReference Include="..\Zigote.Graphs.Core\Zigote.Graphs.Core.csproj"/>
+        <ProjectReference Include="..\Zigote.Graphs.Commands\Zigote.Graphs.Commands.csproj"/>
+        <ProjectReference Include="..\Zigote.Graphs.Registry\Zigote.Graphs.Registry.csproj"/>
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Zigote.UI.Material"/>
+    </ItemGroup>
+</Project>
