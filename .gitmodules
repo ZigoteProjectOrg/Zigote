@@ -1,4 +1,4 @@
 [submodule "Zigote.Engine"]
 	path = Zigote.Engine
-	url = git@github.com-zigote:ZigoteProjectOrg/Zigote.Engine.git
+	url = https://github.com/ZigoteProjectOrg/Zigote.Engine.git
 	branch = main

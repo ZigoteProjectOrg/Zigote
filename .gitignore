@@ -58,3 +58,6 @@ zig-cache/
 # Example / demo apps carry large binary assets (models, textures) that blow past
 # GitHub's file-size limits; kept out of the repo and distributed separately.
 /examples/
+
+# Release bundles produced by build/publish.sh / the release workflow.
+/artifacts/

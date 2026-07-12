@@ -5,7 +5,8 @@ native **Zig + wgpu** rendering backend. Zigote pairs a Flutter-style reactive U
 full 3D engine, a visual editor, and an ECS gameplay layer — all in one .NET 10 solution.
 
 > **The split:** the native half (GPU, windowing, text shaping, physics, ECS, audio, model import)
-> lives in Zig and is vendored as the [`Zigote.Engine`](Zigote.Engine) submodule, which builds
+> lives in Zig and is vendored as the
+> [`Zigote.Engine`](https://github.com/ZigoteProjectOrg/Zigote.Engine) submodule, which builds
 > `libzigote` and exposes a C ABI. Everything above the GPU — widgets, scenes, scripting, the editor,
 > and gameplay — is C#/F# and lives in this repository.
 
@@ -22,7 +23,8 @@ full 3D engine, a visual editor, and an ECS gameplay layer — all in one .NET 1
 - **Visual editor** — scene hierarchy, inspector, asset browser, docked code editor, and node-based
   shader / VFX graphs that codegen to WGSL.
 - **Game export** — package and run standalone games via the runtime/player (JIT and AOT).
-- **Cross-platform** — macOS (primary), with Windows and Linux support.
+- **Cross-platform** — macOS, Windows, and Linux on the same SDL3 + wgpu backend
+  (see [Platform support](#platform-support)).
 
 ## Modules
 
@@ -74,18 +76,20 @@ subsetting and AOT).
 
 ## Getting started
 
-**Prerequisites:** [.NET 10 SDK](https://dotnet.microsoft.com/), the [Zig toolchain](https://ziglang.org/)
-(to build the native engine), and `git`.
+**Prerequisites:** the [.NET 10 SDK](https://dotnet.microsoft.com/) (`global.json` pins 10.0.3xx),
+[Zig **0.16**](https://ziglang.org/download/) on `PATH` (the solution builds the native engine for
+you), and `git`. Release publishing additionally wants a font subsetter (`hb-subset` or
+fonttools' `pyftsubset`) — plain builds don't.
 
 ```sh
 # Clone with the native engine submodule
-git clone --recurse-submodules git@github.com-zigote:ZigoteProjectOrg/Zigote.git
+git clone --recurse-submodules https://github.com/ZigoteProjectOrg/Zigote.git
 cd Zigote
 # (or, if already cloned) fetch the submodule:
 git submodule update --init --recursive
 
-# Build the native engine, then the solution
-#   see Zigote.Engine/README.md for engine build details
+# Build everything — this runs `zig build shared-lib` for the native engine
+# automatically (see Zigote.Engine/docs/building.md for native build options)
 dotnet build Zigote.sln
 ```
 
@@ -99,6 +103,20 @@ dotnet run --project Zigote.Editor
 dotnet run --project Zigote.UI.Gallery          # C#
 dotnet run --project Zigote.UI.FSharp.Gallery   # F#
 ```
+
+## Platform support
+
+| Platform | Status |
+| --- | --- |
+| **macOS** (arm64, x64) | Primary development platform — where the engine is built, run, and tested day to day. x64 cross-builds from arm64. |
+| **Linux** (x64, arm64) | Builds natively in CI (`linux-x64`) and cross-compiles from any host. arm64 is wired as a target but sees less exercise. |
+| **Windows** (x64) | Builds natively in CI (`win-x64`, MSVC ABI). Cross-compiling from macOS/Linux uses Zig's bundled MinGW (GNU ABI). wgpu ships as `wgpu_native.dll` beside `zigote.dll`. |
+
+All platforms share the one SDL3 + wgpu code path — wgpu picks the graphics backend per OS (Metal on
+macOS, Vulkan on Linux, D3D12/Vulkan on Windows). Per-OS self-contained editor bundles come from
+[`.github/workflows/release.yml`](.github/workflows/release.yml), or locally via
+`build/publish.sh <rid>`. Windows and Linux builds are CI-verified but get less real-hardware time
+than macOS — platform bug reports are very welcome.
 
 ## Examples
 
