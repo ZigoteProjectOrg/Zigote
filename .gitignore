@@ -61,3 +61,6 @@ zig-cache/
 
 # Release bundles produced by build/publish.sh / the release workflow.
 /artifacts/
+
+# Local agent-tooling config — not part of the project.
+/.agents/
