@@ -213,7 +213,7 @@ public class CompositionWidgetTests
     [Fact]
     public void Button_HoverChangesFillColor()
     {
-        var btn = new Button("Hi", null);
+        var btn = new Button("Hi", () => { });
         var fill1 = FirstRectColor(Paint(btn, Constraints.Loose(200, 100)));
 
         var hit = (Pressable)btn.HitTest(Center(btn))!;
@@ -226,7 +226,7 @@ public class CompositionWidgetTests
     [Fact]
     public void Button_FlatStyle_PaintsNoFillWhenIdle()
     {
-        var btn = new Button("Hi", null) { Style = ButtonStyle.Flat };
+        var btn = new Button("Hi", () => { }) { Style = ButtonStyle.Flat };
         var p = Paint(btn, Constraints.Loose(200, 100));
         // Flat is borderless and transparent until hover: only the label text, no background rect.
         Assert.DoesNotContain(PaintCommandKind.Rect, Kinds(p));

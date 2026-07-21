@@ -46,7 +46,7 @@ public sealed class SegmentedControl : Widget, ITickerProvider
 
     /// <summary>The animated (possibly fractional) index the selection pill is drawn at.</summary>
     private float PillPos =>
-        _pillInit ? _pillFrom + (_pillTo - _pillFrom) * _slide.Value : Selected;
+        _pillInit ? _pillFrom + (_pillTo - _pillFrom) * _slide.Value : SelectedIndex;
 
     public override void Attach(App owner, Widget? parent)
     {
@@ -63,7 +63,7 @@ public sealed class SegmentedControl : Widget, ITickerProvider
 
     public List<string> Segments { get; set; }
 
-    public int Selected
+    public int SelectedIndex
     {
         get => _selected;
         set
@@ -72,6 +72,13 @@ public sealed class SegmentedControl : Widget, ITickerProvider
             _selected = value;
             MarkNeedsPaint();
         }
+    }
+
+    [Obsolete("Renamed — use SelectedIndex.")]
+    public int Selected
+    {
+        get => SelectedIndex;
+        set => SelectedIndex = value;
     }
 
     public Action<int>? OnChanged { get; set; }
@@ -90,7 +97,7 @@ public sealed class SegmentedControl : Widget, ITickerProvider
         if (newWidget is SegmentedControl s)
         {
             Segments = s.Segments;
-            Selected = s.Selected;
+            SelectedIndex = s.SelectedIndex;
             OnChanged = s.OnChanged;
             Enabled = s.Enabled;
         }
@@ -99,7 +106,7 @@ public sealed class SegmentedControl : Widget, ITickerProvider
     public override int DebugStateHash()
     {
         return HashCode.Combine(
-            Selected,
+            SelectedIndex,
             _hovered,
             _pressed,
             Enabled,
@@ -154,12 +161,12 @@ public sealed class SegmentedControl : Widget, ITickerProvider
         if (!_pillInit)
         {
             _pillInit = true;
-            _pillFrom = _pillTo = Selected;
+            _pillFrom = _pillTo = SelectedIndex;
         }
-        else if (Math.Abs(_pillTo - Selected) > 0.001f)
+        else if (Math.Abs(_pillTo - SelectedIndex) > 0.001f)
         {
             _pillFrom = PillPos;
-            _pillTo = Selected;
+            _pillTo = SelectedIndex;
             _slide.Dismiss();
             _slide.Forward();
         }
@@ -185,7 +192,7 @@ public sealed class SegmentedControl : Widget, ITickerProvider
                 segW,
                 Bounds.Height
             );
-            var isSelected = i == Selected;
+            var isSelected = i == SelectedIndex;
 
             if (!isSelected && Enabled && (_pressed == i || _hovered == i))
             {
@@ -201,7 +208,7 @@ public sealed class SegmentedControl : Widget, ITickerProvider
             }
 
             // Hairline separator between adjacent unselected segments.
-            if (i > 0 && !isSelected && i != Selected + 1 && Enabled)
+            if (i > 0 && !isSelected && i != SelectedIndex + 1 && Enabled)
             {
                 var sepX = segX;
                 var sepInset = Spacing.Sm;
@@ -248,8 +255,8 @@ public sealed class SegmentedControl : Widget, ITickerProvider
 
     private void Select(int index)
     {
-        if (!Enabled || index < 0 || index >= Segments.Count || index == Selected) return;
-        Selected = index;
+        if (!Enabled || index < 0 || index >= Segments.Count || index == SelectedIndex) return;
+        SelectedIndex = index;
         OnChanged?.Invoke(index);
         MarkNeedsPaint();
     }
@@ -301,10 +308,10 @@ public sealed class SegmentedControl : Widget, ITickerProvider
         switch (scancode)
         {
             case 80: // Left
-                Select(Math.Max(0, Selected - 1));
+                Select(Math.Max(0, SelectedIndex - 1));
                 break;
             case 79: // Right
-                Select(Math.Min(Segments.Count - 1, Selected + 1));
+                Select(Math.Min(Segments.Count - 1, SelectedIndex + 1));
                 break;
         }
     }

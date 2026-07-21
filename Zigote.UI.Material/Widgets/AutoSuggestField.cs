@@ -35,7 +35,7 @@ public sealed class AutoSuggestField : Widget
         _field = new TextField(decoration: new InputDecoration(hint)) {
             Text = value,
             OnChanged = _ => Refresh(),
-            OnSubmit = Commit,
+            OnSubmitted = Commit,
             OnFocusChange = focused =>
             {
                 if (focused) Show();

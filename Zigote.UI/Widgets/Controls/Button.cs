@@ -48,7 +48,8 @@ public class Button : StatefulWidget
         }
     }
 
-    // Read live by the Pressable on each press, so changing it needs no rebuild.
+    // Read live by the Pressable on each press, so changing it needs no rebuild. Enablement is
+    // derived per Build, though: a button with no callback renders (and hit-tests) as disabled.
     public Action? OnPressed { get; set; }
 
     /// <summary>
@@ -156,7 +157,7 @@ internal sealed class ButtonState : WidgetState<Button>
 
         var radius = w.Radius ?? _theme.ButtonRadius;
         _box.Radius = radius;
-        _root.Enabled = w.Enabled;
+        _root.Enabled = w.Enabled && w.OnPressed is not null;
         _root.FocusRadius = radius;
         _root.SemanticsLabel = w.Label;
 
@@ -172,7 +173,7 @@ internal sealed class ButtonState : WidgetState<Button>
         var fg = w.TextColor ??
                  (w.Style == ButtonStyle.Elevated ? _theme.OnPrimary : _theme.OnSurface);
 
-        if (!w.Enabled)
+        if (!w.Enabled || w.OnPressed is null)
         {
             _box.Fill = _theme.Fill2;
             _box.BorderColor = Color.Transparent;

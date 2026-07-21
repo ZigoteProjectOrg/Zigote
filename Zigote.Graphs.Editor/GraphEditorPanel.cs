@@ -66,7 +66,7 @@ public sealed class GraphEditorPanel : Widget
         // An optional header (e.g. a live material preview) pinned above the scrollable inspector.
         if (inspectorHeader is not null)
             inspectorSide = new Column {
-                CrossAxisAlign = CrossAxisAlignment.Stretch,
+                CrossAxisAlignment = CrossAxisAlignment.Stretch,
                 Children = {
                     inspectorHeader,
                     new Expanded(inspectorSide),
@@ -79,8 +79,8 @@ public sealed class GraphEditorPanel : Widget
         };
 
         _root = new Column {
-            MainAxisAlign = MainAxisAlignment.Start,
-            CrossAxisAlign = CrossAxisAlignment.Stretch,
+            MainAxisAlignment = MainAxisAlignment.Start,
+            CrossAxisAlignment = CrossAxisAlignment.Stretch,
             Children = {
                 new SizedBox(height: ToolbarH, child: toolbar),
                 new Expanded(_split),
@@ -190,8 +190,8 @@ public sealed class GraphEditorPanel : Widget
             new Padding(
                 EdgeInsets.Symmetric(8f, 2f),
                 new Row {
-                    MainAxisAlign = MainAxisAlignment.Start,
-                    CrossAxisAlign = CrossAxisAlignment.Center,
+                    MainAxisAlignment = MainAxisAlignment.Start,
+                    CrossAxisAlignment = CrossAxisAlignment.Center,
                     Children = {
                         titleLabel,
                         new SizedBox(14f),

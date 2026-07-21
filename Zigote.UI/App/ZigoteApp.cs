@@ -39,7 +39,7 @@ namespace Zigote.UI.Host;
 /// </code>
 ///     <para>Providers injected into the widget tree (accessible via BuildContext):</para>
 ///     <list type="bullet">
-///         <item><see cref="ZigoteTheme" /> — <c>ZigoteThemeProvider.Of(ctx)</c></item>
+///         <item><see cref="ThemeProvider" /> — <c>ThemeProvider.Of(ctx)</c></item>
 ///         <item><see cref="MediaQuery" /> — <c>MediaQuery.Of(ctx)</c></item>
 ///     </list>
 /// </summary>
@@ -59,7 +59,7 @@ public class ZigoteApp
 
     // ── Content / styling ────────────────────────────────────────────────────
 
-    /// <summary>App-wide theme. Propagated via <see cref="ZigoteTheme" /> InheritedWidget.</summary>
+    /// <summary>App-wide theme. Propagated via the <see cref="ThemeProvider" /> InheritedWidget.</summary>
     public ThemeData Theme { get; set; } = ThemeData.Dark;
 
     /// <summary>The root content widget.</summary>
@@ -136,7 +136,8 @@ public class ZigoteApp
 
     /// <summary>
     ///     Called once after the render loop exits (window closed or
-    ///     <see cref="UI.App.ShouldQuit" /> set).
+    ///     <see cref="UI.App.ShouldQuit" /> set). <see cref="App" /> and <see cref="RootNavigator" />
+    ///     are still valid here — they are cleared only after this returns.
     /// </summary>
     protected virtual void OnQuit()
     {
@@ -223,9 +224,9 @@ public class ZigoteApp
             uiApp.Frame();
         }
 
+        OnQuit();
         App = null;
         RootNavigator = null;
-        OnQuit();
     }
 
     /// <summary>

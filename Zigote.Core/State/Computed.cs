@@ -132,8 +132,10 @@ public sealed class Computed<T> : Reaction, IReadableSignal<T>, IReactiveSource,
             foreach (var o in _observers)
                 o.MarkStale(NodeState.Dirty);
 
-        Changed?.Invoke(next);
-        Invalidated?.Invoke();
+        // Handlers run inside this computed's own tracked Execute — suspend tracking so their reads
+        // don't become phantom dependencies of it.
+        Reactive.UntrackedInvoke(Changed, next);
+        Reactive.UntrackedInvoke(Invalidated);
     }
 }
 

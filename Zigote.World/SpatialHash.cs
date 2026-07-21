@@ -10,7 +10,9 @@ namespace Zigote.World;
 /// </summary>
 public sealed class SpatialHash(float cellSize = 4f)
 {
-    private readonly Dictionary<long, List<int>> _cells = new();
+    // Cell entries carry the position alongside the id so Query stays inside the cell list —
+    // no dictionary lookup per candidate. _positions only backs TryGetPosition.
+    private readonly Dictionary<long, List<(int Id, Vec3 Pos)>> _cells = new();
     private readonly float _cellSize = cellSize > 0f ? cellSize : 4f;
     private readonly Dictionary<int, Vec3> _positions = new();
 
@@ -27,7 +29,7 @@ public sealed class SpatialHash(float cellSize = 4f)
         _positions[id] = position;
         var key = KeyOf(CellOf(position.X), CellOf(position.Y), CellOf(position.Z));
         if (!_cells.TryGetValue(key, out var list)) _cells[key] = list = [];
-        list.Add(id);
+        list.Add((id, position));
     }
 
     public bool TryGetPosition(int id, out Vec3 position)
@@ -56,8 +58,8 @@ public sealed class SpatialHash(float cellSize = 4f)
             if (!_cells.TryGetValue(KeyOf(cx, cy, cz), out var list)) continue;
             for (var i = 0; i < list.Count; i++)
             {
-                var id = list[i];
-                var d = _positions[id] - center;
+                var (id, pos) = list[i];
+                var d = pos - center;
                 if (d.LengthSq() <= r2) results.Add(id);
             }
         }

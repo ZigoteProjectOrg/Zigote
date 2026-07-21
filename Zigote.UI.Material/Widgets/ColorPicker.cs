@@ -49,7 +49,7 @@ public sealed class ColorPicker : Widget
         _hexField = new TextField(decoration: new InputDecoration("RRGGBB")) {
             Text = ColorMath.ToHex(initial),
             MinWidth = 70f,
-            OnSubmit = CommitHex,
+            OnSubmitted = CommitHex,
             OnChanged = _ => { }, // committed on submit / blur, not per keystroke
         };
         _hexField.OnFocusChange = focused =>

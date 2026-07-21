@@ -26,7 +26,7 @@ public class DialogContentLayoutTests
     private static Widget CheckRow(string label, string? caption, ThemeData theme)
     {
         var text = new Column {
-            CrossAxisAlign = CrossAxisAlignment.Start,
+            CrossAxisAlignment = CrossAxisAlignment.Start,
             MainAxisSize = MainAxisSize.Min,
             Children = { new Label(label, theme.FontSizeBody, theme.OnSurface) },
         };
@@ -35,7 +35,7 @@ public class DialogContentLayoutTests
         return new Padding(
             EdgeInsets.Only(bottom: 6f),
             new Row {
-                CrossAxisAlign = CrossAxisAlignment.Start,
+                CrossAxisAlignment = CrossAxisAlignment.Start,
                 Children = {
                     new Checkbox(false),
                     new SizedBox(8f),
@@ -50,7 +50,7 @@ public class DialogContentLayoutTests
     {
         var theme = ThemeData.Dark;
         var rows = new Column {
-            CrossAxisAlign = CrossAxisAlignment.Stretch,
+            CrossAxisAlignment = CrossAxisAlignment.Stretch,
             MainAxisSize = MainAxisSize.Min,
         };
         for (var i = 0; i < 4; i++)
@@ -78,7 +78,7 @@ public class DialogContentLayoutTests
         var theme = ThemeData.Dark;
         // The broken shape: a default (Max) column nested in a Row under bounded height.
         var inner = new Column {
-            CrossAxisAlign = CrossAxisAlignment.Start,
+            CrossAxisAlignment = CrossAxisAlignment.Start,
             Children = { new Label("label", theme.FontSizeBody, theme.OnSurface) },
         };
         var row = new Row {

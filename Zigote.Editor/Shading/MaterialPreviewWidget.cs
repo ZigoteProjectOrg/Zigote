@@ -37,7 +37,7 @@ public sealed class MaterialPreviewWidget : Widget
         );
 
         _root = new Column {
-            CrossAxisAlign = CrossAxisAlignment.Stretch,
+            CrossAxisAlignment = CrossAxisAlignment.Stretch,
             // Hug content height — otherwise the default MainAxisSize.Max makes this header claim the
             // whole inspector pane (measured with the full available height), starving the Expanded
             // node-inspector below it of space so it shows nothing.

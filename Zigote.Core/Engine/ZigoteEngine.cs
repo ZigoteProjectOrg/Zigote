@@ -335,8 +335,10 @@ public sealed unsafe class ZigoteEngine : IDisposable
     ///     queue into <paramref name="buffer" /> (cleared first) instead of returning an iterator. The
     ///     loop reuses a single buffer, so a frame with no events allocates nothing on this path —
     ///     unlike <c>PollEvents().ToList()</c>, which allocates an enumerator and a list every frame.
-    ///     (Decoded <see cref="InputEvent" /> instances are still allocated per event, i.e. only at
-    ///     input rate.)
+    ///     The flooding kinds (<see cref="MouseMoveEvent" /> / <see cref="ScrollEvent" />) are rented
+    ///     from a per-poll pool and REUSED by the next call, so do not retain a reference to any polled
+    ///     event past the next poll — dispatch and drop it within the frame. The remaining kinds fire
+    ///     at human rates and are allocated per event.
     /// </summary>
     public void PollEventsInto(List<InputEvent> buffer)
     {
@@ -462,11 +464,17 @@ public sealed unsafe class ZigoteEngine : IDisposable
     /// <summary>Write <paramref name="text" /> to the system clipboard as UTF-8.</summary>
     public void SetClipboard(string text)
     {
-        var bytes = Encoding.UTF8.GetBytes(text);
-        var buf = stackalloc byte[bytes.Length + 1];
-        for (var i = 0; i < bytes.Length; i++) buf[i] = bytes[i];
-        buf[bytes.Length] = 0;
-        NativeEngine.SetClipboard(buf); // stateless — no handle
+        // Bounded like GetClipboard: the stack buffer covers typical copies; a large payload (a
+        // whole-document copy) takes a heap array instead of an unbounded stackalloc.
+        const int stackCap = 8192;
+        var len = Encoding.UTF8.GetByteCount(text);
+        var bytes = len < stackCap ? stackalloc byte[len + 1] : new byte[len + 1];
+        Encoding.UTF8.GetBytes(text, bytes);
+        bytes[len] = 0;
+        fixed (byte* p = bytes)
+        {
+            NativeEngine.SetClipboard(p); // stateless — no handle
+        }
     }
 
     /// <summary>

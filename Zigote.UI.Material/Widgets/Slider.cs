@@ -25,15 +25,14 @@ public class Slider : Widget
 
     /// <summary>
     ///     Named-argument constructor:
-    ///     <c>new Slider(value: 0.5, min: 0, max: 100, onChanged: (v) => …)</c>.
-    ///     <c>onChanged</c> receives a <c>double</c>.
+    ///     <c>new Slider(value: 0.5f, min: 0, max: 100, onChanged: (v) => …)</c>.
     /// </summary>
-    public Slider(double value, double min = 0, double max = 1, Action<double>? onChanged = null)
+    public Slider(float value, float min = 0f, float max = 1f, Action<float>? onChanged = null)
     {
-        _value = (float)value;
-        _min = (float)min;
-        _max = (float)max;
-        OnChanged = onChanged is null ? null : new Action<float>(f => onChanged(f));
+        _value = value;
+        _min = min;
+        _max = max;
+        OnChanged = onChanged;
     }
 
     public float Value

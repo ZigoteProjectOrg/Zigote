@@ -15,7 +15,6 @@ public sealed class ElevatedButton : Button
     {
         if (child is not LabelWidget) Content = child;
         Style = ButtonStyle.Elevated;
-        Enabled = onPressed is not null;
     }
 
     internal static string LabelOf(Widget child)
@@ -34,7 +33,6 @@ public sealed class FilledButton : Button
     {
         if (child is not LabelWidget) Content = child;
         Style = ButtonStyle.Elevated;
-        Enabled = onPressed is not null;
     }
 }
 
@@ -48,7 +46,6 @@ public sealed class OutlinedButton : Button
     {
         if (child is not LabelWidget) Content = child;
         Style = ButtonStyle.Outlined;
-        Enabled = onPressed is not null;
     }
 }
 
@@ -62,6 +59,5 @@ public sealed class TextButton : Button
     {
         if (child is not LabelWidget) Content = child;
         Style = ButtonStyle.Flat;
-        Enabled = onPressed is not null;
     }
 }

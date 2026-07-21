@@ -17,8 +17,7 @@ public class MaterialApp : ZigoteApp
         string initialRoute = "/",
         RouteFactory? onGenerateRoute = null,
         List<Page>? pages = null,
-        Func<Route, object?, bool>? onPopPage = null,
-        bool debugShowCheckedModeBanner = false)
+        Func<Route, object?, bool>? onPopPage = null)
     {
         Home = home;
         Title = title;
@@ -28,6 +27,5 @@ public class MaterialApp : ZigoteApp
         OnGenerateRoute = onGenerateRoute;
         Pages = pages;
         OnPopPage = onPopPage;
-        _ = debugShowCheckedModeBanner;
     }
 }

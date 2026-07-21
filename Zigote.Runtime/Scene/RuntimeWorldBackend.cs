@@ -149,7 +149,11 @@ internal sealed class RuntimeWorldBackend : IWorldBackend
 
     public void SetRotation(EntityHandle entity, Quat rotation)
     {
-        if (TryNode(entity.Id, out var n)) n.Rotation = rotation;
+        if (TryNode(entity.Id, out var n))
+        {
+            n.Rotation = rotation;
+            _spatialDirty = true; // descendants' world positions move with the parent's rotation
+        }
     }
 
     public Vec3 GetScale(EntityHandle entity)
@@ -159,7 +163,11 @@ internal sealed class RuntimeWorldBackend : IWorldBackend
 
     public void SetScale(EntityHandle entity, Vec3 scale)
     {
-        if (TryNode(entity.Id, out var n)) n.Scale = scale;
+        if (TryNode(entity.Id, out var n))
+        {
+            n.Scale = scale;
+            _spatialDirty = true; // descendants' world positions move with the parent's scale
+        }
     }
 
     public Vec3 GetWorldPosition(EntityHandle entity)
@@ -549,14 +557,27 @@ internal sealed class RuntimeWorldBackend : IWorldBackend
     {
         if (!_spatialDirty && _spatialStamp == _tick) return;
         _spatial.Clear();
-        foreach (var (id, node) in _nodes)
-        {
-            if (ReferenceEquals(node, Root)) continue; // the scene root is not a spatial hit
-            _spatial.Insert(id, WorldTransform(node).Position);
-        }
+        // One walk carrying the accumulated parent transform (per-node WorldTransform recursion
+        // would be O(N·depth)). The scene root itself is not a spatial hit.
+        var rootWorld = WorldTransform(Root);
+        for (var i = 0; i < Root.Children.Count; i++)
+            InsertSpatialSubtree(Root.Children[i], rootWorld);
 
         _spatialStamp = _tick;
         _spatialDirty = false;
+    }
+
+    private void InsertSpatialSubtree(SceneNode node, in Transform3D parentWorld)
+    {
+        if (node.IsInternal) return; // mirrors RegisterSubtree: gizmo subtrees are not entities
+
+        var world = Transform3D.Combine(
+            parentWorld,
+            new Transform3D(node.Position, node.Rotation, node.Scale)
+        );
+        if (_nodes.ContainsKey(node.Id)) _spatial.Insert(node.Id, world.Position);
+        for (var i = 0; i < node.Children.Count; i++)
+            InsertSpatialSubtree(node.Children[i], world);
     }
 
     private static bool IsUnder(SceneNode node, SceneNode subtree)

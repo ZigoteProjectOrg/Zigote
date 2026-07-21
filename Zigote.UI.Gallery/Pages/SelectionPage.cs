@@ -26,16 +26,16 @@ internal sealed record SelectionState(
     bool Checked,
     bool SwitchOn,
     int Radio,
-    double Slider,
+    float Slider,
     int Segment,
-    double Stepper,
-    double Number)
+    float Stepper,
+    float Number)
 {
     public static SelectionState Initial => new(
         true,
         true,
         1,
-        0.4,
+        0.4f,
         0,
         3,
         5
@@ -61,7 +61,7 @@ internal sealed class SelectionStore
         State.Update(s => s with { Radio = value });
     }
 
-    public void SetSlider(double value)
+    public void SetSlider(float value)
     {
         State.Update(s => s with { Slider = value });
     }
@@ -71,12 +71,12 @@ internal sealed class SelectionStore
         State.Update(s => s with { Segment = value });
     }
 
-    public void SetStepper(double value)
+    public void SetStepper(float value)
     {
         State.Update(s => s with { Stepper = value });
     }
 
-    public void SetNumber(double value)
+    public void SetNumber(float value)
     {
         State.Update(s => s with { Number = value });
     }
@@ -113,7 +113,7 @@ internal sealed class SelectionPageState : WidgetState<SelectionPage>
             1,
             _store.SetSlider
         );
-        _number ??= new NumberInput((float)s.Number) { OnChanged = v => _store.SetNumber(v) };
+        _number ??= new NumberInput(s.Number) { OnChanged = v => _store.SetNumber(v) };
 
         return Sections(
             Section(

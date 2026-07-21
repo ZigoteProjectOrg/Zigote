@@ -60,7 +60,7 @@ public sealed class SettingsPanel : Widget
     private Widget Build()
     {
         var outer = new Column {
-            CrossAxisAlign = CrossAxisAlignment.Stretch,
+            CrossAxisAlignment = CrossAxisAlignment.Stretch,
             MainAxisSize = MainAxisSize.Min,
         };
 
@@ -121,7 +121,7 @@ public sealed class SettingsPanel : Widget
             "Environment",
             () => ResetGroup("Environment"),
             new Row {
-                CrossAxisAlign = CrossAxisAlignment.Center,
+                CrossAxisAlignment = CrossAxisAlignment.Center,
                 Children = {
                     new Expanded(
                         new SizedBox(height: 26f, child: new Button("Load HDRI…", LoadHdri))
@@ -543,7 +543,7 @@ public sealed class SettingsPanel : Widget
         if (collapsed) return;
 
         var body = new Column {
-            CrossAxisAlign = CrossAxisAlignment.Stretch,
+            CrossAxisAlignment = CrossAxisAlignment.Stretch,
             MainAxisSize = MainAxisSize.Min,
         };
         body.Children.AddRange(rows);
@@ -644,7 +644,7 @@ public sealed class SettingsPanel : Widget
         return new Padding(
             EdgeInsets.Symmetric(0f, Spacing.Xxs),
             new Column {
-                CrossAxisAlign = CrossAxisAlignment.Stretch,
+                CrossAxisAlignment = CrossAxisAlignment.Stretch,
                 MainAxisSize = MainAxisSize.Min,
                 Children = {
                     new Label(
@@ -677,7 +677,7 @@ public sealed class SettingsPanel : Widget
         float r, float g, float b, Action<float> sr, Action<float> sg, Action<float> sb)
     {
         var c = new Column {
-            CrossAxisAlign = CrossAxisAlignment.Stretch,
+            CrossAxisAlignment = CrossAxisAlignment.Stretch,
             MainAxisSize = MainAxisSize.Min,
         };
         c.Children.Add(

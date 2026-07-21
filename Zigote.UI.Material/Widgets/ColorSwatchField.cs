@@ -92,7 +92,7 @@ public sealed class ColorSwatchField : Widget
     private void OpenPicker()
     {
         var col = new Column {
-            CrossAxisAlign = CrossAxisAlignment.Start,
+            CrossAxisAlignment = CrossAxisAlignment.Start,
             MainAxisSize = MainAxisSize.Min,
         };
 
@@ -104,8 +104,8 @@ public sealed class ColorSwatchField : Widget
         for (var r = 0; r < 2; r++)
         {
             var row = new Row {
-                MainAxisAlign = MainAxisAlignment.Start,
-                CrossAxisAlign = CrossAxisAlignment.Center,
+                MainAxisAlignment = MainAxisAlignment.Start,
+                CrossAxisAlignment = CrossAxisAlignment.Center,
             };
             for (var i = 0; i < 5; i++)
             {

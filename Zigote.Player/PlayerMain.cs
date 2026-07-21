@@ -1,7 +1,7 @@
 using System.Diagnostics;
+using System.Reflection;
 using Zigote.Runtime;
 using Zigote.Scripting.Metadata;
-using Zigote.UI.DevTools;
 using Zigote.UI.Host;
 using Zigote.UI.Theme;
 
@@ -42,7 +42,7 @@ public static class PlayerMain
             (uint)Math.Max(240, host.Project.WindowHeight)
         );
         app.Theme = ThemeData.Dark;
-        DevTools.Install(app, DevToolsProfile.ThreeD);
+        if (host.Project.DevToolsEnabled) TryInstallDevTools(app);
         // The 3D scene renders every frame; never idle-wait on events.
         app.ContinuousUpdate = true;
 
@@ -69,6 +69,28 @@ public static class PlayerMain
 
         host.Dispose();
         return 0;
+    }
+
+    /// <summary>
+    ///     Late-binds to <c>Zigote.UI.DevTools.DevTools.Install(app, ThreeD)</c> via reflection,
+    ///     mirroring <c>ZigoteApp</c>'s auto-install: the DevTools assemblies ship only when the
+    ///     project's manifest opts in (<c>DevToolsEnabled</c>), so Zigote.Player can't take a
+    ///     compile-time dependency on them. Absent DLL or any failure is a silent no-op.
+    /// </summary>
+    private static void TryInstallDevTools(App app)
+    {
+        try
+        {
+            var type = Type.GetType("Zigote.UI.DevTools.DevTools, Zigote.UI.DevTools");
+            var install = type?.GetMethod("Install", BindingFlags.Public | BindingFlags.Static);
+            var profile = Type.GetType("Zigote.UI.DevTools.DevToolsProfile, Zigote.UI.DevTools");
+            if (install is null || profile is null) return;
+            install.Invoke(null, [app, Enum.Parse(profile, "ThreeD")]);
+        }
+        catch
+        {
+            // DevTools assemblies not bundled with this export — run without the overlay.
+        }
     }
 
     /// <summary>

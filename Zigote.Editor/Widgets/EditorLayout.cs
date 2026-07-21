@@ -97,8 +97,8 @@ public sealed class EditorLayout : RenderWidget
         var dock = BuildDock();
 
         var column = new Column {
-            MainAxisAlign = MainAxisAlignment.Start,
-            CrossAxisAlign = CrossAxisAlignment.Start,
+            MainAxisAlignment = MainAxisAlignment.Start,
+            CrossAxisAlignment = CrossAxisAlignment.Start,
         };
 
         // Hand menus to a native bar if one is available (e.g. macOS NSMenu);
@@ -693,8 +693,8 @@ public sealed class EditorLayout : RenderWidget
         var row = new Padding(
             EdgeInsets.Symmetric(8f, 0f),
             new Row {
-                MainAxisAlign = MainAxisAlignment.Start,
-                CrossAxisAlign = CrossAxisAlignment.Center,
+                MainAxisAlignment = MainAxisAlignment.Start,
+                CrossAxisAlignment = CrossAxisAlignment.Center,
                 Children = {
                     projectChip,
                     Sep(),
@@ -727,7 +727,7 @@ public sealed class EditorLayout : RenderWidget
         return new ColoredBox(
             _theme.Toolbar,
             new Column {
-                CrossAxisAlign = CrossAxisAlignment.Stretch,
+                CrossAxisAlignment = CrossAxisAlignment.Stretch,
                 Children = {
                     new Expanded(row),
                     new SizedBox(height: 1f, child: new ColoredBox(_theme.Border)),

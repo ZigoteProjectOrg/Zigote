@@ -231,8 +231,8 @@ public class Dialog : RenderWidget, IDismissableOverlay, ITickerProvider
     {
         Dialog? dlg = null;
         var content = new Column {
-            MainAxisAlign = MainAxisAlignment.Start,
-            CrossAxisAlign = CrossAxisAlignment.Start,
+            MainAxisAlignment = MainAxisAlignment.Start,
+            CrossAxisAlignment = CrossAxisAlignment.Start,
             MainAxisSize =
                 MainAxisSize.Min, // shrink to content height (was Max → stretched to ~80% screen)
             Children = {
@@ -258,8 +258,8 @@ public class Dialog : RenderWidget, IDismissableOverlay, ITickerProvider
     {
         Dialog? dlg = null;
         var content = new Column {
-            MainAxisAlign = MainAxisAlignment.Start,
-            CrossAxisAlign = CrossAxisAlignment.Start,
+            MainAxisAlignment = MainAxisAlignment.Start,
+            CrossAxisAlignment = CrossAxisAlignment.Start,
             MainAxisSize =
                 MainAxisSize.Min, // shrink to content height (was Max → stretched to ~80% screen)
             Children = {
@@ -271,8 +271,8 @@ public class Dialog : RenderWidget, IDismissableOverlay, ITickerProvider
                 new Label(message) { Style = Label.LabelStyle.Body },
                 new SizedBox(height: Spacing.Xl),
                 new Row {
-                    MainAxisAlign = MainAxisAlignment.Start,
-                    CrossAxisAlign = CrossAxisAlignment.Center,
+                    MainAxisAlignment = MainAxisAlignment.Start,
+                    CrossAxisAlignment = CrossAxisAlignment.Center,
                     Children = {
                         new Button(
                             confirmLabel,

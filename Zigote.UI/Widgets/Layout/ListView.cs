@@ -24,6 +24,7 @@ public class ListView : Widget
     // _offsets[Count] = total content height. Null/empty while uniform or not yet built.
     private float[] _offsets = [];
     private bool _offsetsDirty = true;
+    private EdgeInsets _padding = EdgeInsets.Zero;
     private ThemeData _theme = ThemeData.Dark;
     private Size _viewSize;
 
@@ -31,8 +32,8 @@ public class ListView : Widget
     ///     Named-argument constructor: <c>new ListView(children: [...])</c> or
     ///     <c>new ListView(itemExtent: 48, children: [...])</c>. All arguments optional, so
     ///     <c>new ListView { ItemHeight = … }</c> + <see cref="SetItems" /> still works.
-    ///     <paramref name="padding" /> and a horizontal <paramref name="scrollDirection" /> are accepted
-    ///     but not applied — this list virtualizes uniform vertical rows.
+    ///     A horizontal <paramref name="scrollDirection" /> is accepted but not applied — this list
+    ///     virtualizes vertical rows.
     /// </summary>
     public ListView(
         List<Widget>? children = null,
@@ -43,7 +44,7 @@ public class ListView : Widget
         _sy = new SmoothScroller(MarkNeedsLayout);
         if (itemExtent is { } e) ItemHeight = (float)e;
         if (children is not null) SetItems(children);
-        _ = padding;
+        if (padding is { } p) _padding = p;
         _ = scrollDirection;
     }
 
@@ -75,6 +76,19 @@ public class ListView : Widget
         }
     }
 
+    /// <summary>Insets around the row content — rows are indented left/right and the first/last row
+    ///     gets breathing room that scrolls with the content.</summary>
+    public EdgeInsets Padding
+    {
+        get => _padding;
+        set
+        {
+            if (_padding == value) return;
+            _padding = value;
+            MarkNeedsLayout();
+        }
+    }
+
     public float ScrollSpeed { get; set; } = 40f;
 
     /// <summary>Ease wheel scrolling (true) or jump instantly (false).</summary>
@@ -84,7 +98,8 @@ public class ListView : Widget
 
     private bool Variable => _heightOf is not null;
 
-    private float ContentHeight => Variable ? Offsets[_items.Count] : _items.Count * _itemHeight;
+    private float ContentHeight =>
+        (Variable ? Offsets[_items.Count] : _items.Count * _itemHeight) + _padding.Vertical;
 
     private float[] Offsets
     {
@@ -186,9 +201,10 @@ public class ListView : Widget
         _viewSize = c.Constrain(new Size(w, h));
 
         // Measure only the visible window — the whole point of virtualization (was O(count)).
+        var innerW = MathF.Max(0f, _viewSize.Width - _padding.Horizontal);
         var (first, last) = VisibleRange();
         for (var i = first; i <= last; i++)
-            _items[i].Measure(new Constraints(maxWidth: _viewSize.Width, maxHeight: Extent(i)));
+            _items[i].Measure(new Constraints(maxWidth: innerW, maxHeight: Extent(i)));
         return _viewSize;
     }
 
@@ -205,7 +221,12 @@ public class ListView : Widget
 
         var (first, last) = VisibleRange();
         for (var i = first; i <= last; i++)
-            _items[i].Layout(new Offset(origin.X, origin.Y + Top(i) - _sy.Offset));
+            _items[i].Layout(
+                new Offset(
+                    origin.X + _padding.Left,
+                    origin.Y + _padding.Top + Top(i) - _sy.Offset
+                )
+            );
     }
 
     public override void Paint(PaintList paint)
@@ -257,7 +278,8 @@ public class ListView : Widget
     {
         var n = _items.Count;
         if (n == 0) return (0, -1);
-        var top = _sy.Offset;
+        // Row tops are padding-relative, so shift the viewport into that space.
+        var top = _sy.Offset - _padding.Top;
         var bottom = top + _viewSize.Height;
         var first = Math.Max(0, IndexAt(top));
         // +1 row of slack so a partially-scrolled bottom row is included.
@@ -344,5 +366,17 @@ public class ListView : Widget
     public override IEnumerable<Widget> GetChildren()
     {
         return _items;
+    }
+
+    /// <summary>
+    ///     Focus/semantics parity with virtualization: only rows inside the viewport window are
+    ///     measured and laid out, so off-window rows carry stale Bounds and must stay invisible to
+    ///     focus traversal and the semantics walk.
+    /// </summary>
+    public override IEnumerable<Widget> GetVisibleChildren()
+    {
+        var (first, last) = VisibleRange();
+        for (var i = first; i <= last; i++)
+            yield return _items[i];
     }
 }

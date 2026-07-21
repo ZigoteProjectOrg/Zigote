@@ -11,14 +11,10 @@
     <ItemGroup>
         <ProjectReference Include="..\Zigote.Runtime\Zigote.Runtime.csproj"/>
         <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
-        <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
-        <ProjectReference Include="..\Zigote.UI.Charts\Zigote.UI.Charts.csproj"/>
-        <ProjectReference Include="..\Zigote.UI.DevTools\Zigote.UI.DevTools.csproj"/>
     </ItemGroup>
     <!-- Fonts are bundled by Zigote.UI (their canonical home) and flow into this app's Fonts/ output
          transitively via the Zigote.UI project reference. The engine loads them from Fonts/ next to the
          executable. Publish-time subsetting is applied repo-wide by Directory.Build.targets. -->
-    <ItemGroup>
-        <Using Include="Zigote.UI.Material"/>
-    </ItemGroup>
+    <!-- No Zigote.UI.DevTools reference: the exporter adds it to the generated game csproj only when
+         the project enables the overlay, and PlayerMain late-binds the install via reflection. -->
 </Project>

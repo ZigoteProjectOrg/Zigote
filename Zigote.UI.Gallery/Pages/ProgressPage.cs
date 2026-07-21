@@ -17,7 +17,7 @@ internal sealed class ProgressPage : StatefulWidget
 
 internal sealed class ProgressPageState : WidgetState<ProgressPage>
 {
-    private double _progress = 0.65;
+    private float _progress = 0.65f;
 
     // Retained: a rebuild mid-drag would recreate the slider and drop the drag.
     private Slider? _slider;
@@ -61,7 +61,7 @@ internal sealed class ProgressPageState : WidgetState<ProgressPage>
                         new SizedBox(24),
                         new Spinner(28),
                         new SizedBox(24),
-                        new SizedBox(160, child: new ProgressBar((float)_progress)),
+                        new SizedBox(160, child: new ProgressBar(_progress)),
                     ]
                 )
             )

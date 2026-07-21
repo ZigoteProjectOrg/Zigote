@@ -48,6 +48,18 @@ public sealed class RaycastHit
 }
 
 /// <summary>
+///     Closest hit of a <see cref="Physics.TryRaycast" />. Distance is in world units along the ray.
+///     The allocation-free counterpart of <see cref="RaycastHit" /> for per-tick casts.
+/// </summary>
+public readonly struct RaycastHit3D(RigidBodyHandle body, Vec3 point, Vec3 normal, float distance)
+{
+    public RigidBodyHandle Body { get; } = body;
+    public Vec3 Point { get; } = point;
+    public Vec3 Normal { get; } = normal;
+    public float Distance { get; } = distance;
+}
+
+/// <summary>
 ///     The contract the host (editor play session / game runtime) implements to back the generic
 ///     <see cref="Physics" /> scripting API with a real physics world. A strongly-typed interface
 ///     (rather
@@ -79,9 +91,10 @@ public interface IPhysicsBackend
 
     /// <summary>
     ///     Closest-hit ray cast; <paramref name="ignore" /> (if valid) is skipped (e.g. the caster's
-    ///     own body).
+    ///     own body). Returns true on hit, filling <paramref name="hit" />.
     /// </summary>
-    RaycastHit? Raycast(Vec3 origin, Vec3 direction, float maxDistance, RigidBodyHandle ignore);
+    bool TryRaycast(Vec3 origin, Vec3 direction, float maxDistance, RigidBodyHandle ignore,
+        out RaycastHit3D hit);
 }
 
 /// <summary>
@@ -178,24 +191,54 @@ public static class Physics
         Backend?.AddImpulse(body, impulse);
     }
 
-    public static RaycastHit? Raycast(Vec3 origin, Vec3 direction, float maxDistance)
+    /// <summary>Allocation-free closest-hit ray cast: true on hit, filling <paramref name="hit" />.</summary>
+    public static bool TryRaycast(Vec3 origin, Vec3 direction, float maxDistance,
+        out RaycastHit3D hit)
     {
-        return Backend?.Raycast(
+        return TryRaycast(
             origin,
             direction,
             maxDistance,
-            RigidBodyHandle.None
+            RigidBodyHandle.None,
+            out hit
         );
+    }
+
+    /// <summary>
+    ///     Allocation-free closest-hit ray cast, skipping <paramref name="ignore" /> (if valid) —
+    ///     e.g. the caster's own body. Prefer this over <see cref="Raycast(Vec3, Vec3, float)" />
+    ///     on per-tick paths: the class result allocates per hit.
+    /// </summary>
+    public static bool TryRaycast(Vec3 origin, Vec3 direction, float maxDistance,
+        RigidBodyHandle ignore, out RaycastHit3D hit)
+    {
+        if (Backend is { } backend)
+            return backend.TryRaycast(
+                origin,
+                direction,
+                maxDistance,
+                ignore,
+                out hit
+            );
+        hit = default;
+        return false;
+    }
+
+    public static RaycastHit? Raycast(Vec3 origin, Vec3 direction, float maxDistance)
+    {
+        return Raycast(origin, direction, maxDistance, RigidBodyHandle.None);
     }
 
     public static RaycastHit? Raycast(Vec3 origin, Vec3 direction, float maxDistance,
         RigidBodyHandle ignore)
     {
-        return Backend?.Raycast(
-            origin,
-            direction,
-            maxDistance,
-            ignore
-        );
+        return TryRaycast(origin, direction, maxDistance, ignore, out var hit)
+            ? new RaycastHit {
+                Body = hit.Body,
+                Point = hit.Point,
+                Normal = hit.Normal,
+                Distance = hit.Distance,
+            }
+            : null;
     }
 }

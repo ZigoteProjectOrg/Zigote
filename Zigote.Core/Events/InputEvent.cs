@@ -323,9 +323,10 @@ internal static class EventDecoder
 
     private static Modifiers DecodeMods(byte m)
     {
-        return ((m & 1) != 0 ? Modifiers.Shift : Modifiers.None) |
-               ((m & 2) != 0 ? Modifiers.Ctrl : Modifiers.None) |
-               ((m & 4) != 0 ? Modifiers.Alt : Modifiers.None) |
-               ((m & 8) != 0 ? Modifiers.Cmd : Modifiers.None);
+        var mods = (ModifierKeys)m;
+        return ((mods & ModifierKeys.Shift) != 0 ? Modifiers.Shift : Modifiers.None) |
+               ((mods & ModifierKeys.Ctrl) != 0 ? Modifiers.Ctrl : Modifiers.None) |
+               ((mods & ModifierKeys.Alt) != 0 ? Modifiers.Alt : Modifiers.None) |
+               ((mods & ModifierKeys.Cmd) != 0 ? Modifiers.Cmd : Modifiers.None);
     }
 }

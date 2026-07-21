@@ -28,7 +28,7 @@ internal sealed class LocalizationPage : StatefulWidget
 internal sealed class LocalizationPageState : WidgetState<LocalizationPage>
 {
     private static readonly string[] Genders = ["male", "female", "other"];
-    private double _count = 2;
+    private float _count = 2;
     private int _gender;
 
     public override Widget Build(BuildContext context)

@@ -97,6 +97,7 @@ internal static class FlexLayout
         MainAxisAlignment mainAlign,
         CrossAxisAlignment crossAlign,
         MainAxisSize mainSize,
+        float spacing,
         ref ChildMetrics[] metrics)
     {
         // Reuse the caller's buffer across frames; only grow when needed. Clear the live range so
@@ -108,7 +109,9 @@ internal static class FlexLayout
             Array.Clear(metrics, 0, children.Count);
 
         var maxCross = 0f;
-        var totalFixed = 0f;
+        // Seed with the fixed inter-child gaps so the per-child available space, the flex
+        // distribution, and the MainAxisSize.Min total all see only what spacing leaves over.
+        var totalFixed = children.Count > 1 ? spacing * (children.Count - 1) : 0f;
         var totalFlex = 0;
 
         var mainMax = axis == 0 ? c.MaxWidth : c.MaxHeight;
@@ -210,6 +213,7 @@ internal static class FlexLayout
         Rect bounds,
         int axis,
         MainAxisAlignment mainAlign,
+        float spacing = 0f,
         bool rtl = false)
     {
         // Normally metrics is sized to children.Count by the immediately-preceding Measure. Guard the
@@ -222,6 +226,8 @@ internal static class FlexLayout
         var totalChildMain = 0f;
         for (var i = 0; i < count; i++)
             totalChildMain += axis == 0 ? metrics[i].Size.Width : metrics[i].Size.Height;
+        // Fixed gaps count as occupied main-axis space: alignment distributes only what remains.
+        if (count > 1) totalChildMain += spacing * (count - 1);
 
         var ownMain = axis == 0 ? bounds.Width : bounds.Height;
         var extra = ownMain - totalChildMain;
@@ -265,7 +271,7 @@ internal static class FlexLayout
                 : new Offset(bounds.X + crossOff, mainPos);
 
             children[i].Layout(origin);
-            cursor += mainSz + gap;
+            cursor += mainSz + gap + spacing;
         }
     }
 

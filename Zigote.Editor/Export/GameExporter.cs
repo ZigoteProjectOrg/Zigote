@@ -364,11 +364,20 @@ public static class GameExporter
         csproj.AppendLine("""        <TrimmerRootAssembly Include="Zigote.ECS" />""");
         if (scriptAsm is not null)
             csproj.AppendLine($"""        <TrimmerRootAssembly Include="{scriptAsm}" />""");
+        // Rooted so the player's reflection late-bind (Type.GetType) survives AOT trimming.
+        if (input.Project.DevToolsEnabled)
+            csproj.AppendLine("""        <TrimmerRootAssembly Include="Zigote.UI.DevTools" />""");
         csproj.AppendLine("    </ItemGroup>");
         csproj.AppendLine("    <ItemGroup>");
         csproj.AppendLine(
             $"""        <ProjectReference Include="{Path.Combine(sdkRoot, "Zigote.Player", "Zigote.Player.csproj")}" />"""
         );
+        // The DevTools overlay is opt-in per project: only an enabled export bundles the assemblies
+        // (PlayerMain late-binds the install, so their absence is a clean no-op).
+        if (input.Project.DevToolsEnabled)
+            csproj.AppendLine(
+                $"""        <ProjectReference Include="{Path.Combine(sdkRoot, "Zigote.UI.DevTools", "Zigote.UI.DevTools.csproj")}" />"""
+            );
         if (scriptCsproj is not null)
             csproj.AppendLine($"""        <ProjectReference Include="{scriptCsproj}" />""");
         csproj.AppendLine("    </ItemGroup>");

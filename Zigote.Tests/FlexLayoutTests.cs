@@ -21,7 +21,7 @@ public class FlexLayoutTests
         var b = new SizedBox(60, 20);
         var row = new Row([a, b]) {
             MainAxisSize = MainAxisSize.Min,
-            CrossAxisAlign = CrossAxisAlignment.Start,
+            CrossAxisAlignment = CrossAxisAlignment.Start,
         };
 
         var size = row.Measure(new Constraints(maxWidth: 200, maxHeight: 100));
@@ -40,7 +40,7 @@ public class FlexLayoutTests
         // metrics buffer: the second Measure hits the Array.Clear reuse path and must match the first.
         var e0 = new Expanded(new SizedBox(0, 10));
         var e1 = new Expanded(new SizedBox(0, 10));
-        var row = new Row([e0, e1]) { CrossAxisAlign = CrossAxisAlignment.Start };
+        var row = new Row([e0, e1]) { CrossAxisAlignment = CrossAxisAlignment.Start };
         var c = new Constraints(maxWidth: 200, maxHeight: 100);
 
         var first = row.Measure(c);
@@ -66,7 +66,7 @@ public class FlexLayoutTests
             var header = new Column([new SizedBox(0, 40)]) { MainAxisSize = headerSize };
             var body = new SizedBox(); // tracked Expanded leaf
             var content = new Column([header, new Expanded(body)]) {
-                CrossAxisAlign = CrossAxisAlignment.Stretch,
+                CrossAxisAlignment = CrossAxisAlignment.Stretch,
             };
             content.Measure(
                 new Constraints(

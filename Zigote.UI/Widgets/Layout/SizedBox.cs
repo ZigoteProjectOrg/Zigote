@@ -7,12 +7,16 @@ namespace Zigote.UI.Widgets.Layout;
 public class SizedBox(float? width = null, float? height = null, Widget? child = null)
     : Widget
 {
-    public static readonly SizedBox Shrink = new(0.0f, 0.0f);
     private Size _size;
 
     public float? Width { get; set; } = width;
     public float? Height { get; set; } = height;
     public Widget? Child { get; set; } = child;
+
+    public static SizedBox Shrink()
+    {
+        return new SizedBox(0f, 0f);
+    }
 
     public static SizedBox Square(float size, Widget? child = null)
     {

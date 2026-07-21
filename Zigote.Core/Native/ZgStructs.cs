@@ -69,6 +69,7 @@ public enum ZgResult
 
 /// <summary>
 ///     Modifier key bitmask for <see cref="ZgEvent.Modifiers" />.
+///     Must match the MOD_* constants in src/ffi/root.zig.
 /// </summary>
 [Flags]
 public enum ModifierKeys : byte
@@ -77,6 +78,7 @@ public enum ModifierKeys : byte
     Shift = 1,
     Ctrl = 2,
     Alt = 4,
+    Cmd = 8, // ⌘ on macOS, Super/Win elsewhere — the platform "command" modifier (MOD_GUI)
 }
 
 /// <summary>

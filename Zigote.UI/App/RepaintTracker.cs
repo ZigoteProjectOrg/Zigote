@@ -147,6 +147,25 @@ public sealed class RepaintTracker
         _damage[_damageCount++] = region;
     }
 
+    /// <summary>
+    ///     Widen this frame's GPU damage without re-dirtying a layer — used by the post-paint
+    ///     paint-list diff, whose layer has already been re-walked and only needs a larger replay
+    ///     region. Degrades to <see cref="FullDamage" /> on overflow like the mark paths.
+    /// </summary>
+    public void AddDamageBoundsOnly(Rect region)
+    {
+        Accumulate(region);
+    }
+
+    /// <summary>
+    ///     Force this frame to a full-frame repaint without re-dirtying the (already re-walked)
+    ///     layers — the paint-list diff found a change it cannot bound.
+    /// </summary>
+    public void ForceFullDamage()
+    {
+        FullDamage = true;
+    }
+
     /// <summary>Record that the root layer was re-painted this frame; clears its dirty flag.</summary>
     public void RootPainted()
     {

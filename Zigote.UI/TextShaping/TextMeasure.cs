@@ -21,7 +21,11 @@ public static class TextMeasure
     // Bound to keep dynamic text (counters, timers) from growing the cache without limit.
     private const int MaxEntries = 8192;
 
-    private static readonly ConcurrentDictionary<Key, Size> Cache = new();
+    // Two generations: when the current one fills up it demotes to _previous (whose contents are
+    // dropped) instead of clearing outright, so entries still being hit survive eviction — a hit
+    // in _previous promotes the entry back into the current generation.
+    private static ConcurrentDictionary<Key, Size> _cache = new();
+    private static ConcurrentDictionary<Key, Size> _previous = new();
 
     /// <summary>Measured size of <paramref name="text" /> at the given font size / weight / style.</summary>
     public static Size Measure(
@@ -40,7 +44,12 @@ public static class TextMeasure
             style,
             fontFamily
         );
-        if (Cache.TryGetValue(key, out var cached)) return cached;
+        if (_cache.TryGetValue(key, out var cached)) return cached;
+        if (_previous.TryGetValue(key, out cached))
+        {
+            _cache[key] = cached;
+            return cached;
+        }
 
         var engine = ZigoteEngine.Instance;
         var size = engine is not null
@@ -53,8 +62,15 @@ public static class TextMeasure
             )
             : new Size(text.Length * fontSize * 0.55f, fontSize * 1.2f);
 
-        if (Cache.Count >= MaxEntries) Cache.Clear();
-        Cache[key] = size;
+        if (_cache.Count >= MaxEntries)
+        {
+            var retired = _previous;
+            retired.Clear();
+            _previous = _cache;
+            _cache = retired;
+        }
+
+        _cache[key] = size;
         return size;
     }
 
@@ -78,7 +94,8 @@ public static class TextMeasure
     /// <summary>Drop all memoised measurements (e.g. after a font swap).</summary>
     public static void Invalidate()
     {
-        Cache.Clear();
+        _cache.Clear();
+        _previous.Clear();
     }
 
     private readonly record struct Key(

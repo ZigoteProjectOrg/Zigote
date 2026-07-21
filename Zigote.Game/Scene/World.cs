@@ -1,3 +1,4 @@
+using Zigote.Core;
 using Zigote.Core.Engine;
 using Zigote.Core.Math3D;
 using Zigote.Core.Physics;
@@ -25,6 +26,12 @@ public sealed class World
     private readonly List<Material3D> _materials = [];
     private readonly List<Mesh3D> _meshes = [];
     private readonly List<SceneNode3D> _roots = [];
+
+    // Reused flattened buffers for the batched physics→node transform sync (one FFI call per frame
+    // instead of a position + rotation call pair per body; zero steady-state allocation).
+    private readonly List<(SceneNode3D Node, uint BodyId)> _syncBodies = [];
+    private ScratchBuffer<uint> _syncIds;
+    private ScratchBuffer<float> _syncXforms;
 
     public IReadOnlyList<SceneNode3D> Roots => _roots;
     public IReadOnlyList<Mesh3D> Meshes => _meshes;
@@ -164,24 +171,40 @@ public sealed class World
     /// </summary>
     public void SyncFromPhysics(PhysicsWorld physics)
     {
-        foreach (var root in _roots)
-            SyncPhysicsNode(physics, root);
+        _syncBodies.Clear();
+        for (var i = 0; i < _roots.Count; i++)
+            CollectDynamicBodies(_roots[i]);
+        var count = _syncBodies.Count;
+        if (count == 0) return;
+
+        var ids = _syncIds.Get(count);
+        for (var i = 0; i < count; i++) ids[i] = _syncBodies[i].BodyId;
+        var xforms = _syncXforms.Get(count * 7);
+        physics.GetBodyTransforms(ids, xforms);
+
+        for (var i = 0; i < count; i++)
+        {
+            var node = _syncBodies[i].Node;
+            var b = i * 7;
+            node.Position = new Vec3(xforms[b], xforms[b + 1], xforms[b + 2]);
+            node.Rotation = new Quat(
+                xforms[b + 3],
+                xforms[b + 4],
+                xforms[b + 5],
+                xforms[b + 6]
+            );
+        }
     }
 
-    private static void SyncPhysicsNode(PhysicsWorld physics, SceneNode3D node)
+    private void CollectDynamicBodies(SceneNode3D node)
     {
         if (node is { Active: true, RigidBody: { } rb }
             && rb.BodyId != PhysicsWorld.InvalidBodyId
             && !rb.IsStatic)
-        {
-            var pos = physics.GetBodyPosition(rb.BodyId);
-            var rot = physics.GetBodyRotation(rb.BodyId);
-            node.Position = pos;
-            node.Rotation = Quat.FromEuler(rot.X, rot.Y, rot.Z);
-        }
+            _syncBodies.Add((node, rb.BodyId));
 
-        foreach (var child in node.Children)
-            SyncPhysicsNode(physics, child);
+        for (var i = 0; i < node.Children.Count; i++)
+            CollectDynamicBodies(node.Children[i]);
     }
 
     // ── Queries ──────────────────────────────────────────────────────────────

@@ -7,6 +7,10 @@ public class Padding(EdgeInsets padding, Widget? child = null) : RenderWidget
 {
     private Size _size;
 
+    /// <summary>
+    ///     The insets applied around <see cref="Child" /> — the constructor's <c>padding:</c>
+    ///     argument (a property cannot share the enclosing type's name, hence <c>Insets</c>).
+    /// </summary>
     public EdgeInsets Insets { get; set; } = padding;
 
     /// <summary>

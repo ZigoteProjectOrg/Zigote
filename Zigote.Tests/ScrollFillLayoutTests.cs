@@ -59,8 +59,8 @@ public class ScrollFillLayoutTests
         Assert.Equal(776f, measured.Width, 1);
 
         // Same shape that crashed in the gallery: a TabView inside a Card inside the scroll.
-        var card = new Card(new Column([tabs]) { CrossAxisAlign = CrossAxisAlignment.Stretch });
-        var page = new Column([card]) { CrossAxisAlign = CrossAxisAlignment.Start };
+        var card = new Card(new Column([tabs]) { CrossAxisAlignment = CrossAxisAlignment.Stretch });
+        var page = new Column([card]) { CrossAxisAlignment = CrossAxisAlignment.Start };
         LayoutInVerticalScroll(page);
 
         AssertFinite(card.Bounds);
@@ -75,7 +75,7 @@ public class ScrollFillLayoutTests
         var list = new ListView { ItemHeight = 40f };
         list.SetItems(Enumerable.Range(0, 5).Select(_ => (Widget)new SizedBox(0, 40)));
 
-        var page = new Column([list]) { CrossAxisAlign = CrossAxisAlignment.Start };
+        var page = new Column([list]) { CrossAxisAlignment = CrossAxisAlignment.Start };
         LayoutInVerticalScroll(page);
 
         AssertFinite(list.Bounds);
@@ -88,7 +88,7 @@ public class ScrollFillLayoutTests
     {
         var scaffold = new Scaffold { Body = new SizedBox(0, 150) };
 
-        var page = new Column([scaffold]) { CrossAxisAlign = CrossAxisAlignment.Start };
+        var page = new Column([scaffold]) { CrossAxisAlignment = CrossAxisAlignment.Start };
         LayoutInVerticalScroll(page);
 
         AssertFinite(scaffold.Bounds);
@@ -132,10 +132,10 @@ public class ScrollFillLayoutTests
     {
         // SizedBox.Expand legitimately reports ∞ on an unbounded axis. Placing it in a Center-aligned
         // flex previously produced (∞ − ∞)/2 = NaN offsets; the FlexLayout guard must keep paint alive.
-        var row = new Row([SizedBox.Expand()]) { MainAxisAlign = MainAxisAlignment.Start };
+        var row = new Row([SizedBox.Expand()]) { MainAxisAlignment = MainAxisAlignment.Start };
         var page = new Column([new SizedBox(0, 30), row]) {
-            MainAxisAlign = MainAxisAlignment.Center,
-            CrossAxisAlign = CrossAxisAlignment.Start,
+            MainAxisAlignment = MainAxisAlignment.Center,
+            CrossAxisAlignment = CrossAxisAlignment.Start,
         };
         LayoutInVerticalScroll(page);
 
@@ -154,8 +154,8 @@ public class ScrollFillLayoutTests
         // A Row with CrossAxisAlignment.Stretch inside a vertical scroll has an unbounded cross axis
         // (height). Before the FlexLayout guard, Stretch pinned the child's min-height to ∞, forcing an
         // infinite child size; now it degrades to a loose measure (natural content height) instead.
-        var row = new Row([new SizedBox(100, 40)]) { CrossAxisAlign = CrossAxisAlignment.Stretch };
-        var page = new Column([row]) { CrossAxisAlign = CrossAxisAlignment.Start };
+        var row = new Row([new SizedBox(100, 40)]) { CrossAxisAlignment = CrossAxisAlignment.Stretch };
+        var page = new Column([row]) { CrossAxisAlignment = CrossAxisAlignment.Start };
         LayoutInVerticalScroll(page);
 
         AssertFinite(row.Bounds);

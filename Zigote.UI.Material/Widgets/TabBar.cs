@@ -31,15 +31,15 @@ public class TabBar : RenderWidget, ITickerProvider
     ///     Named-argument constructor:
     ///     <c>
     ///         new TabBar(tabs: [ new Tab(text: "One"), new Tab(text: "Two") ],
-    ///         onTap: (i) => …)
+    ///         onChanged: (i) => …)
     ///     </c>
     ///     . The theme is resolved from the ambient <c>ThemeProvider</c> during
     ///     Measure. Only each tab's text label is rendered.
     /// </summary>
-    public TabBar(List<Tab> tabs, int initialIndex = 0, Action<int>? onTap = null)
+    public TabBar(List<Tab> tabs, int initialIndex = 0, Action<int>? onChanged = null)
     {
         _selected = initialIndex;
-        OnChanged = onTap;
+        OnChanged = onChanged;
         _theme = ThemeData.Dark; // refreshed from the ambient ThemeProvider in Measure
         Tabs = tabs.ConvertAll(t => t.Label); // setter builds the cells
         _slide = new AnimationController(Motion.Standard, this) { Curve = Curves.EaseOut };
@@ -59,7 +59,7 @@ public class TabBar : RenderWidget, ITickerProvider
         }
     }
 
-    public int Selected
+    public int SelectedIndex
     {
         get => _selected;
         set
@@ -68,6 +68,13 @@ public class TabBar : RenderWidget, ITickerProvider
             _selected = value;
             MarkNeedsPaint();
         }
+    }
+
+    [Obsolete("Renamed — use SelectedIndex.")]
+    public int Selected
+    {
+        get => SelectedIndex;
+        set => SelectedIndex = value;
     }
 
     public Action<int>? OnChanged { get; set; }
@@ -120,7 +127,7 @@ public class TabBar : RenderWidget, ITickerProvider
             _cells.Add(
                 new TabCell(
                     Tabs[i],
-                    () => Selected == idx,
+                    () => SelectedIndex == idx,
                     () => Select(idx),
                     this
                 )
@@ -131,7 +138,7 @@ public class TabBar : RenderWidget, ITickerProvider
     private void Select(int idx)
     {
         if (idx < 0 || idx >= _cells.Count) return;
-        Selected = idx;
+        SelectedIndex = idx;
         OnChanged?.Invoke(idx);
         MarkNeedsPaint();
     }
@@ -140,7 +147,7 @@ public class TabBar : RenderWidget, ITickerProvider
     {
         if (newWidget is TabBar t)
         {
-            Selected = t.Selected;
+            SelectedIndex = t.SelectedIndex;
             OnChanged = t.OnChanged;
             Theme = t.Theme;
             Tabs = t.Tabs; // setter rebuilds cells + relayout
@@ -149,7 +156,7 @@ public class TabBar : RenderWidget, ITickerProvider
 
     public override int DebugStateHash()
     {
-        return HashCode.Combine(Selected, Tabs.Count, Focused);
+        return HashCode.Combine(SelectedIndex, Tabs.Count, Focused);
     }
 
     public override Size Measure(Constraints c)
@@ -215,18 +222,18 @@ public class TabBar : RenderWidget, ITickerProvider
     /// <summary>Draws the 2px accent underline, sliding it between tabs when the selection changes.</summary>
     private void PaintUnderline(PaintList paint)
     {
-        if (Selected < 0 || Selected >= _cells.Count) return;
+        if (SelectedIndex < 0 || SelectedIndex >= _cells.Count) return;
 
         // Retarget the slide whenever the selection changed since the last paint.
         if (!_underInit)
         {
             _underInit = true;
-            _underFrom = _underTo = Selected;
+            _underFrom = _underTo = SelectedIndex;
         }
-        else if (Math.Abs(_underTo - Selected) > 0.001f)
+        else if (Math.Abs(_underTo - SelectedIndex) > 0.001f)
         {
             _underFrom = UnderPos();
-            _underTo = Selected;
+            _underTo = SelectedIndex;
             _slide.Dismiss();
             _slide.Forward();
         }
@@ -255,13 +262,13 @@ public class TabBar : RenderWidget, ITickerProvider
 
     private float UnderPos()
     {
-        return _underInit ? _underFrom + (_underTo - _underFrom) * _slide.Value : Selected;
+        return _underInit ? _underFrom + (_underTo - _underFrom) * _slide.Value : SelectedIndex;
     }
 
     private void PaintSelectedFocusRing(PaintList paint)
     {
-        if (Selected < 0 || Selected >= _cells.Count) return;
-        var b = _cells[Selected].Bounds;
+        if (SelectedIndex < 0 || SelectedIndex >= _cells.Count) return;
+        var b = _cells[SelectedIndex].Bounds;
         var inset = new Rect(
             b.X + Spacing.Xs,
             b.Y + Spacing.Xxs,
@@ -289,10 +296,10 @@ public class TabBar : RenderWidget, ITickerProvider
         switch (scancode)
         {
             case 80: // Left
-                Select(Selected - 1);
+                Select(SelectedIndex - 1);
                 break;
             case 79: // Right
-                Select(Selected + 1);
+                Select(SelectedIndex + 1);
                 break;
         }
     }

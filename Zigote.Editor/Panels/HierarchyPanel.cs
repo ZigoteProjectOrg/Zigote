@@ -301,8 +301,8 @@ public sealed class HierarchyPanel : Widget
         };
 
         var content = new Column {
-            MainAxisAlign = MainAxisAlignment.Start,
-            CrossAxisAlign = CrossAxisAlignment.Start,
+            MainAxisAlignment = MainAxisAlignment.Start,
+            CrossAxisAlignment = CrossAxisAlignment.Start,
             Children = {
                 new Label("Rename Node", _theme.FontSizeBody, _theme.OnSurface) {
                     FontWeight = FontWeight.Bold,
@@ -311,8 +311,8 @@ public sealed class HierarchyPanel : Widget
                 new SizedBox(height: 28f, child: tf),
                 new SizedBox(height: 14f),
                 new Row {
-                    MainAxisAlign = MainAxisAlignment.Start,
-                    CrossAxisAlign = CrossAxisAlignment.Center,
+                    MainAxisAlignment = MainAxisAlignment.Start,
+                    CrossAxisAlignment = CrossAxisAlignment.Center,
                     Children = {
                         new Button(
                             "Rename",

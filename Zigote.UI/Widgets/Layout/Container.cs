@@ -199,12 +199,17 @@ public sealed class Container : RenderWidget
         else
         {
             _childSize = Size.Zero;
+
+            // Childless in unbounded space: fall back to the constraint minimum instead of Infinity.
+            var fillW = float.IsFinite(targetW) ? targetW : inner.MinWidth;
+            var fillH = float.IsFinite(targetH) ? targetH : inner.MinHeight;
             _totalSize = new Size(
-                targetW + Margin.Left + Margin.Right,
-                targetH + Margin.Top + Margin.Bottom
+                fillW + Margin.Left + Margin.Right,
+                fillH + Margin.Top + Margin.Bottom
             );
         }
 
+        _totalSize = c.Constrain(_totalSize);
         return _totalSize;
     }
 

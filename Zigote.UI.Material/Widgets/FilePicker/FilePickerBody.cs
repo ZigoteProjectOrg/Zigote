@@ -28,8 +28,8 @@ internal sealed class FilePickerBody : StatelessWidget
     protected override Widget Build(BuildContext context)
     {
         return new Column {
-            MainAxisAlign = MainAxisAlignment.Start,
-            CrossAxisAlign = CrossAxisAlignment.Start,
+            MainAxisAlignment = MainAxisAlignment.Start,
+            CrossAxisAlignment = CrossAxisAlignment.Start,
             Children = {
                 new FilePickerTitle(_title),
                 new SizedBox(height: 8f),

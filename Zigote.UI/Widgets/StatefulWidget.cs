@@ -1,5 +1,6 @@
 using Zigote.Core;
 using Zigote.Core.Paint;
+using Zigote.Core.State;
 
 namespace Zigote.UI.Widgets;
 
@@ -183,9 +184,19 @@ public abstract class StatefulWidget : Widget
 /// <summary>
 ///     The mutable state for a <see cref="StatefulWidget" />.
 ///     Subclass this directly or use <see cref="WidgetState{TWidget}" /> for typed widget access.
+///     <para>
+///         Lifecycle: <see cref="InitState" /> runs once when the state attaches;
+///         <see cref="Dispose" /> runs when the owning widget detaches from the tree. Effects
+///         created by a state (in <see cref="InitState" /> or later) must go through
+///         <see cref="OwnEffect(Action)" /> — the sanctioned pattern — so they are disposed with
+///         the state: signals hold their observers strongly, so a bare <c>new Effect(...)</c>
+///         outlives the widget and keeps re-running against the detached subtree.
+///     </para>
 /// </summary>
 public abstract class WidgetState
 {
+    private List<IDisposable>? _owned;
+
     internal StatefulWidget Widget { get; set; } = null!;
 
     public bool Mounted { get; private set; }
@@ -222,11 +233,43 @@ public abstract class WidgetState
     {
     }
 
-    /// <summary>Called when the owning widget is removed from the tree.</summary>
+    /// <summary>
+    ///     Create an <see cref="Effect" /> owned by this state: it runs now, re-runs whenever a
+    ///     signal it read changes, and is disposed automatically in <see cref="Dispose" />. Always
+    ///     use this instead of <c>new Effect(...)</c> inside a state (see the class summary).
+    /// </summary>
+    protected Effect OwnEffect(Action body)
+    {
+        ThrowIfDisposed();
+        var effect = new Effect(body);
+        (_owned ??= []).Add(effect);
+        return effect;
+    }
+
+    /// <summary>
+    ///     <see cref="OwnEffect(Action)" /> for a body that returns a cleanup thunk (run before
+    ///     each re-run and on dispose).
+    /// </summary>
+    protected Effect OwnEffect(Func<Action> bodyWithCleanup)
+    {
+        ThrowIfDisposed();
+        var effect = new Effect(bodyWithCleanup);
+        (_owned ??= []).Add(effect);
+        return effect;
+    }
+
+    /// <summary>
+    ///     Called when the owning widget is removed from the tree. Overrides must call
+    ///     <c>base.Dispose()</c> — it releases the effects created via
+    ///     <see cref="OwnEffect(Action)" />.
+    /// </summary>
     public virtual void Dispose()
     {
         Disposed = true;
         Mounted = false;
+        if (_owned == null) return;
+        for (var i = 0; i < _owned.Count; i++) _owned[i].Dispose();
+        _owned = null;
     }
 
     /// <summary>

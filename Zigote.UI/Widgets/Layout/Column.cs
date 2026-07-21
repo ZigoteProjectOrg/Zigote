@@ -24,17 +24,40 @@ public class Column : MultiChildWidget
         MainAxisAlignment mainAxisAlignment = MainAxisAlignment.Start,
         CrossAxisAlignment crossAxisAlignment = CrossAxisAlignment.Center,
         MainAxisSize mainAxisSize = MainAxisSize.Max,
+        float spacing = 0f,
         Key? key = null) : base(children)
     {
-        MainAxisAlign = mainAxisAlignment;
-        CrossAxisAlign = crossAxisAlignment;
+        MainAxisAlignment = mainAxisAlignment;
+        CrossAxisAlignment = crossAxisAlignment;
         MainAxisSize = mainAxisSize;
+        Spacing = spacing;
         if (key is not null) Key = key;
     }
 
-    public MainAxisAlignment MainAxisAlign { get; set; } = MainAxisAlignment.Start;
-    public CrossAxisAlignment CrossAxisAlign { get; set; } = CrossAxisAlignment.Center;
+    public MainAxisAlignment MainAxisAlignment { get; set; } = MainAxisAlignment.Start;
+    public CrossAxisAlignment CrossAxisAlignment { get; set; } = CrossAxisAlignment.Center;
     public MainAxisSize MainAxisSize { get; set; } = MainAxisSize.Max;
+
+    /// <summary>
+    ///     Fixed main-axis gap between adjacent children. Composes with
+    ///     <see cref="MainAxisAlignment" />: the gaps are reserved first, alignment distributes the
+    ///     remaining free space.
+    /// </summary>
+    public float Spacing { get; set; }
+
+    [Obsolete("Renamed — use MainAxisAlignment.")]
+    public MainAxisAlignment MainAxisAlign
+    {
+        get => MainAxisAlignment;
+        set => MainAxisAlignment = value;
+    }
+
+    [Obsolete("Renamed — use CrossAxisAlignment.")]
+    public CrossAxisAlignment CrossAxisAlign
+    {
+        get => CrossAxisAlignment;
+        set => CrossAxisAlignment = value;
+    }
 
     public override Size Measure(Constraints c)
     {
@@ -42,9 +65,10 @@ public class Column : MultiChildWidget
             Children,
             c,
             1,
-            MainAxisAlign,
-            CrossAxisAlign,
+            MainAxisAlignment,
+            CrossAxisAlignment,
             MainAxisSize,
+            Spacing,
             ref _metrics
         );
         return _size;
@@ -63,7 +87,8 @@ public class Column : MultiChildWidget
             _metrics,
             Bounds,
             1,
-            MainAxisAlign
+            MainAxisAlignment,
+            Spacing
         );
     }
 

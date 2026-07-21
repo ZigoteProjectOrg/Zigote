@@ -30,6 +30,7 @@ public class SelectableText : RichText
     // Index [FullText.Length] is the after-last position. Grow-only, rebuilt in OnLayoutRebuilt.
     private float[] _charX = [];
     private int[] _charLine = [];
+    private int[] _lineStartChar = []; // first char index per line + end sentinel
     private int _charCount; // valid entries = FullText.Length + 1
 
     private int _anchor = -1;
@@ -314,6 +315,19 @@ public class SelectableText : RichText
             _charLine[i] = prevLine;
         }
 
+        // Per-line char ranges: _charLine is non-decreasing (runs are placed in line order), so
+        // line L owns [_lineStartChar[L], _lineStartChar[L + 1]) and IndexAtPoint scans one line
+        // instead of the whole text.
+        var lineCount = Math.Max(1, LineCount);
+        if (_lineStartChar.Length < lineCount + 1) _lineStartChar = new int[lineCount + 1];
+        var lineIdx = 0;
+        _lineStartChar[0] = 0;
+        for (var i = 0; i < _charCount; i++)
+            while (lineIdx < _charLine[i])
+                _lineStartChar[++lineIdx] = i;
+
+        while (lineIdx < lineCount) _lineStartChar[++lineIdx] = _charCount;
+
         // Layout changed under the selection — clamp so stale indices can't slice out of range.
         if (_anchor > len) _anchor = len;
         if (_extent > len) _extent = len;
@@ -335,13 +349,14 @@ public class SelectableText : RichText
 
         var lx = point.X - Bounds.X - LineAlignOffset(line);
 
-        // Nearest caret on this line: scan the line's chars via the geometry cache. Runs on an RTL
-        // line are not x-monotonic in char order, so nearest-distance beats interval bisection here.
+        // Nearest caret on this line: scan the line's char range via the geometry cache. Runs on
+        // an RTL line are not x-monotonic in char order, so nearest-distance beats interval
+        // bisection here.
         var best = -1;
         var bestDist = float.MaxValue;
-        for (var i = 0; i < _charCount; i++)
+        var end = Math.Min(_lineStartChar[line + 1], _charCount);
+        for (var i = _lineStartChar[line]; i < end; i++)
         {
-            if (_charLine[i] != line) continue;
             var d = MathF.Abs(_charX[i] - lx);
             if (d < bestDist)
             {

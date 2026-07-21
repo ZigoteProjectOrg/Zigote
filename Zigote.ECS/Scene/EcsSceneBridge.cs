@@ -21,6 +21,10 @@ namespace Zigote.Ecs.Scene;
 public sealed class EcsSceneBridge : IDisposable
 {
     private readonly Dictionary<ulong, int> _entityToNode = new();
+
+    // Last TRS written to (or read back from) each node's entity — PushTransforms skips the FFI
+    // write for a node whose transform hasn't moved since, so a static scene costs no Sets per tick.
+    private readonly Dictionary<int, Transform> _lastPushed = new();
     private readonly Dictionary<int, Entity> _nodeToEntity = new();
     private readonly bool _ownsWorld;
 
@@ -39,6 +43,7 @@ public sealed class EcsSceneBridge : IDisposable
     {
         _nodeToEntity.Clear();
         _entityToNode.Clear();
+        _lastPushed.Clear();
         if (_ownsWorld) World.Dispose();
     }
 
@@ -80,6 +85,7 @@ public sealed class EcsSceneBridge : IDisposable
         if (_nodeToEntity.Remove(node.Id, out var e))
         {
             _entityToNode.Remove(e.Raw);
+            _lastPushed.Remove(node.Id);
             World.DestroyEntity(e);
         }
     }
@@ -110,11 +116,27 @@ public sealed class EcsSceneBridge : IDisposable
         if (_nodeToEntity.TryGetValue(nodeId, out var e)) World.Set(e, transform);
     }
 
-    /// <summary>Scene → entities: copy authored node TRS into the canonical entity Transforms.</summary>
+    /// <summary>
+    ///     Scene → entities: copy authored node TRS into the canonical entity Transforms.
+    ///     Change-gated per node — a transform equal to the last one pushed skips the FFI write.
+    /// </summary>
     public void PushTransforms(IEcsSceneNode root)
     {
-        if (_nodeToEntity.TryGetValue(root.Id, out var e)) World.Set(e, ToTransform(root));
-        foreach (var child in root.Children) PushTransforms(child);
+        if (_nodeToEntity.TryGetValue(root.Id, out var e))
+        {
+            var t = ToTransform(root);
+            if (!_lastPushed.TryGetValue(root.Id, out var last)
+                || last.Position != t.Position
+                || last.Rotation != t.Rotation
+                || last.Scale != t.Scale)
+            {
+                World.Set(e, t);
+                _lastPushed[root.Id] = t;
+            }
+        }
+
+        var children = root.Children;
+        for (var i = 0; i < children.Count; i++) PushTransforms(children[i]);
     }
 
     /// <summary>Entities → scene: mirror canonical entity Transforms back onto the nodes for rendering.</summary>
@@ -125,9 +147,11 @@ public sealed class EcsSceneBridge : IDisposable
             root.Position = t.Position;
             root.Rotation = t.Rotation;
             root.Scale = t.Scale;
+            _lastPushed[root.Id] = t; // node now mirrors the entity — keeps the push gate accurate
         }
 
-        foreach (var child in root.Children) PullTransforms(child);
+        var children = root.Children;
+        for (var i = 0; i < children.Count; i++) PullTransforms(children[i]);
     }
 
     private static Transform ToTransform(IEcsSceneNode n)

@@ -18,10 +18,15 @@ public sealed class DragFeedbackOverlay(Widget feedback, Offset pointer, Offset 
     private Offset _pointer = pointer;
     private Size _screen;
 
+    /// <summary>The ghost widget — the App damages its old/new regions on each pointer move.</summary>
+    internal Widget Feedback => _feedback;
+
     public void SetPointer(Offset pointer)
     {
         _pointer = pointer;
-        MarkNeedsLayout();
+        // Re-run only this overlay's Layout (_screen/_feedbackSize are cached from the last Measure)
+        // — a pointer move must not invalidate the whole tree.
+        Layout(new Offset(Bounds.X, Bounds.Y));
     }
 
     public override Size Measure(Constraints c)

@@ -39,8 +39,8 @@ public sealed class GraphSearchMenu : Widget
             },
         };
         _results = new Column {
-            MainAxisAlign = MainAxisAlignment.Start,
-            CrossAxisAlign = CrossAxisAlignment.Stretch,
+            MainAxisAlignment = MainAxisAlignment.Start,
+            CrossAxisAlignment = CrossAxisAlignment.Stretch,
         };
     }
 

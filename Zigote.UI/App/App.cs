@@ -62,6 +62,11 @@ public partial class App : IDisposable
 
     private readonly PaintList _overlayPaint = new();
 
+    // Last-submitted paint lists, diffed against re-walked lists on partial frames so unmarked
+    // visual changes widen the damage instead of tearing (see PaintAndPresent).
+    private readonly PaintSnapshot _rootSnapshot = new();
+    private readonly PaintSnapshot _overlaySnapshot = new();
+
     // Overlay stack — dialogs, tooltips, snackbars painted on top of Root
     private readonly List<Widget> _overlays = [];
     private readonly PaintList _paint = new();
@@ -288,6 +293,13 @@ public partial class App : IDisposable
     ///     this only affects idle partial-change frames such as a blinking caret or a value-drag.
     /// </summary>
     public bool PartialRepaintEnabled { get; set; } = true;
+
+    /// <summary>
+    ///     Per-frame damage logging to stderr (<c>ZIGOTE_DEBUG_DAMAGE=1</c>): each presented frame's
+    ///     FULL/PARTIAL decision, damage rects, and per-layer dirty state. Diagnostic only.
+    /// </summary>
+    public static readonly bool DebugDamageLog =
+        Environment.GetEnvironmentVariable("ZIGOTE_DEBUG_DAMAGE") == "1";
 
     /// <summary>
     ///     Software cap on the (continuous) render loop, in frames per second. 0 = no cap. Paced at
@@ -624,6 +636,9 @@ public partial class App : IDisposable
         // Damage = the widget's paint region (bounds + any paint-overflow) plus a safety margin. When
         // partial repaint is disabled, treat the mark as an unknown region so the frame full-clears.
         var region = PartialRepaintEnabled ? w.DamageBounds.Inflate(DamageMargin) : Rect.Zero;
+        if (DebugDamageLog)
+            Console.Error.WriteLine(System.FormattableString.Invariant(
+                $"[dmg] mark {w.GetType().Name} bounds=({w.Bounds.X:F1},{w.Bounds.Y:F1} {w.Bounds.Width:F1}x{w.Bounds.Height:F1}) dmg=({region.X:F1},{region.Y:F1} {region.Width:F1}x{region.Height:F1})"));
         if (top == Root) _repaint.AddDamageRoot(region);
         else if (_overlays.Contains(top)) _repaint.AddDamageOverlay(region);
         else _repaint.MarkAll();
@@ -834,10 +849,12 @@ public partial class App : IDisposable
             }
         }
 
-        // A showing tooltip is an overlay; a blinking caret lives in whichever layer its field is in.
-        // A read-only / caret-less text client (e.g. the docked read-only CodeEditor) opts out of the
-        // per-frame caret repaint via WantsCaretBlink, so a focused viewer idles instead of repainting.
-        if (_tooltipTimer > 0) _repaint.MarkOverlay();
+        // A tooltip pending its hover delay repaints the overlay only until the bubble is up — the
+        // show/hide frames are marked by PushOverlay/PopOverlay, so a settled bubble idles instead of
+        // producing full-damage frames forever. A blinking caret lives in whichever layer its field is
+        // in; a read-only / caret-less text client (e.g. the docked read-only CodeEditor) opts out of
+        // the per-frame caret repaint via WantsCaretBlink, so a focused viewer idles too.
+        if (_tooltipTimer > 0 && _tooltipOverlay is null) _repaint.MarkOverlay();
         if (FocusedWidget is ITextInputClient { WantsCaretBlink: true })
             MarkPaintFor(FocusedWidget);
 
@@ -949,6 +966,8 @@ public partial class App : IDisposable
     {
         if (Root is null) return;
 
+        var rootWalked = _repaint.RootDirty;
+        var overlayWalked = _repaint.OverlayDirty;
         using (Profiler.Scope("UI.Paint"))
         {
             if (_repaint.RootDirty)
@@ -964,6 +983,23 @@ public partial class App : IDisposable
                 foreach (var ov in _overlays) ov.Paint(_overlayPaint);
                 _repaint.OverlayPainted();
             }
+        }
+
+        // Partial-frame consistency: a re-walked list reflects CURRENT widget state, but replay only
+        // touches the damage rects — any op that changed without marking damage this frame (a missed
+        // MarkNeedsPaint, an overlay moved by a plain property write) would repaint torn: new inside
+        // the rects it overlaps, stale outside. Diff each re-walked list against what was last
+        // submitted and widen the damage to cover every changed op; unboundable changes degrade the
+        // frame to a full repaint. Runs only on partial frames — full frames are consistent by
+        // construction, and clean layers re-submit their previous (on-screen) list verbatim.
+        if (PartialRepaintEnabled && !ContinuousUpdate && !ForceContinuousRender)
+        {
+            if (rootWalked && _repaint.DamageCount > 0)
+                WidenDamageFromPaintDiff(_rootSnapshot, _paint, isOverlay: false);
+            if (overlayWalked && _repaint.DamageCount > 0)
+                WidenDamageFromPaintDiff(_overlaySnapshot, _overlayPaint, isOverlay: true);
+            if (rootWalked) _rootSnapshot.Capture(_paint);
+            if (overlayWalked) _overlaySnapshot.Capture(_overlayPaint);
         }
 
         DebugStats.UiPaintCommands = _paint.Count;
@@ -994,6 +1030,24 @@ public partial class App : IDisposable
             // empty, which native treats as a full clear — byte-identical to the pre-existing path.
             Engine.SubmitFrameDamage(_repaint.Damage);
 
+            if (DebugDamageLog)
+            {
+                if (_repaint.Damage.IsEmpty)
+                {
+                    Console.Error.WriteLine(
+                        $"[dmg] FULL root={_repaint.RootDirty} overlay={_repaint.OverlayDirty} rootOps={_paint.Count} ovOps={_overlayPaint.Count}");
+                }
+                else
+                {
+                    var sb = new System.Text.StringBuilder("[dmg] PARTIAL ");
+                    foreach (var r in _repaint.Damage)
+                        sb.Append(System.FormattableString.Invariant($"({r.X:F1},{r.Y:F1} {r.Width:F1}x{r.Height:F1}) "));
+                    sb.Append(System.FormattableString.Invariant(
+                        $"root={_repaint.RootDirty} overlay={_repaint.OverlayDirty} rootOps={_paint.Count} ovOps={_overlayPaint.Count}"));
+                    Console.Error.WriteLine(sb.ToString());
+                }
+            }
+
             // The bulk of a continuous editor/game frame: the full 3D scene render (shadow → G-buffer →
             // SSAO → SSR → bloom → tonemap → TAA → overlay composite) plus the swapchain present. When
             // these dominate, the cost is the scene, not the open debug panel.
@@ -1011,6 +1065,33 @@ public partial class App : IDisposable
             // if something marks it so). Kept inside the render block so a skipped/early-returned frame
             // (nothing dirty) leaves last frame's already-empty damage untouched.
             _repaint.ResetDamage();
+        }
+    }
+
+    /// <summary>
+    ///     Add the bounds of every command that changed between <paramref name="snapshot" /> (what is
+    ///     on screen) and <paramref name="current" /> (what will be replayed) to this frame's damage;
+    ///     unboundable changes force a full repaint. See the call site in <see cref="PaintAndPresent" />.
+    /// </summary>
+    private void WidenDamageFromPaintDiff(PaintSnapshot snapshot, PaintList current, bool isOverlay)
+    {
+        Span<Rect> changed = stackalloc Rect[PaintSnapshot.MaxChangedRects];
+        switch (snapshot.Diff(current, changed, out var count))
+        {
+            case PaintDiffResult.Identical:
+                return;
+            case PaintDiffResult.Bounded:
+                for (var i = 0; i < count; i++)
+                    _repaint.AddDamageBoundsOnly(changed[i].Inflate(DamageMargin));
+                if (DebugDamageLog)
+                    Console.Error.WriteLine(System.FormattableString.Invariant(
+                        $"[dmg] diff {(isOverlay ? "overlay" : "root")} widened by {count} rect(s), first=({changed[0].X:F1},{changed[0].Y:F1} {changed[0].Width:F1}x{changed[0].Height:F1})"));
+                return;
+            case PaintDiffResult.Unbounded:
+                _repaint.ForceFullDamage();
+                if (DebugDamageLog)
+                    Console.Error.WriteLine($"[dmg] diff {(isOverlay ? "overlay" : "root")} UNBOUNDED -> full");
+                return;
         }
     }
 
@@ -1161,7 +1242,7 @@ public partial class App : IDisposable
                 }
             }
 
-            if (_tooltipTimer > 0) _repaint.MarkOverlay();
+            if (_tooltipTimer > 0 && _tooltipOverlay is null) _repaint.MarkOverlay();
             if (FocusedWidget is ITextInputClient { WantsCaretBlink: true })
                 MarkPaintFor(FocusedWidget);
 
@@ -1546,24 +1627,32 @@ public partial class App : IDisposable
             return;
         }
 
-        _tooltipTimer += dt;
-        if (_tooltipTimer > 0.7f && _tooltipOverlay is null)
+        // The timer accrues only while no bubble is shown (it gates the per-frame overlay mark in
+        // Frame); once up, the bubble just tracks the pointer — it repositions on the next relayout,
+        // and those frames are already marked by whatever caused the relayout.
+        if (_tooltipOverlay is null)
         {
-            _tooltipOverlay = new TooltipBubble(text, _mousePos, Theme);
-            PushOverlay(_tooltipOverlay);
+            _tooltipTimer += dt;
+            if (_tooltipTimer > 0.7f)
+            {
+                _tooltipOverlay = new TooltipBubble(text, _mousePos, Theme);
+                PushOverlay(_tooltipOverlay);
+            }
         }
         else
         {
-            _tooltipOverlay?.Position = _mousePos;
+            _tooltipOverlay.Position = _mousePos;
         }
     }
 
     private void HideTooltip()
     {
+        // The timer may be accruing with no bubble shown yet — always clear it so the per-frame
+        // overlay mark in Frame stops.
+        _tooltipTimer = 0f;
         if (_tooltipOverlay is null) return;
         PopOverlay(_tooltipOverlay);
         _tooltipOverlay = null;
-        _tooltipTimer = 0f;
     }
 
     // ── Event dispatch ────────────────────────────────────────────────────────
@@ -1612,7 +1701,6 @@ public partial class App : IDisposable
                         var exited = _hoveredWidget;
                         exited?.OnPointerExit();
                         HideTooltip();
-                        _tooltipTimer = 0f;
                         _hoveredWidget = hit;
                         hit?.OnPointerEnter();
                         if (exited is not null) MarkPaintFor(exited);

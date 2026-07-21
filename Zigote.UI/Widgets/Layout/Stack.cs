@@ -12,6 +12,7 @@ namespace Zigote.UI.Widgets.Layout;
 /// </summary>
 public class Stack : MultiChildWidget
 {
+    private Size[] _probeSizes = [];
     private Size _size;
 
     /// <summary>
@@ -34,6 +35,22 @@ public class Stack : MultiChildWidget
 
     public override Size Measure(Constraints c)
     {
+        // Tight constraints already fix the stack size — measure children once with the fill
+        // constraints (a loose probe would alternate with the fill in each child's single-slot
+        // measure cache, thrashing it for the whole subtree every frame).
+        if (c.MinWidth == c.MaxWidth && c.MinHeight == c.MaxHeight)
+        {
+            _size = new Size(c.MaxWidth, c.MaxHeight);
+            var tightFill = Constraints.Tight(_size.Width, _size.Height);
+            foreach (var child in Children)
+                if (child is Positioned p)
+                    MeasurePositioned(p, _size);
+                else
+                    child.Measure(tightFill); // non-positioned children fill the stack
+
+            return _size;
+        }
+
         // The stack sizes to its largest non-positioned child (or the parent constraints).
         float w = 0f, h = 0f;
         var probe = new Constraints(
@@ -42,23 +59,31 @@ public class Stack : MultiChildWidget
             0,
             c.MaxHeight
         );
-        foreach (var child in Children)
+        if (_probeSizes.Length < Children.Count) _probeSizes = new Size[Children.Count];
+        for (var i = 0; i < Children.Count; i++)
         {
+            var child = Children[i];
             if (child is Positioned) continue;
             var sz = child.Measure(probe);
+            _probeSizes[i] = sz;
             w = MathF.Max(w, sz.Width);
             h = MathF.Max(h, sz.Height);
         }
 
         _size = c.Constrain(new Size(w, h));
 
-        // Resolve each child's constraints against the final stack size.
+        // Resolve each child's constraints against the final stack size. A child whose probe size
+        // already matches the stack keeps its probe measurement (re-measuring would evict it from
+        // the child's measure cache without changing the result).
         var fill = Constraints.Tight(_size.Width, _size.Height);
-        foreach (var child in Children)
+        for (var i = 0; i < Children.Count; i++)
+        {
+            var child = Children[i];
             if (child is Positioned p)
                 MeasurePositioned(p, _size);
-            else
+            else if (_probeSizes[i] != _size)
                 child.Measure(fill); // non-positioned children fill the stack
+        }
 
         return _size;
     }

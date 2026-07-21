@@ -35,8 +35,8 @@ public sealed class GraphInspectorPanel : Widget
         _state = state;
         _theme = theme;
         _content = new Column {
-            MainAxisAlign = MainAxisAlignment.Start,
-            CrossAxisAlign = CrossAxisAlignment.Stretch,
+            MainAxisAlignment = MainAxisAlignment.Start,
+            CrossAxisAlignment = CrossAxisAlignment.Stretch,
         };
 
         _state.SelectionChanged += Rebuild;
@@ -352,8 +352,8 @@ public sealed class GraphInspectorPanel : Widget
             return new SizedBox(
                 height: 22f,
                 child: new Row {
-                    MainAxisAlign = MainAxisAlignment.Start,
-                    CrossAxisAlign = CrossAxisAlignment.Center,
+                    MainAxisAlignment = MainAxisAlignment.Start,
+                    CrossAxisAlignment = CrossAxisAlignment.Center,
                     Children = {
                         new SizedBox(
                             14f,
@@ -367,8 +367,8 @@ public sealed class GraphInspectorPanel : Widget
         }
 
         return new Column {
-            MainAxisAlign = MainAxisAlignment.Start,
-            CrossAxisAlign = CrossAxisAlignment.Stretch,
+            MainAxisAlignment = MainAxisAlignment.Start,
+            CrossAxisAlignment = CrossAxisAlignment.Stretch,
             Children = {
                 new SizedBox(height: 22f, child: swatch),
                 new SizedBox(height: 4f),

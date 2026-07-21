@@ -281,7 +281,7 @@ type Ui private () =
         Ui.leaf (
             "checkbox",
             (fun () -> Checkbox(false) :> Widget),
-            [ mkAttr "checked" value (fun (c: Checkbox) x -> c.Checked <- x)
+            [ mkAttr "checked" value (fun (c: Checkbox) x -> c.Value <- x)
               mkAttr "onChanged" onChanged (fun (c: Checkbox) f -> c.OnChanged <- Action<bool>(f)) ]
         )
 
@@ -298,7 +298,7 @@ type Ui private () =
     static member slider(attrs: Attr list, value: float32, onChanged: float32 -> unit) =
         Ui.leaf (
             "slider",
-            (fun () -> Slider(0.0) :> Widget),
+            (fun () -> Slider(0.0f) :> Widget),
             [ mkAttr "value" value (fun (s: Slider) x -> s.Value <- x)
               mkAttr "onChanged" onChanged (fun (s: Slider) f -> s.OnChanged <- Action<float32>(f)) ]
             @ attrs

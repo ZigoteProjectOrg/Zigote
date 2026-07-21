@@ -2,13 +2,11 @@ namespace Zigote.Network;
 
 /// <summary>
 ///     Static convenience accessor over the active <see cref="NetworkManager" />, mirroring the
-///     engine's
-///     other script-facing providers (Input/Physics/Hud). A host (game runtime / editor play session)
-///     assigns
-///     <see cref="Manager" /> when networking is live and clears it on stop; until then every query is
-///     a safe
-///     no-op. Lets game <c>Component</c> scripts reach the network without threading a reference
-///     everywhere.
+///     engine's other script-facing providers (Input/Physics/Hud). EXPERIMENTAL: no engine host
+///     (game runtime / editor play session) wires networking up yet — a host must assign
+///     <see cref="Manager" /> itself when networking goes live and clear it on stop; until then
+///     every query is a safe no-op. Lets game <c>Component</c> scripts reach the network without
+///     threading a reference everywhere.
 /// </summary>
 public static class Net
 {

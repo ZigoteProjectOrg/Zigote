@@ -5,7 +5,7 @@ namespace Zigote.UI.Widgets;
 /// <summary>
 ///     <see cref="InheritedWidget" /> that propagates <see cref="ThemeData" /> down the tree.
 ///     Injected automatically by <see cref="Zigote.UI.Host.ZigoteApp" />; any descendant can read it via
-///     <c>ThemeProvider.Of(BuildContext.Current)</c> or <c>ThemeProvider.Of(BuildContext.Current)</c>.
+///     <c>ThemeProvider.Of(BuildContext.Current)</c> or <c>Theme.Of(BuildContext.Current)</c>.
 /// </summary>
 public sealed class ThemeProvider : InheritedWidget
 {

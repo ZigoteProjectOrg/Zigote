@@ -39,10 +39,17 @@ public sealed class NavigationSplitView : Widget
         };
     }
 
-    public int Selected
+    public int SelectedIndex
     {
         get => _selected;
         set => Select(value);
+    }
+
+    [Obsolete("Renamed — use SelectedIndex.")]
+    public int Selected
+    {
+        get => SelectedIndex;
+        set => SelectedIndex = value;
     }
 
     public Action<int>? OnChanged { get; set; }

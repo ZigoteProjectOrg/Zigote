@@ -25,8 +25,8 @@ public static class AboutDialog
                       ?? "dev";
 
         var content = new Column {
-            MainAxisAlign = MainAxisAlignment.Start,
-            CrossAxisAlign = CrossAxisAlignment.Start,
+            MainAxisAlignment = MainAxisAlignment.Start,
+            CrossAxisAlignment = CrossAxisAlignment.Start,
             MainAxisSize = MainAxisSize.Max,
             Children = {
                 new Label("Zigote Editor", Typography.Title1, theme.OnSurface),

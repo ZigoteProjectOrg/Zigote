@@ -42,11 +42,13 @@ public abstract class Component
     {
     }
 
+    /// <summary>
+    ///     Per-tick update. Runs on the fixed 120 Hz gameplay tick, not the render frame:
+    ///     <paramref name="deltaTime" /> is the constant fixed step, a slow render frame runs
+    ///     several ticks back-to-back, and a fast one may run none — render-side smoothing can
+    ///     blend by <see cref="Time.InterpolationAlpha" />.
+    /// </summary>
     protected virtual void OnUpdate(float deltaTime)
-    {
-    }
-
-    protected virtual void OnFixedUpdate(float fixedDeltaTime)
     {
     }
 
@@ -72,14 +74,21 @@ public abstract class Component
         Dispatch(OnDisable);
     }
 
+    // Inlined rather than routed through Dispatch: a dt-capturing lambda would allocate a closure
+    // per component per tick. Same policy — log the error, disable the component.
     internal void CallUpdate(float dt)
     {
-        Dispatch(() => OnUpdate(dt));
-    }
-
-    internal void CallFixedUpdate(float dt)
-    {
-        Dispatch(() => OnFixedUpdate(dt));
+        try
+        {
+            OnUpdate(dt);
+        }
+        catch (Exception ex)
+        {
+            Enabled = false; // disable to stop repeated errors
+            Console.Error.WriteLine(
+                $"[Script:{GetType().Name}] Unhandled exception — component disabled.\n{ex}"
+            );
+        }
     }
 
     private void Dispatch(Action action)

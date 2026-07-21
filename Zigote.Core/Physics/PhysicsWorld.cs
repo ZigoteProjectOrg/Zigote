@@ -10,7 +10,8 @@ namespace Zigote.Core.Physics;
 ///     world.Step(deltaTime);
 ///     // read transforms and sync scene nodes
 ///     var pos = world.GetBodyPosition(bodyId);
-///     var rot = world.GetBodyRotation(bodyId);
+///     var rot = world.GetBodyRotationQuat(bodyId);
+///     // or, for many bodies, one batched call: world.GetBodyTransforms(ids, xforms)
 ///     </code>
 /// </summary>
 public sealed class PhysicsWorld : IDisposable
@@ -175,6 +176,36 @@ public sealed class PhysicsWorld : IDisposable
             out var rz
         );
         return new Vec3(rx, ry, rz);
+    }
+
+    /// <summary>
+    ///     Batched transform read: for each id in <paramref name="ids" /> writes 7 floats
+    ///     (pos.xyz + quat.xyzw) into <paramref name="outXforms" />, which must hold
+    ///     <c>ids.Length * 7</c> floats. One native call for the whole set — use this on the
+    ///     per-tick sync path instead of a position + rotation call pair per body.
+    /// </summary>
+    public void GetBodyTransforms(ReadOnlySpan<uint> ids, Span<float> outXforms)
+    {
+        EnsureReady();
+        if (ids.Length == 0) return;
+        if (outXforms.Length < ids.Length * 7)
+            throw new ArgumentException(
+                "outXforms must hold 7 floats per body id.",
+                nameof(outXforms)
+            );
+        unsafe
+        {
+            fixed (uint* idsPtr = ids)
+            fixed (float* xformsPtr = outXforms)
+            {
+                NativeEngine.PhysicsGetBodyTransforms(
+                    _engineHandle,
+                    idsPtr,
+                    (uint)ids.Length,
+                    xformsPtr
+                );
+            }
+        }
     }
 
     /// <summary>Teleport a body to the given position (activates it).</summary>

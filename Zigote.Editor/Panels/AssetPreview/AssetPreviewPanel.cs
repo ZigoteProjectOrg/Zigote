@@ -89,7 +89,7 @@ public sealed class AssetPreviewPanel : RenderWidget, IDisposable
         }
 
         var footer = new Column {
-            CrossAxisAlign = CrossAxisAlignment.Start,
+            CrossAxisAlignment = CrossAxisAlignment.Start,
             MainAxisSize = MainAxisSize.Min,
         };
         footer.Children.Add(
@@ -108,7 +108,7 @@ public sealed class AssetPreviewPanel : RenderWidget, IDisposable
         var previewArea = preview ?? Empty(_theme, "No preview available");
 
         return new Column {
-            CrossAxisAlign = CrossAxisAlignment.Stretch,
+            CrossAxisAlignment = CrossAxisAlignment.Stretch,
             Children = {
                 new Expanded(new Padding(EdgeInsets.All(8f), previewArea)),
                 new Divider(),
@@ -120,7 +120,7 @@ public sealed class AssetPreviewPanel : RenderWidget, IDisposable
     private Widget MetaRow(string key, string value)
     {
         return new Row {
-            CrossAxisAlign = CrossAxisAlignment.Center,
+            CrossAxisAlignment = CrossAxisAlignment.Center,
             Children = {
                 new SizedBox(86f, child: new Label(key, _theme.FontSizeCaption, _theme.TextMuted)),
                 new Expanded(

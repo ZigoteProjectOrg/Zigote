@@ -61,9 +61,17 @@ public partial class App
     public void UpdateDrag(Offset pointer)
     {
         if (_activeDrag is null) return;
-        _dragOverlay?.SetPointer(pointer);
+        if (_dragOverlay is not null)
+        {
+            // Damage just the ghost's old + new regions — the overlay repositions itself, so a
+            // pointer move never costs a full relayout/repaint. Drop-target highlight changes still
+            // invalidate fully inside UpdateDropTarget.
+            MarkPaintFor(_dragOverlay.Feedback);
+            _dragOverlay.SetPointer(pointer);
+            MarkPaintFor(_dragOverlay.Feedback);
+        }
+
         UpdateDropTarget(_activeDrag, pointer);
-        _repaint.MarkAll();
     }
 
     /// <summary>

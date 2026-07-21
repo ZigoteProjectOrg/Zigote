@@ -9,7 +9,8 @@ namespace Zigote.UI.Widgets.Controls;
 ///     <c>new Text("Hello", style: new TextStyle(fontSize: 20, color: Colors.Red))</c>.
 ///     <para>
 ///         Only Left/Center/Right alignment is honoured (Start/End/Justify degrade); overflow supports
-///         Clip and Ellipsis (fade/visible are not modelled).
+///         Clip and Ellipsis (fade/visible are not modelled). <c>softWrap: false</c> forces a single
+///         unwrapped line resolved by <c>overflow</c>.
 ///     </para>
 /// </summary>
 public class Text : Label
@@ -36,6 +37,7 @@ public class Text : Label
         if (textAlign is { } ta) Align = ta;
         if (maxLines is { } ml) MaxLines = ml;
         if (overflow is { } ov) Overflow = ov;
-        _ = softWrap;
+        // Label wraps whenever MaxLines != 1, so "don't wrap" maps onto the single-line path.
+        if (softWrap == false) MaxLines = 1;
     }
 }

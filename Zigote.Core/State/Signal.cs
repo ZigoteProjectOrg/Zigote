@@ -115,7 +115,7 @@ public sealed class Signal<T> : IReadableSignal<T>, IReactiveSource
             Changed += listener;
             try
             {
-                listener(_value);
+                Reactive.UntrackedInvoke(listener, _value);
             }
             catch
             {
@@ -164,8 +164,10 @@ public sealed class Signal<T> : IReadableSignal<T>, IReactiveSource
             }
         }
 
-        Changed?.Invoke(value);
-        Invalidated?.Invoke();
+        // A write can land mid-run (a self-writing reaction) — suspend tracking so handler reads
+        // don't become phantom dependencies of whatever reaction is executing.
+        Reactive.UntrackedInvoke(Changed, value);
+        Reactive.UntrackedInvoke(Invalidated);
     }
 
     private sealed class Unsubscriber(Action dispose) : IDisposable

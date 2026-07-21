@@ -86,6 +86,9 @@ public class RichText : LeafWidget
     private bool _builtRtl;
     private int _builtMaxLines;
     private TextOverflow _builtOverflow;
+    private FontWeight _builtWeight;
+    private FontStyle _builtStyle;
+    private string? _builtFamily;
     private float _widest;
     private float _totalHeight;
     private bool _truncated;
@@ -301,7 +304,8 @@ public class RichText : LeafWidget
     {
         if (_builtVersion == _version && _builtWidth == maxWidth && BuiltBaseFs == baseFs &&
             _builtRtl == Rtl && BuiltLhFactor == lhFactor && _builtMaxLines == (MaxLines ?? 0) &&
-            _builtOverflow == Overflow)
+            _builtOverflow == Overflow && _builtWeight == FontWeight && _builtStyle == FontStyle &&
+            _builtFamily == FontFamily)
             return;
 
         _builtVersion = _version;
@@ -311,6 +315,9 @@ public class RichText : LeafWidget
         BuiltLhFactor = lhFactor;
         _builtMaxLines = MaxLines ?? 0;
         _builtOverflow = Overflow;
+        _builtWeight = FontWeight;
+        _builtStyle = FontStyle;
+        _builtFamily = FontFamily;
 
         BuildLayout(maxWidth, baseFs, lhFactor);
         OnLayoutRebuilt();

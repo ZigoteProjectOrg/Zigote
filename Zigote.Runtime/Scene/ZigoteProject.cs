@@ -38,6 +38,14 @@ public class ZigoteProject
 
     public int WindowHeight { get; set; } = 720;
 
+    /// <summary>
+    ///     Ship the DevTools overlay (Shift+D) with exported games. Off by default so a release
+    ///     never carries the debug HUD; when enabled the exporter bundles the Zigote.UI.DevTools
+    ///     assemblies and the standalone player installs the overlay at startup. Ignored by the
+    ///     editor (it always installs its own DevTools).
+    /// </summary>
+    public bool DevToolsEnabled { get; set; }
+
     public static ZigoteProject Load(string path)
     {
         if (!File.Exists(path)) return new ZigoteProject();

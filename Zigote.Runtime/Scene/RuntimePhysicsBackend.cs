@@ -99,8 +99,8 @@ internal sealed class RuntimePhysicsBackend(PhysicsWorld physics) : IPhysicsBack
         physics.AddImpulse(body.BodyId, impulse);
     }
 
-    public RaycastHit? Raycast(Vec3 origin, Vec3 direction, float maxDistance,
-        RigidBodyHandle ignore)
+    public bool TryRaycast(Vec3 origin, Vec3 direction, float maxDistance,
+        RigidBodyHandle ignore, out RaycastHit3D hit)
     {
         if (!physics.Raycast(
                 origin,
@@ -112,13 +112,18 @@ internal sealed class RuntimePhysicsBackend(PhysicsWorld physics) : IPhysicsBack
                 out var distance,
                 ignore.BodyId
             ))
-            return null;
-        return new RaycastHit {
-            Body = new RigidBodyHandle(body),
-            Point = point,
-            Normal = normal,
-            Distance = distance,
-        };
+        {
+            hit = default;
+            return false;
+        }
+
+        hit = new RaycastHit3D(
+            new RigidBodyHandle(body),
+            point,
+            normal,
+            distance
+        );
+        return true;
     }
 
     /// <summary>Enumerate live script-created bodies with their current world transform.</summary>

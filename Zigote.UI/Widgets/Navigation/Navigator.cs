@@ -115,11 +115,15 @@ internal sealed class NavigatorBody : Widget
         _size = c.Constrain(new Size(c.MaxWidth, c.MaxHeight));
         var tight = Constraints.Tight(_size.Width, _size.Height);
 
-        foreach (var r in Routes)
+        var routes = Routes;
+        var first = FirstLayoutIndex(routes);
+        for (var i = 0; i < routes.Count; i++)
         {
-            var content = r.EnsureContent(BuildContext.Current);
+            // Every route keeps its content built and attached (state preservation) — only the
+            // measure itself is skipped for covered routes.
+            var content = routes[i].EnsureContent(BuildContext.Current);
             if (content.Owner is null && Owner is not null) content.Attach(Owner, this);
-            content.Measure(tight);
+            if (i >= first) content.Measure(tight);
         }
 
         return _size;
@@ -135,8 +139,10 @@ internal sealed class NavigatorBody : Widget
             _size.Height
         );
 
-        foreach (var r in Routes)
+        var routes = Routes;
+        for (var i = FirstLayoutIndex(routes); i < routes.Count; i++)
         {
+            var r = routes[i];
             var content = r.ContentOrNull;
             if (content is null) continue;
             var off = r.TransitionOffset(_size, r.Transition.Value);
@@ -170,6 +176,18 @@ internal sealed class NavigatorBody : Widget
                 content.Paint(paint);
             }
         }
+    }
+
+    // Measure/Layout window: while every route is settled, routes under the topmost opaque one can
+    // neither move nor become visible, so they keep last layout's geometry (Paint already skips them
+    // via FirstVisibleIndex). Any running transition lays out the whole stack — a route being
+    // revealed by a pop must have fresh geometry from its first visible frame.
+    private static int FirstLayoutIndex(IReadOnlyList<Route> routes)
+    {
+        for (var i = 0; i < routes.Count; i++)
+            if (routes[i].Status != RouteStatus.Idle)
+                return 0;
+        return FirstVisibleIndex(routes);
     }
 
     // Start painting at the topmost opaque, fully-settled route; everything below it is obscured.

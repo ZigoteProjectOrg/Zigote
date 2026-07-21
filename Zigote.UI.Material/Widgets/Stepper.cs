@@ -18,8 +18,8 @@ public class Stepper : Widget
     private Size _size;
     private ThemeData _theme = ThemeData.Dark;
 
-    public Stepper(double value = 0, double step = 1, double? min = null, double? max = null,
-        Action<double>? onChanged = null)
+    public Stepper(float value = 0f, float step = 1f, float? min = null, float? max = null,
+        Action<float>? onChanged = null)
     {
         Min = min;
         Max = max;
@@ -28,11 +28,11 @@ public class Stepper : Widget
         OnChanged = onChanged;
     }
 
-    public double Value { get; set; }
-    public double Step { get; set; }
-    public double? Min { get; set; }
-    public double? Max { get; set; }
-    public Action<double>? OnChanged { get; set; }
+    public float Value { get; set; }
+    public float Step { get; set; }
+    public float? Min { get; set; }
+    public float? Max { get; set; }
+    public Action<float>? OnChanged { get; set; }
     public bool Enabled { get; set; } = true;
 
     private float HalfHeight => ControlMetrics.CompactHeight;
@@ -255,14 +255,14 @@ public class Stepper : Widget
         }
     }
 
-    private double Clamp(double v)
+    private float Clamp(float v)
     {
         if (Min is { } mn && v < mn) v = mn;
         if (Max is { } mx && v > mx) v = mx;
         return v;
     }
 
-    private void Bump(double delta)
+    private void Bump(float delta)
     {
         if (!Enabled) return;
         var next = Clamp(Value + delta);

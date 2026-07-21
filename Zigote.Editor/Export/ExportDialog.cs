@@ -62,7 +62,7 @@ public static class ExportDialog
         // Dialog passes a bounded max height and expects content columns to be MainAxisSize.Min —
         // the default (Max) fills the whole screen and starves later children to zero height.
         var rows = new Column {
-            CrossAxisAlign = CrossAxisAlignment.Stretch,
+            CrossAxisAlignment = CrossAxisAlignment.Stretch,
             MainAxisSize = MainAxisSize.Min,
         };
         rows.Children.Add(new Label("Export Game", theme.FontSizeTitle, theme.OnSurface));
@@ -120,7 +120,7 @@ public static class ExportDialog
 
         rows.Children.Add(
             new Row {
-                MainAxisAlign = MainAxisAlignment.End,
+                MainAxisAlignment = MainAxisAlignment.End,
                 Children = {
                     new Button("Cancel", () => dialog?.Dismiss()) { Style = ButtonStyle.Outlined },
                     new SizedBox(10f),
@@ -184,7 +184,7 @@ public static class ExportDialog
         // One status row per platform × mode job, updated from the export thread.
         var jobRows = new Dictionary<ExportJob, Label>();
         var rows = new Column {
-            CrossAxisAlign = CrossAxisAlignment.Stretch,
+            CrossAxisAlignment = CrossAxisAlignment.Stretch,
             MainAxisSize = MainAxisSize.Min,
         };
         rows.Children.Add(new Label("Exporting…", theme.FontSizeTitle, theme.OnSurface));
@@ -223,7 +223,7 @@ public static class ExportDialog
         var revealButton = new Button("Show in file manager", null) { Enabled = false };
         rows.Children.Add(
             new Row {
-                MainAxisAlign = MainAxisAlignment.End,
+                MainAxisAlignment = MainAxisAlignment.End,
                 Children = {
                     revealButton,
                     new SizedBox(10f),
@@ -304,7 +304,7 @@ public static class ExportDialog
     {
         // Min, or this column absorbs the Row's bounded height (the dialog's full remaining space).
         var text = new Column {
-            CrossAxisAlign = CrossAxisAlignment.Start,
+            CrossAxisAlignment = CrossAxisAlignment.Start,
             MainAxisSize = MainAxisSize.Min,
             Children = { new Label(label, theme.FontSizeBody, theme.OnSurface) },
         };
@@ -313,7 +313,7 @@ public static class ExportDialog
         return new Padding(
             EdgeInsets.Only(bottom: 6f),
             new Row {
-                CrossAxisAlign = CrossAxisAlignment.Start,
+                CrossAxisAlignment = CrossAxisAlignment.Start,
                 Children = {
                     box,
                     new SizedBox(8f),

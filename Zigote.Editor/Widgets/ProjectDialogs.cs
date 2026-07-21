@@ -40,7 +40,7 @@ public static class ProjectDialogs
             child: new Padding(
                 EdgeInsets.All(20f),
                 new Column {
-                    CrossAxisAlign = CrossAxisAlignment.Stretch,
+                    CrossAxisAlignment = CrossAxisAlignment.Stretch,
                     Children = {
                         new Label("New Project", theme.FontSizeTitle, theme.OnSurface),
                         new SizedBox(height: 6f),
@@ -53,7 +53,7 @@ public static class ProjectDialogs
                         pathField,
                         new SizedBox(height: 16f),
                         new Row {
-                            MainAxisAlign = MainAxisAlignment.End,
+                            MainAxisAlignment = MainAxisAlignment.End,
                             Children = {
                                 new Button("Cancel", () => dialog?.Dismiss()) {
                                     Style = ButtonStyle.Outlined,
@@ -108,14 +108,14 @@ public static class ProjectDialogs
             child: new Padding(
                 EdgeInsets.All(20f),
                 new Column {
-                    CrossAxisAlign = CrossAxisAlignment.Stretch,
+                    CrossAxisAlignment = CrossAxisAlignment.Stretch,
                     Children = {
                         new Label("Save Scene As", theme.FontSizeTitle, theme.OnSurface),
                         new SizedBox(height: 12f),
                         pathField,
                         new SizedBox(height: 16f),
                         new Row {
-                            MainAxisAlign = MainAxisAlignment.End,
+                            MainAxisAlignment = MainAxisAlignment.End,
                             Children = {
                                 new Button("Cancel", () => dialog?.Dismiss()) {
                                     Style = ButtonStyle.Outlined,

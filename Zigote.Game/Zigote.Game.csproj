@@ -10,9 +10,5 @@
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
-        <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
-    </ItemGroup>
-    <ItemGroup>
-        <Using Include="Zigote.UI.Material"/>
     </ItemGroup>
 </Project>

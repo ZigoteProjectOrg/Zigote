@@ -74,8 +74,8 @@ public sealed class SettingsWindow : Widget
         var searching = !string.IsNullOrWhiteSpace(_search);
 
         var sidebar = new Column {
-            CrossAxisAlign = CrossAxisAlignment.Stretch,
-            MainAxisAlign = MainAxisAlignment.Start,
+            CrossAxisAlignment = CrossAxisAlignment.Stretch,
+            MainAxisAlignment = MainAxisAlignment.Start,
         };
         sidebar.Children.Add(
             new Padding(
@@ -109,7 +109,7 @@ public sealed class SettingsWindow : Widget
 
         var rows = BuildRows();
         var content = new Column {
-            CrossAxisAlign = CrossAxisAlignment.Stretch,
+            CrossAxisAlignment = CrossAxisAlignment.Stretch,
             MainAxisSize = MainAxisSize.Min,
         };
 
@@ -149,7 +149,7 @@ public sealed class SettingsWindow : Widget
         return new ColoredBox(
             _theme.Window,
             new Row {
-                CrossAxisAlign = CrossAxisAlignment.Stretch,
+                CrossAxisAlignment = CrossAxisAlignment.Stretch,
                 Children = {
                     new SizedBox(SidebarW, child: new ColoredBox(_theme.Sidebar, sidebar)),
                     new SizedBox(1f, child: new ColoredBox(_theme.Separator)),
@@ -186,7 +186,7 @@ public sealed class SettingsWindow : Widget
     private void AddRow(Column content, RowDef row)
     {
         var text = new Column {
-            CrossAxisAlign = CrossAxisAlignment.Start,
+            CrossAxisAlignment = CrossAxisAlignment.Start,
             MainAxisSize = MainAxisSize.Min,
         };
         text.Children.Add(new Label(row.Title, _theme.FontSizeBody, _theme.OnSurface));
@@ -202,7 +202,7 @@ public sealed class SettingsWindow : Widget
             new Padding(
                 EdgeInsets.Symmetric(0f, RowVPad),
                 new Row {
-                    CrossAxisAlign = CrossAxisAlignment.Center,
+                    CrossAxisAlignment = CrossAxisAlignment.Center,
                     Children = {
                         new Expanded(text),
                         new SizedBox(Spacing.Md),

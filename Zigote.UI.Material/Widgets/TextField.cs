@@ -32,6 +32,7 @@ public class TextField : Widget, ITextInputClient
     private int _compositionStart;
     private string _compositionText = string.Empty;
     private ContextMenu? _contextMenu;
+    private readonly TextEditingController? _controller;
     private int _cursorPos;
 
     private int _desiredCol = -1; // sticky column for Up/Down navigation; -1 = recompute from caret
@@ -59,11 +60,10 @@ public class TextField : Widget, ITextInputClient
     ///         InputDecoration(hintText: "Name"), onChanged: (v) => …, onSubmitted: (v) => …, maxLines: 1)
     ///     </c>
     ///     .
-    ///     A <paramref name="controller" /> seeds the text and receives edits.
+    ///     A <paramref name="controller" /> seeds the text, receives edits, and pushes external
+    ///     <see cref="TextEditingController.Text" /> assignments back into the field.
     ///     <paramref name="maxLines" />
     ///     = 1 is single-line; anything else (or null) enables the multi-line field.
-    ///     <paramref name="obscureText" /> and <paramref name="keyboardType" /> are accepted for API
-    ///     compatibility but not applied.
     /// </summary>
     public TextField(
         TextEditingController? controller = null,
@@ -73,11 +73,10 @@ public class TextField : Widget, ITextInputClient
         int? maxLines = 1,
         int? minLines = null,
         bool readOnly = false,
-        bool obscureText = false,
-        object? keyboardType = null)
+        bool obscureText = false)
     {
         _hint = decoration?.HintText ?? "";
-        OnSubmit = onSubmitted;
+        OnSubmitted = onSubmitted;
         ReadOnly = readOnly;
 
         if (maxLines is null || maxLines > 1)
@@ -89,7 +88,9 @@ public class TextField : Widget, ITextInputClient
 
         if (controller is not null)
         {
+            _controller = controller;
             _text = controller.Text;
+            controller.Changed += OnControllerChanged;
             OnChanged = v =>
             {
                 controller.SetTextSilently(v);
@@ -102,7 +103,18 @@ public class TextField : Widget, ITextInputClient
         }
 
         _obscure = obscureText;
-        _ = keyboardType;
+    }
+
+    /// <summary>
+    ///     Follows an external controller write (<c>controller.Text = …</c> / <c>Clear()</c>) into the
+    ///     field. Edits typed in the field flow back via <see cref="TextEditingController.SetTextSilently" />,
+    ///     so this never re-enters.
+    /// </summary>
+    private void OnControllerChanged(string value)
+    {
+        if (_cursorPos > value.Length) _cursorPos = value.Length;
+        if (_selectionAnchor > value.Length) ClearSelection();
+        Text = value;
     }
 
     public string Text
@@ -148,7 +160,14 @@ public class TextField : Widget, ITextInputClient
     public Action<string>? OnChanged { get; set; }
 
     /// <summary>Fired with the current text when Enter/Return is pressed (commit affordance).</summary>
-    public Action<string>? OnSubmit { get; set; }
+    public Action<string>? OnSubmitted { get; set; }
+
+    [Obsolete("Renamed — use OnSubmitted.")]
+    public Action<string>? OnSubmit
+    {
+        get => OnSubmitted;
+        set => OnSubmitted = value;
+    }
 
     /// <summary>
     ///     Fired when focus is gained (true) or lost (false). Used by composite controls like
@@ -177,8 +196,8 @@ public class TextField : Widget, ITextInputClient
     /// <summary>
     ///     When true the field accepts newlines and grows vertically between <see cref="MinLines" /> and
     ///     <see cref="MaxLines" /> (scrolling past that). Enter inserts a line break; ⌘/Ctrl+Enter fires
-    ///     <see cref="OnSubmit" />. Single-line (the default) keeps the original fixed-height behaviour
-    ///     and Enter submits. For code/syntax editing prefer <see cref="CodeEditor" />.
+    ///     <see cref="OnSubmitted" />. Single-line (the default) keeps the original fixed-height
+    ///     behaviour and Enter submits. For code/syntax editing prefer <see cref="CodeEditor" />.
     /// </summary>
     public bool Multiline
     {
@@ -489,6 +508,7 @@ public class TextField : Widget, ITextInputClient
     public override void Detach()
     {
         base.Detach();
+        if (_controller is not null) _controller.Changed -= OnControllerChanged;
         _layout?.Dispose();
         _layout = null;
     }
@@ -1045,7 +1065,7 @@ public class TextField : Widget, ITextInputClient
                 return;
             }
 
-            OnSubmit?.Invoke(Text);
+            OnSubmitted?.Invoke(Text);
             return;
         }
 

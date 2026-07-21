@@ -14,6 +14,10 @@ namespace Zigote.Ecs;
 public sealed class EcsWorld : IDisposable
 {
     private readonly Dictionary<Type, ulong> _componentIds = new();
+
+    // ForEach reuses one native query per component-id set (ecs_query_init per call is ~µs and the
+    // flagship samples call ForEach every frame). Unused slots in the key are 0 (never a valid id).
+    private readonly Dictionary<(ulong, ulong, ulong, ulong), IDisposable> _queryCache = new();
     private readonly ulong _world;
     private bool _disposed;
 
@@ -25,6 +29,13 @@ public sealed class EcsWorld : IDisposable
     // ── Entity count (C#-tracked; user-created entities only) ──────────────────
     public int EntityCount { get; private set; }
 
+    /// <summary>
+    ///     Registered systems + observers (C#-tracked). Zero means nothing entity-side can write
+    ///     components outside direct <see cref="Set{T}" /> calls — hosts use this to skip
+    ///     entity→node mirroring work when no ECS pass can have run.
+    /// </summary>
+    public int SystemCount { get; private set; }
+
     // ── Pair / relationship primitives ──────────────────────────────────────────
 
     public ulong ChildOf => NativeEngine.EcsBuiltinChildof();
@@ -34,6 +45,8 @@ public sealed class EcsWorld : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        foreach (var q in _queryCache.Values) q.Dispose();
+        _queryCache.Clear();
         NativeEngine.EcsWorldDestroy(_world);
     }
 
@@ -294,11 +307,73 @@ public sealed class EcsWorld : IDisposable
         return new Query<T1, T2>(_world, q);
     }
 
+    public unsafe Query<T1, T2, T3> Query<T1, T2, T3>()
+        where T1 : unmanaged where T2 : unmanaged where T3 : unmanaged
+    {
+        var ids = stackalloc ulong[] {
+            ComponentId<T1>(),
+            ComponentId<T2>(),
+            ComponentId<T3>(),
+        };
+        var q = NativeEngine.EcsQueryCreate(_world, ids, 3);
+        return new Query<T1, T2, T3>(_world, q);
+    }
+
+    public unsafe Query<T1, T2, T3, T4> Query<T1, T2, T3, T4>()
+        where T1 : unmanaged where T2 : unmanaged where T3 : unmanaged where T4 : unmanaged
+    {
+        var ids = stackalloc ulong[] {
+            ComponentId<T1>(),
+            ComponentId<T2>(),
+            ComponentId<T3>(),
+            ComponentId<T4>(),
+        };
+        var q = NativeEngine.EcsQueryCreate(_world, ids, 4);
+        return new Query<T1, T2, T3, T4>(_world, q);
+    }
+
+    private Query<T1> CachedQuery<T1>() where T1 : unmanaged
+    {
+        var key = (ComponentId<T1>(), 0UL, 0UL, 0UL);
+        if (_queryCache.TryGetValue(key, out var cached)) return (Query<T1>)cached;
+        var q = Query<T1>();
+        _queryCache[key] = q;
+        return q;
+    }
+
+    private Query<T1, T2> CachedQuery<T1, T2>() where T1 : unmanaged where T2 : unmanaged
+    {
+        var key = (ComponentId<T1>(), ComponentId<T2>(), 0UL, 0UL);
+        if (_queryCache.TryGetValue(key, out var cached)) return (Query<T1, T2>)cached;
+        var q = Query<T1, T2>();
+        _queryCache[key] = q;
+        return q;
+    }
+
+    private Query<T1, T2, T3> CachedQuery<T1, T2, T3>()
+        where T1 : unmanaged where T2 : unmanaged where T3 : unmanaged
+    {
+        var key = (ComponentId<T1>(), ComponentId<T2>(), ComponentId<T3>(), 0UL);
+        if (_queryCache.TryGetValue(key, out var cached)) return (Query<T1, T2, T3>)cached;
+        var q = Query<T1, T2, T3>();
+        _queryCache[key] = q;
+        return q;
+    }
+
+    private Query<T1, T2, T3, T4> CachedQuery<T1, T2, T3, T4>()
+        where T1 : unmanaged where T2 : unmanaged where T3 : unmanaged where T4 : unmanaged
+    {
+        var key = (ComponentId<T1>(), ComponentId<T2>(), ComponentId<T3>(), ComponentId<T4>());
+        if (_queryCache.TryGetValue(key, out var cached)) return (Query<T1, T2, T3, T4>)cached;
+        var q = Query<T1, T2, T3, T4>();
+        _queryCache[key] = q;
+        return q;
+    }
+
     /// <summary>Convenience: iterate every entity that has <typeparamref name="T1" />.</summary>
     public void ForEach<T1>(Action<Span<T1>> body) where T1 : unmanaged
     {
-        using var q = Query<T1>();
-        q.Each(body);
+        CachedQuery<T1>().Each(body);
     }
 
     /// <summary>
@@ -308,8 +383,21 @@ public sealed class EcsWorld : IDisposable
     public void ForEach<T1, T2>(Action<Span<T1>, Span<T2>> body)
         where T1 : unmanaged where T2 : unmanaged
     {
-        using var q = Query<T1, T2>();
-        q.Each(body);
+        CachedQuery<T1, T2>().Each(body);
+    }
+
+    /// <summary>Convenience: iterate every entity that has all three component types.</summary>
+    public void ForEach<T1, T2, T3>(Action<Span<T1>, Span<T2>, Span<T3>> body)
+        where T1 : unmanaged where T2 : unmanaged where T3 : unmanaged
+    {
+        CachedQuery<T1, T2, T3>().Each(body);
+    }
+
+    /// <summary>Convenience: iterate every entity that has all four component types.</summary>
+    public void ForEach<T1, T2, T3, T4>(Action<Span<T1>, Span<T2>, Span<T3>, Span<T4>> body)
+        where T1 : unmanaged where T2 : unmanaged where T3 : unmanaged where T4 : unmanaged
+    {
+        CachedQuery<T1, T2, T3, T4>().Each(body);
     }
 
     // ── System registration ─────────────────────────────────────────────────────
@@ -348,6 +436,8 @@ public sealed class EcsWorld : IDisposable
                 cookie
             );
         }
+
+        SystemCount++;
     }
 
     public unsafe void RegisterSystem<T1, T2>(string name, EcsPhase phase,
@@ -398,6 +488,142 @@ public sealed class EcsWorld : IDisposable
                 cookie
             );
         }
+
+        SystemCount++;
+    }
+
+    public unsafe void RegisterSystem<T1, T2, T3>(string name, EcsPhase phase,
+        Action<Span<T1>, Span<T2>, Span<T3>> body)
+        where T1 : unmanaged where T2 : unmanaged where T3 : unmanaged
+    {
+        var id1 = ComponentId<T1>();
+        var id2 = ComponentId<T2>();
+        var id3 = ComponentId<T3>();
+        var cookie = EcsSystemTable.Register(iterPtr =>
+            {
+                var n = NativeEngine.EcsIterCountFromPtr(iterPtr);
+                if (n == 0) return;
+                body(
+                    new Span<T1>(
+                        (T1*)NativeEngine.EcsIterFieldFromPtr(
+                            iterPtr,
+                            0,
+                            (nuint)Unsafe.SizeOf<T1>()
+                        ),
+                        n
+                    ),
+                    new Span<T2>(
+                        (T2*)NativeEngine.EcsIterFieldFromPtr(
+                            iterPtr,
+                            1,
+                            (nuint)Unsafe.SizeOf<T2>()
+                        ),
+                        n
+                    ),
+                    new Span<T3>(
+                        (T3*)NativeEngine.EcsIterFieldFromPtr(
+                            iterPtr,
+                            2,
+                            (nuint)Unsafe.SizeOf<T3>()
+                        ),
+                        n
+                    )
+                );
+            }
+        );
+        var phaseId = NativeEngine.EcsBuiltinPhase((byte)phase);
+        var nameBytes = Encoding.UTF8.GetBytes(name + "\0");
+        var ids = stackalloc ulong[] {
+            id1,
+            id2,
+            id3,
+        };
+        fixed (byte* namePtr = nameBytes)
+        {
+            NativeEngine.EcsSystemCreate(
+                _world,
+                namePtr,
+                phaseId,
+                ids,
+                3,
+                (nuint)(delegate* unmanaged[Cdecl]<nuint, void>)&EcsSystemTable.Dispatch,
+                cookie
+            );
+        }
+
+        SystemCount++;
+    }
+
+    public unsafe void RegisterSystem<T1, T2, T3, T4>(string name, EcsPhase phase,
+        Action<Span<T1>, Span<T2>, Span<T3>, Span<T4>> body)
+        where T1 : unmanaged where T2 : unmanaged where T3 : unmanaged where T4 : unmanaged
+    {
+        var id1 = ComponentId<T1>();
+        var id2 = ComponentId<T2>();
+        var id3 = ComponentId<T3>();
+        var id4 = ComponentId<T4>();
+        var cookie = EcsSystemTable.Register(iterPtr =>
+            {
+                var n = NativeEngine.EcsIterCountFromPtr(iterPtr);
+                if (n == 0) return;
+                body(
+                    new Span<T1>(
+                        (T1*)NativeEngine.EcsIterFieldFromPtr(
+                            iterPtr,
+                            0,
+                            (nuint)Unsafe.SizeOf<T1>()
+                        ),
+                        n
+                    ),
+                    new Span<T2>(
+                        (T2*)NativeEngine.EcsIterFieldFromPtr(
+                            iterPtr,
+                            1,
+                            (nuint)Unsafe.SizeOf<T2>()
+                        ),
+                        n
+                    ),
+                    new Span<T3>(
+                        (T3*)NativeEngine.EcsIterFieldFromPtr(
+                            iterPtr,
+                            2,
+                            (nuint)Unsafe.SizeOf<T3>()
+                        ),
+                        n
+                    ),
+                    new Span<T4>(
+                        (T4*)NativeEngine.EcsIterFieldFromPtr(
+                            iterPtr,
+                            3,
+                            (nuint)Unsafe.SizeOf<T4>()
+                        ),
+                        n
+                    )
+                );
+            }
+        );
+        var phaseId = NativeEngine.EcsBuiltinPhase((byte)phase);
+        var nameBytes = Encoding.UTF8.GetBytes(name + "\0");
+        var ids = stackalloc ulong[] {
+            id1,
+            id2,
+            id3,
+            id4,
+        };
+        fixed (byte* namePtr = nameBytes)
+        {
+            NativeEngine.EcsSystemCreate(
+                _world,
+                namePtr,
+                phaseId,
+                ids,
+                4,
+                (nuint)(delegate* unmanaged[Cdecl]<nuint, void>)&EcsSystemTable.Dispatch,
+                cookie
+            );
+        }
+
+        SystemCount++;
     }
 
     // ── Observers (change notification) ─────────────────────────────────────────
@@ -447,6 +673,8 @@ public sealed class EcsWorld : IDisposable
                 cookie
             );
         }
+
+        SystemCount++;
     }
 
     /// <summary>Tell flecs a component mutated via <see cref="Get{T}" /> changed — fires OnSet observers.</summary>
@@ -546,32 +774,52 @@ public sealed class Query<T1>(ulong world, ulong handle) : IDisposable
     public unsafe void Each(Action<Span<T1>> fn)
     {
         var it = NativeEngine.EcsQueryIter(world, handle);
-        while (NativeEngine.EcsQueryNext(it) != 0)
+        var completed = false;
+        try
         {
-            var n = NativeEngine.EcsIterCount(it);
-            fn(new Span<T1>((T1*)NativeEngine.EcsIterField(it, 0, (nuint)Unsafe.SizeOf<T1>()), n));
-        }
+            while (NativeEngine.EcsQueryNext(it) != 0)
+            {
+                var n = NativeEngine.EcsIterCount(it);
+                fn(
+                    new Span<T1>(
+                        (T1*)NativeEngine.EcsIterField(it, 0, (nuint)Unsafe.SizeOf<T1>()),
+                        n
+                    )
+                );
+            }
 
-        // Loop ran ecs_query_next to a false return → flecs already finalized the iterator.
-        // Free only our IterBox wrapper; a second ecs_iter_fini here would double-free.
-        NativeEngine.EcsIterFree(it);
+            completed = true;
+        }
+        finally
+        {
+            QueryIterRelease.Release(it, completed);
+        }
     }
 
     public unsafe void Each(Action<ReadOnlySpan<Entity>, Span<T1>> fn)
     {
         var it = NativeEngine.EcsQueryIter(world, handle);
-        while (NativeEngine.EcsQueryNext(it) != 0)
+        var completed = false;
+        try
         {
-            var n = NativeEngine.EcsIterCount(it);
-            fn(
-                new ReadOnlySpan<Entity>((Entity*)NativeEngine.EcsIterEntities(it), n),
-                new Span<T1>((T1*)NativeEngine.EcsIterField(it, 0, (nuint)Unsafe.SizeOf<T1>()), n)
-            );
-        }
+            while (NativeEngine.EcsQueryNext(it) != 0)
+            {
+                var n = NativeEngine.EcsIterCount(it);
+                fn(
+                    new ReadOnlySpan<Entity>((Entity*)NativeEngine.EcsIterEntities(it), n),
+                    new Span<T1>(
+                        (T1*)NativeEngine.EcsIterField(it, 0, (nuint)Unsafe.SizeOf<T1>()),
+                        n
+                    )
+                );
+            }
 
-        // Loop ran ecs_query_next to a false return → flecs already finalized the iterator.
-        // Free only our IterBox wrapper; a second ecs_iter_fini here would double-free.
-        NativeEngine.EcsIterFree(it);
+            completed = true;
+        }
+        finally
+        {
+            QueryIterRelease.Release(it, completed);
+        }
     }
 }
 
@@ -589,36 +837,243 @@ public sealed class Query<T1, T2>(ulong world, ulong handle) : IDisposable
     public unsafe void Each(Action<Span<T1>, Span<T2>> fn)
     {
         var it = NativeEngine.EcsQueryIter(world, handle);
-        while (NativeEngine.EcsQueryNext(it) != 0)
+        var completed = false;
+        try
         {
-            var n = NativeEngine.EcsIterCount(it);
-            fn(
-                new Span<T1>((T1*)NativeEngine.EcsIterField(it, 0, (nuint)Unsafe.SizeOf<T1>()), n),
-                new Span<T2>((T2*)NativeEngine.EcsIterField(it, 1, (nuint)Unsafe.SizeOf<T2>()), n)
-            );
-        }
+            while (NativeEngine.EcsQueryNext(it) != 0)
+            {
+                var n = NativeEngine.EcsIterCount(it);
+                fn(
+                    new Span<T1>(
+                        (T1*)NativeEngine.EcsIterField(it, 0, (nuint)Unsafe.SizeOf<T1>()),
+                        n
+                    ),
+                    new Span<T2>(
+                        (T2*)NativeEngine.EcsIterField(it, 1, (nuint)Unsafe.SizeOf<T2>()),
+                        n
+                    )
+                );
+            }
 
-        // Loop ran ecs_query_next to a false return → flecs already finalized the iterator.
-        // Free only our IterBox wrapper; a second ecs_iter_fini here would double-free.
-        NativeEngine.EcsIterFree(it);
+            completed = true;
+        }
+        finally
+        {
+            QueryIterRelease.Release(it, completed);
+        }
     }
 
     public unsafe void Each(Action<ReadOnlySpan<Entity>, Span<T1>, Span<T2>> fn)
     {
         var it = NativeEngine.EcsQueryIter(world, handle);
-        while (NativeEngine.EcsQueryNext(it) != 0)
+        var completed = false;
+        try
         {
-            var n = NativeEngine.EcsIterCount(it);
-            fn(
-                new ReadOnlySpan<Entity>((Entity*)NativeEngine.EcsIterEntities(it), n),
-                new Span<T1>((T1*)NativeEngine.EcsIterField(it, 0, (nuint)Unsafe.SizeOf<T1>()), n),
-                new Span<T2>((T2*)NativeEngine.EcsIterField(it, 1, (nuint)Unsafe.SizeOf<T2>()), n)
-            );
-        }
+            while (NativeEngine.EcsQueryNext(it) != 0)
+            {
+                var n = NativeEngine.EcsIterCount(it);
+                fn(
+                    new ReadOnlySpan<Entity>((Entity*)NativeEngine.EcsIterEntities(it), n),
+                    new Span<T1>(
+                        (T1*)NativeEngine.EcsIterField(it, 0, (nuint)Unsafe.SizeOf<T1>()),
+                        n
+                    ),
+                    new Span<T2>(
+                        (T2*)NativeEngine.EcsIterField(it, 1, (nuint)Unsafe.SizeOf<T2>()),
+                        n
+                    )
+                );
+            }
 
-        // Loop ran ecs_query_next to a false return → flecs already finalized the iterator.
-        // Free only our IterBox wrapper; a second ecs_iter_fini here would double-free.
-        NativeEngine.EcsIterFree(it);
+            completed = true;
+        }
+        finally
+        {
+            QueryIterRelease.Release(it, completed);
+        }
+    }
+}
+
+/// <summary>
+///     Archetype chunk iterator over three component types.
+/// </summary>
+public sealed class Query<T1, T2, T3>(ulong world, ulong handle) : IDisposable
+    where T1 : unmanaged where T2 : unmanaged where T3 : unmanaged
+{
+    public void Dispose()
+    {
+        NativeEngine.EcsQueryDestroy(handle);
+    }
+
+    public unsafe void Each(Action<Span<T1>, Span<T2>, Span<T3>> fn)
+    {
+        var it = NativeEngine.EcsQueryIter(world, handle);
+        var completed = false;
+        try
+        {
+            while (NativeEngine.EcsQueryNext(it) != 0)
+            {
+                var n = NativeEngine.EcsIterCount(it);
+                fn(
+                    new Span<T1>(
+                        (T1*)NativeEngine.EcsIterField(it, 0, (nuint)Unsafe.SizeOf<T1>()),
+                        n
+                    ),
+                    new Span<T2>(
+                        (T2*)NativeEngine.EcsIterField(it, 1, (nuint)Unsafe.SizeOf<T2>()),
+                        n
+                    ),
+                    new Span<T3>(
+                        (T3*)NativeEngine.EcsIterField(it, 2, (nuint)Unsafe.SizeOf<T3>()),
+                        n
+                    )
+                );
+            }
+
+            completed = true;
+        }
+        finally
+        {
+            QueryIterRelease.Release(it, completed);
+        }
+    }
+
+    public unsafe void Each(Action<ReadOnlySpan<Entity>, Span<T1>, Span<T2>, Span<T3>> fn)
+    {
+        var it = NativeEngine.EcsQueryIter(world, handle);
+        var completed = false;
+        try
+        {
+            while (NativeEngine.EcsQueryNext(it) != 0)
+            {
+                var n = NativeEngine.EcsIterCount(it);
+                fn(
+                    new ReadOnlySpan<Entity>((Entity*)NativeEngine.EcsIterEntities(it), n),
+                    new Span<T1>(
+                        (T1*)NativeEngine.EcsIterField(it, 0, (nuint)Unsafe.SizeOf<T1>()),
+                        n
+                    ),
+                    new Span<T2>(
+                        (T2*)NativeEngine.EcsIterField(it, 1, (nuint)Unsafe.SizeOf<T2>()),
+                        n
+                    ),
+                    new Span<T3>(
+                        (T3*)NativeEngine.EcsIterField(it, 2, (nuint)Unsafe.SizeOf<T3>()),
+                        n
+                    )
+                );
+            }
+
+            completed = true;
+        }
+        finally
+        {
+            QueryIterRelease.Release(it, completed);
+        }
+    }
+}
+
+/// <summary>
+///     Archetype chunk iterator over four component types.
+/// </summary>
+public sealed class Query<T1, T2, T3, T4>(ulong world, ulong handle) : IDisposable
+    where T1 : unmanaged where T2 : unmanaged where T3 : unmanaged where T4 : unmanaged
+{
+    public void Dispose()
+    {
+        NativeEngine.EcsQueryDestroy(handle);
+    }
+
+    public unsafe void Each(Action<Span<T1>, Span<T2>, Span<T3>, Span<T4>> fn)
+    {
+        var it = NativeEngine.EcsQueryIter(world, handle);
+        var completed = false;
+        try
+        {
+            while (NativeEngine.EcsQueryNext(it) != 0)
+            {
+                var n = NativeEngine.EcsIterCount(it);
+                fn(
+                    new Span<T1>(
+                        (T1*)NativeEngine.EcsIterField(it, 0, (nuint)Unsafe.SizeOf<T1>()),
+                        n
+                    ),
+                    new Span<T2>(
+                        (T2*)NativeEngine.EcsIterField(it, 1, (nuint)Unsafe.SizeOf<T2>()),
+                        n
+                    ),
+                    new Span<T3>(
+                        (T3*)NativeEngine.EcsIterField(it, 2, (nuint)Unsafe.SizeOf<T3>()),
+                        n
+                    ),
+                    new Span<T4>(
+                        (T4*)NativeEngine.EcsIterField(it, 3, (nuint)Unsafe.SizeOf<T4>()),
+                        n
+                    )
+                );
+            }
+
+            completed = true;
+        }
+        finally
+        {
+            QueryIterRelease.Release(it, completed);
+        }
+    }
+
+    public unsafe void Each(
+        Action<ReadOnlySpan<Entity>, Span<T1>, Span<T2>, Span<T3>, Span<T4>> fn)
+    {
+        var it = NativeEngine.EcsQueryIter(world, handle);
+        var completed = false;
+        try
+        {
+            while (NativeEngine.EcsQueryNext(it) != 0)
+            {
+                var n = NativeEngine.EcsIterCount(it);
+                fn(
+                    new ReadOnlySpan<Entity>((Entity*)NativeEngine.EcsIterEntities(it), n),
+                    new Span<T1>(
+                        (T1*)NativeEngine.EcsIterField(it, 0, (nuint)Unsafe.SizeOf<T1>()),
+                        n
+                    ),
+                    new Span<T2>(
+                        (T2*)NativeEngine.EcsIterField(it, 1, (nuint)Unsafe.SizeOf<T2>()),
+                        n
+                    ),
+                    new Span<T3>(
+                        (T3*)NativeEngine.EcsIterField(it, 2, (nuint)Unsafe.SizeOf<T3>()),
+                        n
+                    ),
+                    new Span<T4>(
+                        (T4*)NativeEngine.EcsIterField(it, 3, (nuint)Unsafe.SizeOf<T4>()),
+                        n
+                    )
+                );
+            }
+
+            completed = true;
+        }
+        finally
+        {
+            QueryIterRelease.Release(it, completed);
+        }
+    }
+}
+
+/// <summary>
+///     Releases a pull-query iterator after an <c>Each</c> loop.
+///     A loop that ran <c>ecs_query_next</c> to a false return was already finalized by flecs —
+///     only the IterBox wrapper may be freed (a second <c>ecs_iter_fini</c> would double-free).
+///     A loop interrupted by a callback exception still owns a live flecs iterator and must
+///     run <c>ecs_iter_fini</c> or the iterator's native resources leak.
+/// </summary>
+internal static class QueryIterRelease
+{
+    internal static void Release(ulong it, bool completed)
+    {
+        if (completed) NativeEngine.EcsIterFree(it);
+        else NativeEngine.EcsIterFini(it);
     }
 }
 
@@ -630,14 +1085,19 @@ public sealed class Query<T1, T2>(ulong world, ulong handle) : IDisposable
 internal static class EcsSystemTable
 {
     private static long _nextId;
-    private static readonly Dictionary<ulong, Action<nuint>> Slots = new();
+    private static readonly object RegisterLock = new();
+
+    // Copy-on-write: Register swaps in a fresh dictionary so Dispatch (every system, every tick)
+    // reads the current snapshot lock-free.
+    private static volatile Dictionary<ulong, Slot> _slots = new();
 
     internal static ulong Register(Action<nuint> handler)
     {
         var id = (ulong)Interlocked.Increment(ref _nextId);
-        lock (Slots)
+        lock (RegisterLock)
         {
-            Slots[id] = handler;
+            var next = new Dictionary<ulong, Slot>(_slots) { [id] = new Slot(handler) };
+            _slots = next;
         }
 
         return id;
@@ -646,19 +1106,34 @@ internal static class EcsSystemTable
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     internal static void Dispatch(nuint iterPtr)
     {
+        // UnmanagedCallersOnly — no exception may ever escape into native flecs.
         try
         {
             var cookie = NativeEngine.EcsIterCtx(iterPtr);
-            Action<nuint>? fn;
-            lock (Slots)
+            if (!_slots.TryGetValue(cookie, out var slot)) return;
+            try
             {
-                Slots.TryGetValue(cookie, out fn);
+                slot.Handler(iterPtr);
             }
-
-            fn?.Invoke(iterPtr);
+            catch (Exception ex)
+            {
+                if (!slot.Faulted)
+                {
+                    slot.Faulted = true;
+                    Console.Error.WriteLine(
+                        $"[EcsSystemTable] system #{cookie} threw (further exceptions from it are suppressed):\n{ex}"
+                    );
+                }
+            }
         }
         catch
         {
         }
+    }
+
+    private sealed class Slot(Action<nuint> handler)
+    {
+        internal readonly Action<nuint> Handler = handler;
+        internal bool Faulted;
     }
 }

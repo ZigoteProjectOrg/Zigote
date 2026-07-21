@@ -15,7 +15,7 @@ namespace Zigote.UI.Widgets.Menu;
 /// </summary>
 public sealed class MenuBar : Widget
 {
-    private readonly Row _row = new() { CrossAxisAlign = CrossAxisAlignment.Center };
+    private readonly Row _row = new() { CrossAxisAlignment = CrossAxisAlignment.Center };
     private float _height;
     private ThemeData _theme = ThemeData.Dark;
     private float _width;

@@ -39,7 +39,7 @@ public sealed class WidgetHud : Component
         var card = new Card(
             new Column {
                 MainAxisSize = MainAxisSize.Min,
-                CrossAxisAlign = CrossAxisAlignment.Start,
+                CrossAxisAlignment = CrossAxisAlignment.Start,
                 Children = {
                     new Label(Title, 15f, new Color(0.62f, 0.67f, 0.74f)) {
                         FontWeight = FontWeight.SemiBold,

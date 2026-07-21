@@ -44,9 +44,9 @@ internal interface IReactiveSource
 
 /// <summary>
 ///     Base of every derived node — a <see cref="Computed{T}" /> or an <see cref="Effect" />. Holds the
-///     dependency set, the tri-colour state, and the shared push (<see cref="MarkStale" />) / pull
-///     (<see cref="Refresh" />) machinery. Auto-tracking: whatever sources <see cref="Execute" /> reads
-///     become dependencies, re-derived every run, so conditional dependencies come and go.
+///     ordered dependency list, the tri-colour state, and the shared push (<see cref="MarkStale" />) /
+///     pull (<see cref="Refresh" />) machinery. Auto-tracking: whatever sources <see cref="Execute" />
+///     reads become dependencies, re-derived every run, so conditional dependencies come and go.
 ///     <para>
 ///         <b>Lazy + leak-free:</b> a reaction subscribes to its sources only while it is <em>watched</em>
 ///         (an effect always is; a computed only while it has observers). An unobserved computed neither
@@ -60,8 +60,19 @@ internal interface IReactiveSource
 /// </summary>
 public abstract class Reaction
 {
-    private HashSet<IReactiveSource> _sources = [];
-    private HashSet<IReactiveSource> _next = [];
+    // Ordered dependency list, reconciled positionally (the Reactively algorithm): each run's reads
+    // are compared slot-by-slot against the previous run's list, so a run whose dependencies are
+    // unchanged does no set bookkeeping at all; only from the first divergence on is the tail
+    // unwatched/rewatched.
+    private IReactiveSource[] _sources = [];
+    private int _sourceCount;
+
+    // The run in progress: how many leading reads matched _sources positionally, and — once a read
+    // diverges — the replacement tail collected into _reads.
+    private IReactiveSource[] _reads = [];
+    private int _readCount;
+    private int _matched;
+    private bool _diverged;
 
     private protected NodeState State;
     private protected bool Disposed;
@@ -95,7 +106,30 @@ public abstract class Reaction
     /// <summary>Record <paramref name="source" /> as a dependency of the reaction currently running.</summary>
     internal void AddSource(IReactiveSource source)
     {
-        _next.Add(source);
+        // A source read twice in one run yields ONE slot (observer edges are per-source, and the
+        // reconcile below assumes no duplicates). Dependency lists are small (typically 1-4), so a
+        // linear scan beats hashing here.
+        for (var i = 0; i < _matched; i++)
+            if (ReferenceEquals(_sources[i], source))
+                return;
+        for (var i = 0; i < _readCount; i++)
+            if (ReferenceEquals(_reads[i], source))
+                return;
+
+        if (!_diverged)
+        {
+            if (_matched < _sourceCount && ReferenceEquals(_sources[_matched], source))
+            {
+                _matched++;
+                return;
+            }
+
+            _diverged = true;
+        }
+
+        if (_readCount == _reads.Length)
+            Array.Resize(ref _reads, Math.Max(4, _reads.Length * 2));
+        _reads[_readCount++] = source;
     }
 
     /// <summary>
@@ -148,9 +182,9 @@ public abstract class Reaction
             else if (State == NodeState.Check)
             {
                 // Watched & maybe-dirty: resolve sources; a changed one pushes us to Dirty (see Computed.Execute).
-                foreach (var s in _sources)
+                for (var i = 0; i < _sourceCount; i++)
                 {
-                    s.Refresh();
+                    _sources[i].Refresh();
                     if (State == NodeState.Dirty) break;
                 }
 
@@ -160,8 +194,9 @@ public abstract class Reaction
             {
                 // Unobserved: not subscribed, so state is unreliable — verify via the combined source version.
                 long sum = 0;
-                foreach (var s in _sources)
+                for (var i = 0; i < _sourceCount; i++)
                 {
+                    var s = _sources[i];
                     s.Refresh();
                     sum += s.Version;
                 }
@@ -189,7 +224,9 @@ public abstract class Reaction
         BeforeExecute();
 
         Reactive.EvalContext = this;
-        _next.Clear();
+        _matched = 0;
+        _readCount = 0;
+        _diverged = false;
         _running = true;
         try
         {
@@ -205,32 +242,46 @@ public abstract class Reaction
         // Dispose already detached from sources; don't let ReconcileSources re-subscribe a dead node.
         if (Disposed)
         {
-            _next.Clear();
+            Array.Clear(_reads, 0, _readCount);
+            _readCount = 0;
             return;
         }
 
         ReconcileSources();
 
         long sum = 0;
-        foreach (var s in _sources) sum += s.Version;
+        for (var i = 0; i < _sourceCount; i++) sum += _sources[i].Version;
         _depsVersion = sum;
         _hasRun = true;
     }
 
     private void ReconcileSources()
     {
-        var watched = IsWatched;
-
         // Only (un)wire observer edges while watched — an unobserved reaction leaves no trace on its
         // sources (leak-free), it just records what it read for a future connect.
-        foreach (var s in _sources)
-            if (watched && !_next.Contains(s))
-                s.RemoveObserver(this);
-        foreach (var s in _next)
-            if (watched && !_sources.Contains(s))
-                s.AddObserver(this);
+        var watched = IsWatched;
 
-        (_sources, _next) = (_next, _sources);
+        // Drop the stale tail: everything past the matched prefix was not re-read this run.
+        var keep = _matched;
+        for (var i = keep; i < _sourceCount; i++)
+        {
+            if (watched) _sources[i].RemoveObserver(this);
+            _sources[i] = null!;
+        }
+
+        _sourceCount = keep;
+        if (!_diverged) return;
+
+        // Splice in this run's divergent tail and wire its edges.
+        var count = keep + _readCount;
+        if (_sources.Length < count)
+            Array.Resize(ref _sources, Math.Max(count, _sources.Length * 2));
+        Array.Copy(_reads, 0, _sources, keep, _readCount);
+        Array.Clear(_reads, 0, _readCount);
+        _sourceCount = count;
+        _readCount = 0;
+        if (!watched) return;
+        for (var i = keep; i < count; i++) _sources[i].AddObserver(this);
     }
 
     /// <summary>Became watched: subscribe to every current source (recomputing only if the value is stale).</summary>
@@ -240,14 +291,15 @@ public abstract class Reaction
         {
             // Value is current (nothing changed since we last computed) — just wire the observer edges
             // to the already-recorded sources; each source computed connects recursively down the cone.
-            foreach (var s in _sources) s.AddObserver(this);
+            for (var i = 0; i < _sourceCount; i++) _sources[i].AddObserver(this);
             State = NodeState.Clean;
         }
         else
         {
             // Stale (or never run): drop the recorded sources so ReconcileSources treats all as new and
             // recompute under `watched` to wire the edges.
-            _sources.Clear();
+            Array.Clear(_sources, 0, _sourceCount);
+            _sourceCount = 0;
             State = NodeState.Dirty;
             Refresh();
         }
@@ -256,9 +308,19 @@ public abstract class Reaction
     /// <summary>No longer watched (or disposed): unsubscribe from all sources; cascades to source computeds.</summary>
     private protected void DetachFromSources()
     {
-        foreach (var s in _sources) s.RemoveObserver(this);
-        _sources.Clear();
-        State = NodeState.Dirty; // a later read/connect recomputes fresh
+        for (var i = 0; i < _sourceCount; i++) _sources[i].RemoveObserver(this);
+
+        // Keep the recorded list while merely unwatched: a re-connect that is provably current
+        // (validated at the current global version) rewires these edges without a recompute, and a
+        // remove/re-add of the same source inside one reconcile round-trips losslessly. Only a real
+        // Dispose (flag already set by the caller) drops the references for good.
+        if (Disposed)
+        {
+            Array.Clear(_sources, 0, _sourceCount);
+            _sourceCount = 0;
+        }
+
+        State = NodeState.Dirty; // a later unobserved read recomputes fresh
     }
 }
 
@@ -379,6 +441,42 @@ public static class Reactive
         lock (Gate) fn();
     }
 
+    /// <summary>
+    ///     Invoke a user-facing event handler (<c>Changed</c>/<c>Invalidated</c>/observe callbacks) with
+    ///     dependency tracking suspended: handlers fire while a reaction may be mid-run, and their reads
+    ///     must not become phantom dependencies of it — the same reason effect cleanup runs untracked.
+    /// </summary>
+    internal static void UntrackedInvoke(Action? handler)
+    {
+        if (handler == null) return;
+        var prev = EvalContext;
+        EvalContext = null;
+        try
+        {
+            handler();
+        }
+        finally
+        {
+            EvalContext = prev;
+        }
+    }
+
+    /// <inheritdoc cref="UntrackedInvoke(Action?)" />
+    internal static void UntrackedInvoke<T>(Action<T>? handler, T value)
+    {
+        if (handler == null) return;
+        var prev = EvalContext;
+        EvalContext = null;
+        try
+        {
+            handler(value);
+        }
+        finally
+        {
+            EvalContext = prev;
+        }
+    }
+
     private static void Drain()
     {
         if (_effects == null) return;
@@ -438,7 +536,7 @@ public static class ReactiveExtensions
             {
                 src.Track(); // depend on the source's changes
                 if (first) first = false;
-                else onChanged();
+                else Reactive.UntrackedInvoke(onChanged); // callback reads must not extend the subscription
             });
         }
 

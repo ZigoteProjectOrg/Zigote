@@ -57,6 +57,8 @@
     <_HostOS Condition="$([MSBuild]::IsOSPlatform('OSX'))">macos</_HostOS>
     <_HostOS Condition="$([MSBuild]::IsOSPlatform('Windows'))">windows</_HostOS>
     <_HostOS Condition="$([MSBuild]::IsOSPlatform('Linux'))">linux</_HostOS>
+    <_HostArch Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">aarch64</_HostArch>
+    <_HostArch Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64'">x86_64</_HostArch>
 
     <ZigTargetOS Condition="'$(_RidOS)' != ''">$(_RidOS)</ZigTargetOS>
     <ZigTargetOS Condition="'$(ZigTargetOS)' == ''">$(_HostOS)</ZigTargetOS>
@@ -77,6 +79,9 @@
     <_ZigTriple Condition="'$(_RidOS)' == 'linux' And '$(_RidArch)' != ''">$(_RidArch)-linux-gnu</_ZigTriple>
     <_ZigTriple Condition="'$(_RidOS)' == 'windows' And '$(_RidArch)' != ''">$(_RidArch)-windows-gnu</_ZigTriple>
     <ZigCross Condition="'$(_RidOS)' != '' And '$(_RidOS)' != '$(_HostOS)'">true</ZigCross>
+    <!-- Same-OS cross-ARCH (e.g. osx-x64 from an arm64 Mac) is a cross build too — without -Dtarget
+         zig builds a host-arch lib that gets bundled into the foreign-arch RID and fails to load. -->
+    <ZigCross Condition="'$(_RidOS)' == '$(_HostOS)' And '$(_RidArch)' != '' And '$(_RidArch)' != '$(_HostArch)'">true</ZigCross>
     <ZigTargetArg Condition="'$(ZigCross)' == 'true'">-Dtarget=$(_ZigTriple)</ZigTargetArg>
   </PropertyGroup>
 
@@ -88,7 +93,14 @@
          build + output copy. Without this an edited shader silently keeps rendering the old code
          (the incremental up-to-date check only saw .zig sources). -->
     <ZigSourceFiles Include="$(ZigEngineDir)\src\**\*.wgsl" />
+    <!-- build.zig also compiles the Objective-C platform shims and the vendored C/C++ under
+         libraries/ — same staleness trap as the shaders: without these an edit there silently
+         ships the previous dylib. -->
+    <ZigSourceFiles Include="$(ZigEngineDir)\src\**\*.m" />
     <ZigSourceFiles Include="$(ZigEngineDir)\libraries\**\*.zig" />
+    <ZigSourceFiles Include="$(ZigEngineDir)\libraries\**\*.c" />
+    <ZigSourceFiles Include="$(ZigEngineDir)\libraries\**\*.h" />
+    <ZigSourceFiles Include="$(ZigEngineDir)\libraries\**\*.cpp" />
     <ZigSourceFiles Include="$(ZigEngineDir)\build.zig" />
     <ZigSourceFiles Include="$(ZigEngineDir)\build.zig.zon" />
     <UpToDateCheckInput Include="@(ZigSourceFiles)" />
@@ -115,10 +127,24 @@
                       File="$(_ZigFlagsFile)" Lines="$(_ZigFlags)" Overwrite="true" />
   </Target>
 
+  <!-- macOS→macOS cross-arch needs the SDK as an explicit sysroot: zig only auto-detects the SDK
+       (frameworks, libSystem) for native targets, so a -Dtarget=x86_64-macos build from an arm64
+       host fails on SDL/miniaudio/Cocoa without it. Resolved here (not in the static PropertyGroup)
+       because it shells out to xcrun. -->
+  <Target Name="ZigMacosSysroot" BeforeTargets="BuildZigEngine"
+          Condition="'$(ZigCross)' == 'true' And '$(ZigTargetOS)' == 'macos' And '$(_HostOS)' == 'macos'">
+    <Exec Command="xcrun --show-sdk-path" ConsoleToMSBuild="true" StandardOutputImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_MacSdkPath" />
+    </Exec>
+    <PropertyGroup>
+      <ZigSysrootArg>--sysroot "$(_MacSdkPath)"</ZigSysrootArg>
+    </PropertyGroup>
+  </Target>
+
   <Target Name="BuildZigEngine" BeforeTargets="BeforeBuild"
           Inputs="@(ZigSourceFiles)" Outputs="$(ZigOutDir)\$(ZigNativeLib)">
-    <Message Importance="high" Text="Zigote native: zig build shared-lib -Doptimize=$(ZigOptimize) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigStripArg)" />
-    <Exec Command="zig build shared-lib -Doptimize=$(ZigOptimize) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigStripArg)"
+    <Message Importance="high" Text="Zigote native: zig build shared-lib -Doptimize=$(ZigOptimize) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigStripArg) $(ZigSysrootArg)" />
+    <Exec Command="zig build shared-lib -Doptimize=$(ZigOptimize) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigStripArg) $(ZigSysrootArg)"
           WorkingDirectory="$(ZigEngineDir)" />
   </Target>
 

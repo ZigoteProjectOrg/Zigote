@@ -219,13 +219,13 @@ public static class WidgetSpecs
                 .Raw("let bold = weight FontWeight.Bold")
                 .Spec,
             Mod<Column>("column", "Column")
-                .Prop("mainAxis", c => c.MainAxisAlign)
-                .Prop("crossAxis", c => c.CrossAxisAlign)
+                .Prop("mainAxis", c => c.MainAxisAlignment)
+                .Prop("crossAxis", c => c.CrossAxisAlignment)
                 .Prop("mainAxisSize", c => c.MainAxisSize)
                 .Spec,
             Mod<Row>("row", "Row")
-                .Prop("mainAxis", r => r.MainAxisAlign)
-                .Prop("crossAxis", r => r.CrossAxisAlign)
+                .Prop("mainAxis", r => r.MainAxisAlignment)
+                .Prop("crossAxis", r => r.CrossAxisAlignment)
                 .Prop("mainAxisSize", r => r.MainAxisSize)
                 .Spec,
             Mod<Stack>("stack", "Stack")
@@ -285,7 +285,7 @@ public static class WidgetSpecs
                 .Prop("maxLines", t => t.MaxLines)
                 .Prop("height", t => t.Height)
                 .Prop("minWidth", t => t.MinWidth)
-                .Handler("onSubmit", t => t.OnSubmit)
+                .Handler("onSubmit", t => t.OnSubmitted)
                 .Spec,
             Mod<Slider>("slider", "Slider")
                 .Structural("Value", "OnChanged")

@@ -1,3 +1,4 @@
+using Zigote.Core;
 using Zigote.Core.Engine;
 using Zigote.Core.Math3D;
 using Zigote.Core.Physics;
@@ -84,6 +85,12 @@ public sealed class GameSession : IWorldSessionHooks
 
     // Script component instances
     private readonly ScriptWorld _scripts;
+
+    // Reused flattened buffers for the batched physics→node transform sync (one FFI call per tick
+    // instead of a position + rotation call pair per body; zero steady-state allocation).
+    private readonly List<(SceneNode Node, uint BodyId)> _syncBodies = [];
+    private ScratchBuffer<uint> _syncIds;
+    private ScratchBuffer<float> _syncXforms;
 
     // The HOST-OWNED 2D sprite renderer (EditorState / GameHost); the session only wires the Sprites
     // scripting provider over it, advances sprite-node animation in the fixed loop, and resets the
@@ -484,17 +491,21 @@ public sealed class GameSession : IWorldSessionHooks
             }
         }
 
+        // Publish the leftover sub-tick time as a fraction of a tick, so a render-side script can
+        // interpolate between the last two ticks' states (0-tick frames repeat identical state).
+        Time._interpolationAlpha = _accumulator / FixedDt;
+
         // 2. Camera free-fly fallback (empty scenes stay navigable): once per render frame at the render dt
         //    — a view convenience, not simulation — consuming the frame's still-untouched look delta.
         if (freeFlyCamera) TickCamera(cam!, dt);
 
         // Entity-first transform hand-off. Bake the settled node tree (scripts + physics + camera) into the
-        // canonical entity Transforms; an ECS-system pass would run here and mutate them; then mirror the
-        // canonical Transforms back onto the nodes the renderer reads. With no systems yet this is a faithful
-        // round-trip (nodes unchanged), but it makes flecs the system-of-record and is the seam where
-        // entity-side writes become authoritative.
+        // canonical entity Transforms (change-gated inside the bridge: an unchanged node costs no FFI
+        // write); an ECS-system pass would run here and mutate them; then mirror the canonical Transforms
+        // back onto the nodes the renderer reads. With no systems (or observers) registered nothing
+        // entity-side can have written a Transform, so the pull half is skipped whole.
         Ecs?.PushTransforms(root);
-        Ecs?.PullTransforms(root);
+        if (Ecs is { } ecs && ecs.World.SystemCount > 0) ecs.PullTransforms(root);
 
         root.SyncToNative();
 
@@ -680,18 +691,40 @@ public sealed class GameSession : IWorldSessionHooks
             : local;
     }
 
-    private void SyncFromPhysics(SceneNode node)
+    private void SyncFromPhysics(SceneNode root)
+    {
+        _syncBodies.Clear();
+        CollectDynamicBodies(root);
+        var count = _syncBodies.Count;
+        if (count == 0) return;
+
+        var ids = _syncIds.Get(count);
+        for (var i = 0; i < count; i++) ids[i] = _syncBodies[i].BodyId;
+        var xforms = _syncXforms.Get(count * 7);
+        _physics.GetBodyTransforms(ids, xforms);
+
+        for (var i = 0; i < count; i++)
+        {
+            var node = _syncBodies[i].Node;
+            var b = i * 7;
+            node.Position = new Vec3(xforms[b], xforms[b + 1], xforms[b + 2]);
+            node.Rotation = new Quat(
+                xforms[b + 3],
+                xforms[b + 4],
+                xforms[b + 5],
+                xforms[b + 6]
+            );
+        }
+    }
+
+    private void CollectDynamicBodies(SceneNode node)
     {
         if (_bodyIds.TryGetValue(node.Id, out var bodyId)
             && bodyId != PhysicsWorld.InvalidBodyId
             && !node.IsStatic)
-        {
-            node.Position = _physics.GetBodyPosition(bodyId);
-            var rotEuler = _physics.GetBodyRotation(bodyId);
-            node.Rotation = Quat.FromEuler(rotEuler.X, rotEuler.Y, rotEuler.Z);
-        }
+            _syncBodies.Add((node, bodyId));
 
-        foreach (var c in node.Children) SyncFromPhysics(c);
+        foreach (var c in node.Children) CollectDynamicBodies(c);
     }
 
     private void TickCamera(SceneNode cam, float dt)

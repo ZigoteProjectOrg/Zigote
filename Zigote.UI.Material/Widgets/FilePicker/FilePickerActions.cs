@@ -14,8 +14,8 @@ internal sealed class FilePickerActions : StatelessWidget
     protected override Widget Build(BuildContext context)
     {
         return new Row {
-            MainAxisAlign = MainAxisAlignment.End,
-            CrossAxisAlign = CrossAxisAlignment.Center,
+            MainAxisAlignment = MainAxisAlignment.End,
+            CrossAxisAlignment = CrossAxisAlignment.Center,
             Children = {
                 _cancelButton,
                 new SizedBox(8f),

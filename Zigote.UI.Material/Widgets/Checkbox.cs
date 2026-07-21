@@ -11,26 +11,33 @@ namespace Zigote.UI.Material;
 /// </summary>
 public class Checkbox : StatefulWidget
 {
-    private bool _checked;
+    private bool _value;
     private bool _enabled = true;
     private float _size = ControlMetrics.CheckboxSize;
 
     /// <summary>Named-argument constructor: <c>new Checkbox(value: true, onChanged: (v) => …)</c>.</summary>
     public Checkbox(bool value, Action<bool>? onChanged = null)
     {
-        _checked = value;
+        _value = value;
         OnChanged = onChanged;
     }
 
-    public bool Checked
+    public bool Value
     {
-        get => _checked;
+        get => _value;
         set
         {
-            if (_checked == value) return;
-            _checked = value;
+            if (_value == value) return;
+            _value = value;
             MarkNeedsBuild();
         }
+    }
+
+    [Obsolete("Renamed — use Value.")]
+    public bool Checked
+    {
+        get => Value;
+        set => Value = value;
     }
 
     public Action<bool>? OnChanged { get; set; }
@@ -66,7 +73,7 @@ public class Checkbox : StatefulWidget
     {
         if (newWidget is Checkbox c)
         {
-            Checked = c.Checked;
+            Value = c.Value;
             OnChanged = c.OnChanged;
             Size = c.Size;
             Enabled = c.Enabled;
@@ -75,7 +82,7 @@ public class Checkbox : StatefulWidget
 
     public override int DebugStateHash()
     {
-        return HashCode.Combine(Checked, Enabled, base.DebugStateHash());
+        return HashCode.Combine(Value, Enabled, base.DebugStateHash());
     }
 }
 
@@ -105,7 +112,7 @@ internal sealed class CheckboxState : WidgetState<Checkbox>
         _glyph.GlyphSize = w.Size;
         _root.Enabled = w.Enabled;
         _root.Role = SemanticsRole.Checkbox;
-        _root.Checked = w.Checked;
+        _root.Checked = w.Value;
 
         ApplyColors();
         return _root;
@@ -113,8 +120,8 @@ internal sealed class CheckboxState : WidgetState<Checkbox>
 
     private void Toggle()
     {
-        Widget.Checked = !Widget.Checked;
-        Widget.OnChanged?.Invoke(Widget.Checked);
+        Widget.Value = !Widget.Value;
+        Widget.OnChanged?.Invoke(Widget.Value);
     }
 
     private void ApplyColors()
@@ -125,7 +132,7 @@ internal sealed class CheckboxState : WidgetState<Checkbox>
 
         if (!w.Enabled)
         {
-            if (w.Checked)
+            if (w.Value)
             {
                 _box.Fill = StateStyle.Disabled(_theme.Primary);
                 _box.BorderColor = Color.Transparent;
@@ -139,7 +146,7 @@ internal sealed class CheckboxState : WidgetState<Checkbox>
                 _glyph.Visible = false;
             }
         }
-        else if (w.Checked)
+        else if (w.Value)
         {
             _box.Fill = StateStyle.Fill(_theme.Primary, hovered, pressed);
             _box.BorderColor = Color.Transparent;

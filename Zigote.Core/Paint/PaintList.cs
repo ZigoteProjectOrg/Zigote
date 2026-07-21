@@ -21,6 +21,7 @@ public sealed unsafe class PaintList
     // bytes by string value (bounded like TextMeasure) so steady-state painting allocates nothing on
     // this path. The returned array is read-only — native copies the bytes during submit — so it is
     // safe to share the same instance across frames and across multiple commands in one frame.
+    // Entries live on the pinned object heap, so submit takes their address without a per-frame pin.
     private const int Utf8CacheMax = 8192;
 
     // Per-thread so parallel painters never share it. PaintList paints only on its owning UI thread in
@@ -44,7 +45,7 @@ public sealed unsafe class PaintList
     // parallel List<byte[]?> per command, because the vast majority (Rect/Border/Clip/Opacity) carry
     // neither. This turns PinAndCall from O(commands) into O(blobs) and drops ~16 B of null slots per
     // command from the per-frame working set.
-    private readonly List<(int Index, byte[] Blob)> _pixelBlobs = [];
+    private readonly List<(int Index, byte[] Blob, bool Pinned)> _pixelBlobs = [];
     private readonly List<(int Index, byte[] Blob)> _textBlobs = [];
 
     // ── Glyph run temporary storage ───────────────────────────────────────────
@@ -66,6 +67,36 @@ public sealed unsafe class PaintList
 
     /// <summary>Read-only view of the accumulated commands, for tests and diagnostics.</summary>
     public IReadOnlyList<ZgPaintCommand> DebugCommands => _commands;
+
+    // ── PaintSnapshot access (frame-to-frame diff for partial repaint) ────────
+
+    internal ReadOnlySpan<ZgPaintCommand> CommandSpan =>
+        System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_commands);
+
+    internal List<(int Index, byte[] Blob)> TextBlobs => _textBlobs;
+
+    internal List<(int Index, byte[] Blob, bool Pinned)> PixelBlobs => _pixelBlobs;
+
+    internal byte[]? FindTextBlob(int index)
+    {
+        return PaintSnapshot.Lookup(_textBlobs, index);
+    }
+
+    internal byte[]? FindPixelBlob(int index)
+    {
+        // Same ascending-index layout as the text table; the Pinned flag is irrelevant to content.
+        int lo = 0, hi = _pixelBlobs.Count - 1;
+        while (lo <= hi)
+        {
+            var mid = (lo + hi) >> 1;
+            var midIndex = _pixelBlobs[mid].Index;
+            if (midIndex == index) return _pixelBlobs[mid].Blob;
+            if (midIndex < index) lo = mid + 1;
+            else hi = mid - 1;
+        }
+
+        return null;
+    }
 
     // ── Clip stack API ────────────────────────────────────────────────────────
 
@@ -304,7 +335,7 @@ public sealed unsafe class PaintList
             cmd.PixelsLen = (uint)fontBytes.Length;
         }
 
-        Push(cmd, textBytes, fontBytes);
+        Push(cmd, textBytes, fontBytes, pixelsPinned: true);
     }
 
     public void AddImage(Rect bounds, int pixelWidth, int pixelHeight, byte[]? pixels,
@@ -630,7 +661,9 @@ public sealed unsafe class PaintList
     /// <summary>
     ///     Pin this list and call <paramref name="callback" /> with the pinned command buffer.
     ///     Used by the render graph submit API. Pins the backing array of <see cref="_commands" />
-    ///     directly (no per-frame copy) and pins each text/pixel blob only for the call's duration.
+    ///     directly (no per-frame copy). Cache blobs (see <see cref="EncodeUtf8" />) live on the
+    ///     pinned object heap, so their address is taken without a handle; only caller-supplied
+    ///     pixel blobs are pinned, and only for the call's duration.
     /// </summary>
     internal void PinAndCall(PinCallback callback)
     {
@@ -639,21 +672,26 @@ public sealed unsafe class PaintList
         handles.Clear();
         try
         {
-            // Only the sparse blob entries need pinning — glyph-run commands set TextPtr at Add time
-            // (via _quadHandles) and never appear here, so their pointer survives untouched.
+            // Only the sparse blob entries need pointers — glyph-run commands set TextPtr at Add time
+            // (via _quadHandles) and never appear here, so their pointer survives untouched. Text
+            // blobs always come from the EncodeUtf8 cache, whose arrays never move (pinned object
+            // heap) — the address outlives the fixed block, and the list entry keeps the array alive.
             foreach (var (index, blob) in _textBlobs)
-            {
-                var h = GCHandle.Alloc(blob, GCHandleType.Pinned);
-                handles.Add(h);
-                cmds[index].TextPtr = (byte*)h.AddrOfPinnedObject();
-            }
+                fixed (byte* p = blob)
+                    cmds[index].TextPtr = p;
 
-            foreach (var (index, blob) in _pixelBlobs)
-            {
-                var h = GCHandle.Alloc(blob, GCHandleType.Pinned);
-                handles.Add(h);
-                cmds[index].PixelsPtr = (byte*)h.AddrOfPinnedObject();
-            }
+            foreach (var (index, blob, pinned) in _pixelBlobs)
+                if (pinned)
+                {
+                    fixed (byte* p = blob)
+                        cmds[index].PixelsPtr = p;
+                }
+                else
+                {
+                    var h = GCHandle.Alloc(blob, GCHandleType.Pinned);
+                    handles.Add(h);
+                    cmds[index].PixelsPtr = (byte*)h.AddrOfPinnedObject();
+                }
 
             fixed (ZgPaintCommand* ptr = cmds)
             {
@@ -675,19 +713,22 @@ public sealed unsafe class PaintList
 
     // ── Internal helpers ──────────────────────────────────────────────────────
 
-    private void Push(ZgPaintCommand cmd, byte[]? text, byte[]? pixels)
+    private void Push(ZgPaintCommand cmd, byte[]? text, byte[]? pixels, bool pixelsPinned = false)
     {
         var index = _commands.Count;
         _commands.Add(cmd);
         if (text is not null) _textBlobs.Add((index, text));
-        if (pixels is not null) _pixelBlobs.Add((index, pixels));
+        if (pixels is not null) _pixelBlobs.Add((index, pixels, pixelsPinned));
     }
 
     private static byte[] EncodeUtf8(string text)
     {
         var cache = _utf8Cache ??= new Dictionary<string, byte[]>(StringComparer.Ordinal);
         if (cache.TryGetValue(text, out var bytes)) return bytes;
-        bytes = Encoding.UTF8.GetBytes(text);
+        // Pinned object heap: the array never moves, so submit can embed its address in a command
+        // without a per-frame GCHandle pin (see PinAndCall).
+        bytes = GC.AllocateUninitializedArray<byte>(Encoding.UTF8.GetByteCount(text), pinned: true);
+        Encoding.UTF8.GetBytes(text, bytes);
         if (cache.Count >= Utf8CacheMax) cache.Clear();
         cache[text] = bytes;
         return bytes;

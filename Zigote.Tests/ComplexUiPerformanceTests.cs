@@ -59,7 +59,7 @@ public class ComplexUiPerformanceTests
                         LabeledRow("Notifications", new Checkbox(index % 3 == 0)),
                         LabeledRow(
                             "Volume",
-                            new SizedBox(160f, null, new Slider(0.5 + index * 0.05, 0, 1))
+                            new SizedBox(160f, null, new Slider(0.5f + index * 0.05f, 0, 1))
                         ),
                         new SizedBox(0f, 8f),
                         new Label("Display name"),

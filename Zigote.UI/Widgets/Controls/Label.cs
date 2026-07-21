@@ -28,8 +28,8 @@ public class Label : RenderWidget
 
     private const string Ellipsis = "…";
 
-    // Word-wrapped lines for the multi-line path, cached by (text, width, size, weight) so a re-measure
-    // with unchanged inputs allocates nothing (the paint/measure hot path stays zero-GC).
+    // Word-wrapped lines for the multi-line path, cached by (text, width, font inputs, line cap) so a
+    // re-measure with unchanged inputs allocates nothing (the paint/measure hot path stays zero-GC).
     private readonly List<string> _lines = [];
     private string _drawText = "";
 
@@ -41,7 +41,11 @@ public class Label : RenderWidget
     private string _text;
     private ThemeData _theme = ThemeData.Dark;
     private bool _truncated;
+    private string? _wrapFamily;
     private float _wrapFs = -1f;
+    private int? _wrapMaxLines;
+    private TextOverflow _wrapOverflow = TextOverflow.Clip;
+    private FontStyle _wrapStyle = FontStyle.Normal;
     private string? _wrapText;
     private FontWeight _wrapWeight = FontWeight.Normal;
     private float _wrapWidth = -1f;
@@ -217,18 +221,34 @@ public class Label : RenderWidget
     /// <summary>
     ///     Greedy word-wrap of <see cref="Text" /> to <paramref name="maxWidth" />, honouring explicit
     ///     newlines and capping at <see cref="MaxLines" /> (ellipsizing the last line when
-    ///     <see cref="Overflow" /> is Ellipsis). Cached by (text, width, size, weight) so a repeated
-    ///     measure with unchanged inputs is a no-op.
+    ///     <see cref="Overflow" /> is Ellipsis). Cached by (text, width, font inputs, line cap) so a
+    ///     repeated measure with unchanged inputs is a no-op.
     /// </summary>
     private void EnsureWrapped(float maxWidth)
     {
         if (_wrapText == Text && _wrapWidth == maxWidth && _wrapFs == _fontSize &&
-            _wrapWeight == FontWeight)
+            _wrapWeight == FontWeight && _wrapStyle == FontStyle && _wrapFamily == FontFamily &&
+            _wrapMaxLines == MaxLines && _wrapOverflow == Overflow)
             return;
         _wrapText = Text;
         _wrapWidth = maxWidth;
         _wrapFs = _fontSize;
         _wrapWeight = FontWeight;
+        _wrapStyle = FontStyle;
+        _wrapFamily = FontFamily;
+        _wrapMaxLines = MaxLines;
+        _wrapOverflow = Overflow;
+
+        // Line widths are per-word advances summed with the space advance — one TextMeasure entry
+        // per word instead of one per growing line prefix (kerning drift vs the shaped whole line
+        // is acceptable, as in the selection advance cache).
+        var spaceW = TextMeasure.Width(
+            " ",
+            _fontSize,
+            FontWeight,
+            FontStyle,
+            FontFamily
+        );
 
         _lines.Clear();
         foreach (var hardLine in Text.Split('\n'))
@@ -240,29 +260,33 @@ public class Label : RenderWidget
             }
 
             var cur = string.Empty;
+            var curW = 0f;
             foreach (var word in hardLine.Split(' '))
             {
+                var wordW = TextMeasure.Width(
+                    word,
+                    _fontSize,
+                    FontWeight,
+                    FontStyle,
+                    FontFamily
+                );
                 if (cur.Length == 0)
                 {
                     cur = word;
+                    curW = wordW;
                     continue;
                 }
 
-                var candidate = cur + " " + word;
-                if (TextMeasure.Width(
-                        candidate,
-                        _fontSize,
-                        FontWeight,
-                        FontStyle,
-                        FontFamily
-                    ) <= maxWidth)
+                if (curW + spaceW + wordW <= maxWidth)
                 {
-                    cur = candidate;
+                    cur = cur + " " + word;
+                    curW += spaceW + wordW;
                 }
                 else
                 {
                     _lines.Add(cur);
                     cur = word;
+                    curW = wordW;
                 }
             }
 

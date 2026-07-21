@@ -59,8 +59,8 @@ public sealed class NumberInput : Widget
         _grip = new ScrubGrip(this);
 
         _row = new Row {
-            MainAxisAlign = MainAxisAlignment.Start,
-            CrossAxisAlign = CrossAxisAlignment.Center,
+            MainAxisAlignment = MainAxisAlignment.Start,
+            CrossAxisAlignment = CrossAxisAlignment.Center,
             Children = {
                 _grip,
                 new SizedBox { Width = Spacing.Xxs },

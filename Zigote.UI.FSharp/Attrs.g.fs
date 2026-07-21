@@ -43,18 +43,18 @@ module text =
 [<RequireQualifiedAccess>]
 module column =
     let mainAxis (v: MainAxisAlignment) =
-        mkAttr "mainAxis" v (fun (w: Column) x -> w.MainAxisAlign <- x)
+        mkAttr "mainAxis" v (fun (w: Column) x -> w.MainAxisAlignment <- x)
     let crossAxis (v: CrossAxisAlignment) =
-        mkAttr "crossAxis" v (fun (w: Column) x -> w.CrossAxisAlign <- x)
+        mkAttr "crossAxis" v (fun (w: Column) x -> w.CrossAxisAlignment <- x)
     let mainAxisSize (v: MainAxisSize) =
         mkAttr "mainAxisSize" v (fun (w: Column) x -> w.MainAxisSize <- x)
 
 [<RequireQualifiedAccess>]
 module row =
     let mainAxis (v: MainAxisAlignment) =
-        mkAttr "mainAxis" v (fun (w: Row) x -> w.MainAxisAlign <- x)
+        mkAttr "mainAxis" v (fun (w: Row) x -> w.MainAxisAlignment <- x)
     let crossAxis (v: CrossAxisAlignment) =
-        mkAttr "crossAxis" v (fun (w: Row) x -> w.CrossAxisAlign <- x)
+        mkAttr "crossAxis" v (fun (w: Row) x -> w.CrossAxisAlignment <- x)
     let mainAxisSize (v: MainAxisSize) =
         mkAttr "mainAxisSize" v (fun (w: Row) x -> w.MainAxisSize <- x)
 
@@ -110,7 +110,7 @@ module textField =
     let minWidth (v: float32) =
         mkAttr "minWidth" v (fun (w: TextField) x -> w.MinWidth <- x)
     let onSubmit (handler: string -> unit) =
-        mkAttrReset "onSubmit" handler (fun (w: TextField) f -> w.OnSubmit <- Action<string>(f)) (fun w -> w.OnSubmit <- null)
+        mkAttrReset "onSubmit" handler (fun (w: TextField) f -> w.OnSubmitted <- Action<string>(f)) (fun w -> w.OnSubmitted <- null)
 
 [<RequireQualifiedAccess>]
 module slider =

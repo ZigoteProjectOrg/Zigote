@@ -29,7 +29,7 @@ public sealed class WelcomeScreen : StatelessWidget
 
     protected override Widget Build(BuildContext context)
     {
-        var recents = new Column { CrossAxisAlign = CrossAxisAlignment.Stretch };
+        var recents = new Column { CrossAxisAlignment = CrossAxisAlignment.Stretch };
         if (_config.RecentProjects.Count == 0)
             recents.Children.Add(
                 new Padding(
@@ -42,7 +42,7 @@ public sealed class WelcomeScreen : StatelessWidget
                 recents.Children.Add(RecentRow(path));
 
         var content = new Column {
-            CrossAxisAlign = CrossAxisAlignment.Stretch,
+            CrossAxisAlignment = CrossAxisAlignment.Stretch,
             Children = {
                 new Label("Zigote Editor", 28f, _theme.OnBackground),
                 new SizedBox(height: 4f),
