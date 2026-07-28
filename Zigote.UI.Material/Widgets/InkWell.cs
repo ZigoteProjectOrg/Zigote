@@ -2,12 +2,11 @@ namespace Zigote.UI.Material;
 
 /// <summary>
 ///     A rectangular tappable region. This engine has no ink ripple, so it
-///     behaves like a <see cref="GestureDetector" /> (tap / double-tap).
+///     behaves like a <see cref="GestureDetector" /> (tap / double-tap / touch long-press).
 ///     <c>
 ///         new InkWell(onTap: () => …,
 ///         child: …)
 ///     </c>
-///     . <c>onLongPress</c> is accepted but not detected yet.
 /// </summary>
 public sealed class InkWell : StatelessWidget
 {

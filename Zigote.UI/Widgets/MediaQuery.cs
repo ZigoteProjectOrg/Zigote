@@ -62,7 +62,9 @@ public sealed class MediaQuery : InheritedWidget
         set
         {
             if (_data.Width == value.Width && _data.Height == value.Height &&
-                _data.DevicePixelRatio == value.DevicePixelRatio)
+                _data.DevicePixelRatio == value.DevicePixelRatio &&
+                _data.Padding.Equals(value.Padding) &&
+                _data.ViewInsets.Equals(value.ViewInsets))
             {
                 _data = value;
                 return;
@@ -90,6 +92,8 @@ public sealed class MediaQuery : InheritedWidget
         return oldWidget is not MediaQuery old
                || old.Data.Width != Data.Width
                || old.Data.Height != Data.Height
-               || old.Data.DevicePixelRatio != Data.DevicePixelRatio;
+               || old.Data.DevicePixelRatio != Data.DevicePixelRatio
+               || !old.Data.Padding.Equals(Data.Padding)
+               || !old.Data.ViewInsets.Equals(Data.ViewInsets);
     }
 }

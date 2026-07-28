@@ -303,6 +303,41 @@ public class ScrollView : RenderWidget
         if (!moved) base.OnScroll(dx, dy);
     }
 
+    public override bool CanTouchScroll(bool vertical)
+    {
+        // Not while a scrollbar thumb is being dragged — those finger moves belong to the
+        // thumb (OnPointerMove), not to content scrolling.
+        if (_vbar.Dragging || _hbar.Dragging) return false;
+        return vertical ? ScrollVertical && _sy.Max > 0f : ScrollHorizontal && _sx.Max > 0f;
+    }
+
+    public override void OnTouchScroll(float dx, float dy)
+    {
+        // Content follows the finger 1:1 (drag down = reveal content above = offset shrinks),
+        // hence the negation; no ScrollSpeedMul — that multiplier converts wheel ticks, not
+        // pixels. Unanimated: the offset must track the finger exactly, with no easing lag.
+        var moved = false;
+        if (ScrollHorizontal) moved |= _sx.MoveBy(-dx, false);
+        if (ScrollVertical) moved |= _sy.MoveBy(-dy, false);
+        if (!moved) base.OnTouchScroll(dx, dy);
+    }
+
+    public override void OnTouchFling(float velocityX, float velocityY)
+    {
+        var started = false;
+        if (ScrollHorizontal) started |= _sx.Fling(-velocityX);
+        if (ScrollVertical) started |= _sy.Fling(-velocityY);
+        if (!started) base.OnTouchFling(velocityX, velocityY);
+    }
+
+    public override void OnPointerCancel()
+    {
+        if (!_vbar.Dragging && !_hbar.Dragging) return;
+        _vbar.EndDrag();
+        _hbar.EndDrag();
+        MarkNeedsPaint();
+    }
+
     public override void Detach()
     {
         base.Detach();

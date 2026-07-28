@@ -16,7 +16,6 @@ public sealed class GestureDetector : Widget
 
     /// <summary>
     ///     Named-argument constructor: <c>new GestureDetector(onTap: () => …, child: …)</c>.
-    ///     <paramref name="onLongPress" /> is accepted for API compatibility but not detected yet.
     /// </summary>
     public GestureDetector(
         Widget? child,
@@ -31,7 +30,7 @@ public sealed class GestureDetector : Widget
         OnDoubleTap = onDoubleTap;
         OnTapDown = onTapDown;
         OnTapUp = onTapUp;
-        _ = onLongPress;
+        OnLongPressed = onLongPress;
     }
 
     public Widget? Child { get; set; }
@@ -39,6 +38,16 @@ public sealed class GestureDetector : Widget
     public Action? OnDoubleTap { get; set; }
     public Action<Offset>? OnTapDown { get; set; }
     public Action<Offset>? OnTapUp { get; set; }
+
+    /// <summary>
+    ///     Fired when a touch is held in place past the long-press threshold (the App detects
+    ///     the hold and routes it via <see cref="Widget.OnLongPress" />). Named
+    ///     <c>OnLongPressed</c> because the inherited method already owns <c>OnLongPress</c>;
+    ///     the constructor keeps the natural <c>onLongPress:</c> argument. When unset, the
+    ///     base mapping (long-press → <see cref="Widget.OnRightClick" />) applies.
+    /// </summary>
+    public Action? OnLongPressed { get; set; }
+
     public Action? OnHoverEnter { get; set; }
     public Action? OnHoverExit { get; set; }
 
@@ -94,6 +103,25 @@ public sealed class GestureDetector : Widget
         {
             OnTap?.Invoke();
             _lastTapMs = now;
+        }
+    }
+
+    public override void OnPointerCancel()
+    {
+        _pressed = false;
+    }
+
+    public override void OnLongPress(Offset point)
+    {
+        if (OnLongPressed is not null)
+        {
+            // The hold consumed the gesture: the eventual finger-up must not also count as a tap.
+            _pressed = false;
+            OnLongPressed();
+        }
+        else
+        {
+            base.OnLongPress(point); // default long-press → context-menu (OnRightClick) mapping
         }
     }
 

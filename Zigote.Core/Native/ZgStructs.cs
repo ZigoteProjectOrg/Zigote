@@ -55,6 +55,13 @@ public enum EventKind : byte
     DropText = 15,
     DropPosition = 16,
     DropComplete = 17,
+    TouchDown = 18,
+    TouchMove = 19,
+    TouchUp = 20,
+    TouchCancel = 21,
+    AppBackground = 22,
+    AppForeground = 23,
+    LowMemory = 24,
 }
 
 /// <summary>
@@ -168,6 +175,13 @@ public unsafe struct ZgEvent
     // Aliases used by text_editing events (UTF-8 byte offsets from SDL).
     [FieldOffset(24)] public uint CompositionStart;
     [FieldOffset(28)] public uint CompositionLength;
+
+    // Aliases used by touch events (EVT_TOUCH_*): the finger slot (a compact per-contact id,
+    // 0..9, stable while the finger stays down) rides the key-only KeyScancode field, and
+    // pressure (0..1) rides the wheel-only ScrollX field. X/Y are the position in the same
+    // window-coordinate space as mouse events.
+    [FieldOffset(4)] public uint TouchFinger;
+    [FieldOffset(16)] public float TouchPressure;
 
     // text_input / text_editing: byte range of the payload in the poll text buffer.
     [FieldOffset(32)] public uint TextOff;

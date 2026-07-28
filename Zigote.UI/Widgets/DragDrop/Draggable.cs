@@ -126,6 +126,18 @@ public class Draggable<T> : Widget
         _armed = false;
     }
 
+    public override void OnPointerCancel()
+    {
+        if (_dragging)
+        {
+            Owner?.EndDrag(_startPoint, cancelled: true);
+            _dragging = false;
+            OnDragCompleted?.Invoke(false);
+        }
+
+        _armed = false;
+    }
+
     private void BeginDrag(Offset point)
     {
         if (Owner is null) return;

@@ -325,6 +325,23 @@ public sealed unsafe class ZigoteEngine : IDisposable
     }
 
     /// <summary>
+    ///     Main-window safe-area insets in logical pixels: the margins an app should keep clear
+    ///     of OS obstructions (notch, rounded corners, home indicator, TV overscan). All-zero on
+    ///     desktop. Re-query after a <see cref="ResizeEvent" /> — rotation moves the notch.
+    /// </summary>
+    public (float Left, float Top, float Right, float Bottom) GetSafeArea()
+    {
+        EnsureReady();
+        Span<float> insets = stackalloc float[4];
+        fixed (float* p = insets)
+        {
+            NativeEngine.GetSafeArea(_handle, p);
+        }
+
+        return (insets[0], insets[1], insets[2], insets[3]);
+    }
+
+    /// <summary>
     ///     Drop all native text caches (shaped runs, glyph atlases) on every window, forcing a
     ///     clean re-shape next frame. Call after a wholesale text sizing change (live UI
     ///     font-scale switch) — the same invalidation a font face swap performs.
@@ -426,7 +443,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
             if ((EventKind)raw.Kind == EventKind.Quit)
                 ShouldQuit = true;
 
-            // The two flooding event kinds are rented from the per-poll pool (no allocation once warm);
+            // The flooding event kinds are rented from the per-poll pool (no allocation once warm);
             // everything else fires at human rates and takes the plain allocating decode path.
             var evt = (EventKind)raw.Kind switch {
                 EventKind.MouseMove => _eventPool.RentMouseMove(raw.X, raw.Y, raw.WindowId),
@@ -435,6 +452,13 @@ public sealed unsafe class ZigoteEngine : IDisposable
                     raw.Y,
                     raw.ScrollX,
                     raw.ScrollY,
+                    raw.WindowId
+                ),
+                EventKind.TouchMove => _eventPool.RentTouchMove(
+                    raw.X,
+                    raw.Y,
+                    (int)raw.TouchFinger,
+                    raw.TouchPressure,
                     raw.WindowId
                 ),
                 _ => EventDecoder.Decode(raw, textBase),

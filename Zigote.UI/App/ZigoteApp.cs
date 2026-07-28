@@ -116,6 +116,10 @@ public class ZigoteApp
     /// </summary>
     public static bool AutoInstallDevTools { get; set; } = true;
 
+    // Whether the previous lifecycle state was Paused, so OnResume fires only for the
+    // suspend→foreground pair and not for plain desktop focus regains.
+    private bool _wasPaused;
+
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -140,6 +144,27 @@ public class ZigoteApp
     ///     are still valid here — they are cleared only after this returns.
     /// </summary>
     protected virtual void OnQuit()
+    {
+    }
+
+    /// <summary>
+    ///     The OS is suspending the app (mobile background). Persist anything important here —
+    ///     no code is guaranteed to run afterwards. Rendering is already stopped by the
+    ///     framework. Never called on desktop (see <see cref="App.LifecycleState" /> for the
+    ///     focus-driven Resumed↔Inactive transitions, observable via
+    ///     <see cref="App.AddLifecycleObserver" />).
+    /// </summary>
+    protected virtual void OnPause()
+    {
+    }
+
+    /// <summary>The app returned to the foreground after <see cref="OnPause" />.</summary>
+    protected virtual void OnResume()
+    {
+    }
+
+    /// <summary>OS low-memory warning: drop caches that can be rebuilt.</summary>
+    protected virtual void OnLowMemory()
     {
     }
 
@@ -208,6 +233,16 @@ public class ZigoteApp
         uiApp.Root = themeProvider;
 
         OnInit();
+
+        // Surface the mobile lifecycle as overridable hooks (delegate/observer users can
+        // subscribe on App directly). Pause/Resume are the suspend pair only — the desktop
+        // focus transitions map to Inactive and are not forwarded here.
+        uiApp.LifecycleChanged += state => {
+            if (state == AppLifecycleState.Paused) OnPause();
+            else if (state == AppLifecycleState.Resumed && _wasPaused) OnResume();
+            _wasPaused = state == AppLifecycleState.Paused;
+        };
+        uiApp.LowMemory += OnLowMemory;
 
         TryAutoInstallDevTools(uiApp);
 

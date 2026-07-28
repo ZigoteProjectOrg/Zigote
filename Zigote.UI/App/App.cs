@@ -102,6 +102,11 @@ public partial class App : IDisposable
     private Offset _mousePos;
     private bool _needsLayout = true;
 
+    // Device safe-area insets (notch / home indicator), fed into MediaQueryData.Padding.
+    // Queried lazily by LayoutTree and re-queried after a resize (rotation moves the notch).
+    private EdgeInsets _safeArea = EdgeInsets.Zero;
+    private bool _safeAreaValid;
+
     // Widgets an off-thread caller asked to re-lay-out; drained on the UI thread each frame (the queue's
     // memory barrier also publishes the widget's own pending state). See InvalidateLayoutFromAnyThread.
     private readonly System.Collections.Concurrent.ConcurrentQueue<Widget> _crossThreadInvalidations = new();
@@ -1110,8 +1115,19 @@ public partial class App : IDisposable
         foreach (var evt in events)
         {
             DispatchEvent(evt);
-            if (evt is not MouseMoveEvent) discrete = true;
+            // Pointer-move floods (mouse or finger) are not "discrete": they must not force a
+            // relayout + full repaint per frame. Touch scrolling repaints via the scroller's
+            // own onChanged, presses via MarkPaintFor.
+            if (evt is not MouseMoveEvent and not TouchMoveEvent) discrete = true;
         }
+
+        // Long-press ripening + fling velocity tracking for an active touch.
+        TickTouch(DeltaTime);
+
+        // Backgrounded: drain events (the poll above must keep running so the foreground event
+        // can arrive) but stop all layout/paint/present work — on iOS, GPU work while suspended
+        // is a watchdog kill; on Android the surface may already be gone.
+        if (IsPaused) return;
 
         // A handler may have changed structure/size, or a discrete (non-move) interaction
         // occurred — bring layout current once before painting. Per-widget Measure caching
@@ -1617,10 +1633,25 @@ public partial class App : IDisposable
 
         BuildContext.Current.Reset();
         // Refresh ambient context (MediaQuery) before measuring — every widget can read it.
+        // Padding carries the real device safe area (notch / home indicator; zero on desktop)
+        // so the SafeArea widget insets by actual hardware values. Queried on the main window
+        // only — secondary windows are desktop-only and have no obstructions.
+        if (!_safeAreaValid)
+        {
+            if (ParentApp is null)
+            {
+                var (l, t, r, b) = Engine.GetSafeArea();
+                _safeArea = new EdgeInsets(l, t, r, b);
+            }
+
+            _safeAreaValid = true;
+        }
+
         BuildContext.Current.MediaQuery = new MediaQueryData(
             HostLogicalWidth,
             HostLogicalHeight,
-            HostScale
+            HostScale,
+            _safeArea
         );
 
         var c = Constraints.Tight(HostLogicalWidth, HostLogicalHeight);
@@ -1908,6 +1939,27 @@ public partial class App : IDisposable
                 // that went stale while throttled refreshes immediately.
                 WindowFocused = wf.Focused;
                 if (wf.Focused) _repaint.MarkAll();
+                // Focus is the desktop face of Resumed↔Inactive (never Paused — that's the
+                // mobile suspend pair). Secondary windows don't drive app-level lifecycle.
+                if (ParentApp is null)
+                    switch (wf.Focused)
+                    {
+                        case false when LifecycleState == AppLifecycleState.Resumed:
+                            SetLifecycleState(AppLifecycleState.Inactive);
+                            break;
+                        case true when LifecycleState == AppLifecycleState.Inactive:
+                            SetLifecycleState(AppLifecycleState.Resumed);
+                            break;
+                    }
+
+                break;
+
+            case TouchEvent te:
+                DispatchTouchEvent(te);
+                break;
+
+            case AppBackgroundEvent or AppForegroundEvent or LowMemoryEvent:
+                HandleAppLifecycleEvent(evt);
                 break;
 
             case MouseMoveEvent m:
@@ -2099,6 +2151,9 @@ public partial class App : IDisposable
                 // main window's); refresh before the relayout so MediaQuery sees the new bounds.
                 NativeWindow?.RefreshSize();
                 _pendingRelayout = true;
+                // Rotation moves the notch/home indicator — re-query the safe area with the
+                // new geometry (LayoutTree refreshes it lazily).
+                _safeAreaValid = false;
                 // macOS drops the unified-titlebar styleMask bit on fullscreen/zoom round-trips
                 // — re-assert it whenever the window geometry changes (no-op when intact).
                 if (ChromeStyle == WindowChromeStyle.MacUnified)

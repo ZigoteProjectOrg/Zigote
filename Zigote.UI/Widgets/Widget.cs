@@ -250,9 +250,69 @@ public abstract class Widget
     {
     }
 
+    /// <summary>
+    ///     The pointer sequence this widget was tracking ended without a logical up: a touch was
+    ///     cancelled (OS gesture takeover, app backgrounded) or an app-level gesture — touch
+    ///     drag-to-scroll, long-press — claimed the pointer after this widget already saw
+    ///     <see cref="OnPointerDown" />. Abandon the interaction: clear pressed visuals and drag
+    ///     state, commit nothing (no tap, no click). Widgets that track state across down→up
+    ///     must override this alongside <see cref="OnPointerUp" />.
+    /// </summary>
+    public virtual void OnPointerCancel()
+    {
+    }
+
+    /// <summary>
+    ///     A touch was held in place past the long-press threshold. The default maps it to
+    ///     <see cref="OnRightClick" /> — on touch screens a long-press is the context-menu
+    ///     gesture, so right-click-driven menus work unchanged. Override to attach a distinct
+    ///     long-press behavior (see <c>GestureDetector.onLongPress</c>).
+    /// </summary>
+    public virtual void OnLongPress(Offset point)
+    {
+        OnRightClick(point);
+    }
+
     public virtual void OnScroll(float dx, float dy)
     {
         ScrollParent?.OnScroll(dx, dy);
+    }
+
+    // ── Touch scrolling ─────────────────────────────────────────────────────────
+    //
+    // A touch drag that exceeds the slop distance becomes a scroll gesture when a widget in the
+    // hit chain can consume its dominant axis (the App asks via CanTouchScroll, walking hit →
+    // ScrollParent…). Unlike wheel OnScroll — whose deltas are in wheel ticks and get a speed
+    // multiplier — these deltas are raw finger pixels and must track 1:1.
+
+    /// <summary>
+    ///     Can this widget consume a touch drag along the given axis right now? True only when
+    ///     genuinely scrollable there (content overflows) — a false lets the drag fall through to
+    ///     the pressed widget (e.g. a horizontal slider inside a vertical list keeps horizontal
+    ///     drags). Default: no.
+    /// </summary>
+    public virtual bool CanTouchScroll(bool vertical)
+    {
+        return false;
+    }
+
+    /// <summary>
+    ///     Scroll by a finger-drag delta in logical pixels (positive = the finger moved
+    ///     right/down; content follows the finger). Unconsumable remainder bubbles to
+    ///     <see cref="ScrollParent" /> like wheel scrolling.
+    /// </summary>
+    public virtual void OnTouchScroll(float dx, float dy)
+    {
+        ScrollParent?.OnTouchScroll(dx, dy);
+    }
+
+    /// <summary>
+    ///     The scrolling finger lifted with residual velocity (logical px/sec, finger-direction
+    ///     signs like <see cref="OnTouchScroll" />). Start inertial scrolling from it.
+    /// </summary>
+    public virtual void OnTouchFling(float velocityX, float velocityY)
+    {
+        ScrollParent?.OnTouchFling(velocityX, velocityY);
     }
 
     // ── Drag-and-drop targets ───────────────────────────────────────────────────

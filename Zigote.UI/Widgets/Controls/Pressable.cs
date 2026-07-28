@@ -144,6 +144,15 @@ public sealed class Pressable : Widget
         }
     }
 
+    public override void OnPointerCancel()
+    {
+        // Pointer claimed elsewhere (touch scroll took the drag, OS cancelled the touch):
+        // release the pressed visual and fire nothing.
+        if (!Pressed) return;
+        Pressed = false;
+        NotifyState();
+    }
+
     public override void OnKey(char keyChar, uint scancode, bool down, Modifiers mods)
     {
         if (scancode is 44 or 40) // Space or Enter

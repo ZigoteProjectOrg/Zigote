@@ -357,6 +357,30 @@ public class ListView : Widget
         if (!_sy.MoveBy(-dy * ScrollSpeed, Smooth)) base.OnScroll(dx, dy);
     }
 
+    public override bool CanTouchScroll(bool vertical)
+    {
+        // Not while the scrollbar thumb is being dragged — those moves belong to the thumb.
+        return vertical && !_vbar.Dragging && _sy.Max > 0f;
+    }
+
+    public override void OnTouchScroll(float dx, float dy)
+    {
+        // Content follows the finger 1:1 — pixel deltas, no wheel-tick multiplier, no easing.
+        if (!_sy.MoveBy(-dy, false)) base.OnTouchScroll(dx, dy);
+    }
+
+    public override void OnTouchFling(float velocityX, float velocityY)
+    {
+        if (!_sy.Fling(-velocityY)) base.OnTouchFling(velocityX, velocityY);
+    }
+
+    public override void OnPointerCancel()
+    {
+        if (!_vbar.Dragging) return;
+        _vbar.EndDrag();
+        MarkNeedsPaint();
+    }
+
     public override void Detach()
     {
         base.Detach();

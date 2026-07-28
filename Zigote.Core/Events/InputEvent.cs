@@ -245,6 +245,113 @@ public sealed class DropCompleteEvent(float x, float y) : InputEvent
     public float Y { get; } = y;
 }
 
+// ── Touchscreen ────────────────────────────────────────────────────────────────
+//
+// Fingers on a DIRECT touch device (a screen — trackpads stay cursor/wheel input). A contact
+// lives as TouchDown, zero or more TouchMoves, then exactly one of TouchUp (lifted normally)
+// or TouchCancel (OS gesture takeover, palm rejection, app backgrounded — abandon, don't
+// commit, whatever the finger was doing). The engine never synthesizes mouse events from
+// touches (or vice versa); routing touch into the pointer pipeline is the App's job.
+
+/// <summary>
+///     Base of the touchscreen finger events. <see cref="X" />/<see cref="Y" /> are
+///     window-relative in the same logical space as mouse events. <see cref="Finger" /> is a
+///     compact contact id (0–9): stable from down to up/cancel, reused by later contacts, so
+///     per-pointer state keyed on it must be cleared when the contact ends.
+/// </summary>
+public abstract class TouchEvent : InputEvent
+{
+    public float X { get; private protected set; }
+    public float Y { get; private protected set; }
+    public int Finger { get; private protected set; }
+
+    /// <summary>Contact pressure 0..1; 1 on hardware that doesn't report pressure.</summary>
+    public float Pressure { get; private protected set; }
+}
+
+/// <summary>A finger touched the screen.</summary>
+public sealed class TouchDownEvent : TouchEvent
+{
+    public TouchDownEvent(float x, float y, int finger, float pressure)
+    {
+        X = x;
+        Y = y;
+        Finger = finger;
+        Pressure = pressure;
+    }
+}
+
+/// <summary>A touching finger moved.</summary>
+public sealed class TouchMoveEvent : TouchEvent
+{
+    public TouchMoveEvent()
+    {
+    }
+
+    public TouchMoveEvent(float x, float y, int finger, float pressure)
+    {
+        X = x;
+        Y = y;
+        Finger = finger;
+        Pressure = pressure;
+    }
+
+    // Overwrite in place so PollEventsInto can reuse a pooled instance (see EventPool): a
+    // dragging finger floods moves faster than the frame rate, exactly like mouse moves.
+    internal void Reuse(float x, float y, int finger, float pressure, uint windowId)
+    {
+        X = x;
+        Y = y;
+        Finger = finger;
+        Pressure = pressure;
+        WindowId = windowId;
+    }
+}
+
+/// <summary>A finger lifted off the screen normally.</summary>
+public sealed class TouchUpEvent : TouchEvent
+{
+    public TouchUpEvent(float x, float y, int finger, float pressure)
+    {
+        X = x;
+        Y = y;
+        Finger = finger;
+        Pressure = pressure;
+    }
+}
+
+/// <summary>
+///     The contact ended abnormally — the OS took the gesture (system edge swipe, palm
+///     rejection) or the app is being backgrounded. Handlers must abandon the interaction
+///     (no tap, no click, no drop) rather than treat this as an up at the last position.
+/// </summary>
+public sealed class TouchCancelEvent : TouchEvent
+{
+    public TouchCancelEvent(float x, float y, int finger, float pressure)
+    {
+        X = x;
+        Y = y;
+        Finger = finger;
+        Pressure = pressure;
+    }
+}
+
+// ── Mobile app lifecycle ───────────────────────────────────────────────────────
+
+/// <summary>
+///     The OS is about to suspend the app (SDL will_enter_background). Delivered BEFORE the
+///     suspension: the host must stop rendering/presenting before the next frame — on iOS,
+///     GPU work while backgrounded is a watchdog kill — and should flush persistent state,
+///     since no further code may run once suspended. Never fires on desktop.
+/// </summary>
+public sealed class AppBackgroundEvent : InputEvent;
+
+/// <summary>The app returned to the foreground (SDL did_enter_foreground); rendering may resume.</summary>
+public sealed class AppForegroundEvent : InputEvent;
+
+/// <summary>The OS is low on memory and asks the app to drop caches it can rebuild.</summary>
+public sealed class LowMemoryEvent : InputEvent;
+
 /// <summary>
 ///     Converts raw <see cref="ZgEvent" /> structs into typed <see cref="InputEvent" />
 ///     instances.
@@ -307,6 +414,28 @@ internal static class EventDecoder
             EventKind.DropText => new DropTextEvent(e.GetTextInput((byte*)textBase), e.X, e.Y),
             EventKind.DropPosition => new DropPositionEvent(e.X, e.Y),
             EventKind.DropComplete => new DropCompleteEvent(e.X, e.Y),
+            EventKind.TouchDown => new TouchDownEvent(
+                e.X,
+                e.Y,
+                (int)e.TouchFinger,
+                e.TouchPressure
+            ),
+            EventKind.TouchMove => new TouchMoveEvent(
+                e.X,
+                e.Y,
+                (int)e.TouchFinger,
+                e.TouchPressure
+            ),
+            EventKind.TouchUp => new TouchUpEvent(e.X, e.Y, (int)e.TouchFinger, e.TouchPressure),
+            EventKind.TouchCancel => new TouchCancelEvent(
+                e.X,
+                e.Y,
+                (int)e.TouchFinger,
+                e.TouchPressure
+            ),
+            EventKind.AppBackground => new AppBackgroundEvent(),
+            EventKind.AppForeground => new AppForegroundEvent(),
+            EventKind.LowMemory => new LowMemoryEvent(),
             EventKind.Quit => new QuitEvent(),
             _ => null,
         };

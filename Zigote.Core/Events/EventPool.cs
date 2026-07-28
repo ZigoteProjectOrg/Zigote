@@ -21,14 +21,17 @@ public sealed class EventPool
 {
     private readonly List<MouseMoveEvent> _mouseMove = [];
     private readonly List<ScrollEvent> _scroll = [];
+    private readonly List<TouchMoveEvent> _touchMove = [];
     private int _mouseMoveNext;
     private int _scrollNext;
+    private int _touchMoveNext;
 
     /// <summary>Return every rented instance to the pool. Call once at the start of each poll.</summary>
     public void Reset()
     {
         _mouseMoveNext = 0;
         _scrollNext = 0;
+        _touchMoveNext = 0;
     }
 
     /// <summary>Rent (or grow) a <see cref="MouseMoveEvent" /> and overwrite it with the given values.</summary>
@@ -47,6 +50,31 @@ public sealed class EventPool
 
         _mouseMoveNext++;
         e.Reuse(x, y, windowId);
+        return e;
+    }
+
+    /// <summary>Rent (or grow) a <see cref="TouchMoveEvent" /> and overwrite it with the given values.</summary>
+    public TouchMoveEvent RentTouchMove(float x, float y, int finger, float pressure, uint windowId)
+    {
+        TouchMoveEvent e;
+        if (_touchMoveNext < _touchMove.Count)
+        {
+            e = _touchMove[_touchMoveNext];
+        }
+        else
+        {
+            e = new TouchMoveEvent();
+            _touchMove.Add(e);
+        }
+
+        _touchMoveNext++;
+        e.Reuse(
+            x,
+            y,
+            finger,
+            pressure,
+            windowId
+        );
         return e;
     }
 
