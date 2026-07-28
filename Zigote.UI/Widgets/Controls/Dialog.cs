@@ -98,10 +98,18 @@ public class Dialog : RenderWidget, IDismissableOverlay, ITickerProvider
         _enter.Forward();
     }
 
+    /// <summary>
+    ///     Invoked whenever the dialog leaves the overlay stack, whatever closed it (a button,
+    ///     the scrim, Esc). Hosts that must settle async state (e.g. complete a Task) hook this
+    ///     instead of duplicating the logic across every close path.
+    /// </summary>
+    public Action? OnClosed { get; set; }
+
     /// <summary>Remove this dialog from the overlay stack.</summary>
     public void Dismiss()
     {
         (_host ?? _app).PopOverlay(this);
+        OnClosed?.Invoke();
     }
 
     public override void DescribeSemantics(SemanticsConfiguration config)

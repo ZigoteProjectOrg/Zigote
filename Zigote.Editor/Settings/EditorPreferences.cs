@@ -1,3 +1,4 @@
+using Zigote.Core.Engine;
 using Zigote.Core.Events;
 using Zigote.UI.Host;
 using Zigote.UI.Theme;
@@ -115,6 +116,38 @@ public sealed class EditorPreferences(App app, EditorConfig config)
         ThemeChanged?.Invoke();
     }
 
+    /// <summary>Switch between the OS-native file dialogs and the in-app picker (the existing
+    ///     fallback path — call sites gate on FileDialog.IsSupported, so this applies live).</summary>
+    public void SetNativeFileDialogs(bool on)
+    {
+        if (config.NativeFileDialogs == on) return;
+        config.NativeFileDialogs = on;
+        config.Save();
+        FileDialog.Enabled = on;
+    }
+
+    /// <summary>Window chrome mode ("auto"/"system"/"mac"/"adwaita") — applied live to every
+    ///     open window (main included) and inherited by new ones; the override lets any look be
+    ///     tested on any OS.</summary>
+    public void SetWindowChrome(string mode)
+    {
+        if (config.WindowChromeMode == mode) return;
+        config.WindowChromeMode = mode;
+        config.Save();
+        WindowChrome.Preference = ParseChrome(mode);
+        app.ApplyWindowChrome(WindowChrome.Resolve());
+    }
+
+    internal static WindowChromePreference ParseChrome(string mode)
+    {
+        return mode switch {
+            "system" => WindowChromePreference.System,
+            "mac" => WindowChromePreference.MacUnified,
+            "adwaita" => WindowChromePreference.AdwaitaCsd,
+            _ => WindowChromePreference.Auto,
+        };
+    }
+
     /// <summary>
     ///     Apply persisted font faces + vsync at boot. Face swaps only run when a non-default font
     ///     is configured — the bundled faces are already registered by App's constructor.
@@ -125,6 +158,11 @@ public sealed class EditorPreferences(App app, EditorConfig config)
         if (config.EditorFontPath is not null) ApplyEditorFontFace();
         if (!config.VSync) app.VSync = false;
         NativeMenuBar.Enabled = config.NativeMenuBar;
+        FileDialog.Enabled = config.NativeFileDialogs;
+        WindowChrome.Preference = ParseChrome(config.WindowChromeMode);
+        // App-wide window chrome: the main window gets it here; secondary windows (Settings,
+        // dialogs, torn-out panels) inherit it at CreateWindow.
+        app.ApplyWindowChrome(WindowChrome.Resolve());
     }
 
     private void ApplyUiFontFace()

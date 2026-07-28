@@ -124,6 +124,7 @@ public partial class App : IDisposable
     private App(App parent, string title, uint width, uint height)
     {
         ParentApp = parent;
+        Title = title;
         Engine = parent.Engine;
         NativeWindow = Engine.CreateWindow(title, width, height);
         Theme = parent.Theme;
@@ -139,6 +140,7 @@ public partial class App : IDisposable
         string? fontPath = null, string? fontName = null)
     {
         Active = this;
+        Title = title;
         Engine = new ZigoteEngine();
         FontLicenses.EnsureRegistered();
 
@@ -167,6 +169,12 @@ public partial class App : IDisposable
             fontName ?? "Inter",
             backend
         );
+
+        // Native file dialogs parent to the focused OS window (macOS sheet / Windows owner) —
+        // resolved at show time so a dialog opened from a secondary window (e.g. Settings)
+        // sheets onto that window. Main window is the fallback while nothing is focused.
+        FileDialog.DefaultParentWindow = Engine.MainWindowId;
+        FileDialog.ParentWindowProvider = () => FocusedWindowId;
 
         // Iosevka (monospace) for code/text widgets — registered as a named font so code views
         // can request it; the general UI stays on Inter.
@@ -235,6 +243,23 @@ public partial class App : IDisposable
         }
     }
 
+    /// <summary>
+    ///     SDL id of the OS window that currently has keyboard focus (main or secondary); the
+    ///     main window when none does. Native file dialogs parent here so a dialog opened from
+    ///     e.g. the Settings window sheets onto that window, not the main one.
+    /// </summary>
+    public uint FocusedWindowId
+    {
+        get
+        {
+            if (WindowFocused) return WindowId;
+            for (var i = 0; i < _secondaryWindows.Count; i++)
+                if (_secondaryWindows[i].WindowFocused)
+                    return _secondaryWindows[i].WindowId;
+            return WindowId;
+        }
+    }
+
     /// <summary>The currently active UiApp. Non-null while the app is running.</summary>
     public static App? Active { get; private set; }
 
@@ -257,17 +282,69 @@ public partial class App : IDisposable
         }
     }
 
+    /// <summary>This window's title (also shown by the in-app titlebar when chrome is active).</summary>
+    public string Title { get; }
+
+    /// <summary>
+    ///     Chrome applied to this OS window (see <see cref="ApplyWindowChrome" />). Non-System
+    ///     windows compose a <see cref="WindowChromeHost" /> titlebar strip above the root.
+    /// </summary>
+    public WindowChromeStyle ChromeStyle { get; private set; }
+
     public Widget? Root
     {
         get => _root;
         set
         {
-            if (_root == value) return;
+            var effective = WrapWithChrome(value);
+            if (_root == effective) return;
             _root?.Detach();
-            _root = value;
+            _root = effective;
             _root?.Attach(this, null);
             RequestLayout();
         }
+    }
+
+    /// <summary>
+    ///     Apply an in-app window chrome to this window and every current/future secondary
+    ///     window: MacUnified keeps the native traffic lights over the app-drawn titlebar strip;
+    ///     AdwaitaCsd draws GNOME-style buttons on a borderless window; System restores the OS
+    ///     decorations. A style the native layer refuses (e.g. MacUnified off-macOS) degrades to
+    ///     System for that window.
+    /// </summary>
+    public void ApplyWindowChrome(WindowChromeStyle style)
+    {
+        var effective = style;
+        if (effective != WindowChromeStyle.System && !Engine.WindowChromeSet(WindowId, effective))
+            effective = WindowChromeStyle.System;
+        if (effective == WindowChromeStyle.System && ChromeStyle != WindowChromeStyle.System)
+            Engine.WindowChromeSet(WindowId, WindowChromeStyle.System);
+
+        if (ChromeStyle != effective)
+        {
+            ChromeStyle = effective;
+            // Re-wrap the current root under the new chrome (the setter early-outs on identical
+            // references, so detach explicitly first).
+            var user = _root is WindowChromeHost host ? host.Content : _root;
+            if (user is not null)
+            {
+                _root?.Detach();
+                _root = null;
+                Root = user;
+            }
+        }
+
+        // Cascade the REQUESTED style — each window degrades independently.
+        for (var i = 0; i < _secondaryWindows.Count; i++)
+            _secondaryWindows[i].ApplyWindowChrome(style);
+        RequestPaint();
+    }
+
+    private Widget? WrapWithChrome(Widget? userRoot)
+    {
+        if (userRoot is null || ChromeStyle == WindowChromeStyle.System ||
+            userRoot is WindowChromeHost) return userRoot;
+        return new WindowChromeHost(this, userRoot);
     }
 
     public bool ShouldQuit => Engine.ShouldQuit;
@@ -468,7 +545,26 @@ public partial class App : IDisposable
             height
         );
         _secondaryWindows.Add(win);
+        // New windows inherit the app-wide chrome (Settings, dialogs, torn-out panels…).
+        if (ChromeStyle != WindowChromeStyle.System) win.ApplyWindowChrome(ChromeStyle);
         return win;
+    }
+
+    /// <summary>
+    ///     Programmatic titlebar-✕: behaves exactly like the OS close button — quit request for
+    ///     the main window; <see cref="CloseRequested" /> then destroy for a secondary one. The
+    ///     in-app chrome's close button routes here so window owners keep their close semantics.
+    /// </summary>
+    public void RequestClose()
+    {
+        if (ParentApp is null)
+        {
+            RequestQuit();
+            return;
+        }
+
+        CloseRequested?.Invoke();
+        Close();
     }
 
     /// <summary>
@@ -761,6 +857,7 @@ public partial class App : IDisposable
             // Secondary windows stay live even while the main window has no tree yet.
             RouteEventsToSecondaryWindows();
             PumpSecondaryWindows();
+            FileDialog.Pump();
             return;
         }
 
@@ -797,6 +894,9 @@ public partial class App : IDisposable
         // Move events belonging to secondary OS windows out of the main batch and into each
         // window's own buffer — they are dispatched in that window's SecondaryFrame below.
         RouteEventsToSecondaryWindows();
+        // Start queued / complete finished native file dialogs. Runs every frame regardless of
+        // repaint activity — WaitEvents' 16 ms timeout above bounds the polling latency.
+        FileDialog.Pump();
         var events = _events;
 
         // Advance vsync-driven tickers. Each playing AnimationController calls
@@ -1580,6 +1680,14 @@ public partial class App : IDisposable
         for (var i = _overlays.Count - 1; i >= 0; i--)
             if (_overlays[i] is IDismissableOverlay d && d.RequestDismiss())
                 return true;
+
+        // A window whose ROOT is dismissable closes on Esc — this is how dialogs hosted as
+        // separate OS windows (e.g. the file browser) get the same Esc-cancels behavior that
+        // overlay dialogs get from the stack above. Look through the chrome wrapper: the
+        // dismissable widget is the app's actual root, not the titlebar host.
+        var rootTarget = Root is WindowChromeHost chromeHost ? chromeHost.Content : Root;
+        if (rootTarget is IDismissableOverlay rootDismiss && rootDismiss.RequestDismiss())
+            return true;
 
         if (FocusedWidget != null)
         {

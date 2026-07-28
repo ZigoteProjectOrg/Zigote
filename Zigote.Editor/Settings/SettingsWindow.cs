@@ -1,4 +1,5 @@
 using Zigote.Core;
+using Zigote.Core.Engine;
 using Zigote.Core.Paint;
 using Zigote.Editor.Widgets;
 using Zigote.UI.Theme;
@@ -491,6 +492,44 @@ public sealed class SettingsWindow : Widget
                     _prefs.App.ForceContinuousRender,
                     v => _prefs.App.ForceContinuousRender = v
                 )
+            )
+        );
+        if (FileDialog.PlatformSupported)
+            rows.Add(
+                new RowDef(
+                    "Developer",
+                    "Native file dialogs",
+                    "Use the OS open/save dialogs; off uses the in-app picker everywhere.",
+                    () => new Switch(
+                        config.NativeFileDialogs,
+                        v => _prefs.SetNativeFileDialogs(v)
+                    )
+                )
+            );
+        rows.Add(
+            new RowDef(
+                "Developer",
+                "Window chrome",
+                "Titlebar style for ALL app windows (main, Settings, dialogs). Auto follows " +
+                "the OS: macOS unified traffic lights, GNOME Adwaita buttons, system " +
+                "decorations elsewhere (Windows/KDE); override to test any look. Native OS " +
+                "file panels keep their own chrome.",
+                () =>
+                {
+                    string[] modes = ["auto", "system", "mac", "adwaita"];
+                    string[] labels = ["Auto", "System", "macOS Unified", "GNOME (Adwaita)"];
+                    var sel = Array.IndexOf(modes, config.WindowChromeMode);
+                    if (sel < 0) sel = 0;
+                    return new SizedBox(
+                        190f,
+                        26f,
+                        new Dropdown<string>(
+                            labels,
+                            sel,
+                            (i, _) => _prefs.SetWindowChrome(modes[i])
+                        )
+                    );
+                }
             )
         );
         rows.Add(

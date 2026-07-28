@@ -751,25 +751,42 @@ public sealed class SettingsPanel : Widget
         var root = Directory.Exists("examples")
             ? Path.GetFullPath("examples")
             : Directory.GetCurrentDirectory();
-        FilePickerDialog.Show(
-            app,
-            "Load HDRI / Environment",
-            root,
-            ["hdr", "png", "jpg", "jpeg", "webp"],
-            path =>
+
+        Load();
+        return;
+
+        // FileDialog routes to the native OS dialog or the in-app browser automatically.
+        async void Load()
+        {
+            try
             {
-                try
-                {
-                    ZigoteEngine.Instance?.SetEnvironmentHdri(File.ReadAllBytes(path));
-                    _state
-                        .InvalidateViewport(); // env bytes aren't in the settings struct the viewport diffs
-                }
-                catch (Exception ex)
-                {
-                    Console.Error.WriteLine($"[Settings] HDRI load failed: {ex.Message}");
-                }
+                var path = await FileDialog.OpenFileAsync(
+                    "Load HDRI / Environment",
+                    root,
+                    [new FileDialogFilter("Images", "hdr", "png", "jpg", "jpeg", "webp")]
+                );
+                if (path is not null) ApplyHdri(path);
             }
-        );
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[Settings] File dialog failed: {ex.Message}");
+                app.ShowSnackbar($"File dialog failed: {ex.Message}");
+            }
+        }
+
+        void ApplyHdri(string path)
+        {
+            try
+            {
+                ZigoteEngine.Instance?.SetEnvironmentHdri(File.ReadAllBytes(path));
+                _state
+                    .InvalidateViewport(); // env bytes aren't in the settings struct the viewport diffs
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[Settings] HDRI load failed: {ex.Message}");
+            }
+        }
     }
 
     private void UseProceduralEnv()

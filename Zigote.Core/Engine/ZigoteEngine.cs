@@ -236,6 +236,52 @@ public sealed unsafe class ZigoteEngine : IDisposable
         return (x, y);
     }
 
+    // ── Window chrome (in-app titlebars) ──────────────────────────────────────
+    // All take the SDL window id (the ZgEvent.WindowId / FileDialog parenting domain).
+
+    /// <summary>
+    ///     Apply a chrome style to an OS window. MacUnified keeps the native traffic lights over
+    ///     a full-size content view (macOS only — false elsewhere, callers fall back);
+    ///     AdwaitaCsd makes the window borderless for app-drawn decorations. System restores the
+    ///     default decorations.
+    /// </summary>
+    public bool WindowChromeSet(uint windowId, WindowChromeStyle style)
+    {
+        return !_disposed && NativeEngine.WindowChromeSet(windowId, (uint)style);
+    }
+
+    /// <summary>
+    ///     Declare the window's draggable titlebar rects (x,y,w,h quads, window-relative logical
+    ///     coordinates, up to 4) — the strip the OS moves the window by. Empty clears.
+    /// </summary>
+    public void WindowChromeDragRects(uint windowId, ReadOnlySpan<float> quads)
+    {
+        if (_disposed) return;
+        fixed (float* rects = quads)
+        {
+            NativeEngine.WindowChromeDragRects(windowId, rects, (uint)(quads.Length / 4));
+        }
+    }
+
+    /// <summary>Diagnostic readback of the chrome actually applied to a window: 1 = macOS
+    ///     unified titlebar live, 0 = system, negatives = not probeable (see chrome.zig).</summary>
+    public int WindowChromeProbe(uint windowId)
+    {
+        return _disposed ? -2 : NativeEngine.WindowChromeProbe(windowId);
+    }
+
+    /// <summary>Minimize the window (client-side-decoration button action).</summary>
+    public void WindowChromeMinimize(uint windowId)
+    {
+        if (!_disposed) NativeEngine.WindowChromeMinimize(windowId);
+    }
+
+    /// <summary>Maximize the window, or restore it when already maximized.</summary>
+    public void WindowChromeToggleMaximize(uint windowId)
+    {
+        if (!_disposed) NativeEngine.WindowChromeToggleMaximize(windowId);
+    }
+
     /// <summary>
     ///     Current OS light/dark appearance. Live changes also arrive as
     ///     <see cref="SystemThemeEvent" />s from the poll loop.

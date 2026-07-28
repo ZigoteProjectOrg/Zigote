@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Zigote.Core;
+using Zigote.Core.Engine;
 using Zigote.Editor.Scene;
 using Zigote.UI.Host;
 using Zigote.UI.Theme;
@@ -113,7 +114,39 @@ public static class ExportDialog
         rows.Children.Add(new SizedBox(height: 12f));
 
         rows.Children.Add(SectionHeader("Output", theme));
-        rows.Children.Add(outField);
+        // Native folder picker beside the field; the export folder may not exist yet, so the
+        // field stays editable and the picker just replaces its text.
+        async void BrowseOutput()
+        {
+            try
+            {
+                var current = outField.Text.Trim();
+                var startDir = Directory.Exists(current)
+                    ? current
+                    : Path.GetDirectoryName(state.ProjectPath);
+                var picked = await FileDialog.PickFolderAsync("Choose Export Folder", startDir);
+                if (picked is null) return;
+                outField.Text = picked;
+                app.RequestPaint();
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[Export] Folder picker failed: {ex.Message}");
+            }
+        }
+
+        rows.Children.Add(
+            FileDialog.CanShowDialogs
+                ? new Row {
+                    CrossAxisAlignment = CrossAxisAlignment.Center,
+                    Children = {
+                        new Expanded(outField),
+                        new SizedBox(8f),
+                        new Button("Browse…", BrowseOutput) { Style = ButtonStyle.Outlined },
+                    },
+                }
+                : outField
+        );
         rows.Children.Add(new SizedBox(height: 6f));
         rows.Children.Add(validation);
         rows.Children.Add(new SizedBox(height: 10f));

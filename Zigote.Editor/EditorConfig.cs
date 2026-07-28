@@ -48,6 +48,15 @@ public sealed class EditorConfig
     ///     cross-platform in-window menu bar instead.</summary>
     public bool NativeMenuBar { get; set; } = true;
 
+    /// <summary>Use the OS-native file/folder dialogs for open/save flows; off uses the in-app
+    ///     picker everywhere (the automatic fallback path).</summary>
+    public bool NativeFileDialogs { get; set; } = true;
+
+    /// <summary>App-wide window chrome (main window + every secondary): "auto" (macOS unified /
+    ///     GNOME Adwaita / else system), "system", "mac", or "adwaita" — the override exists for
+    ///     cross-look testing.</summary>
+    public string WindowChromeMode { get; set; } = "auto";
+
     /// <summary>Absolute path of the persisted editor.json (shown in the settings window).</summary>
     public static string FilePath => ConfigPath;
 

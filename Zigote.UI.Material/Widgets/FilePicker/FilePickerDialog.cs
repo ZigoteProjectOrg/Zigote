@@ -1,40 +1,23 @@
-using Zigote.UI.Material.FilePicker;
+using Zigote.Core.Engine;
 using Zigote.UI.Host;
 
 namespace Zigote.UI.Material;
 
 /// <summary>
-///     A modal dialog file picker that presents a grid-like listing of files
-///     matching specific extensions under a root directory.
+///     Project-scoped file picker: the <see cref="FileBrowserDialog" /> locked to a root
+///     directory, returning root-relative paths. This is the picker for asset REFERENCES
+///     (Inspector mesh/texture fields) — it must not wander outside the project, unlike the
+///     OS-level dialogs behind <see cref="FileDialog" />. The static <see cref="Show" /> shape
+///     predates the browser and is kept for its call sites.
 /// </summary>
-public sealed class FilePickerDialog : StatefulWidget
+public static class FilePickerDialog
 {
-    public FilePickerDialog(
-        App app,
-        string title,
-        string rootPath,
-        string[] extensions,
-        Action<string> onSelected,
-        Action? onCancel = null)
-    {
-        App = app;
-        Title = title;
-        RootPath = rootPath;
-        Extensions = NormalizeExtensions(extensions);
-        OnSelected = onSelected;
-        OnCancel = onCancel;
-    }
-
-    internal App App { get; }
-    internal string Title { get; }
-    internal string RootPath { get; }
-    internal IReadOnlyList<string> Extensions { get; }
-    internal Action<string> OnSelected { get; }
-    internal Action? OnCancel { get; }
-
-    internal Dialog? HostDialog { get; set; }
-
-    /// <summary>Displays the file picker dialog as a modal overlay.</summary>
+    /// <summary>
+    ///     Pick one file under <paramref name="rootPath" /> matching
+    ///     <paramref name="extensions" /> (with or without dots; empty = any). Navigation is
+    ///     clamped to the root, and <paramref name="onSelected" /> receives the selection as a
+    ///     root-relative, forward-slash path.
+    /// </summary>
     public static void Show(
         App app,
         string title,
@@ -43,39 +26,39 @@ public sealed class FilePickerDialog : StatefulWidget
         Action<string> onSelected,
         Action? onCancel = null)
     {
-        var picker = new FilePickerDialog(
-            app,
-            title,
-            rootPath,
-            extensions,
-            onSelected,
-            onCancel
-        );
-
-        var dialog = new Dialog(new SizedBox(500f, child: picker), app) {
-            Dismissible = true,
+        var options = new FileBrowserOptions {
+            Kind = FileDialogKind.OpenFile,
+            Title = title,
+            StartDirectory = rootPath,
+            LockRoot = rootPath,
+            Filters = extensions.Length == 0
+                ? null
+                : [new FileDialogFilter("Matching Files", extensions)],
         };
+        Run();
+        return;
 
-        picker.HostDialog = dialog;
-        dialog.Show();
-    }
-
-    protected override WidgetState CreateState()
-    {
-        return new FilePickerDialogState();
-    }
-
-    private static string[] NormalizeExtensions(IEnumerable<string> extensions)
-    {
-        return extensions
-            .Where(e => !string.IsNullOrWhiteSpace(e))
-            .Select(e =>
+        async void Run()
+        {
+            try
+            {
+                var picked = await FileBrowserDialog.ShowAsync(app, options);
+                if (picked.Length == 0)
                 {
-                    var ext = e.Trim();
-                    return ext.StartsWith('.') ? ext : "." + ext;
+                    onCancel?.Invoke();
+                    return;
                 }
-            )
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+
+                var relative = Path.GetRelativePath(rootPath, picked[0]).Replace('\\', '/');
+                onSelected(relative.StartsWith("..", StringComparison.Ordinal)
+                    ? picked[0]
+                    : relative);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[FilePicker] {ex.Message}");
+                onCancel?.Invoke();
+            }
+        }
     }
 }

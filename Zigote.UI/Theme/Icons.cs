@@ -118,6 +118,16 @@ public static class Icons
     public const string Code = "\ue86f"; // code
     public const string Map = "\ue55b"; // map
 
+    // ── File browser ──
+    public const string Home = "\ue88a"; // home
+    public const string ArrowUpward = "\ue5d8"; // arrow_upward (up one directory)
+    public const string Storage = "\ue1db"; // storage (volume/drive)
+    public const string Computer = "\ue30a"; // computer
+    public const string Download = "\ue2c4"; // file_download
+    public const string Description = "\ue873"; // description (text document)
+    public const string CreateNewFolder = "\ue2cc"; // create_new_folder
+    public const string Movie = "\ue02c"; // movie (video files)
+
     /// <summary>
     ///     Paint <paramref name="glyph" /> centered inside <paramref name="box" /> at the given
     ///     pixel size. Material glyphs sit on the baseline within the em square, so the baseline

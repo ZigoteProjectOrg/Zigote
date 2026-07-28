@@ -13,6 +13,7 @@ namespace Zigote.Editor.Settings;
 public sealed class SettingsWindowHost(EditorPreferences prefs)
 {
     private SettingsWindow? _content;
+    private ThemeProvider? _themeScope;
     private App? _win;
 
     /// <summary>Resolves the live editor shell (null on the welcome screen).</summary>
@@ -30,11 +31,13 @@ public sealed class SettingsWindowHost(EditorPreferences prefs)
         var win = prefs.App.CreateWindow("Settings", 860, 620);
         win.Theme = theme;
         _content = new SettingsWindow(prefs, () => LayoutProvider(), theme);
-        win.Root = new ThemeProvider(theme, _content);
+        _themeScope = new ThemeProvider(theme, _content);
+        win.Root = _themeScope;
         win.CloseRequested += () =>
         {
             _win = null;
             _content = null;
+            _themeScope = null;
         };
         _win = win;
     }
@@ -45,7 +48,9 @@ public sealed class SettingsWindowHost(EditorPreferences prefs)
         if (_win is not { IsOpen: true } win || _content is null) return;
         var theme = prefs.ResolveTheme();
         win.Theme = theme;
-        if (win.Root is ThemeProvider tp) tp.Data = theme;
+        // Via the stored reference — win.Root may be the WindowChromeHost wrapper, not the
+        // ThemeProvider itself.
+        if (_themeScope is { } tp) tp.Data = theme;
         _content.ApplyTheme(theme);
     }
 }
