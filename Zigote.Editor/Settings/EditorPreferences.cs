@@ -136,6 +136,9 @@ public sealed class EditorPreferences(App app, EditorConfig config)
         config.Save();
         WindowChrome.Preference = ParseChrome(mode);
         app.ApplyWindowChrome(WindowChrome.Resolve());
+        // The shell reads the titlebar insets at build time (toolbar leading gap) — rebuild it
+        // so the layout tracks the new chrome, same as the native-menu-bar toggle.
+        ThemeChanged?.Invoke();
     }
 
     internal static WindowChromePreference ParseChrome(string mode)

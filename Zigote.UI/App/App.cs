@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using Zigote.Core;
 using Zigote.Core.Animation;
@@ -140,6 +142,7 @@ public partial class App : IDisposable
         string? fontPath = null, string? fontName = null)
     {
         Active = this;
+        MainApp = this;
         Title = title;
         Engine = new ZigoteEngine();
         FontLicenses.EnsureRegistered();
@@ -263,6 +266,9 @@ public partial class App : IDisposable
     /// <summary>The currently active UiApp. Non-null while the app is running.</summary>
     public static App? Active { get; private set; }
 
+    /// <summary>The main (window-owning) App — secondary windows resolve through it.</summary>
+    internal static App? MainApp { get; private set; }
+
     public ZigoteEngine Engine { get; }
 
     /// <summary>
@@ -286,10 +292,27 @@ public partial class App : IDisposable
     public string Title { get; }
 
     /// <summary>
-    ///     Chrome applied to this OS window (see <see cref="ApplyWindowChrome" />). Non-System
-    ///     windows compose a <see cref="WindowChromeHost" /> titlebar strip above the root.
+    ///     Chrome applied to this OS window (see <see cref="ApplyWindowChrome" />). AdwaitaCsd
+    ///     windows compose a <see cref="WindowChromeHost" /> headerbar above the root (it must
+    ///     carry the close/minimize/maximize buttons); MacUnified windows have NO strip — the
+    ///     content extends under the transparent titlebar and the native traffic lights float
+    ///     over it, so top-level layouts should respect <see cref="TitleBarLeftInset" />.
     /// </summary>
     public WindowChromeStyle ChromeStyle { get; private set; }
+
+    /// <summary>Left inset the native traffic lights occupy in MacUnified chrome — top-left
+    ///     content (toolbars) should lead with this much space. 0 in other chromes.</summary>
+    public float TitleBarLeftInset =>
+        ChromeStyle == WindowChromeStyle.MacUnified ? 78f : 0f;
+
+    /// <summary>Suggested top inset for MacUnified windows whose content has no toolbar row to
+    ///     absorb the titlebar band (e.g. the Settings window). 0 in other chromes.</summary>
+    public float TitleBarTopInset =>
+        ChromeStyle == WindowChromeStyle.MacUnified ? 28f : 0f;
+
+    /// <summary>MacUnified: the height of the top band that acts as the draggable titlebar
+    ///     wherever no interactive control claims the point.</summary>
+    public float TitleBarDragHeight { get; set; } = 38f;
 
     public Widget? Root
     {
@@ -334,17 +357,105 @@ public partial class App : IDisposable
             }
         }
 
+        if (effective != WindowChromeStyle.System) EnsureDragHitProvider(Engine);
+
         // Cascade the REQUESTED style — each window degrades independently.
         for (var i = 0; i < _secondaryWindows.Count; i++)
             _secondaryWindows[i].ApplyWindowChrome(style);
         RequestPaint();
     }
 
+    /// <summary>Only Adwaita composes a strip — it must host the CSD buttons. MacUnified keeps
+    ///     the content full-bleed (the native traffic lights float over it).</summary>
     private Widget? WrapWithChrome(Widget? userRoot)
     {
-        if (userRoot is null || ChromeStyle == WindowChromeStyle.System ||
+        if (userRoot is null || ChromeStyle != WindowChromeStyle.AdwaitaCsd ||
             userRoot is WindowChromeHost) return userRoot;
         return new WindowChromeHost(this, userRoot);
+    }
+
+    // ── Titlebar drag arbitration ─────────────────────────────────────────────
+    // The native SDL hit-test asks the app, per pointer position, whether the point is a
+    // draggable titlebar area. This is what lets real controls live in the titlebar band:
+    // buttons/fields stay clickable, and the gaps between them move the window.
+
+    private static readonly Dictionary<Type, bool> InteractiveTypeCache = new();
+    private static bool _dragProviderInstalled;
+
+    private static unsafe void EnsureDragHitProvider(ZigoteEngine engine)
+    {
+        if (_dragProviderInstalled) return;
+        _dragProviderInstalled = true;
+        engine.WindowChromeSetHitProvider(
+            (nint)(delegate* unmanaged[Cdecl]<uint, float, float, int>)&DragHitTrampoline
+        );
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static int DragHitTrampoline(uint windowId, float x, float y)
+    {
+        var main = MainApp;
+        if (main is null) return -1;
+        var app = main.WindowId == windowId ? main : null;
+        if (app is null)
+            for (var i = 0; i < main._secondaryWindows.Count; i++)
+                if (main._secondaryWindows[i].WindowId == windowId)
+                {
+                    app = main._secondaryWindows[i];
+                    break;
+                }
+
+        return app?.DragHitTest(x, y) ?? -1;
+    }
+
+    /// <summary>1 = draggable titlebar point, 0 = interactive content, -1 = no opinion.</summary>
+    internal int DragHitTest(float x, float y)
+    {
+        if (ChromeStyle == WindowChromeStyle.System) return -1;
+        var point = new Offset(x, y);
+
+        // An open overlay owns the pointer — never hijack its clicks into a window drag.
+        for (var i = _overlays.Count - 1; i >= 0; i--)
+            if (_overlays[i].HitTest(point) is not null)
+                return 0;
+
+        if (ChromeStyle == WindowChromeStyle.AdwaitaCsd)
+        {
+            if (_root is not WindowChromeHost host ||
+                !host.Bar.Bounds.Contains(x, y)) return 0;
+            return host.Bar.IsDragPoint(point) ? 1 : 0;
+        }
+
+        // MacUnified: the top band drags wherever nothing interactive claims the point.
+        if (y >= TitleBarDragHeight) return 0;
+        var deepest = _root?.HitTest(point);
+        for (var w = deepest; w is not null && w != _root; w = w.Parent)
+            if (IsInteractive(w))
+                return 0;
+        return 1;
+    }
+
+    /// <summary>
+    ///     Does this widget react to the pointer? Focusable, or overrides a pointer virtual.
+    ///     Reflection once per concrete type (cached) — called from the native hit-test on
+    ///     pointer moves, so it must be cheap.
+    /// </summary>
+    private static bool IsInteractive(Widget w)
+    {
+        if (w.Focusable) return true;
+        var type = w.GetType();
+        if (InteractiveTypeCache.TryGetValue(type, out var known)) return known;
+        var interactive =
+            Overrides(type, nameof(Widget.OnPointerDown)) ||
+            Overrides(type, nameof(Widget.OnScroll)) ||
+            Overrides(type, nameof(Widget.OnRightClick));
+        InteractiveTypeCache[type] = interactive;
+        return interactive;
+
+        static bool Overrides(Type type, string name)
+        {
+            return type.GetMethod(name)?.DeclaringType != typeof(Widget);
+        }
     }
 
     public bool ShouldQuit => Engine.ShouldQuit;
@@ -1966,6 +2077,10 @@ public partial class App : IDisposable
                 // main window's); refresh before the relayout so MediaQuery sees the new bounds.
                 NativeWindow?.RefreshSize();
                 _pendingRelayout = true;
+                // macOS drops the unified-titlebar styleMask bit on fullscreen/zoom round-trips
+                // — re-assert it whenever the window geometry changes (no-op when intact).
+                if (ChromeStyle == WindowChromeStyle.MacUnified)
+                    Engine.WindowChromeSync(WindowId);
                 break;
 
             case WindowCloseEvent:

@@ -270,6 +270,27 @@ public sealed unsafe class ZigoteEngine : IDisposable
         return _disposed ? -2 : NativeEngine.WindowChromeProbe(windowId);
     }
 
+    /// <summary>Re-assert a window's chrome if the OS dropped it (macOS clears the unified
+    ///     titlebar on fullscreen/zoom round-trips). Cheap no-op when intact — call on window
+    ///     resize events.</summary>
+    public void WindowChromeSync(uint windowId)
+    {
+        if (!_disposed) NativeEngine.WindowChromeSync(windowId);
+    }
+
+    /// <summary>
+    ///     Install the app-side drag arbiter the native titlebar hit-test consults per pointer
+    ///     position: (windowId, x, y) → 1 draggable, 0 content, -1 fall back to the static drag
+    ///     rects. Pass a [UnmanagedCallersOnly(Cdecl)] function pointer; 0 clears.
+    /// </summary>
+    public void WindowChromeSetHitProvider(nint provider)
+    {
+        if (_disposed) return;
+        NativeEngine.WindowChromeSetHitProvider(
+            (delegate* unmanaged[Cdecl]<uint, float, float, int>)provider
+        );
+    }
+
     /// <summary>Minimize the window (client-side-decoration button action).</summary>
     public void WindowChromeMinimize(uint windowId)
     {

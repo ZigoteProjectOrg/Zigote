@@ -302,8 +302,54 @@ public sealed class FileBrowserModel
             FileSortColumn.Modified => a.Modified.CompareTo(b.Modified),
             _ => 0,
         };
-        if (c == 0) c = string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+        if (c == 0) c = NaturalCompare(a.Name, b.Name);
         return SortAscending ? c : -c;
+    }
+
+    /// <summary>
+    ///     Case-insensitive name order with digit runs compared numerically — "file2" before
+    ///     "file10", like every OS file manager. Leading zeros are ignored for magnitude but
+    ///     break ties ("07" groups with "7").
+    /// </summary>
+    public static int NaturalCompare(string a, string b)
+    {
+        int i = 0, j = 0;
+        while (i < a.Length && j < b.Length)
+        {
+            if (char.IsAsciiDigit(a[i]) && char.IsAsciiDigit(b[j]))
+            {
+                var startA = i;
+                while (i < a.Length && char.IsAsciiDigit(a[i])) i++;
+                var startB = j;
+                while (j < b.Length && char.IsAsciiDigit(b[j])) j++;
+
+                var trimA = startA;
+                while (trimA < i - 1 && a[trimA] == '0') trimA++;
+                var trimB = startB;
+                while (trimB < j - 1 && b[trimB] == '0') trimB++;
+
+                var lenA = i - trimA;
+                var lenB = j - trimB;
+                if (lenA != lenB) return lenA - lenB; // more significant digits = bigger number
+                for (var k = 0; k < lenA; k++)
+                {
+                    var d = a[trimA + k].CompareTo(b[trimB + k]);
+                    if (d != 0) return d;
+                }
+
+                // Equal magnitude — fewer leading zeros first, then keep scanning.
+                var zeros = (trimA - startA).CompareTo(trimB - startB);
+                if (zeros != 0) return zeros;
+                continue;
+            }
+
+            var ci = char.ToUpperInvariant(a[i]).CompareTo(char.ToUpperInvariant(b[j]));
+            if (ci != 0) return ci;
+            i++;
+            j++;
+        }
+
+        return (a.Length - i).CompareTo(b.Length - j);
     }
 
     private bool IsWithinRoot(string directory)

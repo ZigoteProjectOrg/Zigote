@@ -58,17 +58,17 @@ public sealed class WindowChromeHost : Column
     public WindowChromeHost(App window, Widget content)
     {
         Content = content;
+        Bar = new WindowTitleBar {
+            Title = window.Title,
+            Style = window.ChromeStyle,
+            ForWindow = window,
+            OnClose = window.RequestClose,
+        };
         CrossAxisAlignment = CrossAxisAlignment.Stretch;
-        Children.Add(
-            new WindowTitleBar {
-                Title = window.Title,
-                Style = window.ChromeStyle,
-                ForWindow = window,
-                OnClose = window.RequestClose,
-            }
-        );
+        Children.Add(Bar);
         Children.Add(new Expanded(content));
     }
 
+    public WindowTitleBar Bar { get; }
     public Widget Content { get; }
 }

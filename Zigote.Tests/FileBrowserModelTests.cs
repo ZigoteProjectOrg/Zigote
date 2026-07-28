@@ -178,6 +178,19 @@ public class FileBrowserModelTests
     }
 
     [Fact]
+    public void NaturalSort_ComparesDigitRunsNumerically()
+    {
+        var model = Loaded(File("file10.txt"), File("file2.txt"), File("file1.txt"));
+        Assert.Equal(["file1.txt", "file2.txt", "file10.txt"],
+            model.Visible.Select(e => e.Name).ToArray());
+
+        Assert.True(FileBrowserModel.NaturalCompare("scene9", "scene10") < 0);
+        Assert.True(FileBrowserModel.NaturalCompare("Scene10", "scene9") > 0); // case-insensitive
+        Assert.True(FileBrowserModel.NaturalCompare("a07", "a7") > 0); // zeros break the tie
+        Assert.Equal(0, FileBrowserModel.NaturalCompare("Same", "same"));
+    }
+
+    [Fact]
     public void Load_MissingDirectory_ReportsErrorInsteadOfThrowing()
     {
         var model = new FileBrowserModel();

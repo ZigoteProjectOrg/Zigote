@@ -198,6 +198,7 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
             OnActivate = OnActivate,
             OnSelectionChanged = () => SetStateRebuild(() => { }),
             OnNavigateUp = GoUp,
+            OnContextMenu = ShowContextMenu,
         };
         _scroll = new ScrollView { Child = _list };
         _list.Scroll = _scroll;
@@ -324,11 +325,15 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
             crumbs.Children.Add(CrumbButton(segments[i], theme));
         }
 
+        // MacUnified windows have no titlebar strip — this toolbar IS the titlebar band, so it
+        // leads with the traffic-light inset and its gaps drag the window.
+        var lightsInset = MathF.Max(0f, (Widget.HostWindow?.TitleBarLeftInset ?? 0f) - 10f);
         return new Padding(
             new EdgeInsets(10f, 0f, 10f, 6f),
             new Row {
                 CrossAxisAlignment = CrossAxisAlignment.Center,
                 Children = {
+                    new SizedBox(lightsInset),
                     new IconButton(
                         new IconGlyph(Icons.ArrowBack, 18f),
                         _model.CanGoBack ? () => Navigate(_model.GoBack) : null,
@@ -385,17 +390,35 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
             CrossAxisAlignment = CrossAxisAlignment.Stretch,
             Children = { _header, new Expanded(_scroll) },
         };
-        if (_places.Count == 0) return listColumn;
 
-        _sidebarScroll.Child = BuildSidebar();
-        return new Row {
-            CrossAxisAlignment = CrossAxisAlignment.Stretch,
-            Children = {
-                new SizedBox(156f, child: _sidebarScroll),
-                new Divider { Vertical = true },
-                new Expanded(listColumn),
-            },
-        };
+        var row = new Row { CrossAxisAlignment = CrossAxisAlignment.Stretch };
+        if (_places.Count > 0)
+        {
+            _sidebarScroll.Child = BuildSidebar();
+            row.Children.Add(new SizedBox(156f, child: _sidebarScroll));
+            row.Children.Add(new Divider { Vertical = true });
+        }
+
+        row.Children.Add(new Expanded(listColumn));
+
+        if (BuildPreview() is { } preview)
+        {
+            row.Children.Add(new Divider { Vertical = true });
+            row.Children.Add(new SizedBox(220f, child: preview));
+        }
+
+        return row.Children.Count == 1 ? listColumn : row;
+    }
+
+    /// <summary>Preview pane for a single selected previewable file (images incl. .hdr — a
+    ///     place the in-app browser beats the OS dialogs for engine content).</summary>
+    private Widget? BuildPreview()
+    {
+        if (Options.Kind == FileDialogKind.PickFolder) return null;
+        var selected = _model.SelectedEntries();
+        if (selected.Count != 1 || selected[0].IsDirectory) return null;
+        var entry = selected[0];
+        return FileBrowserPreview.CanPreview(entry.Name) ? new FileBrowserPreview(entry) : null;
     }
 
     private Widget BuildSidebar()
@@ -709,6 +732,161 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
         Complete([full]);
     }
 
+    // ── Context menu ──────────────────────────────────────────────────────────
+
+    private void ShowContextMenu(FileBrowserEntry? entry, Offset point)
+    {
+        var items = new List<ContextMenuItem>();
+        if (entry is { } e)
+        {
+            items.Add(
+                new ContextMenuItem(e.IsDirectory ? "Open" : AcceptLabel(), () => OnActivate(e))
+            );
+            items.Add(new ContextMenuItem("", null, true));
+            items.Add(new ContextMenuItem("Rename…", () => PromptRename(e)));
+            items.Add(new ContextMenuItem(TrashLabel(), TrashSelection));
+            items.Add(new ContextMenuItem("", null, true));
+            items.Add(
+                new ContextMenuItem(
+                    "Copy Path",
+                    () => ZigoteEngine.Instance?.SetClipboard(e.FullPath)
+                )
+            );
+            items.Add(
+                new ContextMenuItem(
+                    RevealLabel(),
+                    () => FileOperations.RevealInFileManager(e.FullPath)
+                )
+            );
+        }
+
+        if (Options.CanCreateDirectories)
+        {
+            if (items.Count > 0) items.Add(new ContextMenuItem("", null, true));
+            items.Add(new ContextMenuItem("New Folder", PromptNewFolder));
+        }
+
+        if (items.Count > 0) new ContextMenu(items.ToArray()).ShowAt(point);
+    }
+
+    private string TrashLabel()
+    {
+        var count = _model.SelectedPaths.Count;
+        return count > 1 ? $"Move {count} Items to Trash" : "Move to Trash";
+    }
+
+    private static string RevealLabel()
+    {
+        return OperatingSystem.IsMacOS() ? "Reveal in Finder"
+            : OperatingSystem.IsWindows() ? "Show in Explorer"
+            : "Show in File Manager";
+    }
+
+    /// <summary>Move the selection to the OS trash (recoverable — never a hard delete).</summary>
+    private void TrashSelection()
+    {
+        var targets = _model.SelectedEntries();
+        if (targets.Count == 0) return;
+        var failed = 0;
+        foreach (var target in targets)
+            if (!FileOperations.MoveToTrash(target.FullPath))
+                failed++;
+        if (failed > 0)
+            App.Active?.ShowSnackbar($"Could not move {failed} item(s) to the Trash.");
+        SetStateRebuild(() =>
+            {
+                _model.Refresh();
+                _list.ResetCursor();
+            }
+        );
+    }
+
+    private void PromptRename(FileBrowserEntry entry)
+    {
+        var app = App.Active;
+        if (app is null) return;
+        var field = new TextField(decoration: new InputDecoration("New name")) {
+            Text = entry.Name,
+        };
+        Dialog? prompt = null;
+        field.OnSubmitted = _ => Apply();
+
+        var body = new SizedBox(
+            340f,
+            child: new Padding(
+                EdgeInsets.All(18f),
+                new Column {
+                    CrossAxisAlignment = CrossAxisAlignment.Stretch,
+                    MainAxisSize = MainAxisSize.Min,
+                    Children = {
+                        new Label($"Rename \"{entry.Name}\"") { Style = Label.LabelStyle.Title },
+                        new SizedBox(height: 10f),
+                        field,
+                        new SizedBox(height: 14f),
+                        new Row {
+                            MainAxisAlignment = MainAxisAlignment.End,
+                            Children = {
+                                new Button("Cancel", () => prompt?.Dismiss()) {
+                                    Style = ButtonStyle.Outlined,
+                                },
+                                new SizedBox(8f),
+                                new Button("Rename", Apply),
+                            },
+                        },
+                    },
+                }
+            )
+        );
+        prompt = new Dialog(body, app) { Dismissible = true };
+        prompt.Show();
+        return;
+
+        void Apply()
+        {
+            var name = field.Text.Trim();
+            if (name.Length == 0 || name == entry.Name)
+            {
+                prompt?.Dismiss();
+                return;
+            }
+
+            var target = Path.Combine(Path.GetDirectoryName(entry.FullPath)!, name);
+            try
+            {
+                if (entry.IsDirectory) Directory.Move(entry.FullPath, target);
+                else File.Move(entry.FullPath, target);
+            }
+            catch (Exception ex)
+            {
+                app.ShowSnackbar($"Rename failed: {ex.Message}");
+                prompt?.Dismiss();
+                return;
+            }
+
+            prompt?.Dismiss();
+            SetStateRebuild(() =>
+                {
+                    _model.Refresh();
+                    SelectPath(target);
+                }
+            );
+        }
+    }
+
+    private void SelectPath(string path)
+    {
+        for (var i = 0; i < _model.Visible.Count; i++)
+            if (string.Equals(
+                    _model.Visible[i].FullPath,
+                    path,
+                    StringComparison.OrdinalIgnoreCase
+                ))
+            {
+                _model.SelectIndex(i);
+                return;
+            }
+    }
+
     private void PromptNewFolder()
     {
         var app = App.Active;
@@ -769,16 +947,7 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
             SetStateRebuild(() =>
                 {
                     _model.Refresh();
-                    for (var i = 0; i < _model.Visible.Count; i++)
-                        if (string.Equals(
-                                _model.Visible[i].FullPath,
-                                path,
-                                StringComparison.OrdinalIgnoreCase
-                            ))
-                        {
-                            _model.SelectIndex(i);
-                            break;
-                        }
+                    SelectPath(path);
                 }
             );
         }

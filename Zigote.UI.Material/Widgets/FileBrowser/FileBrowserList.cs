@@ -41,6 +41,9 @@ internal sealed class FileBrowserList : Widget
     /// <summary>Backspace: navigate to the parent directory.</summary>
     public Action? OnNavigateUp { get; set; }
 
+    /// <summary>Right-click: entry under the cursor (null = empty area) + screen point.</summary>
+    public Action<FileBrowserEntry?, Offset>? OnContextMenu { get; set; }
+
     /// <summary>The hosting scroll view, for keyboard reveal-into-view.</summary>
     public ScrollView? Scroll { get; set; }
 
@@ -250,6 +253,30 @@ internal sealed class FileBrowserList : Widget
         MarkNeedsPaint();
 
         if (isDoubleClick) OnActivate?.Invoke(_model.Visible[idx]);
+    }
+
+    public override void OnRightClick(Offset point)
+    {
+        App.Active?.RequestFocus(this);
+        var idx = RowIndexAt(point);
+        if (idx < 0)
+        {
+            OnContextMenu?.Invoke(null, point);
+            return;
+        }
+
+        // Right-clicking an already-selected row keeps the multi-selection (Finder behavior);
+        // anywhere else moves the selection to that row first.
+        var entry = _model.Visible[idx];
+        if (!_model.IsSelected(entry))
+        {
+            _model.SelectIndex(idx);
+            _cursor = idx;
+            OnSelectionChanged?.Invoke();
+            MarkNeedsPaint();
+        }
+
+        OnContextMenu?.Invoke(entry, point);
     }
 
     // ── Keyboard ──────────────────────────────────────────────────────────────

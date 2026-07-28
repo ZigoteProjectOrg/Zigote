@@ -690,12 +690,15 @@ public sealed class EditorLayout : RenderWidget
 
         // The toolbar is its own elevation layer (a touch lighter than the window) closed off by a
         // hairline along its bottom edge — grouped icon actions, the layered look from the spec.
+        // With MacUnified window chrome the toolbar IS the titlebar band (no separate strip):
+        // lead with the traffic-light inset, and the gaps between controls drag the window.
         var row = new Padding(
             EdgeInsets.Symmetric(8f, 0f),
             new Row {
                 MainAxisAlignment = MainAxisAlignment.Start,
                 CrossAxisAlignment = CrossAxisAlignment.Center,
                 Children = {
+                    new SizedBox(MathF.Max(0f, _app.TitleBarLeftInset - 8f)),
                     projectChip,
                     Sep(),
                     playBtn,

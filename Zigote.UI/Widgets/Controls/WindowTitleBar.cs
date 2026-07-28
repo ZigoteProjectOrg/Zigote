@@ -183,6 +183,12 @@ public sealed class WindowTitleBar : Widget
         );
     }
 
+    /// <summary>Anywhere in the bar except the window buttons drags the window.</summary>
+    internal bool IsDragPoint(Offset point)
+    {
+        return Bounds.Contains(point.X, point.Y) && ButtonAt(point) < 0;
+    }
+
     private int ButtonAt(Offset point)
     {
         for (var i = 0; i < ButtonCount; i++)
