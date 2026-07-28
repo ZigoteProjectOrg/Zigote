@@ -112,8 +112,6 @@ public class TextField : Widget, ITextInputClient
     /// </summary>
     private void OnControllerChanged(string value)
     {
-        if (_cursorPos > value.Length) _cursorPos = value.Length;
-        if (_selectionAnchor > value.Length) ClearSelection();
         Text = value;
     }
 
@@ -122,8 +120,36 @@ public class TextField : Widget, ITextInputClient
         get => _text;
         set
         {
+            value ??= string.Empty;
             if (value == _text) return;
             _text = value;
+
+            // Caret, selection and composition are indices into _text, so any write that
+            // changes it can leave them dangling — and the next keystroke would then index out
+            // of range in OnTextInput. Clamping belongs here rather than at the call sites,
+            // because Text is public and written from several directions: a bound "controlled
+            // value" (the F# Ui.textField assigns Text on every reconcile, including when an
+            // app clears its draft after sending), a TextEditingController, and app code
+            // setting it directly.
+            if (_cursorPos > _text.Length) _cursorPos = _text.Length;
+
+            // The selection is dropped outright rather than clamped. A selection describes a
+            // span of the *previous* text; once that text is replaced by someone else there is
+            // no defensible way to carry it over — and merely bounds-checking the anchor is not
+            // enough, because a selection whose anchor still happens to be in range (say, from
+            // Select All) would survive and silently swallow the user's next keystroke.
+            // Internal edits clear or re-establish the selection immediately after assigning
+            // Text, so nothing here fights them.
+            ClearSelection();
+
+            if (_compositionText.Length > 0)
+            {
+                // An in-flight IME composition cannot survive the text changing underneath it.
+                _compositionText = string.Empty;
+                _compositionStart = _compositionEnd = _cursorPos;
+            }
+
+            _desiredCol = -1;
             MarkNeedsPaint();
         }
     }

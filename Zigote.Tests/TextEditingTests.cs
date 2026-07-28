@@ -59,6 +59,53 @@ public class TextEditingTests
         Assert.Equal("hi", tf.Text);
     }
 
+    /// <summary>
+    ///     Setting <see cref="TextField.Text" /> externally must leave the caret inside the new
+    ///     text. This is the "controlled value" pattern — the F# <c>Ui.textField</c> assigns Text
+    ///     on every reconcile, so an app that clears its draft after sending goes through here —
+    ///     and a caret left past the end used to throw on the next keystroke.
+    /// </summary>
+    [Fact]
+    public void TextField_ExternalTextShrink_ClampsCaretSoNextInputSucceeds()
+    {
+        var tf = new TextField { Text = "" };
+        tf.OnTextInput("a long draft message"); // caret now at the end
+        tf.Text = ""; // e.g. the app cleared the field after sending
+        tf.OnTextInput("x"); // must not throw
+        Assert.Equal("x", tf.Text);
+    }
+
+    [Fact]
+    public void TextField_ExternalTextReplace_KeepsCaretWithinBounds()
+    {
+        var tf = new TextField { Text = "" };
+        tf.OnTextInput("0123456789");
+        tf.Text = "abc"; // shorter than the current caret offset
+        tf.OnTextInput("!");
+        Assert.Equal("abc!", tf.Text);
+    }
+
+    [Fact]
+    public void TextField_ExternalTextShrink_DropsStaleSelection()
+    {
+        var tf = new TextField { Text = "" };
+        tf.OnTextInput("select all of this");
+        tf.OnKey('a', 4, true, Modifiers.Cmd); // ⌘A / Ctrl+A
+        tf.Text = "hi"; // selection referred to the old, longer text
+        tf.OnTextInput("!"); // must not delete a phantom selection or throw
+        Assert.Equal("hi!", tf.Text);
+    }
+
+    [Fact]
+    public void TextField_NullText_IsTreatedAsEmpty()
+    {
+        var tf = new TextField { Text = "abc" };
+        tf.Text = null!;
+        Assert.Equal("", tf.Text);
+        tf.OnTextInput("x");
+        Assert.Equal("x", tf.Text);
+    }
+
     [Fact]
     public void CodeEditor_ReadOnly_IgnoresTextInput()
     {
