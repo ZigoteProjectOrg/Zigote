@@ -408,6 +408,26 @@ public partial class App : IDisposable
         return app?.DragHitTest(x, y) ?? -1;
     }
 
+    /// <summary>
+    ///     Chromed windows (MacUnified especially) may have roots that don't cover the whole
+    ///     window — e.g. content padded below the traffic-light band — which would violate the
+    ///     renderer's opaque-full-screen-root contract and expose the animated debug clear
+    ///     color. Guarantee the contract by painting the window background under the root.
+    /// </summary>
+    private void PaintChromeBackdrop()
+    {
+        if (ChromeStyle == WindowChromeStyle.System) return;
+        _paint.AddRect(
+            new Rect(
+                0f,
+                0f,
+                HostLogicalWidth,
+                HostLogicalHeight
+            ),
+            Theme.Background
+        );
+    }
+
     /// <summary>1 = draggable titlebar point, 0 = interactive content, -1 = no opinion.</summary>
     internal int DragHitTest(float x, float y)
     {
@@ -1184,6 +1204,7 @@ public partial class App : IDisposable
             if (_repaint.RootDirty)
             {
                 _paint.Clear();
+                PaintChromeBackdrop();
                 Root.Paint(_paint);
                 _repaint.RootPainted();
             }
@@ -1500,6 +1521,7 @@ public partial class App : IDisposable
         if (_repaint.RootDirty)
         {
             _paint.Clear();
+            PaintChromeBackdrop();
             Root.Paint(_paint);
             _repaint.RootPainted();
         }
