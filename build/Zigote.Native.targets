@@ -50,7 +50,14 @@
 
     <_RidOS Condition="$(_Rid.StartsWith('osx'))">macos</_RidOS>
     <_RidOS Condition="$(_Rid.StartsWith('win'))">windows</_RidOS>
-    <_RidOS Condition="$(_Rid.StartsWith('linux'))">linux</_RidOS>
+    <!-- Order matters: 'android' RIDs must not fall into the generic 'linux' bucket (they map to
+         the same OS tag but the -android ABI triple + NDK sysroot). iOS/Android are SCAFFOLDING:
+         the triples resolve and wgpu-native prebuilts exist for them, but the vendored SDL build
+         has no UIKit/Android video driver yet and iOS ultimately needs a static-lib step instead
+         of a dylib — see docs/mobile-port.md before using these. -->
+    <_RidOS Condition="$(_Rid.StartsWith('android'))">android</_RidOS>
+    <_RidOS Condition="$(_Rid.StartsWith('ios'))">ios</_RidOS>
+    <_RidOS Condition="'$(_RidOS)' == '' And $(_Rid.StartsWith('linux'))">linux</_RidOS>
     <_RidArch Condition="$(_Rid.EndsWith('-arm64'))">aarch64</_RidArch>
     <_RidArch Condition="$(_Rid.EndsWith('-x64'))">x86_64</_RidArch>
 
@@ -66,6 +73,11 @@
     <ZigNativeLib Condition="'$(ZigTargetOS)' == 'macos'">libzigote.dylib</ZigNativeLib>
     <ZigNativeLib Condition="'$(ZigTargetOS)' == 'linux'">libzigote.so</ZigNativeLib>
     <ZigNativeLib Condition="'$(ZigTargetOS)' == 'windows'">zigote.dll</ZigNativeLib>
+    <ZigNativeLib Condition="'$(ZigTargetOS)' == 'android'">libzigote.so</ZigNativeLib>
+    <!-- iOS forbids loading unsigned dylibs from the app sandbox: the engine must become a static
+         archive linked into the host binary (DllImport "__Internal" via ZIGOTE_STATIC_NATIVE). The
+         dylib name here only keeps the copy step coherent until that step exists. -->
+    <ZigNativeLib Condition="'$(ZigTargetOS)' == 'ios'">libzigote.dylib</ZigNativeLib>
 
     <!-- Zig installs Windows DLLs into zig-out/bin (import lib + others in zig-out/lib); .so/.dylib
          go to zig-out/lib. ZigOutDir is where the loadable lib for this target lands. -->
@@ -78,6 +90,8 @@
     <_ZigTriple Condition="'$(_RidOS)' == 'macos' And '$(_RidArch)' != ''">$(_RidArch)-macos</_ZigTriple>
     <_ZigTriple Condition="'$(_RidOS)' == 'linux' And '$(_RidArch)' != ''">$(_RidArch)-linux-gnu</_ZigTriple>
     <_ZigTriple Condition="'$(_RidOS)' == 'windows' And '$(_RidArch)' != ''">$(_RidArch)-windows-gnu</_ZigTriple>
+    <_ZigTriple Condition="'$(_RidOS)' == 'android' And '$(_RidArch)' != ''">$(_RidArch)-linux-android</_ZigTriple>
+    <_ZigTriple Condition="'$(_RidOS)' == 'ios' And '$(_RidArch)' != ''">$(_RidArch)-ios</_ZigTriple>
     <ZigCross Condition="'$(_RidOS)' != '' And '$(_RidOS)' != '$(_HostOS)'">true</ZigCross>
     <!-- Same-OS cross-ARCH (e.g. osx-x64 from an arm64 Mac) is a cross build too — without -Dtarget
          zig builds a host-arch lib that gets bundled into the foreign-arch RID and fails to load. -->

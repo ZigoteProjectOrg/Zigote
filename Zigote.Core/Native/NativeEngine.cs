@@ -7,5 +7,12 @@ namespace Zigote.Core.Native;
 /// </summary>
 internal static partial class NativeEngine
 {
+#if ZIGOTE_STATIC_NATIVE
+    // iOS (and any statically-linked host): the engine is linked into the executable itself —
+    // dynamic library loading is prohibited there — and "__Internal" tells the runtime to
+    // resolve the symbols from the main binary. Defined by the mobile publish profile.
+    private const string Lib = "__Internal";
+#else
     private const string Lib = "zigote";
+#endif
 }
