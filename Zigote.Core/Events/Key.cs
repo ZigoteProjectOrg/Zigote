@@ -141,6 +141,12 @@ public enum KeyCode : uint
     RightShift = 229,
     RightAlt = 230,
     RightGui = 231,
+
+    /// <summary>
+    ///     The system "back" action (SDL_SCANCODE_AC_BACK). On Android this is the back gesture
+    ///     or button; on desktop it is a browser key most keyboards do not have.
+    /// </summary>
+    AcBack = 282,
 }
 
 /// <summary>

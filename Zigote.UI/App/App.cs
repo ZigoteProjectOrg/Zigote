@@ -1710,6 +1710,58 @@ public partial class App : IDisposable
         RequestFocus(null);
     }
 
+    // ── System back ───────────────────────────────────────────────────────────
+
+    /// <summary>
+    ///     Handlers for the system back action, innermost last. Each returns true if it consumed
+    ///     the gesture. A Navigator registers itself here, and so can anything transient that
+    ///     should close first — a sheet, a drawer, a search overlay.
+    /// </summary>
+    private readonly List<Func<bool>> _backHandlers = [];
+
+    /// <summary>
+    ///     Register a system-back handler; the most recently added runs first, so a dialog opened
+    ///     over a page closes before the page pops. Remove it when the widget detaches.
+    /// </summary>
+    public void AddBackHandler(Func<bool> handler)
+    {
+        _backHandlers.Add(handler);
+    }
+
+    public void RemoveBackHandler(Func<bool> handler)
+    {
+        _backHandlers.Remove(handler);
+    }
+
+    /// <summary>
+    ///     Whether a back action would go anywhere. Used to arm the edge-swipe gesture only when
+    ///     there is somewhere to return to — swiping at the root should not close the app the way
+    ///     a deliberate back press does.
+    /// </summary>
+    public bool CanHandleSystemBack => _overlays.Count > 0 || _backHandlers.Count > 0;
+
+    /// <summary>
+    ///     Run the system-back chain. An open overlay is dismissed first (it is visually on top,
+    ///     so that is what "back" means to the user), then the registered handlers innermost
+    ///     first. Returns false when nothing could consume it — the caller then closes the app.
+    /// </summary>
+    public bool HandleSystemBack()
+    {
+        // Dismiss the topmost dismissable overlay — a dialog or menu is visually on top, so that
+        // is what "back" means while one is open. This is the same seam Escape uses, and it is
+        // deliberately opt-in: tooltips, snackbars, the drag ghost and the devtools HUD are also
+        // overlays, and letting any of them swallow the gesture would make back appear dead.
+        for (var i = _overlays.Count - 1; i >= 0; i--)
+            if (_overlays[i] is IDismissableOverlay dismissable && dismissable.RequestDismiss())
+                return true;
+
+        for (var i = _backHandlers.Count - 1; i >= 0; i--)
+            if (_backHandlers[i]())
+                return true;
+
+        return false;
+    }
+
     // SDL text input is per OS window: a focused text field in a secondary window must engage the
     // IME on THAT window or composed text never arrives (SDL routes it by keyboard focus).
     private void StartHostTextInput()
@@ -1964,6 +2016,7 @@ public partial class App : IDisposable
                 break;
 
             case MouseMoveEvent m:
+                PointerIsTouchFlag = false; // a real cursor is back in charge of hit-target sizing
                 _mousePos = new Offset(m.X, m.Y);
                 if (_capturedWidget is not null)
                 {
@@ -2009,6 +2062,7 @@ public partial class App : IDisposable
 
             case MouseDownEvent { Button: MouseButton.Left } d:
             {
+                PointerIsTouchFlag = false; // a click can arrive without a preceding move (tablet, remote)
                 var point = new Offset(d.X, d.Y);
                 var hit = HitTestAll(point);
                 _capturedWidget = hit;
@@ -2076,6 +2130,18 @@ public partial class App : IDisposable
 
                 if (k.Down)
                 {
+                    // The system back action (Android's back gesture/button, trapped by the
+                    // engine so it reaches us instead of finishing the activity). Handled before
+                    // focus-directed keys: back is a navigation command, not text input.
+                    if (!k.Repeat && k.Key == KeyCode.AcBack)
+                    {
+                        if (HandleSystemBack()) break;
+                        // Nothing left to go back to — let the platform close the app, which is
+                        // what a user pressing back on the first screen expects.
+                        RequestQuit();
+                        break;
+                    }
+
                     var action = Keymap.Resolve(k.Key, k.Modifiers);
 
                     // Global toggles — fire once per physical press (ignore OS auto-repeat), any focus.

@@ -280,13 +280,33 @@ public sealed class NavigatorState : WidgetState<Navigator>
         BuildInitialRoutes();
     }
 
+    /// <summary>Pop for the system back action; false when this navigator is at its root.</summary>
+    private bool HandleSystemBack()
+    {
+        return MaybePop();
+    }
+
     public override Widget Build(BuildContext context)
     {
+        // The system back action (Android's back gesture/button, an iOS edge swipe) pops this
+        // navigator. Registered here rather than in InitState because the owning App is only
+        // known once the widget is attached; registration order also gets the nesting right —
+        // the innermost navigator registers last and so receives the gesture first.
+        if (!_backRegistered && Widget.Owner is { } app)
+        {
+            app.AddBackHandler(HandleSystemBack);
+            _backRegistered = true;
+        }
+
         return _scope;
     }
 
+    private bool _backRegistered;
+
     public override void Dispose()
     {
+        if (_backRegistered) Widget.Owner?.RemoveBackHandler(HandleSystemBack);
+
         // Complete any pending Popped task (an awaited context.Push) and detach content — otherwise a
         // navigator torn down mid-flow leaves awaiters hung forever and route subtrees attached.
         // CompleteWith is TrySetResult-based, so it is safe to call unconditionally.

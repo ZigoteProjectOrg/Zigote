@@ -31,6 +31,12 @@ public partial class App
     /// <summary>Below this lift-off speed (logical px/s) no fling starts.</summary>
     private const float MinFlingVelocity = 80f;
 
+    /// <summary>Width of the leading-edge strip where a back swipe can start (logical px).</summary>
+    private const float EdgeBackWidth = 20f;
+
+    /// <summary>Inward travel that commits an edge swipe to a back navigation.</summary>
+    private const float EdgeBackTravel = 48f;
+
     // Frame-accumulated finger displacement, folded into the smoothed velocity by TickTouch —
     // per-event dt inside one poll batch is meaningless, per-frame dt is real.
     private float _touchFrameDx, _touchFrameDy;
@@ -43,11 +49,28 @@ public partial class App
     private int _touchPrimaryFinger = -1;
 
     private Widget? _touchScrollTarget;
+
+    /// <summary>An in-flight back gesture: the finger started at the screen's leading edge.</summary>
+    private bool _touchEdgeBack;
+
     private Offset _touchStart;
     private float _touchVelX, _touchVelY;
 
+    // Per-thread like Widget.CurrentScrollParent: input dispatch and the hit-test walk it drives
+    // run on the same thread, and a process-wide flag would leak between parallel test hosts.
+    [ThreadStatic] internal static bool PointerIsTouchFlag;
+
+    /// <summary>
+    ///     True when the most recent pointer input came from a finger rather than a mouse. Widgets
+    ///     read it to size hit rects for the pointer actually in use — a 14 px scrollbar strip or a
+    ///     16 px checkbox is precise under a cursor and unusable under a fingertip — without
+    ///     changing anything about how they lay out or paint.
+    /// </summary>
+    public static bool PointerIsTouch => PointerIsTouchFlag;
+
     private void DispatchTouchEvent(TouchEvent evt)
     {
+        PointerIsTouchFlag = true;
         var point = new Offset(evt.X, evt.Y);
         switch (evt)
         {
@@ -61,6 +84,14 @@ public partial class App
                 _touchScrollTarget = null;
                 _touchFrameDx = _touchFrameDy = 0f;
                 _touchVelX = _touchVelY = 0f;
+                // A finger starting within the leading edge strip may become a back gesture.
+                // iOS has no system back control, so the edge swipe IS the platform convention;
+                // it costs nothing elsewhere because the gesture only completes on a decisive
+                // inward drag. RTL flips the edge, matching the direction "back" travels.
+                var edge = Directionality.Of(BuildContext.Current) == TextDirection.Rtl
+                    ? point.X >= HostLogicalWidth - EdgeBackWidth
+                    : point.X <= EdgeBackWidth;
+                _touchEdgeBack = edge && CanHandleSystemBack;
 
                 // Mirror the left-mouse-down path: capture, focus, deliver the press. No hover
                 // transition and no cursor — fingers have neither.
@@ -96,7 +127,34 @@ public partial class App
                     break;
                 }
 
-                if (!_touchMovedPastSlop)
+                // A long-press has already committed the gesture to the pressed widget (lift a
+                // Draggable, grab a reorder row): the surrounding scroller must not steal it back,
+                // or press-and-hold-then-drag — the only way to drag inside a scrolling page on a
+                // touchscreen — could never complete.
+                if (_touchEdgeBack)
+                {
+                    var edgeDx = point.X - _touchStart.X;
+                    var edgeDy = point.Y - _touchStart.Y;
+                    var inward = Directionality.Of(BuildContext.Current) == TextDirection.Rtl
+                        ? -edgeDx
+                        : edgeDx;
+                    // Mostly-horizontal travel inward from the edge: hand the gesture to the
+                    // back chain and abandon whatever the finger had pressed.
+                    if (inward > EdgeBackTravel && MathF.Abs(edgeDy) < inward)
+                    {
+                        _touchEdgeBack = false;
+                        _touchMovedPastSlop = true;
+                        _capturedWidget?.OnPointerCancel();
+                        _capturedWidget = null;
+                        HandleSystemBack();
+                        break;
+                    }
+
+                    // Drifted vertically first — this is a scroll, not a back gesture.
+                    if (MathF.Abs(edgeDy) > TouchSlop) _touchEdgeBack = false;
+                }
+
+                if (!_touchMovedPastSlop && !_touchLongPressFired)
                 {
                     var totX = point.X - _touchStart.X;
                     var totY = point.Y - _touchStart.Y;
@@ -108,11 +166,17 @@ public partial class App
                         if (claimer is not null)
                         {
                             // The scroll gesture owns the pointer now: the pressed widget must
-                            // abandon (not commit) its interaction, then the content catches up
-                            // by the full pre-slop distance so no movement is swallowed.
-                            _capturedWidget?.OnPointerCancel();
-                            if (_capturedWidget is not null) MarkPaintFor(_capturedWidget);
-                            _capturedWidget = null;
+                            // abandon (not commit) its interaction — unless it IS the claimer, in
+                            // which case it is scrolling *itself* (CanTouchScroll) and cancelling
+                            // would abandon the very gesture it just took over. Then the content
+                            // catches up by the full pre-slop distance so no movement is swallowed.
+                            if (claimer != _capturedWidget)
+                            {
+                                _capturedWidget?.OnPointerCancel();
+                                if (_capturedWidget is not null) MarkPaintFor(_capturedWidget);
+                                _capturedWidget = null;
+                            }
+
                             _touchScrollTarget = claimer;
                             claimer.OnTouchScroll(totX, totY);
                             break;
@@ -138,6 +202,15 @@ public partial class App
                     if (MathF.Abs(_touchVelX) > MinFlingVelocity ||
                         MathF.Abs(_touchVelY) > MinFlingVelocity)
                         _touchScrollTarget.OnTouchFling(_touchVelX, _touchVelY);
+
+                    // A widget that claimed its own drag kept the press too — the scroll path
+                    // never delivers a lift, and it needs one to commit (drop a reordered row,
+                    // release a grabbed key).
+                    if (_capturedWidget is not null && _capturedWidget == _touchScrollTarget)
+                    {
+                        _capturedWidget.OnPointerUp(point);
+                        MarkPaintFor(_capturedWidget);
+                    }
                 }
                 else
                 {
@@ -208,6 +281,7 @@ public partial class App
     private void ResetTouch()
     {
         _touchPrimaryFinger = -1;
+        _touchEdgeBack = false;
         _capturedWidget = null;
         _touchScrollTarget = null;
         _touchLongPressFired = false;
