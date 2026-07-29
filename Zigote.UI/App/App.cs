@@ -1958,7 +1958,8 @@ public partial class App : IDisposable
                 DispatchTouchEvent(te);
                 break;
 
-            case AppBackgroundEvent or AppForegroundEvent or LowMemoryEvent:
+            case AppBackgroundEvent or AppForegroundEvent or LowMemoryEvent
+                or ScreenKeyboardEvent:
                 HandleAppLifecycleEvent(evt);
                 break;
 

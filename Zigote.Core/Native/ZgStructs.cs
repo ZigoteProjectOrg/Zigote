@@ -62,6 +62,8 @@ public enum EventKind : byte
     AppBackground = 22,
     AppForeground = 23,
     LowMemory = 24,
+    ScreenKeyboardShown = 25,
+    ScreenKeyboardHidden = 26,
 }
 
 /// <summary>

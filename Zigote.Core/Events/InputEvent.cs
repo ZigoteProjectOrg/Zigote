@@ -353,6 +353,17 @@ public sealed class AppForegroundEvent : InputEvent;
 public sealed class LowMemoryEvent : InputEvent;
 
 /// <summary>
+///     The mobile on-screen keyboard appeared or disappeared. The platform backends already
+///     keep the focused text area visible (the view pans against the
+///     <c>SetTextInputArea</c> rect the text widgets report), so this is for layout/scroll
+///     polish — e.g. insetting content that the keyboard would cover. Never fires on desktop.
+/// </summary>
+public sealed class ScreenKeyboardEvent(bool shown) : InputEvent
+{
+    public bool Shown { get; } = shown;
+}
+
+/// <summary>
 ///     Converts raw <see cref="ZgEvent" /> structs into typed <see cref="InputEvent" />
 ///     instances.
 /// </summary>
@@ -436,6 +447,8 @@ internal static class EventDecoder
             EventKind.AppBackground => new AppBackgroundEvent(),
             EventKind.AppForeground => new AppForegroundEvent(),
             EventKind.LowMemory => new LowMemoryEvent(),
+            EventKind.ScreenKeyboardShown => new ScreenKeyboardEvent(true),
+            EventKind.ScreenKeyboardHidden => new ScreenKeyboardEvent(false),
             EventKind.Quit => new QuitEvent(),
             _ => null,
         };

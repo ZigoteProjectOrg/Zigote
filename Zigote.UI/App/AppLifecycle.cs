@@ -52,6 +52,16 @@ public partial class App
     /// <summary>Current lifecycle state. Starts <see cref="AppLifecycleState.Resumed" />.</summary>
     public AppLifecycleState LifecycleState { get; private set; } = AppLifecycleState.Resumed;
 
+    /// <summary>
+    ///     Whether the mobile on-screen keyboard is up (always false on desktop). The platform
+    ///     already pans the view to keep the focused text area visible; this is for layout
+    ///     decisions on top (e.g. hiding a bottom bar the keyboard covers).
+    /// </summary>
+    public bool ScreenKeyboardVisible { get; private set; }
+
+    /// <summary>Raised when the mobile on-screen keyboard appears/disappears.</summary>
+    public event Action<bool>? ScreenKeyboardChanged;
+
     /// <summary>True while backgrounded — <see cref="Frame" /> drains events but renders nothing.</summary>
     public bool IsPaused => LifecycleState == AppLifecycleState.Paused;
 
@@ -105,6 +115,16 @@ public partial class App
                 // Shaped runs and glyph atlases rebuild lazily — the cheapest big cache to give
                 // back under pressure.
                 Engine.ResetTextCaches();
+                break;
+
+            case ScreenKeyboardEvent kb:
+                if (ScreenKeyboardVisible == kb.Shown) break;
+                ScreenKeyboardVisible = kb.Shown;
+                ScreenKeyboardChanged?.Invoke(kb.Shown);
+                // The platform pans the whole view while the keyboard is up (against the
+                // focused widget's SetTextInputArea rect), so no relayout is required for
+                // visibility — repaint so anything reading the flag refreshes promptly.
+                _repaint.MarkAll();
                 break;
         }
     }
