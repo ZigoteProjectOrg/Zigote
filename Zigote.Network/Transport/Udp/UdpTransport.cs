@@ -150,14 +150,17 @@ public sealed class UdpTransport : ITransport
             SendBufferSize = _config.SendBufferSize,
         };
 
-        // Ignore ICMP port-unreachable so a single closed peer can't kill the receive loop.
-        try
-        {
-            socket.IOControl(unchecked((int)0x9800000C), [0, 0, 0, 0], null);
-        }
-        catch (SocketException)
-        {
-        }
+        // Windows only: SIO_UDP_CONNRESET — ignore ICMP port-unreachable so a single closed
+        // peer can't kill the receive loop. Non-Windows throws PlatformNotSupportedException
+        // (and doesn't surface those resets as socket errors in the first place).
+        if (OperatingSystem.IsWindows())
+            try
+            {
+                socket.IOControl(unchecked((int)0x9800000C), [0, 0, 0, 0], null);
+            }
+            catch (SocketException)
+            {
+            }
 
         if (bind) socket.Bind(local);
         _socket = socket;
