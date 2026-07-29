@@ -42,10 +42,21 @@ statically reference gl*/EAGL symbols on iOS — keep `SDL_VIDEO_OPENGL_ES2` and
 `SDL_VIDEO_RENDER_OGL_ES2` excluding ios). Android work remains: `.SDL_VIDEO_DRIVER_ANDROID`,
 `src/core/android/` JNI glue, and the `SDLActivity` Java side in the app package.
 
-### 3. iOS static lib + loop inversion (C# side) — NEXT UP
-- ✅ `zig build static-lib` exists (35 MB ReleaseFast simulator archive verified); link it into
-  the host binary with `ZIGOTE_STATIC_NATIVE` (DllImport "__Internal"). The `ios` .NET
-  workload install was kicked off 2026-07-29 (check `dotnet workload list`).
+### 3. iOS C# host — ✅ DONE for the simulator (outer `9990533`, engine `6270e26`)
+**The Gallery runs on the iPhone 17 Pro simulator at 60 fps.**
+`dotnet build Zigote.UI.Gallery.iOS -p:ZigTargetRid=iossimulator-arm64`, then simctl
+install/launch `com.zigote.gallery`. How it hangs together: `MobileHost.RunApp` →
+`zigote_run_app` → SDL's UIApplicationMain wrapper calls the managed app-main back
+(classic frame loop unchanged); `MobileNativeResolver` maps the `"zigote"` DllImports to the
+bundled dylib (simulator) or main-program handle (device static). `Zigote.Native.targets`
+derives SDK + zig libc file itself for ios RIDs. Gotcha: stale Mono `.aotdata` after
+incremental managed rebuilds → SIGABRT in `load_aot_module` before managed code runs; clean
+the head's obj/bin. Remaining for the simulator milestone: Gallery-side layout polish
+(desktop-width headers overlap at phone width; pages don't wrap in `SafeArea` yet) — guided
+by manual validation. Device (`ios-arm64`) still needs: static-lib link path
+(`ZIGOTE_STATIC_NATIVE`, `zig build static-lib`, NativeReference + ForceLoad), signing.
+- ✅ `zig build static-lib` exists (35 MB ReleaseFast simulator archive verified); the `ios`
+  .NET workload is installed (26.5.10301).
 - The C# `while (!ShouldQuit) Frame()` loops (ZigoteApp/Editor/Player) own the main thread;
   UIKit requires the system runloop to own it. SDL solves this with `SDL_RunApp`/
   `SDL_HINT_MAIN_CALLBACK_RATE` (its own UIApplicationMain + display-link drives callbacks) —
