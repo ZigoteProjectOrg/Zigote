@@ -60,20 +60,31 @@ public static class GameExporter
 
         log.Report("Generating player project …");
         var sceneScripts = CollectScriptClasses(stagedScene);
-        GeneratePlayerProject(
-            input,
-            sdkRoot,
-            Path.Combine(staging, "player"),
-            exeName,
-            sceneScripts
-        );
 
         Directory.CreateDirectory(options.OutputDir);
         var ok = true;
         foreach (var rid in options.Rids)
         foreach (var mode in options.Modes)
         {
+            // Regenerated per RID: mobile heads need a platform target framework and
+            // SDK-specific items (the iOS static-link native references), which desktop must not
+            // carry. Writing the project is a few hundred lines of text — cheap to redo.
+            GeneratePlayerProject(
+                input,
+                sdkRoot,
+                Path.Combine(staging, "player"),
+                exeName,
+                sceneScripts,
+                rid
+            );
+
             var job = new ExportJob(rid, mode);
+            if (IsMobile(rid) && !MobileHostAvailable(rid, out var why))
+            {
+                log.Report($"[{rid}] {why} — skipped.");
+                continue;
+            }
+
             if (mode == ExportMode.NativeAot && !CanAotFor(rid))
             {
                 // Cross-OS AOT is impossible. When JIT is also requested the platform is already
@@ -117,7 +128,65 @@ public static class GameExporter
 
     private static string RidOs(string rid)
     {
-        return rid.StartsWith("osx") ? "macOS" : rid.StartsWith("win") ? "Windows" : "Linux";
+        if (rid.StartsWith("osx")) return "macOS";
+        if (rid.StartsWith("win")) return "Windows";
+        if (rid.StartsWith("ios")) return "iOS";
+        if (rid.StartsWith("android")) return "Android";
+        return "Linux";
+    }
+
+    /// <summary>A mobile RID — the app is packaged by the platform SDK, not by copying a publish
+    /// directory, and the managed head targets a platform TFM rather than plain net10.0.</summary>
+    private static bool IsMobile(string rid)
+    {
+        return rid.StartsWith("ios") || rid.StartsWith("android");
+    }
+
+    /// <summary>
+    ///     Target framework for the generated player project. Mobile needs the platform TFM so the
+    ///     iOS/Android SDK targets (app packaging, the native-reference pipeline, the registrar)
+    ///     participate at all.
+    /// </summary>
+    private static string RidTfm(string rid)
+    {
+        if (rid.StartsWith("ios")) return "net10.0-ios";
+        if (rid.StartsWith("android")) return "net10.0-android";
+        return "net10.0";
+    }
+
+    /// <summary>
+    ///     Whether this host can package for a mobile RID at all: iOS needs the Apple toolchain
+    ///     (macOS + Xcode), Android needs the NDK the native build reads. The managed workload
+    ///     (`dotnet workload install ios|android`) is checked by the publish itself, which fails
+    ///     with a clear message — this only screens what cannot work in principle.
+    /// </summary>
+    private static bool MobileHostAvailable(string rid, out string reason)
+    {
+        if (rid.StartsWith("ios") && !RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            reason = "iOS packaging requires a macOS host with Xcode";
+            return false;
+        }
+
+        if (rid.StartsWith("android"))
+        {
+            var ndk = Environment.GetEnvironmentVariable("ANDROID_NDK_ROOT");
+            var fallback = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                "Library",
+                "Android",
+                "sdk",
+                "ndk"
+            );
+            if (string.IsNullOrEmpty(ndk) && !Directory.Exists(fallback))
+            {
+                reason = "Android packaging requires the NDK (set ANDROID_NDK_ROOT)";
+                return false;
+            }
+        }
+
+        reason = "";
+        return true;
     }
 
     // ── Staging ───────────────────────────────────────────────────────────────
@@ -311,7 +380,8 @@ public static class GameExporter
 
     internal static void GeneratePlayerProject(ExportInput input, string sdkRoot, string playerDir,
         string exeName,
-        IReadOnlySet<string>? sceneScriptClasses = null)
+        IReadOnlySet<string>? sceneScriptClasses = null,
+        string rid = "")
     {
         Directory.CreateDirectory(playerDir);
 
@@ -323,11 +393,44 @@ public static class GameExporter
                             ? null
                             : Path.GetFileNameWithoutExtension(scriptCsproj));
 
+        var name = string.IsNullOrWhiteSpace(input.Project.Name) ? exeName : input.Project.Name;
         var csproj = new StringBuilder();
         csproj.AppendLine("""<Project Sdk="Microsoft.NET.Sdk">""");
         csproj.AppendLine("    <PropertyGroup>");
         csproj.AppendLine("        <OutputType>Exe</OutputType>");
-        csproj.AppendLine("        <TargetFramework>net10.0</TargetFramework>");
+        csproj.AppendLine($"        <TargetFramework>{RidTfm(rid)}</TargetFramework>");
+        if (IsMobile(rid))
+        {
+            // The app identity the platform installers key on, plus the phone-shaped defaults.
+            csproj.AppendLine($"        <ApplicationTitle>{name}</ApplicationTitle>");
+            csproj.AppendLine($"        <ApplicationId>{BundleId(input.Project.Name)}</ApplicationId>");
+            csproj.AppendLine($"        <RuntimeIdentifier>{rid}</RuntimeIdentifier>");
+        }
+
+        if (rid.StartsWith("ios"))
+        {
+            csproj.AppendLine("        <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>");
+            // SdkOnly, never None: @(NativeReference) is collected by the managed linker pipeline,
+            // and the engine archives would silently never reach the native link without it.
+            csproj.AppendLine("        <MtouchLink>SdkOnly</MtouchLink>");
+        }
+
+        if (rid.StartsWith("android"))
+        {
+            csproj.AppendLine("        <SupportedOSPlatformVersion>26</SupportedOSPlatformVersion>");
+            csproj.AppendLine("        <AndroidPackageFormat>apk</AndroidPackageFormat>");
+            // Assemblies INSIDE the apk: a hand-installed apk (adb install) otherwise aborts at
+            // startup with "No assemblies found" (Fast Deployment pushes them out-of-band).
+            csproj.AppendLine("        <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>");
+            // The player leans on reflection (DevTools late-bind); don't chase trimmer ghosts.
+            csproj.AppendLine("        <AndroidLinkMode>None</AndroidLinkMode>");
+            // Release defaults to profiled Mono AOT, which trips the class-init instance_size
+            // assertion at startup (explicit-layout FFI structs); this is the JIT flavor anyway.
+            csproj.AppendLine("        <RunAOTCompilation>false</RunAOTCompilation>");
+            csproj.AppendLine("        <AndroidEnableProfiledAot>false</AndroidEnableProfiledAot>");
+            csproj.AppendLine("        <AndroidManifest>AndroidManifest.xml</AndroidManifest>");
+        }
+
         csproj.AppendLine($"        <AssemblyName>{exeName}</AssemblyName>");
         csproj.AppendLine("        <RootNamespace>ZigoteExportedGame</RootNamespace>");
         csproj.AppendLine("        <Nullable>enable</Nullable>");
@@ -368,6 +471,74 @@ public static class GameExporter
         if (input.Project.DevToolsEnabled)
             csproj.AppendLine("""        <TrimmerRootAssembly Include="Zigote.UI.DevTools" />""");
         csproj.AppendLine("    </ItemGroup>");
+        // Mobile resource pipelines do not lift referenced-project Content into the package, so
+        // the fonts Zigote.UI ships as Content — and the staged game Content — are declared here
+        // (same set + layout as the Gallery mobile heads; App probes Fonts/ under the base dir).
+        var contentDir = Path.Combine(Path.GetDirectoryName(playerDir)!, "Content");
+        (string Src, string Dst)[] fonts = [
+            (@"Fonts\Inter\static\Inter_18pt-Regular.ttf", @"Fonts\Inter-Regular.ttf"),
+            (@"Fonts\PkgTTC-SGr-Iosevka-34\SGr-Iosevka-Regular.ttc", @"Fonts\Iosevka-Regular.ttc"),
+            (@"Fonts\Noto_Emoji\static\NotoEmoji-Regular.ttf", @"Fonts\NotoEmoji-Regular.ttf"),
+            (@"Fonts\MaterialIcons\MaterialIcons-Regular.ttf", @"Fonts\MaterialIcons-Regular.ttf"),
+            (@"Fonts\Inter\OFL.txt", @"Fonts\LICENSE-Inter-OFL.txt"),
+            (@"Fonts\PkgTTC-SGr-Iosevka-34\OFL.txt", @"Fonts\LICENSE-Iosevka-OFL.txt"),
+        ];
+
+        if (rid.StartsWith("ios"))
+        {
+            csproj.AppendLine("    <ItemGroup>");
+            foreach (var (src, dst) in fonts)
+                csproj.AppendLine(
+                    $"""        <BundleResource Include="{Path.Combine(sdkRoot, "Zigote.UI", src)}" Link="{dst}" />"""
+                );
+            csproj.AppendLine(
+                $"""        <BundleResource Include="{contentDir}\**\*" Link="Content\%(RecursiveDir)%(Filename)%(Extension)" />"""
+            );
+            csproj.AppendLine("    </ItemGroup>");
+        }
+
+        if (rid == "ios-arm64")
+        {
+            // iOS DEVICE links the engine INTO the app binary: AMFI rejects a bundled dylib, and a
+            // device .NET app links every other native piece statically anyway. ForceLoad keeps the
+            // engine's exports alive — every zigote_* entry is bound at runtime by DllImport, so
+            // the linker sees no reference to any of them. The archives are produced by the
+            // engine's `static-lib` step during this same publish (see Zigote.Native.targets).
+            // Simulator builds keep the bundled dylib instead.
+            var zigOut = Path.Combine(sdkRoot, "Zigote.Engine", "zig-out", "lib");
+            csproj.AppendLine("    <ItemGroup>");
+            csproj.AppendLine(
+                $"""        <NativeReference Include="{Path.Combine(zigOut, "libzigote.a")}" Kind="Static" IsCxx="True" ForceLoad="True" Frameworks="UIKit Metal QuartzCore Foundation CoreGraphics CoreVideo CoreMotion GameController CoreAudio AudioToolbox AVFoundation" WeakFrameworks="CoreHaptics" LinkerFlags="-liconv -Wl,-export_dynamic" />"""
+            );
+            csproj.AppendLine(
+                $"""        <_ZigoteDepArchive Include="{Path.Combine(zigOut, "*.a")}" Exclude="{Path.Combine(zigOut, "libzigote.a")}" />"""
+            );
+            csproj.AppendLine("""        <NativeReference Include="@(_ZigoteDepArchive)" Kind="Static" IsCxx="True" />""");
+            csproj.AppendLine("    </ItemGroup>");
+        }
+
+        if (rid.StartsWith("android"))
+        {
+            var abi = rid.EndsWith("x64") ? "x86_64" : "arm64-v8a";
+            csproj.AppendLine("    <ItemGroup>");
+            // SDL's Java half + our SDLActivity subclass; all of SDL's JNI-registered classes
+            // must reach the dex or the first JNI lookup throws.
+            csproj.AppendLine(
+                $"""        <AndroidJavaSource Include="{Path.Combine(sdkRoot, "mobile", "android", "JavaSources")}\**\*.java" Bind="false" />"""
+            );
+            csproj.AppendLine(
+                $"""        <AndroidNativeLibrary Include="{Path.Combine(sdkRoot, "Zigote.Engine", "zig-out", "lib", "libzigote.so")}" Abi="{abi}" />"""
+            );
+            foreach (var (src, dst) in fonts)
+                csproj.AppendLine(
+                    $"""        <AndroidAsset Include="{Path.Combine(sdkRoot, "Zigote.UI", src)}" Link="{dst}" />"""
+                );
+            csproj.AppendLine(
+                $"""        <AndroidAsset Include="{contentDir}\**\*" Link="Content\%(RecursiveDir)%(Filename)%(Extension)" />"""
+            );
+            csproj.AppendLine("    </ItemGroup>");
+        }
+
         csproj.AppendLine("    <ItemGroup>");
         csproj.AppendLine(
             $"""        <ProjectReference Include="{Path.Combine(sdkRoot, "Zigote.Player", "Zigote.Player.csproj")}" />"""
@@ -386,8 +557,28 @@ public static class GameExporter
         csproj.AppendLine(
             $"""    <Import Project="{Path.Combine(sdkRoot, "build", "Zigote.Fonts.targets")}" />"""
         );
+        if (rid.StartsWith("ios"))
+            // libzigote.dylib flows as Content from Zigote.Core through EVERY referencing project;
+            // the iOS SDK keeps each copy and the parallel install_name_tool runs then race on the
+            // same output file. Collapse the duplicates before the tool runs (see the Gallery head).
+            csproj.AppendLine(
+                """
+                    <Target Name="DedupeNativeLibrariesToReidentify"
+                            AfterTargets="_ComputeDynamicLibrariesToReidentify"
+                            BeforeTargets="_InstallNameTool">
+                        <RemoveDuplicates Inputs="@(_DynamicLibraryToReidentify)">
+                            <Output TaskParameter="Filtered" ItemName="_DedupedDynamicLibraryToReidentify" />
+                        </RemoveDuplicates>
+                        <ItemGroup>
+                            <_DynamicLibraryToReidentify Remove="@(_DynamicLibraryToReidentify)" />
+                            <_DynamicLibraryToReidentify Include="@(_DedupedDynamicLibraryToReidentify)" />
+                        </ItemGroup>
+                    </Target>
+                """
+            );
         csproj.AppendLine("</Project>");
         File.WriteAllText(Path.Combine(playerDir, "Game.csproj"), csproj.ToString());
+        WriteMobilePlatformFiles(playerDir, rid, name, input.Project.Name);
 
         var reg = new StringBuilder();
         reg.AppendLine(
@@ -430,9 +621,20 @@ public static class GameExporter
         reg.AppendLine("}");
         File.WriteAllText(Path.Combine(playerDir, "ScriptRegistration.g.cs"), reg.ToString());
 
+        // A class-based Main, not top-level statements: the Android SDK compiles the app as a
+        // Library under the hood (Java owns the process), where top-level statements are illegal.
+        // On Android this Main is never called — MainApplication registers the game body instead.
         File.WriteAllText(
             Path.Combine(playerDir, "Program.g.cs"),
-            "return Zigote.Player.PlayerMain.Run(GameScripts.Register);\n"
+            """
+            static class Program
+            {
+                public static int Main()
+                {
+                    return Zigote.Player.PlayerMain.Run(GameScripts.Register);
+                }
+            }
+            """ + "\n"
         );
     }
 
@@ -448,16 +650,28 @@ public static class GameExporter
         // exe (memory-mapped at runtime, compressed on disk) leaving exe + native lib + Fonts +
         // Content. Native libs and content stay loose — the engine loads both by path. macOS stays
         // multi-file: the .app hides the file count and appended-bundle Mach-Os complicate signing.
-        var singleFile = !aot && !rid.StartsWith("osx");
+        var singleFile = !aot && !rid.StartsWith("osx") && !IsMobile(rid);
+        // The iOS SDK hard-refuses `publish` for simulator architectures ("a device architecture
+        // must be specified") — simulator apps are a `build` product. Same output shape: the .app
+        // lands in the -o directory either way.
+        var verb = rid.StartsWith("iossimulator") ? "build" : "publish";
         var args =
-            new StringBuilder($"publish \"{Path.Combine(staging, "player", "Game.csproj")}\"")
-                .Append(" -c Release --self-contained true")
+            new StringBuilder($"{verb} \"{Path.Combine(staging, "player", "Game.csproj")}\"")
+                // Mobile heads are self-contained by construction (the platform SDK decides the
+                // runtime packaging), and passing --self-contained derails that pipeline.
+                .Append(IsMobile(rid) ? " -c Release" : " -c Release --self-contained true")
                 .Append($" -r {rid} -p:ZigTargetRid={rid}")
                 // Exported games never import source models (assets ship pre-baked .zmesh), so the
                 // native lib builds without the Assimp importer (~3 MB stripped).
                 .Append(" -p:Enable3D=false")
+                // Zigote.Native.targets defaults mobile to the lean UI set (no Jolt) — games need
+                // physics; a global property overrides the targets' assignment. Jolt cross-compiles
+                // fine for ios/android despite the "not yet validated" note there.
+                .Append(IsMobile(rid) ? " -p:EnablePhysics3D=true" : "")
                 .Append(" -p:DebugType=none -p:DebugSymbols=false")
-                .Append(aot ? " -p:GameAot=true" : " -p:PublishTrimmed=false")
+                // Mobile SDKs require their trimmer pipeline (it collects the native references);
+                // link depth is governed by MtouchLink/AndroidLinkMode in the generated project.
+                .Append(aot ? " -p:GameAot=true" : IsMobile(rid) ? "" : " -p:PublishTrimmed=false")
                 .Append(
                     singleFile
                         ? " -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true"
@@ -480,6 +694,18 @@ public static class GameExporter
 
         var outDir = Path.Combine(options.OutputDir, artifact);
         if (Directory.Exists(outDir)) Directory.Delete(outDir, true);
+
+        if (IsMobile(rid))
+        {
+            // The platform SDK produced the installable artifact itself (a signed .app for iOS,
+            // an .apk for Android). Copy the whole publish output — it holds that artifact plus
+            // the symbols and manifests — and point the log at the package.
+            CopyTree(publishDir, outDir);
+            var package = Directory.EnumerateFileSystemEntries(outDir)
+                .FirstOrDefault(e => e.EndsWith(".apk") || e.EndsWith(".ipa") || e.EndsWith(".app"));
+            log.Report($"[{artifact}] → {package ?? outDir}");
+            return true;
+        }
 
         if (rid.StartsWith("osx"))
         {
@@ -686,6 +912,143 @@ public static class GameExporter
             Architecture.X64 => rid.EndsWith("x64"),
             _ => false,
         };
+    }
+
+    /// <summary>
+    ///     Platform side-files next to the generated csproj. Written (and stale ones removed)
+    ///     per RID because the same player dir is reused across the RID loop — the default
+    ///     Compile glob would happily feed a leftover Android file to a desktop build.
+    /// </summary>
+    private static void WriteMobilePlatformFiles(string playerDir, string rid, string name,
+        string? projectName)
+    {
+        File.Delete(Path.Combine(playerDir, "MainApplication.g.cs"));
+
+        if (rid.StartsWith("ios"))
+            // Same plist as the Gallery head: modern launch screen (without ANY launch-screen key
+            // UIKit letterboxes the app at legacy resolutions), all orientations, indirect input.
+            File.WriteAllText(
+                Path.Combine(playerDir, "Info.plist"),
+                """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+                <plist version="1.0">
+                <dict>
+                    <key>UILaunchScreen</key>
+                    <dict/>
+                    <key>UISupportedInterfaceOrientations</key>
+                    <array>
+                        <string>UIInterfaceOrientationPortrait</string>
+                        <string>UIInterfaceOrientationLandscapeLeft</string>
+                        <string>UIInterfaceOrientationLandscapeRight</string>
+                    </array>
+                    <key>UIRequiresFullScreen</key>
+                    <false/>
+                    <key>UIApplicationSupportsIndirectInputEvents</key>
+                    <true/>
+                </dict>
+                </plist>
+                """
+            );
+
+        if (!rid.StartsWith("android")) return;
+
+        var label = System.Security.SecurityElement.Escape(name);
+        File.WriteAllText(
+            Path.Combine(playerDir, "AndroidManifest.xml"),
+            $"""
+             <?xml version="1.0" encoding="utf-8"?>
+             <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="{BundleId(projectName)}">
+                 <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
+                 <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+                 <application android:label="{label}" android:hardwareAccelerated="true">
+                     <!-- SDL's activity (pure Java) owns the window and surface; the managed runtime
+                          is already up by then — MainApplication registered the game body. -->
+                     <activity android:name="com.zigote.app.ZigoteActivity"
+                               android:label="{label}"
+                               android:exported="true"
+                               android:launchMode="singleInstance"
+                               android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density">
+                         <intent-filter>
+                             <action android:name="android.intent.action.MAIN" />
+                             <category android:name="android.intent.category.LAUNCHER" />
+                         </intent-filter>
+                     </activity>
+                 </application>
+             </manifest>
+             """
+        );
+
+        File.WriteAllText(
+            Path.Combine(playerDir, "MainApplication.g.cs"),
+            """
+            // Generated by Zigote game export — Android head. Java owns the process (SDLActivity
+            // starts the SDL thread and calls zigote_android_main), so the game body is registered
+            // here, in the one managed place guaranteed to run before the launcher activity.
+            using Zigote.Core.Native;
+
+            [global::Android.App.Application]
+            public class MainApplication : global::Android.App.Application
+            {
+                public MainApplication(IntPtr handle, global::Android.Runtime.JniHandleOwnership ownership)
+                    : base(handle, ownership)
+                {
+                }
+
+                public override void OnCreate()
+                {
+                    base.OnCreate();
+                    // The engine opens fonts and content natively by plain file path; an APK asset
+                    // has no path, so both trees are copied out at launch. Always overwritten:
+                    // an app update keeps the files dir, and stale content is worse than
+                    // re-copying a few MB at startup.
+                    foreach (var root in new[] { "Fonts", "Content" })
+                        try
+                        {
+                            Stage(root);
+                        }
+                        catch (Exception ex)
+                        {
+                            global::Android.Util.Log.Error("zigote", $"asset staging failed ({root}): {ex}");
+                        }
+
+                    MobileHost.SetAndroidMain(() => Zigote.Player.PlayerMain.Run(GameScripts.Register));
+                }
+
+                private void Stage(string rel)
+                {
+                    // AssetManager has no is-directory query: a non-empty List means directory.
+                    var children = Assets?.List(rel) ?? [];
+                    if (children.Length == 0)
+                    {
+                        var target = Path.Combine(AppContext.BaseDirectory, rel);
+                        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                        using var src = Assets!.Open(rel);
+                        using var dst = File.Create(target);
+                        src.CopyTo(dst);
+                        return;
+                    }
+
+                    foreach (var child in children) Stage($"{rel}/{child}");
+                }
+            }
+            """
+        );
+    }
+
+    /// <summary>
+    ///     Reverse-DNS application id for the mobile package, derived from the project name
+    ///     (installers key on it, and it must be stable across exports).
+    /// </summary>
+    private static string BundleId(string? projectName)
+    {
+        var slug = new string(
+            (projectName ?? "game").ToLowerInvariant()
+                .Select(ch => char.IsLetterOrDigit(ch) ? ch : '.')
+                .ToArray()
+        ).Trim('.');
+        while (slug.Contains("..")) slug = slug.Replace("..", ".");
+        return $"com.zigote.{(slug.Length == 0 ? "game" : slug)}";
     }
 
     private static string SanitizeExeName(string name)

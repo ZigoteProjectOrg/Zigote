@@ -24,6 +24,11 @@ public static class ExportDialog
         ("win-x64", "Windows x64"),
         ("linux-x64", "Linux x64"),
         ("linux-arm64", "Linux ARM64"),
+        // Mobile: the native engine cross-compiles from any host, but the app packaging is
+        // Apple-toolchain / Android-SDK bound — see GameExporter.MobileHostAvailable.
+        ("ios-arm64", "iOS (device)"),
+        ("iossimulator-arm64", "iOS (simulator)"),
+        ("android-arm64", "Android (arm64)"),
     ];
 
     private static bool _exporting;
@@ -368,7 +373,11 @@ public static class ExportDialog
 
     private static string RidOsLabel(string rid)
     {
-        return rid.StartsWith("osx") ? "macOS" : rid.StartsWith("win") ? "Windows" : "Linux";
+        if (rid.StartsWith("osx")) return "macOS";
+        if (rid.StartsWith("win")) return "Windows";
+        if (rid.StartsWith("ios")) return "iOS";
+        if (rid.StartsWith("android")) return "Android";
+        return "Linux";
     }
 
     private static void Reveal(string dir)

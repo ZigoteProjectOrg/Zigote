@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Reflection;
+using Zigote.Core.Native;
 using Zigote.Runtime;
 using Zigote.Scripting.Metadata;
 using Zigote.UI.Host;
@@ -17,6 +18,22 @@ public static class PlayerMain
     private const int TargetFps = 60;
 
     public static int Run(Action<ScriptRegistry> registerScripts)
+    {
+        // iOS owns the process entry: UIApplicationMain must run before any window exists, and
+        // SDL's wrapper calls the game body back on the main thread after launch (same inversion
+        // as ZigoteApp.Run). Android never reaches this Main — the generated Application object
+        // registers RunCore via MobileHost.SetAndroidMain instead.
+        if (OperatingSystem.IsIOS())
+        {
+            var exit = 1;
+            MobileHost.RunApp(() => exit = RunCore(registerScripts));
+            return exit;
+        }
+
+        return RunCore(registerScripts);
+    }
+
+    private static int RunCore(Action<ScriptRegistry> registerScripts)
     {
         var content = ResolveContentDir();
         if (content is null)

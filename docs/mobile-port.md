@@ -89,11 +89,26 @@ Blockers for shipping, roughly ordered; file:line refs from the audit agent:
   `MediaQueryData.ViewInsets` is unwired (SDL has no direct inset query — use
   `SDL_GetWindowSafeArea` deltas or platform hooks).
 
-### 6. Game export (task #9)
-`ExportDialog` RID list + `GameExporter` staging know nothing of mobile. After Gallery works:
-add `ios-arm64`/`android-arm64` RIDs, static-lib + `.app`/IPA staging for iOS, APK packaging
-for Android, and a mobile `Zigote.Player` entry using the inverted loop. `PlayerMain`'s
-content-dir probe needs an iOS-bundle candidate.
+### 6. Game export — ✅ DONE for iOS simulator + Android emulator (2026-07-29)
+`GameExporter` generates a per-RID player project: iOS gets Info.plist, fonts + staged Content
+as `BundleResource`, the dylib-dedupe target, and (device only) the static-archive
+NativeReferences; Android gets a generated AndroidManifest + `MainApplication` ([Application]
+subclass that stages APK assets to files and registers the game body via
+`MobileHost.SetAndroidMain`), the SDL Java sources, `libzigote.so`, and fonts/Content as
+`AndroidAsset`. `PlayerMain.Run` inverts through `MobileHost.RunApp` on iOS. The 3D Test scene
+runs on BOTH the iPhone 17 Pro simulator and the API-34 arm64 emulator. Verified:
+`--export <proj> --rids iossimulator-arm64,android-arm64 --mode jit`. Gotchas baked into code
+comments: simulator RIDs must `dotnet build` (publish is device-only), Android is a Library
+under the hood (no top-level statements) and needs `RunAOTCompilation=false` (Release profiled
+AOT trips a Mono class-init assert), mobile publish must not pass `--self-contained` or
+`PublishTrimmed=false`, exports pass `-p:EnablePhysics3D=true` (Jolt cross-compiles fine).
+Engine: point-shadow cube-array + audio are degraded on the iOS SIMULATOR only; MSAA 2× is
+never assumed on mobile; `ENV_SIZE` shrinks on software (CPU) Vulkan adapters; Android native
+stderr (Rust panics) is forwarded to logcat.
+**Running 3D on the Android emulator requires a host-GPU Vulkan ICD** — emulator ≥ 36 with
+`ANDROID_EMU_VK_ICD=moltenvk … emulator -gpu host` (the default lavapipe/SwiftShader software
+Vulkan dies with "Parent device is lost" under any real 3D load). iOS DEVICE (`ios-arm64`)
+still unverified: static-link path is generated but needs signing + hardware.
 
 ## Order of attack (agreed with the user)
 1. Gallery on Android emulator + iOS simulator (validate by hand — user does this).

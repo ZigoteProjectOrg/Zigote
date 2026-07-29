@@ -1,4 +1,4 @@
-package com.zigote.gallery;
+package com.zigote.app;
 
 import org.libsdl.app.SDLActivity;
 

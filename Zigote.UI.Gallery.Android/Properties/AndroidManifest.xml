@@ -8,7 +8,7 @@
              Vulkan surface and the event thread. The managed runtime is already up by then —
              .NET for Android creates the Application object first, which is where the engine
              gets its app-main. -->
-        <activity android:name="com.zigote.gallery.ZigoteActivity"
+        <activity android:name="com.zigote.app.ZigoteActivity"
                   android:label="Zigote Gallery"
                   android:exported="true"
                   android:launchMode="singleInstance"
