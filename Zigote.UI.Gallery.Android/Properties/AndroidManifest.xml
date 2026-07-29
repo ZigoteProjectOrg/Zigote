@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.zigote.gallery">
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
+    <!-- SDL's audio + controller layers query these; harmless when unused. -->
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <application android:label="Zigote Gallery" android:hardwareAccelerated="true">
+        <!-- The launcher is our SDLActivity subclass (pure Java): SDL owns the window, the GL/
+             Vulkan surface and the event thread. The managed runtime is already up by then —
+             .NET for Android creates the Application object first, which is where the engine
+             gets its app-main. -->
+        <activity android:name="com.zigote.gallery.ZigoteActivity"
+                  android:label="Zigote Gallery"
+                  android:exported="true"
+                  android:launchMode="singleInstance"
+                  android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

@@ -1,0 +1,96 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      Android head for the widget Gallery: compiles the SAME Gallery sources as the desktop and
+      iOS heads. Java owns the process here, so unlike iOS there is no Run() inversion in managed
+      code — SDLActivity starts the SDL thread and calls zigote_android_main, which invokes the
+      app-main that ZigoteApplication registered during startup.
+
+      Build:
+        dotnet build Zigote.UI.Gallery.Android -p:ZigTargetRid=android-arm64
+      ZigTargetRid must be passed on the COMMAND LINE so it reaches Zigote.Core's evaluation and
+      cross-builds the engine (see build/Zigote.Native.targets).
+    -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0-android</TargetFramework>
+        <SupportedOSPlatformVersion>26</SupportedOSPlatformVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <ApplicationTitle>Zigote Gallery</ApplicationTitle>
+        <ApplicationId>com.zigote.gallery</ApplicationId>
+        <!-- arm64 only for bring-up: it is what the emulator image and the pinned wgpu-native
+             Android archive cover. -->
+        <RuntimeIdentifiers>android-arm64</RuntimeIdentifiers>
+        <AndroidPackageFormat>apk</AndroidPackageFormat>
+        <!-- Ship the managed assemblies INSIDE the apk. Debug builds otherwise use Fast
+             Deployment, which pushes them to the device out-of-band — so an apk installed by
+             hand (adb install) aborts at startup with "No assemblies found". -->
+        <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
+        <!-- The UI stack leans on reflection (DevTools late-bind, widget inspector); bring-up must
+             not chase trimmer ghosts. -->
+        <AndroidLinkMode>None</AndroidLinkMode>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- The Android SDK's implicit usings put Android.App/Widget/Views in global scope, where
+             they collide by name with the toolkit's own Dialog, Switch, GridView, Spinner and
+             Toolbar. The Gallery sources are shared verbatim with the desktop head, so the
+             platform namespaces come out of global scope and the few Android-facing files here
+             import them explicitly. -->
+        <Using Remove="Android.App"/>
+        <Using Remove="Android.Widget"/>
+        <Using Remove="Android.Views"/>
+        <Using Remove="Android.Content"/>
+        <Using Remove="Android.OS"/>
+        <Using Remove="Android.Runtime"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Charts\Zigote.UI.Charts.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Localizations\Zigote.UI.Localizations.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.DevTools\Zigote.UI.DevTools.csproj"/>
+        <ProjectReference Include="..\Zigote.Generators\Zigote.Generators.csproj"
+                          OutputItemType="Analyzer" ReferenceOutputAssembly="false"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- The desktop Gallery's sources verbatim. -->
+        <Compile Include="..\Zigote.UI.Gallery\**\*.cs"
+                 Exclude="..\Zigote.UI.Gallery\bin\**;..\Zigote.UI.Gallery\obj\**"/>
+        <AdditionalFiles Include="..\Zigote.UI.Gallery\l10n\*.arb"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- SDL's Java half (vendored from the matching SDL tag — SDLActivity checks the native
+             version against it at startup) plus our activity, which points SDL at libzigote.so
+             and zigote_android_main. All of SDL's JNI-registered classes must reach the dex or
+             the first JNI lookup throws. -->
+        <AndroidJavaSource Include="..\mobile\android\JavaSources\**\*.java">
+            <Bind>false</Bind>
+        </AndroidJavaSource>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- The engine, cross-built by Zigote.Native.targets, placed in the APK's ABI folder. -->
+        <AndroidNativeLibrary Include="..\Zigote.Engine\zig-out\lib\libzigote.so">
+            <Abi>arm64-v8a</Abi>
+        </AndroidNativeLibrary>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Fonts ship as Android assets; App.cs probes Fonts/ under AppContext.BaseDirectory, so
+             the head copies them there at runtime (see ZigoteApplication). -->
+        <AndroidAsset Include="..\Zigote.UI\Fonts\Inter\static\Inter_18pt-Regular.ttf"
+                      Link="Fonts\Inter-Regular.ttf"/>
+        <AndroidAsset Include="..\Zigote.UI\Fonts\PkgTTC-SGr-Iosevka-34\SGr-Iosevka-Regular.ttc"
+                      Link="Fonts\Iosevka-Regular.ttc"/>
+        <AndroidAsset Include="..\Zigote.UI\Fonts\Noto_Emoji\static\NotoEmoji-Regular.ttf"
+                      Link="Fonts\NotoEmoji-Regular.ttf"/>
+        <AndroidAsset Include="..\Zigote.UI\Fonts\MaterialIcons\MaterialIcons-Regular.ttf"
+                      Link="Fonts\MaterialIcons-Regular.ttf"/>
+    </ItemGroup>
+
+</Project>

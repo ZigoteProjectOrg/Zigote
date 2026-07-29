@@ -10,9 +10,12 @@ using Zigote.UI.Widgets.Navigation;
 // the Zigote.UI.Theme sub-namespace.
 namespace Gallery;
 
-internal static class Program
+// Public so the mobile heads can use this exact entry point: on Android the managed Application
+// object registers it with the engine (Java owns the process there and calls back into it), and
+// there is no reason for a phone build to have its own divergent startup path.
+public static class Program
 {
-    private static void Main()
+    public static void Main()
     {
         new GalleryApp().Run();
     }

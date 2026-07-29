@@ -64,4 +64,17 @@ public static class MobileHost
         _pendingMain = null;
         main?.Invoke();
     }
+
+    /// <summary>
+    ///     Register the app body for Android, where the inversion runs the other way: Java owns
+    ///     the process and SDL calls <c>zigote_android_main</c> on its own thread later. Call this
+    ///     from the managed Application object's startup — the one place guaranteed to run before
+    ///     the launcher activity — because the native side needs the callback in hand by then.
+    ///     Unlike <see cref="RunApp" /> this returns immediately.
+    /// </summary>
+    public static unsafe void SetAndroidMain(Action appMain)
+    {
+        _pendingMain = appMain;
+        NativeEngine.SetAndroidMain(&AppMainTrampoline);
+    }
 }
