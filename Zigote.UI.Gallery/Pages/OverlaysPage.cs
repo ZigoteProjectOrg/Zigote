@@ -56,10 +56,18 @@ internal sealed class OverlaysPage : StatelessWidget
             ),
             Section(
                 "Tooltip",
-                new Tooltip(
-                    "Tooltips appear after a short hover",
-                    new Chip("Hover for a tip")
-                )
+                // Tooltips are revealed by hover, and a finger never hovers — on a phone the
+                // hover-only chip would be a dead control with no way to read its message, so
+                // there the chip carries the tip itself and hands it to a snackbar on tap.
+                new AdaptiveBuilder((_, size) => size == WindowSizeClass.Compact
+                    ? new Chip(
+                        "Tap for the tip",
+                        onPressed: () => Toast("Tooltips are hover-only — a tap shows this instead")
+                    )
+                    : new Tooltip(
+                        "Tooltips appear after a short hover",
+                        new Chip("Hover for a tip")
+                    ))
             )
         );
     }

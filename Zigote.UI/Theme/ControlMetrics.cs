@@ -48,4 +48,12 @@ public static class ControlMetrics
 
     /// <summary>Smallest comfortable hit target.</summary>
     public const float MinHit = 20f;
+
+    /// <summary>
+    ///     Smallest comfortable <b>finger</b> target (44 — the platform guideline on both mobile
+    ///     OSes). The heights above are a cursor rhythm and stay as they are; controls reach this
+    ///     one by growing their hit rect or their height at phone width, never by changing what
+    ///     they measure on desktop.
+    /// </summary>
+    public const float MinTouchTarget = 44f;
 }

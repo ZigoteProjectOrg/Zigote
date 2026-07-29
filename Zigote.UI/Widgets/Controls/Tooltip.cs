@@ -2,6 +2,7 @@ using Zigote.Core;
 using Zigote.Core.Paint;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets.Layout;
+using Zigote.UI.Widgets.Overlays;
 
 namespace Zigote.UI.Widgets.Controls;
 
@@ -34,6 +35,7 @@ public sealed class TooltipBubble : Widget
     private readonly DecoratedBox _bubble;
     private readonly ThemeData _theme;
     private Size _bubbleSize;
+    private EdgeInsets _safe;
     private Size _screen;
 
     public TooltipBubble(string text, Offset position, ThemeData theme)
@@ -59,10 +61,13 @@ public sealed class TooltipBubble : Widget
     public override Size Measure(Constraints c)
     {
         _screen = new Size(c.MaxWidth, c.MaxHeight);
+        _safe = MediaQuery.Of(BuildContext.Current).Padding;
+        // Cap the bubble at the usable width so a long message wraps instead of measuring wider
+        // than the screen (which drove the placement below to a negative x).
         _bubbleSize = _bubble.Measure(
             new Constraints(
                 0f,
-                c.MaxWidth,
+                MathF.Max(0f, c.MaxWidth - _safe.Horizontal - Spacing.Md * 2f),
                 0f,
                 c.MaxHeight
             )
@@ -80,11 +85,22 @@ public sealed class TooltipBubble : Widget
         );
 
         // Position above and to the right of the cursor.
-        var bx = MathF.Min(Position.X + Spacing.Md, _screen.Width - _bubbleSize.Width - Spacing.Xs);
+        var bx = Position.X + Spacing.Md;
         var by = Position.Y - _bubbleSize.Height - Spacing.Sm;
         if (by < Spacing.Xs) by = Position.Y + Spacing.Xl;
 
-        _bubble.Layout(new Offset(bx, by));
+        var placed = OverlayPositioning.Clamp(
+            new Rect(
+                bx,
+                by,
+                _bubbleSize.Width,
+                _bubbleSize.Height
+            ),
+            _screen,
+            Spacing.Xs,
+            _safe
+        );
+        _bubble.Layout(new Offset(placed.X, placed.Y));
     }
 
     public override void Paint(PaintList paint)

@@ -18,6 +18,41 @@ internal sealed class LayoutPage : StatelessWidget
     {
         var theme = ThemeProvider.Of(context);
 
+        // The two demo strips below are hoisted so each size class can arrange the same boxes: a
+        // Row never wraps, and both strips are intrinsically wider than a phone card's 302px.
+        var figures = new List<Widget> {
+            new SizedBox(
+                128,
+                child: new AspectRatio(
+                    16.0 / 9.0,
+                    new Container(color: Colors.Teal, child: new Center(new Text("16:9")))
+                )
+            ),
+            new Opacity(0.5, new Container(width: 56, height: 56, color: Colors.Purple)),
+            new Container(
+                width: 90,
+                height: 56,
+                color: Colors.Grey[800],
+                child: new Align(Alignment.BottomRight, new Text("↘"))
+            ),
+        };
+
+        var boxes = new List<Widget> {
+            new ColoredBox(Colors.Indigo, new SizedBox(56, 56)),
+            new DecoratedBox {
+                Fill = Colors.Pink,
+                Radius = 10,
+                BorderColor = theme.OnSurface,
+                Child = new SizedBox(56, 56),
+            },
+            new ClipRect(new ColoredBox(Colors.Teal, new SizedBox(56, 56))),
+            new Transform(new Offset(0, 8), new ColoredBox(Colors.Amber, new SizedBox(56, 40))),
+            new ConstrainedBox(
+                new Constraints(96, minHeight: 44),
+                new ColoredBox(Colors.Grey[700])
+            ),
+        };
+
         return Sections(
             Section(
                 "Container & BoxDecoration",
@@ -77,59 +112,19 @@ internal sealed class LayoutPage : StatelessWidget
             ),
             Section(
                 "AspectRatio · Opacity · Align",
-                new Row(
-                    [
-                        new SizedBox(
-                            128,
-                            child: new AspectRatio(
-                                16.0 / 9.0,
-                                new Container(
-                                    color: Colors.Teal,
-                                    child: new Center(new Text("16:9"))
-                                )
-                            )
-                        ),
-                        new SizedBox(24),
-                        new Opacity(
-                            0.5,
-                            new Container(width: 56, height: 56, color: Colors.Purple)
-                        ),
-                        new SizedBox(24),
-                        new Container(
-                            width: 90,
-                            height: 56,
-                            color: Colors.Grey[800],
-                            child: new Align(Alignment.BottomRight, new Text("↘"))
-                        ),
-                    ]
-                )
+                new AdaptiveBuilder((_, size) => size == WindowSizeClass.Compact
+                    // 322px of boxes in a 302px card: the trailing Container would be silently
+                    // squashed by the leftover width, breaking the very widget it demonstrates.
+                    ? new Wrap(figures, spacing: 24, runSpacing: 24)
+                    : new Row(figures, spacing: 24))
             ),
             Section(
                 "ColoredBox · DecoratedBox · ClipRect · Transform · ConstrainedBox",
-                new Row(
-                    [
-                        new ColoredBox(Colors.Indigo, new SizedBox(56, 56)),
-                        new SizedBox(16),
-                        new DecoratedBox {
-                            Fill = Colors.Pink,
-                            Radius = 10,
-                            BorderColor = theme.OnSurface,
-                            Child = new SizedBox(56, 56),
-                        },
-                        new SizedBox(16),
-                        new ClipRect(new ColoredBox(Colors.Teal, new SizedBox(56, 56))),
-                        new SizedBox(16),
-                        new Transform(
-                            new Offset(0, 8),
-                            new ColoredBox(Colors.Amber, new SizedBox(56, 40))
-                        ),
-                        new SizedBox(16),
-                        new ConstrainedBox(
-                            new Constraints(96, minHeight: 44),
-                            new ColoredBox(Colors.Grey[700])
-                        ),
-                    ]
-                )
+                new AdaptiveBuilder((_, size) => size == WindowSizeClass.Compact
+                    // 384px wide: the ConstrainedBox has a 96px minimum, so it wins over the
+                    // remaining width and paints outside the card instead of shrinking.
+                    ? new Wrap(boxes, spacing: 16, runSpacing: 16)
+                    : new Row(boxes, spacing: 16))
             ),
             Section(
                 "FractionallySizedBox · LayoutBuilder · SafeArea",
@@ -148,14 +143,18 @@ internal sealed class LayoutPage : StatelessWidget
                         new LayoutBuilder((ctx, c) =>
                             new Text($"LayoutBuilder sees ≈ {c.MaxWidth:F0}px of width")
                         ),
-                        new SafeArea(new Text("SafeArea (a passthrough on desktop)")),
+                        new SafeArea(
+                            new Text("SafeArea (real insets on mobile, passthrough on desktop)")
+                        ),
                     ]
                 )
             ),
             Section(
                 "GridView.count",
-                GridView.Count(
-                    4,
+                // The column count follows the width available rather than a fixed desktop number;
+                // four columns leave 69px cells on a phone.
+                new AdaptiveBuilder((_, size) => GridView.Count(
+                    size == WindowSizeClass.Compact ? 3 : 4,
                     [
                         Swatch(Colors.Red, 8), Swatch(Colors.Amber, 8), Swatch(Colors.Green, 8),
                         Swatch(Colors.Cyan, 8),
@@ -164,7 +163,7 @@ internal sealed class LayoutPage : StatelessWidget
                     ],
                     8,
                     8
-                )
+                ))
             )
         );
     }

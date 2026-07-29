@@ -30,6 +30,7 @@ public sealed class TreeView<T> : Widget, ITickerProvider where T : notnull
     private readonly IReadOnlyList<T> _roots;
     private bool _animActive;
     private T _animNode = default!;
+    private bool _compact;
     private int _hoverIndex = -1;
     private Size _size;
     private Ticker? _ticker;
@@ -94,6 +95,12 @@ public sealed class TreeView<T> : Widget, ITickerProvider where T : notnull
 
     /// <summary>Indentation added per depth level.</summary>
     public float IndentPerLevel { get; set; } = 16f;
+
+    // Effective metrics. 24pt rows and a chevron inside them are a pointer rhythm; on a phone the
+    // rows grow to a finger target and the per-level indent tightens so deep nodes keep their label.
+    private float RowH => _compact ? MathF.Max(RowHeight, TouchMetrics.MinTarget) : RowHeight;
+
+    private float Indent => _compact ? MathF.Min(IndentPerLevel, 12f) : IndentPerLevel;
 
     public bool IsExpanded(T node)
     {
@@ -172,9 +179,10 @@ public sealed class TreeView<T> : Widget, ITickerProvider where T : notnull
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
+        _compact = TouchMetrics.IsCompact;
         Flatten();
         var w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 240f;
-        var h = _flat.Count * RowHeight;
+        var h = _flat.Count * RowH;
         _size = c.Constrain(new Size(w, h));
         return _size;
     }
@@ -195,16 +203,16 @@ public sealed class TreeView<T> : Widget, ITickerProvider where T : notnull
     /// </summary>
     private (int First, int Last) VisibleRange(Rect? clip)
     {
-        if (_flat.Count == 0 || RowHeight <= 0f) return (0, -1);
+        if (_flat.Count == 0 || RowH <= 0f) return (0, -1);
         if (clip is not { } c) return (0, _flat.Count - 1);
-        var first = Math.Max(0, (int)((c.Y - Bounds.Y) / RowHeight));
-        var last = Math.Min(_flat.Count - 1, (int)((c.Bottom - Bounds.Y) / RowHeight));
+        var first = Math.Max(0, (int)((c.Y - Bounds.Y) / RowH));
+        var last = Math.Min(_flat.Count - 1, (int)((c.Bottom - Bounds.Y) / RowH));
         return (first, last);
     }
 
     public override void Paint(PaintList paint)
     {
-        if (_flat.Count == 0 || RowHeight <= 0f) return;
+        if (_flat.Count == 0 || RowH <= 0f) return;
         paint.AddClipStart(Bounds);
 
         // Virtualize: iterate only the rows inside the active clip window (the ancestor scroll viewport
@@ -216,7 +224,7 @@ public sealed class TreeView<T> : Widget, ITickerProvider where T : notnull
         for (var i = first; i <= last; i++)
         {
             var row = _flat[i];
-            var rowY = Bounds.Y + i * RowHeight;
+            var rowY = Bounds.Y + i * RowH;
 
             // Freshly revealed descendant rows fade + slide into place while the node expands.
             var animating = _animActive && i >= animStart && i < animEnd;
@@ -243,13 +251,13 @@ public sealed class TreeView<T> : Widget, ITickerProvider where T : notnull
                         Bounds.X + 4f,
                         rowY + 1f,
                         _size.Width - 8f,
-                        RowHeight - 2f
+                        RowH - 2f
                     ),
                     bg,
                     Radii.Sm
                 );
 
-            var indent = 8f + row.Depth * IndentPerLevel;
+            var indent = 8f + row.Depth * Indent;
 
             // Disclosure chevron — only when the node has children.
             if (row.HasChildren)
@@ -262,7 +270,7 @@ public sealed class TreeView<T> : Widget, ITickerProvider where T : notnull
                         Bounds.X + indent,
                         rowY,
                         14f,
-                        RowHeight
+                        RowH
                     ),
                     _theme.TextMuted,
                     14f
@@ -284,7 +292,7 @@ public sealed class TreeView<T> : Widget, ITickerProvider where T : notnull
                             contentX,
                             rowY,
                             16f,
-                            RowHeight
+                            RowH
                         ),
                         _theme.OnSurface,
                         15f
@@ -294,7 +302,7 @@ public sealed class TreeView<T> : Widget, ITickerProvider where T : notnull
             }
 
             var fg = isSelected ? _theme.OnSurface : _theme.OnSurface.WithAlpha(0.9f);
-            var textY = rowY + (RowHeight - fs) / 2f + fs * 0.8f;
+            var textY = rowY + (RowH - fs) / 2f + fs * 0.8f;
             paint.AddText(
                 _labelOf(row.Node),
                 contentX,
@@ -316,7 +324,7 @@ public sealed class TreeView<T> : Widget, ITickerProvider where T : notnull
     private int RowIndexAt(Offset point)
     {
         if (!Bounds.Contains(point.X, point.Y)) return -1;
-        var idx = (int)((point.Y - Bounds.Y) / RowHeight);
+        var idx = (int)((point.Y - Bounds.Y) / RowH);
         return idx >= 0 && idx < _flat.Count ? idx : -1;
     }
 
@@ -345,9 +353,10 @@ public sealed class TreeView<T> : Widget, ITickerProvider where T : notnull
         var row = _flat[idx];
 
         // Click on the disclosure chevron toggles expansion.
-        var indent = 8f + row.Depth * IndentPerLevel;
+        var indent = 8f + row.Depth * Indent;
         var chevronLeft = Bounds.X + indent;
-        if (row.HasChildren && point.X >= chevronLeft && point.X <= chevronLeft + 14f)
+        var chevronW = _compact ? 24f : 14f;
+        if (row.HasChildren && point.X >= chevronLeft && point.X <= chevronLeft + chevronW)
         {
             ToggleExpanded(row.Node);
             return;

@@ -90,12 +90,16 @@ internal sealed class CheckboxState : WidgetState<Checkbox>
 {
     private readonly DecoratedBox _box = new() { Radius = Radii.Xs };
     private readonly CheckGlyph _glyph = new();
+
+    // Phone hit box: the tick keeps its 16pt look, centred in a finger-sized press area.
+    private readonly SizedBox _touchBox = new(TouchMetrics.MinTarget, TouchMetrics.MinTarget);
     private Pressable _root = null!;
     private ThemeData _theme = ThemeData.Dark;
 
     public override void InitState()
     {
         _box.Child = _glyph;
+        _touchBox.Child = new Center(_box);
         _root = new Pressable {
             Child = _box,
             FocusRadius = Radii.Xs,
@@ -110,6 +114,7 @@ internal sealed class CheckboxState : WidgetState<Checkbox>
         var w = Widget;
 
         _glyph.GlyphSize = w.Size;
+        _root.Child = TouchMetrics.IsCompact ? _touchBox : _box;
         _root.Enabled = w.Enabled;
         _root.Role = SemanticsRole.Checkbox;
         _root.Checked = w.Value;

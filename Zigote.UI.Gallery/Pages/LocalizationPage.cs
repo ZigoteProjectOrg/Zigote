@@ -43,13 +43,14 @@ internal sealed class LocalizationPageState : WidgetState<LocalizationPage>
                 // One chip per string, each single-script: the engine shapes one run per string
                 // (direction guessed from its first strong character), so mixing scripts in one
                 // string would render the embedded run in the wrong order.
-                new Row(
-                    mainAxisSize: MainAxisSize.Min,
+                // Wrap, not Row: a single run on desktop, but the Arabic labels are wider than a
+                // phone card and a Row would paint the overflow outside it.
+                new Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
                     children: [
                         new Chip(l.Locale.ToBcp47()),
-                        new SizedBox(8),
                         new Chip(l.LocaleName),
-                        new SizedBox(8),
                         new Chip(direction == TextDirection.Rtl ? l.DirectionRtl : l.DirectionLtr),
                     ]
                 )
@@ -149,36 +150,51 @@ internal sealed class LocalizationPageState : WidgetState<LocalizationPage>
 
     private Widget CounterRow(string label, string message)
     {
-        return new Row(
-            [
-                new Stepper(
-                    _count,
-                    1,
-                    0,
-                    111,
-                    v => SetStateRebuild(() => _count = v)
-                ),
-                new SizedBox(12),
-                new Text($"{label}: {(int)_count}", new TextStyle(12, color: Colors.Grey[500])),
-                new SizedBox(24),
-                new Text(message, new TextStyle(15, fontWeight: FontWeight.Medium)),
-            ]
+        var stepper = new Stepper(
+            _count,
+            1,
+            0,
+            111,
+            v => SetStateRebuild(() => _count = v)
         );
+        var counter = new Text(
+            $"{label}: {(int)_count}",
+            new TextStyle(12, color: Colors.Grey[500])
+        );
+        var result = new Text(message, new TextStyle(15, fontWeight: FontWeight.Medium));
+
+        // On a phone the translated label and the plural message can each fill the card on their
+        // own, so the message drops below the stepper instead of sharing its line.
+        return new AdaptiveBuilder((_, size) => size == WindowSizeClass.Compact
+            ? new Column(
+                crossAxisAlignment: CrossAxisAlignment.Start,
+                children: [
+                    new Row(
+                        mainAxisSize: MainAxisSize.Min,
+                        children: [stepper, new SizedBox(12), counter]
+                    ),
+                    new SizedBox(height: 8),
+                    result,
+                ]
+            )
+            : new Row([stepper, new SizedBox(12), counter, new SizedBox(24), result]));
     }
 
     private static Widget FormatRow(string label, string value)
     {
+        var labelText = new Text(label, new TextStyle(12, color: Colors.Grey[500]));
+        var valueText = new Text(value, new TextStyle(14));
+
+        // The 120px label column costs 40% of a phone card's width, wrapping the long values (a
+        // full date, three currencies) over several lines — stack them there instead.
         return new Padding(
             EdgeInsets.Only(bottom: 6),
-            new Row(
-                [
-                    new SizedBox(
-                        120,
-                        child: new Text(label, new TextStyle(12, color: Colors.Grey[500]))
-                    ),
-                    new Text(value, new TextStyle(14)),
-                ]
-            )
+            new AdaptiveBuilder((_, size) => size == WindowSizeClass.Compact
+                ? new Column(
+                    crossAxisAlignment: CrossAxisAlignment.Start,
+                    children: [labelText, valueText]
+                )
+                : new Row([new SizedBox(120, child: labelText), valueText]))
         );
     }
 
@@ -187,24 +203,23 @@ internal sealed class LocalizationPageState : WidgetState<LocalizationPage>
     {
         var onSurface = ThemeProvider.Of(context).OnSurface;
         var chips = new List<Widget>();
-        for (var i = 1; i <= 4; i++)
-        {
-            if (i > 1) chips.Add(new SizedBox(8));
-            chips.Add(StepChip(l.ChipStep(i), i == 1, onSurface));
-        }
+        for (var i = 1; i <= 4; i++) chips.Add(StepChip(l.ChipStep(i), i == 1, onSurface));
 
-        Widget row = new Row(mainAxisSize: MainAxisSize.Min, children: chips);
-        if (force is { } dir) row = new Directionality(dir, row);
+        // Wrap mirrors under Directionality exactly like the Row did, but reflows the chips
+        // instead of painting them past the card once the translated labels grow.
+        Widget strip = new Wrap(chips, spacing: 8, runSpacing: 8);
+        if (force is { } dir) strip = new Directionality(dir, strip);
 
-        return new Row(
-            [
-                new SizedBox(
-                    140,
-                    child: new Text(label, new TextStyle(12, color: Colors.Grey[500]))
-                ),
-                row,
-            ]
-        );
+        var labelText = new Text(label, new TextStyle(12, color: Colors.Grey[500]));
+
+        // Label column (140) plus four chips (272) needs more width than a phone card has, so the
+        // label takes its own line there.
+        return new AdaptiveBuilder((_, size) => size == WindowSizeClass.Compact
+            ? new Column(
+                crossAxisAlignment: CrossAxisAlignment.Start,
+                children: [labelText, new SizedBox(height: 6), strip]
+            )
+            : new Row([new SizedBox(140, child: labelText), strip]));
     }
 
     private static Widget StepChip(string label, bool accent, Color onSurface)

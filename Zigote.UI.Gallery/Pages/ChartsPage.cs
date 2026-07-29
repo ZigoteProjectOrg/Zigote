@@ -16,6 +16,11 @@ internal sealed class ChartsPage : StatelessWidget
 {
     protected override Widget Build(BuildContext context)
     {
+        // The window's size class, not the pane's: the grid sections below sit in cells that are
+        // only ~540 px wide on a desktop window, so an AdaptiveBuilder inside one would read
+        // Compact there and hand the desktop the phone arm.
+        var size = MediaQuery.Of(context).SizeClass;
+
         var sales = new List<(string Month, double Rev, string Region)> {
             ("Jan", 320, "West"),
             ("Feb", 410, "West"),
@@ -87,7 +92,15 @@ internal sealed class ChartsPage : StatelessWidget
             children: [
                 // ── Advanced / interactive / animated (full width — they need the room) ──
                 Section("Live metrics — real-time stream", new LiveLineChart()),
-                Section("Scroll & zoom — drag to pan, ⌘/Ctrl-scroll to zoom", DemoCharts.ZoomPan()),
+                // Zoom is bound to modifier + wheel; touch has neither, so a phone must not be told
+                // to use a gesture it cannot make (pan works — a horizontal drag survives the
+                // touch arena).
+                Section(
+                    size == WindowSizeClass.Compact
+                        ? "Scroll & zoom — drag to pan"
+                        : "Scroll & zoom — drag to pan, ⌘/Ctrl-scroll to zoom",
+                    DemoCharts.ZoomPan()
+                ),
                 Section("Range selection — drag across the plot", DemoCharts.RangeSelection()),
                 Section("Dual axis — price line + volume bars", DemoCharts.DualAxis()),
                 Section(
@@ -173,7 +186,9 @@ internal sealed class ChartsPage : StatelessWidget
                             crossAxisAlignment: CrossAxisAlignment.Stretch,
                             children: [
                                 ChartBox(animated),
-                                new SizedBox(height: 40),
+                                // Desktop breathing room under the chart; a phone screen has none
+                                // to spare once the grid collapses to one full-width column.
+                                new SizedBox(height: size == WindowSizeClass.Compact ? 12 : 40),
                                 new ElevatedButton(
                                     new Text("Shuffle data"),
                                     () =>

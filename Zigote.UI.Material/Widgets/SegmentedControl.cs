@@ -127,7 +127,9 @@ public sealed class SegmentedControl : Widget, ITickerProvider
 
         var segW = _textWidth + Spacing.Md * 2f;
         var totalW = segW * Math.Max(Segments.Count, 1);
-        _size = c.Constrain(new Size(totalW, ControlMetrics.RegularHeight));
+        _size = c.Constrain(
+            new Size(totalW, TouchMetrics.Pick(ControlMetrics.RegularHeight))
+        );
         return _size;
     }
 
@@ -230,6 +232,9 @@ public sealed class SegmentedControl : Widget, ITickerProvider
             var lw = TextMeasure.Width(label, fs, FontWeight.Medium);
             var bx = segX + (segW - lw) / 2f;
             var by = Bounds.Y + (Bounds.Height - th) / 2f + fs * 0.8f;
+            // The group shrinks to the width it is given, but the labels don't: without a clip
+            // long translations bleed into the neighbouring segment and past the control.
+            paint.AddClipStart(segRect);
             paint.AddText(
                 label,
                 bx,
@@ -238,6 +243,7 @@ public sealed class SegmentedControl : Widget, ITickerProvider
                 fs,
                 fontWeight: FontWeight.Medium
             );
+            paint.AddClipEnd();
         }
 
         if (Focused && Enabled)

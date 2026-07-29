@@ -134,7 +134,9 @@ public class Slider : Widget
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        _measureH = Math.Clamp(Height, c.MinHeight, c.MaxHeight);
+        // The whole widget is the scrub target, so on a phone the band — not the 4pt track it
+        // draws inside it — has to be finger-sized. Paint centres off the measured height.
+        _measureH = Math.Clamp(TouchMetrics.AtLeast(Height), c.MinHeight, c.MaxHeight);
         var rawW = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 200f;
         var sz = c.Constrain(new Size(rawW, _measureH));
         _measureW = sz.Width;

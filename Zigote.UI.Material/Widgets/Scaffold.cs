@@ -8,6 +8,7 @@ public sealed class Scaffold : RenderWidget
     private const float FabSize = 56f;
     private const float FabPadding = 16f;
     private float _barH;
+    private float _bottomInset;
     private Size _size;
 
     private ThemeData _theme = ThemeData.Dark;
@@ -42,6 +43,10 @@ public sealed class Scaffold : RenderWidget
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
         _barH = AppBar?.Height ?? 0f;
+        // Material's resizeToAvoidBottomInset: give the body only the height the soft keyboard
+        // leaves, so a focused field scrolls into view instead of sitting behind the keyboard.
+        // ViewInsets is zero on desktop, so the desktop layout is unchanged.
+        _bottomInset = MediaQuery.Of(BuildContext.Current).ViewInsets.Bottom;
 
         // On an unbounded axis (e.g. inside a parent ScrollView) size to the app bar + body content
         // rather than infinity — an infinite size poisons flex layout (∞ − ∞ → NaN) and crashes paint.
@@ -54,7 +59,7 @@ public sealed class Scaffold : RenderWidget
         if (AppBar != null)
             AppBar.Measure(Constraints.Tight(_size.Width, _barH));
 
-        var bodyH = Math.Max(0, _size.Height - _barH);
+        var bodyH = Math.Max(0, _size.Height - _barH - _bottomInset);
         Body?.Measure(Constraints.Tight(_size.Width, bodyH));
 
         FloatingActionButton?.Measure(Constraints.Tight(FabSize, FabSize));
@@ -74,13 +79,12 @@ public sealed class Scaffold : RenderWidget
         AppBar?.Layout(origin);
 
         var bodyY = origin.Y + _barH;
-        var bodyH = Math.Max(0, _size.Height - _barH);
         Body?.Layout(new Offset(origin.X, bodyY));
 
         FloatingActionButton?.Layout(
             new Offset(
                 origin.X + _size.Width - FabSize - FabPadding,
-                origin.Y + _size.Height - FabSize - FabPadding
+                origin.Y + _size.Height - _bottomInset - FabSize - FabPadding
             )
         );
     }

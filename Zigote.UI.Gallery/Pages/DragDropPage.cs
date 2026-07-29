@@ -59,9 +59,13 @@ internal sealed class DragDropPageState : WidgetState<DragDropPage>
                 ),
                 Section(
                     "External file drop (OS → app)",
-                    new Column(
-                        crossAxisAlignment: CrossAxisAlignment.Start,
-                        children: [FileZone(), new SizedBox(height: 8), _files]
+                    new AdaptiveBuilder(
+                        (_, size) => size == WindowSizeClass.Compact
+                            ? DesktopOnly("Desktop only — phones have no OS file drag.")
+                            : new Column(
+                                crossAxisAlignment: CrossAxisAlignment.Start,
+                                children: [FileZone(), new SizedBox(height: 8), _files]
+                            )
                     )
                 ),
                 Section(
@@ -89,21 +93,34 @@ internal sealed class DragDropPageState : WidgetState<DragDropPage>
                 ),
                 Section(
                     "Drag OUT to the OS (macOS best-effort)",
-                    new Column(
-                        crossAxisAlignment: CrossAxisAlignment.Start,
-                        children: [
-                            new Text("Drag this onto Finder or a text field in another app:"),
-                            new SizedBox(height: 10),
-                            new Draggable<string>(
-                                "Zigote drag-out",
-                                Pill("⤴  Drag me out", Color.Purple),
-                                dragText: "Dragged out of Zigote"
-                            ) { AllowDragOut = true },
-                        ]
+                    new AdaptiveBuilder(
+                        (_, size) => size == WindowSizeClass.Compact
+                            ? DesktopOnly("Desktop only — no app-to-app drag on a phone.")
+                            : new Column(
+                                crossAxisAlignment: CrossAxisAlignment.Start,
+                                children: [
+                                    new Text(
+                                        "Drag this onto Finder or a text field in another app:"
+                                    ),
+                                    new SizedBox(height: 10),
+                                    new Draggable<string>(
+                                        "Zigote drag-out",
+                                        Pill("⤴  Drag me out", Color.Purple),
+                                        dragText: "Dragged out of Zigote"
+                                    ) { AllowDragOut = true },
+                                ]
+                            )
                     )
                 ),
             ]
         );
+    }
+
+    // Both OS integrations above are desktop-only surfaces: there is no OS file drag and no
+    // app-to-app drag on a phone, so those sections say so rather than baiting a dead gesture.
+    private static Widget DesktopOnly(string note)
+    {
+        return new Label(note, 13, Colors.Grey[500]);
     }
 
     private void Paste()

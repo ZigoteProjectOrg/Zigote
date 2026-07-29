@@ -140,6 +140,27 @@ public class SelectableText : RichText
         if (_anchor == _extent) ClearSelection();
     }
 
+    public override void OnPointerCancel()
+    {
+        // A scroller claimed the drag (touch) or the OS took the gesture: stay disarmed, or the
+        // next press would extend this stale selection instead of starting a new one.
+        _dragging = false;
+    }
+
+    /// <summary>
+    ///     Press-and-hold selects the word under the finger — drag-select needs a pointer the page
+    ///     scroller isn't already using, so it is a mouse-only affordance.
+    /// </summary>
+    public override void OnLongPress(Offset point)
+    {
+        var (start, end) = TextNavigation.WordAt(FullText, IndexAtPoint(point));
+        if (start == end) return;
+        _dragging = false;
+        _anchor = start;
+        _extent = end;
+        MarkNeedsPaint();
+    }
+
     // ── Keyboard ──
 
     public override void OnKey(char keyChar, uint scancode, bool down, Modifiers mods)

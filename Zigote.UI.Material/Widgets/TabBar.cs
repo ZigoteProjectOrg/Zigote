@@ -17,6 +17,11 @@ public class TabBar : RenderWidget, ITickerProvider
 {
     private readonly List<TabCell> _cells = [];
     private readonly AnimationController _slide;
+    private float _maxScrollX;
+
+    /// <summary>How far the strip is scrolled when the tabs are wider than the space they get.</summary>
+    private float _scrollX;
+
     private int _selected;
     private Size _size;
 
@@ -175,11 +180,29 @@ public class TabBar : RenderWidget, ITickerProvider
         }
 
         var width = float.IsPositiveInfinity(c.MaxWidth) ? total : MathF.Min(total, c.MaxWidth);
-        _size = c.Constrain(new Size(width, TabHeight));
+        _size = c.Constrain(new Size(width, TouchMetrics.AtLeast(TabHeight, 48f)));
+
+        // Tabs that don't fit used to be laid out and painted past Bounds — visible overflow and
+        // unreachable tabs. Keep them in the strip and scroll it instead (drag on touch, wheel on
+        // desktop, and the keyboard/selection follows below).
+        _maxScrollX = MathF.Max(0f, total - _size.Width);
+        _scrollX = Math.Clamp(_scrollX, 0f, _maxScrollX);
+        if (_maxScrollX > 0f) ScrollSelectedIntoView();
 
         var cellH = _size.Height;
         foreach (var cell in _cells) cell.Measure(Constraints.Tight(cell.DesiredWidth, cellH));
         return _size;
+    }
+
+    private void ScrollSelectedIntoView()
+    {
+        if (SelectedIndex < 0 || SelectedIndex >= _cells.Count) return;
+        var left = 0f;
+        for (var i = 0; i < SelectedIndex; i++) left += _cells[i].DesiredWidth;
+        var right = left + _cells[SelectedIndex].DesiredWidth;
+        if (left < _scrollX) _scrollX = left;
+        else if (right > _scrollX + _size.Width) _scrollX = right - _size.Width;
+        _scrollX = Math.Clamp(_scrollX, 0f, _maxScrollX);
     }
 
     public override void Layout(Offset origin)
@@ -190,7 +213,7 @@ public class TabBar : RenderWidget, ITickerProvider
             _size.Width,
             _size.Height
         );
-        var x = origin.X;
+        var x = origin.X - _scrollX;
         foreach (var cell in _cells)
         {
             cell.Layout(new Offset(x, origin.Y));
@@ -201,7 +224,9 @@ public class TabBar : RenderWidget, ITickerProvider
     public override void Paint(PaintList paint)
     {
         paint.AddRect(Bounds, Theme.Surface);
+        paint.AddClipStart(Bounds);
         foreach (var c in _cells) c.Paint(paint);
+        paint.AddClipEnd();
 
         // Hairline baseline separator under the whole strip.
         paint.AddRect(
@@ -214,9 +239,10 @@ public class TabBar : RenderWidget, ITickerProvider
             Theme.Separator
         );
 
+        paint.AddClipStart(Bounds);
         PaintUnderline(paint);
-
         if (Focused) PaintSelectedFocusRing(paint);
+        paint.AddClipEnd();
     }
 
     /// <summary>Draws the 2px accent underline, sliding it between tabs when the selection changes.</summary>
@@ -302,6 +328,37 @@ public class TabBar : RenderWidget, ITickerProvider
                 Select(SelectedIndex + 1);
                 break;
         }
+    }
+
+    // A strip wider than its box is a horizontal scroller — the finger drags it, the wheel's
+    // horizontal axis nudges it, and anything else keeps bubbling to the page.
+    public override bool CanTouchScroll(bool vertical)
+    {
+        return !vertical && _maxScrollX > 0f;
+    }
+
+    public override void OnTouchScroll(float dx, float dy)
+    {
+        if (_maxScrollX <= 0f)
+        {
+            base.OnTouchScroll(dx, dy);
+            return;
+        }
+
+        _scrollX = Math.Clamp(_scrollX - dx, 0f, _maxScrollX);
+        MarkNeedsLayout();
+    }
+
+    public override void OnScroll(float dx, float dy)
+    {
+        if (_maxScrollX <= 0f || MathF.Abs(dx) <= MathF.Abs(dy))
+        {
+            base.OnScroll(dx, dy);
+            return;
+        }
+
+        _scrollX = Math.Clamp(_scrollX - dx * MinTabWidth * 0.5f, 0f, _maxScrollX);
+        MarkNeedsLayout();
     }
 
     private sealed class TabCell(string label, Func<bool> isSelected, Action onTap, TabBar owner)

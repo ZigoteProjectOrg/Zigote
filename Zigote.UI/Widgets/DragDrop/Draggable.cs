@@ -126,6 +126,18 @@ public class Draggable<T> : Widget
         _armed = false;
     }
 
+    /// <summary>
+    ///     Press-and-hold lifts the payload on a touchscreen. A finger drag alone can't: the
+    ///     surrounding scroller claims it after 12 px of slop, so a drag toward a drop zone below
+    ///     just scrolls the page. Holding first commits the gesture here (see App.Touch) — the
+    ///     platform convention, and the only sequence that can complete a drop by finger. This
+    ///     replaces the default long-press → context-menu mapping for draggables.
+    /// </summary>
+    public override void OnLongPress(Offset point)
+    {
+        if (_armed && !_dragging) BeginDrag(point);
+    }
+
     public override void OnPointerCancel()
     {
         if (_dragging)

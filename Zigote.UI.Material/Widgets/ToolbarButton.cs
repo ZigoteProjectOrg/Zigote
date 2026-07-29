@@ -27,11 +27,11 @@ public enum ToolbarTone
 /// </summary>
 public sealed class ToolbarButton : Widget
 {
-    private const float H = ControlMetrics.RegularHeight; // 28
     private const float PadX = 9f;
     private const float Gap = 6f;
     private const float ChevW = 12f;
 
+    private bool _compact;
     private bool _hovered;
     private float _labelW;
     private bool _pressed;
@@ -98,11 +98,15 @@ public sealed class ToolbarButton : Widget
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
+        _compact = TouchMetrics.IsCompact;
         var fs = _theme.FontSizeCaption;
         _labelW = string.IsNullOrEmpty(Label)
             ? 0f
             : TextMeasure.Width(Label, fs, FontWeight.Medium);
-        _size = c.Constrain(new Size(MathF.Max(ContentWidth() + PadX * 2f, H), H));
+        // The bar itself is already 44 tall; its buttons were a fixed 28, so on a phone nothing in
+        // a touch-sized toolbar was actually touch-sized.
+        var h = TouchMetrics.Pick(ControlMetrics.RegularHeight);
+        _size = c.Constrain(new Size(MathF.Max(ContentWidth() + PadX * 2f, h), h));
         return _size;
     }
 
@@ -126,10 +130,12 @@ public sealed class ToolbarButton : Widget
             ToolbarTone.Primary => StateStyle.Tint(_theme.Accent, state),
             ToolbarTone.Danger => StateStyle.Tint(_theme.Danger, state),
             ToolbarTone.Success => StateStyle.Tint(_theme.Success, state),
+            // The quiet tone is transparent at rest and only reveals itself on hover — which never
+            // happens on a phone, leaving a borderless glyph with no affordance. Give it a resting fill.
             _ => state switch {
                 ControlState.Pressed => _theme.ControlPressed,
                 ControlState.Hovered => _theme.ControlHover,
-                _ => null,
+                _ => _compact ? _theme.ControlHover : null,
             },
         };
         if (fill.HasValue) paint.AddRect(Bounds, fill.Value, radius);

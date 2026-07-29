@@ -204,6 +204,13 @@ public sealed class NumberInput : Widget
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
+        // On a phone the ± buttons are the only usable way to change the value (the scrub grip
+        // measures itself away), so they get finger-sized padding instead of the dense 4×2.
+        var pad = TouchMetrics.IsCompact
+            ? EdgeInsets.Symmetric(Spacing.Md, Spacing.Md)
+            : EdgeInsets.Symmetric(Spacing.Xs, Spacing.Xxs);
+        _btnUp.Padding = pad;
+        _btnDown.Padding = pad;
         _size = _row.Measure(c);
         return _size;
     }
@@ -266,6 +273,7 @@ public sealed class NumberInput : Widget
         private bool _hovered;
         private float _lastX;
         private float _measureH;
+        private float _measureW = GripWidth;
         private ThemeData _theme = ThemeData.Dark;
 
         public override bool Focusable => false;
@@ -282,7 +290,10 @@ public sealed class NumberInput : Widget
                 ? Math.Clamp(ControlMetrics.RegularHeight, c.MinHeight, c.MaxHeight)
                 : ControlMetrics.RegularHeight;
             _measureH = h;
-            return c.Constrain(new Size(GripWidth, h));
+            // A 14pt drag strip whose only cue is a hover cursor is dead weight on a phone; collapse
+            // it so the field and the ± buttons get the whole row.
+            _measureW = TouchMetrics.IsCompact ? 0f : GripWidth;
+            return c.Constrain(new Size(_measureW, h));
         }
 
         public override void Layout(Offset origin)
@@ -290,7 +301,7 @@ public sealed class NumberInput : Widget
             Bounds = new Rect(
                 origin.X,
                 origin.Y,
-                GripWidth,
+                _measureW,
                 _measureH
             );
         }

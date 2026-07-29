@@ -102,12 +102,23 @@ internal sealed class DisplayPageState : WidgetState<DisplayPage>
                     ]
                 )
             ),
-            Section(
-                "Tooltip",
-                new Tooltip(
-                    "This is a tooltip",
-                    new OutlinedButton(new Text("Hover me"))
-                )
+            Section("Tooltip", TooltipDemo())
+        );
+    }
+
+    // A tooltip only ever surfaces on hover, which fingers never produce — on a phone the bare
+    // button would be a dead control whose label is unreachable. Compact keeps the tooltip (a
+    // mouse in a narrow window still gets it) but also puts the text behind a tap.
+    private static Widget TooltipDemo()
+    {
+        const string message = "This is a tooltip";
+
+        return new AdaptiveBuilder(
+            (_, size) => new Tooltip(
+                message,
+                size == WindowSizeClass.Compact
+                    ? new OutlinedButton(new Text("Tap for a tip"), () => Toast(message))
+                    : new OutlinedButton(new Text("Hover me"))
             )
         );
     }

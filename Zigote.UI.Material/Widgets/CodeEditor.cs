@@ -36,6 +36,9 @@ public sealed class CodeEditor : Widget, ITextInputClient
     private const float ScrollEase = 22f; // smooth-scroll ease rate (higher = snappier)
     private const float BarHitWidth = 16f; // grabbable scrollbar strip width
 
+    /// <summary>How far a fling throws the scroll target, as a fraction of lift-off velocity.</summary>
+    private const float FlingSeconds = 0.35f;
+
     // Double-click (word select) detection — no click-count in the event pipeline, so track timing.
     private const float DoubleClickSeconds = 0.4f;
 
@@ -1386,6 +1389,32 @@ public sealed class CodeEditor : Widget, ITextInputClient
         _targetX -= dx * _charWidth * 6f;
         ClampTargets();
         AnimateScroll(); // ease the rendered offset toward the new target
+    }
+
+    // Touch scrolling. Without these the editor is wheel-only: a finger drag inside it runs
+    // OnPointerMove (text selection) and the document never moves. Deltas are already in logical
+    // px — no wheel-tick conversion — and the drag tracks the finger 1:1.
+    public override bool CanTouchScroll(bool vertical)
+    {
+        return vertical ? VBar().On : HBar().On;
+    }
+
+    public override void OnTouchScroll(float dx, float dy)
+    {
+        _targetX -= dx;
+        _targetY -= dy;
+        ClampTargets();
+        SnapScroll();
+        MarkNeedsPaint();
+    }
+
+    public override void OnTouchFling(float velocityX, float velocityY)
+    {
+        // Reuse the existing ease as the inertia: throw the target ahead and let it settle.
+        _targetX -= velocityX * FlingSeconds;
+        _targetY -= velocityY * FlingSeconds;
+        ClampTargets();
+        AnimateScroll();
     }
 
     public override void OnRightClick(Offset point)

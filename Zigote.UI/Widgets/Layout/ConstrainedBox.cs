@@ -17,11 +17,16 @@ public class ConstrainedBox(Constraints constraints, Widget? child = null) : Wid
 
     public override Size Measure(Constraints c)
     {
+        // The parent's ceiling wins over an imposed minimum. Constraints raises max to min when the
+        // two cross (Constraints ctor), so a 280-wide minimum inside a 264-wide parent would measure
+        // 280 and paint 16 px outside it — the failure mode of every fixed-min box on a phone.
+        var maxW = Math.Min(c.MaxWidth, Constraints.MaxWidth);
+        var maxH = Math.Min(c.MaxHeight, Constraints.MaxHeight);
         var merged = new Constraints(
-            Math.Max(c.MinWidth, Constraints.MinWidth),
-            Math.Min(c.MaxWidth, Constraints.MaxWidth),
-            Math.Max(c.MinHeight, Constraints.MinHeight),
-            Math.Min(c.MaxHeight, Constraints.MaxHeight)
+            Math.Min(Math.Max(c.MinWidth, Constraints.MinWidth), maxW),
+            maxW,
+            Math.Min(Math.Max(c.MinHeight, Constraints.MinHeight), maxH),
+            maxH
         );
 
         _size = merged.Constrain(

@@ -20,8 +20,15 @@ public sealed class ColorPicker : Widget
     private const float ReadoutHeight = 16f;
     private const int SvResolution = 96; // SV square raster grid (square texture, scaled to fit)
 
+    // Effective metrics: the hue/alpha strips are drag targets, and 14pt of them is thinner than a
+    // fingertip. Widen them (and the hex field) at phone width; the picker's own width is unchanged.
+    private float BarW => _compact ? 28f : BarWidth;
+
+    private float HexH => _compact ? TouchMetrics.MinTarget : HexHeight;
+
     private readonly TextField _hexField;
     private float _a;
+    private bool _compact;
 
     // Layout rects (absolute), computed in Layout.
     private Rect _alphaRect;
@@ -90,13 +97,14 @@ public sealed class ColorPicker : Widget
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
+        _compact = TouchMetrics.IsCompact;
 
         _width = PickerWidth;
-        _height = SvHeight + SectionGap + BarWidth + SectionGap + HexHeight + SectionGap +
+        _height = SvHeight + SectionGap + BarW + SectionGap + HexH + SectionGap +
                   ReadoutHeight;
 
         // Measure the hex field at the width it will occupy (right portion of the hex row).
-        _hexField.Measure(new Constraints(maxWidth: _width * 0.6f, maxHeight: HexHeight));
+        _hexField.Measure(new Constraints(maxWidth: _width * 0.6f, maxHeight: HexH));
 
         var size = c.Constrain(new Size(_width, _height));
         _width = size.Width;
@@ -116,7 +124,7 @@ public sealed class ColorPicker : Widget
         var x = origin.X;
         var y = origin.Y;
 
-        var svW = _width - BarWidth - BarGap;
+        var svW = _width - BarW - BarGap;
         _svRect = new Rect(
             x,
             y,
@@ -126,7 +134,7 @@ public sealed class ColorPicker : Widget
         _hueRect = new Rect(
             x + svW + BarGap,
             y,
-            BarWidth,
+            BarW,
             SvHeight
         );
 
@@ -135,14 +143,14 @@ public sealed class ColorPicker : Widget
             x,
             y,
             _width,
-            BarWidth
+            BarW
         );
 
-        y += BarWidth + SectionGap;
+        y += BarW + SectionGap;
 
         // Hex row: label "#" handled in paint; field takes the right ~60%.
         var fieldW = _width * 0.6f;
-        var fieldSize = _hexField.Measure(new Constraints(maxWidth: fieldW, maxHeight: HexHeight));
+        var fieldSize = _hexField.Measure(new Constraints(maxWidth: fieldW, maxHeight: HexH));
         _hexField.Layout(new Offset(x + _width - fieldSize.Width, y));
     }
 
@@ -156,7 +164,7 @@ public sealed class ColorPicker : Widget
 
         // Hex row label.
         var hexRowY = _alphaRect.Bottom + SectionGap;
-        var labelBaseline = hexRowY + (HexHeight - _theme.FontSizeBody) / 2f +
+        var labelBaseline = hexRowY + (HexH - _theme.FontSizeBody) / 2f +
                             _theme.FontSizeBody * 0.8f;
         paint.AddText(
             "Hex",

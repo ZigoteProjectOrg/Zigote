@@ -1,5 +1,6 @@
 using Zigote.Core;
 using Zigote.Core.Paint;
+using Zigote.UI.Host;
 using Zigote.UI.Theme;
 
 namespace Zigote.UI.Widgets.Layout;
@@ -290,8 +291,7 @@ public class ListView : Widget
     public override Widget? HitTest(Offset point)
     {
         if (!Bounds.Contains(point.X, point.Y)) return null;
-        if (_sy.Max > 0f && point.X >= Bounds.Right - Scrollbar.HitWidth)
-            return this; // scrollbar strip
+        if (OverVBar(point)) return this; // scrollbar strip
 
         var oldScroll = CurrentScrollParent;
         CurrentScrollParent = this;
@@ -300,16 +300,31 @@ public class ListView : Widget
         for (var i = last; i >= first; i--)
         {
             var hit = _items[i].HitTest(point);
-            if (hit is not null) return hit;
+            if (hit is not null)
+            {
+                // Keep the bubble chain alive past this list: the App only assigns a ScrollParent
+                // to the final hit widget, so a drag this list can't take (horizontal, or already
+                // at its edge) would otherwise never reach an outer scroller.
+                ScrollParent = oldScroll;
+                return hit;
+            }
         }
 
         CurrentScrollParent = oldScroll;
         return this;
     }
 
+    // Mouse-only affordance: under a finger the 14 px strip overlaps the trailing controls of every
+    // full-width row, and a tap there would jump-scroll instead of hitting the row. Touch drags the
+    // content directly (CanTouchScroll).
+    private bool OverVBar(Offset p)
+    {
+        return !App.PointerIsTouch && _sy.Max > 0f && p.X >= Bounds.Right - Scrollbar.HitWidth;
+    }
+
     public override void OnPointerDown(Offset point)
     {
-        if (_sy.Max <= 0f || point.X < Bounds.Right - Scrollbar.HitWidth) return;
+        if (!OverVBar(point)) return;
         var (ts, tl) = Scrollbar.VTrack(Bounds);
         var (start, len) = _vbar.Geometry(
             ts,

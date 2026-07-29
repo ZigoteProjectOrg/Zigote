@@ -61,8 +61,12 @@ public sealed class ListTile : StatelessWidget
         // The tap area (Pressable) covers the leading + text only. Keeping an interactive Trailing
         // (Switch/Checkbox/Radio) OUTSIDE the Pressable lets it receive its own pointer events —
         // otherwise the Pressable captures the whole row and the trailing control can't be toggled.
+        //
+        // 8pt of vertical padding leaves a caption-only tile ~30pt tall; a phone list row wants the
+        // Material 48pt metric, which Md padding around a 13pt label reaches.
+        var padV = TouchMetrics.IsCompact ? Spacing.Md : Spacing.Sm;
         Widget tap = new Pressable {
-            Child = new LayoutPadding(EdgeInsets.Symmetric(Spacing.Md, Spacing.Sm), main),
+            Child = new LayoutPadding(EdgeInsets.Symmetric(Spacing.Md, padV), main),
             OnPressed = () => OnPressed?.Invoke(),
             Enabled = OnPressed is not null,
             SelectedState = Selected,

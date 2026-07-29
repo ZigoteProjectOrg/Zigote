@@ -16,6 +16,11 @@ namespace Zigote.UI.Widgets.Menu;
 public sealed class MenuBar : Widget
 {
     private readonly Row _row = new() { CrossAxisAlignment = CrossAxisAlignment.Center };
+
+    // Titles keep their intrinsic widths and the strip scrolls when they don't all fit: a narrow
+    // window (or a phone) would otherwise push the trailing menus off the edge, unreachable. Nothing
+    // to scroll on a wide window, so it stays a plain row there.
+    private readonly ScrollView _scroller;
     private float _height;
     private ThemeData _theme = ThemeData.Dark;
     private float _width;
@@ -43,6 +48,8 @@ public sealed class MenuBar : Widget
             };
             _row.Children.Add(btn);
         }
+
+        _scroller = new ScrollView(_row) { ScrollHorizontal = true, ScrollVertical = false };
     }
 
     public override Size Measure(Constraints c)
@@ -51,6 +58,9 @@ public sealed class MenuBar : Widget
         var row = _row.Measure(c);
         _width = float.IsFinite(c.MaxWidth) ? c.MaxWidth : row.Width;
         _height = row.Height;
+        // Hand the scroller a tight box — it fills whatever it is given, and the bar is exactly
+        // one row tall.
+        _scroller.Measure(Constraints.Tight(_width, _height));
         return c.Constrain(new Size(_width, _height));
     }
 
@@ -62,23 +72,23 @@ public sealed class MenuBar : Widget
             _width,
             _height
         );
-        _row.Layout(origin);
+        _scroller.Layout(origin);
     }
 
     public override void Paint(PaintList paint)
     {
         paint.AddRect(Bounds, _theme.Surface);
-        _row.Paint(paint);
+        _scroller.Paint(paint);
     }
 
     public override Widget? HitTest(Offset point)
     {
         if (!Bounds.Contains(point.X, point.Y)) return null;
-        return _row.HitTest(point) ?? this;
+        return _scroller.HitTest(point) ?? this;
     }
 
     public override IEnumerable<Widget> GetChildren()
     {
-        return ChildOrEmpty(_row);
+        return ChildOrEmpty(_scroller);
     }
 }

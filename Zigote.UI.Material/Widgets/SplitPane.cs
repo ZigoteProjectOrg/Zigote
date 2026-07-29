@@ -8,6 +8,7 @@ namespace Zigote.UI.Material;
 public sealed class SplitPane(ThemeData theme, Widget? first = null, Widget? second = null)
     : RenderWidget
 {
+    private bool _compact;
     private Rect _dividerRect;
 
     private bool _dragging;
@@ -27,8 +28,33 @@ public sealed class SplitPane(ThemeData theme, Widget? first = null, Widget? sec
 
     public override Size Measure(Constraints c)
     {
+        _compact = TouchMetrics.IsCompact;
         _size = c.Constrain(new Size(c.MaxWidth, c.MaxHeight));
         return _size;
+    }
+
+    /// <summary>
+    ///     Where the divider is <em>grabbed</em>, as opposed to drawn. The 4pt hairline is the whole
+    ///     affordance on a pointer (helped by the resize cursor); a finger has neither the precision
+    ///     nor the cursor, so on a phone the grab band is inflated around the unchanged hairline.
+    /// </summary>
+    private Rect DividerGrab()
+    {
+        if (!_compact) return _dividerRect;
+        var grow = MathF.Max(0f, (TouchMetrics.MinTarget - DividerW) / 2f);
+        return Vertical
+            ? new Rect(
+                _dividerRect.X,
+                _dividerRect.Y - grow,
+                _dividerRect.Width,
+                _dividerRect.Height + grow * 2f
+            )
+            : new Rect(
+                _dividerRect.X - grow,
+                _dividerRect.Y,
+                _dividerRect.Width + grow * 2f,
+                _dividerRect.Height
+            );
     }
 
     /// <summary>The allowed [min, max] range for <see cref="SplitRatio" /> given the current size.</summary>
@@ -109,14 +135,14 @@ public sealed class SplitPane(ThemeData theme, Widget? first = null, Widget? sec
     public override Widget? HitTest(Offset point)
     {
         if (!Bounds.Contains(point.X, point.Y)) return null;
-        if (_dividerRect.Contains(point.X, point.Y)) return this;
+        if (DividerGrab().Contains(point.X, point.Y)) return this;
         var hit = Second?.HitTest(point) ?? First?.HitTest(point);
         return hit ?? this;
     }
 
     public override void OnPointerDown(Offset point)
     {
-        if (!_dividerRect.Contains(point.X, point.Y)) return;
+        if (!DividerGrab().Contains(point.X, point.Y)) return;
         _dragging = true;
         _dragStart = Vertical ? point.Y : point.X;
         _ratioAtDrag = SplitRatio;

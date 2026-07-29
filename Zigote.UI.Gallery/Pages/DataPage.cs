@@ -26,6 +26,11 @@ internal sealed class DataPageState : WidgetState<DataPage>
     {
         var theme = ThemeProvider.Of(context);
 
+        // The window's size class, not the pane's: every section here sits in a grid cell that is
+        // only ~540 px wide on a desktop window, so an AdaptiveBuilder inside one would read
+        // Compact there and hand the desktop the phone arm.
+        var compact = MediaQuery.Of(context).SizeClass == WindowSizeClass.Compact;
+
         var roots = new List<Node> {
             new(
                 "Fruits",
@@ -37,10 +42,13 @@ internal sealed class DataPageState : WidgetState<DataPage>
             new("Vegetables", [new Node("Carrot", []), new Node("Pea", [])]),
         };
 
+        // A drag from rest belongs to the page scroller on touch, so a finger lifts a row by
+        // pressing and holding it.
+        var grab = compact ? "hold to reorder" : "drag to reorder";
         var rows = new List<Widget> {
-            new ListTile(new Icon(MaterialIcons.Home), new Text("First — drag to reorder")),
-            new ListTile(new Icon(MaterialIcons.Settings), new Text("Second — drag to reorder")),
-            new ListTile(new Icon(MaterialIcons.Search), new Text("Third — drag to reorder")),
+            new ListTile(new Icon(MaterialIcons.Home), new Text($"First — {grab}")),
+            new ListTile(new Icon(MaterialIcons.Settings), new Text($"Second — {grab}")),
+            new ListTile(new Icon(MaterialIcons.Search), new Text($"Third — {grab}")),
         };
 
         string[] mail = ["Inbox", "Sent", "Drafts"];
@@ -50,11 +58,16 @@ internal sealed class DataPageState : WidgetState<DataPage>
                 "TreeView",
                 new SizedBox(
                     height: 200,
-                    child: new TreeView<Node>(
-                        roots,
-                        n => n.Children,
-                        n => n.Name,
-                        n => Toast(n.Name)
+                    // TreeView measures to its full row count and scrolls nothing itself, so rows
+                    // past the box were clipped and unreachable; the scroll view also gives the
+                    // tree drag-to-scroll on touch.
+                    child: new SingleChildScrollView(
+                        new TreeView<Node>(
+                            roots,
+                            n => n.Children,
+                            n => n.Name,
+                            n => Toast(n.Name)
+                        )
                     )
                 )
             ),
@@ -80,7 +93,8 @@ internal sealed class DataPageState : WidgetState<DataPage>
                             i => SetStateRebuild(() => _innerTab = i)
                         ),
                         new SizedBox(
-                            height: 72,
+                            // Finger-sized tabs eat most of a 72-px box; give the page below room.
+                            height: compact ? 96 : 72,
                             child: new TabBarView(
                                 [
                                     new Center(new Text("First page")),
@@ -106,16 +120,21 @@ internal sealed class DataPageState : WidgetState<DataPage>
             ),
             Section(
                 "NavigationSplitView",
-                new SizedBox(
-                    height: 220,
-                    child: new NavigationSplitView(
-                        theme,
-                        mail,
-                        i => new Center(new Text($"{mail[i]} detail")),
-                        _navSel,
-                        i => SetStateRebuild(() => _navSel = i)
+                // Side by side the two panes want 160 px each plus a divider that then has nowhere
+                // to travel, and the sidebar labels clip. A phone shows the source list stacked
+                // over the detail instead — the same selection model, one column.
+                compact
+                    ? MailStack(theme, mail)
+                    : new SizedBox(
+                        height: 220,
+                        child: new NavigationSplitView(
+                            theme,
+                            mail,
+                            i => new Center(new Text($"{mail[i]} detail")),
+                            _navSel,
+                            i => SetStateRebuild(() => _navSel = i)
+                        )
                     )
-                )
             ),
             Section(
                 "Toolbar",
@@ -125,6 +144,34 @@ internal sealed class DataPageState : WidgetState<DataPage>
                 )
             )
         );
+    }
+
+    private Widget MailStack(ThemeData theme, string[] mail)
+    {
+        var stack = new Column(crossAxisAlignment: CrossAxisAlignment.Stretch);
+        for (var i = 0; i < mail.Length; i++)
+        {
+            var index = i;
+            stack.Children.Add(
+                new ListTile(
+                    title: new Text(mail[index]),
+                    onPressed: () => SetStateRebuild(() => _navSel = index),
+                    selected: index == _navSel
+                )
+            );
+        }
+
+        stack.Children.Add(new SizedBox(height: 12));
+        stack.Children.Add(
+            new SizedBox(
+                height: 120,
+                child: new ColoredBox(
+                    theme.Fill2,
+                    new Center(new Text($"{mail[_navSel]} detail"))
+                )
+            )
+        );
+        return stack;
     }
 
     private sealed record Node(string Name, List<Node> Children);

@@ -121,6 +121,13 @@ public sealed class GradientEditor : Widget
     private const int RampPixels = 256; // internal raster width; AddImage scales to bounds
     private const double DoubleClickSeconds = 0.35;
 
+    // Effective metrics. A 12×14 colour stop is a mouse affordance; on a phone the handle grows and
+    // the pick tolerance grows further still, so a fingertip lands on the stop it aimed at.
+    private float HalfW => _compact ? 10f : HandleHalfWidth;
+
+    private float StripH => _compact ? 24f : HandleStripHeight;
+
+    private bool _compact;
     private bool _draggingStop;
     private int _lastClickStop = -1;
     private double _lastClickTime;
@@ -167,8 +174,9 @@ public sealed class GradientEditor : Widget
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
+        _compact = TouchMetrics.IsCompact;
         var rawW = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 240f;
-        var h = RampHeight + Gap + HandleStripHeight;
+        var h = RampHeight + Gap + StripH;
         var sz = c.Constrain(new Size(rawW, h));
         _measureW = sz.Width;
         _measureH = sz.Height;
@@ -184,8 +192,8 @@ public sealed class GradientEditor : Widget
             _measureH
         );
         // Inset the ramp by the handle half-width so a stop at t=0 or t=1 stays fully on-screen.
-        var rampX = Bounds.X + HandleHalfWidth;
-        var rampW = MathF.Max(1f, _measureW - HandleHalfWidth * 2f);
+        var rampX = Bounds.X + HalfW;
+        var rampW = MathF.Max(1f, _measureW - HalfW * 2f);
         _rampRect = new Rect(
             rampX,
             Bounds.Y,
@@ -266,9 +274,9 @@ public sealed class GradientEditor : Widget
             for (var s = 0; s < steps; s++)
             {
                 var t = (s + 0.5f) / steps; // 0 at tip, 1 at base
-                var half = HandleHalfWidth * t;
-                var y = tipY + t * HandleStripHeight;
-                var thickness = HandleStripHeight / steps + 1f;
+                var half = HalfW * t;
+                var y = tipY + t * StripH;
+                var thickness = StripH / steps + 1f;
                 paint.AddRect(
                     new Rect(
                         cx - half,
@@ -282,19 +290,19 @@ public sealed class GradientEditor : Widget
 
             // Outline: base bar + a hairline frame so the marker reads against any ramp color.
             var baseRect = new Rect(
-                cx - HandleHalfWidth,
-                stripY + HandleStripHeight - 2f,
-                HandleHalfWidth * 2f,
+                cx - HalfW,
+                stripY + StripH - 2f,
+                HalfW * 2f,
                 2f
             );
             paint.AddRect(baseRect, border);
             if (selected)
                 paint.AddBorder(
                     new Rect(
-                        cx - HandleHalfWidth - 1f,
+                        cx - HalfW - 1f,
                         stripY,
-                        HandleHalfWidth * 2f + 2f,
-                        HandleStripHeight
+                        HalfW * 2f + 2f,
+                        StripH
                     ),
                     _theme.Primary,
                     0f,
@@ -345,14 +353,14 @@ public sealed class GradientEditor : Widget
     private int HandleAt(float x, float y)
     {
         var stripTop = _rampRect.Bottom + Gap;
-        var stripBottom = stripTop + HandleStripHeight;
+        var stripBottom = stripTop + StripH;
         if (y < stripTop - 2f || y > stripBottom + 2f)
             // Also allow grabbing along the whole strip height with a slightly wider band.
             if (y < _rampRect.Bottom || y > stripBottom + 4f)
                 return -1;
 
         var best = -1;
-        var bestDist = HandleHalfWidth + 4f;
+        var bestDist = _compact ? TouchMetrics.MinTarget / 2f : HalfW + 4f;
         var stops = Gradient.Stops;
         for (var i = 0; i < stops.Count; i++)
         {
@@ -532,10 +540,10 @@ public sealed class GradientEditor : Widget
         // Anchor the popover at the handle, in screen space.
         var cx = StopCenterX(stops[stopIndex].Position);
         var anchor = new Rect(
-            cx - HandleHalfWidth,
+            cx - HalfW,
             _rampRect.Bottom + Gap,
-            HandleHalfWidth * 2f,
-            HandleStripHeight
+            HalfW * 2f,
+            StripH
         );
 
         // Track the stop by identity-ish key (position+color at open) so it survives re-sorts.

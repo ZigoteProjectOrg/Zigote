@@ -14,6 +14,7 @@ public class Switch : RenderWidget, ITickerProvider
     private readonly AnimationController _anim;
     private bool _hovered;
     private bool _pressed;
+    private float _hitPadX, _hitPadY;
     private Size _size;
     private ThemeData _theme = ThemeData.Dark;
     private Ticker? _ticker;
@@ -137,7 +138,23 @@ public class Switch : RenderWidget, ITickerProvider
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
         _size = c.Constrain(new Size(TrackW, TrackH));
+        // The 38×22 capsule is half a finger target. Grow the hit rect around the unchanged
+        // track instead of the track itself, so the switch looks identical on every platform.
+        _hitPadX = MathF.Max(0f, (TouchMetrics.AtLeast(_size.Width) - _size.Width) / 2f);
+        _hitPadY = MathF.Max(0f, (TouchMetrics.AtLeast(_size.Height) - _size.Height) / 2f);
         return _size;
+    }
+
+    private Rect HitRect => new(
+        Bounds.X - _hitPadX,
+        Bounds.Y - _hitPadY,
+        Bounds.Width + _hitPadX * 2f,
+        Bounds.Height + _hitPadY * 2f
+    );
+
+    public override Widget? HitTest(Offset point)
+    {
+        return HitRect.Contains(point.X, point.Y) ? this : null;
     }
 
     public override void Layout(Offset origin)
@@ -215,7 +232,7 @@ public class Switch : RenderWidget, ITickerProvider
 
     public override void OnPointerUp(Offset point)
     {
-        if (_pressed && Enabled && Bounds.Contains(point.X, point.Y))
+        if (_pressed && Enabled && HitRect.Contains(point.X, point.Y))
             Toggle();
         if (_pressed)
         {

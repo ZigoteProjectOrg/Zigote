@@ -40,7 +40,9 @@ public sealed class IconButton : StatelessWidget
             if (IconSize is { } s) ic.Size = s;
         }
 
-        var box = (IconSize ?? 24f) + 16f;
+        // 24pt icon + 16 padding is 40 — under the 44pt finger target, and the small icon sizes
+        // toolbars use land near 34. Floor the whole box on a phone; the icon itself is unchanged.
+        var box = TouchMetrics.AtLeast((IconSize ?? 24f) + 16f);
         Widget result = new Pressable {
             Child = new SizedBox(box, box, new Center(_icon)),
             OnPressed = () => OnPressed?.Invoke(),

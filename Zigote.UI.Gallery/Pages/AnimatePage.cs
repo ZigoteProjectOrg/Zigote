@@ -24,6 +24,14 @@ internal sealed class AnimatePage : StatefulWidget
 
 internal sealed class AnimatePageState : WidgetState<AnimatePage>
 {
+    private const string FluentSample =
+        "Text(\"Hello\").Animate().Fade(duration: 500.ms).Scale(delay: 500.ms)";
+
+    // One call per line: as a single 66-character run the sample is ~400 px wide and word-wraps
+    // mid-token inside a phone-width card, which is exactly what a code sample must not do.
+    private const string FluentSampleStacked =
+        "Text(\"Hello\").Animate()\n    .Fade(duration: 500.ms)\n    .Scale(delay: 500.ms)";
+
     public override Widget Build(BuildContext context)
     {
         // Staggered entrance of a small list.
@@ -43,33 +51,41 @@ internal sealed class AnimatePageState : WidgetState<AnimatePage>
                 )
             );
 
+        var replay = new FilledButton(
+            new Text("Replay animations"),
+            () => SetStateRebuild(() => { })
+        );
+        var replayHint = new Text(
+            "Effects play once on mount — rebuild to replay.",
+            new TextStyle(12, color: Colors.Gray)
+        );
+
         return Sections(
             Section(
                 "Replay",
-                new Row(
-                    mainAxisSize: MainAxisSize.Min,
-                    children: [
-                        new FilledButton(
-                            new Text("Replay animations"),
-                            () => SetStateRebuild(() => { })
-                        ),
-                        new SizedBox(12),
-                        new Text(
-                            "Effects play once on mount — rebuild to replay.",
-                            new TextStyle(12, color: Colors.Gray)
-                        ),
-                    ]
-                )
+                // Beside the button the caption gets ~140 px and wraps to three lines at phone
+                // width — stack them there, keep the single row everywhere wider.
+                new AdaptiveBuilder((_, size) => size == WindowSizeClass.Compact
+                    ? new Column(
+                        crossAxisAlignment: CrossAxisAlignment.Start,
+                        children: [replay, new SizedBox(height: 8), replayHint]
+                    )
+                    : new Row(
+                        mainAxisSize: MainAxisSize.Min,
+                        children: [replay, new SizedBox(12), replayHint]
+                    ))
             ),
             Section(
                 "Fluent API — the flutter_animate way",
                 new Column(
                     crossAxisAlignment: CrossAxisAlignment.Start,
                     children: [
-                        new Text(
-                            "Text(\"Hello\").Animate().Fade(duration: 500.ms).Scale(delay: 500.ms)",
+                        // Only the sample re-builds with the size class; the animated text below
+                        // stays put so a resize doesn't replay its entrance.
+                        new AdaptiveBuilder((_, size) => new Text(
+                            size == WindowSizeClass.Compact ? FluentSampleStacked : FluentSample,
                             new TextStyle(12, fontStyle: FontStyle.Italic, color: Colors.Gray)
-                        ),
+                        )),
                         new SizedBox(height: 12),
                         new Text("Hello, Zigote!", new TextStyle(28, fontWeight: FontWeight.Bold))
                             .Animate()

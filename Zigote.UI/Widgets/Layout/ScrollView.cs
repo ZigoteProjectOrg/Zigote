@@ -1,5 +1,6 @@
 using Zigote.Core;
 using Zigote.Core.Paint;
+using Zigote.UI.Host;
 using Zigote.UI.Theme;
 
 namespace Zigote.UI.Widgets.Layout;
@@ -189,17 +190,26 @@ public class ScrollView : RenderWidget
         CurrentScrollParent = this;
         var hit = Child?.HitTest(point);
         if (hit == null) CurrentScrollParent = oldScroll;
+        // Only the final hit widget gets a ScrollParent from the App, so a nested scroller must
+        // record its own here — otherwise the chain ends at this view and a drag it can't consume
+        // (wrong axis, already at the edge) is dropped instead of bubbling to the outer scroller.
+        else ScrollParent = oldScroll;
         return hit ?? this;
     }
 
+    // The strip is a cursor affordance: 14 px is precise under a mouse and, under a finger, sits
+    // exactly where a full-width row's trailing control does — a tap there would jump-scroll
+    // instead of hitting the row. Fingers drag the content itself (CanTouchScroll) and need none of it.
     private bool OverVBar(Offset p)
     {
-        return ScrollVertical && _sy.Max > 0f && p.X >= Bounds.Right - Scrollbar.HitWidth;
+        return !App.PointerIsTouch && ScrollVertical && _sy.Max > 0f &&
+               p.X >= Bounds.Right - Scrollbar.HitWidth;
     }
 
     private bool OverHBar(Offset p)
     {
-        return ScrollHorizontal && _sx.Max > 0f && p.Y >= Bounds.Bottom - Scrollbar.HitWidth;
+        return !App.PointerIsTouch && ScrollHorizontal && _sx.Max > 0f &&
+               p.Y >= Bounds.Bottom - Scrollbar.HitWidth;
     }
 
     public override MouseCursor? GetCursor(Offset point)

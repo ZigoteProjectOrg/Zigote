@@ -13,11 +13,15 @@ namespace Zigote.UI.Material;
 /// </summary>
 internal sealed class FileBrowserList : Widget
 {
-    public const float RowHeight = 26f;
+    private const float PointerRowHeight = 26f;
     private const float DoubleClickSeconds = 0.4f;
     private const float TypeAheadResetSeconds = 1.0f;
 
+    /// <summary>Below this the Name/Size/Modified table collapses to a single Name column.</summary>
+    internal const float MinThreeColumnWidth = 360f;
+
     private readonly FileBrowserModel _model;
+    private bool _compact;
     private int _cursor = -1;
     private int _hover = -1;
     private int _lastClickIndex = -1;
@@ -47,14 +51,24 @@ internal sealed class FileBrowserList : Widget
     /// <summary>The hosting scroll view, for keyboard reveal-into-view.</summary>
     public ScrollView? Scroll { get; set; }
 
+    /// <summary>Row height: the dense 26pt file row on a pointer, a finger target on a phone.</summary>
+    private float RowH =>
+        _compact ? MathF.Max(PointerRowHeight, TouchMetrics.MinTarget) : PointerRowHeight;
+
     public override bool Focusable => true;
     public override bool HandlesDirectionalKeys => true;
 
-    /// <summary>Shared column geometry (used by the header too): name is the flexible remainder.</summary>
+    /// <summary>
+    ///     Shared column geometry (used by the header too): name is the flexible remainder. Below
+    ///     <see cref="MinThreeColumnWidth" /> the 120pt name floor plus Size + Modified is wider than
+    ///     the widget, so the trailing columns would paint past its own bounds — drop them and give
+    ///     the whole row to the name.
+    /// </summary>
     internal static (float Name, float Size, float Modified) Columns(float width)
     {
         const float size = 76f;
         const float modified = 128f;
+        if (width < MinThreeColumnWidth) return (width, 0f, 0f);
         return (MathF.Max(120f, width - size - modified), size, modified);
     }
 
@@ -70,9 +84,10 @@ internal sealed class FileBrowserList : Widget
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
+        _compact = TouchMetrics.IsCompact;
         var w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 560f;
         // Keep some height even when empty so the "empty folder" message has a canvas.
-        var h = MathF.Max(_model.Visible.Count * RowHeight, 120f);
+        var h = MathF.Max(_model.Visible.Count * RowH, 120f);
         _size = c.Constrain(new Size(w, h));
         return _size;
     }
@@ -103,9 +118,9 @@ internal sealed class FileBrowserList : Widget
         var last = rows.Count - 1;
         if (clip is { } cl)
         {
-            first = Math.Max(0, (int)((cl.Y - Bounds.Y) / RowHeight));
-            last = Math.Min(last, (int)((cl.Bottom - Bounds.Y) / RowHeight));
-            _pageRows = Math.Max(3, (int)(cl.Height / RowHeight) - 1);
+            first = Math.Max(0, (int)((cl.Y - Bounds.Y) / RowH));
+            last = Math.Min(last, (int)((cl.Bottom - Bounds.Y) / RowH));
+            _pageRows = Math.Max(3, (int)(cl.Height / RowH) - 1);
         }
 
         var (nameW, sizeW, _) = Columns(_size.Width);
@@ -114,7 +129,7 @@ internal sealed class FileBrowserList : Widget
         for (var i = first; i <= last; i++)
         {
             var entry = rows[i];
-            var rowY = Bounds.Y + i * RowHeight;
+            var rowY = Bounds.Y + i * RowH;
             var selected = _model.IsSelected(entry);
             var bg = selected ? _theme.Primary.WithAlpha(0.26f)
                 : i == _hover ? _theme.OnSurface.WithAlpha(0.06f)
@@ -125,7 +140,7 @@ internal sealed class FileBrowserList : Widget
                         Bounds.X + 4f,
                         rowY + 1f,
                         _size.Width - 8f,
-                        RowHeight - 2f
+                        RowH - 2f
                     ),
                     bg,
                     Radii.Sm
@@ -139,13 +154,13 @@ internal sealed class FileBrowserList : Widget
                     Bounds.X + 10f,
                     rowY,
                     16f,
-                    RowHeight
+                    RowH
                 ),
                 iconColor,
                 15f
             );
 
-            var textY = rowY + (RowHeight - fs) / 2f + fs * 0.8f;
+            var textY = rowY + (RowH - fs) / 2f + fs * 0.8f;
             var fg = entry.IsHidden ? _theme.TextMuted : _theme.OnSurface;
 
             // Clip the name to its column so long names never bleed into Size/Modified.
@@ -154,7 +169,7 @@ internal sealed class FileBrowserList : Widget
                     Bounds.X,
                     rowY,
                     nameW - 6f,
-                    RowHeight
+                    RowH
                 )
             );
             paint.AddText(
@@ -165,6 +180,8 @@ internal sealed class FileBrowserList : Widget
                 fs
             );
             paint.AddClipEnd();
+
+            if (sizeW <= 0f) continue; // narrow layout: name is the only column
 
             if (!entry.IsDirectory)
                 paint.AddText(
@@ -205,7 +222,7 @@ internal sealed class FileBrowserList : Widget
     private int RowIndexAt(Offset point)
     {
         if (!Bounds.Contains(point.X, point.Y)) return -1;
-        var idx = (int)((point.Y - Bounds.Y) / RowHeight);
+        var idx = (int)((point.Y - Bounds.Y) / RowH);
         return idx >= 0 && idx < _model.Visible.Count ? idx : -1;
     }
 
@@ -242,8 +259,14 @@ internal sealed class FileBrowserList : Widget
         var range = (mods & Modifiers.Shift) != 0;
 
         var time = App.Active?.Time ?? 0f;
-        var isDoubleClick = !toggle && !range && idx == _lastClickIndex &&
-                            time - _lastClickTime < DoubleClickSeconds;
+        // Double-tap-to-open is a mouse idiom with no phone equivalent, and it is the only way into
+        // a directory. On a phone a single tap activates — except in multi-select, where tapping
+        // must keep building a selection rather than confirming the first file touched.
+        var singleTapOpens = _compact &&
+                             (_model.Visible[idx].IsDirectory || !_model.AllowMultiSelect);
+        var isDoubleClick = !toggle && !range &&
+                            (singleTapOpens || (idx == _lastClickIndex &&
+                                                time - _lastClickTime < DoubleClickSeconds));
         _lastClickIndex = idx;
         _lastClickTime = time;
 
@@ -352,7 +375,7 @@ internal sealed class FileBrowserList : Widget
         if ((uint)index >= (uint)_model.Visible.Count) return;
         _cursor = index;
         _model.SelectIndex(index, range: extend);
-        Scroll?.EnsureVisible(index * RowHeight, RowHeight);
+        Scroll?.EnsureVisible(index * RowH, RowH);
         OnSelectionChanged?.Invoke();
         MarkNeedsPaint();
     }
@@ -418,8 +441,12 @@ internal sealed class FileBrowserHeader : Widget
 {
     public const float Height = 24f;
     private readonly FileBrowserModel _model;
+    private bool _compact;
     private Size _size;
     private ThemeData _theme = ThemeData.Dark;
+
+    /// <summary>Sort targets are the whole strip height, so it grows with the finger.</summary>
+    private float BarHeight => _compact ? MathF.Max(Height, TouchMetrics.MinTarget) : Height;
 
     public FileBrowserHeader(FileBrowserModel model)
     {
@@ -431,8 +458,9 @@ internal sealed class FileBrowserHeader : Widget
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
+        _compact = TouchMetrics.IsCompact;
         var w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 560f;
-        _size = c.Constrain(new Size(w, Height));
+        _size = c.Constrain(new Size(w, BarHeight));
         return _size;
     }
 
@@ -450,11 +478,21 @@ internal sealed class FileBrowserHeader : Widget
     {
         var (nameW, sizeW, _) = FileBrowserList.Columns(_size.Width);
         var fs = _theme.FontSizeCaption - 1f;
-        var textY = Bounds.Y + (Height - fs) / 2f + fs * 0.8f;
+        var textY = Bounds.Y + (Bounds.Height - fs) / 2f + fs * 0.8f;
 
         DrawLabel(paint, "Name", FileSortColumn.Name, Bounds.X + 32f, textY, fs);
-        DrawLabel(paint, "Size", FileSortColumn.Size, Bounds.X + nameW, textY, fs);
-        DrawLabel(paint, "Modified", FileSortColumn.Modified, Bounds.X + nameW + sizeW, textY, fs);
+        if (sizeW > 0f)
+        {
+            DrawLabel(paint, "Size", FileSortColumn.Size, Bounds.X + nameW, textY, fs);
+            DrawLabel(
+                paint,
+                "Modified",
+                FileSortColumn.Modified,
+                Bounds.X + nameW + sizeW,
+                textY,
+                fs
+            );
+        }
         paint.AddRect(
             new Rect(
                 Bounds.X,
@@ -485,7 +523,7 @@ internal sealed class FileBrowserHeader : Widget
                     x + label.Length * fs * 0.62f + 2f,
                     Bounds.Y,
                     12f,
-                    Height
+                    Bounds.Height
                 ),
                 _theme.TextSecondary,
                 12f
@@ -495,6 +533,13 @@ internal sealed class FileBrowserHeader : Widget
     public override void OnPointerDown(Offset point)
     {
         var (nameW, sizeW, _) = FileBrowserList.Columns(_size.Width);
+        if (sizeW <= 0f)
+        {
+            // Narrow layout: Name is the only column, so every tap re-sorts (and flips) by name.
+            OnSort?.Invoke(FileSortColumn.Name);
+            return;
+        }
+
         var x = point.X - Bounds.X;
         var column = x < nameW ? FileSortColumn.Name
             : x < nameW + sizeW ? FileSortColumn.Size

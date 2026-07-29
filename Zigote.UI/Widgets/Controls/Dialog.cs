@@ -128,9 +128,14 @@ public class Dialog : RenderWidget, IDismissableOverlay, ITickerProvider
         // width is bounded by a ConstrainedBox), with an absolute width cap for large monitors.
         // A *Fraction (when set) instead sizes the card to a fixed fraction of the window — for large
         // editor surfaces that should fill most of the screen rather than hug their content.
+        // A phone-width window has no room to give 20% away: the 0.8 fraction leaves 312 px of 390
+        // for a card whose content minimum is 280. Below Compact the sheet takes the whole width
+        // less a real edge margin instead.
         var maxW = WidthFraction > 0f
             ? _size.Width * WidthFraction
-            : MathF.Min(_size.Width * 0.8f, 560f);
+            : _size.Width < WindowSize.CompactMax
+                ? MathF.Max(0f, _size.Width - Spacing.Xl * 2f)
+                : MathF.Min(_size.Width * 0.8f, 560f);
         var maxH = HeightFraction > 0f ? _size.Height * HeightFraction : _size.Height * 0.85f;
         var minW = WidthFraction > 0f ? maxW : 0f;
         var minH = HeightFraction > 0f ? maxH : 0f;

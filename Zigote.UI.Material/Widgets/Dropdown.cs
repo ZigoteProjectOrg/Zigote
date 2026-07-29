@@ -92,7 +92,7 @@ public class Dropdown<T>(
         _theme = ThemeProvider.Of(BuildContext.Current);
         var w = MathF.Max(MinWidth, c.MaxWidth);
         w = float.IsPositiveInfinity(w) ? MinWidth : w;
-        _size = c.Constrain(new Size(w, Height));
+        _size = c.Constrain(new Size(w, TouchMetrics.AtLeast(Height)));
         return _size;
     }
 
@@ -229,7 +229,6 @@ public class Dropdown<T>(
 /// </summary>
 internal sealed class DropdownPopup : RenderWidget, IDismissableOverlay, ITickerProvider
 {
-    private const float RowH = ControlMetrics.MenuRowHeight;
     private const float CheckW = Spacing.Xl; // left gutter reserved for the selected ✓
     private const float MaxPopupH = 360f;
 
@@ -242,10 +241,16 @@ internal sealed class DropdownPopup : RenderWidget, IDismissableOverlay, ITicker
     private readonly Action<int> _onPick;
     private readonly int _selected;
 
+    private bool _compact;
     private int _hovered = -1;
     private float _maxScroll;
     private float _popupH;
     private float _popupW;
+    private int _pressedRow = -1;
+
+    /// <summary>Row height: the dense menu rhythm on a pointer, a finger target on a phone.</summary>
+    private float _rowH = ControlMetrics.MenuRowHeight;
+
     private Size _screen;
     private bool _scrolledToSelection;
     private float _scrollY;
@@ -310,6 +315,8 @@ internal sealed class DropdownPopup : RenderWidget, IDismissableOverlay, ITicker
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
         _screen = new Size(c.MaxWidth, c.MaxHeight);
+        _compact = TouchMetrics.IsCompact;
+        _rowH = TouchMetrics.Pick(ControlMetrics.MenuRowHeight);
 
         var fs = _theme.FontSizeBody;
         var widest = _labels.Aggregate(
@@ -317,8 +324,11 @@ internal sealed class DropdownPopup : RenderWidget, IDismissableOverlay, ITicker
             (current, l) => MathF.Max(current, TextMeasure.Width(l, fs, fontFamily: _fontFamily))
         );
         _popupW = MathF.Max(_minWidth, MathF.Max(_anchor.Width, widest + CheckW + Spacing.Md));
+        // OverlayPositioning only shifts the popup, so a long label would otherwise push rows off
+        // a phone screen where they can never be tapped. Rows clip their text at the surface.
+        _popupW = MathF.Min(_popupW, MathF.Max(_minWidth, _screen.Width - Spacing.Lg));
 
-        var content = _labels.Length * RowH;
+        var content = _labels.Length * _rowH;
         var cap = MathF.Min(MaxPopupH, _screen.Height - 16f);
         _popupH = MathF.Min(content, cap);
         _maxScroll = MathF.Max(0f, content - _popupH);
@@ -327,7 +337,11 @@ internal sealed class DropdownPopup : RenderWidget, IDismissableOverlay, ITicker
         if (_scrolledToSelection) return _screen;
         _scrolledToSelection = true;
         if (_maxScroll > 0f && _selected >= 0)
-            _scrollY = Math.Clamp(_selected * RowH - _popupH * 0.5f + RowH * 0.5f, 0f, _maxScroll);
+            _scrollY = Math.Clamp(
+                _selected * _rowH - _popupH * 0.5f + _rowH * 0.5f,
+                0f,
+                _maxScroll
+            );
 
         return _screen;
     }
@@ -364,20 +378,20 @@ internal sealed class DropdownPopup : RenderWidget, IDismissableOverlay, ITicker
         paint.AddClipStart(mr);
         for (var i = 0; i < _labels.Length; i++)
         {
-            var rowY = mr.Y + i * RowH - _scrollY;
-            if (rowY + RowH <= mr.Y || rowY >= mr.Bottom) continue; // outside the visible window
+            var rowY = mr.Y + i * _rowH - _scrollY;
+            if (rowY + _rowH <= mr.Y || rowY >= mr.Bottom) continue; // outside the visible window
 
             var row = new Rect(
                 mr.X,
                 rowY,
                 _popupW,
-                RowH
+                _rowH
             );
             var hovered = i == _hovered;
             if (hovered) paint.AddRect(row, _theme.Selection, Radii.Xs);
 
             var fg = hovered ? _theme.OnPrimary : _theme.OnSurface;
-            var baseline = row.Y + (RowH - fs) / 2f + fs * 0.8f;
+            var baseline = row.Y + (_rowH - fs) / 2f + fs * 0.8f;
             if (i == _selected)
                 Icons.DrawAt(
                     paint,
@@ -402,7 +416,7 @@ internal sealed class DropdownPopup : RenderWidget, IDismissableOverlay, ITicker
         // Slim scrollbar thumb when the list overflows.
         if (_maxScroll > 0f)
         {
-            var thumb = MathF.Max(24f, mr.Height * (_popupH / (_labels.Length * RowH)));
+            var thumb = MathF.Max(24f, mr.Height * (_popupH / (_labels.Length * _rowH)));
             var thumbY = mr.Y + (mr.Height - thumb) * (_scrollY / _maxScroll);
             paint.AddRect(
                 new Rect(
@@ -429,7 +443,7 @@ internal sealed class DropdownPopup : RenderWidget, IDismissableOverlay, ITicker
     private int RowAt(Rect mr, float y)
     {
         if (y < mr.Y || y >= mr.Bottom) return -1;
-        var idx = (int)((y - mr.Y + _scrollY) / RowH);
+        var idx = (int)((y - mr.Y + _scrollY) / _rowH);
         return idx >= 0 && idx < _labels.Length ? idx : -1;
     }
 
@@ -460,15 +474,64 @@ internal sealed class DropdownPopup : RenderWidget, IDismissableOverlay, ITicker
 
         var idx = RowAt(mr, point.Y);
         if (idx < 0) return;
+
+        // A finger that lands on a row must still be able to start a scroll drag, so on a phone the
+        // pick commits on lift; a pointer keeps the press-to-select menu behaviour.
+        if (_compact)
+        {
+            _pressedRow = _hovered = idx;
+            MarkNeedsPaint();
+            return;
+        }
+
         // Pop before invoking — the callback may itself open overlays, which must land on a clean list.
         Dismiss();
         _onPick(idx);
     }
 
+    public override void OnPointerUp(Offset point)
+    {
+        var pressed = _pressedRow;
+        _pressedRow = -1;
+        if (pressed < 0) return;
+
+        var mr = PopupRect();
+        if (!mr.Contains(point.X, point.Y) || RowAt(mr, point.Y) != pressed)
+        {
+            _hovered = -1;
+            MarkNeedsPaint();
+            return;
+        }
+
+        Dismiss();
+        _onPick(pressed);
+    }
+
+    public override void OnPointerCancel()
+    {
+        if (_pressedRow < 0 && _hovered < 0) return;
+        _pressedRow = -1;
+        _hovered = -1;
+        MarkNeedsPaint();
+    }
+
     public override void OnScroll(float dx, float dy)
     {
         if (_maxScroll <= 0f) return;
-        _scrollY = Math.Clamp(_scrollY - dy * RowH * 3f, 0f, _maxScroll);
+        _scrollY = Math.Clamp(_scrollY - dy * _rowH * 3f, 0f, _maxScroll);
+        MarkNeedsPaint();
+    }
+
+    // A popup taller than its cap is wheel-only otherwise — the 3pt thumb is paint, not a handle.
+    public override bool CanTouchScroll(bool vertical)
+    {
+        return vertical && _maxScroll > 0f;
+    }
+
+    public override void OnTouchScroll(float dx, float dy)
+    {
+        if (_maxScroll <= 0f) return;
+        _scrollY = Math.Clamp(_scrollY - dy, 0f, _maxScroll);
         MarkNeedsPaint();
     }
 }

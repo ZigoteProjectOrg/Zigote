@@ -14,6 +14,10 @@ internal sealed class EditorsPage : StatelessWidget
 {
     protected override Widget Build(BuildContext context)
     {
+        // Built here, not inside the AdaptiveBuilder below: that builder re-runs on every
+        // constraints change, and a fresh editor there would drop the typed text on a resize.
+        var code = new CodeEditor("void Main()\n{\n    Console.WriteLine(\"Hello, Zigote!\");\n}");
+
         return Sections(
             Section(
                 "Color picker",
@@ -53,10 +57,12 @@ internal sealed class EditorsPage : StatelessWidget
             ),
             Section(
                 "Code editor",
-                new SizedBox(
-                    height: 170,
-                    child: new CodeEditor(
-                        "void Main()\n{\n    Console.WriteLine(\"Hello, Zigote!\");\n}"
+                // The editor scrolls its own content with the wheel only, so on a phone whatever
+                // the box shows is all that is reachable — give the sample room to fit uncut.
+                new AdaptiveBuilder(
+                    (_, size) => new SizedBox(
+                        height: size == WindowSizeClass.Compact ? 220 : 170,
+                        child: code
                     )
                 )
             )

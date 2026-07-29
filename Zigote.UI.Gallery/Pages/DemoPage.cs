@@ -26,6 +26,10 @@ internal sealed class DemoPage : StatelessWidget
     {
         var l = GalleryL10n.Of(context);
 
+        // The soft keyboard hides the bottom strip of the window; pad the scroll content by it so
+        // a focused field can still be scrolled clear of it. Zero everywhere without an IME.
+        var keyboard = MediaQuery.Of(context).ViewInsets.Bottom;
+
         return new Scaffold(
             new AppBar(
                 new Text(_demo.Title(l)),
@@ -35,7 +39,10 @@ internal sealed class DemoPage : StatelessWidget
                 centerTitle: true
             ),
             new SingleChildScrollView {
-                Child = new Padding(EdgeInsets.All(16), _demo.BuildPage()),
+                Child = new Padding(
+                    EdgeInsets.FromLtrb(16, 16, 16, 16 + keyboard),
+                    _demo.BuildPage()
+                ),
             }
         );
     }

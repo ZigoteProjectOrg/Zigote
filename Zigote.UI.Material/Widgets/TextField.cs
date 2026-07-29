@@ -549,7 +549,9 @@ public class TextField : Widget, ITextInputClient
         _theme = ThemeProvider.Of(BuildContext.Current);
         if (!Multiline)
         {
-            _size = c.Constrain(new Size(MinWidth, Height));
+            // A form field is the primary target on a phone; 28pt is too shallow to tap reliably.
+            // (A tight parent constraint still wins, so composed hosts keep their own geometry.)
+            _size = c.Constrain(new Size(MinWidth, TouchMetrics.AtLeast(Height)));
             return _size;
         }
 

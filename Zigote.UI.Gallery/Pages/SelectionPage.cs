@@ -121,25 +121,39 @@ internal sealed class SelectionPageState : WidgetState<SelectionPage>
                 new Column(
                     crossAxisAlignment: CrossAxisAlignment.Start,
                     children: [
+                        // The tap intent feeds LabeledRow's phone arm, where the whole row — not
+                        // the glyph a finger can barely hit — is the target.
                         LabeledRow(
                             new Checkbox(s.Checked, _store.SetChecked),
-                            s.Checked ? "Checked" : "Unchecked"
+                            s.Checked ? "Checked" : "Unchecked",
+                            () => _store.SetChecked(!s.Checked)
                         ),
                         new SizedBox(height: 8),
                         LabeledRow(
                             new Switch(s.SwitchOn, _store.SetSwitch),
-                            s.SwitchOn ? "On" : "Off"
+                            s.SwitchOn ? "On" : "Off",
+                            () => _store.SetSwitch(!s.SwitchOn)
                         ),
                     ]
                 )
             ),
             Section(
                 "Radio group",
-                new Row(
-                    [
-                        Radio(s, 0, "One"), Radio(s, 1, "Two"), Radio(s, 2, "Three"),
-                    ]
-                )
+                // Finger-sized radios turn three inline options into most of a phone-width card;
+                // Wrap gives the run somewhere to go instead of painting past the card edge.
+                new AdaptiveBuilder((_, size) => size == WindowSizeClass.Compact
+                    ? new Wrap(
+                        spacing: 0,
+                        runSpacing: 4,
+                        children: [
+                            Radio(s, 0, "One"), Radio(s, 1, "Two"), Radio(s, 2, "Three"),
+                        ]
+                    )
+                    : new Row(
+                        [
+                            Radio(s, 0, "One"), Radio(s, 1, "Two"), Radio(s, 2, "Three"),
+                        ]
+                    ))
             ),
             Section(
                 "Slider",
@@ -191,7 +205,11 @@ internal sealed class SelectionPageState : WidgetState<SelectionPage>
     {
         return new Padding(
             EdgeInsets.Only(right: 12),
-            LabeledRow(new Radio<int>(value, s.Radio, _store.SetRadio), label)
+            LabeledRow(
+                new Radio<int>(value, s.Radio, _store.SetRadio),
+                label,
+                () => _store.SetRadio(value)
+            )
         );
     }
 }

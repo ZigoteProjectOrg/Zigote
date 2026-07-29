@@ -56,7 +56,8 @@ public sealed class ColorSwatchField : Widget
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        _size = c.Constrain(new Size(Width, Height));
+        // The swatch is the whole trigger for the picker popover; 22pt tall is not a finger target.
+        _size = c.Constrain(new Size(Width, TouchMetrics.AtLeast(Height)));
         return _size;
     }
 
@@ -170,7 +171,10 @@ public sealed class ColorSwatchField : Widget
 
         public override Size Measure(Constraints c)
         {
-            _s = new Size(18f, 18f);
+            // 18pt presets with 4pt gutters are a mouse grid; five 36pt chips still fit the 220pt
+            // popover and each one is finally aimable.
+            var d = TouchMetrics.Pick(18f, 36f);
+            _s = new Size(d, d);
             return _s;
         }
 
@@ -179,8 +183,8 @@ public sealed class ColorSwatchField : Widget
             Bounds = new Rect(
                 origin.X,
                 origin.Y,
-                18f,
-                18f
+                _s.Width,
+                _s.Height
             );
         }
 

@@ -59,6 +59,7 @@ public sealed class ContextMenu : RenderWidget, ITickerProvider
     private int _openSubmenuIdx = -1;
     private ContextMenu? _parentMenu; // the menu that opened this one (null for the root)
     private Offset _pos;
+    private EdgeInsets _safe;
     private Size _screen;
     private ContextMenu? _submenu;
     private ThemeData _theme = ThemeData.Dark;
@@ -156,8 +157,17 @@ public sealed class ContextMenu : RenderWidget, ITickerProvider
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
         _screen = new Size(c.MaxWidth, c.MaxHeight);
-        _menuW = MeasureMenuWidth();
+        _safe = MediaQuery.Of(BuildContext.Current).Padding;
+        // Clamping can only shift a surface, never shrink it — so cap the width here or a long
+        // label runs off a phone screen and takes its whole row out of reach.
+        _menuW = MathF.Min(MeasureMenuWidth(), MathF.Max(80f, UsableWidth() - Spacing.Lg));
         return _screen;
+    }
+
+    /// <summary>Screen width actually available to a menu (safe area excluded).</summary>
+    private float UsableWidth()
+    {
+        return _screen.Width - _safe.Horizontal;
     }
 
     public override void Layout(Offset origin)
@@ -170,10 +180,17 @@ public sealed class ContextMenu : RenderWidget, ITickerProvider
         );
     }
 
-    /// <summary>Row height for an item — separators get a slim divider row, everything else is uniform.</summary>
-    private static float RowHeight(ContextMenuItem item)
+    /// <summary>
+    ///     Row height for an item — separators get a slim divider row, everything else is uniform.
+    ///     The macOS 22 pt row is a precise cursor target but half a fingertip, and the touch slop
+    ///     alone is larger than it: at phone width rows take the finger target instead.
+    /// </summary>
+    private float RowHeight(ContextMenuItem item)
     {
-        return item.Separator ? SeparatorH : ControlMetrics.MenuRowHeight;
+        if (item.Separator) return SeparatorH;
+        return WindowSize.ClassFor(UsableWidth()) == WindowSizeClass.Compact
+            ? ControlMetrics.MinTouchTarget
+            : ControlMetrics.MenuRowHeight;
     }
 
     /// <summary>
@@ -229,7 +246,7 @@ public sealed class ContextMenu : RenderWidget, ITickerProvider
             size.Width,
             size.Height
         );
-        return OverlayPositioning.Clamp(raw, _screen);
+        return OverlayPositioning.Clamp(raw, _screen, safe: _safe);
     }
 
     public override void Paint(PaintList paint)
@@ -246,6 +263,10 @@ public sealed class ContextMenu : RenderWidget, ITickerProvider
         paint.AddElevation(mr, Radii.Lg, Elevation.Z2);
         paint.AddRect(mr, _theme.Surface, Radii.Lg);
         paint.AddBorder(mr, _theme.Separator, Radii.Lg);
+
+        // Rows are painted from measured text that can exceed the clamped menu width on a narrow
+        // screen; clip so an over-long label ends at the surface instead of over the page.
+        paint.AddClipStart(mr);
 
         var fs = _theme.FontSizeBody;
         var y = mr.Y;
@@ -346,6 +367,8 @@ public sealed class ContextMenu : RenderWidget, ITickerProvider
                 );
             }
         }
+
+        paint.AddClipEnd();
 
         if (rise > 0.01f) paint.PopTranslate();
         if (fade) paint.PopAlpha();
@@ -449,25 +472,7 @@ public sealed class ContextMenu : RenderWidget, ITickerProvider
 
         if (hasChildren && _openSubmenuIdx != idx)
         {
-            // Close any previously open submenu
-            _submenu?.Dismiss();
-            _submenu = null;
-
-            _openSubmenuIdx = idx;
-
-            // Open submenu at the right edge of this menu, aligned to the parent row.
-            var rowTop = mr.Y;
-            for (var i = 0; i < idx; i++) rowTop += RowHeight(Items[i]);
-
-            _submenu = new ContextMenu(_app, [.. item.Children!]);
-            // Submenu shares the screen overlay but we position it manually
-            _submenu._parentMenu = this; // owner link so item-select can dismiss the whole chain
-            _submenu._screen = _screen;
-            _submenu._theme = _theme;
-            _submenu._menuW = _submenu.MeasureMenuWidth();
-            _submenu._pos = new Offset(mr.Right, rowTop);
-            _submenu.PlayEnter();
-            MarkNeedsPaint();
+            OpenSubmenu(idx, mr);
         }
         else if (!hasChildren && _openSubmenuIdx >= 0)
         {
@@ -476,6 +481,50 @@ public sealed class ContextMenu : RenderWidget, ITickerProvider
             _openSubmenuIdx = -1;
             MarkNeedsPaint();
         }
+    }
+
+    /// <summary>
+    ///     Replace any open submenu with the one belonging to row <paramref name="idx" />, placed
+    ///     beside its parent row.
+    /// </summary>
+    private void OpenSubmenu(int idx, Rect mr)
+    {
+        _submenu?.Dismiss();
+        _submenu = null;
+        _openSubmenuIdx = idx;
+
+        var rowTop = mr.Y;
+        for (var i = 0; i < idx; i++) rowTop += RowHeight(Items[i]);
+        var row = new Rect(
+            mr.X,
+            rowTop,
+            _menuW,
+            RowHeight(Items[idx])
+        );
+
+        _submenu = new ContextMenu(_app, [.. Items[idx].Children!]);
+        // Submenu shares the screen overlay but we position it manually
+        _submenu._parentMenu = this; // owner link so item-select can dismiss the whole chain
+        _submenu._screen = _screen;
+        _submenu._safe = _safe;
+        _submenu._theme = _theme;
+        _submenu._menuW = MathF.Min(
+            _submenu.MeasureMenuWidth(),
+            MathF.Max(80f, UsableWidth() - Spacing.Lg)
+        );
+        // Anchored rather than "right edge of the parent": on a narrow screen the parent already
+        // spans most of the width, and a fixed right placement would clamp back on top of it.
+        var placed = OverlayPositioning.Anchored(
+            row,
+            new Size(_submenu._menuW, _submenu.TotalHeight()),
+            _screen,
+            OverlaySide.Right,
+            0f,
+            safe: _safe
+        );
+        _submenu._pos = new Offset(placed.X, placed.Y);
+        _submenu.PlayEnter();
+        MarkNeedsPaint();
     }
 
     public override void OnPointerDown(Offset point)
@@ -503,8 +552,14 @@ public sealed class ContextMenu : RenderWidget, ITickerProvider
         {
             var item = Items[idx];
             if (item.Separator || !item.IsEnabled) return;
-            // Submenu parent items open on hover; clicking them does nothing
-            if (item.Children is { Count: > 0 }) return;
+            // Submenu parents open on hover — which fingers do not produce, so a tap has to open
+            // them as well. On desktop the row is already open by the time the click lands, so
+            // this is a no-op there.
+            if (item.Children is { Count: > 0 })
+            {
+                if (_openSubmenuIdx != idx) OpenSubmenu(idx, mr);
+                return;
+            }
 
             if (item.OnSelect is { } sel)
             {

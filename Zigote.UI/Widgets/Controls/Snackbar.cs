@@ -38,6 +38,7 @@ public sealed class Snackbar(
 
     // Action button hit-rect, recomputed in Layout to match the painted label exactly.
     private Rect _actionRect;
+    private EdgeInsets _safe;
     private Size _screen;
     private ThemeData _theme = ThemeData.Dark;
 
@@ -59,6 +60,9 @@ public sealed class Snackbar(
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
         _screen = new Size(c.MaxWidth, c.MaxHeight);
+        // The toast is an app-level overlay, outside the root SafeArea — without the device insets
+        // it sits on top of the home indicator.
+        _safe = MediaQuery.Of(BuildContext.Current).Padding;
         return _screen;
     }
 
@@ -100,6 +104,10 @@ public sealed class Snackbar(
         paint.AddElevation(sRect, Radii.Lg, Elevation.Z2);
         paint.AddRect(sRect, ToastSurface, Radii.Lg);
 
+        // The surface is capped at the screen width but the message is drawn at its measured
+        // width — clip so a long message ends at the toast instead of running off-screen.
+        paint.AddClipStart(sRect);
+
         var fs = _theme.FontSizeBody;
         var baselineY = sRect.Y + (Height - fs) / 2f + fs * 0.8f;
 
@@ -125,6 +133,7 @@ public sealed class Snackbar(
             );
         }
 
+        paint.AddClipEnd();
         paint.PopAlpha();
     }
 
@@ -170,10 +179,11 @@ public sealed class Snackbar(
             actionW = TextMeasure.Width(actionLabel, fs, FontWeight.Bold) + ActionPadH * 2f;
 
         var innerW = msgW + (actionW > 0f ? Gap + actionW : 0f);
-        var surfaceW = MathF.Min(innerW + PadH * 2f, MathF.Max(120f, _screen.Width - 32f));
+        var usableW = _screen.Width - _safe.Horizontal;
+        var surfaceW = MathF.Min(innerW + PadH * 2f, MathF.Max(120f, usableW - 32f));
 
-        var surfaceX = (_screen.Width - surfaceW) / 2f;
-        var surfaceY = _screen.Height - Height - BottomMargin;
+        var surfaceX = _safe.Left + (usableW - surfaceW) / 2f;
+        var surfaceY = _screen.Height - _safe.Bottom - Height - BottomMargin;
 
         var surface = OverlayPositioning.Clamp(
             new Rect(
@@ -183,7 +193,8 @@ public sealed class Snackbar(
                 Height
             ),
             _screen,
-            BottomMargin
+            BottomMargin,
+            _safe
         );
 
         var messageX = PadH;

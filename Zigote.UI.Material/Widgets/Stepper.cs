@@ -75,7 +75,11 @@ public class Stepper : Widget
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        _size = c.Constrain(new Size(GroupWidth, HalfHeight * 2f));
+        // 18×22 halves are the smallest targets in the set. Give each half a full finger box on a
+        // phone — Paint and HalfAt both derive from Bounds, so the geometry follows for free.
+        _size = c.Constrain(
+            new Size(TouchMetrics.Pick(GroupWidth), TouchMetrics.Pick(HalfHeight) * 2f)
+        );
         return _size;
     }
 

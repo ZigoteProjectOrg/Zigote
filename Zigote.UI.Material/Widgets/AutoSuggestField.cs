@@ -146,11 +146,12 @@ public sealed class AutoSuggestField : Widget
 
     private sealed class SuggestionPopup : Widget
     {
-        private const float RowH = 22f;
+        private const float PointerRowH = 22f;
         private const int MaxRows = 10;
         private readonly Func<Rect> _anchor;
         private readonly Action<string> _onPick;
         private int _hover = -1;
+        private float _rowH = PointerRowH;
         private Size _screen;
         private ThemeData _theme = ThemeData.Dark;
 
@@ -174,6 +175,7 @@ public sealed class AutoSuggestField : Widget
         {
             _theme = ThemeProvider.Of(BuildContext.Current);
             _screen = new Size(c.MaxWidth, c.MaxHeight);
+            _rowH = TouchMetrics.Pick(PointerRowH);
             return _screen;
         }
 
@@ -187,11 +189,24 @@ public sealed class AutoSuggestField : Widget
             );
         }
 
+        /// <summary>
+        ///     How many rows the popup shows. The list does not scroll, so the cap is whichever is
+        ///     smaller: the row budget, or what actually fits beside the anchor on this screen —
+        ///     a 44pt-row phone list would otherwise run off the bottom with no way to reach it.
+        /// </summary>
+        private int VisibleRows()
+        {
+            var a = _anchor();
+            var room = MathF.Max(a.Y, _screen.Height - a.Bottom) - 8f;
+            var fits = _rowH > 0f ? (int)MathF.Floor((room - 4f) / _rowH) : MaxRows;
+            return Math.Max(1, Math.Min(Math.Min(Items.Count, MaxRows), fits));
+        }
+
         private Rect ListRect()
         {
             var a = _anchor();
-            var rows = Math.Min(Items.Count, MaxRows);
-            var h = rows * RowH + 4f;
+            var rows = VisibleRows();
+            var h = rows * _rowH + 4f;
             var w = MathF.Max(a.Width, 180f);
             return OverlayPositioning.Anchored(
                 a,
@@ -211,16 +226,16 @@ public sealed class AutoSuggestField : Widget
             paint.AddBorder(lr, _theme.Separator, Radii.Md);
 
             var fs = _theme.FontSizeCaption;
-            var rows = Math.Min(Items.Count, MaxRows);
+            var rows = VisibleRows();
             paint.AddClipStart(lr);
             for (var i = 0; i < rows; i++)
             {
-                var ry = lr.Y + 2f + i * RowH;
+                var ry = lr.Y + 2f + i * _rowH;
                 var row = new Rect(
                     lr.X,
                     ry,
                     lr.Width,
-                    RowH
+                    _rowH
                 );
                 if (i == _hover) paint.AddRect(row, _theme.Selection, Radii.Xs);
 
@@ -229,7 +244,7 @@ public sealed class AutoSuggestField : Widget
                 paint.AddText(
                     disp,
                     lr.X + Spacing.Sm,
-                    ry + RowH * 0.72f,
+                    ry + _rowH * 0.72f,
                     fg,
                     fs
                 );
@@ -242,7 +257,7 @@ public sealed class AutoSuggestField : Widget
                     paint.AddText(
                         val,
                         lr.X + Spacing.Sm + dispW + Spacing.Sm,
-                        ry + RowH * 0.72f,
+                        ry + _rowH * 0.72f,
                         tail,
                         fs - 1f
                     );
@@ -256,8 +271,8 @@ public sealed class AutoSuggestField : Widget
         {
             var lr = ListRect();
             if (!lr.Contains(p.X, p.Y)) return -1;
-            var idx = (int)((p.Y - lr.Y - 2f) / RowH);
-            return idx >= 0 && idx < Math.Min(Items.Count, MaxRows) ? idx : -1;
+            var idx = (int)((p.Y - lr.Y - 2f) / _rowH);
+            return idx >= 0 && idx < VisibleRows() ? idx : -1;
         }
 
         public override Widget? HitTest(Offset point)

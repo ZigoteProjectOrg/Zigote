@@ -16,6 +16,11 @@ public sealed class Toolbar : Widget
     private const float Gap = Spacing.Sm;
 
     private Size[] _leadSizes = [];
+    private float _overflow;
+
+    /// <summary>How far the strip is scrolled when its children are wider than the bar.</summary>
+    private float _scrollX;
+
     private Size _size;
     private ThemeData _theme = ThemeData.Dark;
     private Size[] _trailSizes = [];
@@ -57,6 +62,12 @@ public sealed class Toolbar : Widget
 
         var width = float.IsFinite(c.MaxWidth) ? c.MaxWidth : MeasureIntrinsicWidth();
         _size = c.Constrain(new Size(width, h));
+
+        // Leading packs left and trailing packs right with nothing arbitrating the middle, so on a
+        // narrow bar the two groups used to overlap and paint past the edges. Treat the bar as one
+        // horizontally scrollable strip instead: everything stays reachable, nothing bleeds out.
+        _overflow = MathF.Max(0f, MeasureIntrinsicWidth() - _size.Width);
+        _scrollX = Math.Clamp(_scrollX, 0f, _overflow);
         return _size;
     }
 
@@ -87,7 +98,7 @@ public sealed class Toolbar : Widget
             _size.Height
         );
 
-        var x = origin.X + HPad;
+        var x = origin.X + HPad - _scrollX;
         for (var i = 0; i < Leading.Count; i++)
         {
             var sz = i < _leadSizes.Length ? _leadSizes[i] : Size.Zero;
@@ -96,7 +107,7 @@ public sealed class Toolbar : Widget
             x += sz.Width + Gap;
         }
 
-        var rx = origin.X + _size.Width - HPad;
+        var rx = origin.X + _size.Width - HPad + _overflow - _scrollX;
         for (var i = Trailing.Count - 1; i >= 0; i--)
         {
             var sz = i < _trailSizes.Length ? _trailSizes[i] : Size.Zero;
@@ -124,8 +135,39 @@ public sealed class Toolbar : Widget
             _theme.Separator
         );
 
+        paint.AddClipStart(Bounds);
         foreach (var w in Leading) w.Paint(paint);
         foreach (var w in Trailing) w.Paint(paint);
+        paint.AddClipEnd();
+    }
+
+    public override bool CanTouchScroll(bool vertical)
+    {
+        return !vertical && _overflow > 0f;
+    }
+
+    public override void OnTouchScroll(float dx, float dy)
+    {
+        if (_overflow <= 0f)
+        {
+            base.OnTouchScroll(dx, dy);
+            return;
+        }
+
+        _scrollX = Math.Clamp(_scrollX - dx, 0f, _overflow);
+        MarkNeedsLayout();
+    }
+
+    public override void OnScroll(float dx, float dy)
+    {
+        if (_overflow <= 0f || MathF.Abs(dx) <= MathF.Abs(dy))
+        {
+            base.OnScroll(dx, dy);
+            return;
+        }
+
+        _scrollX = Math.Clamp(_scrollX - dx * Gap * 2f, 0f, _overflow);
+        MarkNeedsLayout();
     }
 
     public override Widget? HitTest(Offset point)

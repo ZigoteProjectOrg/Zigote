@@ -36,6 +36,7 @@ public sealed class Popover : Widget
 
     private Size _childSize;
     private OverlaySide _resolvedSide = OverlaySide.Below;
+    private EdgeInsets _safe;
     private Size _screen;
     private Rect _surface;
     private ThemeData _theme = ThemeData.Dark;
@@ -76,10 +77,15 @@ public sealed class Popover : Widget
 
         // Capture the whole window so click-outside dismissal works.
         _screen = new Size(c.MaxWidth, c.MaxHeight);
+        // Overlays sit outside any SafeArea, so the device insets have to be honoured here.
+        _safe = MediaQuery.Of(BuildContext.Current).Padding;
 
         // Leave room for the inset, the arrow, and the screen margins.
-        var maxW = MathF.Max(0f, _screen.Width - Margin * 2f - ContentInset * 2f);
-        var maxH = MathF.Max(0f, _screen.Height - Margin * 2f - ContentInset * 2f - ArrowDepth);
+        var maxW = MathF.Max(0f, _screen.Width - _safe.Horizontal - Margin * 2f - ContentInset * 2f);
+        var maxH = MathF.Max(
+            0f,
+            _screen.Height - _safe.Vertical - Margin * 2f - ContentInset * 2f - ArrowDepth
+        );
         _childSize = _child.Measure(new Constraints(maxWidth: maxW, maxHeight: maxH));
 
         return _screen;
@@ -112,7 +118,8 @@ public sealed class Popover : Widget
             surfaceSize,
             _screen,
             PreferredSide,
-            Gap
+            Gap,
+            safe: _safe
         );
 
         _resolvedSide = ResolveSide(anchor, _surface);

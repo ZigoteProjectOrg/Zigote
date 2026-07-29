@@ -21,16 +21,24 @@ public static class OverlayPositioning
     /// <summary>
     ///     Shift <paramref name="rect" /> the minimum amount needed to keep it within
     ///     <paramref name="screen" /> (leaving <paramref name="margin" /> at the edges).
+    ///     <paramref name="safe" /> adds the device's safe-area insets to those edges: overlays are
+    ///     laid out against the whole window, outside any <c>SafeArea</c>, so without it a menu row
+    ///     can land under a notch or the home indicator where it cannot be tapped. Zero on desktop.
     /// </summary>
-    public static Rect Clamp(Rect rect, Size screen, float margin = 8f)
+    public static Rect Clamp(Rect rect, Size screen, float margin = 8f, EdgeInsets safe = default)
     {
         var x = rect.X;
         var y = rect.Y;
 
-        if (x + rect.Width > screen.Width - margin) x = screen.Width - margin - rect.Width;
-        if (y + rect.Height > screen.Height - margin) y = screen.Height - margin - rect.Height;
-        if (x < margin) x = margin;
-        if (y < margin) y = margin;
+        var left = safe.Left + margin;
+        var top = safe.Top + margin;
+        var right = screen.Width - safe.Right - margin;
+        var bottom = screen.Height - safe.Bottom - margin;
+
+        if (x + rect.Width > right) x = right - rect.Width;
+        if (y + rect.Height > bottom) y = bottom - rect.Height;
+        if (x < left) x = left;
+        if (y < top) y = top;
 
         return new Rect(
             x,
@@ -46,18 +54,26 @@ public static class OverlayPositioning
     ///     then clamping onto the screen. Returns the surface's screen rect.
     /// </summary>
     public static Rect Anchored(Rect anchor, Size size, Size screen,
-        OverlaySide side = OverlaySide.Below, float gap = 4f, float margin = 8f)
+        OverlaySide side = OverlaySide.Below, float gap = 4f, float margin = 8f,
+        EdgeInsets safe = default)
     {
+        // Flip against the same usable box Clamp enforces, so a surface never "fits" on a side
+        // that clamping would then drag back over its anchor.
+        var left = safe.Left + margin;
+        var top = safe.Top + margin;
+        var right = screen.Width - safe.Right - margin;
+        var bottom = screen.Height - safe.Bottom - margin;
+
         var resolved = side switch {
-            OverlaySide.Below when anchor.Bottom + gap + size.Height > screen.Height - margin
-                                   && anchor.Y - gap - size.Height >= margin => OverlaySide.Above,
-            OverlaySide.Above when anchor.Y - gap - size.Height < margin
-                                   && anchor.Bottom + gap + size.Height <= screen.Height - margin =>
+            OverlaySide.Below when anchor.Bottom + gap + size.Height > bottom
+                                   && anchor.Y - gap - size.Height >= top => OverlaySide.Above,
+            OverlaySide.Above when anchor.Y - gap - size.Height < top
+                                   && anchor.Bottom + gap + size.Height <= bottom =>
                 OverlaySide.Below,
-            OverlaySide.Right when anchor.Right + gap + size.Width > screen.Width - margin
-                                   && anchor.X - gap - size.Width >= margin => OverlaySide.Left,
-            OverlaySide.Left when anchor.X - gap - size.Width < margin
-                                  && anchor.Right + gap + size.Width <= screen.Width - margin =>
+            OverlaySide.Right when anchor.Right + gap + size.Width > right
+                                   && anchor.X - gap - size.Width >= left => OverlaySide.Left,
+            OverlaySide.Left when anchor.X - gap - size.Width < left
+                                  && anchor.Right + gap + size.Width <= right =>
                 OverlaySide.Right,
             _ => side,
         };
@@ -78,7 +94,8 @@ public static class OverlayPositioning
                 size.Height
             ),
             screen,
-            margin
+            margin,
+            safe
         );
     }
 }

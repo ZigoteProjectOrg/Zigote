@@ -101,6 +101,7 @@ internal sealed class ChipState : SingleTickerProviderState<Chip>
     private readonly DecoratedBox _box = new();
     private readonly Label _label = new("") { MaxLines = 1 };
     private readonly LayoutPadding _padding = new(EdgeInsets.Zero);
+    private readonly ConstrainedBox _minHeight = new(new Constraints(minHeight: ControlMetrics.CompactHeight));
     private AnimationController _sel = null!;
     private bool _selTarget;
     private Pressable _root = null!;
@@ -110,13 +111,11 @@ internal sealed class ChipState : SingleTickerProviderState<Chip>
     {
         _padding.Child = _label;
         _box.Radius = Radii.Capsule;
-        _box.Child = new ConstrainedBox(
-            new Constraints(minHeight: ControlMetrics.CompactHeight),
-            new Align(Alignment.Center, _padding) {
-                WidthFactor = 1f,
-                HeightFactor = 1f,
-            }
-        );
+        _minHeight.Child = new Align(Alignment.Center, _padding) {
+            WidthFactor = 1f,
+            HeightFactor = 1f,
+        };
+        _box.Child = _minHeight;
         _root = new Pressable {
             Child = _box,
             FocusRadius = Radii.Capsule,
@@ -151,7 +150,13 @@ internal sealed class ChipState : SingleTickerProviderState<Chip>
         _label.Text = w.Label;
         _label.FontSize = _theme.FontSizeCaption;
         _label.FontWeight = w.Selected ? FontWeight.Medium : FontWeight.Normal;
-        _padding.Insets = EdgeInsets.Symmetric(Spacing.Md, Spacing.Xxs);
+        // Filter/choice chips are toggles: 22pt tall is unusable with a finger. Grow the capsule
+        // itself (a hit-rect trick would overlap neighbours in a tightly-spaced Wrap).
+        var compact = TouchMetrics.IsCompact;
+        _minHeight.Constraints = new Constraints(
+            minHeight: compact ? 36f : ControlMetrics.CompactHeight
+        );
+        _padding.Insets = EdgeInsets.Symmetric(compact ? Spacing.Lg : Spacing.Md, Spacing.Xxs);
         _root.Enabled = w.Enabled;
 
         ApplyColors();

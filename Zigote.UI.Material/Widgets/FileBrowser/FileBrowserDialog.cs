@@ -82,33 +82,38 @@ public sealed class FileBrowserDialog : StatefulWidget, IDismissableOverlay
     public static Task<string[]> ShowAsync(App app, FileBrowserOptions options)
     {
         var picker = new FileBrowserDialog { Options = options };
-        try
-        {
-            var win = app.CreateWindow(DefaultTitle(options), WindowWidth, WindowHeight);
-            win.Theme = app.Theme;
-            // Titlebar ✕ destroys the window App after this fires; a confirm/cancel completed
-            // the task first and makes it a no-op.
-            win.CloseRequested += () => picker.Tcs.TrySetResult([]);
-            picker.HostWindow = win;
-            // Window chrome (macOS unified / Adwaita CSD) is app-wide: the window inherited it
-            // from its parent App at CreateWindow, and the App wraps this root in the titlebar
-            // strip automatically.
-            win.Root = picker;
-            CenterOverParent(app, win);
-            return picker.Tcs.Task;
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine(
-                $"[FileBrowser] Separate dialog window unavailable ({ex.Message}) — " +
-                "showing the in-window dialog instead."
-            );
-        }
+
+        // A phone has no secondary-window concept, and 780pt of dialog would be clipped to half of
+        // itself anyway — go straight to the in-window presentation, sized full-screen below.
+        var compact = WindowSize.ClassFor(app.HostLogicalWidth) == WindowSizeClass.Compact;
+        if (!compact)
+            try
+            {
+                var win = app.CreateWindow(DefaultTitle(options), WindowWidth, WindowHeight);
+                win.Theme = app.Theme;
+                // Titlebar ✕ destroys the window App after this fires; a confirm/cancel completed
+                // the task first and makes it a no-op.
+                win.CloseRequested += () => picker.Tcs.TrySetResult([]);
+                picker.HostWindow = win;
+                // Window chrome (macOS unified / Adwaita CSD) is app-wide: the window inherited it
+                // from its parent App at CreateWindow, and the App wraps this root in the titlebar
+                // strip automatically.
+                win.Root = picker;
+                CenterOverParent(app, win);
+                return picker.Tcs.Task;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(
+                    $"[FileBrowser] Separate dialog window unavailable ({ex.Message}) — " +
+                    "showing the in-window dialog instead."
+                );
+            }
 
         var host = new BrowserHost(picker, app) {
             Dismissible = true,
-            WidthFraction = 0.62f,
-            HeightFraction = 0.7f,
+            WidthFraction = compact ? 1f : 0.62f,
+            HeightFraction = compact ? 1f : 0.7f,
         };
         // Every close path (Cancel button, Esc, scrim click) funnels through Dismiss →
         // OnClosed; a confirm completed the task first, making this a no-op.
@@ -181,6 +186,9 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
     private ScrollView _scroll = null!;
     private SearchField _search = null!;
     private ScrollView _sidebarScroll = null!;
+
+    /// <summary>Phone width: the dialog drops to a single column (no places sidebar, no preview).</summary>
+    private bool _compact;
 
     private FileBrowserOptions Options => Widget.Options;
 
@@ -275,6 +283,7 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
     public override Widget Build(BuildContext context)
     {
         var theme = ThemeProvider.Of(context);
+        _compact = TouchMetrics.IsCompact;
         var body = new Column {
             CrossAxisAlignment = CrossAxisAlignment.Stretch,
             Children = {
@@ -328,43 +337,55 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
         // MacUnified windows have no titlebar strip — this toolbar IS the titlebar band, so it
         // leads with the traffic-light inset and its gaps drag the window.
         var lightsInset = MathF.Max(0f, (Widget.HostWindow?.TitleBarLeftInset ?? 0f) - 10f);
+        var nav = new Row {
+            CrossAxisAlignment = CrossAxisAlignment.Center,
+            Children = {
+                new SizedBox(lightsInset),
+                new IconButton(
+                    new IconGlyph(Icons.ArrowBack, 18f),
+                    _model.CanGoBack ? () => Navigate(_model.GoBack) : null,
+                    tooltip: "Back"
+                ),
+                new IconButton(
+                    new IconGlyph(Icons.ArrowForward, 18f),
+                    _model.CanGoForward ? () => Navigate(_model.GoForward) : null,
+                    tooltip: "Forward"
+                ),
+                new IconButton(
+                    new IconGlyph(Icons.ArrowUpward, 18f),
+                    _model.CanGoUp ? GoUp : null,
+                    tooltip: "Up one level"
+                ),
+                new SizedBox(6f),
+                // Height-capped: a bare ScrollView measures to its max constraints and would
+                // otherwise stretch the toolbar row over the whole dialog.
+                new Expanded(
+                    new SizedBox(
+                        height: 28f,
+                        child: new ScrollView {
+                            Child = crumbs,
+                            ScrollHorizontal = true,
+                            ScrollVertical = false,
+                        }
+                    )
+                ),
+                new SizedBox(8f),
+            },
+        };
+
+        // 190pt of search alongside three icon buttons leaves the breadcrumbs ~76pt on a phone;
+        // give the field its own full-width row instead.
+        if (!_compact)
+        {
+            nav.Children.Add(new SizedBox(190f, child: _search));
+            return new Padding(new EdgeInsets(10f, 0f, 10f, 6f), nav);
+        }
+
         return new Padding(
             new EdgeInsets(10f, 0f, 10f, 6f),
-            new Row {
-                CrossAxisAlignment = CrossAxisAlignment.Center,
-                Children = {
-                    new SizedBox(lightsInset),
-                    new IconButton(
-                        new IconGlyph(Icons.ArrowBack, 18f),
-                        _model.CanGoBack ? () => Navigate(_model.GoBack) : null,
-                        tooltip: "Back"
-                    ),
-                    new IconButton(
-                        new IconGlyph(Icons.ArrowForward, 18f),
-                        _model.CanGoForward ? () => Navigate(_model.GoForward) : null,
-                        tooltip: "Forward"
-                    ),
-                    new IconButton(
-                        new IconGlyph(Icons.ArrowUpward, 18f),
-                        _model.CanGoUp ? GoUp : null,
-                        tooltip: "Up one level"
-                    ),
-                    new SizedBox(6f),
-                    // Height-capped: a bare ScrollView measures to its max constraints and would
-                    // otherwise stretch the toolbar row over the whole dialog.
-                    new Expanded(
-                        new SizedBox(
-                            height: 28f,
-                            child: new ScrollView {
-                                Child = crumbs,
-                                ScrollHorizontal = true,
-                                ScrollVertical = false,
-                            }
-                        )
-                    ),
-                    new SizedBox(8f),
-                    new SizedBox(190f, child: _search),
-                },
+            new Column {
+                CrossAxisAlignment = CrossAxisAlignment.Stretch,
+                Children = { nav, new SizedBox(height: 6f), _search },
             }
         );
     }
@@ -390,6 +411,10 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
             CrossAxisAlignment = CrossAxisAlignment.Stretch,
             Children = { _header, new Expanded(_scroll) },
         };
+
+        // The list alone wants ~200pt of columns; adding a 156pt sidebar and a 220pt preview needs
+        // ~700pt of body. On a phone the list gets the whole width and the two side panes go away.
+        if (_compact) return listColumn;
 
         var row = new Row { CrossAxisAlignment = CrossAxisAlignment.Stretch };
         if (_places.Count > 0)
@@ -471,15 +496,22 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
                 )
             );
 
-        var actions = new Row { CrossAxisAlignment = CrossAxisAlignment.Center };
-        actions.Children.Add(new Checkbox(_model.ShowHidden, ToggleHidden) { Size = 14f });
-        actions.Children.Add(new SizedBox(6f));
-        actions.Children.Add(new Label("Hidden", theme.FontSizeCaption, theme.TextSecondary));
+        // Options (hidden toggle, New Folder, item count) and the commit pair (filter, Cancel,
+        // Accept) add up to ~600pt of un-wrapping Row. On a phone they become two stacked rows,
+        // with the filter dropdown full-width above the buttons.
+        var options = new Row { CrossAxisAlignment = CrossAxisAlignment.Center };
+        options.Children.Add(
+            new Checkbox(_model.ShowHidden, ToggleHidden) {
+                Size = _compact ? ControlMetrics.CheckboxSize : 14f,
+            }
+        );
+        options.Children.Add(new SizedBox(6f));
+        options.Children.Add(new Label("Hidden", theme.FontSizeCaption, theme.TextSecondary));
 
         if (Options.CanCreateDirectories && Options.Kind != FileDialogKind.OpenFile)
         {
-            actions.Children.Add(new SizedBox(14f));
-            actions.Children.Add(
+            options.Children.Add(new SizedBox(14f));
+            options.Children.Add(
                 new Button("New Folder", PromptNewFolder) {
                     Style = ButtonStyle.Outlined,
                     FontSize = theme.FontSizeCaption,
@@ -487,34 +519,60 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
             );
         }
 
-        actions.Children.Add(new SizedBox(14f));
-        actions.Children.Add(
+        options.Children.Add(new SizedBox(14f));
+        options.Children.Add(
             new Label(StatusText(), theme.FontSizeCaption, theme.TextMuted)
         );
-        actions.Children.Add(new Spacer());
 
-        if (_filterLabels.Length > 0)
+        var commit = new Row {
+            // Only read in the stacked (phone) arm — the desktop arm copies these children into a
+            // single row that already right-packs them behind a Spacer.
+            MainAxisAlignment = MainAxisAlignment.End,
+            CrossAxisAlignment = CrossAxisAlignment.Center,
+        };
+        Widget? filter = _filterLabels.Length > 0
+            ? new Dropdown<string>(_filterLabels, _activeFilter, OnFilterChanged) { Height = 26f }
+            : null;
+
+        if (filter is not null && !_compact)
         {
-            actions.Children.Add(
-                new SizedBox(
-                    220f,
-                    child: new Dropdown<string>(_filterLabels, _activeFilter, OnFilterChanged) {
-                        Height = 26f,
-                    }
-                )
-            );
-            actions.Children.Add(new SizedBox(10f));
+            commit.Children.Add(new SizedBox(220f, child: filter));
+            commit.Children.Add(new SizedBox(10f));
         }
 
-        actions.Children.Add(new Button("Cancel", Cancel) { Style = ButtonStyle.Outlined });
-        actions.Children.Add(new SizedBox(8f));
-        actions.Children.Add(
+        commit.Children.Add(new Button("Cancel", Cancel) { Style = ButtonStyle.Outlined });
+        commit.Children.Add(new SizedBox(8f));
+        commit.Children.Add(
             new Button(AcceptLabel(), CanAccept() ? Confirm : null) {
                 BackgroundColor = theme.Primary,
             }
         );
 
-        col.Children.Add(new Padding(new EdgeInsets(16f, 10f, 16f, 12f), actions));
+        if (!_compact)
+        {
+            var actions = new Row { CrossAxisAlignment = CrossAxisAlignment.Center };
+            actions.Children.AddRange(options.Children);
+            actions.Children.Add(new Spacer());
+            actions.Children.AddRange(commit.Children);
+            col.Children.Add(new Padding(new EdgeInsets(16f, 10f, 16f, 12f), actions));
+            return col;
+        }
+
+        var stacked = new Column {
+            CrossAxisAlignment = CrossAxisAlignment.Stretch,
+            MainAxisSize = MainAxisSize.Min,
+            Children = { options },
+        };
+        if (filter is not null)
+        {
+            stacked.Children.Add(new SizedBox(height: 8f));
+            stacked.Children.Add(filter);
+        }
+
+        stacked.Children.Add(new SizedBox(height: 8f));
+        stacked.Children.Add(commit);
+
+        col.Children.Add(new Padding(new EdgeInsets(16f, 10f, 16f, 12f), stacked));
         return col;
     }
 

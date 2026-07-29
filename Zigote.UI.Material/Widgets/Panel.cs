@@ -48,6 +48,7 @@ public sealed class Panel : Widget
     private float _hAt, _wAt, _xAt, _yAt;
 
     // Screen dimensions — captured from Constraints during Measure, used for clamping
+    private bool _compact;
     private float _screenH = 768f;
     private float _screenW = 1024f;
 
@@ -116,6 +117,13 @@ public sealed class Panel : Widget
 
     // ── Derived geometry ──────────────────────────────────────────────────────
 
+    /// <summary>
+    ///     Effective title-bar height. It carries the drag strip and the close button, so on a phone —
+    ///     where the panel is full-screen and the title bar is the only chrome left — it grows to a
+    ///     finger target.
+    /// </summary>
+    private float TitleH => _compact ? MathF.Max(TitleHeight, TouchMetrics.MinTarget) : TitleHeight;
+
     private Rect PanelRect => new(
         PanelX,
         PanelY,
@@ -127,23 +135,23 @@ public sealed class Panel : Widget
         PanelX,
         PanelY,
         _w,
-        TitleHeight
+        TitleH
     );
 
     private Rect ContentRect =>
         new(
             PanelX,
-            PanelY + TitleHeight,
+            PanelY + TitleH,
             _w,
-            MathF.Max(0f, _h - TitleHeight)
+            MathF.Max(0f, _h - TitleH)
         );
 
     private Rect CloseButtonRect =>
         new(
-            PanelX + _w - TitleHeight + 4f,
+            PanelX + _w - TitleH + 4f,
             PanelY + 4f,
-            TitleHeight - 8f,
-            TitleHeight - 8f
+            TitleH - 8f,
+            TitleH - 8f
         );
 
     // ── Overlay helpers ───────────────────────────────────────────────────────
@@ -167,7 +175,19 @@ public sealed class Panel : Widget
         if (float.IsFinite(c.MaxWidth)) _screenW = c.MaxWidth;
         if (float.IsFinite(c.MaxHeight)) _screenH = c.MaxHeight;
 
-        Content?.Measure(Constraints.Tight(_w, MathF.Max(0f, _h - TitleHeight)));
+        // A free-floating, 8-way-resizable window is a desktop metaphor with no phone equivalent
+        // (and its 5pt resize edges are ungrabbable anyway). Present full-screen instead; HitDir
+        // then reports no resize zones, leaving the title bar and close button as the only chrome.
+        _compact = TouchMetrics.IsCompact;
+        if (_compact)
+        {
+            PanelX = 0f;
+            PanelY = 0f;
+            _w = _screenW;
+            _h = _screenH;
+        }
+
+        Content?.Measure(Constraints.Tight(_w, MathF.Max(0f, _h - TitleH)));
 
         // Full-screen size — we are a non-blocking overlay (HitTest limits capture to panel rect)
         return new Size(_screenW, _screenH);
@@ -181,7 +201,7 @@ public sealed class Panel : Widget
             _screenW,
             _screenH
         );
-        Content?.Layout(new Offset(PanelX, PanelY + TitleHeight));
+        Content?.Layout(new Offset(PanelX, PanelY + TitleH));
     }
 
     public override void Paint(PaintList paint)
@@ -214,11 +234,11 @@ public sealed class Panel : Widget
         // Title text
         var fs = _theme.FontSizeBody;
         var titleX = PanelX + 22f; // leave room for grip dots
-        var titleMaxW = _w - 22f - (CanClose ? TitleHeight : 0f);
+        var titleMaxW = _w - 22f - (CanClose ? TitleH : 0f);
         paint.AddText(
             Title,
             titleX,
-            PanelY + TitleHeight * 0.8f,
+            PanelY + TitleH * 0.8f,
             _theme.OnSurface,
             fs
         );
@@ -240,7 +260,7 @@ public sealed class Panel : Widget
         }
 
         // Content area (clipped)
-        if (_h > TitleHeight)
+        if (_h > TitleH)
         {
             paint.AddClipStart(ContentRect);
             Content?.Paint(paint);
@@ -260,7 +280,7 @@ public sealed class Panel : Widget
         const float dotR = 1.5f;
         const float dotGap = 4f;
         var gx = PanelX + 8f;
-        var gy = PanelY + TitleHeight / 2f - dotGap;
+        var gy = PanelY + TitleH / 2f - dotGap;
         for (var row = 0; row < 3; row++)
         for (var col = 0; col < 2; col++)
             paint.AddRect(
@@ -381,7 +401,7 @@ public sealed class Panel : Widget
 
             case ResizeDir.TitleDrag:
                 PanelX = Math.Clamp(_xAt + dx, 0f, _screenW - _w);
-                PanelY = Math.Clamp(_yAt + dy, 0f, _screenH - TitleHeight);
+                PanelY = Math.Clamp(_yAt + dy, 0f, _screenH - TitleH);
                 // Relayout so the inner Content tracks the panel this frame: Content is only
                 // (re)positioned in Layout, and a captured mouse-move otherwise just repaints —
                 // leaving the content at its stale absolute Bounds while the chrome moves.
@@ -425,6 +445,8 @@ public sealed class Panel : Widget
 
     private ResizeDir HitDir(Offset p)
     {
+        if (_compact) return ResizeDir.None; // full-screen: nothing to resize
+
         // Corner zones (larger grab area for usability)
         var inL = p.X < PanelX + CornerGrab;
         var inR = p.X > PanelX + _w - CornerGrab;
@@ -527,6 +549,6 @@ public sealed class Panel : Widget
 
         // Keep panel within screen bounds
         PanelX = Math.Clamp(PanelX, 0f, _screenW - _w);
-        PanelY = Math.Clamp(PanelY, 0f, _screenH - TitleHeight);
+        PanelY = Math.Clamp(PanelY, 0f, _screenH - TitleH);
     }
 }

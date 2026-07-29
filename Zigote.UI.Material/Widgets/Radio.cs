@@ -98,12 +98,16 @@ internal sealed class RadioState<T> : WidgetState<Radio<T>> where T : IEquatable
 {
     private readonly DecoratedBox _box = new();
     private readonly RadioDotGlyph _glyph = new();
+
+    // Phone hit box: the dot keeps its 16pt look, centred in a finger-sized press area.
+    private readonly SizedBox _touchBox = new(TouchMetrics.MinTarget, TouchMetrics.MinTarget);
     private Pressable _root = null!;
     private ThemeData _theme = ThemeData.Dark;
 
     public override void InitState()
     {
         _box.Child = _glyph;
+        _touchBox.Child = new Center(_box);
         _root = new Pressable {
             Child = _box,
             OnStateChanged = ApplyColors,
@@ -119,6 +123,7 @@ internal sealed class RadioState<T> : WidgetState<Radio<T>> where T : IEquatable
 
         _glyph.GlyphSize = d;
         _box.Radius = d / 2f;
+        _root.Child = TouchMetrics.IsCompact ? _touchBox : _box;
         _root.Enabled = w.Enabled;
         _root.FocusRadius = d / 2f;
         _root.Role = SemanticsRole.RadioButton;

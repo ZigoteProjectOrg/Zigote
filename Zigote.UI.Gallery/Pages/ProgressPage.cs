@@ -55,15 +55,28 @@ internal sealed class ProgressPageState : WidgetState<ProgressPage>
             ),
             Section(
                 "Circular & spinner",
-                new Row(
-                    [
-                        new CircularProgressIndicator(),
-                        new SizedBox(24),
-                        new Spinner(28),
-                        new SizedBox(24),
-                        new SizedBox(160, child: new ProgressBar(_progress)),
-                    ]
-                )
+                // The three indicators plus their gaps almost exactly fill a phone-width card, so
+                // a narrower screen (or a larger text scale) would squeeze the 160-px bar to
+                // nothing. Wrap reflows them into runs; wider windows keep the single row.
+                new AdaptiveBuilder((_, size) => size == WindowSizeClass.Compact
+                    ? new Wrap(
+                        spacing: 24,
+                        runSpacing: 12,
+                        children: [
+                            new CircularProgressIndicator(),
+                            new Spinner(28),
+                            new SizedBox(160, child: new ProgressBar(_progress)),
+                        ]
+                    )
+                    : new Row(
+                        [
+                            new CircularProgressIndicator(),
+                            new SizedBox(24),
+                            new Spinner(28),
+                            new SizedBox(24),
+                            new SizedBox(160, child: new ProgressBar(_progress)),
+                        ]
+                    ))
             )
         );
     }

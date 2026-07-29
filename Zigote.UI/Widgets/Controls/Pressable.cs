@@ -103,7 +103,35 @@ public sealed class Pressable : Widget
     // Capture all pointer events so the child's visuals are driven entirely by this wrapper.
     public override Widget? HitTest(Offset point)
     {
-        return Bounds.Contains(point.X, point.Y) ? this : null;
+        return TouchTarget().Contains(point.X, point.Y) ? this : null;
+    }
+
+    /// <summary>
+    ///     The hit rect. Under a finger, glyph-sized controls (a 16 px checkbox, a 22 px chip) grow
+    ///     to the finger target on the axis that is too small — the rect only, so layout and paint
+    ///     are untouched and the mouse keeps the exact bounds. Controls already on a row rhythm
+    ///     (buttons, tiles, tabs) are left alone: inflating those would let a tap near a boundary
+    ///     land on the neighbour, and their real fix is a taller measure at phone width.
+    /// </summary>
+    private Rect TouchTarget()
+    {
+        if (!App.PointerIsTouch) return Bounds;
+
+        const float glyphSized = ControlMetrics.RowHeight;
+        var gx = Bounds.Width < glyphSized
+            ? (ControlMetrics.MinTouchTarget - Bounds.Width) / 2f
+            : 0f;
+        var gy = Bounds.Height < glyphSized
+            ? (ControlMetrics.MinTouchTarget - Bounds.Height) / 2f
+            : 0f;
+        if (gx <= 0f && gy <= 0f) return Bounds;
+
+        return new Rect(
+            Bounds.X - gx,
+            Bounds.Y - gy,
+            Bounds.Width + gx * 2f,
+            Bounds.Height + gy * 2f
+        );
     }
 
     public override void OnPointerEnter()
@@ -131,7 +159,9 @@ public sealed class Pressable : Widget
 
     public override void OnPointerUp(Offset point)
     {
-        if (Pressed && Enabled && Bounds.Contains(point.X, point.Y))
+        // Same rect the press was accepted through, so a tap that landed in the touch margin
+        // still commits rather than silently doing nothing.
+        if (Pressed && Enabled && TouchTarget().Contains(point.X, point.Y))
         {
             UiFeedback.Click?.Invoke();
             OnPressed?.Invoke();

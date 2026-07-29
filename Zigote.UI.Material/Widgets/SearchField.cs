@@ -17,6 +17,7 @@ public sealed class SearchField : Widget
     private readonly TextField _field;
     private bool _clearHovered;
     private bool _clearPressed;
+    private bool _compact;
     private Size _size;
     private ThemeData _theme = ThemeData.Dark;
 
@@ -95,12 +96,32 @@ public sealed class SearchField : Widget
         );
     }
 
+    /// <summary>
+    ///     Where the clear button is *pressed*, as opposed to drawn: the 13pt glyph keeps its size
+    ///     on every platform, but a finger gets the whole trailing inset to aim at.
+    /// </summary>
+    private Rect ClearHitBox()
+    {
+        var box = ClearBox();
+        if (!_compact) return box;
+        var grow = MathF.Max(0f, (TouchMetrics.MinTarget - box.Width) / 2f);
+        return new Rect(
+            box.X - grow,
+            MathF.Max(Bounds.Y, box.Y - grow),
+            box.Width + grow * 2f,
+            MathF.Min(Bounds.Height, box.Height + grow * 2f)
+        );
+    }
+
     // ── Widget protocol ───────────────────────────────────────────────────────
 
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        _size = c.Constrain(new Size(MathF.Max(MinWidth, SideInset * 2f + 40f), Height));
+        _compact = TouchMetrics.IsCompact;
+        _size = c.Constrain(
+            new Size(MathF.Max(MinWidth, SideInset * 2f + 40f), TouchMetrics.AtLeast(Height))
+        );
 
         // The inner field occupies the area between the leading glyph and trailing clear button.
         var inner = MathF.Max(0f, _size.Width - SideInset * 2f);
@@ -232,7 +253,7 @@ public sealed class SearchField : Widget
     public override Widget? HitTest(Offset point)
     {
         if (!Bounds.Contains(point.X, point.Y)) return null;
-        if (ShowClear && ClearBox().Contains(point.X, point.Y)) return this;
+        if (ShowClear && ClearHitBox().Contains(point.X, point.Y)) return this;
 
         var hit = _field.HitTest(point);
         if (hit != null) return hit;
@@ -272,14 +293,14 @@ public sealed class SearchField : Widget
 
     public override void OnPointerDown(Offset point)
     {
-        if (!ShowClear || !ClearBox().Contains(point.X, point.Y)) return;
+        if (!ShowClear || !ClearHitBox().Contains(point.X, point.Y)) return;
         _clearPressed = true;
         MarkNeedsPaint();
     }
 
     public override void OnPointerUp(Offset point)
     {
-        if (_clearPressed && ClearBox().Contains(point.X, point.Y))
+        if (_clearPressed && ClearHitBox().Contains(point.X, point.Y))
             Clear();
         if (_clearPressed)
         {

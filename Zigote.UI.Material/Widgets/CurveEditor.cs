@@ -156,6 +156,7 @@ public sealed class EditableCurve
 public sealed class CurveEditor : Widget
 {
     private const float HitRadius = 8f;
+
     private const float KeyRadius = 4.5f;
     private const float HandleRadius = 3.5f;
     private const float TangentLen = 36f; // screen-space length of a tangent handle arm
@@ -164,10 +165,19 @@ public sealed class CurveEditor : Widget
     private const uint ScDelete = 76;
     private const uint ScBackspace = 42;
 
+    /// <summary>
+    ///     Pick radius for keys and tangent handles. The drawn key stays 4.5pt; a fingertip needs a
+    ///     far wider catchment, and tangent handles are only pickable on the already-selected key,
+    ///     so the wider radius cannot make the wrong handle win.
+    /// </summary>
+    private float Grab => _compact ? TouchMetrics.MinTarget / 2f : HitRadius;
+
     private readonly float _maxT = 1f;
 
     // Data-space view window (the value range mapped to the vertical extent).
     private readonly float _minT = 0f;
+
+    private bool _compact;
 
     // Active drag target.
     private DragKind _drag = DragKind.None;
@@ -237,6 +247,7 @@ public sealed class CurveEditor : Widget
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
+        _compact = TouchMetrics.IsCompact;
         var w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 240f;
         var h = float.IsFinite(c.MaxHeight) ? c.MaxHeight : 160f;
         var sz = c.Constrain(new Size(w, h));
@@ -553,7 +564,7 @@ public sealed class CurveEditor : Widget
     {
         var keys = Curve.Keys;
         var best = -1;
-        var bestD = HitRadius * HitRadius;
+        var bestD = Grab * Grab;
         for (var i = 0; i < keys.Count; i++)
         {
             var s = DataToScreen(keys[i].Time, keys[i].Value);
@@ -581,14 +592,14 @@ public sealed class CurveEditor : Widget
         {
             var slope = key.OutTangent != 0f ? key.OutTangent : Curve.AutoSlope(_selected);
             var h = TangentScreenPoint(center, slope, 1f);
-            if (Within(p, h, HitRadius)) return DragKind.OutTangent;
+            if (Within(p, h, Grab)) return DragKind.OutTangent;
         }
 
         if (_selected > 0)
         {
             var slope = key.InTangent != 0f ? key.InTangent : Curve.AutoSlope(_selected);
             var h = TangentScreenPoint(center, slope, -1f);
-            if (Within(p, h, HitRadius)) return DragKind.InTangent;
+            if (Within(p, h, Grab)) return DragKind.InTangent;
         }
 
         return DragKind.None;

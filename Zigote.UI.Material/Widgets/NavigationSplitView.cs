@@ -68,6 +68,16 @@ public sealed class NavigationSplitView : Widget
 
     public override Size Measure(Constraints c)
     {
+        // Side-by-side master/detail assumes a wide viewport: at phone width the 160pt sidebar
+        // minimum leaves the detail a sliver and the divider no room to travel at all. Stack the
+        // two panes instead — same widget, same selection model, just a top/bottom split.
+        var compact = TouchMetrics.IsCompact;
+        if (_split.Vertical != compact)
+        {
+            _split.Vertical = compact;
+            _split.SplitRatio = compact ? 0.35f : 0.22f;
+        }
+
         // Capture the pane's size ourselves: Widget.MeasuredSize is only auto-populated for
         // Stateless/Stateful widgets, so reading _split.MeasuredSize here yields Size.Zero —
         // which left Bounds empty and made the whole split view hit-test-transparent.
@@ -113,6 +123,7 @@ internal sealed class Sidebar : Widget
     private readonly Action<int> _onSelect;
     private readonly float[] _rowY;
     private int _hovered = -1;
+    private float _rowH = ControlMetrics.RegularHeight;
     private Size _size;
     private ThemeData _theme;
 
@@ -134,7 +145,8 @@ internal sealed class Sidebar : Widget
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        var h = Spacing.Sm * 2f + _items.Count * (ControlMetrics.RegularHeight + Spacing.Xxs);
+        _rowH = TouchMetrics.Pick(ControlMetrics.RegularHeight);
+        var h = Spacing.Sm * 2f + _items.Count * (_rowH + Spacing.Xxs);
         _size = c.Constrain(new Size(c.MaxWidth, MathF.Max(h, c.MinHeight)));
         return _size;
     }
@@ -151,7 +163,7 @@ internal sealed class Sidebar : Widget
         for (var i = 0; i < _items.Count; i++)
         {
             _rowY[i] = y;
-            y += ControlMetrics.RegularHeight + Spacing.Xxs;
+            y += _rowH + Spacing.Xxs;
         }
     }
 
@@ -162,6 +174,10 @@ internal sealed class Sidebar : Widget
         // distinct panel in both light and dark.
         paint.AddRect(Bounds, _theme.Background);
 
+        // The sidebar sizes to its content but its pane does not: more rows than the pane is tall
+        // used to paint over the detail view (and, stacked on a phone, over the divider).
+        paint.AddClipStart(Bounds);
+
         var fs = _theme.FontSizeBody;
         var rowW = Bounds.Width - Spacing.Sm * 2f;
 
@@ -171,7 +187,7 @@ internal sealed class Sidebar : Widget
                 Bounds.X + Spacing.Sm,
                 _rowY[i],
                 rowW,
-                ControlMetrics.RegularHeight
+                _rowH
             );
             var isSelected = i == Selected;
 
@@ -197,6 +213,8 @@ internal sealed class Sidebar : Widget
             }
         }
 
+        paint.AddClipEnd();
+
         if (Focused)
             paint.AddFocusRing(Bounds, 0f, _theme);
     }
@@ -214,7 +232,7 @@ internal sealed class Sidebar : Widget
                 Bounds.X + Spacing.Sm,
                 _rowY[i],
                 Bounds.Width - Spacing.Sm * 2f,
-                ControlMetrics.RegularHeight
+                _rowH
             );
             if (row.Contains(point.X, point.Y)) return i;
         }

@@ -14,10 +14,11 @@ namespace Zigote.UI.Material;
 /// </summary>
 public sealed class ReorderableList : Widget
 {
-    private const float GripWidth = 24f;
+    private const float PointerGripWidth = 24f;
 
     private readonly IList<Widget> _items;
 
+    private bool _compact;
     private int _dragFrom = -1; // index of the row being dragged (-1 = idle)
     private int _dragInsert = -1; // insertion slot [0.._items.Count]
     private float _dragY; // current cursor Y (screen)
@@ -38,18 +39,25 @@ public sealed class ReorderableList : Widget
     /// <summary>Per-row height in logical pixels.</summary>
     public float RowHeight { get; set; } = ControlMetrics.RegularHeight;
 
+    // Effective metrics: a 24×28 grip is a pointer affordance. On a phone both axes reach a finger
+    // target so the handle can actually be grabbed.
+    private float Grip => _compact ? TouchMetrics.MinTarget : PointerGripWidth;
+
+    private float RowH => _compact ? MathF.Max(RowHeight, TouchMetrics.MinTarget) : RowHeight;
+
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
+        _compact = TouchMetrics.IsCompact;
         var w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 240f;
-        var h = _items.Count * RowHeight;
+        var h = _items.Count * RowH;
         _size = c.Constrain(new Size(w, h));
 
         var rowC = new Constraints(
             0f,
-            MathF.Max(0f, _size.Width - GripWidth),
+            MathF.Max(0f, _size.Width - Grip),
             0f,
-            RowHeight
+            RowH
         );
         foreach (var item in _items)
             item.Measure(rowC);
@@ -66,8 +74,8 @@ public sealed class ReorderableList : Widget
         );
         for (var i = 0; i < _items.Count; i++)
         {
-            var y = origin.Y + i * RowHeight;
-            _items[i].Layout(new Offset(origin.X + GripWidth, y));
+            var y = origin.Y + i * RowH;
+            _items[i].Layout(new Offset(origin.X + Grip, y));
         }
     }
 
@@ -79,12 +87,12 @@ public sealed class ReorderableList : Widget
         {
             if (i == _dragFrom) continue; // drawn separately as the ghost
 
-            var rowY = Bounds.Y + i * RowHeight;
+            var rowY = Bounds.Y + i * RowH;
             var rowRect = new Rect(
                 Bounds.X,
                 rowY,
                 _size.Width,
-                RowHeight
+                RowH
             );
             if (!paint.IsVisible(rowRect)) continue;
 
@@ -94,7 +102,7 @@ public sealed class ReorderableList : Widget
                         Bounds.X + 2f,
                         rowY + 1f,
                         _size.Width - 4f,
-                        RowHeight - 2f
+                        RowH - 2f
                     ),
                     _theme.OnSurface.WithAlpha(0.05f),
                     Radii.Sm
@@ -107,7 +115,7 @@ public sealed class ReorderableList : Widget
         // Insertion indicator.
         if (_dragFrom >= 0 && _dragInsert >= 0)
         {
-            var lineY = Bounds.Y + _dragInsert * RowHeight;
+            var lineY = Bounds.Y + _dragInsert * RowH;
             lineY = Math.Clamp(lineY, Bounds.Y, Bounds.Bottom - 2f);
             paint.AddRect(
                 new Rect(
@@ -124,12 +132,12 @@ public sealed class ReorderableList : Widget
         // Ghost of the dragged row, following the cursor.
         if (_dragFrom >= 0 && _dragFrom < _items.Count)
         {
-            var ghostY = Math.Clamp(_dragY - _grabDy, Bounds.Y, Bounds.Bottom - RowHeight);
+            var ghostY = Math.Clamp(_dragY - _grabDy, Bounds.Y, Bounds.Bottom - RowH);
             var ghostRect = new Rect(
                 Bounds.X,
                 ghostY,
                 _size.Width,
-                RowHeight
+                RowH
             );
             paint.AddElevation(ghostRect, Radii.Sm, Elevation.Z2);
             paint.AddRect(ghostRect, _theme.SurfaceAlt.WithAlpha(0.96f), Radii.Sm);
@@ -137,9 +145,9 @@ public sealed class ReorderableList : Widget
 
             // Translate the dragged child + grip to the ghost position.
             var item = _items[_dragFrom];
-            var dy = ghostY - (Bounds.Y + _dragFrom * RowHeight);
+            var dy = ghostY - (Bounds.Y + _dragFrom * RowH);
             paint.PushTranslate(0f, dy);
-            PaintGrip(paint, Bounds.Y + _dragFrom * RowHeight, true);
+            PaintGrip(paint, Bounds.Y + _dragFrom * RowH, true);
             item.Paint(paint);
             paint.PopTranslate();
         }
@@ -151,8 +159,8 @@ public sealed class ReorderableList : Widget
     {
         // Six-dot grip (⠿) drawn as small squares — robust regardless of font glyph coverage.
         var color = active ? _theme.OnSurface.WithAlpha(0.8f) : _theme.TextMuted.WithAlpha(0.55f);
-        var cx = Bounds.X + GripWidth / 2f;
-        var cy = rowY + RowHeight / 2f;
+        var cx = Bounds.X + Grip / 2f;
+        var cy = rowY + RowH / 2f;
         const float gap = 4f;
         const float dot = 2f;
         for (var col = 0; col < 2; col++)
@@ -175,7 +183,7 @@ public sealed class ReorderableList : Widget
 
     private int RowIndexAt(float y)
     {
-        var idx = (int)((y - Bounds.Y) / RowHeight);
+        var idx = (int)((y - Bounds.Y) / RowH);
         return idx >= 0 && idx < _items.Count ? idx : -1;
     }
 
@@ -184,7 +192,7 @@ public sealed class ReorderableList : Widget
         if (!Bounds.Contains(point.X, point.Y)) return null;
 
         // The grip column always belongs to this list (drag handle). Elsewhere, let children hit-test.
-        if (point.X >= Bounds.X + GripWidth)
+        if (point.X >= Bounds.X + Grip)
         {
             var idx = RowIndexAt(point.Y);
             if (idx >= 0)
@@ -200,7 +208,7 @@ public sealed class ReorderableList : Widget
     public override MouseCursor? GetCursor(Offset point)
     {
         if (_dragFrom >= 0) return MouseCursor.Move; // a row is being dragged
-        if (point.X < Bounds.X + GripWidth) return MouseCursor.Pointer; // hovering the drag grip
+        if (point.X < Bounds.X + Grip) return MouseCursor.Pointer; // hovering the drag grip
         return null;
     }
 
@@ -210,7 +218,7 @@ public sealed class ReorderableList : Widget
         {
             _dragY = point.Y;
             // Insertion slot = nearest gap, computed from the row center under the cursor.
-            var raw = (point.Y - Bounds.Y) / RowHeight;
+            var raw = (point.Y - Bounds.Y) / RowH;
             var insert = (int)MathF.Round(raw);
             _dragInsert = Math.Clamp(insert, 0, _items.Count);
             MarkNeedsPaint();
@@ -238,14 +246,24 @@ public sealed class ReorderableList : Widget
         if (idx < 0) return;
 
         // Only the grip column starts a drag; clicks elsewhere are forwarded to children via HitTest.
-        if (point.X <= Bounds.X + GripWidth)
+        if (point.X <= Bounds.X + Grip)
         {
             _dragFrom = idx;
             _dragInsert = idx;
             _dragY = point.Y;
-            _grabDy = point.Y - (Bounds.Y + idx * RowHeight);
+            _grabDy = point.Y - (Bounds.Y + idx * RowH);
             MarkNeedsPaint();
         }
+    }
+
+    public override void OnPointerCancel()
+    {
+        // The gesture was taken away mid-lift (touch scroll claimed it, OS cancelled the touch):
+        // drop the drag instead of leaving a ghost row pinned to a stale cursor position.
+        if (_dragFrom < 0) return;
+        _dragFrom = -1;
+        _dragInsert = -1;
+        MarkNeedsPaint();
     }
 
     public override void OnPointerUp(Offset point)
