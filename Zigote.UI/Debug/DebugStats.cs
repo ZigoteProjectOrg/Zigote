@@ -18,9 +18,27 @@ public static class DebugStats
     private static float _fpsTimer;
 
     private static readonly Process Proc = Process.GetCurrentProcess();
-    private static TimeSpan _lastCpu = Proc.TotalProcessorTime;
+    private static TimeSpan _lastCpu = SafeCpuTime();
     private static float _metricTimer = 1f; // force first-frame sample
     private static float _statTimer = 1f;
+
+    /// <summary>
+    ///     <see cref="Process.TotalProcessorTime" /> throws PlatformNotSupported on iOS/Android.
+    ///     The per-sample reads are already try/guarded; this keeps the TYPE INITIALIZER from
+    ///     throwing there too (a cctor exception takes the whole app down, and it did — the
+    ///     CPU% readout just stays 0 on those platforms).
+    /// </summary>
+    private static TimeSpan SafeCpuTime()
+    {
+        try
+        {
+            return Proc.TotalProcessorTime;
+        }
+        catch (Exception)
+        {
+            return TimeSpan.Zero;
+        }
+    }
 
     public static float Fps { get; private set; } = 60f;
     public static float FpsMin { get; private set; } = 60f;

@@ -58,6 +58,9 @@
     <_RidOS Condition="$(_Rid.StartsWith('android'))">android</_RidOS>
     <_RidOS Condition="$(_Rid.StartsWith('ios'))">ios</_RidOS>
     <_RidOS Condition="'$(_RidOS)' == '' And $(_Rid.StartsWith('linux'))">linux</_RidOS>
+    <!-- The iOS simulator is a distinct platform from the device (separate SDK, separate zig ABI
+         suffix, separate wgpu prebuilt) — same _RidOS, different triple + SDK below. -->
+    <_IosSimulator Condition="$(_Rid.StartsWith('iossimulator'))">true</_IosSimulator>
     <_RidArch Condition="$(_Rid.EndsWith('-arm64'))">aarch64</_RidArch>
     <_RidArch Condition="$(_Rid.EndsWith('-x64'))">x86_64</_RidArch>
 
@@ -91,7 +94,17 @@
     <_ZigTriple Condition="'$(_RidOS)' == 'linux' And '$(_RidArch)' != ''">$(_RidArch)-linux-gnu</_ZigTriple>
     <_ZigTriple Condition="'$(_RidOS)' == 'windows' And '$(_RidArch)' != ''">$(_RidArch)-windows-gnu</_ZigTriple>
     <_ZigTriple Condition="'$(_RidOS)' == 'android' And '$(_RidArch)' != ''">$(_RidArch)-linux-android</_ZigTriple>
-    <_ZigTriple Condition="'$(_RidOS)' == 'ios' And '$(_RidArch)' != ''">$(_RidArch)-ios</_ZigTriple>
+    <_ZigTriple Condition="'$(_RidOS)' == 'ios' And '$(_RidArch)' != '' And '$(_IosSimulator)' != 'true'">$(_RidArch)-ios</_ZigTriple>
+    <_ZigTriple Condition="'$(_RidOS)' == 'ios' And '$(_RidArch)' != '' And '$(_IosSimulator)' == 'true'">$(_RidArch)-ios-simulator</_ZigTriple>
+
+    <!-- iOS constraints: Debug/ReleaseSafe zig builds reference std.debug's
+         _dyld_get_image_header_containing_address, absent from the iOS tbds — force ReleaseFast.
+         Assimp/Jolt/flecs are not yet validated for iOS cross-builds, and the UI apps being
+         brought up there don't use them — force the lean set until they are. -->
+    <ZigOptimize Condition="'$(_RidOS)' == 'ios'">ReleaseFast</ZigOptimize>
+    <Enable3D Condition="'$(_RidOS)' == 'ios'">false</Enable3D>
+    <EnablePhysics3D Condition="'$(_RidOS)' == 'ios'">false</EnablePhysics3D>
+    <EnableEcs Condition="'$(_RidOS)' == 'ios'">false</EnableEcs>
     <ZigCross Condition="'$(_RidOS)' != '' And '$(_RidOS)' != '$(_HostOS)'">true</ZigCross>
     <!-- Same-OS cross-ARCH (e.g. osx-x64 from an arm64 Mac) is a cross build too — without -Dtarget
          zig builds a host-arch lib that gets bundled into the foreign-arch RID and fails to load. -->
@@ -152,6 +165,28 @@
     </Exec>
     <PropertyGroup>
       <ZigSysrootArg>--sysroot "$(_MacSdkPath)"</ZigSysrootArg>
+    </PropertyGroup>
+  </Target>
+
+  <!-- iOS: zig bundles no iOS libc headers and the sysroot flag alone adds no include paths, so
+       the SDK must be spelled out twice: as the sysroot (frameworks/link) AND as a generated
+       zig libc file (usr/include). The SDK differs between device (iphoneos) and simulator. -->
+  <Target Name="ZigIosSysroot" BeforeTargets="BuildZigEngine" Condition="'$(ZigTargetOS)' == 'ios'">
+    <PropertyGroup>
+      <_IosSdkName Condition="'$(_IosSimulator)' == 'true'">iphonesimulator</_IosSdkName>
+      <_IosSdkName Condition="'$(_IosSdkName)' == ''">iphoneos</_IosSdkName>
+    </PropertyGroup>
+    <Exec Command="xcrun --sdk $(_IosSdkName) --show-sdk-path" ConsoleToMSBuild="true" StandardOutputImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_IosSdkPath" />
+    </Exec>
+    <PropertyGroup>
+      <_ZigIosLibcFile>$(ZigEngineDir)\zig-out\.zig-libc-ios.txt</_ZigIosLibcFile>
+    </PropertyGroup>
+    <MakeDir Directories="$(ZigEngineDir)\zig-out" />
+    <WriteLinesToFile File="$(_ZigIosLibcFile)" Overwrite="true"
+                      Lines="include_dir=$(_IosSdkPath)/usr/include;sys_include_dir=$(_IosSdkPath)/usr/include;crt_dir=;msvc_lib_dir=;kernel32_lib_dir=;gcc_dir=" />
+    <PropertyGroup>
+      <ZigSysrootArg>--sysroot "$(_IosSdkPath)" --libc "$(_ZigIosLibcFile)"</ZigSysrootArg>
     </PropertyGroup>
   </Target>
 

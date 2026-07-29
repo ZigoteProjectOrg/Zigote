@@ -1,3 +1,4 @@
+using Zigote.Core.Native;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Navigation;
@@ -203,6 +204,21 @@ public class ZigoteApp
     ///     until the window is closed.
     /// </summary>
     public void Run()
+    {
+        // iOS owns the process entry: UIApplicationMain must run before any window exists,
+        // and SDL's wrapper calls the app body back on the main thread after launch (with the
+        // UIKit runloop serviced from inside the event pump, so the frame loop below works
+        // unchanged). Desktop platforms run the body directly.
+        if (OperatingSystem.IsIOS())
+        {
+            MobileHost.RunApp(RunCore);
+            return;
+        }
+
+        RunCore();
+    }
+
+    private void RunCore()
     {
         using var uiApp = new App(
             Title,

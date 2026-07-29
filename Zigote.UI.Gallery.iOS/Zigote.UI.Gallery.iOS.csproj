@@ -1,0 +1,84 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      iOS head for the widget Gallery: compiles the SAME Gallery sources (no fork) against
+      net10.0-ios and bundles the iOS-simulator build of the native engine. The entry point is
+      Gallery's own Program.Main — ZigoteApp.Run routes through MobileHost/zigote_run_app
+      (SDL's UIApplicationMain wrapper) on iOS, so no platform-specific app code exists here.
+
+      Build (simulator):
+        dotnet build Zigote.UI.Gallery.iOS -p:ZigTargetRid=iossimulator-arm64
+      ZigTargetRid must be passed on the COMMAND LINE: it is how build/Zigote.Native.targets
+      (imported via Zigote.Core) learns to cross-build the engine for the simulator — a plain
+      csproj property would not reach the referenced project's evaluation.
+    -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0-ios</TargetFramework>
+        <RuntimeIdentifier>iossimulator-arm64</RuntimeIdentifier>
+        <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <ApplicationTitle>Zigote Gallery</ApplicationTitle>
+        <ApplicationId>com.zigote.gallery</ApplicationId>
+        <!-- No managed linking: the UI stack leans on reflection in places (DevTools late-bind,
+             widget inspector) and bring-up must not chase trimmer ghosts. -->
+        <MtouchLink>None</MtouchLink>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Charts\Zigote.UI.Charts.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Localizations\Zigote.UI.Localizations.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.DevTools\Zigote.UI.DevTools.csproj"/>
+        <ProjectReference Include="..\Zigote.Generators\Zigote.Generators.csproj"
+                          OutputItemType="Analyzer" ReferenceOutputAssembly="false"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- The desktop Gallery's sources verbatim (its Program.Main is the entry point). -->
+        <Compile Include="..\Zigote.UI.Gallery\**\*.cs"
+                 Exclude="..\Zigote.UI.Gallery\bin\**;..\Zigote.UI.Gallery\obj\**"/>
+        <None Include="..\Zigote.UI.Gallery\assets\**" CopyToOutputDirectory="PreserveNewest"/>
+        <!-- ARB catalogs → the generated compile-safe GalleryL10n class (LocalizationsGenerator). -->
+        <AdditionalFiles Include="..\Zigote.UI.Gallery\l10n\*.arb"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- The bundled fonts. On desktop these flow transitively as Content from Zigote.UI;
+             the iOS resource pipeline does not lift referenced-project Content into the app
+             bundle, so the app declares them itself. BundleResource paths keep the same
+             Fonts/ layout App.cs probes under AppContext.BaseDirectory (= bundle root). -->
+        <BundleResource Include="..\Zigote.UI\Fonts\Inter\static\Inter_18pt-Regular.ttf"
+                        Link="Fonts\Inter-Regular.ttf"/>
+        <BundleResource Include="..\Zigote.UI\Fonts\PkgTTC-SGr-Iosevka-34\SGr-Iosevka-Regular.ttc"
+                        Link="Fonts\Iosevka-Regular.ttc"/>
+        <BundleResource Include="..\Zigote.UI\Fonts\Noto_Emoji\static\NotoEmoji-Regular.ttf"
+                        Link="Fonts\NotoEmoji-Regular.ttf"/>
+        <BundleResource Include="..\Zigote.UI\Fonts\MaterialIcons\MaterialIcons-Regular.ttf"
+                        Link="Fonts\MaterialIcons-Regular.ttf"/>
+        <BundleResource Include="..\Zigote.UI\Fonts\Inter\OFL.txt"
+                        Link="Fonts\LICENSE-Inter-OFL.txt"/>
+        <BundleResource Include="..\Zigote.UI\Fonts\PkgTTC-SGr-Iosevka-34\OFL.txt"
+                        Link="Fonts\LICENSE-Iosevka-OFL.txt"/>
+    </ItemGroup>
+
+    <!-- libzigote.dylib flows as Content from Zigote.Core through EVERY project that references
+         it (UI, Material, Charts, …), and the iOS SDK's native-library collection keeps each
+         copy — several parallel install_name_tool runs then race on the same output file and
+         the build dies. Collapse the duplicates (same file, identical metadata) to one before
+         the tool runs. -->
+    <Target Name="DedupeNativeLibrariesToReidentify"
+            AfterTargets="_ComputeDynamicLibrariesToReidentify"
+            BeforeTargets="_InstallNameTool">
+        <RemoveDuplicates Inputs="@(_DynamicLibraryToReidentify)">
+            <Output TaskParameter="Filtered" ItemName="_DedupedDynamicLibraryToReidentify"/>
+        </RemoveDuplicates>
+        <ItemGroup>
+            <_DynamicLibraryToReidentify Remove="@(_DynamicLibraryToReidentify)"/>
+            <_DynamicLibraryToReidentify Include="@(_DedupedDynamicLibraryToReidentify)"/>
+        </ItemGroup>
+    </Target>
+
+</Project>
