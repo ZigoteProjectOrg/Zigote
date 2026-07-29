@@ -61,6 +61,19 @@
     <!-- The iOS simulator is a distinct platform from the device (separate SDK, separate zig ABI
          suffix, separate wgpu prebuilt) — same _RidOS, different triple + SDK below. -->
     <_IosSimulator Condition="$(_Rid.StartsWith('iossimulator'))">true</_IosSimulator>
+    <!-- iOS DEVICE links the engine statically into the app binary. A loose dylib in the bundle is
+         rejected by AMFI at load ("code signature invalid"), and .NET links every other native
+         piece (Mono included) into the executable there too — the simulator, which enforces no
+         signing, keeps the dylib. -->
+    <ZigStaticNative Condition="'$(_RidOS)' == 'ios' And '$(_IosSimulator)' != 'true'">true</ZigStaticNative>
+    <ZigBuildStep Condition="'$(ZigStaticNative)' == 'true'">static-lib</ZigBuildStep>
+    <ZigBuildStep Condition="'$(ZigBuildStep)' == ''">shared-lib</ZigBuildStep>
+    <!-- With the engine linked into the app binary, DllImport must name "__Internal" (see
+         NativeEngine.Lib). This is not merely cosmetic: the iOS SDK links with
+         `-dead_strip -exported_symbols_list mtouch-symbols.list`, and the registrar only adds a
+         native symbol to that list when a P/Invoke names __Internal — anything else is stripped,
+         however hard the archive is force-loaded. -->
+    <DefineConstants Condition="'$(ZigStaticNative)' == 'true'">$(DefineConstants);ZIGOTE_STATIC_NATIVE</DefineConstants>
     <_RidArch Condition="$(_Rid.EndsWith('-arm64'))">aarch64</_RidArch>
     <_RidArch Condition="$(_Rid.EndsWith('-x64'))">x86_64</_RidArch>
 
@@ -81,6 +94,7 @@
          archive linked into the host binary (DllImport "__Internal" via ZIGOTE_STATIC_NATIVE). The
          dylib name here only keeps the copy step coherent until that step exists. -->
     <ZigNativeLib Condition="'$(ZigTargetOS)' == 'ios'">libzigote.dylib</ZigNativeLib>
+    <ZigNativeLib Condition="'$(ZigStaticNative)' == 'true'">libzigote.a</ZigNativeLib>
 
     <!-- Zig installs Windows DLLs into zig-out/bin (import lib + others in zig-out/lib); .so/.dylib
          go to zig-out/lib. ZigOutDir is where the loadable lib for this target lands. -->
@@ -104,7 +118,12 @@
     <ZigOptimize Condition="'$(_RidOS)' == 'ios'">ReleaseFast</ZigOptimize>
     <Enable3D Condition="'$(_RidOS)' == 'ios'">false</Enable3D>
     <EnablePhysics3D Condition="'$(_RidOS)' == 'ios'">false</EnablePhysics3D>
-    <EnableEcs Condition="'$(_RidOS)' == 'ios'">false</EnableEcs>
+    <!-- ECS stays ON for iOS. With the engine statically linked, DllImport names __Internal and
+         EVERY generated P/Invoke must resolve at link time — and the bindings are generated from
+         the Zig sources regardless of build flags, so gating flecs out leaves 12 dangling
+         zigote_ecs_* symbols. (3D and Jolt have stub implementations that keep exporting their
+         names, which is why only ECS breaks.) flecs is plain C and cross-compiles cleanly. -->
+    <EnableEcs Condition="'$(_RidOS)' == 'ios'">true</EnableEcs>
     <ZigCross Condition="'$(_RidOS)' != '' And '$(_RidOS)' != '$(_HostOS)'">true</ZigCross>
     <!-- Same-OS cross-ARCH (e.g. osx-x64 from an arm64 Mac) is a cross build too — without -Dtarget
          zig builds a host-arch lib that gets bundled into the foreign-arch RID and fails to load. -->
@@ -192,9 +211,15 @@
 
   <Target Name="BuildZigEngine" BeforeTargets="BeforeBuild"
           Inputs="@(ZigSourceFiles)" Outputs="$(ZigOutDir)\$(ZigNativeLib)">
-    <Message Importance="high" Text="Zigote native: zig build shared-lib -Doptimize=$(ZigOptimize) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigStripArg) $(ZigSysrootArg)" />
-    <Exec Command="zig build shared-lib -Doptimize=$(ZigOptimize) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigStripArg) $(ZigSysrootArg)"
+    <Message Importance="high" Text="Zigote native: zig build $(ZigBuildStep) -Doptimize=$(ZigOptimize) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigStripArg) $(ZigSysrootArg)" />
+    <Exec Command="zig build $(ZigBuildStep) -Doptimize=$(ZigOptimize) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigStripArg) $(ZigSysrootArg)"
           WorkingDirectory="$(ZigEngineDir)" />
+    <!-- Apple's linker rejects zig's archives outright ("member not 8-byte aligned"), and Apple's
+         libtool silently drops members when fed one, because zig also writes members with mode
+         000. Repack each archive the only way that survives both: extract the objects, make them
+         readable, and let libtool build a Darwin-format archive from the objects. -->
+    <Exec Condition="'$(ZigStaticNative)' == 'true'" WorkingDirectory="$(ZigOutLib)"
+          Command="set -e; for a in *.a; do d=`mktemp -d`; cp &quot;$a&quot; &quot;$d/in.a&quot;; (cd &quot;$d&quot; &amp;&amp; ar x in.a &amp;&amp; rm in.a &amp;&amp; chmod 644 *.o &amp;&amp; libtool -static -o out.a *.o 2&gt;/dev/null); cp &quot;$d/out.a&quot; &quot;$a&quot;; rm -rf &quot;$d&quot;; done" />
   </Target>
 
   <!-- Copy the target platform's native lib (and, on Windows, the wgpu_native.dll it links against)
@@ -203,7 +228,7 @@
     <!-- No Exists() guard: these are produced by BuildZigEngine (which runs BeforeBuild), so the file
          is present by the time MSBuild copies content. An Exists() check is evaluated at project load
          — before the build — and would drop the lib on a fresh/target-switched build. -->
-    <Content Include="$(ZigOutDir)\$(ZigNativeLib)">
+    <Content Include="$(ZigOutDir)\$(ZigNativeLib)" Condition="'$(ZigStaticNative)' != 'true'">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>$(ZigNativeLib)</Link>
     </Content>

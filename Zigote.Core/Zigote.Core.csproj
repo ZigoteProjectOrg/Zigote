@@ -14,7 +14,11 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Zigote.Generators\Zigote.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false"/>
-        <AdditionalFiles Include="..\Zigote.Engine\src\ffi\*.zig"/>
+        <!-- desktop_shims_stub.zig is excluded: it re-exports the macOS-only menu/drag entry points as
+         no-ops for other platforms, and those already have hand-written bindings in NativeMenu.cs
+         (same partial class) — generating them again would duplicate the declarations. -->
+    <AdditionalFiles Include="..\Zigote.Engine\src\ffi\*.zig"
+                     Exclude="..\Zigote.Engine\src\ffi\desktop_shims_stub.zig"/>
     </ItemGroup>
 
     <ItemGroup>

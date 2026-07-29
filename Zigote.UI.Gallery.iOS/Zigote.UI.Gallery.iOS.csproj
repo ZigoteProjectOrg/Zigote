@@ -21,9 +21,11 @@
         <Nullable>enable</Nullable>
         <ApplicationTitle>Zigote Gallery</ApplicationTitle>
         <ApplicationId>com.zigote.gallery</ApplicationId>
-        <!-- No managed linking: the UI stack leans on reflection in places (DevTools late-bind,
-             widget inspector) and bring-up must not chase trimmer ghosts. -->
-        <MtouchLink>None</MtouchLink>
+        <!-- SdkOnly: the app assemblies stay untrimmed (the UI stack leans on reflection —
+             DevTools late-bind, widget inspector), but the linker pipeline still runs, which is
+             what collects @(NativeReference) for the native link. MtouchLink=None skips that
+             step entirely and the engine archives never reach the linker. -->
+        <MtouchLink>SdkOnly</MtouchLink>
     </PropertyGroup>
 
     <ItemGroup>
@@ -63,6 +65,38 @@
         <BundleResource Include="..\Zigote.UI\Fonts\PkgTTC-SGr-Iosevka-34\OFL.txt"
                         Link="Fonts\LICENSE-Iosevka-OFL.txt"/>
     </ItemGroup>
+
+    <!-- iOS DEVICE: the engine is linked INTO the app binary. AMFI rejects a loose dylib in the
+         bundle ("invalid code signature"), and a device .NET app links everything else — Mono
+         included — statically anyway. The archives come from `zig build static-lib` (engine +
+         each dependency, which a static archive does not absorb); ForceLoad keeps the engine's
+         exports alive, since every zigote_* entry is resolved at runtime by DllImport and the
+         linker therefore sees no references to them. Simulator builds keep the bundled dylib. -->
+    <Target Name="AddZigoteStaticArchives" BeforeTargets="ResolveAssemblyReferences"
+            Condition="'$(RuntimeIdentifier)' == 'ios-arm64'">
+        <ItemGroup>
+            <!-- The engine archive is force-loaded: every zigote_* entry point is reached only
+                 through runtime DllImport resolution, so the linker sees no reference to any of
+                 them and would otherwise drop the whole archive. (ForceLoad must be set on its
+                 own item — a %(Filename) condition while the item is being created does not
+                 batch, which silently left the archive out.) The dependency archives are pulled
+                 normally, by the references the engine objects make into them. -->
+            <NativeReference Include="$(MSBuildThisFileDirectory)..\Zigote.Engine\zig-out\lib\libzigote.a">
+                <Kind>Static</Kind>
+                <IsCxx>True</IsCxx>
+                <ForceLoad>True</ForceLoad>
+                <Frameworks>UIKit Metal QuartzCore Foundation CoreGraphics CoreVideo CoreMotion GameController CoreAudio AudioToolbox AVFoundation</Frameworks>
+                <WeakFrameworks>CoreHaptics</WeakFrameworks>
+                <LinkerFlags>-liconv -Wl,-export_dynamic</LinkerFlags>
+            </NativeReference>
+            <_ZigoteDepArchive Include="$(MSBuildThisFileDirectory)..\Zigote.Engine\zig-out\lib\*.a"
+                               Exclude="$(MSBuildThisFileDirectory)..\Zigote.Engine\zig-out\lib\libzigote.a"/>
+            <NativeReference Include="@(_ZigoteDepArchive)">
+                <Kind>Static</Kind>
+                <IsCxx>True</IsCxx>
+            </NativeReference>
+        </ItemGroup>
+    </Target>
 
     <!-- libzigote.dylib flows as Content from Zigote.Core through EVERY project that references
          it (UI, Material, Charts, …), and the iOS SDK's native-library collection keeps each
