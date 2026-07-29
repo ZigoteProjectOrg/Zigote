@@ -107,7 +107,14 @@
     <_ZigTriple Condition="'$(_RidOS)' == 'macos' And '$(_RidArch)' != ''">$(_RidArch)-macos</_ZigTriple>
     <_ZigTriple Condition="'$(_RidOS)' == 'linux' And '$(_RidArch)' != ''">$(_RidArch)-linux-gnu</_ZigTriple>
     <_ZigTriple Condition="'$(_RidOS)' == 'windows' And '$(_RidArch)' != ''">$(_RidArch)-windows-gnu</_ZigTriple>
-    <_ZigTriple Condition="'$(_RidOS)' == 'android' And '$(_RidArch)' != ''">$(_RidArch)-linux-android</_ZigTriple>
+    <!-- The API suffix is mandatory: without it zig defaults Android to API 29, which disagrees
+         with the NDK library directory the sysroot paths point at. -->
+    <AndroidApiLevel Condition="'$(AndroidApiLevel)' == ''">34</AndroidApiLevel>
+    <_ZigTriple Condition="'$(_RidOS)' == 'android' And '$(_RidArch)' != ''">$(_RidArch)-linux-android.$(AndroidApiLevel)</_ZigTriple>
+    <_AndroidTriple Condition="'$(_RidOS)' == 'android' And '$(_RidArch)' != ''">$(_RidArch)-linux-android</_AndroidTriple>
+    <!-- Android ABI directory names inside an APK's lib/ folder. -->
+    <AndroidAbi Condition="'$(_RidOS)' == 'android' And '$(_RidArch)' == 'aarch64'">arm64-v8a</AndroidAbi>
+    <AndroidAbi Condition="'$(_RidOS)' == 'android' And '$(_RidArch)' == 'x86_64'">x86_64</AndroidAbi>
     <_ZigTriple Condition="'$(_RidOS)' == 'ios' And '$(_RidArch)' != '' And '$(_IosSimulator)' != 'true'">$(_RidArch)-ios</_ZigTriple>
     <_ZigTriple Condition="'$(_RidOS)' == 'ios' And '$(_RidArch)' != '' And '$(_IosSimulator)' == 'true'">$(_RidArch)-ios-simulator</_ZigTriple>
 
@@ -124,6 +131,12 @@
          zigote_ecs_* symbols. (3D and Jolt have stub implementations that keep exporting their
          names, which is why only ECS breaks.) flecs is plain C and cross-compiles cleanly. -->
     <EnableEcs Condition="'$(_RidOS)' == 'ios'">true</EnableEcs>
+    <!-- Same reasoning as iOS: Assimp (C++) and Jolt are not yet validated against the NDK, and
+         the apps being brought up do not use them; ECS stays on so the generated P/Invoke set
+         resolves. Android keeps the .so (no static-link requirement — only iOS forbids one). -->
+    <Enable3D Condition="'$(_RidOS)' == 'android'">false</Enable3D>
+    <EnablePhysics3D Condition="'$(_RidOS)' == 'android'">false</EnablePhysics3D>
+    <EnableEcs Condition="'$(_RidOS)' == 'android'">true</EnableEcs>
     <ZigCross Condition="'$(_RidOS)' != '' And '$(_RidOS)' != '$(_HostOS)'">true</ZigCross>
     <!-- Same-OS cross-ARCH (e.g. osx-x64 from an arm64 Mac) is a cross build too — without -Dtarget
          zig builds a host-arch lib that gets bundled into the foreign-arch RID and fails to load. -->
@@ -209,11 +222,32 @@
     </PropertyGroup>
   </Target>
 
+  <!-- Android: zig bundles no bionic headers, so the NDK sysroot must be spelled out as both the
+       sysroot (system libraries) and a generated zig libc file (headers + crt objects). The libc
+       file is generated per build rather than committed because it embeds absolute NDK paths. -->
+  <Target Name="ZigAndroidSysroot" BeforeTargets="BuildZigEngine" Condition="'$(ZigTargetOS)' == 'android'">
+    <PropertyGroup>
+      <AndroidNdkRoot Condition="'$(AndroidNdkRoot)' == ''">$(ANDROID_NDK_ROOT)</AndroidNdkRoot>
+      <AndroidNdkRoot Condition="'$(AndroidNdkRoot)' == ''">$(HOME)/Library/Android/sdk/ndk/26.2.11394342</AndroidNdkRoot>
+      <!-- The prebuilt directory is named darwin-x86_64 even on Apple silicon (the only one shipped). -->
+      <_NdkSysroot>$(AndroidNdkRoot)/toolchains/llvm/prebuilt/darwin-x86_64/sysroot</_NdkSysroot>
+      <_ZigAndroidLibcFile>$(ZigEngineDir)/zig-out/.zig-libc-android-$(_RidArch).txt</_ZigAndroidLibcFile>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(_NdkSysroot)')"
+           Text="Android NDK sysroot not found at '$(_NdkSysroot)'. Set AndroidNdkRoot or ANDROID_NDK_ROOT." />
+    <MakeDir Directories="$(ZigEngineDir)/zig-out" />
+    <WriteLinesToFile File="$(_ZigAndroidLibcFile)" Overwrite="true"
+                      Lines="include_dir=$(_NdkSysroot)/usr/include;sys_include_dir=$(_NdkSysroot)/usr/include/$(_AndroidTriple);crt_dir=$(_NdkSysroot)/usr/lib/$(_AndroidTriple)/$(AndroidApiLevel);msvc_lib_dir=;kernel32_lib_dir=;gcc_dir=" />
+    <PropertyGroup>
+      <ZigSysrootArg>--sysroot "$(_NdkSysroot)" --libc "$(_ZigAndroidLibcFile)"</ZigSysrootArg>
+    </PropertyGroup>
+  </Target>
+
   <Target Name="BuildZigEngine" BeforeTargets="BeforeBuild"
           Inputs="@(ZigSourceFiles)" Outputs="$(ZigOutDir)\$(ZigNativeLib)">
     <Message Importance="high" Text="Zigote native: zig build $(ZigBuildStep) -Doptimize=$(ZigOptimize) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigStripArg) $(ZigSysrootArg)" />
     <Exec Command="zig build $(ZigBuildStep) -Doptimize=$(ZigOptimize) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigStripArg) $(ZigSysrootArg)"
-          WorkingDirectory="$(ZigEngineDir)" />
+          WorkingDirectory="$(ZigEngineDir)" IgnoreStandardErrorWarningFormat="true" />
     <!-- Apple's linker rejects zig's archives outright ("member not 8-byte aligned"), and Apple's
          libtool silently drops members when fed one, because zig also writes members with mode
          000. Repack each archive the only way that survives both: extract the objects, make them
