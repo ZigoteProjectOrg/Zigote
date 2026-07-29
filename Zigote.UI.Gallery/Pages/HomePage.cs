@@ -51,25 +51,33 @@ internal sealed class HomePage : StatelessWidget
                 FabAction(l),
                 new Icon(MaterialIcons.Add)
             ),
-            body: new SingleChildScrollView {
+            // One page, three form factors: the size class (from the width the body actually
+            // gets — reacts to live resizes and rotation) picks the header arrangement and the
+            // card-grid density. Compact stacks everything; wider classes keep the original
+            // desktop composition.
+            body: new AdaptiveBuilder((ctx, size) => new SingleChildScrollView {
                 Child = new Padding(
-                    EdgeInsets.All(24),
+                    EdgeInsets.All(size == WindowSizeClass.Compact ? 16 : 24),
                     new Column(
                         crossAxisAlignment: CrossAxisAlignment.Stretch,
                         children: [
-                            Header(context, l),
+                            Header(ctx, l, size),
                             new SizedBox(height: 20),
                             GridView.Count(
-                                3,
+                                size switch {
+                                    WindowSizeClass.Compact => 1,
+                                    WindowSizeClass.Medium => 2,
+                                    _ => 3,
+                                },
                                 cards,
                                 16,
                                 16,
-                                2.1
+                                size == WindowSizeClass.Compact ? 2.6 : 2.1
                             ),
                         ]
                     )
                 ),
-            }
+            })
         );
     }
 
@@ -88,27 +96,63 @@ internal sealed class HomePage : StatelessWidget
         return () => GalleryUi.Toast(message);
     }
 
-    private Widget Header(BuildContext context, GalleryL10n l)
+    private Widget Header(BuildContext context, GalleryL10n l, WindowSizeClass size)
     {
+        var headline = new Column(
+            crossAxisAlignment: CrossAxisAlignment.Start,
+            children: [
+                new Text(
+                    l.HomeHeadline,
+                    new TextStyle(24, fontWeight: FontWeight.Bold)
+                ),
+                new SizedBox(height: 4),
+                new Text(
+                    l.HomeTagline,
+                    new TextStyle(13, color: Colors.Grey[500])
+                ),
+            ]
+        );
+
+        // Watch rebuilds just this control when the theme signal changes. Labels are captured
+        // from the locale-resolved `l` (this whole page rebuilds on a locale switch anyway).
+        var appearance = new Watch(() => new SegmentedControl(
+            [l.HomeThemeLight, l.HomeThemeDark],
+            _theme.Mode.Value == ThemeMode.Dark ? 1 : 0,
+            i => _theme.Set(i == 1 ? ThemeMode.Dark : ThemeMode.Light)
+        ));
+
+        // Phone widths can't fit headline + both controls on one line — stack them, with each
+        // control on its own labelled row. Wider classes keep the single-row composition.
+        if (size == WindowSizeClass.Compact)
+            return new Column(
+                crossAxisAlignment: CrossAxisAlignment.Start,
+                children: [
+                    headline,
+                    new SizedBox(height: 16),
+                    new Row(
+                        crossAxisAlignment: CrossAxisAlignment.Center,
+                        children: [
+                            new Text(l.HomeLanguage, new TextStyle(color: Colors.Grey[500])),
+                            new SizedBox(12),
+                            LanguageSwitcher(context, l),
+                        ]
+                    ),
+                    new SizedBox(height: 12),
+                    new Row(
+                        crossAxisAlignment: CrossAxisAlignment.Center,
+                        children: [
+                            new Text(l.HomeAppearance, new TextStyle(color: Colors.Grey[500])),
+                            new SizedBox(12),
+                            appearance,
+                        ]
+                    ),
+                ]
+            );
+
         return new Row(
             crossAxisAlignment: CrossAxisAlignment.Center,
             children: [
-                new Expanded(
-                    new Column(
-                        crossAxisAlignment: CrossAxisAlignment.Start,
-                        children: [
-                            new Text(
-                                l.HomeHeadline,
-                                new TextStyle(24, fontWeight: FontWeight.Bold)
-                            ),
-                            new SizedBox(height: 4),
-                            new Text(
-                                l.HomeTagline,
-                                new TextStyle(13, color: Colors.Grey[500])
-                            ),
-                        ]
-                    )
-                ),
+                new Expanded(headline),
                 new SizedBox(24),
                 new Text(l.HomeLanguage, new TextStyle(color: Colors.Grey[500])),
                 new SizedBox(12),
@@ -116,13 +160,7 @@ internal sealed class HomePage : StatelessWidget
                 new SizedBox(24),
                 new Text(l.HomeAppearance, new TextStyle(color: Colors.Grey[500])),
                 new SizedBox(12),
-                // Watch rebuilds just this control when the theme signal changes. Labels are captured
-                // from the locale-resolved `l` (this whole page rebuilds on a locale switch anyway).
-                new Watch(() => new SegmentedControl(
-                    [l.HomeThemeLight, l.HomeThemeDark],
-                    _theme.Mode.Value == ThemeMode.Dark ? 1 : 0,
-                    i => _theme.Set(i == 1 ? ThemeMode.Dark : ThemeMode.Light)
-                )),
+                appearance,
             ]
         );
     }

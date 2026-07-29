@@ -33,6 +33,13 @@ public readonly struct MediaQueryData(
 
     /// <summary>Logical size as a <see cref="Zigote.Core.Size" />.</summary>
     public Size Size => new(Width, Height);
+
+    /// <summary>
+    ///     The window's <see cref="WindowSizeClass" /> (Compact = phone, Medium = tablet,
+    ///     Expanded = desktop). For layouts inside a pane narrower than the window, prefer
+    ///     <see cref="AdaptiveBuilder" />, which classifies the width actually available.
+    /// </summary>
+    public WindowSizeClass SizeClass => WindowSize.ClassFor(Width);
 }
 
 /// <summary>

@@ -3,6 +3,7 @@ using Zigote.UI.Localizations;
 using Zigote.UI.Material;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
+using Zigote.UI.Widgets.Layout;
 using Zigote.UI.Widgets.Navigation;
 
 // Kept in a top-level namespace (not under Zigote.UI) so the widget/type names are never shadowed by
@@ -66,13 +67,17 @@ internal sealed class GalleryApp : MaterialApp
 
         // GalleryL10n is generated from l10n/*.arb (LocalizationsGenerator) — the typed delegate
         // replaces a string-keyed Bundle, so every message access is compile-checked.
-        Home = new LocalizationsScope {
-            Delegates = [GalleryL10n.Delegate],
-            SupportedLocales = [.. GalleryL10n.SupportedLocales],
-            FallbackLocale = Locale.En,
-            OnLocaleChanged = locale => GalleryFonts.Apply(App, locale),
-            Child = _navigator,
-        };
+        // SafeArea keeps every page clear of mobile obstructions (notch, home indicator) using
+        // the real device insets in MediaQuery — a passthrough on desktop, where they are zero.
+        Home = new SafeArea(
+            new LocalizationsScope {
+                Delegates = [GalleryL10n.Delegate],
+                SupportedLocales = [.. GalleryL10n.SupportedLocales],
+                FallbackLocale = Locale.En,
+                OnLocaleChanged = locale => GalleryFonts.Apply(App, locale),
+                Child = _navigator,
+            }
+        );
 
         // Signals as the app's state layer: project routing into the page stack, and appearance into
         // the framework theme. Signal.Changed fires only on an actual change (equality-gated).
