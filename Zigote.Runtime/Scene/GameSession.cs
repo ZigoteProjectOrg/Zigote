@@ -429,9 +429,9 @@ public sealed class GameSession : IWorldSessionHooks
         if (Environment.GetEnvironmentVariable("ZIGOTE_GAMEPAD") == "1")
         {
             Gamepad.ConnectedProvider = () => ZigoteEngine.Instance?.GamepadConnected() ?? false;
-            Gamepad.AxisProvider = axis => ZigoteEngine.Instance?.GamepadAxis(axis) ?? 0f;
+            Gamepad.AxisProvider = axis => ZigoteEngine.Instance?.GamepadAxis(0, axis) ?? 0f;
             Gamepad.ButtonProvider =
-                button => ZigoteEngine.Instance?.GamepadButton(button) ?? false;
+                button => ZigoteEngine.Instance?.GamepadButton(0, button) ?? false;
         }
         else
         {

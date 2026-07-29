@@ -804,27 +804,33 @@ public sealed unsafe class ZigoteEngine : IDisposable
         NativeEngine.RenderSetFrustumCull(_handle, enabled ? 1u : 0u);
     }
 
-    // ── Game controller (SDL gamepad) ─────────────────────────────────────────
+    // ── Game controllers (SDL gamepad, up to 8 player slots) ─────────────────────
 
-    /// <summary>True when a game controller is connected.</summary>
-    public bool GamepadConnected()
+    /// <summary>Number of connected controllers (0-8); slots are packed from 0. Hotplug-aware.</summary>
+    public int GamepadCount()
     {
-        return !_disposed && NativeEngine.InputGamepadConnected(_handle) != 0;
+        return _disposed ? 0 : (int)NativeEngine.InputGamepadCount(_handle);
+    }
+
+    /// <summary>True when the game controller in slot <paramref name="pad" /> is connected.</summary>
+    public bool GamepadConnected(int pad = 0)
+    {
+        return !_disposed && NativeEngine.InputGamepadConnected(_handle, (byte)pad) != 0;
     }
 
     /// <summary>
     ///     Read a controller axis, normalised to [-1, 1] (triggers [0, 1]). See <c>GamepadAxis</c>
     ///     order.
     /// </summary>
-    public float GamepadAxis(int axis)
+    public float GamepadAxis(int pad, int axis)
     {
-        return _disposed ? 0f : NativeEngine.InputGamepadAxis(_handle, (byte)axis);
+        return _disposed ? 0f : NativeEngine.InputGamepadAxis(_handle, (byte)pad, (byte)axis);
     }
 
     /// <summary>True while a controller button is held. See <c>GamepadButton</c> order.</summary>
-    public bool GamepadButton(int button)
+    public bool GamepadButton(int pad, int button)
     {
-        return !_disposed && NativeEngine.InputGamepadButton(_handle, (byte)button) != 0;
+        return !_disposed && NativeEngine.InputGamepadButton(_handle, (byte)pad, (byte)button) != 0;
     }
 
     // ── Audio (miniaudio software synth, lazily opened on first use) ──────────────
