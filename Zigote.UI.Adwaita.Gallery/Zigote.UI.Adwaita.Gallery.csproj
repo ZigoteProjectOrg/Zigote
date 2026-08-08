@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <RootNamespace>AdwaitaGallery</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Adwaita\Zigote.UI.Adwaita.csproj"/>
+    </ItemGroup>
+</Project>

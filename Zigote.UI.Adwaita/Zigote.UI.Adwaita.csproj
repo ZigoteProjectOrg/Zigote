@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>Zigote.UI.Adwaita</RootNamespace>
+        <AssemblyName>Zigote.UI.Adwaita</AssemblyName>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.BottomSheet\Zigote.UI.BottomSheet.csproj"/>
+    </ItemGroup>
+</Project>

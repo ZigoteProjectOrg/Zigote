@@ -1,0 +1,393 @@
+using Zigote.Core.Events;
+using Zigote.Core.State;
+
+namespace Zigote.UI.Adwaita;
+
+/// <summary>
+///     AdwCarousel — a paged horizontal container: every page gets the full carousel width, a
+///     pointer drag scrolls the strip and snaps to the nearest page on release (fling advances a
+///     page), Left/Right arrows page with the keyboard. Pair with
+///     <see cref="AdwCarouselIndicatorDots" /> / <see cref="AdwCarouselIndicatorLines" />.
+///     <para>
+///         ponytail: while <see cref="Interactive" />, the carousel claims the pointer for
+///         dragging, so controls inside pages are not clickable (no gesture arena to arbitrate a
+///         drag vs a child tap — that is the upgrade path); and a touch drag released too slowly
+///         to fling can rest between pages until the next interaction (no scroll-end hook).
+///     </para>
+/// </summary>
+public sealed class AdwCarousel : RenderWidget
+{
+    private const float DragSlop = 6f; // px before a press becomes a drag
+    private const float FlingSpeed = 400f; // px/s that advances a page regardless of distance
+    private const float WheelThreshold = 1f; // accumulated wheel ticks that page (a notch = 1)
+    private const long WheelDebounceMs = 250; // one page per gesture window, à la libadwaita
+
+    /// <summary>Current page, signal-backed so the indicators can react.</summary>
+    internal readonly Signal<int> PositionSignal = new(0);
+
+    private readonly SmoothScroller _scroller;
+    private Size _size;
+    private float _pageWidth;
+    private float _lastPageWidth = -1f;
+    private float _wheelAccum;
+    private long _wheelLastMs;
+    private long _wheelPagedMs = long.MinValue;
+    private bool _armed;
+    private bool _dragging;
+    private float _dragStartX;
+    private float _dragStartOffset;
+
+    public AdwCarousel(params Widget[] pages) : this((IEnumerable<Widget>)pages)
+    {
+    }
+
+    public AdwCarousel(IEnumerable<Widget> pages)
+    {
+        Pages = [.. pages];
+        _scroller = new SmoothScroller(MarkNeedsLayout);
+    }
+
+    public List<Widget> Pages { get; }
+
+    public Action<int>? OnPageChanged { get; set; }
+
+    /// <summary>Whether pointer drags page the carousel (indicators/keyboard still work).</summary>
+    public bool Interactive { get; set; } = true;
+
+    public int Position
+    {
+        get => PositionSignal.Value;
+        set => GoTo(value);
+    }
+
+    public override bool Focusable => Interactive && Pages.Count > 1;
+    public override bool HandlesDirectionalKeys => true;
+
+    private void GoTo(int index)
+    {
+        index = Math.Clamp(index, 0, Math.Max(0, Pages.Count - 1));
+        if (_pageWidth > 0f) _scroller.AnimateTo(index * _pageWidth);
+        SetPosition(index);
+    }
+
+    private void SetPosition(int index)
+    {
+        if (PositionSignal.Peek() == index) return;
+        PositionSignal.Value = index;
+        OnPageChanged?.Invoke(index);
+    }
+
+    public override Size Measure(Constraints c)
+    {
+        float width;
+        if (float.IsFinite(c.MaxWidth))
+        {
+            width = c.MaxWidth;
+        }
+        else
+        {
+            // Unbounded width: size to the widest page's intrinsic width.
+            width = 0f;
+            foreach (var page in Pages)
+                width = MathF.Max(
+                    width,
+                    page.Measure(
+                        new Constraints(
+                            0,
+                            float.PositiveInfinity,
+                            0,
+                            c.MaxHeight
+                        )
+                    ).Width
+                );
+        }
+
+        var height = 0f;
+        foreach (var page in Pages)
+            height = MathF.Max(
+                height,
+                page.Measure(
+                    new Constraints(
+                        width,
+                        width,
+                        0,
+                        c.MaxHeight
+                    )
+                ).Height
+            );
+        if (float.IsFinite(c.MaxHeight)) height = c.MaxHeight;
+
+        // Re-measure tight so every page fills the resolved page box.
+        foreach (var page in Pages) page.Measure(Constraints.Tight(width, height));
+
+        _pageWidth = width;
+        _scroller.Max = MathF.Max(0f, (Pages.Count - 1) * width);
+        _scroller.Reclamp();
+        if (MathF.Abs(width - _lastPageWidth) > 0.5f)
+        {
+            // First measure / resize: land exactly on the current page at the new width.
+            _lastPageWidth = width;
+            _scroller.JumpTo(PositionSignal.Peek() * width);
+        }
+
+        _size = c.Constrain(new Size(width, height));
+        return _size;
+    }
+
+    public override void Layout(Offset origin)
+    {
+        Bounds = new Rect(
+            origin.X,
+            origin.Y,
+            _size.Width,
+            _size.Height
+        );
+        var x = origin.X - _scroller.Offset;
+        foreach (var page in Pages)
+        {
+            page.Layout(new Offset(x, origin.Y));
+            x += _pageWidth;
+        }
+    }
+
+    public override void Paint(PaintList paint)
+    {
+        paint.AddClipStart(Bounds);
+        foreach (var page in Pages)
+        {
+            // Cull pages fully outside the viewport.
+            if (page.Bounds.Right < Bounds.X - 0.5f || page.Bounds.X > Bounds.Right + 0.5f)
+                continue;
+            page.Paint(paint);
+        }
+
+        paint.AddClipEnd();
+    }
+
+    public override Widget? HitTest(Offset point)
+    {
+        if (!Bounds.Contains(point.X, point.Y)) return null;
+
+        // ponytail: an Interactive carousel claims the whole pointer so a drag can start anywhere
+        // (nearly every widget claims hits, so "children first" would leave no drag surface).
+        // Controls inside pages are therefore not clickable while Interactive — set Interactive =
+        // false to restore child hit-testing; a gesture arena is the upgrade path.
+        if (Interactive && Pages.Count > 1) return this;
+
+        foreach (var page in Pages)
+        {
+            var hit = page.HitTest(point);
+            if (hit is not null) return hit;
+        }
+
+        return this;
+    }
+
+    // ── Mouse drag ──────────────────────────────────────────────────────────────
+
+    public override void OnPointerDown(Offset point)
+    {
+        if (!Interactive || Pages.Count < 2) return;
+        _armed = true;
+        _dragging = false;
+        _dragStartX = point.X;
+        _dragStartOffset = _scroller.Offset;
+    }
+
+    public override void OnPointerMove(Offset point)
+    {
+        if (!_armed) return;
+        var dx = point.X - _dragStartX;
+        if (!_dragging && MathF.Abs(dx) > DragSlop) _dragging = true;
+        if (_dragging) _scroller.JumpTo(_dragStartOffset - dx);
+    }
+
+    public override void OnPointerUp(Offset point)
+    {
+        if (_dragging) SnapToNearest();
+        _armed = false;
+        _dragging = false;
+    }
+
+    public override void OnPointerCancel()
+    {
+        if (_dragging) SnapToNearest();
+        _armed = false;
+        _dragging = false;
+    }
+
+    private void SnapToNearest()
+    {
+        if (_pageWidth <= 0f) return;
+        GoTo((int)MathF.Round(_scroller.Offset / _pageWidth));
+    }
+
+    // ── Mouse wheel ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    ///     A wheel tick pages the carousel: dominant axis wins, wheel-down / touchpad-left is
+    ///     forward. Deltas accumulate against a one-tick threshold so touchpad micro-deltas add
+    ///     up, and one gesture pages at most once per <see cref="WheelDebounceMs" />.
+    /// </summary>
+    public override void OnScroll(float dx, float dy)
+    {
+        if (!Interactive || Pages.Count < 2 || _pageWidth <= 0f)
+        {
+            base.OnScroll(dx, dy);
+            return;
+        }
+
+        // Dominant axis; dy is negated so wheel-down means forward (matches ScrollView's signs).
+        var delta = MathF.Abs(dx) > MathF.Abs(dy) ? dx : -dy;
+        var now = Environment.TickCount64;
+        if (now - _wheelLastMs > WheelDebounceMs) _wheelAccum = 0f; // idle timeout: new gesture
+        _wheelLastMs = now;
+        if (now - _wheelPagedMs < WheelDebounceMs) return; // just paged: swallow the gesture tail
+
+        _wheelAccum += delta;
+        if (MathF.Abs(_wheelAccum) < WheelThreshold) return;
+
+        GoTo(PositionSignal.Peek() + (_wheelAccum > 0f ? 1 : -1));
+        _wheelAccum = 0f;
+        _wheelPagedMs = now;
+    }
+
+    // ── Touch drag ──────────────────────────────────────────────────────────────
+
+    public override bool CanTouchScroll(bool vertical)
+    {
+        return Interactive && !vertical && Pages.Count > 1;
+    }
+
+    public override void OnTouchScroll(float dx, float dy)
+    {
+        _scroller.JumpTo(_scroller.Offset - dx);
+    }
+
+    public override void OnTouchFling(float velocityX, float velocityY)
+    {
+        if (_pageWidth <= 0f) return;
+        // Finger right (+vx) reveals the previous page; a fast fling always advances one page.
+        if (velocityX <= -FlingSpeed)
+            GoTo((int)MathF.Floor(_scroller.Offset / _pageWidth) + 1);
+        else if (velocityX >= FlingSpeed)
+            GoTo((int)MathF.Ceiling(_scroller.Offset / _pageWidth) - 1);
+        else
+            SnapToNearest();
+    }
+
+    // ── Keyboard ────────────────────────────────────────────────────────────────
+
+    public override void OnKey(char keyChar, uint scancode, bool down, Modifiers mods)
+    {
+        if (!down) return;
+        switch (scancode)
+        {
+            case 80: // Left
+                GoTo(PositionSignal.Peek() - 1);
+                break;
+            case 79: // Right
+                GoTo(PositionSignal.Peek() + 1);
+                break;
+        }
+    }
+
+    public override void Detach()
+    {
+        base.Detach();
+        _scroller.Dispose(); // ticker recreated lazily on the next animation
+    }
+
+    public override IEnumerable<Widget> GetChildren()
+    {
+        return Pages;
+    }
+
+    /// <summary>Only the current page is focus/semantics-reachable.</summary>
+    public override IEnumerable<Widget> GetVisibleChildren()
+    {
+        var i = PositionSignal.Peek();
+        if (i >= 0 && i < Pages.Count) yield return Pages[i];
+    }
+
+    public override int DebugStateHash()
+    {
+        return HashCode.Combine(_scroller.Offset, Pages.Count);
+    }
+}
+
+/// <summary>8px page dots for an <see cref="AdwCarousel" />; clicking a dot jumps to its page.</summary>
+public sealed class AdwCarouselIndicatorDots(AdwCarousel carousel) : StatelessWidget
+{
+    protected override Widget Build(BuildContext context)
+    {
+        return CarouselIndicator.Build(
+            context,
+            carousel,
+            8f,
+            8f,
+            4f
+        );
+    }
+}
+
+/// <summary>24×3px page lines for an <see cref="AdwCarousel" />; clicking a line jumps to its page.</summary>
+public sealed class AdwCarouselIndicatorLines(AdwCarousel carousel) : StatelessWidget
+{
+    protected override Widget Build(BuildContext context)
+    {
+        return CarouselIndicator.Build(
+            context,
+            carousel,
+            24f,
+            3f,
+            1.5f
+        );
+    }
+}
+
+/// <summary>
+///     The body both carousel indicators share: a row of pressable pips, the current one drawn in
+///     the foreground colour and the rest dimmed, each jumping to its page. libadwaita's dots and
+///     lines differ only in pip geometry, so they differ only in these arguments here.
+/// </summary>
+file static class CarouselIndicator
+{
+    public static Widget Build(
+        BuildContext context,
+        AdwCarousel carousel,
+        float width,
+        float height,
+        float radius)
+    {
+        var theme = ThemeProvider.Of(context);
+        return new Watch(() =>
+            {
+                var pos = carousel.PositionSignal.Value;
+                var row = new Row(spacing: Spacing.Sm, mainAxisSize: MainAxisSize.Min);
+                for (var i = 0; i < carousel.Pages.Count; i++)
+                {
+                    var index = i;
+                    row.Children.Add(
+                        new Pressable {
+                            FocusRadius = radius,
+                            SemanticsLabel = $"Page {index + 1}",
+                            SelectedState = index == pos,
+                            OnPressed = () => carousel.Position = index,
+                            Child = new SizedBox(
+                                width,
+                                height,
+                                new DecoratedBox {
+                                    Radius = radius,
+                                    Fill = index == pos ? theme.OnSurface : theme.Label4,
+                                }
+                            ),
+                        }
+                    );
+                }
+
+                return row;
+            }
+        );
+    }
+}
