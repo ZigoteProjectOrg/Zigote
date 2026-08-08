@@ -64,6 +64,7 @@ public enum EventKind : byte
     LowMemory = 24,
     ScreenKeyboardShown = 25,
     ScreenKeyboardHidden = 26,
+    DisplayChanged = 27,
 }
 
 /// <summary>
@@ -254,6 +255,48 @@ public struct ZgRendererCaps
 
     public byte RayTracingFromRender; // offset 9 — RT usable from fragment shaders
     // 2 bytes padding to 12 (matches Zig extern struct).
+}
+
+/// <summary>
+///     One GPU the engine enumerated at init, returned by <c>zigote_enumerate_gpus</c>. Mirrors
+///     <c>GpuInfo</c> in src/renderer/gpu_select.zig. Total size: 144 bytes.
+///     <para>
+///         The same physical GPU appears once per graphics API the instance was built with (a
+///         Windows machine typically lists each card under both D3D12 and Vulkan), so
+///         <see cref="Backend" /> is part of a GPU's identity, not just a detail about it.
+///     </para>
+/// </summary>
+[StructLayout(LayoutKind.Sequential, Size = 144)]
+public unsafe struct ZgGpuInfo
+{
+    public fixed byte Name[128]; // offset 0   — UTF-8, NUL-padded
+    public uint Backend; // offset 128 — ZgGpuBackend
+    public uint DeviceType; // offset 132 — ZgGpuDeviceType
+    public uint VendorId; // offset 136
+    public uint DeviceId; // offset 140
+}
+
+/// <summary>Graphics API an adapter drives. Mirrors wgpu's <c>BackendType</c>.</summary>
+public enum ZgGpuBackend : uint
+{
+    Undefined = 0,
+    Null = 1,
+    WebGpu = 2,
+    D3D11 = 3,
+    D3D12 = 4,
+    Metal = 5,
+    Vulkan = 6,
+    OpenGl = 7,
+    OpenGlEs = 8,
+}
+
+/// <summary>Physical kind of an adapter. Mirrors wgpu's <c>AdapterType</c>.</summary>
+public enum ZgGpuDeviceType : uint
+{
+    DiscreteGpu = 1,
+    IntegratedGpu = 2,
+    Cpu = 3,
+    Unknown = 4,
 }
 
 /// <summary>

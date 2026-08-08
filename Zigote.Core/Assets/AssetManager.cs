@@ -70,6 +70,7 @@ public sealed class AssetManager
             if (_entries.TryGetValue(key, out var existing))
             {
                 var typed = (AssetEntry<T>)existing;
+                typed.Detached = false; // in the table, therefore live again
                 typed.RefCount++;
                 typed.LastTouchFrame = _frame;
                 // A previously-evicted (Unloaded) or Failed entry that is being re-referenced restarts.
@@ -124,16 +125,21 @@ public sealed class AssetManager
                 continue;
             }
 
-            // Cancelled while loading (all refs released before the load finished): drop the payload.
+            // Cancelled while loading (all refs released before the load finished), or the record was
+            // dropped from the table entirely (evict / Clear). Either way the payload goes no further.
+            //
+            // Dropping it raw is safe by the loader contract: LoadOffThread is pure CPU work that may
+            // not touch the FFI or the GPU, so a payload holds nothing but managed memory — the
+            // native resources only exist after Apply, which is exactly what is being skipped.
             bool wanted;
             lock (_lock)
             {
-                wanted = entry.RefCount > 0;
+                wanted = entry.RefCount > 0 && !entry.Detached;
             }
 
             if (!wanted)
             {
-                entry.State = AssetLoadState.Unloaded;
+                if (!entry.Detached) entry.State = AssetLoadState.Unloaded;
                 continue;
             }
 
@@ -174,6 +180,7 @@ public sealed class AssetManager
                 var entry = _entries[key];
                 if (entry.State == AssetLoadState.Loaded) entry.UnloadValue();
                 entry.State = AssetLoadState.Unloaded;
+                entry.Detached = true; // a load still in flight for it must not be applied
                 _entries.Remove(key);
             }
 
@@ -182,20 +189,31 @@ public sealed class AssetManager
     }
 
     /// <summary>
-    ///     Unload everything (e.g. on project close). Not thread-safe against in-flight loads
-    ///     finishing.
+    ///     Unload everything (e.g. on project close).
+    ///     <para>
+    ///         Safe against loads still in flight: their records are marked detached under the lock, so
+    ///         whichever completions land afterwards are dropped by <see cref="Pump" /> instead of
+    ///         being applied onto a record the table no longer holds. Draining the queue alone could
+    ///         not do it — a worker that had not finished yet enqueues after the drain.
+    ///     </para>
     /// </summary>
     public void Clear()
     {
         lock (_lock)
         {
             foreach (var entry in _entries.Values)
-                if (entry.State == AssetLoadState.Loaded)
-                    entry.UnloadValue();
-            _entries.Clear();
-        }
+            {
+                if (entry.State == AssetLoadState.Loaded) entry.UnloadValue();
+                entry.State = AssetLoadState.Unloaded;
+                entry.Detached = true;
+            }
 
-        _completed.Clear();
+            _entries.Clear();
+            while (_completed.TryDequeue(out _))
+            {
+                // Already-queued payloads: their records are detached above, so nothing to unload.
+            }
+        }
     }
 
     // ── internals ─────────────────────────────────────────────────────────────

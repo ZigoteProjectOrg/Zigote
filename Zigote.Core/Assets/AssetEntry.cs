@@ -18,6 +18,19 @@ internal abstract class AssetEntry
     /// <summary>Number of live handles keeping this resident. Mutated only on the main thread.</summary>
     public int RefCount;
 
+    /// <summary>
+    ///     This record is no longer in the manager's table — evicted, or dropped by
+    ///     <see cref="AssetManager.Clear" /> — so a load still in flight for it must be discarded
+    ///     rather than applied.
+    ///     <para>
+    ///         Without this, a load that finished after its entry was dropped would still be applied,
+    ///         producing a resident value (a GPU upload, in the loaders that matter) attached to a
+    ///         record nothing tracks: unreachable from the table, so no later evict or clear could
+    ///         ever unload it. Set and read under the manager's lock.
+    ///     </para>
+    /// </summary>
+    public bool Detached;
+
     /// <summary>Written by the main-thread pump/evict with release semantics; readable from any thread.</summary>
     public volatile AssetLoadState State;
 

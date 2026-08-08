@@ -263,7 +263,10 @@ public static class FileDialog
     {
         if (!IsSupported) return RunManaged(spec);
 
-        var request = new Request { Spec = spec, ParentWindow = parentWindow };
+        var request = new Request {
+            Spec = spec,
+            ParentWindow = parentWindow,
+        };
         Pending.Enqueue(request);
         // Show immediately when idle instead of waiting for the next frame's Pump.
         if (_active is null) StartNext();

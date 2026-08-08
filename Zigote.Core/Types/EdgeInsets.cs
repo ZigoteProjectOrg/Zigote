@@ -23,7 +23,7 @@ public readonly struct EdgeInsets(float left, float top, float right, float bott
         );
     }
 
-    public static EdgeInsets Symmetric(float horizontal, float vertical)
+    public static EdgeInsets Symmetric(float horizontal = 0, float vertical = 0)
     {
         return new EdgeInsets(
             horizontal,

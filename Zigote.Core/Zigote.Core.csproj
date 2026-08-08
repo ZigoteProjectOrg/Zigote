@@ -3,7 +3,6 @@
         <TargetFramework>net10.0</TargetFramework>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <Nullable>enable</Nullable>
-        <LangVersion>latest</LangVersion>
         <ImplicitUsings>enable</ImplicitUsings>
         <RootNamespace>Zigote.Core</RootNamespace>
         <AssemblyName>Zigote.Core</AssemblyName>
@@ -17,8 +16,8 @@
         <!-- desktop_shims_stub.zig is excluded: it re-exports the macOS-only menu/drag entry points as
          no-ops for other platforms, and those already have hand-written bindings in NativeMenu.cs
          (same partial class) — generating them again would duplicate the declarations. -->
-    <AdditionalFiles Include="..\Zigote.Engine\src\ffi\*.zig"
-                     Exclude="..\Zigote.Engine\src\ffi\desktop_shims_stub.zig"/>
+        <AdditionalFiles Include="..\Zigote.Engine\src\ffi\*.zig"
+                         Exclude="..\Zigote.Engine\src\ffi\desktop_shims_stub.zig"/>
     </ItemGroup>
 
     <ItemGroup>

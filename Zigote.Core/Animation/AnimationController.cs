@@ -126,6 +126,21 @@ public sealed class AnimationController
         _ticker?.Stop();
     }
 
+    /// <summary>
+    ///     Jump to an arbitrary progress without animating and without firing the completed/dismissed
+    ///     edges — the seam for a gesture that drives the animation directly (a bottom sheet tracking
+    ///     the finger). A following <see cref="Forward" />/<see cref="Reverse" /> resumes from here.
+    /// </summary>
+    public void Seek(float progress)
+    {
+        _repeats = false;
+        Progress = Math.Clamp(progress, 0f, 1f);
+        Status = AnimationStatus.Idle;
+        _ticker?.Stop();
+        OnTick?.Invoke();
+        RequestFrameAction?.Invoke();
+    }
+
     /// <summary>Jump to start without animating.</summary>
     public void Dismiss()
     {

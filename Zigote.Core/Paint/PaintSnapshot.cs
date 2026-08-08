@@ -51,7 +51,8 @@ public sealed class PaintSnapshot
     public void Capture(PaintList list)
     {
         var src = list.CommandSpan;
-        if (_cmds.Length < src.Length) _cmds = new ZgPaintCommand[Math.Max(src.Length, _cmds.Length * 2)];
+        if (_cmds.Length < src.Length)
+            _cmds = new ZgPaintCommand[Math.Max(src.Length, _cmds.Length * 2)];
         src.CopyTo(_cmds);
         _count = src.Length;
 
@@ -76,14 +77,26 @@ public sealed class PaintSnapshot
         // Longest common prefix, comparing blob contents alongside the structs.
         var min = Math.Min(prev.Length, cur.Length);
         var prefix = 0;
-        while (prefix < min && CommandEquals(prev, prefix, cur, prefix, current)) prefix++;
+        while (prefix < min && CommandEquals(
+                   prev,
+                   prefix,
+                   cur,
+                   prefix,
+                   current
+               )) prefix++;
         if (prefix == prev.Length && prefix == cur.Length) return PaintDiffResult.Identical;
 
         // Longest common suffix that does not overlap the prefix.
         var maxSuffix = min - prefix;
         var suffix = 0;
         while (suffix < maxSuffix &&
-               CommandEquals(prev, prev.Length - 1 - suffix, cur, cur.Length - 1 - suffix, current))
+               CommandEquals(
+                   prev,
+                   prev.Length - 1 - suffix,
+                   cur,
+                   cur.Length - 1 - suffix,
+                   current
+               ))
             suffix++;
 
         // Scope state entering the changed window is shared by construction (the prefix is identical).
@@ -91,7 +104,6 @@ public sealed class PaintSnapshot
         var transformDepth = 0;
         var rtDepth = 0;
         for (var i = 0; i < prefix; i++)
-        {
             switch ((PaintCommandKind)prev[i].Kind)
             {
                 case PaintCommandKind.TransformPush: transformDepth++; break;
@@ -99,14 +111,27 @@ public sealed class PaintSnapshot
                 case PaintCommandKind.RenderTextureBegin: rtDepth++; break;
                 case PaintCommandKind.RenderTextureEnd: rtDepth--; break;
             }
-        }
 
         if (transformDepth > 0 || rtDepth > 0) return PaintDiffResult.Unbounded;
 
         // Every command inside either window contributes bounds; a state/structure command in the
         // window means op indices shifted across scopes — repaint everything rather than guess.
-        return AccumulateWindow(prev, prefix, prev.Length - suffix, this, changed, ref changedCount) &&
-               AccumulateWindow(cur, prefix, cur.Length - suffix, current, changed, ref changedCount)
+        return AccumulateWindow(
+                   prev,
+                   prefix,
+                   prev.Length - suffix,
+                   this,
+                   changed,
+                   ref changedCount
+               ) &&
+               AccumulateWindow(
+                   cur,
+                   prefix,
+                   cur.Length - suffix,
+                   current,
+                   changed,
+                   ref changedCount
+               )
             ? PaintDiffResult.Bounded
             : PaintDiffResult.Unbounded;
     }
@@ -117,7 +142,12 @@ public sealed class PaintSnapshot
     {
         for (var i = start; i < end; i++)
         {
-            if (!TryCommandBounds(in cmds[i], blobSource, i, out var bounds)) return false;
+            if (!TryCommandBounds(
+                    in cmds[i],
+                    blobSource,
+                    i,
+                    out var bounds
+                )) return false;
             if (bounds.Width <= 0f || bounds.Height <= 0f) continue;
             AddRect(changed, ref changedCount, bounds);
         }
@@ -147,7 +177,8 @@ public sealed class PaintSnapshot
     ///     Conservative screen bounds of one draw command. False = not boundable from the command
     ///     (state ops, layout-handle text) — the caller degrades to a full repaint.
     /// </summary>
-    private static bool TryCommandBounds(in ZgPaintCommand cmd, object blobSource, int index, out Rect bounds)
+    private static bool TryCommandBounds(in ZgPaintCommand cmd, object blobSource, int index,
+        out Rect bounds)
     {
         bounds = Rect.Zero;
         switch ((PaintCommandKind)cmd.Kind)
@@ -157,13 +188,23 @@ public sealed class PaintSnapshot
             case PaintCommandKind.Image:
             case PaintCommandKind.LiquidGlass:
             case PaintCommandKind.ShaderEffect:
-                bounds = new Rect(cmd.RectX, cmd.RectY, cmd.RectW, cmd.RectH)
+                bounds = new Rect(
+                        cmd.RectX,
+                        cmd.RectY,
+                        cmd.RectW,
+                        cmd.RectH
+                    )
                     .Inflate(cmd.BorderWidth + 2f);
                 return true;
 
             case PaintCommandKind.Shadow:
                 // BorderWidth carries the blur radius, BaselineX the (directional) spread.
-                bounds = new Rect(cmd.RectX, cmd.RectY, cmd.RectW, cmd.RectH)
+                bounds = new Rect(
+                        cmd.RectX,
+                        cmd.RectY,
+                        cmd.RectW,
+                        cmd.RectH
+                    )
                     .Inflate(cmd.BorderWidth + MathF.Abs(cmd.BaselineX) + 8f);
                 return true;
 
@@ -173,18 +214,40 @@ public sealed class PaintSnapshot
                 // bytes ≥ glyphs and FontSize ≥ any real advance, so the box only ever over-covers.
                 var w = cmd.TextLen * (cmd.FontSize + MathF.Abs(cmd.LetterSpacing)) + 8f;
                 var h = cmd.FontSize * 3f;
-                bounds = new Rect(cmd.BaselineX - 4f, cmd.BaselineY - cmd.FontSize * 2f, w, h);
+                bounds = new Rect(
+                    cmd.BaselineX - 4f,
+                    cmd.BaselineY - cmd.FontSize * 2f,
+                    w,
+                    h
+                );
                 return true;
             }
 
             case PaintCommandKind.Bezier:
             {
                 // Control points are packed into the rect/radius/baseline slots; width in FontSize.
-                var minX = MathF.Min(MathF.Min(cmd.RectX, cmd.RectW), MathF.Min(cmd.Radius, cmd.BaselineX));
-                var maxX = MathF.Max(MathF.Max(cmd.RectX, cmd.RectW), MathF.Max(cmd.Radius, cmd.BaselineX));
-                var minY = MathF.Min(MathF.Min(cmd.RectY, cmd.RectH), MathF.Min(cmd.BorderWidth, cmd.BaselineY));
-                var maxY = MathF.Max(MathF.Max(cmd.RectY, cmd.RectH), MathF.Max(cmd.BorderWidth, cmd.BaselineY));
-                bounds = new Rect(minX, minY, maxX - minX, maxY - minY).Inflate(cmd.FontSize + 2f);
+                var minX = MathF.Min(
+                    MathF.Min(cmd.RectX, cmd.RectW),
+                    MathF.Min(cmd.Radius, cmd.BaselineX)
+                );
+                var maxX = MathF.Max(
+                    MathF.Max(cmd.RectX, cmd.RectW),
+                    MathF.Max(cmd.Radius, cmd.BaselineX)
+                );
+                var minY = MathF.Min(
+                    MathF.Min(cmd.RectY, cmd.RectH),
+                    MathF.Min(cmd.BorderWidth, cmd.BaselineY)
+                );
+                var maxY = MathF.Max(
+                    MathF.Max(cmd.RectY, cmd.RectH),
+                    MathF.Max(cmd.BorderWidth, cmd.BaselineY)
+                );
+                bounds = new Rect(
+                    minX,
+                    minY,
+                    maxX - minX,
+                    maxY - minY
+                ).Inflate(cmd.FontSize + 2f);
                 return true;
             }
 
@@ -192,7 +255,10 @@ public sealed class PaintSnapshot
             {
                 var blob = FindPixelBlob(blobSource, index);
                 if (blob is null || blob.Length < 16) return false;
-                float minX = float.MaxValue, minY = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue;
+                float minX = float.MaxValue,
+                    minY = float.MaxValue,
+                    maxX = float.MinValue,
+                    maxY = float.MinValue;
                 for (var o = 0; o + 8 <= blob.Length; o += 8)
                 {
                     var x = BitConverter.ToSingle(blob, o);
@@ -203,7 +269,12 @@ public sealed class PaintSnapshot
                     maxY = MathF.Max(maxY, y);
                 }
 
-                bounds = new Rect(minX, minY, maxX - minX, maxY - minY).Inflate(2f);
+                bounds = new Rect(
+                    minX,
+                    minY,
+                    maxX - minX,
+                    maxY - minY
+                ).Inflate(2f);
                 return true;
             }
 
@@ -256,8 +327,7 @@ public sealed class PaintSnapshot
 
     private static byte[]? FindTextBlob(object source, int index)
     {
-        return source switch
-        {
+        return source switch {
             PaintSnapshot s => Lookup(s._textBlobs, index),
             PaintList l => l.FindTextBlob(index),
             _ => null,
@@ -266,8 +336,7 @@ public sealed class PaintSnapshot
 
     private static byte[]? FindPixelBlob(object source, int index)
     {
-        return source switch
-        {
+        return source switch {
             PaintSnapshot s => Lookup(s._pixelBlobs, index),
             PaintList l => l.FindPixelBlob(index),
             _ => null,

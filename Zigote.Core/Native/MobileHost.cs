@@ -20,7 +20,8 @@ internal static class MobileNativeResolver
             !OperatingSystem.IsMacCatalyst()) return;
         NativeLibrary.SetDllImportResolver(
             typeof(MobileNativeResolver).Assembly,
-            static (name, _, _) => {
+            static (name, _, _) =>
+            {
                 if (name != "zigote") return IntPtr.Zero;
                 // Simulator builds bundle the engine as a loose dylib (the simulator doesn't
                 // enforce device code-signing); device builds link it statically into the app
@@ -57,7 +58,7 @@ public static class MobileHost
         NativeEngine.RunApp(&AppMainTrampoline);
     }
 
-    [UnmanagedCallersOnly(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static void AppMainTrampoline()
     {
         var main = _pendingMain;

@@ -245,6 +245,14 @@ public sealed class DropCompleteEvent(float x, float y) : InputEvent
     public float Y { get; } = y;
 }
 
+/// <summary>
+///     The window moved to a different monitor, or its monitor's refresh rate / content scale
+///     changed. The refresh rate and HiDPI scale the app is pacing and laying out against may now be
+///     stale — dragging a window from a 60 Hz panel to a 144 Hz one is the common case. Handled by
+///     <c>App</c>, which re-queries both and re-paces its frame loop.
+/// </summary>
+public sealed class DisplayChangedEvent : InputEvent;
+
 // ── Touchscreen ────────────────────────────────────────────────────────────────
 //
 // Fingers on a DIRECT touch device (a screen — trackpads stay cursor/wheel input). A contact
@@ -437,7 +445,12 @@ internal static class EventDecoder
                 (int)e.TouchFinger,
                 e.TouchPressure
             ),
-            EventKind.TouchUp => new TouchUpEvent(e.X, e.Y, (int)e.TouchFinger, e.TouchPressure),
+            EventKind.TouchUp => new TouchUpEvent(
+                e.X,
+                e.Y,
+                (int)e.TouchFinger,
+                e.TouchPressure
+            ),
             EventKind.TouchCancel => new TouchCancelEvent(
                 e.X,
                 e.Y,
@@ -449,6 +462,7 @@ internal static class EventDecoder
             EventKind.LowMemory => new LowMemoryEvent(),
             EventKind.ScreenKeyboardShown => new ScreenKeyboardEvent(true),
             EventKind.ScreenKeyboardHidden => new ScreenKeyboardEvent(false),
+            EventKind.DisplayChanged => new DisplayChangedEvent(),
             EventKind.Quit => new QuitEvent(),
             _ => null,
         };

@@ -72,6 +72,30 @@ public sealed unsafe class ZigoteEngine : IDisposable
     /// <summary>Opaque engine handle passed to all native FFI calls.</summary>
     public ulong Handle => _handle;
 
+    // ── Domain facades ────────────────────────────────────────────────────────
+    //
+    // The engine's surface is one class because there is one native handle behind all of it, but it
+    // covers four unrelated jobs. These name the seams without moving a single call: the Audio*,
+    // Scene* and Render* methods below stay exactly where they are and every existing caller keeps
+    // working — new code can take `IAudioApi` instead of the whole engine, which is what makes a
+    // player's queue and equalizer testable without a sound card.
+
+    private IAudioApi? _audio;
+
+    /// <summary>
+    ///     Media playback: files, transport, equalizer chains, offline decode. An interface, so an
+    ///     app can be driven by a fake device in tests — see <see cref="IAudioApi" />. Spatial and
+    ///     procedural audio (listener, one-shots, voices, buses) stay on this class: they are a
+    ///     game's concern and no app should have to stub them.
+    /// </summary>
+    public IAudioApi Audio => _audio ??= new EngineAudioApi(this);
+
+    /// <summary>
+    ///     The 3D scene: nodes, transforms, materials, lights, cameras. A zero-allocation struct over
+    ///     this engine — see <see cref="Scene3D" />.
+    /// </summary>
+    public Scene3D Scene => new(this);
+
     public bool ShouldQuit { get; private set; }
 
     /// <summary>Current surface width in physical pixels.</summary>
@@ -82,6 +106,15 @@ public sealed unsafe class ZigoteEngine : IDisposable
 
     /// <summary>HiDPI scale factor (e.g. 2.0 on Retina displays).</summary>
     public float Scale { get; private set; } = 1f;
+
+    /// <summary>
+    ///     Refresh rate of the monitor the main window is on, in Hz; 0 when the platform doesn't
+    ///     report one. Re-read whenever the window is resized or moves to another display, so on a
+    ///     mixed 60 Hz + 144 Hz desktop this tracks whichever panel the window is actually on.
+    ///     Hosts pace their frame loop against <c>App.FrameIntervalTicks</c> rather than reading this
+    ///     directly — that folds in the app's own FPS cap.
+    /// </summary>
+    public float DisplayRefreshHz { get; private set; }
 
     /// <summary>Surface width in logical pixels.</summary>
     public float LogicalWidth => PixelWidth / Scale;
@@ -176,7 +209,9 @@ public sealed unsafe class ZigoteEngine : IDisposable
         string title,
         string? fontPath = null,
         string? fontName = null,
-        RenderBackend backend = RenderBackend.Auto)
+        RenderBackend backend = RenderBackend.Auto,
+        GpuPowerPreference gpuPreference = GpuPowerPreference.Auto,
+        int gpuIndex = -1)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
@@ -204,7 +239,9 @@ public sealed unsafe class ZigoteEngine : IDisposable
                 tp,
                 fp,
                 fn,
-                (uint)backend
+                (uint)backend,
+                (uint)gpuPreference,
+                gpuIndex
             );
         }
 
@@ -222,6 +259,51 @@ public sealed unsafe class ZigoteEngine : IDisposable
         NativeEngine.SetResizeRenderCallback(_handle, &LiveResizeThunk);
     }
 
+    /// <summary>
+    ///     The GPUs the engine found at startup, in the order the override index refers to. The list
+    ///     is snapshotted at init (the adapters not chosen are released immediately), so this is cheap
+    ///     and stable — it will not notice a GPU hot-plugged afterwards.
+    /// </summary>
+    /// <returns>An empty list before <see cref="Initialize" />, or if enumeration found nothing.</returns>
+    public IReadOnlyList<GpuInfo> EnumerateGpus()
+    {
+        if (!_initialized || _disposed) return [];
+
+        const int max = 16; // gpu_select.max_gpus
+        var raw = stackalloc ZgGpuInfo[max];
+        var count = (int)NativeEngine.EnumerateGpus(_handle, raw, max);
+
+        var list = new List<GpuInfo>(count);
+        for (var i = 0; i < count; i++)
+        {
+            var name = Marshal.PtrToStringUTF8((IntPtr)raw[i].Name) ?? "Unknown GPU";
+            list.Add(
+                new GpuInfo(
+                    i,
+                    name,
+                    (ZgGpuBackend)raw[i].Backend,
+                    (ZgGpuDeviceType)raw[i].DeviceType,
+                    raw[i].VendorId,
+                    raw[i].DeviceId
+                )
+            );
+        }
+
+        return list;
+    }
+
+    /// <summary>
+    ///     The GPU the renderer is actually running on, or null when the engine fell back to wgpu's
+    ///     own adapter pick (which is not necessarily one of the enumerated entries).
+    /// </summary>
+    public GpuInfo? ActiveGpu()
+    {
+        if (!_initialized || _disposed) return null;
+        var index = NativeEngine.GetActiveGpu(_handle);
+        var gpus = EnumerateGpus();
+        return index >= 0 && index < gpus.Count ? gpus[index] : null;
+    }
+
     /// <summary>Does this event belong to the main window (id matches, or unknown/global)?</summary>
     public bool IsMainWindowEvent(InputEvent evt)
     {
@@ -234,6 +316,16 @@ public sealed unsafe class ZigoteEngine : IDisposable
         EnsureReady();
         NativeEngine.MainWindowPosition(_handle, out var x, out var y);
         return (x, y);
+    }
+
+    /// <summary>
+    ///     Hide or show the main window without destroying it — how an app keeps running with
+    ///     nothing on screen. Showing raises it too, since the only reason to show a hidden window
+    ///     is that the user asked for it back.
+    /// </summary>
+    public void MainWindowSetVisible(bool visible)
+    {
+        if (!_disposed) NativeEngine.MainWindowSetVisible(_handle, visible ? 1u : 0u);
     }
 
     // ── Window chrome (in-app titlebars) ──────────────────────────────────────
@@ -301,6 +393,28 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public void WindowChromeToggleMaximize(uint windowId)
     {
         if (!_disposed) NativeEngine.WindowChromeToggleMaximize(windowId);
+    }
+
+    /// <summary>
+    ///     Request an alpha-composited main window (CSD rounded corners). Must be called BEFORE
+    ///     <see cref="Initialize" /> — transparency is a window-creation property. Whether it
+    ///     actually took is reported by <see cref="WindowIsTransparent" />.
+    /// </summary>
+    public void SetWindowTransparent(bool enabled)
+    {
+        NativeEngine.SetWindowTransparent(enabled);
+    }
+
+    /// <summary>The window is maximized or fullscreen — CSD hosts square their corners.</summary>
+    public bool WindowIsMaximized(uint windowId)
+    {
+        return !_disposed && NativeEngine.WindowIsMaximized(windowId);
+    }
+
+    /// <summary>Whether the window really got an alpha channel the compositor composites.</summary>
+    public bool WindowIsTransparent(uint windowId)
+    {
+        return !_disposed && NativeEngine.WindowIsTransparent(windowId);
     }
 
     /// <summary>
@@ -401,8 +515,10 @@ public sealed unsafe class ZigoteEngine : IDisposable
         {
             ref readonly var raw = ref _eventBuf[i];
 
-            // A secondary window's resize must not clobber the main window's cached size.
-            if ((EventKind)raw.Kind == EventKind.Resize &&
+            // A secondary window's resize must not clobber the main window's cached size. A display
+            // change refreshes the same cache: moving to another monitor can change the HiDPI scale
+            // and always invalidates the cached refresh rate.
+            if ((EventKind)raw.Kind is EventKind.Resize or EventKind.DisplayChanged &&
                 (raw.WindowId == 0 || raw.WindowId == MainWindowId))
                 RefreshSize();
             if ((EventKind)raw.Kind == EventKind.Quit)
@@ -436,8 +552,10 @@ public sealed unsafe class ZigoteEngine : IDisposable
         {
             ref readonly var raw = ref _eventBuf[i];
 
-            // A secondary window's resize must not clobber the main window's cached size.
-            if ((EventKind)raw.Kind == EventKind.Resize &&
+            // A secondary window's resize must not clobber the main window's cached size. A display
+            // change refreshes the same cache: moving to another monitor can change the HiDPI scale
+            // and always invalidates the cached refresh rate.
+            if ((EventKind)raw.Kind is EventKind.Resize or EventKind.DisplayChanged &&
                 (raw.WindowId == 0 || raw.WindowId == MainWindowId))
                 RefreshSize();
             if ((EventKind)raw.Kind == EventKind.Quit)
@@ -483,6 +601,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
         string? fontFamily = null)
     {
         if (string.IsNullOrEmpty(text)) return Size.Zero;
+        fontFamily = FontFaces.Resolve(weight, fontFamily);
 
         // Stack-allocate the UTF-8 buffers for the common short-label case. MeasureText is called per
         // dynamic-text widget per frame (FPS counter, timers, coordinates, profiler) where the result
@@ -618,7 +737,54 @@ public sealed unsafe class ZigoteEngine : IDisposable
     }
 
     /// <summary>
-    ///     Load a texture natively and return its cache handle.
+    ///     Free a texture handle returned by any <c>LoadTexture*</c> call — both the decoded CPU
+    ///     copy and the GPU texture. Safe to call from anywhere, including mid-layout: the engine
+    ///     defers the actual free to the end of the current frame. Releasing <c>0</c>, an unknown
+    ///     handle, or the same handle twice is a no-op.
+    /// </summary>
+    /// <remarks>
+    ///     Texture handles are owned by the caller. Nothing else frees them, so an image-heavy UI
+    ///     (a gallery, a reader) that never releases will grow until the GPU is exhausted.
+    /// </remarks>
+    public static void ReleaseTexture(ulong textureHandle)
+    {
+        // Deliberately tolerant rather than RequireInstance(): images are disposed during teardown,
+        // when the engine may already be gone. There is nothing left to leak at that point.
+        var engine = Instance;
+        if (textureHandle == 0 || engine is null || engine._disposed) return;
+        NativeEngine.ReleaseTexture(engine._handle, textureHandle);
+    }
+
+    /// <summary>
+    ///     Live texture accounting: handles outstanding, decoded bytes still held on the CPU (images
+    ///     not yet painted — the copy is dropped once the GPU texture exists), and bytes resident on
+    ///     the GPU. Drive a cache budget off <paramref name="gpuBytes" />; watch
+    ///     <paramref name="count" /> to catch textures nobody released.
+    /// </summary>
+    public static void GetImageStats(out int count, out long cpuBytes, out long gpuBytes)
+    {
+        count = 0;
+        cpuBytes = 0;
+        gpuBytes = 0;
+        var engine = Instance;
+        if (engine is null || engine._disposed) return;
+
+        NativeEngine.ImageStats(
+            engine._handle,
+            out var c,
+            out var cpu,
+            out var gpu
+        );
+        count = (int)c;
+        cpuBytes = (long)cpu;
+        gpuBytes = (long)gpu;
+    }
+
+    /// <summary>
+    ///     Load a texture natively and return its cache handle. Thread-safe — decoding a large
+    ///     image off the UI thread keeps the frame loop free; the GPU upload happens on the render
+    ///     thread the first time the handle is painted. Release it with
+    ///     <see cref="ReleaseTexture" />.
     /// </summary>
     public static ulong LoadTexture(string path, out uint outW, out uint outH)
     {
@@ -667,6 +833,27 @@ public sealed unsafe class ZigoteEngine : IDisposable
                 (nuint)data.Length,
                 out outW,
                 out outH
+            );
+        }
+    }
+
+    /// <summary>
+    ///     Register already-decoded RGBA8 pixels (<c>width × height × 4</c> bytes, row-major) as a
+    ///     texture. For pixels the caller already has — procedural content, a video frame, a decode
+    ///     done elsewhere — which would otherwise have to be re-encoded to PNG just to get past the
+    ///     decoder. Thread-safe; release with <see cref="ReleaseTexture" />.
+    /// </summary>
+    public static ulong LoadTextureFromRgba(ReadOnlySpan<byte> rgba, uint width, uint height)
+    {
+        var engine = RequireInstance();
+        fixed (byte* ptr = rgba)
+        {
+            return NativeEngine.LoadTextureFromRgba(
+                engine._handle,
+                ptr,
+                (nuint)rgba.Length,
+                width,
+                height
             );
         }
     }
@@ -951,6 +1138,64 @@ public sealed unsafe class ZigoteEngine : IDisposable
         }
     }
 
+    /// <summary>
+    ///     Create a source fed by <see cref="AudioStreamPush" /> rather than by a file (not
+    ///     started). Returns a handle id (0 = failure).
+    ///     <para>
+    ///         A file source pulls; this one is pushed, which is the only shape a socket fits. What
+    ///         comes back is otherwise an ordinary sound: the same volume, equalizer routing and
+    ///         transport calls apply.
+    ///     </para>
+    /// </summary>
+    public uint AudioStreamCreate()
+    {
+        return _disposed ? 0u : NativeEngine.AudioStreamCreate(_handle);
+    }
+
+    /// <summary>
+    ///     Hand encoded bytes to a stream source. Returns how many were accepted — a short count
+    ///     means its queue is full and the caller should stop reading until it drains, which is what
+    ///     keeps a radio station from buffering into memory without bound.
+    /// </summary>
+    public int AudioStreamPush(uint id, ReadOnlySpan<byte> bytes)
+    {
+        if (_disposed || id == 0 || bytes.IsEmpty) return 0;
+        fixed (byte* p = bytes)
+        {
+            return (int)NativeEngine.AudioStreamPush(
+                _handle,
+                id,
+                p,
+                (uint)bytes.Length
+            );
+        }
+    }
+
+    /// <summary>
+    ///     No more bytes are coming. What is already queued still plays out, and the sound reports
+    ///     end-of-stream once it does — so a finished stream auto-advances like a finished file.
+    /// </summary>
+    public void AudioStreamFinish(uint id)
+    {
+        if (!_disposed) NativeEngine.AudioStreamFinish(_handle, id);
+    }
+
+    public AudioStreamState AudioStreamStatus(uint id)
+    {
+        return _disposed
+            ? AudioStreamState.Unsupported
+            : (AudioStreamState)NativeEngine.AudioStreamState(_handle, id);
+    }
+
+    /// <summary>
+    ///     Decoded audio held ahead of the mixer, in seconds. What a "Buffering…" indicator shows,
+    ///     and what tells a player it is safe to start.
+    /// </summary>
+    public float AudioStreamBuffered(uint id)
+    {
+        return _disposed ? 0f : NativeEngine.AudioStreamBuffered(_handle, id);
+    }
+
     public void AudioSoundPlay(uint id)
     {
         if (!_disposed) NativeEngine.AudioSoundPlay(_handle, id);
@@ -1051,6 +1296,169 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public void AudioSoundSetGroup(uint id, uint groupId)
     {
         if (!_disposed) NativeEngine.AudioSoundSetGroup(_handle, id, groupId);
+    }
+
+    // ── Device rate (high-resolution playback) ────────────────────────────────────
+
+    /// <summary>The output device's current sample rate in Hz; 0 when there is no audio device.</summary>
+    public int AudioOutputRate()
+    {
+        return _disposed ? 0 : (int)NativeEngine.AudioOutputRate(_handle);
+    }
+
+    /// <summary>
+    ///     Reopen the audio device at <paramref name="sampleRateHz" /> (0 = the device's preferred
+    ///     rate), returning the rate actually achieved (0 = failure, sound now disabled).
+    ///     <para>
+    ///         The rate is fixed at device creation, so this rebuilds the engine: <b>every sound,
+    ///         mixer bus and equalizer chain id becomes invalid</b> and must be recreated. Playing a
+    ///         source at its own rate is the only way to avoid resampling it, which is the whole
+    ///         point of high-resolution audio.
+    ///     </para>
+    /// </summary>
+    public int AudioReopen(int sampleRateHz)
+    {
+        return _disposed
+            ? 0
+            : (int)NativeEngine.AudioReopen(_handle, (uint)Math.Max(0, sampleRateHz));
+    }
+
+    // ── Transport (media playback: seek + position) ───────────────────────────────
+
+    /// <summary>Seek a sound to an absolute position in seconds.</summary>
+    public void AudioSoundSeek(uint id, float seconds)
+    {
+        if (!_disposed) NativeEngine.AudioSoundSeek(_handle, id, seconds);
+    }
+
+    /// <summary>Playback cursor in seconds; -1 when the source cannot report one.</summary>
+    public float AudioSoundCursor(uint id)
+    {
+        return _disposed ? -1f : NativeEngine.AudioSoundCursor(_handle, id);
+    }
+
+    /// <summary>Total length in seconds; -1 when unknown (procedural tones, unseekable streams).</summary>
+    public float AudioSoundDuration(uint id)
+    {
+        return _disposed ? -1f : NativeEngine.AudioSoundDuration(_handle, id);
+    }
+
+    /// <summary>
+    ///     The source decoded past its last frame — the auto-advance signal for a playlist. Unlike
+    ///     <c>!AudioSoundIsPlaying</c> this stays false for a sound that was merely paused.
+    /// </summary>
+    public bool AudioSoundAtEnd(uint id)
+    {
+        return !_disposed && NativeEngine.AudioSoundAtEnd(_handle, id) != 0;
+    }
+
+    /// <summary>
+    ///     Start a sound at an exact point on the audio clock, <paramref name="secondsFromNow" />
+    ///     ahead of now — the primitive gapless playback is built on. Scheduling on the audio thread
+    ///     is the only way to hit the boundary exactly; polling can never be tighter than a frame.
+    /// </summary>
+    public void AudioSoundScheduleStart(uint id, float secondsFromNow)
+    {
+        if (!_disposed) NativeEngine.AudioSoundScheduleStart(_handle, id, secondsFromNow);
+    }
+
+    // ── Equalizer chains ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    ///     Create a chain of <paramref name="bandCount" /> biquad filters (max 16), flat until
+    ///     configured, spliced between the sounds routed through it and the master output. Returns a
+    ///     chain id (0 = failure).
+    /// </summary>
+    public uint AudioEqCreate(int bandCount)
+    {
+        return _disposed ? 0u : NativeEngine.AudioEqCreate(_handle, (uint)Math.Max(1, bandCount));
+    }
+
+    /// <summary>
+    ///     Configure one band. Shelves take Q (converted to the RBJ slope inside the engine), matching
+    ///     how AutoEq and every parametric EQ UI specify them. Re-tuning a band without changing its
+    ///     <paramref name="kind" /> reconfigures the filter in place — no clicks, no graph churn.
+    /// </summary>
+    public void AudioEqSetBand(uint eqId, int index, AudioBandKind kind, float freqHz, float gainDb,
+        float q)
+    {
+        if (!_disposed)
+            NativeEngine.AudioEqSetBand(
+                _handle,
+                eqId,
+                (uint)index,
+                (byte)kind,
+                freqHz,
+                gainDb,
+                q
+            );
+    }
+
+    /// <summary>Bypass or engage the chain without losing its band settings (the A/B lever).</summary>
+    public void AudioEqSetEnabled(uint eqId, bool enabled)
+    {
+        if (!_disposed) NativeEngine.AudioEqSetEnabled(_handle, eqId, enabled ? 1u : 0u);
+    }
+
+    public void AudioEqDestroy(uint eqId)
+    {
+        if (!_disposed) NativeEngine.AudioEqDestroy(_handle, eqId);
+    }
+
+    /// <summary>Route a sound through an equalizer chain (chain 0 = dry).</summary>
+    public void AudioSoundSetEq(uint id, uint eqId)
+    {
+        if (!_disposed) NativeEngine.AudioSoundSetEq(_handle, id, eqId);
+    }
+
+    // ── Offline decoding ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    ///     Decode a whole audio file to interleaved float samples at its native rate and channel count
+    ///     — for callers that need the samples rather than playback (waveform overviews, loudness
+    ///     analysis, sampler/IR loading). Needs no audio device. Returns an empty array on failure.
+    ///     <para>Blocking and allocating: call it from a background thread, never an audio callback.</para>
+    /// </summary>
+    public float[] AudioDecodeFile(string path, out int channels, out int sampleRate)
+    {
+        channels = 0;
+        sampleRate = 0;
+        if (_disposed || string.IsNullOrEmpty(path)) return [];
+
+        byte[] pathBytes = [.. Encoding.UTF8.GetBytes(path), 0];
+        nuint buffer;
+        uint nativeChannels;
+        uint nativeRate;
+        ulong frames;
+        fixed (byte* p = pathBytes)
+        {
+            buffer = NativeEngine.AudioDecodeFile(
+                _handle,
+                p,
+                out nativeChannels,
+                out nativeRate,
+                out frames
+            );
+        }
+
+        if (buffer == 0) return [];
+        try
+        {
+            // frames * channels can only overflow int for absurd inputs (a ~3 hour stereo file is
+            // ~1e9 samples); refuse rather than truncate into a short read.
+            var total = frames * nativeChannels;
+            if (total == 0 || total > int.MaxValue) return [];
+
+            var samples = new float[(int)total];
+            new ReadOnlySpan<float>((void*)buffer, (int)total).CopyTo(samples);
+            channels = (int)nativeChannels;
+            sampleRate = (int)nativeRate;
+            return samples;
+        }
+        finally
+        {
+            NativeEngine.AudioDecodeFree(_handle, buffer);
+        }
     }
 
     public void SceneSetLightProperties(ulong nodeHandle, byte kind, float r, float g, float b,
@@ -1201,8 +1609,14 @@ public sealed unsafe class ZigoteEngine : IDisposable
     }
 
     // ── 2D sprite renderer FFI ───────────────────────────────────────────────────
+    /// <summary>
+    ///     Floats per sprite instance — pos.xyz, rot, size.xy, uv0.xy, uv1.xy, rgba, corner_radius,
+    ///     border_width. Must match SpriteSystem.INSTANCE_FLOATS and the sprite shader's VsIn.
+    /// </summary>
+    public const int SpriteInstanceFloats = 16;
+
     // Immediate-mode frame model (see wgpu_sprites.zig): SpritesBegin once per frame with the
-    // scene + overlay cameras, then SpritesDraw per pre-sorted batch of 14-float instances
+    // scene + overlay cameras, then SpritesDraw per pre-sorted batch of 16-float instances
     // (pos.xyz, rot, size.xy, uv0.xy, uv1.xy, rgba). Textures/shaders are u32 handles (0 = none).
 
     /// <summary>
@@ -1294,14 +1708,14 @@ public sealed unsafe class ZigoteEngine : IDisposable
     }
 
     /// <summary>
-    ///     Append one pre-sorted sprite batch (count × 14 floats). texture2 feeds custom shaders'
+    ///     Append one pre-sorted sprite batch (count × 16 floats). texture2 feeds custom shaders'
     ///     secondary slot (0 = white); blend: 0 alpha / 1 additive / 2 opaque; stage: 0 scene / 1 overlay.
     /// </summary>
     public void SpritesDraw(uint texture, uint texture2, uint shader, uint blend, uint stage,
         ReadOnlySpan<float> materialParams, ReadOnlySpan<float> instances, uint count)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (count == 0 || texture == 0 || instances.Length < count * 14) return;
+        if (count == 0 || texture == 0 || instances.Length < count * SpriteInstanceFloats) return;
         fixed (float* pp = materialParams)
         fixed (float* ip = instances)
         {
@@ -1945,6 +2359,33 @@ public sealed unsafe class ZigoteEngine : IDisposable
         }
     }
 
+    /// <summary>
+    ///     Register <paramref name="name" /> as a script-fallback family: any character the
+    ///     requested face cannot draw is looked for in these, in registration order, before it is
+    ///     given up on and rendered as a box. The font must have been loaded via
+    ///     <see cref="LoadFont" /> or the initial font list.
+    /// </summary>
+    /// <remarks>
+    ///     A bundled UI face covers the scripts its designer drew — Inter is Latin, Greek and
+    ///     Cyrillic. Any app that displays text it did not author needs this, or Japanese, Korean,
+    ///     Chinese, Arabic and Thai render as tofu.
+    /// </remarks>
+    /// <returns>True on success.</returns>
+    public bool AddFallbackFont(string name)
+    {
+        EnsureReady();
+        var nameLen = Encoding.UTF8.GetByteCount(name);
+        var nameBuf = nameLen < StackStringMax
+            ? stackalloc byte[nameLen + 1]
+            : new byte[nameLen + 1];
+        Encoding.UTF8.GetBytes(name, nameBuf);
+        nameBuf[nameLen] = 0;
+        fixed (byte* namePtr = nameBuf)
+        {
+            return NativeEngine.AddFallbackFont(_handle, namePtr) == ZgResult.Ok;
+        }
+    }
+
     // ── Glyph atlas upload ────────────────────────────────────────────────────
 
     /// <summary>
@@ -1995,6 +2436,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
         PixelWidth = w;
         PixelHeight = h;
         Scale = NativeEngine.GetScale(_handle);
+        DisplayRefreshHz = NativeEngine.GetRefreshHz(_handle, 0);
     }
 
     private static void ValidateAbi()

@@ -71,7 +71,7 @@ public sealed unsafe class PaintList
     // ── PaintSnapshot access (frame-to-frame diff for partial repaint) ────────
 
     internal ReadOnlySpan<ZgPaintCommand> CommandSpan =>
-        System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_commands);
+        CollectionsMarshal.AsSpan(_commands);
 
     internal List<(int Index, byte[] Blob)> TextBlobs => _textBlobs;
 
@@ -312,6 +312,7 @@ public sealed unsafe class PaintList
     {
         CheckColor(color);
         CheckFontSize(fontSize);
+        fontFamily = FontFaces.Resolve(fontWeight, fontFamily);
         var textBytes = EncodeUtf8(text);
         var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.Text };
         SetColor(ref cmd, ScaleAlpha(color));
@@ -335,7 +336,12 @@ public sealed unsafe class PaintList
             cmd.PixelsLen = (uint)fontBytes.Length;
         }
 
-        Push(cmd, textBytes, fontBytes, pixelsPinned: true);
+        Push(
+            cmd,
+            textBytes,
+            fontBytes,
+            true
+        );
     }
 
     public void AddImage(Rect bounds, int pixelWidth, int pixelHeight, byte[]? pixels,
@@ -678,13 +684,17 @@ public sealed unsafe class PaintList
             // heap) — the address outlives the fixed block, and the list entry keeps the array alive.
             foreach (var (index, blob) in _textBlobs)
                 fixed (byte* p = blob)
+                {
                     cmds[index].TextPtr = p;
+                }
 
             foreach (var (index, blob, pinned) in _pixelBlobs)
                 if (pinned)
                 {
                     fixed (byte* p = blob)
+                    {
                         cmds[index].PixelsPtr = p;
+                    }
                 }
                 else
                 {
@@ -727,7 +737,7 @@ public sealed unsafe class PaintList
         if (cache.TryGetValue(text, out var bytes)) return bytes;
         // Pinned object heap: the array never moves, so submit can embed its address in a command
         // without a per-frame GCHandle pin (see PinAndCall).
-        bytes = GC.AllocateUninitializedArray<byte>(Encoding.UTF8.GetByteCount(text), pinned: true);
+        bytes = GC.AllocateUninitializedArray<byte>(Encoding.UTF8.GetByteCount(text), true);
         Encoding.UTF8.GetBytes(text, bytes);
         if (cache.Count >= Utf8CacheMax) cache.Clear();
         cache[text] = bytes;
