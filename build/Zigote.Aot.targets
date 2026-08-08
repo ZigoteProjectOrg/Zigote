@@ -27,10 +27,24 @@
 
   <!-- Root the whole UI stack. WidgetDebug/DevTools reflect over public widget & theme properties by name
        and Type.GetType-late-bind DevTools.Install; without rooting, the trimmer would strip those members
-       and the inspector/HUD would silently degrade under AOT. Cheap to keep (UI assemblies are small). -->
+       and the inspector/HUD would silently degrade under AOT. Cheap to keep (UI assemblies are small).
+
+       This is NOT only about debug tooling, and the omission that prompted the comment was not cosmetic.
+       App.IsInteractive — the native window hit-test that decides whether a point in the titlebar strip
+       is a compositor drag region or client area — answers "does this widget react to the pointer?" with
+       `type.GetMethod("OnPointerDown")?.DeclaringType != typeof(Widget)`. ILC emits reflection metadata
+       only for rooted assemblies, so for a type in an unrooted one GetMethod resolves to the INHERITED
+       base method and the override is invisible: the widget reports "not interactive". Zigote.UI.Adwaita
+       was missing here, and AdwWindowControls' FrameButton is the one widget that depends entirely on
+       this probe (it is deliberately non-Focusable, so it never hits the early-out every other clickable
+       widget takes). The result was that the close/minimize/maximize buttons of a GNOME CSD window fell
+       inside the drag region: clicking one started a window move instead of activating it — in AOT
+       builds only, with no error anywhere. Any assembly contributing widgets to a chromed window
+       belongs in this list. -->
   <ItemGroup Condition="'$(ZigoteAot)' == 'true'">
     <TrimmerRootAssembly Include="Zigote.UI" />
     <TrimmerRootAssembly Include="Zigote.UI.Material" />
+    <TrimmerRootAssembly Include="Zigote.UI.Adwaita" />
     <TrimmerRootAssembly Include="Zigote.UI.Charts" />
     <TrimmerRootAssembly Include="Zigote.UI.DevTools" />
   </ItemGroup>

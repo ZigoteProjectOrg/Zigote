@@ -3,7 +3,6 @@
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
-        <LangVersion>latest</LangVersion>
         <ImplicitUsings>enable</ImplicitUsings>
         <RootNamespace>Zigote.UI.Localizations</RootNamespace>
         <AssemblyName>Zigote.UI.Localizations</AssemblyName>

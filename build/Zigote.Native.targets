@@ -142,6 +142,29 @@
          zig builds a host-arch lib that gets bundled into the foreign-arch RID and fails to load. -->
     <ZigCross Condition="'$(_RidOS)' == '$(_HostOS)' And '$(_RidArch)' != '' And '$(_RidArch)' != '$(_HostArch)'">true</ZigCross>
     <ZigTargetArg Condition="'$(ZigCross)' == 'true'">-Dtarget=$(_ZigTriple)</ZigTargetArg>
+    <!-- CPU floor. A native (non-cross) build lets zig DETECT the build machine's CPU, so libzigote.so
+         comes out using whatever the developer's chip happens to have — AVX-512 on a Zen 4 laptop —
+         and dies with SIGILL on anything older. Same shape of bug as the glibc floor below: invisible
+         on the machine that built it, fatal everywhere else, and it surfaces as "Illegal instruction"
+         with no hint of which library is at fault. A cross build is unaffected (-Dtarget implies
+         baseline), which is why only the host-arch artifact ever breaks.
+         x86_64_v2 because that is already NativeAOT's own floor, so both halves of the binary land on
+         the same one; v3 (AVX2) would be defensible but excludes pre-2013 hardware for no measured
+         gain. Raise it only with a benchmark to point at.
+         Set ZigCpu to any zig CPU name (x86_64_v3, znver4, apple_m1, native) to override — an artifact
+         built for one machine, or a benchmark. `native` reintroduces the bug on purpose. -->
+    <_ZigCpuArch Condition="'$(_RidArch)' != ''">$(_RidArch)</_ZigCpuArch>
+    <_ZigCpuArch Condition="'$(_RidArch)' == ''">$(_HostArch)</_ZigCpuArch>
+    <ZigCpu Condition="'$(ZigCpu)' == '' And '$(_ZigCpuArch)' == 'x86_64'">x86_64_v2</ZigCpu>
+    <ZigCpu Condition="'$(ZigCpu)' == ''">baseline</ZigCpu>
+    <ZigCpuArg>-Dcpu=$(ZigCpu)</ZigCpuArg>
+    <!-- NOTE on glibc: a host-arch Linux build links the BUILD MACHINE's glibc, so libzigote.so
+         refuses to load on anything older — including every Flatpak runtime, whose glibc is by
+         definition not the newest. It surfaces as a DllNotFoundException naming a version symbol, so
+         it reads like a packaging mistake rather than an ABI floor. NativeAOT has the same problem for
+         the managed binary and no -Dtarget to fix it with, so the floor is set by building in a
+         container with an old glibc instead: publish.sh's container mode (build/Dockerfile.linux). -->
+
   </PropertyGroup>
 
   <ItemGroup>
@@ -169,7 +192,7 @@
        We stamp the resolved flags next to zig-out and delete the outputs when they differ. -->
   <Target Name="ZigFlagsGuard" BeforeTargets="BuildZigEngine">
     <PropertyGroup>
-      <_ZigFlags>$(ZigOptimize)|$(Enable3D)|$(EnablePhysics3D)|$(EnableEcs)|$(_ZigTriple)|$(ZigCross)|$(ZigStrip)</_ZigFlags>
+      <_ZigFlags>$(ZigOptimize)|$(Enable3D)|$(EnablePhysics3D)|$(EnableEcs)|$(_ZigTriple)|$(ZigCross)|$(ZigCpuArg)|$(ZigStrip)</_ZigFlags>
       <_ZigFlagsFile>$(ZigEngineDir)\zig-out\.zig-build-flags</_ZigFlagsFile>
       <_PrevZigFlags Condition="Exists('$(_ZigFlagsFile)')">$([System.IO.File]::ReadAllText('$(_ZigFlagsFile)').Trim())</_PrevZigFlags>
     </PropertyGroup>
@@ -245,8 +268,8 @@
 
   <Target Name="BuildZigEngine" BeforeTargets="BeforeBuild"
           Inputs="@(ZigSourceFiles)" Outputs="$(ZigOutDir)\$(ZigNativeLib)">
-    <Message Importance="high" Text="Zigote native: zig build $(ZigBuildStep) -Doptimize=$(ZigOptimize) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigStripArg) $(ZigSysrootArg)" />
-    <Exec Command="zig build $(ZigBuildStep) -Doptimize=$(ZigOptimize) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigStripArg) $(ZigSysrootArg)"
+    <Message Importance="high" Text="Zigote native: zig build $(ZigBuildStep) -Doptimize=$(ZigOptimize) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigCpuArg) $(ZigStripArg) $(ZigSysrootArg)" />
+    <Exec Command="zig build $(ZigBuildStep) -Doptimize=$(ZigOptimize) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigCpuArg) $(ZigStripArg) $(ZigSysrootArg)"
           WorkingDirectory="$(ZigEngineDir)" IgnoreStandardErrorWarningFormat="true" />
     <!-- Apple's linker rejects zig's archives outright ("member not 8-byte aligned"), and Apple's
          libtool silently drops members when fed one, because zig also writes members with mode

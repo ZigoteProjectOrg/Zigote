@@ -1,0 +1,11 @@
+<Project>
+    <!--
+      Repo-wide language pins. The SDK is pinned in global.json (10.0.110); this pins the language
+      levels that SDK ships so a newer SDK on someone's machine can't silently change compilation.
+      Per-project <LangVersion> overrides still win — none are set today.
+    -->
+    <PropertyGroup>
+        <LangVersion Condition="'$(MSBuildProjectExtension)' == '.csproj'">14.0</LangVersion>
+        <LangVersion Condition="'$(MSBuildProjectExtension)' == '.fsproj'">10.0</LangVersion>
+    </PropertyGroup>
+</Project>

@@ -64,3 +64,9 @@ zig-cache/
 
 # Local agent-tooling config — not part of the project.
 /.agents/
+
+# BenchmarkDotNet output
+BenchmarkDotNet.Artifacts/
+
+# Local MCP server config — machine-specific.
+/.mcp.json

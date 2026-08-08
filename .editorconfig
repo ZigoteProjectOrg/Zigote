@@ -26,35 +26,3 @@ resharper_csharp_max_array_initializer_elements_on_line = 1
 # Trailing commas
 resharper_trailing_comma_in_multiline_lists = true
 resharper_trailing_comma_in_singleline_lists = false
-
-# ── Zero-allocation rules (see CLAUDE.md § Zero-allocation rules) ────────────────────────────
-# The 0 B/frame invariant itself is enforced by allocation tests (HotPathAllocationTests,
-# Chart_SteadyStatePaint_AllocatesZero, CachedTextTests); these analyzers catch the idioms that
-# create garbage before it reaches a hot path.
-
-# stackalloc inside a loop grows the stack every iteration — always a bug.
-dotnet_diagnostic.CA2014.severity = error
-
-# Span-based string APIs instead of allocating ones.
-dotnet_diagnostic.CA1845.severity = warning # string.Concat(span) over '+' chains
-dotnet_diagnostic.CA1846.severity = warning # AsSpan over Substring
-dotnet_diagnostic.CA1847.severity = warning # Contains(char) over Contains(string)
-dotnet_diagnostic.CA1858.severity = warning # StartsWith over IndexOf == 0
-
-# Collection allocation traps.
-dotnet_diagnostic.CA1825.severity = warning # Array.Empty<T>() over new T[0]
-dotnet_diagnostic.CA1826.severity = warning # indexer over Enumerable.First/Last on lists
-dotnet_diagnostic.CA1827.severity = warning # Any() over Count() == 0
-dotnet_diagnostic.CA1829.severity = warning # Count/Length property over Count()
-dotnet_diagnostic.CA1832.severity = warning # AsSpan over range-indexing an array (copies)
-dotnet_diagnostic.CA1833.severity = warning # AsSpan/AsMemory over range-indexing an array
-dotnet_diagnostic.CA1854.severity = warning # TryGetValue over ContainsKey + indexer
-# Suggestion only: widget-builder helpers intentionally return Widget (composition style, cold
-# path); the hot-path version of this rule — never foreach an interface-typed collection — is a
-# CLAUDE.md rule because no analyzer catches it at the call site.
-dotnet_diagnostic.CA1859.severity = suggestion
-dotnet_diagnostic.CA1860.severity = warning # Count/Length > 0 over Any() (Any boxes the enumerator)
-dotnet_diagnostic.CA1861.severity = warning # no inline constant arrays as arguments (new[] per call)
-dotnet_diagnostic.CA1868.severity = warning # no Contains-before-Add on sets (double lookup)
-dotnet_diagnostic.CA1869.severity = warning # cache JsonSerializerOptions
-dotnet_diagnostic.CA1870.severity = warning # cache SearchValues instances

@@ -1,17 +1,25 @@
 <Project>
   <!--
-    Subset the bundled text fonts to the glyphs the UI actually uses, shrinking release artifacts
-    (Iosevka's bundled 6-face .ttc drops from ~66 MB to a couple hundred KB). Runs after Publish only,
-    so day-to-day dev builds stay fast and full-coverage fonts are kept for the editor.
+    Optionally subset the bundled text fonts to a fixed set of Unicode ranges, shrinking release
+    artifacts (Iosevka's bundled 6-face .ttc drops from ~66 MB to a couple hundred KB). Runs after
+    Publish only.
+
+    OFF BY DEFAULT. Subsetting is safe for an app whose text is all chrome the developer wrote, and
+    wrong for one that displays user data — a music player shows whatever the tags say, a file
+    manager whatever the filenames say. The ranges below keep Latin and Cyrillic, so a published
+    build rendered Greek, Vietnamese and every other unlisted script as tofu, and no amount of
+    testing in English would have shown it. Shipping a few MB more is by far the cheaper mistake.
+
+    Turn it on per project with -p:EnableFontStripping=true where artifact size matters and the text
+    really is fixed — and widen FontUnicodes to everything that app can actually display.
 
     Applied repo-wide via Directory.Build.targets, so EVERY app that bundles the fonts (editor, player,
-    galleries, and any future app) gets it — not just the ones that imported it by hand. It is a clean
-    no-op for projects with no Fonts/ output. The game exporter's generated Game.csproj stages under the
-    temp dir (outside the tree) so it imports this file explicitly.
+    galleries, and any future app) sees the same default — not just the ones that imported it by hand.
+    It is a clean no-op for projects with no Fonts/ output. The game exporter's generated Game.csproj
+    stages under the temp dir (outside the tree) so it imports this file explicitly.
 
-    Icon/emoji fonts are intentionally NOT subset (their glyphs live in PUA / emoji ranges we don't
-    enumerate) — files matching *Icon*/*Emoji* are excluded. Override FontUnicodes / FontSubsetTool per
-    project if needed; pass -p:EnableFontStripping=false to ship fonts unsubset on purpose.
+    Icon/emoji fonts are never subset even when this is on (their glyphs live in PUA / emoji ranges we
+    don't enumerate) — files matching *Icon*/*Emoji* are excluded.
   -->
   <PropertyGroup>
     <!-- Unicode ranges to keep in text fonts: Basic Latin + Latin-1 + Latin Extended-A, punctuation,
@@ -20,7 +28,7 @@
     <FontUnicodes Condition="'$(FontUnicodes)' == ''">U+0000-00FF,U+0100-017F,U+2000-206F,U+20A0-20BF,U+2190-21FF,U+2200-22FF,U+2500-257F,U+25A0-25FF,U+0400-04FF</FontUnicodes>
     <!-- harfbuzz's hb-subset (brew install harfbuzz). Set to e.g. 'pyftsubset' to use fonttools. -->
     <FontSubsetTool Condition="'$(FontSubsetTool)' == ''">hb-subset</FontSubsetTool>
-    <EnableFontStripping Condition="'$(EnableFontStripping)' == ''">true</EnableFontStripping>
+    <EnableFontStripping Condition="'$(EnableFontStripping)' == ''">false</EnableFontStripping>
   </PropertyGroup>
 
   <Target Name="StripBundledFonts" AfterTargets="Publish" Condition="'$(EnableFontStripping)' == 'true'">

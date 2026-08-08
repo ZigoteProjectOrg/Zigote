@@ -2,7 +2,6 @@
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
-        <LangVersion>latest</LangVersion>
         <ImplicitUsings>enable</ImplicitUsings>
         <RootNamespace>Zigote.Render2D</RootNamespace>
         <AssemblyName>Zigote.Render2D</AssemblyName>

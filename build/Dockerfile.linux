@@ -1,0 +1,52 @@
+# Build environment for Zigote's *portable* Linux artifacts. Used by build/publish.sh --container.
+#
+# The only thing this image exists for is the glibc floor. A binary links the glibc of the machine that
+# built it, and that is a hard load-time floor for everything downstream:
+#
+#   * libzigote.so, because zig defaults -Dtarget to the host triple for a host-arch build.
+#   * the NativeAOT binary, because ilc hands its objects to the host clang. There is no -Dtarget
+#     equivalent and no supported sysroot switch, so a container is the only way to move that floor.
+#
+# Built on a rolling-release desktop, both come out needing a glibc newer than any Flatpak runtime and
+# newer than every LTS distro, and they fail at exec with "GLIBC_2.xx not found" — which reads like a
+# packaging bug rather than an ABI floor.
+#
+# Debian 12 (glibc 2.36) rather than the official .NET SDK image (Debian 13, glibc 2.41): 2.36 covers
+# Ubuntu 22.04, RHEL 9 and every Flatpak runtime in service, and 2.41 does not. That is the entire
+# reason the SDK is installed by script instead of inherited from a base image.
+#
+# Nothing here is version-floated: the SDK channel and zig version are build args so an image rebuild
+# is reproducible and can be pinned per release.
+FROM debian:12-slim
+
+ARG DOTNET_CHANNEL=10.0
+ARG ZIG_VERSION=0.16.0
+
+ENV DOTNET_NOLOGO=1 \
+    DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    DOTNET_GENERATE_ASPNET_CERTIFICATE=false \
+    PATH=/usr/share/dotnet:$PATH
+
+# clang + lld + zlib: what ilc links NativeAOT output with. zip: publish.sh's artifact step.
+# git: some SDK targets shell out to it for source-link metadata.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates curl xz-utils zip git \
+        clang lld zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
+    && bash /tmp/dotnet-install.sh --channel "$DOTNET_CHANNEL" --install-dir /usr/share/dotnet \
+    && rm /tmp/dotnet-install.sh
+
+# The Zig toolchain is a static tarball, so it needs nothing from the distro and its own age is
+# irrelevant to the glibc floor — only the target it links for matters.
+RUN arch="$(uname -m)" \
+    && curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-${arch}-linux-${ZIG_VERSION}.tar.xz" \
+       | tar -xJ -C /opt \
+    && ln -s "/opt/zig-${arch}-linux-${ZIG_VERSION}/zig" /usr/local/bin/zig
+
+# publish.sh runs as the invoking host user (podman --userns=keep-id / docker --user) so build output
+# is not root-owned. That user has no passwd entry and no home inside the image, so HOME is pointed
+# here and the NuGet cache is bind-mounted into it.
+RUN mkdir -p /build-home && chmod 777 /build-home
+ENV HOME=/build-home
