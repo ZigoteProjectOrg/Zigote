@@ -3,7 +3,6 @@ using Zigote.Core;
 using Zigote.Core.Animation;
 using Zigote.Core.Native;
 using Zigote.Core.Paint;
-using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Layout;
 

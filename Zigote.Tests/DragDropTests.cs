@@ -1,11 +1,9 @@
 using Xunit;
 using Zigote.Core;
-using Zigote.Core.Paint;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.DragDrop;
 using Zigote.UI.Widgets.Layout;
-using Zigote.UI.Host;
 
 namespace Zigote.Tests;
 

@@ -17,7 +17,14 @@ public class PhysicsProviderTests
     {
         Physics.Backend = null;
 
-        Assert.False(Physics.TryRaycast(Vec3.Zero, Vec3.Forward, 10f, out var hit));
+        Assert.False(
+            Physics.TryRaycast(
+                Vec3.Zero,
+                Vec3.Forward,
+                10f,
+                out var hit
+            )
+        );
         Assert.Equal(default, hit.Body);
         Assert.Null(Physics.Raycast(Vec3.Zero, Vec3.Forward, 10f));
     }
@@ -38,7 +45,15 @@ public class PhysicsProviderTests
         try
         {
             var ignore = new RigidBodyHandle(42);
-            Assert.True(Physics.TryRaycast(Vec3.Zero, Vec3.Forward, 10f, ignore, out var hit));
+            Assert.True(
+                Physics.TryRaycast(
+                    Vec3.Zero,
+                    Vec3.Forward,
+                    10f,
+                    ignore,
+                    out var hit
+                )
+            );
             Assert.Equal(7u, hit.Body.BodyId);
             Assert.Equal(new Vec3(1, 2, 3), hit.Point);
             Assert.Equal(Vec3.Up, hit.Normal);
@@ -46,7 +61,14 @@ public class PhysicsProviderTests
             Assert.Equal(ignore, fake.LastIgnore);
 
             // The no-ignore overload passes None, never a valid body id.
-            Assert.True(Physics.TryRaycast(Vec3.Zero, Vec3.Forward, 10f, out _));
+            Assert.True(
+                Physics.TryRaycast(
+                    Vec3.Zero,
+                    Vec3.Forward,
+                    10f,
+                    out _
+                )
+            );
             Assert.Equal(RigidBodyHandle.None, fake.LastIgnore);
         }
         finally

@@ -404,7 +404,12 @@ public class RepaintTrackerTests
         // frame must never fall back to FullDamage or touch the overlay layer (regression: MarkNeedsPaint
         // used to route through MarkAll, clobbering the precise damage and re-walking both layers).
         var t = new RepaintTracker();
-        var thumb = new Rect(40, 10, 24, 24);
+        var thumb = new Rect(
+            40,
+            10,
+            24,
+            24
+        );
         PaintFrame(t); // first frame settles both layers
         t.ResetDamage(); // enter partial mode
 
@@ -416,12 +421,17 @@ public class RepaintTrackerTests
             Assert.False(t.FullDamage);
             Assert.Equal(1, t.DamageCount); // one merged region, not a full clear
             Assert.True(t.RootDirty);
-            Assert.False(t.OverlayDirty); // dragging a root control never re-walks the overlay layer
+            Assert.False(
+                t.OverlayDirty
+            ); // dragging a root control never re-walks the overlay layer
             PaintFrame(t);
             t.ResetDamage(); // end-of-frame reset (App does this after present)
         }
 
-        Assert.Equal(1, t.OverlayPaints); // overlay painted only once (the settle) — never during the drag
+        Assert.Equal(
+            1,
+            t.OverlayPaints
+        ); // overlay painted only once (the settle) — never during the drag
     }
 
     [Fact]
@@ -433,8 +443,18 @@ public class RepaintTrackerTests
         PaintFrame(t); // settle both layers first
         t.ResetDamage();
 
-        var buttonA = new Rect(0, 0, 80, 30);
-        var buttonB = new Rect(120, 0, 80, 30);
+        var buttonA = new Rect(
+            0,
+            0,
+            80,
+            30
+        );
+        var buttonB = new Rect(
+            120,
+            0,
+            80,
+            30
+        );
         t.AddDamageRoot(buttonA); // exited
         t.AddDamageRoot(buttonB); // entered
 
@@ -451,7 +471,14 @@ public class RepaintTrackerTests
         var t = new RepaintTracker();
         t.ResetDamage();
 
-        t.AddDamageRoot(new Rect(0, 0, 80, 30)); // exited; entered side contributes nothing
+        t.AddDamageRoot(
+            new Rect(
+                0,
+                0,
+                80,
+                30
+            )
+        ); // exited; entered side contributes nothing
 
         Assert.False(t.FullDamage);
         Assert.Equal(1, t.DamageCount);

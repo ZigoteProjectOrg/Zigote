@@ -15,6 +15,9 @@ namespace Zigote.Tests;
 ///     → Paint into a real <see cref="PaintList" /> (whose NaN validation doubles as a canary) plus
 ///     synthetic pointer input for the hover pipeline.
 /// </summary>
+[Collection(
+    "Ticker"
+)] // static Ticker.Active is shared; AdvanceAll in one class ticks another class's widgets
 public class ChartsTests
 {
     private static readonly List<Sale> Sales = [
@@ -476,7 +479,8 @@ public class ChartsTests
         // hover registry must NOT be rebuilt per invalidate (lazy), the resolve scratch
         // (_resolved/_seriesOrder/groups/triples/spans) must be reused, and stacking keys are the
         // raw ChartValues (no per-point key strings) — this was ~150+ KB per invalidate.
-        var data = Enumerable.Range(0, 500).Select(i => ((double)i, Math.Sin(i / 15.0))).ToList();
+        var data = Enumerable.Range(0, 500).Select(i => ((double)i, Math.Sin(i / 15.0)))
+            .ToList();
         ChartMark mark = kind == "area"
             ? AreaMark.Of(data, d => d.Item1, d => d.Item2)
             : LineMark.Of(data, d => d.Item1, d => d.Item2);
@@ -631,7 +635,8 @@ public class ChartsTests
     [Fact]
     public void Chart_ScrollableX_StartsAtEnd_PansAndClamps()
     {
-        var data = Enumerable.Range(0, 100).Select(i => ((double)i, Math.Sin(i / 5.0))).ToList();
+        var data = Enumerable.Range(0, 100).Select(i => ((double)i, Math.Sin(i / 5.0)))
+            .ToList();
         var chart = new Chart {
             Animated = false,
             ScrollableX = true,
@@ -706,7 +711,8 @@ public class ChartsTests
     [Fact]
     public void Chart_ZoomBy_ShrinksWindow_KeepingFocusPoint()
     {
-        var data = Enumerable.Range(0, 100).Select(i => ((double)i, Math.Sin(i / 5.0))).ToList();
+        var data = Enumerable.Range(0, 100).Select(i => ((double)i, Math.Sin(i / 5.0)))
+            .ToList();
         var chart = new Chart {
             Animated = false,
             ZoomableX = true,
@@ -780,7 +786,8 @@ public class ChartsTests
     public void Chart_DualYAxes_IndependentScales_SharedSeriesColors()
     {
         var priceData = Enumerable.Range(0, 12).Select(i => ((double)i, 100.0 + i)).ToList();
-        var volData = Enumerable.Range(0, 12).Select(i => ((double)i, (double)(i * 1000))).ToList();
+        var volData = Enumerable.Range(0, 12).Select(i => ((double)i, (double)(i * 1000)))
+            .ToList();
 
         var price = LineMark.Of(priceData, d => d.Item1, d => d.Item2);
         price.Name = "price";
@@ -869,7 +876,8 @@ public class ChartsTests
     [Fact]
     public void Chart_LineMark_MaxRenderPoints_CutsStrokeCommands()
     {
-        var data = Enumerable.Range(0, 2000).Select(i => ((double)i, Math.Sin(i / 30.0))).ToList();
+        var data = Enumerable.Range(0, 2000).Select(i => ((double)i, Math.Sin(i / 30.0)))
+            .ToList();
 
         int PaintCommandCount(int cap)
         {
@@ -889,7 +897,10 @@ public class ChartsTests
 
         var full = PaintCommandCount(0);
         var capped = PaintCommandCount(100);
-        Assert.True(capped < full / 2, $"decimated ({capped}) should be far below full ({full})");
+        Assert.True(
+            capped < full / 2,
+            $"decimated ({capped}) should be far below full ({full})"
+        );
     }
 
     [Theory]
@@ -906,7 +917,8 @@ public class ChartsTests
         // A live chart (LiveLineChart-style) repaints every frame, so the whole mark paint path must
         // be zero-alloc in steady state: slopes in a reused scratch, render-order caches without
         // hoisted sort closures, bar keys resolved once per data resolve, no boxed enumerators.
-        var data = Enumerable.Range(0, 200).Select(i => ((double)i, Math.Sin(i / 15.0))).ToList();
+        var data = Enumerable.Range(0, 200).Select(i => ((double)i, Math.Sin(i / 15.0)))
+            .ToList();
         var linear = LineMark.Of(data, d => d.Item1, d => d.Item2);
         linear.Interpolation = ChartInterpolation.Linear;
         ChartMark mark = kind switch {

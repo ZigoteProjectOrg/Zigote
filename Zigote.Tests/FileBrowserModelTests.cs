@@ -1,5 +1,4 @@
 using Xunit;
-using Zigote.UI.Material;
 
 namespace Zigote.Tests;
 
@@ -44,9 +43,16 @@ public class FileBrowserModelTests
     [Fact]
     public void DirectoriesGroupFirst_ThenSortedByName()
     {
-        var model = Loaded(File("zeta.txt"), Dir("beta"), File("alpha.txt"), Dir("Alpha"));
-        Assert.Equal(["Alpha", "beta", "alpha.txt", "zeta.txt"],
-            model.Visible.Select(e => e.Name).ToArray());
+        var model = Loaded(
+            File("zeta.txt"),
+            Dir("beta"),
+            File("alpha.txt"),
+            Dir("Alpha")
+        );
+        Assert.Equal(
+            ["Alpha", "beta", "alpha.txt", "zeta.txt"],
+            model.Visible.Select(e => e.Name).ToArray()
+        );
     }
 
     [Fact]
@@ -54,13 +60,17 @@ public class FileBrowserModelTests
     {
         var model = Loaded(File("big.txt", 300), File("small.txt", 1), Dir("sub"));
         model.SortBy(FileSortColumn.Size);
-        Assert.Equal(["sub", "small.txt", "big.txt"],
-            model.Visible.Select(e => e.Name).ToArray());
+        Assert.Equal(
+            ["sub", "small.txt", "big.txt"],
+            model.Visible.Select(e => e.Name).ToArray()
+        );
 
         model.SortBy(FileSortColumn.Size); // same column again flips to descending
         Assert.False(model.SortAscending);
-        Assert.Equal(["sub", "big.txt", "small.txt"],
-            model.Visible.Select(e => e.Name).ToArray());
+        Assert.Equal(
+            ["sub", "big.txt", "small.txt"],
+            model.Visible.Select(e => e.Name).ToArray()
+        );
     }
 
     [Fact]
@@ -99,7 +109,12 @@ public class FileBrowserModelTests
     [Fact]
     public void Selection_PlainReplaces_ToggleAndRangeNeedMultiSelect()
     {
-        var model = Loaded(File("a"), File("b"), File("c"), File("d"));
+        var model = Loaded(
+            File("a"),
+            File("b"),
+            File("c"),
+            File("d")
+        );
         model.AllowMultiSelect = true;
 
         model.SelectIndex(0);
@@ -120,7 +135,12 @@ public class FileBrowserModelTests
     [Fact]
     public void TypeAhead_MatchesPrefix_AndWraps()
     {
-        var model = Loaded(File("apple"), File("banana"), File("berry"), File("cherry"));
+        var model = Loaded(
+            File("apple"),
+            File("banana"),
+            File("berry"),
+            File("cherry")
+        );
         Assert.Equal(1, model.TypeAheadIndex("b", 0)); // banana
         Assert.Equal(2, model.TypeAheadIndex("b", 1)); // berry, scanning on from banana
         Assert.Equal(1, model.TypeAheadIndex("b", 2)); // wraps back around to banana
@@ -181,8 +201,10 @@ public class FileBrowserModelTests
     public void NaturalSort_ComparesDigitRunsNumerically()
     {
         var model = Loaded(File("file10.txt"), File("file2.txt"), File("file1.txt"));
-        Assert.Equal(["file1.txt", "file2.txt", "file10.txt"],
-            model.Visible.Select(e => e.Name).ToArray());
+        Assert.Equal(
+            ["file1.txt", "file2.txt", "file10.txt"],
+            model.Visible.Select(e => e.Name).ToArray()
+        );
 
         Assert.True(FileBrowserModel.NaturalCompare("scene9", "scene10") < 0);
         Assert.True(FileBrowserModel.NaturalCompare("Scene10", "scene9") > 0); // case-insensitive

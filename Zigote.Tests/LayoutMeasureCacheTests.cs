@@ -20,7 +20,7 @@ public class LayoutMeasureCacheTests
     {
         var small = new MeasureCountingBox(10f, 10f);
         var fill = new FillBox();
-        var stack = new Stack(children: [small, fill]);
+        var stack = new Stack([small, fill]);
 
         var size = stack.Measure(Constraints.Tight(100f, 50f));
 
@@ -34,7 +34,7 @@ public class LayoutMeasureCacheTests
     {
         var small = new MeasureCountingBox(10f, 10f);
         var big = new MeasureCountingBox(30f, 30f);
-        var stack = new Stack(children: [small, big]);
+        var stack = new Stack([small, big]);
 
         var size = stack.Measure(new Constraints(maxWidth: 100f, maxHeight: 100f));
 
@@ -50,7 +50,7 @@ public class LayoutMeasureCacheTests
     [Fact]
     public void Container_TightCell_ForcesCellSize()
     {
-        var container = new Container(child: new Container(width: 10, height: 10));
+        var container = new Container(new Container(width: 10, height: 10));
 
         var size = container.Measure(Constraints.Tight(200f, 100f));
 
@@ -63,14 +63,14 @@ public class LayoutMeasureCacheTests
         var size = new Container().Measure(Constraints.Unbounded);
         Assert.Equal(Size.Zero, size);
 
-        var withMin = new Container().Measure(new Constraints(minWidth: 50f, minHeight: 20f));
+        var withMin = new Container().Measure(new Constraints(50f, minHeight: 20f));
         Assert.Equal(new Size(50f, 20f), withMin);
     }
 
     [Fact]
     public void Container_WithChild_RespectsMinConstraints()
     {
-        var container = new Container(child: new Container(width: 10, height: 10));
+        var container = new Container(new Container(width: 10, height: 10));
 
         var size = container.Measure(
             new Constraints(

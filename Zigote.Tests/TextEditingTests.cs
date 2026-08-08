@@ -90,7 +90,12 @@ public class TextEditingTests
     {
         var tf = new TextField { Text = "" };
         tf.OnTextInput("select all of this");
-        tf.OnKey('a', 4, true, Modifiers.Cmd); // ⌘A / Ctrl+A
+        tf.OnKey(
+            'a',
+            4,
+            true,
+            Modifiers.Cmd
+        ); // ⌘A / Ctrl+A
         tf.Text = "hi"; // selection referred to the old, longer text
         tf.OnTextInput("!"); // must not delete a phantom selection or throw
         Assert.Equal("hi!", tf.Text);
@@ -236,7 +241,7 @@ public class TextEditingTests
         Assert.Equal("ab\ncd", ml.Text);
 
         var submitted = false;
-        var sl = new TextField { OnSubmit = _ => submitted = true };
+        var sl = new TextField { OnSubmitted = _ => submitted = true };
         sl.OnTextInput("ab");
         sl.OnKey(
             '\0',
@@ -254,7 +259,7 @@ public class TextEditingTests
         var submitted = false;
         var ml = new TextField {
             Multiline = true,
-            OnSubmit = _ => submitted = true,
+            OnSubmitted = _ => submitted = true,
         };
         ml.OnTextInput("x");
         ml.OnKey(

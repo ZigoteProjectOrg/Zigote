@@ -6,9 +6,10 @@ using Zigote.UI.DevTools;
 using Zigote.UI.DevTools.Diagnostics;
 using Zigote.UI.DevTools.Panels;
 using Zigote.UI.DevTools.Widgets;
+using Zigote.UI.Adwaita;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
-using Zigote.UI.Host;
+using Zigote.UI.Widgets.Layout;
 
 namespace Zigote.Tests;
 
@@ -29,6 +30,7 @@ public class DevToolsTests
         yield return new LogsPanel();
         yield return new ConsolePanel();
         yield return new VariablesPanel();
+        yield return new ReactivePanel();
         yield return new UiPaintPanel();
         yield return new PipelinePanel();
         yield return new RendererPanel();
@@ -42,7 +44,10 @@ public class DevToolsTests
 
         foreach (var panel in AppIndependentPanels())
         {
-            var root = new ThemeProvider(ThemeData.Dark, panel.Build(BuildContext.Current));
+            var root = new ThemeProvider(
+                ThemeData.Dark,
+                DevPage.Group(panel.Build(BuildContext.Current))
+            );
             Measure(root);
             root.Paint(new PaintList());
 
@@ -61,6 +66,89 @@ public class DevToolsTests
     {
         w.Measure(Constraints.Tight(DevToolsPanel.PanelWidth - 24f, 1400f));
         w.Layout(Offset.Zero);
+    }
+
+    /// <summary>
+    ///     Every panel also has to survive a phone: same build/refresh/paint cycle under a 390pt
+    ///     <see cref="MediaQuery" />, where the kit switches to finger-sized rows and the panel strip to
+    ///     its scrollable arm.
+    /// </summary>
+    [Fact]
+    public void EveryPanel_BuildRefreshPaint_AtPhoneWidth_DoesNotThrow()
+    {
+        DevChartData.Install();
+        for (var i = 0; i < 5; i++) DebugStats.Sample(0.016f);
+
+        foreach (var panel in AppIndependentPanels())
+        {
+            var root = new MediaQuery(
+                new MediaQueryData(390f, 780f),
+                new ThemeProvider(ThemeData.Dark, DevPage.Group(panel.Build(BuildContext.Current)))
+            );
+            root.Measure(Constraints.Tight(390f, 780f));
+            root.Layout(Offset.Zero);
+            root.Paint(new PaintList());
+
+            panel.Refresh(0.016f);
+            root.Measure(Constraints.Tight(390f, 780f));
+            root.Layout(Offset.Zero);
+            root.Paint(new PaintList());
+        }
+    }
+
+    /// <summary>
+    ///     Adjacent readout rows collapse into one boxed list; everything else stays between the cards
+    ///     in source order. This is what gives every panel its grouped layout without panels knowing.
+    /// </summary>
+    [Fact]
+    public void DevPage_GroupsAdjacentRowsAndKeepsTheRest()
+    {
+        var note = new DevNote("note");
+        var header = new DevSectionHeader("Section");
+        var source = new Column {
+            Children = {
+                header,
+                new DevKeyValue("a"),
+                new DevKeyValue("b"),
+                note,
+                new DevKeyValue("c"),
+            },
+        };
+
+        var grouped = Assert.IsType<Column>(DevPage.Group(source));
+        // header, [a b] card, note, [c] card
+        Assert.Equal(4, grouped.Children.Count);
+        Assert.Same(header, grouped.Children[0]);
+        Assert.Same(note, grouped.Children[2]);
+        Assert.Equal(2, GroupRows(grouped.Children[1]));
+        Assert.Equal(1, GroupRows(grouped.Children[3]));
+
+        static int GroupRows(Widget w)
+        {
+            var padding = Assert.IsType<Padding>(w);
+            return Assert.IsType<AdwPreferencesGroup>(padding.Child).Rows.Count;
+        }
+    }
+
+    /// <summary>A readout row is dense on a pointer screen and a 44pt touch target on a phone.</summary>
+    [Theory]
+    [InlineData(1200f, DevKit.RowHeight)]
+    [InlineData(390f, ControlMetrics.MinTouchTarget)]
+    public void KeyValueRow_HeightFollowsSizeClass(float screenWidth, float expected)
+    {
+        var root = new MediaQuery(
+            new MediaQueryData(screenWidth, 800f),
+            new ThemeProvider(ThemeData.Dark, new DevKeyValue("key", "value"))
+        );
+        var size = root.Measure(
+            new Constraints(
+                0f,
+                300f,
+                0f,
+                800f
+            )
+        );
+        Assert.Equal(expected, size.Height);
     }
 
     // ── Profile gating ──
@@ -147,5 +235,20 @@ public class DevToolsTests
         DebugStats.Sample(0.3f);
         Assert.True(DevChartData.Revision > beforeRev);
         Assert.True(DevChartData.Fps.Count > 0);
+    }
+
+    [Fact]
+    public void DebugDraws_StayActive_WhilePanelsAreClosed()
+    {
+        var c = new DevToolsController(null!, DevToolsProfile.TwoD);
+        Assert.False(c.DebugDrawActive);
+        Assert.False(c.WantsContinuousFrame);
+
+        c.ShowLayoutBounds = true;
+
+        // Enabled draw, no panel open: still paints, still pumps frames — but never swallows clicks.
+        Assert.True(c.DebugDrawActive);
+        Assert.True(c.WantsContinuousFrame);
+        Assert.False(c.PanelsMounted);
     }
 }

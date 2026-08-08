@@ -311,6 +311,64 @@ public class AssetStreamingTests
         Assert.True(h.IsFailed);
         Assert.NotNull(h.Error);
     }
+    // ── In-flight loads vs the table being emptied under them ───────────────────
+
+    [Fact]
+    public void Clear_WhileLoading_DropsTheCompletion_InsteadOfLeakingIt()
+    {
+        var m = Manager(out var loader);
+        loader.Gate.Reset(); // hold the worker inside LoadOffThread
+
+        var handle = m.Acquire(AssetId.New(), loader);
+        m.Clear(); // project closed while the load is still running
+        loader.Gate.Set(); // ... and now it finishes
+
+        // Applying here would build a resident value on a record the table no longer holds — nothing
+        // could ever unload it, because evict and clear both work off the table.
+        PumpUntil<FakeAsset>(m, () => loader.Applies > 0);
+
+        Assert.Equal(0, loader.Applies);
+        Assert.False(handle.IsLoaded);
+        Assert.Equal(0, m.Count);
+    }
+
+    [Fact]
+    public void Evict_WhileLoading_DropsTheCompletion_InsteadOfLeakingIt()
+    {
+        var m = Manager(out var loader);
+        loader.Gate.Reset();
+
+        var id = AssetId.New();
+        var handle = m.Acquire(id, loader);
+        m.Release(handle); // no references left, so eviction may take the record
+        Assert.Equal(1, m.EvictUnreferenced());
+
+        loader.Gate.Set();
+        PumpUntil<FakeAsset>(m, () => loader.Applies > 0);
+
+        Assert.Equal(0, loader.Applies);
+        Assert.Equal(0, m.Count);
+    }
+
+    [Fact]
+    public void ReAcquire_AfterClear_LoadsAgain_AndResolves()
+    {
+        var m = Manager(out var loader);
+        var id = AssetId.New();
+
+        var first = m.Acquire(id, loader);
+        PumpUntil<FakeAsset>(m, () => first.IsLoaded);
+        Assert.True(first.IsLoaded);
+
+        m.Clear();
+
+        // A detached record must not poison the id: the next acquire builds a fresh one.
+        var second = m.Acquire(id, loader);
+        PumpUntil<FakeAsset>(m, () => second.IsLoaded);
+        Assert.True(second.IsLoaded);
+        Assert.Equal(2, loader.Applies);
+    }
+
     // ── A resident asset + a controllable loader ────────────────────────────────
 
     private sealed class FakeAsset

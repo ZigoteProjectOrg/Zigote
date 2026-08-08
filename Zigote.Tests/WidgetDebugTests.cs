@@ -167,6 +167,28 @@ public class WidgetDebugTests
     }
 
     [Fact]
+    public void DeepestAt_IgnoresAnEmptyFullScreenOverlayLayer()
+    {
+        // The AdwToastOverlay shape: content plus a topmost Align that fills the window and shows
+        // nothing until a toast arrives. Picking by bounds alone selected that Align everywhere.
+        var inner = new Label("hi");
+        var content = new SizedBox(200f, 100f, inner);
+        var empty = new Align(Alignment.BottomCenter);
+        var root = new Stack {
+            Children = {
+                content,
+                empty,
+            },
+        };
+        root.Attach(null!, null);
+        root.Measure(Constraints.Tight(200f, 100f));
+        root.Layout(Offset.Zero);
+
+        Assert.True(empty.Bounds.Contains(5f, 5f), "the empty layer must cover the point");
+        Assert.Same(inner, WidgetDebug.DeepestAt(root, new Offset(5f, 5f)));
+    }
+
+    [Fact]
     public void DeepestAt_OutsideEverything_ReturnsNull()
     {
         var root = LaidOutTree(out _, out _, out _);
@@ -181,5 +203,83 @@ public class WidgetDebugTests
         Assert.Same(inner, path[^1]);
         Assert.Contains(first, path);
         Assert.Same(root, path[0]);
+    }
+
+    // ── Property tree / JSON view (Members / CanExpand / ToJson) ──
+
+    private sealed record Style(Color? Background, float Radius, Nested? Inner = null);
+
+    private sealed record Nested(string Name);
+
+    private sealed class Styled : Label
+    {
+        public Styled() : base("x")
+        {
+        }
+
+        public Style? Sheet { get; set; }
+    }
+
+    [Fact]
+    public void Members_ObjectValue_IsExpandableAndShownAsItsType()
+    {
+        var w = new Styled { Sheet = new Style(new Color(1f, 0f, 0f), 12f) };
+        var m = WidgetDebug.Members(w).First(x => x.Name == "Sheet");
+        Assert.True(m.Expandable);
+        Assert.Equal("{Style}", m.Value); // not the record's whole ToString dump
+        Assert.Equal(
+            "#FF0000",
+            WidgetDebug.Members(m.Raw!).First(x => x.Name == "Background").Value
+        );
+    }
+
+    [Fact]
+    public void Members_NestedNulls_AreKept_ButWidgetNullsAreNot()
+    {
+        var style = new Style(null, 12f);
+        Assert.Equal("null", WidgetDebug.Members(style).First(x => x.Name == "Background").Value);
+        Assert.DoesNotContain(WidgetDebug.Members(new Styled()), x => x.Name == "Sheet");
+    }
+
+    [Fact]
+    public void CanExpand_LeafValuesAreNotExpandable()
+    {
+        Assert.False(WidgetDebug.CanExpand(null));
+        Assert.False(WidgetDebug.CanExpand("text"));
+        Assert.False(WidgetDebug.CanExpand(12f));
+        Assert.False(WidgetDebug.CanExpand(new Color(1f, 0f, 0f)));
+        Assert.True(WidgetDebug.CanExpand(new Style(null, 1f)));
+        Assert.True(WidgetDebug.CanExpand(new List<int> { 1 }));
+    }
+
+    [Fact]
+    public void ToJson_NestsObjectsAndQuotesFormattedLeaves()
+    {
+        var json = WidgetDebug.ToJson(new Style(new Color(1f, 0f, 0f), 12f, new Nested("deep")));
+        Assert.Contains("\"Background\": \"#FF0000\"", json);
+        Assert.Contains("\"Radius\": 12", json);
+        Assert.Contains("\"Name\": \"deep\"", json);
+    }
+
+    [Fact]
+    public void ToJson_DepthCap_StopsDescending()
+    {
+        var json = WidgetDebug.ToJson(new Style(null, 1f, new Nested("deep")), 1);
+        Assert.Contains("\"Inner\": \"{Nested}\"", json);
+        Assert.DoesNotContain("deep", json);
+    }
+
+    [Fact]
+    public void ToJson_Cycle_DoesNotRecurseForever()
+    {
+        var a = new Node();
+        a.Next = a;
+        var json = WidgetDebug.ToJson(a);
+        Assert.Contains("↻", json);
+    }
+
+    private sealed class Node
+    {
+        public Node? Next { get; set; }
     }
 }

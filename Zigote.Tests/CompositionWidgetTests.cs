@@ -282,7 +282,7 @@ public class CompositionWidgetTests
         var hit = cb.HitTest(Center(cb))!;
         hit.OnPointerDown(Center(cb));
         hit.OnPointerUp(Center(cb));
-        Assert.True(cb.Checked);
+        Assert.True(cb.Value);
         Assert.Single(changed);
         Assert.True(changed[0]);
     }

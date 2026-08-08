@@ -2,7 +2,6 @@ using Xunit;
 using Zigote.Core;
 using Zigote.Core.Native;
 using Zigote.Core.Paint;
-using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Layout;
 
 namespace Zigote.Tests;

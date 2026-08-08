@@ -28,7 +28,7 @@ public class MaterialApiConsistencyTests
     public void Controller_SeedsField_AndFollowsExternalWrites()
     {
         var controller = new TextEditingController("seed");
-        var field = new TextField(controller: controller);
+        var field = new TextField(controller);
         Assert.Equal("seed", field.Text);
 
         controller.Text = "external";
@@ -44,7 +44,7 @@ public class MaterialApiConsistencyTests
         var controller = new TextEditingController();
         var notifications = 0;
         controller.Changed += _ => notifications++;
-        var field = new TextField(controller: controller);
+        var field = new TextField(controller);
 
         field.OnTextInput("hi");
 
@@ -56,7 +56,7 @@ public class MaterialApiConsistencyTests
     public void Controller_ClearWithCaretAtEnd_ThenTyping_DoesNotThrow()
     {
         var controller = new TextEditingController();
-        var field = new TextField(controller: controller);
+        var field = new TextField(controller);
         field.OnTextInput("abcdef"); // caret now sits past the cleared text's length
 
         controller.Clear();
@@ -70,7 +70,7 @@ public class MaterialApiConsistencyTests
     public void Controller_DetachedField_StopsFollowing()
     {
         var controller = new TextEditingController("a");
-        var field = new TextField(controller: controller);
+        var field = new TextField(controller);
 
         field.Detach();
         controller.Text = "b";
@@ -120,9 +120,9 @@ public class MaterialApiConsistencyTests
         var rows = new List<Widget>();
         for (var i = 0; i < 3; i++) rows.Add(new RowBox());
         var list = new ListView(
-            children: rows,
-            itemExtent: 20,
-            padding: EdgeInsets.All(10f)
+            rows,
+            20,
+            EdgeInsets.All(10f)
         ) { Smooth = false };
 
         list.Measure(Constraints.Tight(200f, 100f));
@@ -140,9 +140,9 @@ public class MaterialApiConsistencyTests
         var rows = new List<Widget>();
         for (var i = 0; i < 10; i++) rows.Add(new RowBox());
         var list = new ListView(
-            children: rows,
-            itemExtent: 20,
-            padding: EdgeInsets.All(10f)
+            rows,
+            20,
+            EdgeInsets.All(10f)
         ) { Smooth = false };
         list.Measure(Constraints.Tight(200f, 100f));
         list.Layout(Offset.Zero);
@@ -162,7 +162,12 @@ public class MaterialApiConsistencyTests
     public void Slider_FloatCtor_StepsAndNotifiesInFloat()
     {
         var last = float.NaN;
-        var slider = new Slider(0.25f, 0f, 1f, v => last = v);
+        var slider = new Slider(
+            0.25f,
+            0f,
+            1f,
+            v => last = v
+        );
         slider.OnKey(
             '\0',
             79,

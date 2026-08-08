@@ -1,5 +1,8 @@
 using Xunit;
 using Zigote.Core.Events;
+using Zigote.UI.Host;
+using Zigote.UI.Widgets;
+using Zigote.UI.Widgets.Layout;
 
 namespace Zigote.Tests;
 
@@ -134,5 +137,20 @@ public class KeymapTests
         restored.Load(dump);
         Assert.Equal("a.x", restored.Resolve(KeyCode.X, Modifiers.Ctrl));
         Assert.Equal("a.y", restored.Resolve(KeyCode.F2, Modifiers.None));
+    }
+
+    private sealed class Editor : SizedBox, ITextInputClient;
+
+    [Theory]
+    [InlineData(Modifiers.None, true, false)] // Space while typing in a search box is a space
+    [InlineData(Modifiers.Shift, true, false)] // Shift+Space too
+    [InlineData(Modifiers.Ctrl, true, true)] // Ctrl+F is a command, focus or not
+    [InlineData(Modifiers.Alt, true, true)]
+    [InlineData(Modifiers.None, false, true)] // nothing typing — Space is play/pause
+    public void Shortcut_YieldsToFocusedEditor_OnlyWhenUnmodified(
+        Modifiers mods, bool editorFocused, bool expected)
+    {
+        Widget? focused = editorFocused ? new Editor() : new SizedBox(1f, 1f);
+        Assert.Equal(expected, App.ShortcutOutranksFocus(mods, focused));
     }
 }

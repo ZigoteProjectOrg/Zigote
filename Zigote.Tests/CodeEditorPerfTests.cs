@@ -14,6 +14,9 @@ namespace Zigote.Tests;
 ///     across frames (no re-lex from line 0 every frame while scrolled), and multi-line lexer state is
 ///     still carried correctly across the visible window.
 /// </summary>
+[Collection(
+    "Ticker"
+)] // static Ticker.Active is shared; AdvanceAll in one class ticks another class's widgets
 public class CodeEditorPerfTests
 {
     private static (float, float, float, float) Col(ZgPaintCommand c)
@@ -104,7 +107,9 @@ public class CodeEditorPerfTests
         // code1 | /* | comment | */ | code2  →  Keyword, Comment, Comment, Comment, Keyword
         var ed = new CodeEditor("code1\n/*\ncomment\n*/\ncode2") { Tokenizer = tok };
 
-        ed.Measure(Constraints.Tight(600f, 600f)); // tall enough that all five lines are visible
+        ed.Measure(
+            Constraints.Tight(600f, 600f)
+        ); // tall enough that all five lines are visible
         ed.Layout(Offset.Zero);
 
         var paint = new PaintList();

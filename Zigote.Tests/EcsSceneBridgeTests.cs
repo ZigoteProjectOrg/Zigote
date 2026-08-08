@@ -167,7 +167,7 @@ public sealed class EcsSceneBridgeTests : IDisposable
             Id = id,
             Name = name,
             Position = pos,
-            Children = [..children],
+            Children = [.. children],
         };
     }
 

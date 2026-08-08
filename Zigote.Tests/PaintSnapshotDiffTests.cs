@@ -33,15 +33,65 @@ public class PaintSnapshotDiffTests
     public void Identical_lists_diff_as_identical()
     {
         var a = List(p =>
-        {
-            p.AddRect(new Rect(0, 0, 800, 600), new Color(0.1f, 0.1f, 0.1f, 1f));
-            p.AddText("hello", 20, 40, new Color(1f, 1f, 1f, 1f), 14f);
-        });
+            {
+                p.AddRect(
+                    new Rect(
+                        0,
+                        0,
+                        800,
+                        600
+                    ),
+                    new Color(
+                        0.1f,
+                        0.1f,
+                        0.1f,
+                        1f
+                    )
+                );
+                p.AddText(
+                    "hello",
+                    20,
+                    40,
+                    new Color(
+                        1f,
+                        1f,
+                        1f,
+                        1f
+                    ),
+                    14f
+                );
+            }
+        );
         var b = List(p =>
-        {
-            p.AddRect(new Rect(0, 0, 800, 600), new Color(0.1f, 0.1f, 0.1f, 1f));
-            p.AddText("hello", 20, 40, new Color(1f, 1f, 1f, 1f), 14f);
-        });
+            {
+                p.AddRect(
+                    new Rect(
+                        0,
+                        0,
+                        800,
+                        600
+                    ),
+                    new Color(
+                        0.1f,
+                        0.1f,
+                        0.1f,
+                        1f
+                    )
+                );
+                p.AddText(
+                    "hello",
+                    20,
+                    40,
+                    new Color(
+                        1f,
+                        1f,
+                        1f,
+                        1f
+                    ),
+                    14f
+                );
+            }
+        );
 
         Assert.Equal(PaintDiffResult.Identical, Diff(a, b, out _));
     }
@@ -50,29 +100,113 @@ public class PaintSnapshotDiffTests
     public void Changed_rect_fill_reports_bounds_covering_the_rect()
     {
         var a = List(p =>
-        {
-            p.AddRect(new Rect(0, 0, 800, 600), new Color(0.1f, 0.1f, 0.1f, 1f));
-            p.AddRect(new Rect(100, 100, 200, 80), new Color(0.3f, 0.3f, 0.3f, 1f));
-        });
+            {
+                p.AddRect(
+                    new Rect(
+                        0,
+                        0,
+                        800,
+                        600
+                    ),
+                    new Color(
+                        0.1f,
+                        0.1f,
+                        0.1f,
+                        1f
+                    )
+                );
+                p.AddRect(
+                    new Rect(
+                        100,
+                        100,
+                        200,
+                        80
+                    ),
+                    new Color(
+                        0.3f,
+                        0.3f,
+                        0.3f,
+                        1f
+                    )
+                );
+            }
+        );
         var b = List(p =>
-        {
-            p.AddRect(new Rect(0, 0, 800, 600), new Color(0.1f, 0.1f, 0.1f, 1f));
-            p.AddRect(new Rect(100, 100, 200, 80), new Color(0.5f, 0.5f, 0.5f, 1f)); // hover shade
-        });
+            {
+                p.AddRect(
+                    new Rect(
+                        0,
+                        0,
+                        800,
+                        600
+                    ),
+                    new Color(
+                        0.1f,
+                        0.1f,
+                        0.1f,
+                        1f
+                    )
+                );
+                p.AddRect(
+                    new Rect(
+                        100,
+                        100,
+                        200,
+                        80
+                    ),
+                    new Color(
+                        0.5f,
+                        0.5f,
+                        0.5f,
+                        1f
+                    )
+                ); // hover shade
+            }
+        );
 
         var result = Diff(a, b, out var rects);
 
         Assert.Equal(PaintDiffResult.Bounded, result);
         var union = rects.Aggregate(rects[0], Rect.Union);
-        Assert.True(union.X <= 100 && union.Y <= 100 &&
-                    union.X + union.Width >= 300 && union.Y + union.Height >= 180);
+        Assert.True(
+            union.X <= 100 && union.Y <= 100 &&
+            union.X + union.Width >= 300 && union.Y + union.Height >= 180
+        );
     }
 
     [Fact]
     public void Moved_rect_covers_both_old_and_new_positions()
     {
-        var a = List(p => p.AddRect(new Rect(10, 10, 50, 50), new Color(1f, 0f, 0f, 1f)));
-        var b = List(p => p.AddRect(new Rect(400, 300, 50, 50), new Color(1f, 0f, 0f, 1f)));
+        var a = List(p => p.AddRect(
+                new Rect(
+                    10,
+                    10,
+                    50,
+                    50
+                ),
+                new Color(
+                    1f,
+                    0f,
+                    0f,
+                    1f
+                )
+            )
+        );
+        var b = List(p => p.AddRect(
+                new Rect(
+                    400,
+                    300,
+                    50,
+                    50
+                ),
+                new Color(
+                    1f,
+                    0f,
+                    0f,
+                    1f
+                )
+            )
+        );
 
         var result = Diff(a, b, out var rects);
 
@@ -85,8 +219,32 @@ public class PaintSnapshotDiffTests
     [Fact]
     public void Changed_text_reports_bounds_covering_the_glyphs()
     {
-        var a = List(p => p.AddText("68 fps", 1180, 30, new Color(1f, 1f, 1f, 1f), 12f));
-        var b = List(p => p.AddText("59 fps", 1180, 30, new Color(1f, 1f, 1f, 1f), 12f));
+        var a = List(p => p.AddText(
+                "68 fps",
+                1180,
+                30,
+                new Color(
+                    1f,
+                    1f,
+                    1f,
+                    1f
+                ),
+                12f
+            )
+        );
+        var b = List(p => p.AddText(
+                "59 fps",
+                1180,
+                30,
+                new Color(
+                    1f,
+                    1f,
+                    1f,
+                    1f
+                ),
+                12f
+            )
+        );
 
         var result = Diff(a, b, out var rects);
 
@@ -101,16 +259,83 @@ public class PaintSnapshotDiffTests
     public void Inserted_command_is_bounded_and_removal_is_symmetric()
     {
         var baseline = List(p =>
-        {
-            p.AddRect(new Rect(0, 0, 800, 600), new Color(0.1f, 0.1f, 0.1f, 1f));
-            p.AddRect(new Rect(700, 500, 60, 40), new Color(0.9f, 0.9f, 0.9f, 1f));
-        });
+            {
+                p.AddRect(
+                    new Rect(
+                        0,
+                        0,
+                        800,
+                        600
+                    ),
+                    new Color(
+                        0.1f,
+                        0.1f,
+                        0.1f,
+                        1f
+                    )
+                );
+                p.AddRect(
+                    new Rect(
+                        700,
+                        500,
+                        60,
+                        40
+                    ),
+                    new Color(
+                        0.9f,
+                        0.9f,
+                        0.9f,
+                        1f
+                    )
+                );
+            }
+        );
         var withBubble = List(p =>
-        {
-            p.AddRect(new Rect(0, 0, 800, 600), new Color(0.1f, 0.1f, 0.1f, 1f));
-            p.AddRect(new Rect(300, 200, 120, 32), new Color(0.2f, 0.2f, 0.2f, 1f)); // tooltip bubble
-            p.AddRect(new Rect(700, 500, 60, 40), new Color(0.9f, 0.9f, 0.9f, 1f));
-        });
+            {
+                p.AddRect(
+                    new Rect(
+                        0,
+                        0,
+                        800,
+                        600
+                    ),
+                    new Color(
+                        0.1f,
+                        0.1f,
+                        0.1f,
+                        1f
+                    )
+                );
+                p.AddRect(
+                    new Rect(
+                        300,
+                        200,
+                        120,
+                        32
+                    ),
+                    new Color(
+                        0.2f,
+                        0.2f,
+                        0.2f,
+                        1f
+                    )
+                ); // tooltip bubble
+                p.AddRect(
+                    new Rect(
+                        700,
+                        500,
+                        60,
+                        40
+                    ),
+                    new Color(
+                        0.9f,
+                        0.9f,
+                        0.9f,
+                        1f
+                    )
+                );
+            }
+        );
 
         var inserted = Diff(baseline, withBubble, out var rects);
         Assert.Equal(PaintDiffResult.Bounded, inserted);
@@ -125,17 +350,45 @@ public class PaintSnapshotDiffTests
     public void Change_inside_a_transform_scope_is_unbounded()
     {
         var a = List(p =>
-        {
-            p.PushTransform(Matrix2D.Translation(50f, 50f));
-            p.AddRect(new Rect(0, 0, 40, 40), new Color(1f, 0f, 0f, 1f));
-            p.PopTransform();
-        });
+            {
+                p.PushTransform(Matrix2D.Translation(50f, 50f));
+                p.AddRect(
+                    new Rect(
+                        0,
+                        0,
+                        40,
+                        40
+                    ),
+                    new Color(
+                        1f,
+                        0f,
+                        0f,
+                        1f
+                    )
+                );
+                p.PopTransform();
+            }
+        );
         var b = List(p =>
-        {
-            p.PushTransform(Matrix2D.Translation(50f, 50f));
-            p.AddRect(new Rect(0, 0, 40, 40), new Color(0f, 1f, 0f, 1f));
-            p.PopTransform();
-        });
+            {
+                p.PushTransform(Matrix2D.Translation(50f, 50f));
+                p.AddRect(
+                    new Rect(
+                        0,
+                        0,
+                        40,
+                        40
+                    ),
+                    new Color(
+                        0f,
+                        1f,
+                        0f,
+                        1f
+                    )
+                );
+                p.PopTransform();
+            }
+        );
 
         Assert.Equal(PaintDiffResult.Unbounded, Diff(a, b, out _));
     }
@@ -144,17 +397,59 @@ public class PaintSnapshotDiffTests
     public void Changed_clip_scope_is_unbounded()
     {
         var a = List(p =>
-        {
-            p.AddClipStart(new Rect(0, 0, 100, 100));
-            p.AddRect(new Rect(10, 10, 20, 20), new Color(1f, 1f, 1f, 1f));
-            p.AddClipEnd();
-        });
+            {
+                p.AddClipStart(
+                    new Rect(
+                        0,
+                        0,
+                        100,
+                        100
+                    )
+                );
+                p.AddRect(
+                    new Rect(
+                        10,
+                        10,
+                        20,
+                        20
+                    ),
+                    new Color(
+                        1f,
+                        1f,
+                        1f,
+                        1f
+                    )
+                );
+                p.AddClipEnd();
+            }
+        );
         var b = List(p =>
-        {
-            p.AddClipStart(new Rect(0, 0, 200, 200));
-            p.AddRect(new Rect(10, 10, 20, 20), new Color(1f, 1f, 1f, 1f));
-            p.AddClipEnd();
-        });
+            {
+                p.AddClipStart(
+                    new Rect(
+                        0,
+                        0,
+                        200,
+                        200
+                    )
+                );
+                p.AddRect(
+                    new Rect(
+                        10,
+                        10,
+                        20,
+                        20
+                    ),
+                    new Color(
+                        1f,
+                        1f,
+                        1f,
+                        1f
+                    )
+                );
+                p.AddClipEnd();
+            }
+        );
 
         Assert.Equal(PaintDiffResult.Unbounded, Diff(a, b, out _));
     }
@@ -163,17 +458,59 @@ public class PaintSnapshotDiffTests
     public void Identical_commands_inside_identical_clip_scopes_stay_identical()
     {
         var a = List(p =>
-        {
-            p.AddClipStart(new Rect(0, 0, 100, 100));
-            p.AddRect(new Rect(10, 10, 20, 20), new Color(1f, 1f, 1f, 1f));
-            p.AddClipEnd();
-        });
+            {
+                p.AddClipStart(
+                    new Rect(
+                        0,
+                        0,
+                        100,
+                        100
+                    )
+                );
+                p.AddRect(
+                    new Rect(
+                        10,
+                        10,
+                        20,
+                        20
+                    ),
+                    new Color(
+                        1f,
+                        1f,
+                        1f,
+                        1f
+                    )
+                );
+                p.AddClipEnd();
+            }
+        );
         var b = List(p =>
-        {
-            p.AddClipStart(new Rect(0, 0, 100, 100));
-            p.AddRect(new Rect(10, 10, 20, 20), new Color(1f, 1f, 1f, 1f));
-            p.AddClipEnd();
-        });
+            {
+                p.AddClipStart(
+                    new Rect(
+                        0,
+                        0,
+                        100,
+                        100
+                    )
+                );
+                p.AddRect(
+                    new Rect(
+                        10,
+                        10,
+                        20,
+                        20
+                    ),
+                    new Color(
+                        1f,
+                        1f,
+                        1f,
+                        1f
+                    )
+                );
+                p.AddClipEnd();
+            }
+        );
 
         Assert.Equal(PaintDiffResult.Identical, Diff(a, b, out _));
     }
@@ -182,15 +519,43 @@ public class PaintSnapshotDiffTests
     public void Many_scattered_changes_still_return_bounded_with_merged_rects()
     {
         var a = List(p =>
-        {
-            for (var i = 0; i < 24; i++)
-                p.AddRect(new Rect(i * 30, i * 20, 20, 10), new Color(0.2f, 0.2f, 0.2f, 1f));
-        });
+            {
+                for (var i = 0; i < 24; i++)
+                    p.AddRect(
+                        new Rect(
+                            i * 30,
+                            i * 20,
+                            20,
+                            10
+                        ),
+                        new Color(
+                            0.2f,
+                            0.2f,
+                            0.2f,
+                            1f
+                        )
+                    );
+            }
+        );
         var b = List(p =>
-        {
-            for (var i = 0; i < 24; i++)
-                p.AddRect(new Rect(i * 30, i * 20, 20, 10), new Color(0.4f, 0.4f, 0.4f, 1f));
-        });
+            {
+                for (var i = 0; i < 24; i++)
+                    p.AddRect(
+                        new Rect(
+                            i * 30,
+                            i * 20,
+                            20,
+                            10
+                        ),
+                        new Color(
+                            0.4f,
+                            0.4f,
+                            0.4f,
+                            1f
+                        )
+                    );
+            }
+        );
 
         var result = Diff(a, b, out var rects);
 

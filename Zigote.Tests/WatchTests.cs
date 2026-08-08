@@ -21,10 +21,11 @@ public class WatchTests
         var count = new Signal<int>(0);
         var builds = 0;
         var root = new Watch(() =>
-        {
-            builds++;
-            return new Label($"count: {count.Value}");
-        });
+            {
+                builds++;
+                return new Label($"count: {count.Value}");
+            }
+        );
 
         root.Attach(null!, null);
         root.Measure(Constraints.Tight(200f, 100f));
@@ -45,10 +46,11 @@ public class WatchTests
         var unrelated = new Signal<int>(0);
         var builds = 0;
         var root = new Watch(() =>
-        {
-            builds++;
-            return new Label($"{shown.Value}");
-        });
+            {
+                builds++;
+                return new Label($"{shown.Value}");
+            }
+        );
         root.Attach(null!, null);
         root.Measure(Constraints.Tight(200f, 100f));
         Assert.Equal(1, builds);
@@ -66,10 +68,11 @@ public class WatchTests
         var count = new Signal<int>(0);
         var builds = 0;
         var root = new Watch(() =>
-        {
-            builds++;
-            return new Label($"{count.Value}");
-        });
+            {
+                builds++;
+                return new Label($"{count.Value}");
+            }
+        );
         root.Attach(null!, null);
         root.Measure(Constraints.Tight(200f, 100f));
         Assert.Equal(1, builds);

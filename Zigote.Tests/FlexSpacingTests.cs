@@ -65,7 +65,7 @@ public class FlexSpacingTests
         var b = new SizedBox(60, 10);
         var row = new Row(
             [a, b],
-            mainAxisAlignment: MainAxisAlignment.SpaceBetween,
+            MainAxisAlignment.SpaceBetween,
             spacing: 10f
         );
 
@@ -81,7 +81,7 @@ public class FlexSpacingTests
     {
         var a = new SizedBox(40, 10);
         var b = new SizedBox(60, 10);
-        var row = new Row([a, b], mainAxisAlignment: MainAxisAlignment.End, spacing: 10f);
+        var row = new Row([a, b], MainAxisAlignment.End, spacing: 10f);
 
         row.Measure(new Constraints(maxWidth: 200, maxHeight: 100));
         row.Layout(new Offset(0, 0));

@@ -53,7 +53,12 @@ public class CrossThreadLayoutTests
 
         public override void Layout(Offset origin)
         {
-            Bounds = new Rect(origin.X, origin.Y, 10f, 10f);
+            Bounds = new Rect(
+                origin.X,
+                origin.Y,
+                10f,
+                10f
+            );
         }
 
         public override void Paint(PaintList paint)

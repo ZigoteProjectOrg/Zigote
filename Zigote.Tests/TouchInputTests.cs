@@ -2,7 +2,6 @@ using Xunit;
 using Zigote.Core;
 using Zigote.Core.Animation;
 using Zigote.Core.Events;
-using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
 
@@ -15,6 +14,9 @@ namespace Zigote.Tests;
 ///     App-level finger routing itself needs a live window (SmokeTest territory); these pin the
 ///     widget/scroller contracts it composes.
 /// </summary>
+[Collection(
+    "Ticker"
+)] // static Ticker.Active is shared; AdvanceAll in one class ticks another class's widgets
 public class TouchInputTests
 {
     // 200px-wide, 2000px-tall content inside a 400px-tall viewport → 1600px of scroll extent.
@@ -67,9 +69,9 @@ public class TouchInputTests
     public void ScrollView_CanTouchScroll_ReflectsAxisAndOverflow()
     {
         var scroll = FreshScroll();
-        Assert.True(scroll.CanTouchScroll(vertical: true));
+        Assert.True(scroll.CanTouchScroll(true));
         // No horizontal overflow (and ScrollHorizontal is off by default in this setup).
-        Assert.False(scroll.CanTouchScroll(vertical: false));
+        Assert.False(scroll.CanTouchScroll(false));
 
         // Content that fits has nothing to scroll — the drag must fall through to the
         // pressed widget instead of being eaten by a scrollable with zero extent.
@@ -83,7 +85,7 @@ public class TouchInputTests
             )
         );
         fits.Layout(Offset.Zero);
-        Assert.False(fits.CanTouchScroll(vertical: true));
+        Assert.False(fits.CanTouchScroll(true));
     }
 
     [Fact]
@@ -123,7 +125,10 @@ public class TouchInputTests
     public void Pressable_PointerCancel_ReleasesPressWithoutFiring()
     {
         var fired = 0;
-        var p = new Pressable { Child = new SizedBox(100, 40), OnPressed = () => fired++ };
+        var p = new Pressable {
+            Child = new SizedBox(100, 40),
+            OnPressed = () => fired++,
+        };
         p.Measure(Constraints.Tight(100, 40));
         p.Layout(Offset.Zero);
 

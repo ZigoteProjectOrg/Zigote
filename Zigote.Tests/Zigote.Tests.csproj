@@ -2,18 +2,18 @@
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
-        <LangVersion>latest</LangVersion>
         <ImplicitUsings>enable</ImplicitUsings>
         <RootNamespace>Zigote.Tests</RootNamespace>
         <AssemblyName>Zigote.Tests</AssemblyName>
         <IsPackable>false</IsPackable>
         <IsTestProject>true</IsTestProject>
+        <OutputType>Exe</OutputType>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.7.0"/>
-        <PackageReference Include="xunit" Version="2.9.3"/>
-        <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0-pre.4">
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1"/>
+        <PackageReference Include="xunit.v3" Version="3.2.2"/>
+        <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
@@ -26,7 +26,9 @@
         <ProjectReference Include="..\Zigote.Core\Zigote.Core.csproj"/>
         <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
         <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Adwaita\Zigote.UI.Adwaita.csproj"/>
         <ProjectReference Include="..\Zigote.UI.Charts\Zigote.UI.Charts.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.BottomSheet\Zigote.UI.BottomSheet.csproj"/>
         <ProjectReference Include="..\Zigote.UI.DevTools\Zigote.UI.DevTools.csproj"/>
         <ProjectReference Include="..\Zigote.ECS\Zigote.ECS.csproj"/>
         <ProjectReference Include="..\Zigote.Network\Zigote.Network.csproj"/>
@@ -45,6 +47,9 @@
         <ProjectReference Include="..\Zigote.World\Zigote.World.csproj"/>
         <ProjectReference Include="..\Zigote.Save\Zigote.Save.csproj"/>
         <ProjectReference Include="..\Zigote.Physics2D\Zigote.Physics2D.csproj"/>
+        <ProjectReference Include="..\Zigote.Persistence\Zigote.Persistence.csproj"/>
+        <ProjectReference Include="..\Zigote.Persistence.SQLite\Zigote.Persistence.SQLite.csproj"/>
+        <ProjectReference Include="..\Zigote.Preferences\Zigote.Preferences.csproj"/>
     </ItemGroup>
     <ItemGroup>
         <Using Include="Zigote.UI.Material"/>

@@ -6,6 +6,9 @@ namespace Zigote.Tests;
 
 public class Render2DTests
 {
+    /// <summary>Floats per packed instance — kept in step with the renderer/shader layout.</summary>
+    private const int Stride = Core.Engine.ZigoteEngine.SpriteInstanceFloats;
+
     // ── SpriteSheet.GridFrames ───────────────────────────────────────────────
 
     [Fact]
@@ -291,7 +294,7 @@ public class Render2DTests
         var batch = Assert.Single(device.Submits);
         Assert.Equal(4, batch.Count);
         for (var i = 0; i < 4; i++)
-            Assert.Equal(i, batch.Instances[i * 14 + 10], 5);
+            Assert.Equal(i, batch.Instances[i * Stride + 10], 5);
     }
 
     [Fact]
@@ -343,7 +346,7 @@ public class Render2DTests
         var batch = Assert.Single(device.Submits);
         float[] expectedOrder = [3f, 2f, 1f, 0f]; // layer -2, then (0,-5), (0,100), then layer 1
         for (var i = 0; i < 4; i++)
-            Assert.Equal(expectedOrder[i], batch.Instances[i * 14 + 10], 5);
+            Assert.Equal(expectedOrder[i], batch.Instances[i * Stride + 10], 5);
     }
 
     // ── Renderer2D: batching ─────────────────────────────────────────────────

@@ -15,19 +15,28 @@ public class FileDialogTests
     [Fact]
     public void FilterSpec_JoinsNameAndExtensions()
     {
-        var spec = FileDialog.BuildFilterSpec([
-            new FileDialogFilter("Zigote Project", "zigoteproj"),
-            new FileDialogFilter("Images", "png", "jpg"),
-        ]);
+        var spec = FileDialog.BuildFilterSpec(
+            [
+                new FileDialogFilter("Zigote Project", "zigoteproj"),
+                new FileDialogFilter("Images", "png", "jpg"),
+            ]
+        );
         Assert.Equal("Zigote Project|zigoteproj\nImages|png;jpg", spec);
     }
 
     [Fact]
     public void FilterSpec_NormalizesDotAndStarPrefixes()
     {
-        var spec = FileDialog.BuildFilterSpec([
-            new FileDialogFilter("Images", ".png", "*.jpg", "webp"),
-        ]);
+        var spec = FileDialog.BuildFilterSpec(
+            [
+                new FileDialogFilter(
+                    "Images",
+                    ".png",
+                    "*.jpg",
+                    "webp"
+                ),
+            ]
+        );
         Assert.Equal("Images|png;jpg;webp", spec);
     }
 
@@ -36,9 +45,11 @@ public class FileDialogTests
     {
         // A "*" (or "*.*") extension makes the whole filter an all-files pattern — SDL only
         // accepts "*" as a standalone pattern, never mixed with extensions.
-        var spec = FileDialog.BuildFilterSpec([
-            new FileDialogFilter("All Files", "png", "*"),
-        ]);
+        var spec = FileDialog.BuildFilterSpec(
+            [
+                new FileDialogFilter("All Files", "png", "*"),
+            ]
+        );
         Assert.Equal("All Files|*", spec);
 
         var starDotStar = FileDialog.BuildFilterSpec([new FileDialogFilter("All", "*.*")]);
@@ -49,9 +60,11 @@ public class FileDialogTests
     public void FilterSpec_SanitizesReservedCharactersInNames()
     {
         // '|' and '\n' are the spec's own separators; they must never leak in from a name.
-        var spec = FileDialog.BuildFilterSpec([
-            new FileDialogFilter("Weird|Name\nHere", "png"),
-        ]);
+        var spec = FileDialog.BuildFilterSpec(
+            [
+                new FileDialogFilter("Weird|Name\nHere", "png"),
+            ]
+        );
         Assert.Equal("Weird Name Here|png", spec);
     }
 

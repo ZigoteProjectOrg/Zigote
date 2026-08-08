@@ -31,6 +31,18 @@ public class AbiLayoutTests
             280,
             Marshal.SizeOf<ZgRenderSettings3D>()
         ); // 70 f32 — pinned to the Zig extern struct (68 + 2 bokeh shape)
+        // 144 bytes: 128-byte NUL-padded name + backend + device_type + vendor_id + device_id.
+        // The engine memcpy's straight into the caller's buffer, so a mismatch corrupts the list.
+        Assert.Equal(144, Marshal.SizeOf<ZgGpuInfo>());
+    }
+
+    [Fact]
+    public void GpuInfo_FieldOffsets()
+    {
+        Assert.Equal(128, Offset<ZgGpuInfo>(nameof(ZgGpuInfo.Backend)));
+        Assert.Equal(132, Offset<ZgGpuInfo>(nameof(ZgGpuInfo.DeviceType)));
+        Assert.Equal(136, Offset<ZgGpuInfo>(nameof(ZgGpuInfo.VendorId)));
+        Assert.Equal(140, Offset<ZgGpuInfo>(nameof(ZgGpuInfo.DeviceId)));
     }
 
     [Fact]

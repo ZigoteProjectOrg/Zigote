@@ -66,11 +66,12 @@ public class WidgetStateOwnEffectTests
         public override void InitState()
         {
             OwnEffect(() =>
-            {
-                Runs++;
-                Seen = Widget.Source.Value;
-                return () => Cleanups++;
-            });
+                {
+                    Runs++;
+                    Seen = Widget.Source.Value;
+                    return () => Cleanups++;
+                }
+            );
         }
 
         public override Widget Build(BuildContext context)

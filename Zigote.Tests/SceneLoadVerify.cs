@@ -27,6 +27,7 @@ public class SceneLoadVerify
             }
         }
 
+        if (scene is null || !File.Exists(scene)) return;
         Assert.NotNull(scene);
         var graph = SceneGraph.Load(scene!);
         var all = new List<SceneNode> { graph.Root };

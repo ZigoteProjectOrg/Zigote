@@ -154,7 +154,9 @@ public class ScrollFillLayoutTests
         // A Row with CrossAxisAlignment.Stretch inside a vertical scroll has an unbounded cross axis
         // (height). Before the FlexLayout guard, Stretch pinned the child's min-height to ∞, forcing an
         // infinite child size; now it degrades to a loose measure (natural content height) instead.
-        var row = new Row([new SizedBox(100, 40)]) { CrossAxisAlignment = CrossAxisAlignment.Stretch };
+        var row = new Row([new SizedBox(100, 40)]) {
+            CrossAxisAlignment = CrossAxisAlignment.Stretch,
+        };
         var page = new Column([row]) { CrossAxisAlignment = CrossAxisAlignment.Start };
         LayoutInVerticalScroll(page);
 

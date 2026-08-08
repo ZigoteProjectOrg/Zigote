@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
 using Xunit;
-using Xunit.Abstractions;
 using Zigote.Core;
 using Zigote.Core.Paint;
 using Zigote.UI.Theme;

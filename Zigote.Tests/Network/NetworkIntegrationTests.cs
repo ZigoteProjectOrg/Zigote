@@ -1,3 +1,8 @@
+// These tests exercise threading directly: the bounded Wait/WaitAll calls with explicit
+// timeouts ARE the assertions (a deadlock must fail fast, not hang), so awaiting instead would
+// defeat the test. Cancellation is likewise irrelevant to a wait that is already time-bounded.
+
+#pragma warning disable xUnit1031, xUnit1051
 using Xunit;
 using Zigote.Core.Math3D;
 using Zigote.Network;
@@ -344,3 +349,5 @@ public class NetworkIntegrationTests
         }
     }
 }
+
+#pragma warning restore xUnit1031, xUnit1051
