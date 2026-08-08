@@ -1,66 +1,29 @@
-using System.Text.Json;
-
 namespace Zigote.Editor.Widgets;
 
 /// <summary>
-///     Persists a <see cref="DockNode" /> dock tree to a per-project
-///     <c>&lt;project&gt;.layout.json</c>
-///     next to the .zigoteproj. Unknown panel ids are dropped on load (so layouts survive panels
-///     being renamed/removed), and an unreadable file simply falls back to the default layout.
+///     Converts between the live <see cref="DockNode" /> dock tree and its serializable
+///     <see cref="DockLayoutData" /> form (the per-project <c>layout.dock</c> preference).
+///     Unknown panel ids are dropped on restore (so layouts survive panels being
+///     renamed/removed) and empty subtrees collapse — a fully-unknown layout restores as null,
+///     which means "use the default arrangement".
 /// </summary>
 public static class DockLayoutStore
 {
-    public static string PathFor(string projectFile)
-    {
-        return Path.ChangeExtension(projectFile, ".layout.json");
-    }
-
-    private static readonly JsonSerializerOptions SaveOptions = new() { WriteIndented = true };
-
-    public static void Save(string projectFile, DockNode root)
-    {
-        try
-        {
-            var json = JsonSerializer.Serialize(ToDto(root), SaveOptions);
-            File.WriteAllText(PathFor(projectFile), json);
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"[Layout] save failed: {ex.Message}");
-        }
-    }
-
-    public static DockNode? Load(string projectFile, IReadOnlySet<string> knownPanels)
-    {
-        try
-        {
-            var path = PathFor(projectFile);
-            if (!File.Exists(path)) return null;
-            var dto = JsonSerializer.Deserialize<Dto>(File.ReadAllText(path));
-            return dto == null ? null : FromDto(dto, knownPanels);
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"[Layout] load failed: {ex.Message}");
-            return null;
-        }
-    }
-
-    private static Dto ToDto(DockNode node)
+    public static DockLayoutData ToData(DockNode node)
     {
         return node switch {
-            DockLeaf l => new Dto {
+            DockLeaf l => new DockLayoutData {
                 Panels = l.PanelIds.ToList(),
                 Active = l.ActiveIndex,
                 Collapsed = l.Collapsed,
             },
-            DockSplit s => new Dto {
-                First = ToDto(s.First),
-                Second = ToDto(s.Second),
+            DockSplit s => new DockLayoutData {
+                First = ToData(s.First),
+                Second = ToData(s.Second),
                 Vertical = s.Vertical,
                 Ratio = s.Ratio,
             },
-            _ => new Dto(),
+            _ => new DockLayoutData(),
         };
     }
 
@@ -68,43 +31,32 @@ public static class DockLayoutStore
     ///     Rebuild a node, dropping unknown panels and collapsing empty subtrees (returns null if
     ///     empty).
     /// </summary>
-    private static DockNode? FromDto(Dto dto, IReadOnlySet<string> known)
+    public static DockNode? FromData(DockLayoutData data, IReadOnlySet<string> knownPanels)
     {
-        if (dto.Panels is { Count: > 0 })
+        if (data.Panels is { Count: > 0 })
         {
-            var ids = dto.Panels.Where(known.Contains).Distinct().ToList();
+            var ids = data.Panels.Where(knownPanels.Contains).Distinct().ToList();
             if (ids.Count == 0) return null;
             return new DockLeaf(ids) {
-                ActiveIndex = Math.Clamp(dto.Active, 0, ids.Count - 1),
-                Collapsed = dto.Collapsed,
+                ActiveIndex = Math.Clamp(data.Active, 0, ids.Count - 1),
+                Collapsed = data.Collapsed,
             };
         }
 
-        if (dto.First != null && dto.Second != null)
+        if (data.First != null && data.Second != null)
         {
-            var f = FromDto(dto.First, known);
-            var s = FromDto(dto.Second, known);
+            var f = FromData(data.First, knownPanels);
+            var s = FromData(data.Second, knownPanels);
             if (f == null) return s;
             if (s == null) return f;
             return new DockSplit(
                 f,
                 s,
-                dto.Vertical,
-                dto.Ratio
+                data.Vertical,
+                data.Ratio
             );
         }
 
         return null;
-    }
-
-    private sealed class Dto
-    {
-        public List<string>? Panels { get; set; } // leaf
-        public int Active { get; set; }
-        public bool Collapsed { get; set; }
-        public Dto? First { get; set; } // split
-        public Dto? Second { get; set; }
-        public bool Vertical { get; set; }
-        public float Ratio { get; set; }
     }
 }

@@ -6,7 +6,6 @@ using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
-using Zigote.UI.Host;
 
 namespace Zigote.Editor.Settings;
 
@@ -14,15 +13,16 @@ namespace Zigote.Editor.Settings;
 ///     The editor Settings window content (hosted in its own OS window — see
 ///     <see cref="SettingsWindowHost" />): a Zed-style two-pane layout with a searchable section
 ///     sidebar (General / Appearance / UI Font / Editor Font / Panels / Terminal / Developer) and a
-///     scrollable content pane of setting rows. Every control writes through
-///     <see cref="EditorPreferences" /> so changes apply live and persist to editor.json.
+///     scrollable content pane of setting rows. Every control writes an
+///     <see cref="EditorSettings" /> preference — persistence (SQLite) happens inside the
+///     preference and the reactive appliers in <see cref="EditorPreferences" /> push the change
+///     into the running editor, so a row never applies anything by hand. "Reset All" is the
+///     group's batched <c>Reset()</c>.
 /// </summary>
 public sealed class SettingsWindow : Widget
 {
     private const float SidebarW = 220f;
     private const float RowVPad = 10f;
-
-    private static readonly string[] ThemeModes = ["system", "dark", "light"];
 
     private readonly Func<EditorLayout?> _layout;
     private readonly EditorPreferences _prefs;
@@ -219,7 +219,8 @@ public sealed class SettingsWindow : Widget
 
     private List<RowDef> BuildRows()
     {
-        var config = _prefs.Config;
+        var history = _prefs.History;
+        var settings = _prefs.Settings;
         var layout = _layout();
         var rows = new List<RowDef>();
 
@@ -230,12 +231,8 @@ public sealed class SettingsWindow : Widget
                 "Reopen last project",
                 "Open the most recent project on launch instead of the welcome screen.",
                 () => new Switch(
-                    config.ReopenLastProject,
-                    v =>
-                    {
-                        config.ReopenLastProject = v;
-                        config.Save();
-                    }
+                    settings.ReopenLastProject.Value,
+                    v => settings.ReopenLastProject.Value = v
                 )
             )
         );
@@ -246,8 +243,8 @@ public sealed class SettingsWindow : Widget
                     "Native menu bar",
                     "Use the macOS system menu bar; off shows the in-window menu bar instead.",
                     () => new Switch(
-                        config.NativeMenuBar,
-                        v => _prefs.SetNativeMenuBar(v)
+                        settings.NativeMenuBar.Value,
+                        v => settings.NativeMenuBar.Value = v
                     )
                 )
             );
@@ -255,15 +252,14 @@ public sealed class SettingsWindow : Widget
             new RowDef(
                 "General",
                 "Recent projects",
-                $"{config.RecentProjects.Count} entries in the File ▸ Open Recent menu.",
+                $"{history.Recent.Value.Length} entries in the File ▸ Open Recent menu.",
                 () => new SizedBox(
                     height: 24f,
                     child: new Button(
                         "Clear",
                         () =>
                         {
-                            config.RecentProjects.Clear();
-                            config.Save();
+                            history.ClearRecent();
                             Rebuild();
                         }
                     )
@@ -273,16 +269,37 @@ public sealed class SettingsWindow : Widget
         rows.Add(
             new RowDef(
                 "General",
-                "Settings file",
-                EditorConfig.FilePath,
+                "Settings database",
+                EditorSettings.DbPath,
                 () => new SizedBox(
                     height: 24f,
                     child: new Button(
                         "Copy Path",
                         () =>
                         {
-                            _prefs.App.Engine.SetClipboard(EditorConfig.FilePath);
+                            _prefs.App.Engine.SetClipboard(EditorSettings.DbPath);
                             Owner?.ShowSnackbar("Settings path copied");
+                        }
+                    )
+                )
+            )
+        );
+        rows.Add(
+            new RowDef(
+                "General",
+                "Reset settings",
+                "Restore every editor setting to its default. Recent projects are kept.",
+                () => new SizedBox(
+                    height: 24f,
+                    child: new Button(
+                        "Reset All",
+                        () =>
+                        {
+                            // One batched group reset: the appliers settle once each, then the
+                            // shell (and this window, via ApplyTheme) restyle to the defaults.
+                            settings.Reset();
+                            Rebuild();
+                            Owner?.ShowSnackbar("Settings restored to defaults");
                         }
                     )
                 )
@@ -298,15 +315,14 @@ public sealed class SettingsWindow : Widget
                 () =>
                 {
                     string[] labels = ["System", "Dark", "Light"];
-                    var sel = Math.Max(0, Array.IndexOf(ThemeModes, config.ThemeMode));
                     return new SizedBox(
                         140f,
                         26f,
                         new Dropdown<string>(
                             labels,
-                            sel,
+                            (int)settings.ThemeMode.Value,
                             s => s,
-                            (i, _) => _prefs.SetThemeMode(ThemeModes[i])
+                            (i, _) => settings.ThemeMode.Value = (EditorThemeMode)i
                         )
                     );
                 }
@@ -319,7 +335,11 @@ public sealed class SettingsWindow : Widget
                 "UI Font",
                 "UI font family",
                 "Face used by all interface text (swaps the \"Inter\" family live).",
-                () => FontDropdown(config.UiFontPath, "Inter (default)", p => _prefs.SetUiFont(p))
+                () => FontDropdown(
+                    settings.UiFontPath.Value,
+                    "Inter (default)",
+                    p => settings.UiFontPath.Value = p
+                )
             )
         );
         rows.Add(
@@ -328,11 +348,11 @@ public sealed class SettingsWindow : Widget
                 "UI font size",
                 "Base interface font size in points (default 13). Scales titles and captions with it.",
                 () => NumberBox(
-                    config.UiFontSize,
+                    settings.UiFontSize.Value,
                     9f,
                     26f,
                     1f,
-                    v => _prefs.SetUiFontSize(v)
+                    v => settings.UiFontSize.Value = v
                 )
             )
         );
@@ -344,9 +364,9 @@ public sealed class SettingsWindow : Widget
                 "Editor font family",
                 "Monospace face for the code editor and console (swaps the \"code\" family live).",
                 () => FontDropdown(
-                    config.EditorFontPath,
+                    settings.EditorFontPath.Value,
                     "Iosevka (default)",
-                    p => _prefs.SetEditorFont(p)
+                    p => settings.EditorFontPath.Value = p
                 )
             )
         );
@@ -356,11 +376,11 @@ public sealed class SettingsWindow : Widget
                 "Editor font size",
                 "Code editor font size in points (default 13).",
                 () => NumberBox(
-                    config.EditorFontSize,
+                    settings.EditorFontSize.Value,
                     8f,
                     32f,
                     1f,
-                    v => _prefs.SetEditorFontSize(v)
+                    v => settings.EditorFontSize.Value = v
                 )
             )
         );
@@ -427,11 +447,13 @@ public sealed class SettingsWindow : Widget
                 "Console font size",
                 "Log text size in points (default follows the theme caption size).",
                 () => NumberBox(
-                    config.ConsoleFontSize > 0 ? config.ConsoleFontSize : _theme.FontSizeCaption,
+                    settings.ConsoleFontSize.Value > 0
+                        ? settings.ConsoleFontSize.Value
+                        : _theme.FontSizeCaption,
                     8f,
                     24f,
                     1f,
-                    v => _prefs.SetConsoleFontSize(v)
+                    v => settings.ConsoleFontSize.Value = v
                 )
             )
         );
@@ -441,35 +463,30 @@ public sealed class SettingsWindow : Widget
                 "Clear on play",
                 "Empty the console every time play mode starts.",
                 () => new Switch(
-                    config.ConsoleClearOnPlay,
-                    v =>
-                    {
-                        config.ConsoleClearOnPlay = v;
-                        config.Save();
-                    }
+                    settings.ConsoleClearOnPlay.Value,
+                    v => settings.ConsoleClearOnPlay.Value = v
                 )
             )
         );
 
         // Developer
-        if (layout is not null)
-            rows.Add(
-                new RowDef(
-                    "Developer",
-                    "Reduced editor graphics",
-                    "Disable TAA/bloom/SSR/DoF while authoring; play mode always renders full.",
-                    () => new Switch(
-                        layout.State.ReducedEditorGraphics,
-                        v => layout.State.ReducedEditorGraphics = v
-                    )
+        rows.Add(
+            new RowDef(
+                "Developer",
+                "Reduced editor graphics",
+                "Disable TAA/bloom/SSR/DoF while authoring; play mode always renders full.",
+                () => new Switch(
+                    settings.ReducedEditorGraphics.Value,
+                    v => settings.ReducedEditorGraphics.Value = v
                 )
-            );
+            )
+        );
         rows.Add(
             new RowDef(
                 "Developer",
                 "VSync",
                 "Cap presentation to the display refresh rate.",
-                () => new Switch(_prefs.Config.VSync, v => _prefs.SetVSync(v))
+                () => new Switch(settings.VSync.Value, v => settings.VSync.Value = v)
             )
         );
         rows.Add(
@@ -501,8 +518,8 @@ public sealed class SettingsWindow : Widget
                     "Native file dialogs",
                     "Use the OS open/save dialogs; off uses the in-app picker everywhere.",
                     () => new Switch(
-                        config.NativeFileDialogs,
-                        v => _prefs.SetNativeFileDialogs(v)
+                        settings.NativeFileDialogs.Value,
+                        v => settings.NativeFileDialogs.Value = v
                     )
                 )
             );
@@ -518,7 +535,7 @@ public sealed class SettingsWindow : Widget
                 {
                     string[] modes = ["auto", "system", "mac", "adwaita"];
                     string[] labels = ["Auto", "System", "macOS Unified", "GNOME (Adwaita)"];
-                    var sel = Array.IndexOf(modes, config.WindowChromeMode);
+                    var sel = Array.IndexOf(modes, settings.WindowChromeMode.Value);
                     if (sel < 0) sel = 0;
                     return new SizedBox(
                         190f,
@@ -526,12 +543,45 @@ public sealed class SettingsWindow : Widget
                         new Dropdown<string>(
                             labels,
                             sel,
-                            (i, _) => _prefs.SetWindowChrome(modes[i])
+                            (i, _) => settings.WindowChromeMode.Value = modes[i]
                         )
                     );
                 }
             )
         );
+        // GPU picker — only worth showing when the machine actually has a choice. The same card can
+        // be listed once per graphics API, so the entries name both (see GpuInfo.DisplayName).
+        var gpus = _prefs.App.Engine.EnumerateGpus();
+        if (gpus.Count > 1)
+            rows.Add(
+                new RowDef(
+                    "Developer",
+                    "Graphics device",
+                    "Which GPU the editor renders on. Automatic picks the fastest one. Takes " +
+                    "effect after restarting the editor — the GPU device is created once at " +
+                    "startup. ZIGOTE_GPU / ZIGOTE_GPU_POWER override this for a single launch.",
+                    () =>
+                    {
+                        var active = _prefs.App.Engine.ActiveGpu();
+                        string[] labels = [
+                            active is { } a ? $"Automatic (now: {a.Name})" : "Automatic",
+                            .. gpus.Select(g => g.DisplayName),
+                        ];
+                        // Entry 0 is Automatic, so a stored index shifts by one.
+                        var stored = settings.GpuIndex.Value;
+                        var sel = stored >= 0 && stored < gpus.Count ? stored + 1 : 0;
+                        return new SizedBox(
+                            190f,
+                            26f,
+                            new Dropdown<string>(
+                                labels,
+                                sel,
+                                (i, _) => settings.GpuIndex.Value = i - 1
+                            )
+                        );
+                    }
+                )
+            );
         rows.Add(
             new RowDef(
                 "Developer",

@@ -37,7 +37,15 @@ public sealed class SettingsWindowHost(EditorPreferences prefs)
         // MacUnified chrome hides the titlebar entirely — pad the content below the
         // traffic-light band so the sidebar doesn't collide with the native buttons.
         win.Root = win.TitleBarTopInset > 0f
-            ? new Padding(new EdgeInsets(0f, win.TitleBarTopInset, 0f, 0f), _themeScope)
+            ? new Padding(
+                new EdgeInsets(
+                    0f,
+                    win.TitleBarTopInset,
+                    0f,
+                    0f
+                ),
+                _themeScope
+            )
             : _themeScope;
         win.CloseRequested += () =>
         {

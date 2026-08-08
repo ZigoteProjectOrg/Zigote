@@ -1,5 +1,6 @@
 using Zigote.Core.Engine;
 using Zigote.Core.Events;
+using Zigote.Core.State;
 using Zigote.UI.Host;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets.Menu;
@@ -7,25 +8,39 @@ using Zigote.UI.Widgets.Menu;
 namespace Zigote.Editor.Settings;
 
 /// <summary>
-///     Applies user preferences from <see cref="EditorConfig" /> to the running editor: theme mode
-///     (System/Dark/Light + UI font scale), runtime font-face swaps (UI "Inter" face, code-editor
-///     "code" face), and vsync. The settings window mutates config through this class so every
-///     change is applied live AND persisted; Program.cs subscribes to <see cref="ThemeChanged" />
-///     to rebuild the shell (editor panels take their ThemeData by constructor).
+///     The reactive glue between <see cref="EditorSettings" /> and the running editor: effects
+///     observe the preferences and apply every change live — theme mode (System/Dark/Light + UI
+///     font scale), runtime font-face swaps (UI "Inter" face, code-editor "code" face), vsync, and
+///     the menu-bar presentation. The Settings window (or any code) only writes a preference value;
+///     persistence happens inside the preference itself and the matching applier reacts. A batched
+///     group <c>Reset()</c> settles each applier once. Program.cs subscribes to
+///     <see cref="ThemeChanged" /> to rebuild the shell (editor panels take their ThemeData by
+///     constructor).
 /// </summary>
-public sealed class EditorPreferences(App app, EditorConfig config)
+public sealed class EditorPreferences(App app, EditorSettings settings, ProjectHistory history)
 {
+    // Appliers live for the whole process; the fields keep the effects from being collected.
+    private Effect? _chromeApplier;
+    private Effect? _editorFontApplier;
+    private Effect? _fileDialogApplier;
+    private Effect? _themeApplier;
+    private Effect? _uiFontApplier;
+    private Effect? _vsyncApplier;
+
     public App App => app;
-    public EditorConfig Config => config;
+    public EditorSettings Settings => settings;
+
+    /// <summary>Project history (recent projects) — its own preference group, not a setting.</summary>
+    public ProjectHistory History => history;
 
     /// <summary>Dark after resolving "system" against the OS appearance (unknown → dark).</summary>
-    public bool IsDarkResolved => config.ThemeMode switch {
-        "dark" => true,
-        "light" => false,
+    public bool IsDarkResolved => settings.ThemeMode.Peek() switch {
+        EditorThemeMode.Dark => true,
+        EditorThemeMode.Light => false,
         _ => app.Engine.GetSystemTheme() != SystemTheme.Light,
     };
 
-    private float UiFontScale => Math.Clamp(config.UiFontSize, 9f, 26f) / 13f;
+    private float UiFontScale => Math.Clamp(settings.UiFontSize.Peek(), 9f, 26f) / 13f;
 
     /// <summary>The resolved theme must be re-derived and the UI rebuilt (mode/scale change).</summary>
     public event Action? ThemeChanged;
@@ -40,105 +55,10 @@ public sealed class EditorPreferences(App app, EditorConfig config)
         return t.WithFontScale(UiFontScale);
     }
 
-    public void SetThemeMode(string mode)
-    {
-        if (config.ThemeMode == mode) return;
-        config.ThemeMode = mode;
-        config.Save();
-        ThemeChanged?.Invoke();
-    }
-
     /// <summary>Re-resolve a "system" theme after the OS switched appearance.</summary>
     public void OnSystemThemeChanged()
     {
-        if (config.ThemeMode == "system") ThemeChanged?.Invoke();
-    }
-
-    public void SetUiFontSize(float size)
-    {
-        config.UiFontSize = Math.Clamp(size, 9f, 26f);
-        config.Save();
-        // A wholesale sizing change must re-shape all cached text (native + managed) exactly like
-        // a face swap does, or stale shaped runs render against the new metrics.
-        app.ResetTextRendering();
-        ThemeChanged?.Invoke();
-    }
-
-    public void SetUiFont(string? path)
-    {
-        config.UiFontPath = path;
-        config.Save();
-        ApplyUiFontFace();
-    }
-
-    public void SetEditorFont(string? path)
-    {
-        config.EditorFontPath = path;
-        config.Save();
-        ApplyEditorFontFace();
-        EditorFontChanged?.Invoke();
-    }
-
-    public void SetEditorFontSize(float size)
-    {
-        config.EditorFontSize = Math.Clamp(size, 8f, 32f);
-        config.Save();
-        app.ResetTextRendering();
-        EditorFontChanged?.Invoke();
-    }
-
-    public void SetConsoleFontSize(float size)
-    {
-        config.ConsoleFontSize = size <= 0 ? 0 : Math.Clamp(size, 8f, 24f);
-        config.Save();
-        app.ResetTextRendering();
-        EditorFontChanged?.Invoke();
-    }
-
-    public void SetVSync(bool on)
-    {
-        config.VSync = on;
-        config.Save();
-        app.VSync = on;
-    }
-
-    /// <summary>Switch between the OS-native menu bar and the in-window one (macOS-relevant;
-    ///     elsewhere there is no native backend and the in-window bar is always used).</summary>
-    public void SetNativeMenuBar(bool on)
-    {
-        if (config.NativeMenuBar == on) return;
-        config.NativeMenuBar = on;
-        config.Save();
-        NativeMenuBar.Enabled = on;
-        // Drop the app menus from the system bar now — the shell rebuild below re-installs the
-        // right presentation (native TryInstall or the in-window MenuBar fallback).
-        if (!on) NativeMenuBar.Uninstall();
-        ThemeChanged?.Invoke();
-    }
-
-    /// <summary>Switch between the OS-native file dialogs and the in-app picker (the existing
-    ///     fallback path — call sites gate on FileDialog.IsSupported, so this applies live).</summary>
-    public void SetNativeFileDialogs(bool on)
-    {
-        if (config.NativeFileDialogs == on) return;
-        config.NativeFileDialogs = on;
-        config.Save();
-        FileDialog.Enabled = on;
-    }
-
-    /// <summary>Window chrome mode ("auto"/"system"/"mac"/"adwaita") — applied live to every
-    ///     open window (main included) and inherited by new ones; the override lets any look be
-    ///     tested on any OS.</summary>
-    public void SetWindowChrome(string mode)
-    {
-        if (config.WindowChromeMode == mode) return;
-        config.WindowChromeMode = mode;
-        config.Save();
-        WindowChrome.Preference = ParseChrome(mode);
-        app.ApplyWindowChrome(WindowChrome.Resolve());
-        // The shell reads the titlebar insets at build time (toolbar leading gap) — rebuild it
-        // so the layout tracks the new chrome, same as the native-menu-bar toggle.
-        ThemeChanged?.Invoke();
+        if (settings.ThemeMode.Peek() == EditorThemeMode.System) ThemeChanged?.Invoke();
     }
 
     internal static WindowChromePreference ParseChrome(string mode)
@@ -152,31 +72,115 @@ public sealed class EditorPreferences(App app, EditorConfig config)
     }
 
     /// <summary>
-    ///     Apply persisted font faces + vsync at boot. Face swaps only run when a non-default font
-    ///     is configured — the bundled faces are already registered by App's constructor.
+    ///     Wire the appliers. Each is an <see cref="Effect" /> whose construction pass applies the
+    ///     persisted state — face swaps only when a non-default font is configured, the bundled
+    ///     faces are already registered by App's constructor — and whose later passes react to
+    ///     preference writes from anywhere: the Settings window, a group Reset, or code.
     /// </summary>
     public void ApplyAtBoot()
     {
-        if (config.UiFontPath is not null) ApplyUiFontFace();
-        if (config.EditorFontPath is not null) ApplyEditorFontFace();
-        if (!config.VSync) app.VSync = false;
-        NativeMenuBar.Enabled = config.NativeMenuBar;
-        FileDialog.Enabled = config.NativeFileDialogs;
-        WindowChrome.Preference = ParseChrome(config.WindowChromeMode);
-        // App-wide window chrome: the main window gets it here; secondary windows (Settings,
-        // dialogs, torn-out panels) inherit it at CreateWindow.
-        app.ApplyWindowChrome(WindowChrome.Resolve());
+        var boot = true;
+
+        var appliedUiSize = settings.UiFontSize.Peek();
+        var appliedNativeBar = settings.NativeMenuBar.Peek();
+        _themeApplier = new Effect(() =>
+            {
+                _ = settings.ThemeMode.Value; // tracked: a mode swap rebuilds the shell
+                var uiSize = settings.UiFontSize.Value;
+                var nativeBar = settings.NativeMenuBar.Value;
+                NativeMenuBar.Enabled = nativeBar;
+                if (boot) return;
+                if (nativeBar != appliedNativeBar)
+                {
+                    appliedNativeBar = nativeBar;
+                    // Drop the app menus from the system bar now — the shell rebuild below re-installs
+                    // the right presentation (native TryInstall or the in-window MenuBar fallback).
+                    if (!nativeBar) NativeMenuBar.Uninstall();
+                }
+
+                if (Math.Abs(uiSize - appliedUiSize) > 0.001f)
+                {
+                    appliedUiSize = uiSize;
+                    // A wholesale sizing change must re-shape all cached text (native + managed)
+                    // exactly like a face swap does, or stale runs render against the new metrics.
+                    app.ResetTextRendering();
+                }
+
+                InvokeUntracked(ThemeChanged);
+            }
+        );
+
+        _uiFontApplier = new Effect(() =>
+            {
+                var path = settings.UiFontPath.Value;
+                if (boot && path is null) return;
+                ApplyUiFontFace(path);
+            }
+        );
+
+        var appliedEditorFont = settings.EditorFontPath.Peek();
+        _editorFontApplier = new Effect(() =>
+            {
+                var path = settings.EditorFontPath.Value;
+                _ = settings.EditorFontSize.Value;
+                _ = settings.ConsoleFontSize.Value;
+                if (boot)
+                {
+                    if (path is not null) ApplyEditorFontFace(path);
+                    return;
+                }
+
+                if (!string.Equals(path, appliedEditorFont, StringComparison.Ordinal))
+                {
+                    appliedEditorFont = path;
+                    ApplyEditorFontFace(path);
+                }
+
+                app.ResetTextRendering();
+                InvokeUntracked(EditorFontChanged);
+            }
+        );
+
+        _vsyncApplier = new Effect(() =>
+            {
+                var on = settings.VSync.Value;
+                if (boot && on) return; // swapchains start vsync-on; only a persisted "off" applies
+                app.VSync = on;
+            }
+        );
+
+        // Call sites gate on FileDialog.IsSupported, so the native/in-app choice applies live.
+        _fileDialogApplier = new Effect(() =>
+            {
+                FileDialog.Enabled = settings.NativeFileDialogs.Value;
+            }
+        );
+
+        _chromeApplier = new Effect(() =>
+            {
+                // App-wide window chrome: the main window gets it here; secondary windows (Settings,
+                // dialogs, torn-out panels) inherit it at CreateWindow.
+                WindowChrome.Preference = ParseChrome(settings.WindowChromeMode.Value);
+                app.ApplyWindowChrome(WindowChrome.Resolve());
+                if (boot) return;
+                // The shell reads the titlebar insets at build time (toolbar leading gap) — rebuild it
+                // so the layout tracks the new chrome, same as the native-menu-bar toggle.
+                InvokeUntracked(ThemeChanged);
+            }
+        );
+
+        boot = false;
     }
 
-    private void ApplyUiFontFace()
+    private void ApplyUiFontFace(string? configured)
     {
-        var path = config.UiFontPath ?? BundledFontPath("Inter-Regular.ttf");
+        var path = configured ?? BundledFontPath("Inter-Regular.ttf");
         if (path is not null) app.SetFontFace("Inter", path);
     }
 
-    private void ApplyEditorFontFace()
+    private void ApplyEditorFontFace(string? configured)
     {
-        var path = config.EditorFontPath ?? BundledFontPath("Iosevka-Regular.ttc");
+        var path = configured ?? BundledFontPath("Iosevka-Regular.ttc");
         if (path is not null) app.SetFontFace("code", path);
     }
 
@@ -184,6 +188,22 @@ public sealed class EditorPreferences(App app, EditorConfig config)
     {
         var p = Path.Combine(AppContext.BaseDirectory, "Fonts", file);
         return File.Exists(p) ? p : null;
+    }
+
+    /// <summary>
+    ///     Shell-rebuild handlers read preferences and widget state at will; fired from inside an
+    ///     applier those reads would become phantom dependencies of the effect, so tracking is
+    ///     suspended around the invoke.
+    /// </summary>
+    private static void InvokeUntracked(Action? handler)
+    {
+        if (handler is null) return;
+        Reactive.Untracked(() =>
+            {
+                handler();
+                return true;
+            }
+        );
     }
 
     /// <summary>
