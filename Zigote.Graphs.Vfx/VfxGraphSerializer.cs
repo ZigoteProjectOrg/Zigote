@@ -165,7 +165,7 @@ public static class VfxGraphSerializer
 
         // Must keep its setter: System.Text.Json skips getter-only properties on deserialize, which
         // silently drops every node property on round-trip (spawn rates fall back to defaults).
-        public List<PropDto> Props { get; } = [];
+        public List<PropDto> Props { get; set; } = [];
 
         public LayoutDto? Layout { get; set; }
     }

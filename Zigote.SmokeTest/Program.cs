@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using Zigote.Core;
+using Zigote.Core.Engine;
 using Zigote.Core.Math3D;
 using Zigote.Core.Paint;
 using Zigote.Render2D;
@@ -1041,6 +1042,7 @@ try
             struct VsIn {
                 @location(0) pos: vec3<f32>, @location(1) rot: f32, @location(2) size: vec2<f32>,
                 @location(3) uv0: vec2<f32>, @location(4) uv1: vec2<f32>, @location(5) color: vec4<f32>,
+                @location(6) shape: vec2<f32>,
             };
             struct VsOut { @builtin(position) clip: vec4<f32>, @location(0) uv: vec2<f32>, @location(1) color: vec4<f32>, };
             @vertex fn vs_main(@builtin(vertex_index) vid: u32, in: VsIn) -> VsOut {
@@ -1133,9 +1135,11 @@ try
                 w,
                 h
             );
-            // Instance: pos.xyz, rot, size.xy, uv0.xy, uv1.xy, rgba (14 floats).
+            // Instance: pos.xyz, rot, size.xy, uv0.xy, uv1.xy, rgba, corner_radius,
+            // border_width (16 floats).
             // Scene stage, alpha: full checker, 2×2 units at the origin (over the ball).
-            ReadOnlySpan<float> a = [0f, 0f, 0f, 0f, 2f, 2f, 0f, 0f, 1f, 1f, 1f, 1f, 1f, 1f];
+            ReadOnlySpan<float> a =
+                [0f, 0f, 0f, 0f, 2f, 2f, 0f, 0f, 1f, 1f, 1f, 1f, 1f, 1f, 0f, 0f];
             app.Engine.SpritesDraw(
                 spriteTex,
                 0,
@@ -1148,7 +1152,7 @@ try
             );
             // Scene stage, additive: rotated top-left quarter of the sheet, tinted cyan.
             ReadOnlySpan<float> b =
-                [-1.6f, 1.0f, 0f, 0.6f, 1.2f, 1.2f, 0f, 0f, 0.5f, 0.5f, 0.2f, 1f, 1f, 0.9f];
+                [-1.6f, 1.0f, 0f, 0.6f, 1.2f, 1.2f, 0f, 0f, 0.5f, 0.5f, 0.2f, 1f, 1f, 0.9f, 0f, 0f];
             app.Engine.SpritesDraw(
                 spriteTex,
                 0,
@@ -1161,7 +1165,7 @@ try
             );
             // Scene stage, CUSTOM shader (params tint green-ish); falls back to default if rejected.
             ReadOnlySpan<float> c =
-                [1.6f, 1.0f, 0f, 0f, 1.2f, 1.2f, 0f, 0f, 1f, 1f, 1f, 1f, 1f, 1f];
+                [1.6f, 1.0f, 0f, 0f, 1.2f, 1.2f, 0f, 0f, 1f, 1f, 1f, 1f, 1f, 1f, 0f, 0f];
             ReadOnlySpan<float> prms = [0.3f, 1.0f, 0.3f, 1.0f];
             app.Engine.SpritesDraw(
                 spriteTex,
@@ -1174,7 +1178,9 @@ try
                 1
             );
             // Overlay stage (pixel space, origin top-left): exact-color square at (40, 40)–(140, 140).
-            ReadOnlySpan<float> d = [90f, 90f, 0f, 0f, 100f, 100f, 0f, 0f, 1f, 1f, 1f, 1f, 1f, 1f];
+            // Rounded + stroked, exercising the new shape floats: radius 24 px, 6 px border.
+            ReadOnlySpan<float> d =
+                [90f, 90f, 0f, 0f, 100f, 100f, 0f, 0f, 1f, 1f, 1f, 1f, 1f, 1f, 24f, 6f];
             app.Engine.SpritesDraw(
                 spriteTex,
                 0,
@@ -1449,6 +1455,59 @@ try
             $"[smoke] bidi-capture {(okBidi ? "ok" : "FAILED")} font={bidiFont ?? "(default)"} -> {bidiShot}"
         );
         if (!okBidi) return 2;
+    }
+
+    // Texture lifecycle (ZIGOTE_SMOKE_TEXTURES=1): the check for zigote_release_texture and the
+    // CPU-copy drop. Load a batch, paint it (forcing GPU upload), release it, and assert the
+    // accounting returns to zero. A leak here is invisible in every other mode until the app dies
+    // of it, which is exactly how it went unnoticed before.
+    if (Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_TEXTURES") is not null)
+    {
+        const int batch = 64;
+        const uint tw = 256, th = 256;
+        var pixels = new byte[tw * th * 4];
+        Array.Fill(pixels, (byte)200);
+
+        ZigoteEngine.GetImageStats(out var baseCount, out _, out _);
+        var handles = new ulong[batch];
+        for (var i = 0; i < batch; i++)
+            handles[i] = ZigoteEngine.LoadTextureFromRgba(pixels, tw, th);
+
+        // Paint them once so every handle gets a real GPU texture, then run a frame so the
+        // end-of-frame drain sees the uploads.
+        var texPaint = new PaintList();
+        for (var i = 0; i < batch; i++)
+            texPaint.AddImage(
+                new Rect(
+                    i % 8 * 32f,
+                    i / 8 * 32f,
+                    32f,
+                    32f
+                ),
+                (int)tw,
+                (int)th,
+                null,
+                handles[i]
+            );
+        app.Engine.SubmitPaintCommands(texPaint);
+        app.Frame();
+        app.Frame();
+
+        ZigoteEngine.GetImageStats(out var loadedCount, out var loadedCpu, out var loadedGpu);
+        foreach (var handleToFree in handles) ZigoteEngine.ReleaseTexture(handleToFree);
+        app.Frame(); // releases are deferred to end-of-frame
+        ZigoteEngine.GetImageStats(out var freedCount, out var freedCpu, out var freedGpu);
+
+        var texOk = loadedCount == baseCount + batch &&
+                    loadedGpu >= (long)tw * th * 4 * batch &&
+                    loadedCpu == 0 && // CPU copies dropped after upload
+                    freedCount == baseCount && freedCpu == 0 && freedGpu == 0;
+        Console.WriteLine(
+            $"[smoke] textures {(texOk ? "ok" : "FAILED")}: loaded={loadedCount} " +
+            $"cpu={loadedCpu} gpu={loadedGpu} → after release count={freedCount} " +
+            $"cpu={freedCpu} gpu={freedGpu} (baseline {baseCount})"
+        );
+        if (!texOk) return 2;
     }
 
     var ok = rendered >= frames;

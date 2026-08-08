@@ -132,10 +132,11 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
             index = source.IndexOf("export fn ", index);
             if (index == -1) break;
 
-            // Skip a match that sits inside a line/doc comment (`//` … `///`) — with multiple files
-            // ingested, the odds of "export fn" appearing in prose rise, and it must not emit a binding.
-            var lineStart = source.LastIndexOf('\n', index) + 1;
-            if (source.Substring(lineStart, index - lineStart).TrimStart().StartsWith("//"))
+            // A real declaration is always top-level, hence always at column 0. Anything indented is
+            // the phrase appearing inside something else — a doc comment, or a string literal in a
+            // test that greps these very declarations — and must not emit a binding. Matching on the
+            // column covers every such case at once; matching on `//` covered only the first.
+            if (source.LastIndexOf('\n', index) + 1 != index)
             {
                 index += "export fn ".Length;
                 continue;
@@ -248,13 +249,13 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
         if (zigType.StartsWith("[*c]const ") || zigType.StartsWith("[*]const "))
         {
             var innerType = zigType.Substring(zigType.IndexOf("const ") + 6).Trim();
-            return MapSingleZigTypeToCSharp(innerType) + "*";
+            return MapZigTypeToCSharp("", innerType) + "*";
         }
 
         if (zigType.StartsWith("[*c]") || zigType.StartsWith("[*]"))
         {
             var innerType = zigType.Substring(zigType.IndexOf("]") + 1).Trim();
-            return MapSingleZigTypeToCSharp(innerType) + "*";
+            return MapZigTypeToCSharp("", innerType) + "*";
         }
 
         if (zigType.StartsWith("*"))
@@ -332,6 +333,7 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
             "u32" => "uint",
             "u64" => "ulong",
             "i32" => "int",
+            "c_int" => "int",
             "f32" => "float",
             "usize" => "nuint",
             "bool" => "bool",

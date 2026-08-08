@@ -1096,7 +1096,7 @@ internal static class EcsSystemTable
         var id = (ulong)Interlocked.Increment(ref _nextId);
         lock (RegisterLock)
         {
-            var next = new Dictionary<ulong, Slot>(_slots) { [id] = new Slot(handler) };
+            var next = new Dictionary<ulong, Slot>(_slots) { [id] = new(handler) };
             _slots = next;
         }
 
