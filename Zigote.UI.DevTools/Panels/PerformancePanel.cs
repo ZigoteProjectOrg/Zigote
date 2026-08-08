@@ -2,15 +2,14 @@ using System.Diagnostics;
 using Zigote.Core;
 using Zigote.Core.Diagnostics;
 using Zigote.UI.Charts.Marks;
-using Zigote.UI.Debug;
 using Zigote.UI.DevTools.Diagnostics;
 using Zigote.UI.DevTools.Widgets;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
-
 using Zigote.UI.Host;
+
 namespace Zigote.UI.DevTools.Panels;
 
 /// <summary>
@@ -29,8 +28,12 @@ public sealed class PerformancePanel : IDevPanel
 
     private readonly DevChartCard _frameCard;
     private readonly DevKeyValue _stats = new("Avg / min / max");
-    private readonly Column _scopeList = new(crossAxisAlignment: CrossAxisAlignment.Stretch,
-        mainAxisSize: MainAxisSize.Min);
+
+    private readonly Column _scopeList = new(
+        crossAxisAlignment: CrossAxisAlignment.Stretch,
+        mainAxisSize: MainAxisSize.Min
+    );
+
     private readonly List<DebugProfiler.ScopeAggregate> _agg = [];
     private long _lastScope;
 
@@ -46,11 +49,28 @@ public sealed class PerformancePanel : IDevPanel
         area.Color = Blue;
         area.Opacity = 0.25f;
         frame.Marks.Add(area);
-        frame.Marks.Add(new RuleMark
-            { Y = 1000.0 / 60.0, Label = "60", Color = Green.WithAlpha(0.55f), Dash = 4f });
-        frame.Marks.Add(new RuleMark
-            { Y = 1000.0 / 30.0, Label = "30", Color = Orange.WithAlpha(0.55f), Dash = 4f });
-        _frameCard = new DevChartCard(frame, 80f, 60f, "Frame time (ms) — 60 s");
+        frame.Marks.Add(
+            new RuleMark {
+                Y = 1000.0 / 60.0,
+                Label = "60",
+                Color = Green.WithAlpha(0.55f),
+                Dash = 4f,
+            }
+        );
+        frame.Marks.Add(
+            new RuleMark {
+                Y = 1000.0 / 30.0,
+                Label = "30",
+                Color = Orange.WithAlpha(0.55f),
+                Dash = 4f,
+            }
+        );
+        _frameCard = new DevChartCard(
+            frame,
+            80f,
+            60f,
+            "Frame time (ms) — 60 s"
+        );
     }
 
     public string Title => "Profiler";
@@ -58,14 +78,18 @@ public sealed class PerformancePanel : IDevPanel
 
     public Widget Build(BuildContext context)
     {
-        return new Column(crossAxisAlignment: CrossAxisAlignment.Stretch,
-            mainAxisSize: MainAxisSize.Min) {
+        return new Column(
+            crossAxisAlignment: CrossAxisAlignment.Stretch,
+            mainAxisSize: MainAxisSize.Min
+        ) {
             Children = {
-                _frameCard, _stats,
+                _frameCard,
+                _stats,
                 new SizedBox(height: Spacing.Xs),
-                new Button("Capture 120 frames → profile_capture.json",
-                        () => Profiler.Capture(120, "profile_capture.json"))
-                    { Style = ButtonStyle.Outlined },
+                new Button(
+                    "Capture 120 frames → profile_capture.json",
+                    () => Profiler.Capture(120, "profile_capture.json")
+                ) { Style = ButtonStyle.Outlined },
                 new DevSectionHeader("Hottest scopes (self · total)"),
                 _scopeList,
             },

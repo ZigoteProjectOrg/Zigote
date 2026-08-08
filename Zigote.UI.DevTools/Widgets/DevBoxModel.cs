@@ -40,7 +40,12 @@ public sealed class DevBoxModel : LeafWidget
 
     public override void Layout(Offset origin)
     {
-        Bounds = new Rect(origin.X, origin.Y, _size.Width, _size.Height);
+        Bounds = new Rect(
+            origin.X,
+            origin.Y,
+            _size.Width,
+            _size.Height
+        );
     }
 
     private static bool Paintable(Rect b)
@@ -67,15 +72,24 @@ public sealed class DevBoxModel : LeafWidget
         var uniH = MathF.Max(refB.Bottom, selB.Bottom) - uniY;
         if (uniW <= 0f || uniH <= 0f) return;
 
-        var area = new Rect(Bounds.X + 4f, Bounds.Y + 14f, Bounds.Width - 8f, Bounds.Height - 18f);
+        var area = new Rect(
+            Bounds.X + 4f,
+            Bounds.Y + 14f,
+            Bounds.Width - 8f,
+            Bounds.Height - 18f
+        );
         var scale = MathF.Min(area.Width / uniW, area.Height / uniH);
         var ox = area.X + (area.Width - uniW * scale) * 0.5f;
         var oy = area.Y + (area.Height - uniH * scale) * 0.5f;
 
         Rect Map(Rect r)
         {
-            return new Rect(ox + (r.X - uniX) * scale, oy + (r.Y - uniY) * scale,
-                MathF.Max(2f, r.Width * scale), MathF.Max(2f, r.Height * scale));
+            return new Rect(
+                ox + (r.X - uniX) * scale,
+                oy + (r.Y - uniY) * scale,
+                MathF.Max(2f, r.Width * scale),
+                MathF.Max(2f, r.Height * scale)
+            );
         }
 
         if (!ReferenceEquals(sel, _labelWidget))
@@ -89,8 +103,19 @@ public sealed class DevBoxModel : LeafWidget
         {
             var p = Map(refB);
             paint.AddRect(p, _theme.Fill1.WithAlpha(0.4f), 2f);
-            paint.AddBorder(p, _theme.Hint.WithAlpha(0.55f), 2f, 1f);
-            paint.AddText(_parName, p.X + 3f, Bounds.Y + 10f, _theme.Hint, LabelSize);
+            paint.AddBorder(
+                p,
+                _theme.Hint.WithAlpha(0.55f),
+                2f,
+                1f
+            );
+            paint.AddText(
+                _parName,
+                p.X + 3f,
+                Bounds.Y + 10f,
+                _theme.Hint,
+                LabelSize
+            );
 
             var pw = (int)MathF.Round(refB.Width);
             var ph = (int)MathF.Round(refB.Height);
@@ -102,13 +127,24 @@ public sealed class DevBoxModel : LeafWidget
             }
 
             var ptw = TextMeasure.Width(_parSizeText, LabelSize, fontFamily: "code");
-            paint.AddText(_parSizeText, p.Right - ptw - 3f, p.Bottom - 3f,
-                _theme.Hint.WithAlpha(0.8f), LabelSize, fontFamily: "code");
+            paint.AddText(
+                _parSizeText,
+                p.Right - ptw - 3f,
+                p.Bottom - 3f,
+                _theme.Hint.WithAlpha(0.8f),
+                LabelSize,
+                fontFamily: "code"
+            );
         }
 
         var s = Map(selB);
         paint.AddRect(s, _theme.Primary.WithAlpha(0.25f), 2f);
-        paint.AddBorder(s, _theme.Primary, 2f, 1.5f);
+        paint.AddBorder(
+            s,
+            _theme.Primary,
+            2f,
+            1.5f
+        );
 
         var sw = (int)MathF.Round(selB.Width);
         var sh = (int)MathF.Round(selB.Height);
@@ -129,12 +165,25 @@ public sealed class DevBoxModel : LeafWidget
             scy = s.Bottom + LabelSize + 2f <= area.Bottom ? s.Bottom + LabelSize : s.Y - 2f;
         }
 
-        paint.AddText(_selSizeText, scx, scy, _theme.Primary, LabelSize, fontFamily: "code");
+        paint.AddText(
+            _selSizeText,
+            scx,
+            scy,
+            _theme.Primary,
+            LabelSize,
+            fontFamily: "code"
+        );
     }
 
     public override int DebugStateHash()
     {
         var b = Target?.Bounds ?? default;
-        return HashCode.Combine(Target?.GetType(), b.X, b.Y, b.Width, b.Height);
+        return HashCode.Combine(
+            Target?.GetType(),
+            b.X,
+            b.Y,
+            b.Width,
+            b.Height
+        );
     }
 }

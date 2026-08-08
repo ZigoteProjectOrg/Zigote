@@ -7,8 +7,8 @@ using Zigote.UI.DevTools.Widgets;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Layout;
-
 using Zigote.UI.Host;
+
 namespace Zigote.UI.DevTools.Panels;
 
 /// <summary>
@@ -59,18 +59,25 @@ public sealed class PipelinePanel : IDevPanel
 
     public Widget Build(BuildContext context)
     {
-        return new Column(crossAxisAlignment: CrossAxisAlignment.Stretch,
-            mainAxisSize: MainAxisSize.Min) {
+        return new Column(
+            crossAxisAlignment: CrossAxisAlignment.Stretch,
+            mainAxisSize: MainAxisSize.Min
+        ) {
             Children = {
                 _idle,
                 new DevSectionHeader("Draw calls"),
-                _draws, _drawsNow,
+                _draws,
+                _drawsNow,
                 new DevSectionHeader("Triangles"),
-                _tris, _trisNow,
+                _tris,
+                _trisNow,
                 new DevSectionHeader("Visible objects"),
-                _visible, _visibleNow,
+                _visible,
+                _visibleNow,
                 new DevSectionHeader("Render passes"),
-                _passes, _passesNow, _frameIndex,
+                _passes,
+                _passesNow,
+                _frameIndex,
             },
         };
     }

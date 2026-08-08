@@ -9,8 +9,8 @@ using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
-
 using Zigote.UI.Host;
+
 namespace Zigote.UI.DevTools.Panels;
 
 /// <summary>
@@ -51,19 +51,67 @@ public sealed class MemoryPanel : IDevPanel
     public MemoryPanel()
     {
         var mem = DevChart.Sparkline();
-        AddArea(mem, DevChartData.WorkingSetMb, "working set", Blue, 0.15f);
-        AddArea(mem, DevChartData.GcHeapMb, "GC heap", Green, 0.25f);
-        _memCard = new DevChartCard(mem, 84f, 120f, "Heap vs process — 2 min");
+        AddArea(
+            mem,
+            DevChartData.WorkingSetMb,
+            "working set",
+            Blue,
+            0.15f
+        );
+        AddArea(
+            mem,
+            DevChartData.GcHeapMb,
+            "GC heap",
+            Green,
+            0.25f
+        );
+        _memCard = new DevChartCard(
+            mem,
+            84f,
+            120f,
+            "Heap vs process — 2 min"
+        );
 
         var alloc = DevChart.Sparkline();
-        AddArea(alloc, DevChartData.AllocMbPerSec, "alloc MB/s", Orange, 0.3f);
-        _allocCard = new DevChartCard(alloc, 60f, 120f, "Allocation rate — MB/s");
+        AddArea(
+            alloc,
+            DevChartData.AllocMbPerSec,
+            "alloc MB/s",
+            Orange,
+            0.3f
+        );
+        _allocCard = new DevChartCard(
+            alloc,
+            60f,
+            120f,
+            "Allocation rate — MB/s"
+        );
 
         var gc = DevChart.Sparkline();
-        AddLine(gc, DevChartData.Gen0PerSec, "gen0 /s", Yellow);
-        AddLine(gc, DevChartData.Gen1PerSec, "gen1 /s", Orange);
-        AddLine(gc, DevChartData.Gen2PerSec, "gen2 /s", Red);
-        _gcCard = new DevChartCard(gc, 60f, 120f, "GC collections /s");
+        AddLine(
+            gc,
+            DevChartData.Gen0PerSec,
+            "gen0 /s",
+            Yellow
+        );
+        AddLine(
+            gc,
+            DevChartData.Gen1PerSec,
+            "gen1 /s",
+            Orange
+        );
+        AddLine(
+            gc,
+            DevChartData.Gen2PerSec,
+            "gen2 /s",
+            Red
+        );
+        _gcCard = new DevChartCard(
+            gc,
+            60f,
+            120f,
+            "GC collections /s"
+        );
     }
 
     public string Title => "Memory";
@@ -71,19 +119,27 @@ public sealed class MemoryPanel : IDevPanel
 
     public Widget Build(BuildContext context)
     {
-        return new Column(crossAxisAlignment: CrossAxisAlignment.Stretch,
-            mainAxisSize: MainAxisSize.Min) {
+        return new Column(
+            crossAxisAlignment: CrossAxisAlignment.Stretch,
+            mainAxisSize: MainAxisSize.Min
+        ) {
             Children = {
                 _memCard,
                 new DevSectionHeader("Managed vs unmanaged"),
-                _managed, _unmanaged, _heapInfo,
+                _managed,
+                _unmanaged,
+                _heapInfo,
                 new DevSectionHeader("Allocation rate"),
-                _allocCard, _allocRate,
+                _allocCard,
+                _allocRate,
                 new DevSectionHeader("GC collections"),
-                _gcCard, _gcCounts, _pause,
+                _gcCard,
+                _gcCounts,
+                _pause,
                 new SizedBox(height: Spacing.Sm),
-                new Button("Force GC (gen 2)", () => GC.Collect(2, GCCollectionMode.Forced, true))
-                    { Style = ButtonStyle.Outlined },
+                new Button("Force GC (gen 2)", () => GC.Collect(2, GCCollectionMode.Forced, true)) {
+                    Style = ButtonStyle.Outlined,
+                },
             },
         };
     }
@@ -111,7 +167,8 @@ public sealed class MemoryPanel : IDevPanel
         _allocRate.ValueColor = alloc > 8f ? Orange : t.OnSurface;
 
         _gcCounts.Value = _tGcCounts.Update(
-            $"{DebugStats.Gen0Collections} / {DebugStats.Gen1Collections} / {DebugStats.Gen2Collections}");
+            $"{DebugStats.Gen0Collections} / {DebugStats.Gen1Collections} / {DebugStats.Gen2Collections}"
+        );
 
         RefreshText(t);
     }
@@ -128,7 +185,8 @@ public sealed class MemoryPanel : IDevPanel
             _pause.ValueColor = t.Hint;
             var frag = info.FragmentedBytes / (1024.0 * 1024.0);
             _heapInfo.Value = _tHeapInfo.Update(
-                $"committed {info.TotalCommittedBytes / (1024.0 * 1024.0):F0} MB · frag {frag:F1} MB");
+                $"committed {info.TotalCommittedBytes / (1024.0 * 1024.0):F0} MB · frag {frag:F1} MB"
+            );
             _heapInfo.ValueColor = t.Hint;
         }
         catch
@@ -137,7 +195,8 @@ public sealed class MemoryPanel : IDevPanel
         }
     }
 
-    private static void AddArea(Chart chart, TimeSeriesRing ring, string name, Color color, float op)
+    private static void AddArea(Chart chart, TimeSeriesRing ring, string name, Color color,
+        float op)
     {
         var m = AreaMark.Of(ring, s => s.Time, s => s.Value);
         m.Name = name;

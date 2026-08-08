@@ -1,13 +1,12 @@
 using Zigote.Core;
 using Zigote.Core.Diagnostics;
-using Zigote.Core.Paint;
 using Zigote.UI.DevTools.Widgets;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
-
 using Zigote.UI.Host;
+
 namespace Zigote.UI.DevTools.Panels;
 
 /// <summary>
@@ -21,8 +20,12 @@ public sealed class LogsPanel : IDevPanel
 
     private readonly List<DebugLogEntry> _all = [];
     private readonly HashSet<DebugLogLevel> _hidden = [];
-    private readonly Column _list = new(crossAxisAlignment: CrossAxisAlignment.Stretch,
-        mainAxisSize: MainAxisSize.Min);
+
+    private readonly Column _list = new(
+        crossAxisAlignment: CrossAxisAlignment.Stretch,
+        mainAxisSize: MainAxisSize.Min
+    );
+
     private bool _dirty = true;
     private int _version = -1;
 
@@ -31,16 +34,29 @@ public sealed class LogsPanel : IDevPanel
 
     public Widget Build(BuildContext context)
     {
-        return new Column(crossAxisAlignment: CrossAxisAlignment.Stretch,
-            mainAxisSize: MainAxisSize.Min) {
+        return new Column(
+            crossAxisAlignment: CrossAxisAlignment.Stretch,
+            mainAxisSize: MainAxisSize.Min
+        ) {
             Children = {
                 new Row(crossAxisAlignment: CrossAxisAlignment.Center) {
                     Children = {
-                        Chip("Err", DebugLogLevel.Error), Chip("Warn", DebugLogLevel.Warning),
-                        Chip("Info", DebugLogLevel.Info), Chip("Dbg", DebugLogLevel.Debug),
+                        Chip("Err", DebugLogLevel.Error),
+                        Chip("Warn", DebugLogLevel.Warning),
+                        Chip("Info", DebugLogLevel.Info),
+                        Chip("Dbg", DebugLogLevel.Debug),
                         new Spacer(),
-                        new Button("Clear", () => { DebugLog.Clear(); _dirty = true; })
-                            { Style = ButtonStyle.Flat, FontSize = DevKit.CaptionSize },
+                        new Button(
+                            "Clear",
+                            () =>
+                            {
+                                DebugLog.Clear();
+                                _dirty = true;
+                            }
+                        ) {
+                            Style = ButtonStyle.Flat,
+                            FontSize = DevKit.CaptionSize,
+                        },
                     },
                 },
                 new SizedBox(height: Spacing.Xs),
@@ -72,11 +88,13 @@ public sealed class LogsPanel : IDevPanel
         {
             var e = _all[i];
             if (_hidden.Contains(e.Level)) continue;
-            rows.Add(new Label(e.Message, DevKit.CaptionSize, LevelColor(e.Level, t)) {
-                MaxLines = 1,
-                Overflow = TextOverflow.Ellipsis,
-                FontFamily = "code",
-            });
+            rows.Add(
+                new Label(e.Message, DevKit.CaptionSize, LevelColor(e.Level, t)) {
+                    MaxLines = 1,
+                    Overflow = TextOverflow.Ellipsis,
+                    FontFamily = "code",
+                }
+            );
         }
 
         if (rows.Count == 0) rows.Add(new DevNote("No log entries."));
@@ -99,17 +117,20 @@ public sealed class LogsPanel : IDevPanel
 
         box.Child = new Padding(EdgeInsets.Symmetric(Spacing.Sm, 2f), text);
         Recolor();
-        return new Padding(EdgeInsets.Only(right: Spacing.Xs), new Pressable {
-            Child = box,
-            FocusRadius = 4f,
-            OnPressed = () =>
-            {
-                if (!_hidden.Add(level)) _hidden.Remove(level);
-                _dirty = true;
-                Recolor();
-            },
-            OnStateChanged = Recolor,
-        });
+        return new Padding(
+            EdgeInsets.Only(right: Spacing.Xs),
+            new Pressable {
+                Child = box,
+                FocusRadius = 4f,
+                OnPressed = () =>
+                {
+                    if (!_hidden.Add(level)) _hidden.Remove(level);
+                    _dirty = true;
+                    Recolor();
+                },
+                OnStateChanged = Recolor,
+            }
+        );
     }
 
     private static Color LevelColor(DebugLogLevel level, ThemeData t)

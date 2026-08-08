@@ -6,8 +6,8 @@ using Zigote.UI.TextShaping;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Focus;
-
 using Zigote.UI.Host;
+
 namespace Zigote.UI.DevTools;
 
 /// <summary>
@@ -64,7 +64,12 @@ public sealed class DevOverlayLayer : RenderWidget, INoAutoFocus
 
     public override void Layout(Offset origin)
     {
-        Bounds = new Rect(origin.X, origin.Y, _screen.Width, _screen.Height);
+        Bounds = new Rect(
+            origin.X,
+            origin.Y,
+            _screen.Width,
+            _screen.Height
+        );
     }
 
     // Transparent to input — the badge/inspector never capture the pointer — EXCEPT in inspect
@@ -73,7 +78,7 @@ public sealed class DevOverlayLayer : RenderWidget, INoAutoFocus
     // column either way.
     public override Widget? HitTest(Offset point)
     {
-        return _controller is { PanelOpen: true, InspectMode: true } &&
+        return _controller is { PanelsMounted: true, InspectMode: true } &&
                Bounds.Contains(point.X, point.Y)
             ? this
             : null;
@@ -113,7 +118,7 @@ public sealed class DevOverlayLayer : RenderWidget, INoAutoFocus
     /// <summary>Advance the repaint-rainbow scan; called once per frame by the controller.</summary>
     public void Tick(float dt, Widget? root)
     {
-        if (_controller.PanelOpen && _controller.ShowRepaintRainbow && root is not null)
+        if (_controller.DebugDrawActive && _controller.ShowRepaintRainbow && root is not null)
         {
             ScanRepaint(root);
             foreach (var kv in _repaintMap) kv.Value.TimeSince += dt;
@@ -127,7 +132,7 @@ public sealed class DevOverlayLayer : RenderWidget, INoAutoFocus
     public override void Paint(PaintList paint)
     {
         var root = _controller.App.Root;
-        if (_controller.PanelOpen && root is not null)
+        if (_controller.DebugDrawActive && root is not null)
         {
             if (_controller.ShowOverflow) PaintOverflows(paint, root, null);
             if (_controller.ShowLayoutBounds) PaintBounds(paint, root);
@@ -137,14 +142,24 @@ public sealed class DevOverlayLayer : RenderWidget, INoAutoFocus
             if (sel is { Bounds.Width: > 0f } && IsPaintable(sel.Bounds))
             {
                 paint.AddRect(sel.Bounds, Theme.Primary.WithAlpha(0.12f));
-                paint.AddBorder(sel.Bounds, Theme.Primary.WithAlpha(0.7f), 0f, 2f);
+                paint.AddBorder(
+                    sel.Bounds,
+                    Theme.Primary.WithAlpha(0.7f),
+                    0f,
+                    2f
+                );
             }
 
             var hover = _controller.HoverHighlight;
             if (hover is not null && !ReferenceEquals(hover, sel) && IsPaintable(hover.Bounds))
             {
                 paint.AddRect(hover.Bounds, Theme.Primary.WithAlpha(0.07f));
-                paint.AddBorder(hover.Bounds, Theme.Primary.WithAlpha(0.4f), 0f, 1f);
+                paint.AddBorder(
+                    hover.Bounds,
+                    Theme.Primary.WithAlpha(0.4f),
+                    0f,
+                    1f
+                );
             }
 
             // Info tag next to the widget being inspected: "TypeName · W×H".
@@ -152,6 +167,8 @@ public sealed class DevOverlayLayer : RenderWidget, INoAutoFocus
             if (tagged is not null && IsPaintable(tagged.Bounds)) PaintInfoTag(paint, tagged);
         }
 
+        // A phone-width panel covers the screen; there is nowhere left to put the badge/stats.
+        if (_controller.PanelInsetRight >= _screen.Width - BadgeW) return;
         PaintBadge(paint);
         if (_controller.CompactVisible) PaintCompact(paint);
     }
@@ -177,10 +194,40 @@ public sealed class DevOverlayLayer : RenderWidget, INoAutoFocus
         var y = b.Y - tagH - 3f;
         if (y < 2f) y = MathF.Min(b.Bottom + 3f, _screen.Height - tagH - 2f);
 
-        paint.AddRect(new Rect(x, y, tagW, tagH), new Color(0.08f, 0.08f, 0.1f, 0.95f), 4f);
-        paint.AddBorder(new Rect(x, y, tagW, tagH), Theme.Primary.WithAlpha(0.5f), 4f, 1f);
-        paint.AddText(_tagText, x + pad, y + tagH * 0.72f, Theme.OnSurface, DevKit.CaptionSize,
-            fontFamily: "code");
+        paint.AddRect(
+            new Rect(
+                x,
+                y,
+                tagW,
+                tagH
+            ),
+            new Color(
+                0.08f,
+                0.08f,
+                0.1f,
+                0.95f
+            ),
+            4f
+        );
+        paint.AddBorder(
+            new Rect(
+                x,
+                y,
+                tagW,
+                tagH
+            ),
+            Theme.Primary.WithAlpha(0.5f),
+            4f,
+            1f
+        );
+        paint.AddText(
+            _tagText,
+            x + pad,
+            y + tagH * 0.72f,
+            Theme.OnSurface,
+            DevKit.CaptionSize,
+            fontFamily: "code"
+        );
     }
 
     private void PaintBadge(PaintList paint)
@@ -195,10 +242,30 @@ public sealed class DevOverlayLayer : RenderWidget, INoAutoFocus
         }
 
         var color = fps >= 55f ? Color.Green : fps >= 30f ? Color.Amber : Color.Red;
-        var bx = _screen.Width - BadgeW - 6f - (_controller.PanelOpen ? DevToolsPanel.PanelWidth : 0f);
-        paint.AddRect(new Rect(bx, 6f, BadgeW, BadgeH), new Color(0.1f, 0.1f, 0.12f, 0.9f), 5f);
-        paint.AddText(_badgeFpsText, bx + 7f, 6f + BadgeH * 0.74f, color, t.FontSizeCaption,
-            fontFamily: "code");
+        var bx = _screen.Width - BadgeW - 6f - _controller.PanelInsetRight;
+        paint.AddRect(
+            new Rect(
+                bx,
+                6f,
+                BadgeW,
+                BadgeH
+            ),
+            new Color(
+                0.1f,
+                0.1f,
+                0.12f,
+                0.9f
+            ),
+            5f
+        );
+        paint.AddText(
+            _badgeFpsText,
+            bx + 7f,
+            6f + BadgeH * 0.74f,
+            color,
+            t.FontSizeCaption,
+            fontFamily: "code"
+        );
     }
 
     private void PaintCompact(PaintList paint)
@@ -207,7 +274,21 @@ public sealed class DevOverlayLayer : RenderWidget, INoAutoFocus
         float w = 168f, x = 8f, y = 34f, rh = 16f;
         const int rowCount = 6;
         var h = rowCount * rh + 8f;
-        paint.AddRect(new Rect(x, y, w, h), new Color(0.08f, 0.08f, 0.1f, 0.9f), 6f);
+        paint.AddRect(
+            new Rect(
+                x,
+                y,
+                w,
+                h
+            ),
+            new Color(
+                0.08f,
+                0.08f,
+                0.1f,
+                0.9f
+            ),
+            6f
+        );
 
         var draws = "—";
         var tris = "—";
@@ -229,13 +310,29 @@ public sealed class DevOverlayLayer : RenderWidget, INoAutoFocus
 
         void Row(string k, string v, Color c)
         {
-            paint.AddText(k, x + 8f, ry + 12f, t.Hint, t.FontSizeCaption - 1f);
-            paint.AddText(v, x + 70f, ry + 12f, c, t.FontSizeCaption - 1f, fontFamily: "code");
+            paint.AddText(
+                k,
+                x + 8f,
+                ry + 12f,
+                t.Hint,
+                t.FontSizeCaption - 1f
+            );
+            paint.AddText(
+                v,
+                x + 70f,
+                ry + 12f,
+                c,
+                t.FontSizeCaption - 1f,
+                fontFamily: "code"
+            );
             ry += rh;
         }
 
-        Row("fps", _cFps.Update($"{DebugStats.Fps:F0}"),
-            DebugStats.Fps >= 55f ? Color.Green : Color.Amber);
+        Row(
+            "fps",
+            _cFps.Update($"{DebugStats.Fps:F0}"),
+            DebugStats.Fps >= 55f ? Color.Green : Color.Amber
+        );
         Row("frame", _cFrame.Update($"{DebugStats.FrameMs:F1} ms"), t.OnSurface);
         Row("cpu", _cCpu.Update($"{DebugStats.CpuPct:F0} %"), t.OnSurface);
         Row("mem", _cMem.Update($"{DebugStats.MemMb:F0} MB"), t.OnSurface);
@@ -270,7 +367,11 @@ public sealed class DevOverlayLayer : RenderWidget, INoAutoFocus
         var hash = w.DebugStateHash();
         if (!_repaintMap.TryGetValue(w, out var info))
         {
-            info = new RepaintInfo { LastHash = hash, Count = 0, TimeSince = float.MaxValue };
+            info = new RepaintInfo {
+                LastHash = hash,
+                Count = 0,
+                TimeSince = float.MaxValue,
+            };
             _repaintMap[w] = info;
         }
 
@@ -300,8 +401,61 @@ public sealed class DevOverlayLayer : RenderWidget, INoAutoFocus
             var alpha = 1f - age / 0.5f;
             var hue = HueTable[kv.Value.Count % HueTable.Length];
             var c = HslToRgb(hue, 0.9f, 0.65f).WithAlpha(alpha * 0.85f);
-            paint.AddBorder(kv.Key.Bounds, c, 0f, 2f);
+            paint.AddBorder(
+                kv.Key.Bounds,
+                c,
+                0f,
+                2f
+            );
         }
+    }
+
+    // ── Overflow badges ──
+
+    private const float OverflowBadgeH = 15f;
+    private const float OverflowIcon = 11f;
+
+    private float OverflowBadgeWidth(string text)
+    {
+        return OverflowIcon + 4f +
+               TextMeasure.Width(text, Theme.FontSizeCaption - 1f, fontFamily: "code") + 6f;
+    }
+
+    /// <summary>
+    ///     The red "overflowed by N px" chip: a Material direction icon plus the amount. Both are
+    ///     drawn as separate runs because the icon and the number come from different faces.
+    /// </summary>
+    private void OverflowBadge(PaintList paint, string icon, string text, float x, float y,
+        Color color)
+    {
+        var w = OverflowBadgeWidth(text);
+        paint.AddRect(
+            new Rect(
+                x,
+                y,
+                w,
+                OverflowBadgeH
+            ),
+            color,
+            2f
+        );
+        var baseline = y + OverflowBadgeH - 4f;
+        Icons.DrawAt(
+            paint,
+            icon,
+            x + 3f,
+            baseline,
+            Color.White,
+            OverflowIcon
+        );
+        paint.AddText(
+            text,
+            x + 3f + OverflowIcon + 3f,
+            baseline,
+            Color.White,
+            Theme.FontSizeCaption - 1f,
+            fontFamily: "code"
+        );
     }
 
     private void PaintOverflows(PaintList paint, Widget w, Rect? parentBounds)
@@ -316,22 +470,31 @@ public sealed class DevOverlayLayer : RenderWidget, INoAutoFocus
             if (overL > 0.5f || overT > 0.5f || overR > 0.5f || overB > 0.5f)
             {
                 var oc = Color.Red.WithAlpha(0.9f);
-                paint.AddBorder(b, oc, 0f, 2f);
+                paint.AddBorder(
+                    b,
+                    oc,
+                    0f,
+                    2f
+                );
                 if (overB > 0.5f)
-                {
-                    var msg = $"↓{overB:F0}px";
-                    paint.AddRect(new Rect(b.X, b.Bottom - 13f, msg.Length * 6f + 4f, 13f), oc, 2f);
-                    paint.AddText(msg, b.X + 2f, b.Bottom - 3f, Color.White, Theme.FontSizeCaption - 1f);
-                }
+                    OverflowBadge(
+                        paint,
+                        MaterialIcons.ArrowDownward,
+                        $"{overB:F0}px",
+                        b.X,
+                        b.Bottom - OverflowBadgeH,
+                        oc
+                    );
 
                 if (overR > 0.5f)
-                {
-                    var msg = $"→{overR:F0}px";
-                    var tw = msg.Length * 6f + 4f;
-                    paint.AddRect(new Rect(b.Right - tw, b.Y, tw, 13f), oc, 2f);
-                    paint.AddText(msg, b.Right - tw + 2f, b.Y + 10f, Color.White,
-                        Theme.FontSizeCaption - 1f);
-                }
+                    OverflowBadge(
+                        paint,
+                        MaterialIcons.ArrowForward,
+                        $"{overR:F0}px",
+                        b.Right - OverflowBadgeWidth($"{overR:F0}px"),
+                        b.Y,
+                        oc
+                    );
             }
         }
 

@@ -1,5 +1,5 @@
 using Zigote.Core;
-using Zigote.Core.Paint;
+using Zigote.UI.Adwaita;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
@@ -8,28 +8,25 @@ using Zigote.UI.Widgets.Layout;
 namespace Zigote.UI.DevTools.Widgets;
 
 /// <summary>
-///     A wrapping strip of selectable pill tabs. Used for both the category row and the panel row of the
-///     devtools panel. Tabs/selection are set via <see cref="Set" />; the strip only rebuilds when they
-///     actually change, and recolours the pills to reflect the active one.
+///     The panel selector: a horizontally scrollable strip of Adwaita pills. It can run to a dozen
+///     entries and has to survive a 390px phone, which rules out a joined toggle group — the top-level
+///     category switcher, which is three segments, uses one of those instead (see
+///     <c>DevToolsView.CategorySwitcher</c>). Tabs/selection are set via <see cref="Set" />, and the
+///     strip only rebuilds when they actually change.
 /// </summary>
 public sealed class DevTabStrip : StatefulWidget
 {
     private int _selected;
     private IReadOnlyList<string> _tabs;
 
-    public DevTabStrip(IReadOnlyList<string> tabs, int selected, Action<int> onSelect,
-        bool emphasize = false)
+    public DevTabStrip(IReadOnlyList<string> tabs, int selected, Action<int> onSelect)
     {
         _tabs = tabs;
         _selected = selected;
         OnSelect = onSelect;
-        Emphasize = emphasize;
     }
 
     public Action<int> OnSelect { get; }
-
-    /// <summary>Larger, accent-tinted pills for the top-level category row.</summary>
-    public bool Emphasize { get; }
 
     public IReadOnlyList<string> Tabs => _tabs;
     public int Selected => _selected;
@@ -67,46 +64,73 @@ public sealed class DevTabStrip : StatefulWidget
         public override Widget Build(BuildContext context)
         {
             var t = ThemeProvider.Of(context);
-            var wrap = new Wrap { Spacing = Spacing.Xs, RunSpacing = Spacing.Xs };
+            var row = new Row(spacing: Spacing.Xs, mainAxisSize: MainAxisSize.Min);
             for (var i = 0; i < Widget.Tabs.Count; i++)
             {
                 var idx = i;
-                var selected = i == Widget.Selected;
-                wrap.Children.Add(Chip(Widget.Tabs[i], selected, () => Widget.OnSelect(idx), t,
-                    Widget.Emphasize));
+                row.Children.Add(
+                    Pill(
+                        Widget.Tabs[i],
+                        i == Widget.Selected,
+                        () => Widget.OnSelect(idx),
+                        t
+                    )
+                );
             }
 
-            return wrap;
+            var height = DevKit.Compact
+                ? ControlMetrics.MinTouchTarget
+                : AdwMetrics.CompactButtonHeight;
+            return new SizedBox(
+                height: height,
+                child: new ScrollView(row) {
+                    ScrollVertical = false,
+                    ScrollHorizontal = true,
+                    // A bar under a single row of tabs reads as a divider, not as a scrollbar.
+                    ShowScrollbars = false,
+                }
+            );
         }
 
-        private static Pressable Chip(string label, bool selected, Action onTap, ThemeData t,
-            bool emphasize)
+        private static Widget Pill(string label, bool selected, Action onTap, ThemeData t)
         {
-            var fs = emphasize ? DevKit.CaptionSize + 0.5f : DevKit.CaptionSize;
+            var p = AdwPalette.For(t);
             var box = new DecoratedBox {
-                Radius = 5f,
+                Radius = AdwMetrics.Pill,
                 Child = new Padding(
-                    EdgeInsets.Symmetric(Spacing.Sm, emphasize ? 4f : 3f),
-                    new Label(label, fs, selected ? t.Primary : t.Hint) {
-                        MaxLines = 1,
-                        FontWeight = selected ? FontWeight.SemiBold : FontWeight.Normal,
-                    }
+                    EdgeInsets.Symmetric(Spacing.Md, Spacing.Xs),
+                    new Center(
+                        new Label(
+                            label,
+                            selected ? AdwTypography.CaptionHeading : AdwTypography.Caption,
+                            selected ? t.OnBackground : p.DimLabel
+                        ) { MaxLines = 1 }
+                    )
                 ),
             };
 
-            void Recolor(bool hovered)
+            var press = new Pressable {
+                Child = box,
+                FocusRadius = AdwMetrics.Pill,
+                OnPressed = onTap,
+                SelectedState = selected,
+                SemanticsLabel = label,
+            };
+
+            void Recolor()
             {
                 box.Fill = selected
-                    ? t.Primary.WithAlpha(emphasize ? 0.22f : 0.18f)
-                    : hovered
-                        ? t.ControlHover.WithAlpha(0.5f)
-                        : Color.Transparent;
-                box.BorderColor = selected ? t.Primary.WithAlpha(0.45f) : Color.Transparent;
+                    ? p.ButtonFillActive
+                    : press.Pressed
+                        ? p.ButtonFillHover
+                        : press.Hovered
+                            ? p.ButtonFill
+                            : Color.Transparent;
+                box.MarkNeedsPaint();
             }
 
-            Recolor(false);
-            var press = new Pressable { Child = box, FocusRadius = 5f, OnPressed = onTap };
-            press.OnStateChanged = () => Recolor(press.Hovered);
+            Recolor();
+            press.OnStateChanged = Recolor;
             return press;
         }
     }

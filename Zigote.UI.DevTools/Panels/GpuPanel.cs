@@ -8,8 +8,8 @@ using Zigote.UI.DevTools.Widgets;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Layout;
-
 using Zigote.UI.Host;
+
 namespace Zigote.UI.DevTools.Panels;
 
 /// <summary>
@@ -63,7 +63,12 @@ public sealed class GpuPanel : IDevPanel
         m.Color = Purple;
         m.Opacity = 0.22f;
         mem.Marks.Add(m);
-        _memCard = new DevChartCard(mem, 74f, 120f, "GPU memory — 2 min");
+        _memCard = new DevChartCard(
+            mem,
+            74f,
+            120f,
+            "GPU memory — 2 min"
+        );
     }
 
     public string Title => "GPU";
@@ -71,15 +76,25 @@ public sealed class GpuPanel : IDevPanel
 
     public Widget Build(BuildContext context)
     {
-        return new Column(crossAxisAlignment: CrossAxisAlignment.Stretch,
-            mainAxisSize: MainAxisSize.Min) {
+        return new Column(
+            crossAxisAlignment: CrossAxisAlignment.Stretch,
+            mainAxisSize: MainAxisSize.Min
+        ) {
             Children = {
                 new DevSectionHeader("Device"),
-                _backend, _surface,
+                _backend,
+                _surface,
                 new DevSectionHeader("Memory"),
-                _memCard, _buffers, _textures, _total, _memNote,
+                _memCard,
+                _buffers,
+                _textures,
+                _total,
+                _memNote,
                 new DevSectionHeader("Pipeline load (per frame)"),
-                _draws, _tris, _visible, _passes,
+                _draws,
+                _tris,
+                _visible,
+                _passes,
             },
         };
     }
@@ -100,7 +115,9 @@ public sealed class GpuPanel : IDevPanel
 
         _backend.Value = _backendText;
         _surface.Value = engine is not null
-            ? _tSurface.Update($"{engine.LogicalWidth:F0}×{engine.LogicalHeight:F0} @{engine.Scale:0.#}x")
+            ? _tSurface.Update(
+                $"{engine.LogicalWidth:F0}×{engine.LogicalHeight:F0} @{engine.Scale:0.#}x"
+            )
             : "—";
 
         if (!DebugStats.EngineOk)

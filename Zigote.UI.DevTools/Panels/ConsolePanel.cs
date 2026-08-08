@@ -5,8 +5,8 @@ using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
-
 using Zigote.UI.Host;
+
 namespace Zigote.UI.DevTools.Panels;
 
 /// <summary>
@@ -20,8 +20,12 @@ public sealed class ConsolePanel : IDevPanel
 
     private readonly List<DebugLogEntry> _all = [];
     private readonly DevConsoleField _field = new();
-    private readonly Column _tail = new(crossAxisAlignment: CrossAxisAlignment.Stretch,
-        mainAxisSize: MainAxisSize.Min);
+
+    private readonly Column _tail = new(
+        crossAxisAlignment: CrossAxisAlignment.Stretch,
+        mainAxisSize: MainAxisSize.Min
+    );
+
     private int _version = -1;
 
     public string Title => "Console";
@@ -30,8 +34,10 @@ public sealed class ConsolePanel : IDevPanel
     public Widget Build(BuildContext context)
     {
         _field.OnSubmitted = () => _version = -1;
-        return new Column(crossAxisAlignment: CrossAxisAlignment.Stretch,
-            mainAxisSize: MainAxisSize.Min) {
+        return new Column(
+            crossAxisAlignment: CrossAxisAlignment.Stretch,
+            mainAxisSize: MainAxisSize.Min
+        ) {
             Children = {
                 _field,
                 new DevSectionHeader("Output"),
@@ -52,11 +58,13 @@ public sealed class ConsolePanel : IDevPanel
         for (var i = start; i < _all.Count; i++)
         {
             var e = _all[i];
-            rows.Add(new Label(e.Message, DevKit.CaptionSize, LevelColor(e.Level, t)) {
-                MaxLines = 1,
-                Overflow = TextOverflow.Ellipsis,
-                FontFamily = "code",
-            });
+            rows.Add(
+                new Label(e.Message, DevKit.CaptionSize, LevelColor(e.Level, t)) {
+                    MaxLines = 1,
+                    Overflow = TextOverflow.Ellipsis,
+                    FontFamily = "code",
+                }
+            );
         }
 
         if (rows.Count == 0) rows.Add(new DevNote("Console ready — type 'help'."));

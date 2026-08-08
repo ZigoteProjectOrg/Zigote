@@ -1,24 +1,29 @@
 using Zigote.Core;
 using Zigote.Core.Paint;
-using Zigote.UI.DevTools.Widgets;
-using Zigote.UI.Semantics;
+using Zigote.UI.Adwaita;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
-using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Focus;
 using Zigote.UI.Widgets.Layout;
 
 namespace Zigote.UI.DevTools;
 
 /// <summary>
-///     The docked devtools panel — a full retained widget tree pushed as its own overlay while open.
-///     Header + category tab strip + panel tab strip + a scrollable body hosting the active
-///     <see cref="IDevPanel" />'s widget. Non-modal: it opts out of auto-focus (<see cref="INoAutoFocus" />)
-///     so opening it never steals focus, and closes on Escape (<see cref="IDismissableOverlay" />).
-///     Everything outside the docked column falls through to the app (see <see cref="HitTest" />).
+///     The in-app devtools overlay: a <see cref="DevToolsView" /> pushed as its own overlay while open.
+///     <para>
+///         Three presentations. Docked, it is a column on the right whose width the user drags
+///         (<see cref="DevResizeHandle" />) and which the rest of the app shows through — everything
+///         outside the column falls through to the app (see <see cref="HitTest" />). Fullscreen (the
+///         header's expand button, or any phone-width screen, where a 408px column would be most of the
+///         display anyway) it covers the host window. Torn off into its own OS window, this overlay is
+///         not used at all — see <see cref="DevToolsController.OpenWindow" />.
+///     </para>
+///     Non-modal: it opts out of auto-focus (<see cref="INoAutoFocus" />) so opening it never steals
+///     focus, and closes on Escape (<see cref="IDismissableOverlay" />).
 /// </summary>
 public sealed class DevToolsPanel : StatefulWidget, IDismissableOverlay, INoAutoFocus
 {
+    /// <summary>Default width of the docked column, before the user drags it.</summary>
     public const float PanelWidth = 408f;
 
     private readonly DevToolsController _controller;
@@ -27,6 +32,18 @@ public sealed class DevToolsPanel : StatefulWidget, IDismissableOverlay, INoAuto
     {
         _controller = controller;
     }
+
+    private bool _full;
+
+    /// <summary>
+    ///     Width the overlay actually occupies on the right — the (resizable) docked column, or the
+    ///     whole window when fullscreen. Computed rather than captured at build time so a host-window
+    ///     resize is reflected immediately. Read by <see cref="DevOverlayLayer" /> to keep the fps badge
+    ///     clear of it.
+    /// </summary>
+    public float VisibleWidth => _full
+        ? MathF.Max(Bounds.Width, _controller.DockWidth)
+        : _controller.DockWidth;
 
     public bool RequestDismiss()
     {
@@ -43,12 +60,13 @@ public sealed class DevToolsPanel : StatefulWidget, IDismissableOverlay, INoAuto
         return true;
     }
 
-    // Only the docked column on the right is interactive; clicks elsewhere fall through to the app so
-    // the panel never blocks the scene/UI behind it. (StatefulWidget.HitTest otherwise returns `this`
-    // on a child-miss, which would swallow every click over the full-screen overlay.)
+    // Only the panel's own column is interactive; clicks elsewhere fall through to the app so the panel
+    // never blocks the scene/UI behind it. (StatefulWidget.HitTest otherwise returns `this` on a
+    // child-miss, which would swallow every click over the full-screen overlay.) The drag handle sits
+    // just outside the column, so the interactive band is a little wider than the view.
     public override Widget? HitTest(Offset point)
     {
-        if (point.X < Bounds.Right - PanelWidth) return null;
+        if (point.X < Bounds.Right - VisibleWidth - DevResizeHandle.Width) return null;
         return base.HitTest(point);
     }
 
@@ -57,86 +75,157 @@ public sealed class DevToolsPanel : StatefulWidget, IDismissableOverlay, INoAuto
         return new DevToolsPanelState(_controller);
     }
 
-    private sealed class DevToolsPanelState(DevToolsController controller) : WidgetState<DevToolsPanel>
+    private sealed class DevToolsPanelState(DevToolsController controller)
+        : WidgetState<DevToolsPanel>
     {
+        // Built through an AdaptiveBuilder so a host-window resize across the phone breakpoint
+        // actually re-picks the arm: the ambient MediaQuery is not an inherited widget here, so a
+        // plain Build() would keep whatever layout it chose the first time.
         public override Widget Build(BuildContext context)
         {
-            var t = ThemeProvider.Of(context);
-
-            var cats = controller.VisibleCategories();
-            var catSel = Math.Max(0, cats.IndexOf(controller.Category));
-            var catStrip = new DevTabStrip(
-                cats.ConvertAll(c => c.Label()),
-                catSel,
-                i => SetStateRebuild(() => controller.SetCategory(cats[i])),
-                emphasize: true);
-
-            var panels = controller.PanelsIn(controller.Category);
-            var panelSel = controller.SelectedIndex(controller.Category);
-            var panelStrip = new DevTabStrip(
-                panels.ConvertAll(p => p.Title),
-                panelSel,
-                i => SetStateRebuild(() => controller.SetSelected(controller.Category, i)));
-
-            var active = controller.ActivePanel;
-            Widget body = active is not null
-                ? controller.WidgetFor(active, context)
-                : new DevNote("No panels in this category.");
-
-            var column = new Column(
-                crossAxisAlignment: CrossAxisAlignment.Stretch,
-                mainAxisSize: MainAxisSize.Max) {
-                Children = {
-                    Header(t),
-                    new Padding(EdgeInsets.Only(left: Spacing.Md, right: Spacing.Md, top: Spacing.Xs),
-                        catStrip),
-                    new Padding(
-                        EdgeInsets.Only(left: Spacing.Md, right: Spacing.Md, top: Spacing.Xs,
-                            bottom: Spacing.Xs),
-                        panelStrip),
-                    new SizedBox(height: 1f, child: new DevFillBox(t.Separator)),
-                    new Expanded(new ScrollView(new Padding(
-                        EdgeInsets.All(Spacing.Md), body)) { ScrollVertical = true }),
-                },
-            };
-
-            var chrome = new DecoratedBox {
-                Fill = t.Panel,
-                Child = column,
-            };
-
-            return new Stack {
-                Children = {
-                    new Positioned(chrome, top: 0, bottom: 0, right: 0, width: PanelWidth),
-                },
-            };
+            return new AdaptiveBuilder(BuildArm, 0f);
         }
 
-        private Padding Header(ThemeData t)
+        private Widget BuildArm(BuildContext context, WindowSizeClass cls)
         {
-            var close = new Label("✕", DevKit.CaptionSize + 3f, t.Hint) { MaxLines = 1 };
-            var closeBtn = new Pressable {
-                Child = new Padding(EdgeInsets.All(Spacing.Xs), close),
-                FocusRadius = 5f,
-                Role = SemanticsRole.Button,
-                SemanticsLabel = "Close devtools",
-                OnPressed = () => controller.TogglePanel(),
-            };
+            var mq = MediaQuery.Of(context);
+            // A phone is always fullscreen: a docked column plus a drag handle is a pointer idea.
+            var full = controller.Fullscreen || cls == WindowSizeClass.Compact;
+            var width = full ? mq.Width : controller.DockWidth;
+            Widget._full = full;
 
-            return new Padding(
-                EdgeInsets.Only(left: Spacing.Md, right: Spacing.Sm, top: Spacing.Sm),
-                new Row(crossAxisAlignment: CrossAxisAlignment.Center) {
-                    Children = {
-                        new Label("DevTools", t.FontSizeBody, t.Primary)
-                            { FontWeight = FontWeight.Bold, MaxLines = 1 },
-                        new SizedBox(width: Spacing.Sm),
-                        new Label(controller.Profile.Resolve() == DevToolsProfile.ThreeD
-                            ? "3D" : "2D", DevKit.CaptionSize - 1f, t.Hint) { MaxLines = 1 },
-                        new Spacer(),
-                        closeBtn,
-                    },
-                }
+            var view = new DevToolsView(
+                controller,
+                full ? DevToolsChrome.Fullscreen : DevToolsChrome.Docked
             );
+
+            var stack = new Stack {
+                Children = {
+                    new Positioned(
+                        view,
+                        top: 0,
+                        bottom: 0,
+                        right: 0,
+                        left: full ? 0 : null,
+                        width: full ? null : width
+                    ),
+                },
+            };
+            if (!full)
+                stack.Children.Add(
+                    new Positioned(
+                        new DevResizeHandle(controller),
+                        top: 0,
+                        bottom: 0,
+                        right: width,
+                        width: DevResizeHandle.Width
+                    )
+                );
+            return stack;
         }
+    }
+}
+
+/// <summary>
+///     The docked column's left edge: drag it to resize the panel. Paints as the Adwaita window-split
+///     hairline, tinting to the accent while hovered or dragged, and carries a horizontal-resize cursor
+///     so the affordance is discoverable without a visible grip.
+/// </summary>
+public sealed class DevResizeHandle(DevToolsController controller) : LeafWidget
+{
+    /// <summary>Grab band width — wider than the hairline it paints, so it is easy to hit.</summary>
+    public const float Width = 6f;
+
+    private bool _dragging;
+    private bool _hovered;
+    private float _startWidth;
+    private float _startX;
+    private Size _size;
+    private ThemeData _theme = ThemeData.Dark;
+
+    public override Size Measure(Constraints c)
+    {
+        _theme = ThemeProvider.Of(BuildContext.Current);
+        _size = new Size(Width, float.IsFinite(c.MaxHeight) ? c.MaxHeight : c.MinHeight);
+        return _size;
+    }
+
+    public override void Layout(Offset origin)
+    {
+        Bounds = new Rect(
+            origin.X,
+            origin.Y,
+            _size.Width,
+            _size.Height
+        );
+    }
+
+    public override void Paint(PaintList paint)
+    {
+        var p = AdwPalette.For(_theme);
+        var active = _dragging || _hovered;
+        // The hairline sits on the column's edge; the rest of the band stays invisible.
+        paint.AddRect(
+            new Rect(
+                Bounds.Right - 1f,
+                Bounds.Y,
+                1f,
+                Bounds.Height
+            ),
+            active ? _theme.Accent : p.HeaderbarShade
+        );
+    }
+
+    public override Widget? HitTest(Offset point)
+    {
+        return Bounds.Contains(point.X, point.Y) ? this : null;
+    }
+
+    public override MouseCursor? GetCursor(Offset point)
+    {
+        return MouseCursor.ResizeEW;
+    }
+
+    public override void OnPointerEnter()
+    {
+        _hovered = true;
+        MarkNeedsPaint();
+    }
+
+    public override void OnPointerExit()
+    {
+        _hovered = false;
+        MarkNeedsPaint();
+    }
+
+    public override void OnPointerDown(Offset point)
+    {
+        _dragging = true;
+        _startX = point.X;
+        _startWidth = controller.DockWidth;
+        MarkNeedsPaint();
+    }
+
+    public override void OnPointerMove(Offset point)
+    {
+        // Dragging left (a smaller x) widens the panel: it is anchored to the right edge.
+        if (_dragging) controller.DockWidth = _startWidth + (_startX - point.X);
+    }
+
+    public override void OnPointerUp(Offset point)
+    {
+        _dragging = false;
+        MarkNeedsPaint();
+    }
+
+    public override void OnPointerCancel()
+    {
+        _dragging = false;
+        MarkNeedsPaint();
+    }
+
+    public override int DebugStateHash()
+    {
+        return HashCode.Combine(_dragging, _hovered, controller.DockWidth);
     }
 }

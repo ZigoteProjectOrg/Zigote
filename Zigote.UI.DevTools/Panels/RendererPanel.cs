@@ -7,8 +7,8 @@ using Zigote.UI.DevTools.Widgets;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Layout;
-
 using Zigote.UI.Host;
+
 namespace Zigote.UI.DevTools.Panels;
 
 /// <summary>
@@ -50,34 +50,101 @@ public sealed class RendererPanel : IDevPanel
 
     public Widget Build(BuildContext context)
     {
-        _view = new DevStepper("Debug view", "Shaded",
-            () => StepView(-1), () => StepView(1));
-        _bloom = Amount("Bloom", s => s.BloomIntensity, (ref ZgRenderSettings3D s, float v) => s.BloomIntensity = v, 0.45f);
-        _ssao = Amount("SSAO", s => s.SsaoStrength, (ref ZgRenderSettings3D s, float v) => s.SsaoStrength = v, 0.5f);
-        _ssr = Amount("SSR", s => s.SsrIntensity, (ref ZgRenderSettings3D s, float v) => s.SsrIntensity = v, 0.5f);
-        _shadows = Amount("Shadows", s => s.ShadowStrength, (ref ZgRenderSettings3D s, float v) => s.ShadowStrength = v, 0.55f);
-        _taa = Flag("TAA", s => s.TaaEnabled, (ref ZgRenderSettings3D s, float v) => s.TaaEnabled = v);
-        _dof = Flag("Depth of field", s => s.DofEnabled, (ref ZgRenderSettings3D s, float v) => s.DofEnabled = v);
-        _wire = Flag("Wireframe", s => s.Wireframe, (ref ZgRenderSettings3D s, float v) => s.Wireframe = v);
-        _diag = Flag("Diagnostic mode", s => s.DiagnosticMode, (ref ZgRenderSettings3D s, float v) => s.DiagnosticMode = v);
-        _exposure = new DevStepper("Exposure", "1.00",
-            () => Tune((ref ZgRenderSettings3D s) => s.Exposure = Clamp(s.Exposure - 0.05f, 0.2f, 3f)),
-            () => Tune((ref ZgRenderSettings3D s) => s.Exposure = Clamp(s.Exposure + 0.05f, 0.2f, 3f)));
-        _ambient = new DevStepper("Ambient", "0.00",
-            () => Tune((ref ZgRenderSettings3D s) => s.AmbientIntensity = Clamp(s.AmbientIntensity - 0.05f, 0f, 2f)),
-            () => Tune((ref ZgRenderSettings3D s) => s.AmbientIntensity = Clamp(s.AmbientIntensity + 0.05f, 0f, 2f)));
+        _view = new DevStepper(
+            "Debug view",
+            "Shaded",
+            () => StepView(-1),
+            () => StepView(1)
+        );
+        _bloom = Amount(
+            "Bloom",
+            s => s.BloomIntensity,
+            (ref ZgRenderSettings3D s, float v) => s.BloomIntensity = v,
+            0.45f
+        );
+        _ssao = Amount(
+            "SSAO",
+            s => s.SsaoStrength,
+            (ref ZgRenderSettings3D s, float v) => s.SsaoStrength = v,
+            0.5f
+        );
+        _ssr = Amount(
+            "SSR",
+            s => s.SsrIntensity,
+            (ref ZgRenderSettings3D s, float v) => s.SsrIntensity = v,
+            0.5f
+        );
+        _shadows = Amount(
+            "Shadows",
+            s => s.ShadowStrength,
+            (ref ZgRenderSettings3D s, float v) => s.ShadowStrength = v,
+            0.55f
+        );
+        _taa = Flag(
+            "TAA",
+            s => s.TaaEnabled,
+            (ref ZgRenderSettings3D s, float v) => s.TaaEnabled = v
+        );
+        _dof = Flag(
+            "Depth of field",
+            s => s.DofEnabled,
+            (ref ZgRenderSettings3D s, float v) => s.DofEnabled = v
+        );
+        _wire = Flag(
+            "Wireframe",
+            s => s.Wireframe,
+            (ref ZgRenderSettings3D s, float v) => s.Wireframe = v
+        );
+        _diag = Flag(
+            "Diagnostic mode",
+            s => s.DiagnosticMode,
+            (ref ZgRenderSettings3D s, float v) => s.DiagnosticMode = v
+        );
+        _exposure = new DevStepper(
+            "Exposure",
+            "1.00",
+            () => Tune((ref ZgRenderSettings3D s) =>
+                s.Exposure = Clamp(s.Exposure - 0.05f, 0.2f, 3f)
+            ),
+            () => Tune((ref ZgRenderSettings3D s) =>
+                s.Exposure = Clamp(s.Exposure + 0.05f, 0.2f, 3f)
+            )
+        );
+        _ambient = new DevStepper(
+            "Ambient",
+            "0.00",
+            () => Tune((ref ZgRenderSettings3D s) =>
+                s.AmbientIntensity = Clamp(s.AmbientIntensity - 0.05f, 0f, 2f)
+            ),
+            () => Tune((ref ZgRenderSettings3D s) =>
+                s.AmbientIntensity = Clamp(s.AmbientIntensity + 0.05f, 0f, 2f)
+            )
+        );
 
-        return new Column(crossAxisAlignment: CrossAxisAlignment.Stretch,
-            mainAxisSize: MainAxisSize.Min) {
+        return new Column(
+            crossAxisAlignment: CrossAxisAlignment.Stretch,
+            mainAxisSize: MainAxisSize.Min
+        ) {
             Children = {
                 new DevSectionHeader("Live"),
-                _backend, _surface, _counters, _visible,
+                _backend,
+                _surface,
+                _counters,
+                _visible,
                 new DevSectionHeader("Debug view"),
                 _view,
                 new DevSectionHeader("Features"),
-                _bloom, _ssao, _ssr, _shadows, _taa, _dof, _wire, _diag,
+                _bloom,
+                _ssao,
+                _ssr,
+                _shadows,
+                _taa,
+                _dof,
+                _wire,
+                _diag,
                 new DevSectionHeader("Tuning"),
-                _exposure, _ambient,
+                _exposure,
+                _ambient,
             },
         };
     }
@@ -96,7 +163,9 @@ public sealed class RendererPanel : IDevPanel
 
         _backend.Value = _backendText;
         _surface.Value = engine is not null
-            ? _tSurface.Update($"{engine.LogicalWidth:F0}×{engine.LogicalHeight:F0} @{engine.Scale:0.#}x")
+            ? _tSurface.Update(
+                $"{engine.LogicalWidth:F0}×{engine.LogicalHeight:F0} @{engine.Scale:0.#}x"
+            )
             : "—";
 
         if (DebugStats.EngineOk)
@@ -146,30 +215,45 @@ public sealed class RendererPanel : IDevPanel
     private DevToggle Amount(string label, Func<ZgRenderSettings3D, float> get, SetFloat set,
         float @default)
     {
-        return new DevToggle(label, get(Read()) > 0f, on => Tune((ref ZgRenderSettings3D s) =>
-        {
-            if (on) set(ref s, _remembered.TryGetValue(label, out var v) && v > 0f ? v : @default);
-            else
-            {
-                _remembered[label] = get(s);
-                set(ref s, 0f);
-            }
-        }));
+        return new DevToggle(
+            label,
+            get(Read()) > 0f,
+            on => Tune((ref ZgRenderSettings3D s) =>
+                {
+                    if (on)
+                    {
+                        set(
+                            ref s,
+                            _remembered.TryGetValue(label, out var v) && v > 0f ? v : @default
+                        );
+                    }
+                    else
+                    {
+                        _remembered[label] = get(s);
+                        set(ref s, 0f);
+                    }
+                }
+            )
+        );
     }
 
     private DevToggle Flag(string label, Func<ZgRenderSettings3D, float> get, SetFloat set)
     {
-        return new DevToggle(label, get(Read()) != 0f,
-            on => Tune((ref ZgRenderSettings3D s) => set(ref s, on ? 1f : 0f)));
+        return new DevToggle(
+            label,
+            get(Read()) != 0f,
+            on => Tune((ref ZgRenderSettings3D s) => set(ref s, on ? 1f : 0f))
+        );
     }
 
     private void StepView(int dir)
     {
         Tune((ref ZgRenderSettings3D s) =>
-        {
-            var v = ((int)s.DebugView + dir + 16) % 16;
-            s.DebugView = v;
-        });
+            {
+                var v = ((int)s.DebugView + dir + 16) % 16;
+                s.DebugView = v;
+            }
+        );
     }
 
     private static string ViewName(int v)

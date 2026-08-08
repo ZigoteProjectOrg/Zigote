@@ -1,4 +1,5 @@
 using Zigote.Core;
+using Zigote.UI.Adwaita;
 using Zigote.Core.Diagnostics;
 using Zigote.Core.Events;
 using Zigote.Core.Paint;
@@ -6,8 +7,8 @@ using Zigote.UI.TextShaping;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Focus;
-
 using Zigote.UI.Host;
+
 namespace Zigote.UI.DevTools.Widgets;
 
 /// <summary>
@@ -19,8 +20,10 @@ namespace Zigote.UI.DevTools.Widgets;
 /// </summary>
 public sealed class DevConsoleField : RenderWidget, ITextInputClient, IKeyboardTrap
 {
-    private const float Height = 26f;
     private const string Placeholder = "type a command — try 'help'";
+
+    /// <summary>Adwaita entry height, raised to a finger-sized target on a phone.</summary>
+    private float _height = AdwMetrics.EntryHeight;
 
     private int _historyIdx = -1;
     private string _input = "";
@@ -37,39 +40,82 @@ public sealed class DevConsoleField : RenderWidget, ITextInputClient, IKeyboardT
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
+        _height = DevKit.Compact ? ControlMetrics.MinTouchTarget : AdwMetrics.EntryHeight;
         var w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : c.MinWidth;
-        _size = new Size(w, Height);
+        _size = new Size(w, _height);
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
-        Bounds = new Rect(origin.X, origin.Y, _size.Width, _size.Height);
+        Bounds = new Rect(
+            origin.X,
+            origin.Y,
+            _size.Width,
+            _size.Height
+        );
     }
 
     public override void Paint(PaintList paint)
     {
         var focused = Owner?.FocusedWidget == this;
-        paint.AddRect(Bounds, _theme.PanelSunken, 5f);
-        paint.AddBorder(Bounds, focused ? _theme.Primary.WithAlpha(0.7f) : _theme.Separator, 5f, 1f);
+        var p = AdwPalette.For(_theme);
+        // Adwaita entry: view background, 1px border, and a 2px accent focus ring when focused.
+        paint.AddRect(Bounds, p.ViewBg, AdwMetrics.ControlRadius);
+        paint.AddBorder(
+            Bounds,
+            focused ? _theme.Accent : p.Border,
+            AdwMetrics.ControlRadius,
+            focused ? _theme.FocusRingWidth : 1f
+        );
 
-        var textY = Bounds.Y + Height * 0.66f;
-        paint.AddText("›", Bounds.X + 7f, textY, _theme.Primary, DevKit.CaptionSize + 1f,
-            fontFamily: "code");
+        var textY = Bounds.Y + _height * 0.62f;
+        Icons.DrawAt(
+            paint,
+            Icons.ChevronRight,
+            Bounds.X + 8f,
+            textY,
+            _theme.Accent,
+            AdwMetrics.IconSize
+        );
 
-        var tx = Bounds.X + 20f;
+        var tx = Bounds.X + 8f + AdwMetrics.IconSize + Spacing.Xs;
         if (_input.Length == 0 && !focused)
         {
-            paint.AddText(Placeholder, tx, textY, _theme.Hint.WithAlpha(0.7f), DevKit.CaptionSize);
+            paint.AddText(
+                Placeholder,
+                tx,
+                textY,
+                _theme.Hint.WithAlpha(0.7f),
+                DevKit.CaptionSize
+            );
         }
         else
         {
-            paint.AddText(_input, tx, textY, _theme.OnSurface, DevKit.CaptionSize, fontFamily: "code");
+            paint.AddText(
+                _input,
+                tx,
+                textY,
+                _theme.OnSurface,
+                DevKit.CaptionSize,
+                fontFamily: "code"
+            );
             if (focused && BlinkOn())
             {
-                var caretX = tx + TextMeasure.Width(_input, DevKit.CaptionSize,
-                    fontFamily: "code") + 1f;
-                paint.AddRect(new Rect(caretX, Bounds.Y + 6f, 1.5f, Height - 12f), _theme.Primary);
+                var caretX = tx + TextMeasure.Width(
+                    _input,
+                    DevKit.CaptionSize,
+                    fontFamily: "code"
+                ) + 1f;
+                paint.AddRect(
+                    new Rect(
+                        caretX,
+                        Bounds.Y + _height * 0.25f,
+                        1.5f,
+                        _height * 0.5f
+                    ),
+                    _theme.Primary
+                );
             }
         }
     }

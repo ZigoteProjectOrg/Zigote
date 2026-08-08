@@ -7,8 +7,8 @@ using Zigote.UI.DevTools.Widgets;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Layout;
-
 using Zigote.UI.Host;
+
 namespace Zigote.UI.DevTools.Panels;
 
 /// <summary>
@@ -33,9 +33,24 @@ public sealed class UiPaintPanel : IDevPanel
     public UiPaintPanel()
     {
         var chart = DevChart.Sparkline();
-        AddLine(chart, DevChartData.UiCommands, "root", Blue);
-        AddLine(chart, DevChartData.OverlayCommands, "overlays", Purple);
-        _card = new DevChartCard(chart, 84f, 60f, "Paint commands — 60 s");
+        AddLine(
+            chart,
+            DevChartData.UiCommands,
+            "root",
+            Blue
+        );
+        AddLine(
+            chart,
+            DevChartData.OverlayCommands,
+            "overlays",
+            Purple
+        );
+        _card = new DevChartCard(
+            chart,
+            84f,
+            60f,
+            "Paint commands — 60 s"
+        );
     }
 
     public string Title => "UI Paint";
@@ -43,11 +58,15 @@ public sealed class UiPaintPanel : IDevPanel
 
     public Widget Build(BuildContext context)
     {
-        return new Column(crossAxisAlignment: CrossAxisAlignment.Stretch,
-            mainAxisSize: MainAxisSize.Min) {
+        return new Column(
+            crossAxisAlignment: CrossAxisAlignment.Stretch,
+            mainAxisSize: MainAxisSize.Min
+        ) {
             Children = {
                 new DevSectionHeader("Paint commands"),
-                _card, _root, _overlay,
+                _card,
+                _root,
+                _overlay,
                 new DevNote("A flat root line while idle means the repaint gate is holding."),
             },
         };
@@ -55,8 +74,11 @@ public sealed class UiPaintPanel : IDevPanel
 
     public void Refresh(float dt)
     {
-        _card.Sync(DevChartData.Revision, DevChartData.Time,
-            App.Active?.Theme ?? ThemeData.Dark);
+        _card.Sync(
+            DevChartData.Revision,
+            DevChartData.Time,
+            App.Active?.Theme ?? ThemeData.Dark
+        );
         _root.Value = _tRoot.Update($"{DebugStats.UiPaintCommands}");
         _overlay.Value = _tOverlay.Update($"{DebugStats.OverlayPaintCommands}");
     }

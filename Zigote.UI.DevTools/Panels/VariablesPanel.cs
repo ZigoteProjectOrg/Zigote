@@ -22,8 +22,10 @@ public sealed class VariablesPanel : IDevPanel
     public Widget Build(BuildContext context)
     {
         _sync.Clear();
-        var col = new Column(crossAxisAlignment: CrossAxisAlignment.Stretch,
-            mainAxisSize: MainAxisSize.Min);
+        var col = new Column(
+            crossAxisAlignment: CrossAxisAlignment.Stretch,
+            mainAxisSize: MainAxisSize.Min
+        );
         string? category = null;
         foreach (var v in DebugVariables.All)
         {
@@ -65,15 +67,23 @@ public sealed class VariablesPanel : IDevPanel
             }
             case DebugVarType.Enum:
             {
-                var step = new DevStepper(v.Name, v.Display(),
-                    () => CycleEnum(v, -1), () => CycleEnum(v, 1));
+                var step = new DevStepper(
+                    v.Name,
+                    v.Display(),
+                    () => CycleEnum(v, -1),
+                    () => CycleEnum(v, 1)
+                );
                 _sync.Add(() => step.Value = v.Display());
                 return step;
             }
             default:
             {
-                var step = new DevStepper(v.Name, v.Display(),
-                    () => Nudge(v, -1), () => Nudge(v, 1));
+                var step = new DevStepper(
+                    v.Name,
+                    v.Display(),
+                    () => Nudge(v, -1),
+                    () => Nudge(v, 1)
+                );
                 _sync.Add(() => step.Value = v.Display());
                 return step;
             }

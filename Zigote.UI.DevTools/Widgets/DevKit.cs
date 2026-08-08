@@ -1,45 +1,76 @@
 using Zigote.Core;
 using Zigote.Core.Paint;
-using Zigote.UI.Semantics;
-using Zigote.UI.TextShaping;
+using Zigote.UI.Adwaita;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
+using Zigote.UI.Host;
 
 namespace Zigote.UI.DevTools.Widgets;
 
 /// <summary>
-///     Retained-widget building blocks for devtools panels — the widget-native replacements for the old
-///     immediate-mode <c>DebugUi</c> primitives. Every panel composes these instead of hand-painting, so
-///     hover/focus/state and the framework's layout all come for free. Panels keep references to the
+///     Retained-widget building blocks for devtools panels, drawn in the Adwaita idiom: the GNOME type
+///     ramp (<see cref="AdwTypography" />), the named-colour palette (<see cref="AdwPalette" />) and the
+///     libadwaita control metrics. Panels compose these instead of hand-painting, keep references to the
 ///     ones they mutate (e.g. a <see cref="DevKeyValue" />'s <see cref="DevKeyValue.Value" />) and update
 ///     them in <see cref="IDevPanel.Refresh" />.
 /// </summary>
 public static class DevKit
 {
-    public const float CaptionSize = 11.5f;
-    public const float RowHeight = 20f;
+    /// <summary>Secondary/detail text size — Adwaita <c>.caption</c>.</summary>
+    public const float CaptionSize = 12f;
+
+    /// <summary>
+    ///     Dense readout row height on a pointer screen. Half of Adwaita's 50px list row — devtools are
+    ///     dense by nature — but not so short that the first and last rows of a 12px-radius card collide
+    ///     with its rounded corners, which is what 28 did.
+    /// </summary>
+    public const float RowHeight = 36f;
+
+    /// <summary>Below this the surface is a phone, not merely a narrow pane or a small window.</summary>
+    private const float PhoneWidth = 400f;
+
+    /// <summary>
+    ///     True when controls should be finger-sized: a touch pointer is driving, or the surface is
+    ///     phone-sized. Deliberately not "the pane is narrow" — a 408px docked column and a 520px
+    ///     torn-off devtools window are both narrow and both driven by a mouse, and they must keep the
+    ///     same dense rhythm as each other.
+    /// </summary>
+    public static bool Compact =>
+        App.PointerIsTouch || MediaQuery.Of(BuildContext.Current).Width < PhoneWidth;
+
+    /// <summary>Dense row height on a pointer screen, a finger-sized target on a phone.</summary>
+    public static float Row => Compact ? ControlMetrics.MinTouchTarget : RowHeight;
+
+    /// <summary>Horizontal inset of a readout row — matches the Adwaita boxed-list inset.</summary>
+    public const float RowInset = AdwMetrics.RowPaddingX;
+
+    // Twelve hues spread so neighbouring depths never read as the same colour — the same idea as the
+    // overlay's repaint rainbow, reused for tree-depth guides.
+    private static readonly Color[] Depths = [
+        Color.Rgb(0xE0, 0x6C, 0x75), Color.Rgb(0xE5, 0xA5, 0x4B), Color.Rgb(0xD8, 0xCF, 0x54),
+        Color.Rgb(0x98, 0xC3, 0x79), Color.Rgb(0x56, 0xC2, 0x8E), Color.Rgb(0x56, 0xB6, 0xC2),
+        Color.Rgb(0x61, 0xAF, 0xEF), Color.Rgb(0x82, 0x8B, 0xF0), Color.Rgb(0xB0, 0x77, 0xE8),
+        Color.Rgb(0xD4, 0x70, 0xD0), Color.Rgb(0xEA, 0x6F, 0xA8), Color.Rgb(0xC0, 0x92, 0x6B),
+    ];
+
+    /// <summary>The guide colour for a tree depth — cycles every 12 levels.</summary>
+    public static Color DepthColor(int depth)
+    {
+        return Depths[(depth % Depths.Length + Depths.Length) % Depths.Length];
+    }
 }
 
-/// <summary>A section header: a short accent bar + a bold caption. Static once built.</summary>
+/// <summary>A boxed-list group heading: Adwaita <c>.heading</c> over the rows it introduces.</summary>
 public sealed class DevSectionHeader(string title) : StatelessWidget
 {
     protected override Widget Build(BuildContext context)
     {
         var t = ThemeProvider.Of(context);
         return new Padding(
-            EdgeInsets.Only(top: Spacing.Sm, bottom: Spacing.Xxs),
-            new Row(crossAxisAlignment: CrossAxisAlignment.Center) {
-                Children = {
-                    new Padding(
-                        EdgeInsets.Only(right: Spacing.Sm),
-                        new SizedBox(3f, 12f, new DevFillBox(t.Primary, 1.5f))
-                    ),
-                    new Label(title, DevKit.CaptionSize + 1.5f, t.Primary)
-                        { FontWeight = FontWeight.SemiBold, MaxLines = 1 },
-                },
-            }
+            EdgeInsets.Only(top: Spacing.Lg, bottom: Spacing.Sm),
+            new Label(title, AdwTypography.Heading, t.OnBackground) { MaxLines = 1 }
         );
     }
 }
@@ -63,7 +94,12 @@ public sealed class DevFillBox(Color color, float radius = 0f) : LeafWidget
 
     public override void Layout(Offset origin)
     {
-        Bounds = new Rect(origin.X, origin.Y, _size.Width, _size.Height);
+        Bounds = new Rect(
+            origin.X,
+            origin.Y,
+            _size.Width,
+            _size.Height
+        );
     }
 
     public override void Paint(PaintList paint)
@@ -79,9 +115,9 @@ public sealed class DevFillBox(Color color, float radius = 0f) : LeafWidget
 }
 
 /// <summary>
-///     A key → value row: a muted key on the left, a value (monospace by default) on the right. The
-///     <see cref="Value" /> and <see cref="ValueColor" /> are live-mutable so panels update them each
-///     frame without a rebuild.
+///     A key → value readout row, laid out like an <see cref="AdwActionRow" /> but at devtools density:
+///     the key in body text on the left, a monospace value on the right. The <see cref="Value" /> and
+///     <see cref="ValueColor" /> are live-mutable so panels update them each frame without a rebuild.
 /// </summary>
 public sealed class DevKeyValue : StatelessWidget
 {
@@ -91,11 +127,10 @@ public sealed class DevKeyValue : StatelessWidget
     public DevKeyValue(string key, string value = "", Color? valueColor = null, bool mono = true)
     {
         _key = key;
-        _valueLabel = new Label(value, DevKit.CaptionSize) {
+        _valueLabel = new Label(value, mono ? AdwTypography.Monospace : AdwTypography.Caption) {
             MaxLines = 1,
             Overflow = TextOverflow.Ellipsis,
             Align = TextAlign.Right,
-            FontFamily = mono ? "code" : null,
             Color = valueColor,
         };
     }
@@ -115,25 +150,38 @@ public sealed class DevKeyValue : StatelessWidget
     protected override Widget Build(BuildContext context)
     {
         var t = ThemeProvider.Of(context);
-        return new SizedBox(height: DevKit.RowHeight, child: new Row(
-            crossAxisAlignment: CrossAxisAlignment.Center) {
-            Children = {
-                new Label(_key, DevKit.CaptionSize, t.Hint) { MaxLines = 1 },
-                new Spacer(),
-                new Flexible(_valueLabel, fit: FlexFit.Loose),
-            },
-        });
+        _valueLabel.Color ??= t.OnSurface;
+        return new SizedBox(
+            height: DevKit.Row,
+            child: new Padding(
+                EdgeInsets.Symmetric(DevKit.RowInset),
+                new Row(crossAxisAlignment: CrossAxisAlignment.Center) {
+                    Children = {
+                        // Key at its natural width, value takes everything left and ellipsizes if it
+                        // still does not fit. Sharing the row between two Flexibles and a Spacer (as
+                        // this did) gave the value a third of the row, which clipped every long
+                        // readout — flex children split what is left AFTER the fixed ones.
+                        new Label(_key, AdwTypography.Caption, t.TextSecondary) {
+                            MaxLines = 1,
+                            Overflow = TextOverflow.Ellipsis,
+                        },
+                        new SizedBox(Spacing.Sm),
+                        new Expanded(_valueLabel),
+                    },
+                }
+            )
+        );
     }
 }
 
-/// <summary>A single muted caption line (hints / notes). <see cref="Text" /> is live-mutable.</summary>
+/// <summary>A dim caption line (hints / notes), Adwaita <c>.caption</c>. <see cref="Text" /> is live-mutable.</summary>
 public sealed class DevNote : StatelessWidget
 {
     private readonly Label _label;
 
     public DevNote(string text, Color? color = null)
     {
-        _label = new Label(text, DevKit.CaptionSize) { Color = color };
+        _label = new Label(text, AdwTypography.Caption) { Color = color };
     }
 
     public string Text
@@ -150,18 +198,18 @@ public sealed class DevNote : StatelessWidget
 
     protected override Widget Build(BuildContext context)
     {
-        _label.Color ??= ThemeProvider.Of(context).Hint;
-        return new Padding(EdgeInsets.Symmetric(0f, 2f), _label);
+        _label.Color ??= AdwPalette.For(ThemeProvider.Of(context)).DimLabel;
+        return new Padding(EdgeInsets.Symmetric(DevKit.RowInset, Spacing.Sm), _label);
     }
 }
 
 /// <summary>
-///     A labelled horizontal meter: key + value on one line, a thin proportional bar beneath. Panels
-///     mutate <see cref="Value" />, <see cref="Fraction" />, and <see cref="Color" /> each frame.
+///     A labelled meter: key + value on one line over an Adwaita progress bar. Panels mutate
+///     <see cref="Value" />, <see cref="Fraction" /> and <see cref="Color" /> each frame.
 /// </summary>
 public sealed class DevMeter : StatelessWidget
 {
-    private readonly DevFillBox _fill = new(Color.Transparent, 2f);
+    private readonly DevFillBox _fill = new(Color.Transparent, AdwMetrics.Pill);
     private readonly string _key;
     private readonly Label _valueLabel;
     private FractionBox _fraction = null!;
@@ -169,10 +217,10 @@ public sealed class DevMeter : StatelessWidget
     public DevMeter(string key, Color color)
     {
         _key = key;
-        _valueLabel = new Label("", DevKit.CaptionSize) {
+        _valueLabel = new Label("", AdwTypography.Monospace) {
             MaxLines = 1,
+            Overflow = TextOverflow.Ellipsis,
             Align = TextAlign.Right,
-            FontFamily = "code",
         };
         _fill.Color = color;
     }
@@ -198,28 +246,37 @@ public sealed class DevMeter : StatelessWidget
     protected override Widget Build(BuildContext context)
     {
         var t = ThemeProvider.Of(context);
-        _fraction = new FractionBox(_fill, t.Fill3, 4f);
-        return new Padding(EdgeInsets.Symmetric(0f, 2f), new Column(
-            crossAxisAlignment: CrossAxisAlignment.Stretch,
-            mainAxisSize: MainAxisSize.Min) {
-            Children = {
-                new Row(crossAxisAlignment: CrossAxisAlignment.Center) {
-                    Children = {
-                        new Label(_key, DevKit.CaptionSize, t.Hint) { MaxLines = 1 },
-                        new Spacer(),
-                        new Flexible(_valueLabel, fit: FlexFit.Loose),
+        var p = AdwPalette.For(t);
+        _valueLabel.Color ??= t.OnSurface;
+        _fraction = new FractionBox(_fill, p.ButtonFill, AdwMetrics.ProgressBarHeight);
+        return new Padding(
+            EdgeInsets.Symmetric(DevKit.RowInset, Spacing.Sm),
+            new Column(
+                crossAxisAlignment: CrossAxisAlignment.Stretch,
+                mainAxisSize: MainAxisSize.Min
+            ) {
+                Children = {
+                    new Row(crossAxisAlignment: CrossAxisAlignment.Center) {
+                        Children = {
+                            new Label(_key, AdwTypography.Caption, p.DimLabel) {
+                                MaxLines = 1,
+                                Overflow = TextOverflow.Ellipsis,
+                            },
+                            new SizedBox(Spacing.Sm),
+                            new Expanded(_valueLabel),
+                        },
                     },
+                    new SizedBox(height: Spacing.Xs),
+                    _fraction,
                 },
-                new SizedBox(height: 2f),
-                _fraction,
-            },
-        });
+            }
+        );
     }
 
     /// <summary>A track rect with a proportional fill of <see cref="Fill" />; sizes to full width.</summary>
     private sealed class FractionBox(DevFillBox fill, Color track, float height) : RenderWidget
     {
-        private readonly DevFillBox _track = new(track, 2f);
+        private readonly DevFillBox _track = new(track, AdwMetrics.Pill);
         private Size _size;
 
         public DevFillBox Fill { get; } = fill;
@@ -236,7 +293,12 @@ public sealed class DevMeter : StatelessWidget
 
         public override void Layout(Offset origin)
         {
-            Bounds = new Rect(origin.X, origin.Y, _size.Width, _size.Height);
+            Bounds = new Rect(
+                origin.X,
+                origin.Y,
+                _size.Width,
+                _size.Height
+            );
             _track.Layout(origin);
             var fw = _size.Width * Math.Clamp(Fraction, 0f, 1f);
             Fill.Measure(Constraints.Tight(fw, _size.Height));
@@ -256,136 +318,46 @@ public sealed class DevMeter : StatelessWidget
     }
 }
 
-/// <summary>A checkbox glyph leaf: a rounded box, accent-filled with a check when on.</summary>
-public sealed class DevCheckGlyph : LeafWidget
+/// <summary>
+///     A label + switch row — an <see cref="AdwSwitchRow" />, so the whole row is the (finger-sized)
+///     target and the state reaches a screen reader. <see cref="OnChanged" /> fires with the new value.
+/// </summary>
+public sealed class DevToggle : StatelessWidget
 {
-    private const float BoxSize = 15f;
-    private ThemeData _theme = ThemeData.Dark;
-
-    public bool Checked { get; set; }
-
-    public override Size Measure(Constraints c)
-    {
-        _theme = ThemeProvider.Of(BuildContext.Current);
-        return new Size(BoxSize, BoxSize);
-    }
-
-    public override void Layout(Offset origin)
-    {
-        Bounds = new Rect(origin.X, origin.Y, BoxSize, BoxSize);
-    }
-
-    public override void Paint(PaintList paint)
-    {
-        paint.AddRect(Bounds, Checked ? _theme.Primary : _theme.Fill2, 4f);
-        paint.AddBorder(Bounds, Checked ? _theme.Primary : _theme.Hint.WithAlpha(0.5f), 4f, 1f);
-        if (Checked)
-            paint.AddText("✓", Bounds.X + 2.5f, Bounds.Bottom - 3f, _theme.OnPrimary, 10.5f,
-                fontWeight: FontWeight.Bold);
-    }
-
-    public override int DebugStateHash()
-    {
-        return Checked ? 1 : 0;
-    }
-}
-
-/// <summary>A label + checkbox row. <see cref="OnChanged" /> fires with the new value when clicked.</summary>
-public sealed class DevToggle : StatefulWidget
-{
-    private bool _value;
+    private readonly AdwSwitchRow _row;
 
     public DevToggle(string label, bool value, Action<bool> onChanged, bool enabled = true)
     {
         Label = label;
-        _value = value;
         OnChanged = onChanged;
-        Enabled = enabled;
+        _row = new AdwSwitchRow(label, value: value, onChanged: onChanged) { Enabled = enabled };
     }
 
     public string Label { get; }
     public Action<bool> OnChanged { get; }
-    public bool Enabled { get; set; }
+
+    public bool Enabled
+    {
+        get => _row.Enabled;
+        set => _row.Enabled = value;
+    }
 
     public bool Value
     {
-        get => _value;
-        set
-        {
-            if (_value == value) return;
-            _value = value;
-            (InternalState as DevToggleState)?.SyncValue(value);
-        }
+        get => _row.Value;
+        set => _row.Value = value;
     }
 
-    protected override WidgetState CreateState()
+    protected override Widget Build(BuildContext context)
     {
-        return new DevToggleState();
-    }
-
-    private sealed class DevToggleState : WidgetState<DevToggle>
-    {
-        private readonly DevCheckGlyph _check = new();
-        private readonly DecoratedBox _hover = new() { Radius = 4f };
-        private readonly Label _label = new("", DevKit.CaptionSize) { MaxLines = 1 };
-        private Pressable _root = null!;
-        private ThemeData _theme = ThemeData.Dark;
-
-        public void SyncValue(bool v)
-        {
-            _check.Checked = v;
-            _root.MarkNeedsPaint();
-        }
-
-        public override void InitState()
-        {
-            _hover.Child = new Padding(
-                EdgeInsets.Symmetric(Spacing.Xs, 2f),
-                new Row(crossAxisAlignment: CrossAxisAlignment.Center) {
-                    Children = { _label, new Spacer(), _check },
-                }
-            );
-            _root = new Pressable {
-                Child = _hover,
-                FocusRadius = 4f,
-                OnStateChanged = ApplyColors,
-                OnPressed = Toggle,
-            };
-        }
-
-        private void Toggle()
-        {
-            if (!Widget.Enabled) return;
-            Widget.Value = !Widget.Value;
-            _check.Checked = Widget.Value;
-            Widget.OnChanged(Widget.Value);
-            _root.MarkNeedsPaint();
-        }
-
-        public override Widget Build(BuildContext context)
-        {
-            _theme = ThemeProvider.Of(context);
-            _label.Text = Widget.Label;
-            _check.Checked = Widget.Value;
-            _root.Enabled = Widget.Enabled;
-            _root.Role = SemanticsRole.Checkbox;
-            _root.SemanticsLabel = Widget.Label;
-            _root.Checked = Widget.Value;
-            ApplyColors();
-            return new SizedBox(height: DevKit.RowHeight + 2f, child: _root);
-        }
-
-        private void ApplyColors()
-        {
-            _label.Color = Widget.Enabled ? _theme.OnSurface : _theme.Hint.WithAlpha(0.5f);
-            _hover.Fill = _root.Hovered && Widget.Enabled
-                ? _theme.ControlHover.WithAlpha(0.5f)
-                : Color.Transparent;
-        }
+        return _row;
     }
 }
 
-/// <summary>A label + ◀ value ▶ stepper row. Chevrons fire <see cref="OnPrev" />/<see cref="OnNext" />.</summary>
+/// <summary>
+///     A label + ◀ value ▶ stepper row for values that cycle rather than count (enum debug views,
+///     variable presets). Chevrons fire <see cref="OnPrev" />/<see cref="OnNext" />.
+/// </summary>
 public sealed class DevStepper : StatefulWidget
 {
     private string _value;
@@ -420,10 +392,10 @@ public sealed class DevStepper : StatefulWidget
 
     private sealed class DevStepperState : WidgetState<DevStepper>
     {
-        private readonly Label _value = new("", DevKit.CaptionSize) {
+        private readonly Label _value = new("", AdwTypography.Monospace) {
             MaxLines = 1,
+            Overflow = TextOverflow.Ellipsis,
             Align = TextAlign.Center,
-            FontFamily = "code",
         };
 
         public void SyncValue(string v)
@@ -435,44 +407,38 @@ public sealed class DevStepper : StatefulWidget
         {
             var t = ThemeProvider.Of(context);
             _value.Text = Widget.Value;
-            return new SizedBox(height: DevKit.RowHeight + 2f, child: new Row(
-                crossAxisAlignment: CrossAxisAlignment.Center) {
-                Children = {
-                    new Label(Widget.Label, DevKit.CaptionSize, t.Hint) { MaxLines = 1 },
-                    new Spacer(),
-                    Chip("◀", Widget.OnPrev, t),
-                    new SizedBox(width: 4f),
-                    new SizedBox(width: 58f, child: _value),
-                    new SizedBox(width: 4f),
-                    Chip("▶", Widget.OnNext, t),
-                },
-            });
+            _value.Color = t.OnSurface;
+            return new SizedBox(
+                height: MathF.Max(AdwMetrics.RowMinHeight, DevKit.Row),
+                child: new Padding(
+                    EdgeInsets.Symmetric(DevKit.RowInset),
+                    new Row(crossAxisAlignment: CrossAxisAlignment.Center) {
+                        Children = {
+                            new Flexible(
+                                new Label(Widget.Label, AdwTypography.Body, t.OnSurface) {
+                                    MaxLines = 1,
+                                    Overflow = TextOverflow.Ellipsis,
+                                },
+                                fit: FlexFit.Loose
+                            ),
+                            new Spacer(),
+                            Chip(Icons.ChevronLeft, "Previous", Widget.OnPrev),
+                            new SizedBox(88f, child: _value),
+                            Chip(Icons.ChevronRight, "Next", Widget.OnNext),
+                        },
+                    }
+                )
+            );
         }
 
-        private static Pressable Chip(string glyph, Action onTap, ThemeData t)
+        private static AdwButton Chip(string icon, string label, Action onTap)
         {
-            var box = new DecoratedBox {
-                Radius = 4f,
-                Fill = t.Fill2,
-                Child = new SizedBox(18f, 18f, new Center(
-                    new Label(glyph, DevKit.CaptionSize, t.OnSurface))),
+            return new AdwButton(label, onTap) {
+                IconName = icon,
+                Style = AdwButtonStyle.Flat,
+                Circular = true,
+                Compact = true,
             };
-            return new Pressable {
-                Child = box,
-                FocusRadius = 4f,
-                OnPressed = onTap,
-                OnStateChanged = () => box.Fill = Color.Transparent,
-            }.WithHoverFill(box, t);
         }
-    }
-}
-
-internal static class PressableChipExtensions
-{
-    // Small helper so the stepper chip recolours on hover without a bespoke state class.
-    public static Pressable WithHoverFill(this Pressable p, DecoratedBox box, ThemeData t)
-    {
-        p.OnStateChanged = () => box.Fill = p.Hovered ? t.ControlHover : t.Fill2;
-        return p;
     }
 }

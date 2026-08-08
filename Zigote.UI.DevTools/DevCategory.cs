@@ -1,3 +1,5 @@
+using Zigote.UI.Theme;
+
 namespace Zigote.UI.DevTools;
 
 /// <summary>
@@ -21,6 +23,17 @@ public enum DevCategory
 
 public static class DevCategoryExtensions
 {
+    /// <summary>Material icon for the category's view-switcher segment (the label is its tooltip).</summary>
+    public static string Icon(this DevCategory c)
+    {
+        return c switch {
+            DevCategory.Generic => Icons.Dashboard,
+            DevCategory.Ui2D => Icons.Layers,
+            DevCategory.Render3D => Icons.Cube,
+            _ => Icons.Category,
+        };
+    }
+
     public static string Label(this DevCategory c)
     {
         return c switch {

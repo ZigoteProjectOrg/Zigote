@@ -6,8 +6,8 @@ using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
-
 using Zigote.UI.Host;
+
 namespace Zigote.UI.DevTools.Panels;
 
 /// <summary>
@@ -20,8 +20,12 @@ public sealed class SemanticsPanel(App app) : IDevPanel
     private const double RefreshMs = 200.0;
 
     private readonly DevKeyValue _count = new("Nodes");
-    private readonly Column _list = new(crossAxisAlignment: CrossAxisAlignment.Stretch,
-        mainAxisSize: MainAxisSize.Min);
+
+    private readonly Column _list = new(
+        crossAxisAlignment: CrossAxisAlignment.Stretch,
+        mainAxisSize: MainAxisSize.Min
+    );
+
     private long _last;
 
     public string Title => "Semantics";
@@ -29,8 +33,10 @@ public sealed class SemanticsPanel(App app) : IDevPanel
 
     public Widget Build(BuildContext context)
     {
-        return new Column(crossAxisAlignment: CrossAxisAlignment.Stretch,
-            mainAxisSize: MainAxisSize.Min) {
+        return new Column(
+            crossAxisAlignment: CrossAxisAlignment.Stretch,
+            mainAxisSize: MainAxisSize.Min
+        ) {
             Children = {
                 new DevSectionHeader("Accessibility tree"),
                 _count,
@@ -61,7 +67,12 @@ public sealed class SemanticsPanel(App app) : IDevPanel
         var n = 0;
         if (root is not null)
             foreach (var child in root.Children)
-                n += Flatten(child, 0, rows, t);
+                n += Flatten(
+                    child,
+                    0,
+                    rows,
+                    t
+                );
 
         _count.Value = n.ToString();
         _count.ValueColor = t.Hint;
@@ -74,16 +85,28 @@ public sealed class SemanticsPanel(App app) : IDevPanel
         var focused = node.Flags.HasFlag(SemanticsFlags.Focused);
         var disabled = node.Flags.HasFlag(SemanticsFlags.Disabled);
         var text = Describe(node);
-        rows.Add(new Padding(
-            EdgeInsets.Only(left: depth * 12f),
-            new Label(text, DevKit.CaptionSize,
-                focused ? t.Primary : disabled ? t.Hint.WithAlpha(0.6f) : t.OnSurface) {
-                MaxLines = 1,
-                Overflow = TextOverflow.Ellipsis,
-            }));
+        rows.Add(
+            new Padding(
+                EdgeInsets.Only(depth * 12f),
+                new Label(
+                    text,
+                    DevKit.CaptionSize,
+                    focused ? t.Primary : disabled ? t.Hint.WithAlpha(0.6f) : t.OnSurface
+                ) {
+                    MaxLines = 1,
+                    Overflow = TextOverflow.Ellipsis,
+                }
+            )
+        );
 
         var count = 1;
-        foreach (var child in node.Children) count += Flatten(child, depth + 1, rows, t);
+        foreach (var child in node.Children)
+            count += Flatten(
+                child,
+                depth + 1,
+                rows,
+                t
+            );
         return count;
     }
 

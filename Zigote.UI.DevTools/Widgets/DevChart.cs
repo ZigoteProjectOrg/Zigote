@@ -1,4 +1,5 @@
 using Zigote.Core;
+using Zigote.UI.Adwaita;
 using Zigote.UI.Charts;
 using Zigote.UI.Charts.Scales;
 using Zigote.UI.Theme;
@@ -21,7 +22,10 @@ public static class DevChart
             XScale = new LinearScale { Nice = false },
             YScale = new LinearScale { Min = 0 },
             XAxis = { Show = false },
-            YAxis = { Show = showYAxis, TickTarget = 3 },
+            YAxis = {
+                Show = showYAxis,
+                TickTarget = 3,
+            },
         };
     }
 }
@@ -81,13 +85,41 @@ public sealed class DevChartCard : StatelessWidget
     protected override Widget Build(BuildContext context)
     {
         var t = ThemeProvider.Of(context);
+        var p = AdwPalette.For(t);
         Chart.Theme = t;
-        var col = new Column(crossAxisAlignment: CrossAxisAlignment.Stretch,
-            mainAxisSize: MainAxisSize.Min);
+        var col = new Column(
+            crossAxisAlignment: CrossAxisAlignment.Stretch,
+            mainAxisSize: MainAxisSize.Min
+        );
         if (_title is not null)
-            col.Children.Add(new Padding(EdgeInsets.Only(bottom: 2f),
-                new Label(_title, DevKit.CaptionSize, t.Hint) { MaxLines = 1 }));
-        col.Children.Add(new SizedBox(height: _height, child: Chart));
-        return new Padding(EdgeInsets.Symmetric(0f, 3f), col);
+            col.Children.Add(
+                new Padding(
+                    EdgeInsets.Only(bottom: Spacing.Xs),
+                    new Label(_title, AdwTypography.CaptionHeading, p.DimLabel) { MaxLines = 1 }
+                )
+            );
+        // The chart gets more vertical room when the pane it lands in is wide (fullscreen panel or a
+        // torn-off window) and stays compact in a narrow dock — the class is that of the width this
+        // card is actually given, not the window's.
+        col.Children.Add(
+            new AdaptiveBuilder(
+                (_, cls) => new SizedBox(
+                    height: cls switch {
+                        WindowSizeClass.Expanded => _height * 1.5f,
+                        WindowSizeClass.Medium => _height * 1.2f,
+                        _ => _height,
+                    },
+                    child: Chart
+                ),
+                0f
+            )
+        );
+
+        // No card of its own: DevPage folds a chart and the rows that follow it into ONE boxed list,
+        // so a section reads as a single object instead of two stacked boxes.
+        return new Padding(
+            EdgeInsets.Symmetric(DevKit.RowInset, Spacing.Md),
+            col
+        );
     }
 }

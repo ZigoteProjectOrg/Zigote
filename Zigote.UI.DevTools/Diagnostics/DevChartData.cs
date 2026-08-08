@@ -1,6 +1,8 @@
+using Zigote.Core.State;
 using Zigote.UI.Debug;
-
 using Zigote.UI.Host;
+using Zigote.UI.Widgets;
+
 namespace Zigote.UI.DevTools.Diagnostics;
 
 /// <summary>
@@ -27,6 +29,7 @@ public static class DevChartData
     private static int _lastGen0, _lastGen1, _lastGen2;
     private static long _lastAllocBytes;
     private static ulong _lastFrameIndex;
+    private static long _lastRuns, _lastRebuilds;
 
     // ── Fast rings (0.25 s cadence, 60 s window) ─────────────────────────────
     public static TimeSeriesRing Fps { get; } = new(240);
@@ -37,6 +40,12 @@ public static class DevChartData
     public static TimeSeriesRing RenderPasses { get; } = new(240);
     public static TimeSeriesRing UiCommands { get; } = new(240);
     public static TimeSeriesRing OverlayCommands { get; } = new(240);
+
+    /// <summary>Reaction bodies run per second — computed recomputes plus effect runs.</summary>
+    public static TimeSeriesRing ReactionRuns { get; } = new(240);
+
+    /// <summary><see cref="Watch" /> subtree swaps per second — the UI-visible share of the above.</summary>
+    public static TimeSeriesRing WatchRebuilds { get; } = new(240);
 
     // ── Slow rings (1 s cadence, 2 min window) ───────────────────────────────
     public static TimeSeriesRing WorkingSetMb { get; } = new(120);
@@ -83,11 +92,20 @@ public static class DevChartData
         _fastTimer += dt;
         if (_fastTimer >= FastPeriod)
         {
+            var elapsed = _fastTimer;
             _fastTimer = 0f;
             Fps.Push(Time, DebugStats.Fps);
             FrameMs.Push(Time, DebugStats.FrameMs);
             UiCommands.Push(Time, DebugStats.UiPaintCommands);
             OverlayCommands.Push(Time, DebugStats.OverlayPaintCommands);
+
+            // Rates, not totals: a monotonic counter drawn as a line only ever slopes upward.
+            var runs = Reactive.Runs;
+            var rebuilds = Watch.Rebuilds;
+            ReactionRuns.Push(Time, (float)((runs - _lastRuns) / elapsed));
+            WatchRebuilds.Push(Time, (float)((rebuilds - _lastRebuilds) / elapsed));
+            _lastRuns = runs;
+            _lastRebuilds = rebuilds;
 
             if (DebugStats.EngineOk)
             {

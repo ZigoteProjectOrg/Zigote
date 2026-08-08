@@ -10,8 +10,8 @@ using Zigote.UI.DevTools.Widgets;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Layout;
-
 using Zigote.UI.Host;
+
 namespace Zigote.UI.DevTools.Panels;
 
 /// <summary>
@@ -75,12 +75,29 @@ public sealed class OverviewPanel : IDevPanel
         fpsArea.Opacity = 0.2f;
         fpsArea.Interpolation = ChartInterpolation.Linear;
         fps.Marks.Add(fpsArea);
-        fps.Marks.Add(new RuleMark { Y = 60, Label = "60", Color = Green.WithAlpha(0.55f), Dash = 4f });
-        fps.Marks.Add(new RuleMark { Y = 30, Label = "30", Color = Orange.WithAlpha(0.55f), Dash = 4f });
+        fps.Marks.Add(
+            // No labels: the y-axis already numbers the scale, and a rule label lands on top of it.
+            new RuleMark {
+                Y = 60,
+                Color = Green.WithAlpha(0.55f),
+                Dash = 4f,
+            }
+        );
+        fps.Marks.Add(
+            new RuleMark {
+                Y = 30,
+                Color = Orange.WithAlpha(0.55f),
+                Dash = 4f,
+            }
+        );
         _fpsCard = new DevChartCard(fps, 78f, 60f);
 
         var cpu = DevChart.Sparkline();
-        cpu.YScale = new LinearScale { Min = 0, Max = 100, Nice = false };
+        cpu.YScale = new LinearScale {
+            Min = 0,
+            Max = 100,
+            Nice = false,
+        };
         var cpuArea = AreaMark.Of(DevChartData.CpuPct, s => s.Time, s => s.Value);
         cpuArea.Name = "cpu %";
         cpuArea.Color = Blue;
@@ -106,19 +123,35 @@ public sealed class OverviewPanel : IDevPanel
 
     public Widget Build(BuildContext context)
     {
-        return new Column(crossAxisAlignment: CrossAxisAlignment.Stretch,
-            mainAxisSize: MainAxisSize.Min) {
+        return new Column(
+            crossAxisAlignment: CrossAxisAlignment.Stretch,
+            mainAxisSize: MainAxisSize.Min
+        ) {
             Children = {
                 new DevSectionHeader("Frame"),
-                _fpsCard, _fps, _frame, _range,
+                _fpsCard,
+                _fps,
+                _frame,
+                _range,
                 new DevSectionHeader("CPU"),
-                _cpuCard, _cpu,
+                _cpuCard,
+                _cpu,
                 new DevSectionHeader("Memory"),
-                _memCard, _ws, _heap,
+                _memCard,
+                _ws,
+                _heap,
                 new DevSectionHeader("Renderer"),
-                _backend, _surface, _draws, _tris, _visible, _idle,
+                _backend,
+                _surface,
+                _draws,
+                _tris,
+                _visible,
+                _idle,
                 new DevSectionHeader("Health"),
-                _errors, _warnings, _info, _uptime,
+                _errors,
+                _warnings,
+                _info,
+                _uptime,
             },
         };
     }
@@ -154,7 +187,9 @@ public sealed class OverviewPanel : IDevPanel
 
         _backend.Value = _backendText;
         _surface.Value = engine is not null
-            ? _tSurface.Update($"{engine.LogicalWidth:F0}×{engine.LogicalHeight:F0} @{engine.Scale:0.#}x")
+            ? _tSurface.Update(
+                $"{engine.LogicalWidth:F0}×{engine.LogicalHeight:F0} @{engine.Scale:0.#}x"
+            )
             : "—";
 
         if (DebugStats.EngineOk)
@@ -171,7 +206,9 @@ public sealed class OverviewPanel : IDevPanel
 
             _tris.Value = _trisText;
             _visible.Value = _tVisible.Update($"{s.VisibleObjects}");
-            _idle.Text = DevChartData.Rendering3D ? "" : "3D idle — counters show the last rendered frame";
+            _idle.Text = DevChartData.Rendering3D
+                ? ""
+                : "3D idle — counters show the last rendered frame";
             _idle.Color = theme.Hint;
         }
         else
