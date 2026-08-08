@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <AssemblyName>Zigote.Reactive.Benchmark</AssemblyName>
+        <RootNamespace>Zigote.ReactiveBench</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="BenchmarkDotNet" Version="0.15.8"/>
+        <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="5.3.0">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0"/>
+        <!-- Benchmark-only: the head-to-head baseline in Comparison.cs. Never referenced by shipped code. -->
+        <PackageReference Include="SignalsDotnet" Version="2.3.1"/>
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Zigote.Core\Zigote.Core.csproj"/>
+    </ItemGroup>
+</Project>

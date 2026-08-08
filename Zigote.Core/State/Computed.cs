@@ -15,27 +15,36 @@ namespace Zigote.Core.State;
 ///         minimal-recompute (an intermediate whose value is unchanged does not wake its observers).
 ///         Dispose to detach permanently. An optional comparer controls when the value counts as changed.
 ///     </para>
+///     <para>
+///         <b>A throwing compute is cached like a value:</b> the exception is stored and rethrown on every
+///         read until a dependency changes, instead of re-running the failing body per read — otherwise a
+///         computed that throws inside a paint binding becomes a hidden per-frame recompute. A cycle (a
+///         computed read while it is recomputing) throws instead of quietly yielding a stale value.
+///     </para>
 /// </summary>
-public sealed class Computed<T> : Reaction, IReadableSignal<T>, IReactiveSource, IDisposable
+public sealed class Computed<T> : Reaction, IReadableSignal<T>, IDisposable
 {
     private readonly Func<T> _compute;
+    private readonly Delegate _named; // what to name this computed after — see Reactive.Describe
     private readonly IEqualityComparer<T> _equals;
     private readonly ISignal[] _forced;
-    private HashSet<Reaction>? _observers;
+    private System.Runtime.ExceptionServices.ExceptionDispatchInfo? _error;
     private T _value = default!;
-    private long _version;
 
-    internal Computed(Func<T> compute, IEqualityComparer<T>? equals, ISignal[] forced)
+    internal Computed(Func<T> compute, IEqualityComparer<T>? equals, ISignal[] forced,
+        Delegate? named = null)
     {
+        Reactive.AssertUnboxedEquality(equals);
         _compute = compute;
+        _named = named ?? compute;
         _equals = equals ?? EqualityComparer<T>.Default;
         _forced = forced;
         // Eager first compute (unobserved — records deps without subscribing), so `Computed.From` yields
         // a ready value like the previous API. Recomputes are lazy thereafter.
-        lock (Reactive.Gate)
+        using (Reactive.Hold())
         {
             State = NodeState.Dirty;
-            Refresh();
+            Refresh(); // a failure here is cached, not thrown: errors are always delivered at read time
         }
     }
 
@@ -43,10 +52,11 @@ public sealed class Computed<T> : Reaction, IReadableSignal<T>, IReactiveSource,
     {
         get
         {
-            lock (Reactive.Gate)
+            using (Reactive.Hold())
             {
                 Reactive.EvalContext?.AddSource(this);
                 Refresh();
+                _error?.Throw();
                 return _value;
             }
         }
@@ -55,87 +65,119 @@ public sealed class Computed<T> : Reaction, IReadableSignal<T>, IReactiveSource,
     /// <inheritdoc />
     public event Action? Invalidated;
 
+    /// <summary>
+    ///     Raised after a recompute produced a new value — a <b>raw</b> hook fired from inside the
+    ///     recompute, not a settled view of the graph: mid-cascade it can see intermediate values that no
+    ///     effect ever observes. For a coalesced, glitch-free view use
+    ///     <see cref="ReactiveExtensions.Observe" /> or an <see cref="Effect" />.
+    /// </summary>
     public event Action<T>? Changed;
 
-    internal override bool IsWatched => _observers is { Count: > 0 };
-
-    long IReactiveSource.Version => _version;
-
-    void IReactiveSource.Track()
+    /// <summary>0 → 1 observers: became watched, so subscribe to our own sources.</summary>
+    private protected override void OnObserved()
     {
-        Reactive.EvalContext?.AddSource(this);
+        Connect();
     }
 
-    void IReactiveSource.AddObserver(Reaction r)
+    /// <summary>1 → 0 observers: unsubscribe (cascades up the cone to source computeds).</summary>
+    private protected override void OnUnobserved()
     {
-        var was = _observers is { Count: > 0 };
-        (_observers ??= []).Add(r);
-        if (!was) Connect(); // 0 → 1: became watched, subscribe to sources
+        DetachFromSources();
     }
 
-    void IReactiveSource.RemoveObserver(Reaction r)
+    /// <summary>
+    ///     <see cref="Reaction.Refresh" />, plus the cycle check: a read that re-enters a computed still
+    ///     executing its own body is a dependency cycle — fail loudly (cf. preact's "Cycle detected")
+    ///     rather than handing back the half-built previous value.
+    /// </summary>
+    internal override void Refresh()
     {
-        if (_observers == null) return;
-        if (_observers.Remove(r) && _observers.Count == 0)
-            DetachFromSources(); // 1 → 0: no longer watched, unsubscribe (cascades to source computeds)
-    }
-
-    void IReactiveSource.Refresh()
-    {
-        Refresh();
+        if (IsRunning)
+            throw new InvalidOperationException(
+                "Reactive: cycle detected — a computed was read while it was still computing " +
+                "(it depends, directly or through other computeds, on itself)."
+            );
+        base.Refresh();
     }
 
     /// <summary>Read the current value WITHOUT subscribing (does not become a dependency of the reader).</summary>
     public T Peek()
     {
-        lock (Reactive.Gate)
+        using (Reactive.Hold())
         {
             Refresh();
+            _error?.Throw();
             return _value;
         }
     }
 
     public void Dispose()
     {
-        lock (Reactive.Gate)
+        using (Reactive.Hold())
         {
             if (Disposed) return;
             Disposed = true;
             DetachFromSources();
-            _observers?.Clear();
+            ClearObservers();
         }
     }
 
     private protected override void OnScheduled()
     {
         // A computed does not schedule itself; it propagates "maybe-dirty" to its own observers.
-        if (_observers == null) return;
-        foreach (var o in _observers) o.MarkStale(NodeState.Check);
+        MarkObservers(NodeState.Check);
+    }
+
+    private protected override string DescribeBody()
+    {
+        return Reactive.Describe(_named);
     }
 
     private protected override void Execute()
     {
-        var next = _compute();
+        var hadError = _error != null;
+        T next;
+        try
+        {
+            next = _compute();
+            _error = null;
+        }
+        catch (Exception ex)
+        {
+            // Cache the failure and propagate it as a change: observers go Dirty, re-read, and hit the
+            // rethrow — the same shape as a value change, so nothing recomputes until a source moves.
+            _error = System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex);
+            TrackForced();
+            Version++;
+            MarkObservers(NodeState.Dirty);
+            Reactive.UntrackedInvoke(Invalidated);
+            return;
+        }
 
-        // Always-subscribed extras: track them even if this run didn't read them.
-        for (var i = 0; i < _forced.Length; i++)
-            if (_forced[i] is IReactiveSource src)
-                src.Track();
+        TrackForced();
 
-        if (_equals.Equals(_value, next)) return;
+        // Recovering from a cached error counts as a change even if the value matches the pre-error one:
+        // observers were told it changed when it threw, so they must be told it is readable again.
+        if (!hadError && _equals.Equals(_value, next)) return;
 
         _value = next;
-        _version++;
+        Version++;
 
         // Our value really changed → observers must recompute (they are already ≥Check from the cascade).
-        if (_observers != null)
-            foreach (var o in _observers)
-                o.MarkStale(NodeState.Dirty);
+        MarkObservers(NodeState.Dirty);
 
         // Handlers run inside this computed's own tracked Execute — suspend tracking so their reads
         // don't become phantom dependencies of it.
         Reactive.UntrackedInvoke(Changed, next);
         Reactive.UntrackedInvoke(Invalidated);
+    }
+
+    /// <summary>Always-subscribed extras: track them even if this run didn't read them (or threw).</summary>
+    private void TrackForced()
+    {
+        for (var i = 0; i < _forced.Length; i++)
+            if (_forced[i] is Source src)
+                src.Track();
     }
 }
 
@@ -165,6 +207,13 @@ public static class Computed
     public static Computed<TResult> From<TSource, TResult>(Signal<TSource> source,
         Func<TSource, TResult> map)
     {
-        return new Computed<TResult>(() => map(source.Value), null, []);
+        // Named after `map` — the closure below is declared here, so every mapped computed in the app
+        // would otherwise pile into one "Computed.From" row in the diagnostics table.
+        return new Computed<TResult>(
+            () => map(source.Value),
+            null,
+            [],
+            map
+        );
     }
 }

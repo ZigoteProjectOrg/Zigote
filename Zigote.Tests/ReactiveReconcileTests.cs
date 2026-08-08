@@ -17,10 +17,11 @@ public class ReactiveReconcileTests
         var a = new Signal<int>(1);
         var runs = 0;
         using var c = Computed.From(() =>
-        {
-            runs++;
-            return a.Value + a.Value;
-        });
+            {
+                runs++;
+                return a.Value + a.Value;
+            }
+        );
         using var live = c.Observe(() => { });
 
         a.Value = 2;
@@ -37,10 +38,11 @@ public class ReactiveReconcileTests
         var twice = new Signal<bool>(true);
         var runs = 0;
         using var c = Computed.From(() =>
-        {
-            runs++;
-            return twice.Value ? a.Value + a.Value : a.Value;
-        });
+            {
+                runs++;
+                return twice.Value ? a.Value + a.Value : a.Value;
+            }
+        );
         using var live = c.Observe(() => { });
 
         twice.Value = false;

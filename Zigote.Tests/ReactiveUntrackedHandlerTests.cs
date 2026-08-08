@@ -19,10 +19,11 @@ public class ReactiveUntrackedHandlerTests
         var other = new Signal<int>(100);
         var runs = 0;
         using var doubled = Computed.From(() =>
-        {
-            runs++;
-            return a.Value * 2;
-        });
+            {
+                runs++;
+                return a.Value * 2;
+            }
+        );
         doubled.Changed += _ => { _ = other.Value; }; // fires inside the tracked recompute
         using var live = doubled.Observe(() => { });
 
@@ -47,10 +48,12 @@ public class ReactiveUntrackedHandlerTests
 
         var runs = 0;
         using var eff = new Effect(() =>
-        {
-            runs++;
-            target.Value = trigger.Value; // the write fires Changed inside the effect's tracked body
-        });
+            {
+                runs++;
+                target.Value =
+                    trigger.Value; // the write fires Changed inside the effect's tracked body
+            }
+        );
         Assert.Equal(1, runs);
 
         trigger.Value = 1;
@@ -67,10 +70,11 @@ public class ReactiveUntrackedHandlerTests
         var other = new Signal<int>(0);
         var fires = 0;
         using var sub = s.Observe(() =>
-        {
-            fires++;
-            _ = other.Value;
-        });
+            {
+                fires++;
+                _ = other.Value;
+            }
+        );
 
         s.Value = 1;
         Assert.Equal(1, fires);

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>Zigote.Reactive</RootNamespace>
+        <AssemblyName>Zigote.Reactive.R3</AssemblyName>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Zigote.Core\Zigote.Core.csproj"/>
+        <ProjectReference Include="..\Zigote.Preferences\Zigote.Preferences.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="R3" Version="1.3.1"/>
+    </ItemGroup>
+</Project>

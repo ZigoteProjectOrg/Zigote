@@ -37,10 +37,11 @@ public class ReactiveAllocationTests
         var s = new Signal<int>(0);
         var toggle = 0;
         AllocGuard.AssertZeroAlloc(() =>
-        {
-            toggle ^= 1;
-            s.Value = toggle;
-        });
+            {
+                toggle ^= 1;
+                s.Value = toggle;
+            }
+        );
     }
 
     [Fact]
@@ -59,10 +60,11 @@ public class ReactiveAllocationTests
         using var e = new Effect(() => _sink = s.Value);
         var toggle = 0;
         AllocGuard.AssertZeroAlloc(() =>
-        {
-            toggle ^= 1;
-            s.Value = toggle;
-        });
+            {
+                toggle ^= 1;
+                s.Value = toggle;
+            }
+        );
     }
 
     [Fact]
@@ -73,10 +75,11 @@ public class ReactiveAllocationTests
         using var e = new Effect(() => _sink = doubled.Value); // makes `doubled` watched
         var toggle = 0;
         AllocGuard.AssertZeroAlloc(() =>
-        {
-            toggle ^= 1;
-            s.Value = toggle;
-        });
+            {
+                toggle ^= 1;
+                s.Value = toggle;
+            }
+        );
     }
 
     [Fact]
@@ -88,10 +91,11 @@ public class ReactiveAllocationTests
         using var e = new Effect(() => _sink = b.Value + c.Value);
         var toggle = 0;
         AllocGuard.AssertZeroAlloc(() =>
-        {
-            toggle ^= 1;
-            a.Value = toggle;
-        });
+            {
+                toggle ^= 1;
+                a.Value = toggle;
+            }
+        );
     }
 
     [Fact]
@@ -104,10 +108,11 @@ public class ReactiveAllocationTests
         using var e = new Effect(() => _sink = c3.Value);
         var toggle = 0;
         AllocGuard.AssertZeroAlloc(() =>
-        {
-            toggle ^= 1;
-            s.Value = toggle;
-        });
+            {
+                toggle ^= 1;
+                s.Value = toggle;
+            }
+        );
     }
 
     [Fact]
@@ -117,7 +122,7 @@ public class ReactiveAllocationTests
         var b = new Signal<int>(0);
         using var e = new Effect(() => _sink = a.Value + b.Value);
         var toggle = 0;
-        Action body = () =>
+        var body = () =>
         {
             toggle ^= 1;
             a.Value = toggle;
@@ -133,25 +138,44 @@ public class ReactiveAllocationTests
         // next. Zero-alloc as long as the returned cleanup doesn't capture (here it's a cached delegate);
         // a cleanup closure that captures per-run would allocate — that's caller-controlled, not the core.
         var s = new Signal<int>(0);
-        Action cleanup = () => { };
+        var cleanup = () => { };
         using var e = new Effect(() =>
-        {
-            _sink = s.Value;
-            return cleanup;
-        });
+            {
+                _sink = s.Value;
+                return cleanup;
+            }
+        );
         var toggle = 0;
         AllocGuard.AssertZeroAlloc(() =>
-        {
-            toggle ^= 1;
-            s.Value = toggle;
-        });
+            {
+                toggle ^= 1;
+                s.Value = toggle;
+            }
+        );
+    }
+
+    [Fact]
+    public void Deferred_effect_mark_and_drain_is_zero_alloc()
+    {
+        // The EffectAffinity.Deferred path: the write parks the effect in the shared queue and
+        // DrainDeferred runs it. Steady state must reuse the queue's capacity, not grow a list per frame.
+        var s = new Signal<int>(0);
+        using var e = new Effect(() => _sink = s.Value, EffectAffinity.Deferred);
+        var toggle = 0;
+        AllocGuard.AssertZeroAlloc(() =>
+            {
+                toggle ^= 1;
+                s.Value = toggle;
+                Reactive.DrainDeferred();
+            }
+        );
     }
 
     [Fact]
     public void Untracked_read_is_zero_alloc()
     {
         var s = new Signal<int>(5);
-        Func<int> read = () => s.Value; // cached once
+        var read = () => s.Value; // cached once
         AllocGuard.AssertZeroAlloc(() => _sink += Reactive.Untracked(read));
     }
 
@@ -163,10 +187,11 @@ public class ReactiveAllocationTests
         using var c = Computed.From(() => s.Value * 2);
         var toggle = 0;
         AllocGuard.AssertZeroAlloc(() =>
-        {
-            toggle ^= 1;
-            s.Value = toggle; // no observers → c not recomputed here
-            _sink += c.Value; // lazy read → version-sum verify + recompute
-        });
+            {
+                toggle ^= 1;
+                s.Value = toggle; // no observers → c not recomputed here
+                _sink += c.Value; // lazy read → version-sum verify + recompute
+            }
+        );
     }
 }
