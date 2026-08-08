@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>Zigote.Bloc</RootNamespace>
+        <AssemblyName>Zigote.Bloc</AssemblyName>
+    </PropertyGroup>
+
+    <!-- Zigote.Core only. A bloc that needed a logging package would push that package onto every
+         app using the pattern; failures go through the OnError hook instead. -->
+    <ItemGroup>
+        <ProjectReference Include="..\Zigote.Core\Zigote.Core.csproj"/>
+    </ItemGroup>
+</Project>
