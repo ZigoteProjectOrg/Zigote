@@ -43,7 +43,11 @@ public static class FileBrowserPlaces
 
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         Add("Home", home, Icons.Home);
-        Add("Desktop", Environment.GetFolderPath(Environment.SpecialFolder.Desktop), Icons.Computer);
+        Add(
+            "Desktop",
+            Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+            Icons.Computer
+        );
         Add(
             "Documents",
             Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
@@ -77,7 +81,8 @@ public static class FileBrowserPlaces
                         // see through it, so resolve links explicitly.
                         try
                         {
-                            if (Directory.ResolveLinkTarget(volume, true)?.FullName == "/") continue;
+                            if (Directory.ResolveLinkTarget(volume, true)?.FullName == "/")
+                                continue;
                         }
                         catch
                         {
@@ -91,7 +96,7 @@ public static class FileBrowserPlaces
             {
                 Add("File System", "/", Icons.Storage);
                 var user = Environment.UserName;
-                foreach (var root in (string[]) [$"/media/{user}", $"/run/media/{user}", "/mnt"])
+                foreach (var root in (string[])[$"/media/{user}", $"/run/media/{user}", "/mnt"])
                 {
                     if (!Directory.Exists(root)) continue;
                     foreach (var mount in Directory.GetDirectories(root))

@@ -116,7 +116,8 @@ internal sealed class LayoutPage : StatelessWidget
                     // 322px of boxes in a 302px card: the trailing Container would be silently
                     // squashed by the leftover width, breaking the very widget it demonstrates.
                     ? new Wrap(figures, spacing: 24, runSpacing: 24)
-                    : new Row(figures, spacing: 24))
+                    : new Row(figures, spacing: 24)
+                )
             ),
             Section(
                 "ColoredBox · DecoratedBox · ClipRect · Transform · ConstrainedBox",
@@ -124,7 +125,8 @@ internal sealed class LayoutPage : StatelessWidget
                     // 384px wide: the ConstrainedBox has a 96px minimum, so it wins over the
                     // remaining width and paints outside the card instead of shrinking.
                     ? new Wrap(boxes, spacing: 16, runSpacing: 16)
-                    : new Row(boxes, spacing: 16))
+                    : new Row(boxes, spacing: 16)
+                )
             ),
             Section(
                 "FractionallySizedBox · LayoutBuilder · SafeArea",
@@ -154,16 +156,17 @@ internal sealed class LayoutPage : StatelessWidget
                 // The column count follows the width available rather than a fixed desktop number;
                 // four columns leave 69px cells on a phone.
                 new AdaptiveBuilder((_, size) => GridView.Count(
-                    size == WindowSizeClass.Compact ? 3 : 4,
-                    [
-                        Swatch(Colors.Red, 8), Swatch(Colors.Amber, 8), Swatch(Colors.Green, 8),
-                        Swatch(Colors.Cyan, 8),
-                        Swatch(Colors.Pink, 8), Swatch(Colors.Lime, 8), Swatch(Colors.Brown, 8),
-                        Swatch(Colors.BlueGrey, 8),
-                    ],
-                    8,
-                    8
-                ))
+                        size == WindowSizeClass.Compact ? 3 : 4,
+                        [
+                            Swatch(Colors.Red, 8), Swatch(Colors.Amber, 8), Swatch(Colors.Green, 8),
+                            Swatch(Colors.Cyan, 8),
+                            Swatch(Colors.Pink, 8), Swatch(Colors.Lime, 8), Swatch(Colors.Brown, 8),
+                            Swatch(Colors.BlueGrey, 8),
+                        ],
+                        8,
+                        8
+                    )
+                )
             )
         );
     }

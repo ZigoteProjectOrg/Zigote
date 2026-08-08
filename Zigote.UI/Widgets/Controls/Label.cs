@@ -438,8 +438,10 @@ public class Label : RenderWidget
         // baseline ≈ top + font_size * 0.8
         var baseline = Bounds.Y + _fontSize * 0.8f;
 
-        // Clip when the rendered glyphs may bleed past the box (overflow or a multi-line cap).
-        var needsClip = _truncated || MaxLines is > 0;
+        // Clip only when the text genuinely overflows its box. A bare MaxLines cap on text that
+        // fits must NOT clip: glyph ink (side bearings, AA fringe) can extend a pixel or two past
+        // the summed advances, and hard-clipping at the measured width shaves the last glyph.
+        var needsClip = _truncated;
         if (needsClip) paint.AddClipStart(Bounds);
 
         paint.AddText(

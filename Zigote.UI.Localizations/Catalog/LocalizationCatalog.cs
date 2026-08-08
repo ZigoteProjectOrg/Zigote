@@ -1,6 +1,5 @@
 using System.Collections;
 using System.Collections.Concurrent;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.Localizations;
 

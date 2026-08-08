@@ -5,7 +5,6 @@ using Zigote.UI.TextShaping;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets.Overlays;
 using AppInstance = Zigote.UI.Host.App;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.Widgets.Controls;
 
@@ -68,7 +67,7 @@ public sealed class ContextMenu : RenderWidget, ITickerProvider
     {
         _app = app ?? AppInstance.Active ??
             throw new InvalidOperationException("No active App found.");
-        Items = [..items];
+        Items = [.. items];
         _enter = new AnimationController(Motion.Fast, this) { Curve = Curves.EaseOut };
         _enter.OnTick += MarkNeedsLayout;
     }

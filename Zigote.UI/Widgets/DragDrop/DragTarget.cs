@@ -1,6 +1,5 @@
 using Zigote.Core;
 using Zigote.Core.Paint;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.Widgets.DragDrop;
 
@@ -42,14 +41,44 @@ public class DragTarget<T> : Widget
     /// drops — each dropped path is delivered to <see cref="OnAccept" />.</summary>
     public bool AcceptExternalFiles { get; set; }
 
+    // Outgoing subtree kept alive until the incoming one has been built — see Rebuild.
+    private Widget? _retiring;
+
+    /// <summary>
+    ///     Swap in the child for the current hover state. This runs mid-drag, on every enter/leave,
+    ///     so it must not tear down anything the drag depends on:
+    ///     <list type="bullet">
+    ///         <item>
+    ///             A builder that returns the SAME widget (highlighting by mutating a retained
+    ///             frame, the cheapest way) is asking for a repaint, not a remount.
+    ///         </item>
+    ///         <item>
+    ///             Otherwise the incoming child is attached first and the outgoing one is retired
+    ///             only after the next Measure. A StatelessWidget builds its subtree lazily in
+    ///             Measure, so until then it has adopted nothing — detaching the old tree right
+    ///             here would take shared children (the dragged Draggable among them) with it, and
+    ///             App drops the pointer capture of anything it detaches, killing the drag.
+    ///         </item>
+    ///     </list>
+    /// </summary>
     private void Rebuild()
     {
-        var old = _child;
-        _child = Builder(_hovering);
+        var next = Builder(_hovering);
+        if (ReferenceEquals(next, _child))
+        {
+            MarkNeedsPaint();
+            return;
+        }
+
         if (Owner is not null)
         {
-            old.Detach();
+            _retiring ??= _child;
+            _child = next;
             _child.Attach(Owner, this);
+        }
+        else
+        {
+            _child = next;
         }
 
         MarkNeedsLayout();
@@ -58,6 +87,14 @@ public class DragTarget<T> : Widget
     public override Size Measure(Constraints c)
     {
         _size = _child.Measure(c);
+        // The new subtree exists and has adopted whatever it shares with the old one; retiring it
+        // now leaves those children in the live tree (Widget.Detach skips re-parented children).
+        if (_retiring is { } old)
+        {
+            _retiring = null;
+            if (!ReferenceEquals(old, _child)) old.Detach();
+        }
+
         return _size;
     }
 

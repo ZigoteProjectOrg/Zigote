@@ -1,5 +1,4 @@
 using AppInstance = Zigote.UI.Host.App;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.Material;
 

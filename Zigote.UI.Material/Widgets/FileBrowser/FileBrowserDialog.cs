@@ -233,7 +233,7 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
 
     private string ResolveStartDirectory()
     {
-        foreach (var candidate in (string?[]) [Options.StartDirectory, Options.LockRoot])
+        foreach (var candidate in (string?[])[Options.StartDirectory, Options.LockRoot])
         {
             if (string.IsNullOrEmpty(candidate)) continue;
             if (Directory.Exists(candidate)) return candidate;
@@ -264,7 +264,9 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
         static string LabelOf(FileDialogFilter f)
         {
             var exts = NormalizedExts(f);
-            return exts is null ? f.Name : $"{f.Name} ({string.Join(", ", exts.Select(e => "." + e))})";
+            return exts is null
+                ? f.Name
+                : $"{f.Name} ({string.Join(", ", exts.Select(e => "." + e))})";
         }
     }
 
@@ -301,7 +303,12 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
             body.Children.Insert(
                 0,
                 new Padding(
-                    new EdgeInsets(16f, 12f, 16f, 8f),
+                    new EdgeInsets(
+                        16f,
+                        12f,
+                        16f,
+                        8f
+                    ),
                     new Label(TitleText(), theme.FontSizeTitle, theme.OnSurface)
                 )
             );
@@ -378,14 +385,31 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
         if (!_compact)
         {
             nav.Children.Add(new SizedBox(190f, child: _search));
-            return new Padding(new EdgeInsets(10f, 0f, 10f, 6f), nav);
+            return new Padding(
+                new EdgeInsets(
+                    10f,
+                    0f,
+                    10f,
+                    6f
+                ),
+                nav
+            );
         }
 
         return new Padding(
-            new EdgeInsets(10f, 0f, 10f, 6f),
+            new EdgeInsets(
+                10f,
+                0f,
+                10f,
+                6f
+            ),
             new Column {
                 CrossAxisAlignment = CrossAxisAlignment.Stretch,
-                Children = { nav, new SizedBox(height: 6f), _search },
+                Children = {
+                    nav,
+                    new SizedBox(height: 6f),
+                    _search,
+                },
             }
         );
     }
@@ -409,7 +433,10 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
     {
         var listColumn = new Column {
             CrossAxisAlignment = CrossAxisAlignment.Stretch,
-            Children = { _header, new Expanded(_scroll) },
+            Children = {
+                _header,
+                new Expanded(_scroll),
+            },
         };
 
         // The list alone wants ~200pt of columns; adding a 156pt sidebar and a 220pt preview needs
@@ -484,7 +511,12 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
         if (Options.Kind == FileDialogKind.SaveFile)
             col.Children.Add(
                 new Padding(
-                    new EdgeInsets(16f, 10f, 16f, 0f),
+                    new EdgeInsets(
+                        16f,
+                        10f,
+                        16f,
+                        0f
+                    ),
                     new Row {
                         CrossAxisAlignment = CrossAxisAlignment.Center,
                         Children = {
@@ -520,9 +552,7 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
         }
 
         options.Children.Add(new SizedBox(14f));
-        options.Children.Add(
-            new Label(StatusText(), theme.FontSizeCaption, theme.TextMuted)
-        );
+        options.Children.Add(new Label(StatusText(), theme.FontSizeCaption, theme.TextMuted));
 
         var commit = new Row {
             // Only read in the stacked (phone) arm — the desktop arm copies these children into a
@@ -554,7 +584,17 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
             actions.Children.AddRange(options.Children);
             actions.Children.Add(new Spacer());
             actions.Children.AddRange(commit.Children);
-            col.Children.Add(new Padding(new EdgeInsets(16f, 10f, 16f, 12f), actions));
+            col.Children.Add(
+                new Padding(
+                    new EdgeInsets(
+                        16f,
+                        10f,
+                        16f,
+                        12f
+                    ),
+                    actions
+                )
+            );
             return col;
         }
 
@@ -572,7 +612,17 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
         stacked.Children.Add(new SizedBox(height: 8f));
         stacked.Children.Add(commit);
 
-        col.Children.Add(new Padding(new EdgeInsets(16f, 10f, 16f, 12f), stacked));
+        col.Children.Add(
+            new Padding(
+                new EdgeInsets(
+                    16f,
+                    10f,
+                    16f,
+                    12f
+                ),
+                stacked
+            )
+        );
         return col;
     }
 

@@ -24,15 +24,24 @@ public sealed class LayoutBuilder : RenderWidget
     {
         if (_child is null || _lastConstraints is not { } last || c != last)
         {
-            _child?.Detach();
             var bc = new BoxConstraints(
                 c.MinWidth,
                 c.MaxWidth,
                 c.MinHeight,
                 c.MaxHeight
             );
-            _child = _builder(BuildContext.Current, bc);
-            if (Owner is not null) _child.Attach(Owner, this);
+            var next = _builder(BuildContext.Current, bc);
+            // A builder that hands back the SAME widget is asking to be re-laid-out, not rebuilt.
+            // Detaching and re-attaching it would restart its animations and re-defer the build of
+            // any Watch inside it (Watch postpones swaps while the tree walk is running) — once per
+            // frame for the whole of a window-resize drag, which is what made resizing flicker.
+            if (!ReferenceEquals(next, _child))
+            {
+                _child?.Detach();
+                _child = next;
+                if (Owner is not null) _child.Attach(Owner, this);
+            }
+
             _lastConstraints = c;
         }
 

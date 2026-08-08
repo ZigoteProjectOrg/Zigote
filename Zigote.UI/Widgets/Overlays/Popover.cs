@@ -2,7 +2,6 @@ using Zigote.Core;
 using Zigote.Core.Paint;
 using Zigote.UI.Theme;
 using AppInstance = Zigote.UI.Host.App;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.Widgets.Overlays;
 
@@ -81,7 +80,10 @@ public sealed class Popover : Widget
         _safe = MediaQuery.Of(BuildContext.Current).Padding;
 
         // Leave room for the inset, the arrow, and the screen margins.
-        var maxW = MathF.Max(0f, _screen.Width - _safe.Horizontal - Margin * 2f - ContentInset * 2f);
+        var maxW = MathF.Max(
+            0f,
+            _screen.Width - _safe.Horizontal - Margin * 2f - ContentInset * 2f
+        );
         var maxH = MathF.Max(
             0f,
             _screen.Height - _safe.Vertical - Margin * 2f - ContentInset * 2f - ArrowDepth

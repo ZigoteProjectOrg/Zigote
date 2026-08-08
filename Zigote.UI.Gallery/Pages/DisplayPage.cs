@@ -113,8 +113,7 @@ internal sealed class DisplayPageState : WidgetState<DisplayPage>
     {
         const string message = "This is a tooltip";
 
-        return new AdaptiveBuilder(
-            (_, size) => new Tooltip(
+        return new AdaptiveBuilder((_, size) => new Tooltip(
                 message,
                 size == WindowSizeClass.Compact
                     ? new OutlinedButton(new Text("Tap for a tip"), () => Toast(message))

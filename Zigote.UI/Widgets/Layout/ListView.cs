@@ -14,9 +14,20 @@ namespace Zigote.UI.Widgets.Layout;
 /// </summary>
 public class ListView : Widget
 {
+    // Rows kept built on each side of the visible window, so a slow scroll doesn't rebuild the
+    // leading row every frame.
+    private const int Overscan = 4;
     private readonly List<Widget> _items = [];
     private readonly SmoothScroller _sy;
     private readonly Scrollbar _vbar = new();
+
+    // Builder mode: rows are materialized on demand into _built and dropped once they leave the
+    // window + overscan. _items stays empty.
+    private Func<int, Widget>? _builder;
+    private readonly Dictionary<int, Widget> _built = [];
+    private readonly List<int> _evicted = [];
+    private int _builderCount;
+    private float _lastInnerWidth = -1f;
     private Func<int, float>? _heightOf;
 
     private float _itemHeight = 36f;
@@ -26,6 +37,11 @@ public class ListView : Widget
     private float[] _offsets = [];
     private bool _offsetsDirty = true;
     private EdgeInsets _padding = EdgeInsets.Zero;
+
+    // Pending reveal-into-view row, applied in Layout once the scroll extent is known.
+    private int _revealIndex = -1;
+    private float _revealMargin;
+
     private ThemeData _theme = ThemeData.Dark;
     private Size _viewSize;
 
@@ -97,10 +113,33 @@ public class ListView : Widget
 
     public IReadOnlyList<Widget> Items => _items;
 
+    /// <summary>The current vertical scroll offset.</summary>
+    public float OffsetY
+    {
+        get => _sy.Offset;
+        set => _sy.JumpTo(value);
+    }
+
+    /// <summary>Maximum scrollable distance (content height − viewport height). 0 if it all fits.</summary>
+    public float MaxScrollExtentY => _sy.Max;
+
+    /// <summary>
+    ///     Fired each layout with (currentOffsetY, maxOffsetY) — use to drive infinite scroll /
+    ///     paging. The same seam <see cref="ScrollView.OnScrolled" /> offers, so a virtualised list
+    ///     and a plain scroll view page the same way.
+    /// </summary>
+    public Action<float, float>? OnScrolled { get; set; }
+
     private bool Variable => _heightOf is not null;
 
+    /// <summary>Row count — the builder's count in builder mode, else the materialized item count.</summary>
+    public int Count => _builder is not null ? _builderCount : _items.Count;
+
+    /// <summary>Width available to a row (viewport minus <see cref="Padding" />).</summary>
+    public float ViewportWidth => MathF.Max(0f, _viewSize.Width - _padding.Horizontal);
+
     private float ContentHeight =>
-        (Variable ? Offsets[_items.Count] : _items.Count * _itemHeight) + _padding.Vertical;
+        (Variable ? Offsets[Count] : Count * _itemHeight) + _padding.Vertical;
 
     private float[] Offsets
     {
@@ -112,18 +151,67 @@ public class ListView : Widget
     }
 
     /// <summary>
-    ///     Builds a list from an item count and item builder. This materializes
-    ///     every item eagerly (the underlying list still virtualizes measure/layout/paint to the
-    ///     viewport, so scrolling stays O(viewport)).
+    ///     Flutter's <c>ListView.builder</c>: rows are built on demand for the visible window only,
+    ///     so construction is O(viewport) too — a million-row list costs the same as a ten-row one.
+    ///     Rows leaving the window are detached and dropped, so any state they hold (hover, focus,
+    ///     a nested scroll offset) dies with them — keep row state in your model, not in the widget.
     /// </summary>
     public static ListView Builder(int itemCount, Func<int, Widget> itemBuilder,
         double? itemExtent = null)
     {
         var lv = new ListView(itemExtent: itemExtent);
-        var items = new List<Widget>(Math.Max(0, itemCount));
-        for (var i = 0; i < itemCount; i++) items.Add(itemBuilder(i));
-        lv.SetItems(items);
+        lv.SetBuilder(itemCount, itemBuilder);
         return lv;
+    }
+
+    /// <summary>
+    ///     Switch the list into builder mode — see <see cref="Builder" />. Call again to change the
+    ///     count or the builder (e.g. after a filter); already-built rows are dropped.
+    /// </summary>
+    public void SetBuilder(int itemCount, Func<int, Widget> itemBuilder, bool keepScroll = false)
+    {
+        _items.Clear();
+        DropBuilt();
+        _builder = itemBuilder;
+        _builderCount = Math.Max(0, itemCount);
+        InvalidateExtents();
+        if (!keepScroll) _sy.JumpTo(0f);
+    }
+
+    /// <summary>Row <paramref name="i" />, built and attached on first use in builder mode.</summary>
+    private Widget ItemAt(int i)
+    {
+        if (_builder is null) return _items[i];
+        if (_built.TryGetValue(i, out var w)) return w;
+
+        w = _builder(i);
+        _built[i] = w;
+        if (Owner is not null) w.Attach(Owner, this);
+        // Measure here so a row first reached from Layout/Paint (a scroll that outran the measure
+        // pass) still has a size this frame instead of painting as a zero box.
+        w.Measure(new Constraints(maxWidth: ViewportWidth, maxHeight: Extent(i)));
+        return w;
+    }
+
+    private void DropBuilt()
+    {
+        foreach (var w in _built.Values) w.Detach();
+        _built.Clear();
+    }
+
+    /// <summary>Drop built rows outside the window — the whole point of builder mode.</summary>
+    private void EvictOutside(int first, int last)
+    {
+        if (_built.Count == 0) return;
+        _evicted.Clear();
+        foreach (var (i, _) in _built)
+            if (i < first - Overscan || i > last + Overscan)
+                _evicted.Add(i);
+        foreach (var i in _evicted)
+        {
+            _built[i].Detach();
+            _built.Remove(i);
+        }
     }
 
     /// <summary>
@@ -133,22 +221,88 @@ public class ListView : Widget
     /// </summary>
     public void SetItems(IEnumerable<Widget> items, bool keepScroll = true)
     {
+        LeaveBuilderMode();
+        var previous = _items.ToArray();
         _items.Clear();
         _items.AddRange(items);
+        // Attach the incoming set before retiring the outgoing one, so a row present in both is
+        // re-parented rather than torn down (the same order Watch.Apply uses).
+        if (Owner is not null)
+            foreach (var w in _items)
+                w.Attach(Owner, this);
+        Retire(previous);
         InvalidateExtents();
         if (!keepScroll) _sy.JumpTo(0f);
     }
 
     public void AddItem(Widget item)
     {
+        LeaveBuilderMode();
         _items.Add(item);
+        // Rows added after the list itself was attached would otherwise stay ownerless: no Watch
+        // inside them ever starts, and anything that needs the App — a Draggable, which refuses to
+        // begin a drag without an Owner — silently does nothing.
+        if (Owner is not null) item.Attach(Owner, this);
         InvalidateExtents();
     }
 
     public void Clear()
     {
+        LeaveBuilderMode();
+        var previous = _items.ToArray();
         _items.Clear();
+        Retire(previous);
         InvalidateExtents();
+    }
+
+    /// <summary>Detach rows that left the list and were not re-adopted by the incoming set.</summary>
+    private void Retire(Widget[] previous)
+    {
+        if (previous.Length == 0) return;
+        var kept = _items.Count > 0 ? new HashSet<Widget>(_items) : null;
+        foreach (var w in previous)
+            if (ReferenceEquals(w.Parent, this) && kept?.Contains(w) != true)
+                w.Detach();
+    }
+
+    private void LeaveBuilderMode()
+    {
+        if (_builder is null) return;
+        DropBuilt();
+        _builder = null;
+        _builderCount = 0;
+    }
+
+    /// <summary>
+    ///     Scroll (smoothly) so row <paramref name="index" /> is in view, with
+    ///     <paramref name="margin" /> px of slack. Deferred to the next <see cref="Layout" /> so it
+    ///     lands correctly even when the row only exists because the list just grew.
+    /// </summary>
+    public void EnsureVisible(int index, float margin = 8f)
+    {
+        _revealIndex = index;
+        _revealMargin = margin;
+        MarkNeedsLayout();
+    }
+
+    private void ApplyPendingReveal()
+    {
+        var i = _revealIndex;
+        _revealIndex = -1;
+        if (i < 0 || i >= Count || _viewSize.Height <= 0f) return;
+
+        var top = Top(i) - _revealMargin;
+        var bottom = Top(i) + Extent(i) + _revealMargin;
+        var cur = _sy.Offset;
+        if (top < cur) ScrollTo(top);
+        else if (bottom > cur + _viewSize.Height) ScrollTo(bottom - _viewSize.Height);
+        return;
+
+        void ScrollTo(float y)
+        {
+            if (Smooth) _sy.AnimateTo(y);
+            else _sy.JumpTo(y);
+        }
     }
 
     /// <summary>Discard the cached row-offset table — call after changing variable row heights in place.</summary>
@@ -168,7 +322,7 @@ public class ListView : Widget
             return;
         }
 
-        var n = _items.Count;
+        var n = Count;
         if (_offsets.Length != n + 1) _offsets = new float[n + 1];
         var acc = 0f;
         for (var i = 0; i < n; i++)
@@ -193,19 +347,34 @@ public class ListView : Widget
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        EnsureOffsets();
 
         // On an unbounded axis (e.g. inside a parent ScrollView) size to content rather than infinity —
         // an infinite size poisons flex layout (∞ − ∞ → NaN) and crashes paint.
         var w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 240f;
+        // Width first, and before the offset table: a HeightOf that measures wrapped text (or a grid
+        // row's cell height) is width-dependent, so a resize has to rebuild the table.
+        // Publish the width through _viewSize before EnsureOffsets so HeightOf can read ViewportWidth.
+        _viewSize = new Size(c.Constrain(new Size(w, 0f)).Width, _viewSize.Height);
+        var innerW = ViewportWidth;
+        if (MathF.Abs(innerW - _lastInnerWidth) > 0.01f)
+        {
+            _lastInnerWidth = innerW;
+            _offsetsDirty = true;
+        }
+
+        EnsureOffsets();
         var h = float.IsFinite(c.MaxHeight) ? c.MaxHeight : ContentHeight;
         _viewSize = c.Constrain(new Size(w, h));
 
         // Measure only the visible window — the whole point of virtualization (was O(count)).
-        var innerW = MathF.Max(0f, _viewSize.Width - _padding.Horizontal);
+        // The `i < Count` re-check (here and in Layout/Paint/HitTest below) tolerates the
+        // item list changing under the loop: a row's Measure or the OnScrolled seam can run app
+        // code that calls SetItems (load-more reconcile). SetItems marks layout, so the truncated
+        // pass is repaired next frame instead of indexing out of range.
         var (first, last) = VisibleRange();
-        for (var i = first; i <= last; i++)
-            _items[i].Measure(new Constraints(maxWidth: innerW, maxHeight: Extent(i)));
+        for (var i = first; i <= last && i < Count; i++)
+            ItemAt(i).Measure(new Constraints(maxWidth: innerW, maxHeight: Extent(i)));
+        EvictOutside(first, last);
         return _viewSize;
     }
 
@@ -219,10 +388,12 @@ public class ListView : Widget
         );
         _sy.Max = MathF.Max(0f, ContentHeight - _viewSize.Height);
         _sy.Reclamp();
+        ApplyPendingReveal();
+        OnScrolled?.Invoke(_sy.Offset, _sy.Max);
 
         var (first, last) = VisibleRange();
-        for (var i = first; i <= last; i++)
-            _items[i].Layout(
+        for (var i = first; i <= last && i < Count; i++)
+            ItemAt(i).Layout(
                 new Offset(
                     origin.X + _padding.Left,
                     origin.Y + _padding.Top + Top(i) - _sy.Offset
@@ -234,8 +405,8 @@ public class ListView : Widget
     {
         paint.AddClipStart(Bounds);
         var (first, last) = VisibleRange();
-        for (var i = first; i <= last; i++)
-            _items[i].Paint(paint);
+        for (var i = first; i <= last && i < Count; i++)
+            ItemAt(i).Paint(paint);
         paint.AddClipEnd();
 
         _vbar.PaintVertical(
@@ -251,7 +422,7 @@ public class ListView : Widget
     /// <summary>Index of the row containing content-space vertical position <paramref name="y" />.</summary>
     private int IndexAt(float y)
     {
-        var n = _items.Count;
+        var n = Count;
         if (!Variable)
             return Math.Clamp((int)(y / _itemHeight), 0, n - 1);
 
@@ -277,7 +448,7 @@ public class ListView : Widget
 
     private (int First, int Last) VisibleRange()
     {
-        var n = _items.Count;
+        var n = Count;
         if (n == 0) return (0, -1);
         // Row tops are padding-relative, so shift the viewport into that space.
         var top = _sy.Offset - _padding.Top;
@@ -297,9 +468,9 @@ public class ListView : Widget
         CurrentScrollParent = this;
 
         var (first, last) = VisibleRange();
-        for (var i = last; i >= first; i--)
+        for (var i = Math.Min(last, Count - 1); i >= first; i--)
         {
-            var hit = _items[i].HitTest(point);
+            var hit = ItemAt(i).HitTest(point);
             if (hit is not null)
             {
                 // Keep the bubble chain alive past this list: the App only assigns a ScrollParent
@@ -345,8 +516,32 @@ public class ListView : Widget
         );
     }
 
+    public override void OnPointerEnter()
+    {
+        SetBarHover(true);
+    }
+
+    public override void OnPointerExit()
+    {
+        SetBarHover(false);
+    }
+
+    /// <summary>
+    ///     Widen the bar while the pointer is on its strip. HitTest already claims the strip for
+    ///     this widget, so enter/exit fire exactly when the pointer crosses it.
+    /// </summary>
+    private void SetBarHover(bool hovered)
+    {
+        if (_vbar.Hovered == hovered) return;
+        _vbar.Hovered = hovered;
+        MarkNeedsPaint();
+    }
+
     public override void OnPointerMove(Offset point)
     {
+        // The strip and the rows share this widget's bounds, so a move is the only thing that says
+        // which of the two the pointer is actually over.
+        SetBarHover(OverVBar(point) || _vbar.Dragging);
         if (!_vbar.Dragging) return;
         var (ts, tl) = Scrollbar.VTrack(Bounds);
         _sy.JumpTo(
@@ -364,6 +559,7 @@ public class ListView : Widget
     {
         if (!_vbar.Dragging) return;
         _vbar.EndDrag();
+        SetBarHover(OverVBar(point));
         MarkNeedsPaint();
     }
 
@@ -404,7 +600,7 @@ public class ListView : Widget
 
     public override IEnumerable<Widget> GetChildren()
     {
-        return _items;
+        return _builder is not null ? _built.Values : _items;
     }
 
     /// <summary>
@@ -415,7 +611,7 @@ public class ListView : Widget
     public override IEnumerable<Widget> GetVisibleChildren()
     {
         var (first, last) = VisibleRange();
-        for (var i = first; i <= last; i++)
-            yield return _items[i];
+        for (var i = first; i <= last && i < Count; i++)
+            yield return ItemAt(i);
     }
 }

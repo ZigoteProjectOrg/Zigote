@@ -32,6 +32,7 @@ public sealed class Watch : Widget
     private bool _started;
     private bool _detached;
     private bool _dirty;
+    private bool _measuredOnce;
     private int _uiThread;
 
     public Watch(Func<Widget> build)
@@ -39,25 +40,88 @@ public sealed class Watch : Widget
         _build = build;
     }
 
+    /// <summary>
+    ///     Subtree swaps applied by every <see cref="Watch" /> since start, excluding first
+    ///     materialisation — the UI-side half of <see cref="Reactive.Runs" />, and the number that tells
+    ///     you a screen is rebuilding when nothing visible changed. Diagnostics only; surfaced as
+    ///     <c>ui.watch_rebuilds</c> in devtools.
+    /// </summary>
+    /// <remarks>
+    ///     Per-instance counts live on the inherited <see cref="Widget.RebuildCount" /> — the same field
+    ///     <c>StatelessWidget</c>/<c>StatefulWidget</c> bump, and what the inspector already reads.
+    /// </remarks>
+    public static long Rebuilds { get; private set; }
+
     private void EnsureStarted()
     {
         if (_started) return;
         _started = true;
         _uiThread = Environment.CurrentManagedThreadId;
-        _computed = Computed.From(_build); // eager first build (on the UI thread), auto-tracks its reads
-        Apply();
+        _computed =
+            Computed.From(_build); // eager first build (on the UI thread), auto-tracks its reads
+
+        // Observe FIRST, then materialise. The order is load-bearing: a signal that changes between
+        // the computed's evaluation and this subscription is handled inside Observe's first effect
+        // run — Track() connects the computed, Connect() sees the stale version and silently
+        // recomputes — but the `first` flag suppresses the callback for that run, so nothing tells
+        // the Watch. Applying AFTER the subscription reads that recomputed value and swaps it in;
+        // applying before it reads the stale one, and with the change already consumed nothing ever
+        // invalidates again — the Watch shows its first build forever. In an app that is a screen
+        // stuck on its spinner because the load landed while the first layout pass was mounting it
+        // (Mahou.Tests.WatchRaceTests reproduced 3232 lost swaps in 5000 with the old order).
         _subscription = ((ISignal)_computed).Observe(OnChanged);
+        Apply();
+    }
+
+    /// <summary>
+    ///     Re-measure the freshly swapped subtree against the constraints this Watch was last given.
+    ///     If it wants the same size it did before, no ancestor's geometry can have changed by
+    ///     definition — so lay the subtree out in place and ask for a repaint, instead of dirtying the
+    ///     parent chain and making the App re-walk the WHOLE tree.
+    ///     <para>
+    ///         This is the retained-mode payoff, and it is the difference between a screen of reactive
+    ///         cells costing O(changed) and O(tree) per frame: with 10 000 cells on screen, one changed
+    ///         cell used to cost a 1.2 ms full-tree Measure+Layout, the same as ten thousand changed
+    ///         cells. A size CHANGE still falls through to the normal upward invalidation — that one
+    ///         genuinely can move everything around it.
+    ///     </para>
+    /// </summary>
+    private bool TryRelayoutInPlace()
+    {
+        if (_child is null || Owner is null || !_measuredOnce) return false;
+
+        var size = _child.Measure(LastConstraints);
+        if (size != _size) return false; // our size moved — ancestors must re-layout
+
+        _child.Layout(new Offset(Bounds.X, Bounds.Y));
+        MarkNeedsPaint(); // damage is this widget's region only
+        return true;
     }
 
     // Swap in the freshly-built subtree (UI thread only).
-    private void Apply()
+    private void Apply(bool inPlace = false)
     {
         var next = _computed!.Value;
         if (ReferenceEquals(next, _child)) return;
 
-        _child?.Detach();
+        // Attach the incoming subtree before tearing down the outgoing one, and skip the teardown
+        // when the new tree re-adopted it — a builder that wraps/unwraps a retained child otherwise
+        // detaches it (disposing every StatefulWidget state inside) only to re-attach it one line
+        // later. See StatelessWidget.EnsureBuilt.
+        var previous = _child;
+        if (previous is not null)
+        {
+            Rebuilds++; // UI thread only, like the rest of Apply
+            RebuildCount++; // a Watch swap is this widget's rebuild — the inspector's R: column
+        }
+
         _child = next;
         if (Owner != null) _child?.Attach(Owner, this);
+        if (previous is not null &&
+            (previous.Parent is null || ReferenceEquals(previous.Parent, this)))
+            previous.Detach();
+
+        if (inPlace && TryRelayoutInPlace()) return;
         MarkNeedsLayout();
     }
 
@@ -65,9 +129,13 @@ public sealed class Watch : Widget
     {
         if (_detached) return;
 
-        if (Environment.CurrentManagedThreadId == _uiThread)
+        // Swapping while the measure/layout/paint walk is running would mutate the tree mid-walk
+        // (a parent has already sized its arrays / cached its ranges for this pass) — defer exactly
+        // like the off-thread path; the swap lands in Measure next frame.
+        if (Environment.CurrentManagedThreadId == _uiThread && Owner is not { InTreeWalk: true })
         {
-            Apply();
+            // Safe to re-measure in place here precisely BECAUSE no walk is running (checked above).
+            Apply(true);
         }
         else
         {
@@ -97,6 +165,7 @@ public sealed class Watch : Widget
         _child = null;
         _started = false;
         _dirty = false;
+        _measuredOnce = false; // a re-attached Watch must not lay out against stale constraints
     }
 
     public override Size Measure(Constraints constraints)
@@ -108,6 +177,8 @@ public sealed class Watch : Widget
             Apply();
         }
 
+        LastConstraints = constraints; // remembered for the in-place path — see TryRelayoutInPlace
+        _measuredOnce = true;
         _size = _child?.Measure(constraints) ?? constraints.Constrain(Size.Zero);
         MeasuredSize = _size;
         return _size;
@@ -115,7 +186,12 @@ public sealed class Watch : Widget
 
     public override void Layout(Offset origin)
     {
-        Bounds = new Rect(origin.X, origin.Y, _size.Width, _size.Height);
+        Bounds = new Rect(
+            origin.X,
+            origin.Y,
+            _size.Width,
+            _size.Height
+        );
         _child?.Layout(origin);
     }
 
@@ -124,10 +200,15 @@ public sealed class Watch : Widget
         _child?.Paint(paint);
     }
 
+    // The child's answer, including "nothing": a Watch is a container, and every other container
+    // (Align, Stack, the route transitions) lets a miss fall through to whatever is underneath.
+    // This one used to answer `this` on a miss — so a full-screen Watch overlaying content (a
+    // reader's chrome bar over the page) silently ate every click and wheel event beneath it, and
+    // being non-focusable, dropped keyboard focus with them.
     public override Widget? HitTest(Offset point)
     {
         if (!Bounds.Contains(point.X, point.Y)) return null;
-        return _child?.HitTest(point) ?? this;
+        return _child?.HitTest(point);
     }
 
     public override IEnumerable<Widget> GetChildren()

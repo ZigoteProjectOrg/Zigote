@@ -82,7 +82,11 @@ public abstract class StatefulWidget : Widget
         EnsureInitialized();
         if (!NeedsBuild) return;
         RebuildCount++;
-        _child?.Detach();
+
+        // Build first, detach after, and only if the subtree actually changed — see the same
+        // comment in StatelessWidget.EnsureBuilt. A State.Build that returns a retained root
+        // otherwise loses focus and replays entrance animations on every setState.
+        var previous = _child;
 
         // Mark this widget as the build owner so DependOn<T>() inside State.Build registers it
         // as a dependent of any inherited widget it reads.
@@ -99,7 +103,14 @@ public abstract class StatefulWidget : Widget
         }
 
         _childCache = _child is not null ? [_child] : null;
+
+        // Attach first, then detach only what the new tree did not re-adopt — see the same comment in
+        // StatelessWidget.EnsureBuilt.
         if (_child != null && Owner != null) _child.Attach(Owner, this);
+        if (!ReferenceEquals(previous, _child) &&
+            (previous?.Parent is null || ReferenceEquals(previous.Parent, this)))
+            previous?.Detach();
+
         NeedsBuild = false;
 
         // The child is a brand-new instance (unmeasured). Invalidate the measure cache so Measure below

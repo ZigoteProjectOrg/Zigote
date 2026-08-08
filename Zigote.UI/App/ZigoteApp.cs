@@ -52,6 +52,12 @@ public class ZigoteApp
     public uint Width { get; set; } = 960;
     public uint Height { get; set; } = 640;
 
+    /// <summary>
+    ///     Create the main window with an alpha channel (CSD rounded corners). Must be set
+    ///     before <see cref="Run" /> — transparency is a window-creation property.
+    /// </summary>
+    public bool TransparentWindow { get; set; }
+
     /// <summary>Path to a .ttf/.otf font file. Null = macOS system default.</summary>
     public string? FontPath { get; set; }
 
@@ -225,7 +231,8 @@ public class ZigoteApp
             Width,
             Height,
             FontPath,
-            FontName
+            FontName,
+            transparentWindow: TransparentWindow
         );
         App = uiApp;
         uiApp.Theme = Theme;
@@ -253,7 +260,8 @@ public class ZigoteApp
         // Surface the mobile lifecycle as overridable hooks (delegate/observer users can
         // subscribe on App directly). Pause/Resume are the suspend pair only — the desktop
         // focus transitions map to Inactive and are not forwarded here.
-        uiApp.LifecycleChanged += state => {
+        uiApp.LifecycleChanged += state =>
+        {
             if (state == AppLifecycleState.Paused) OnPause();
             else if (state == AppLifecycleState.Resumed && _wasPaused) OnResume();
             _wasPaused = state == AppLifecycleState.Paused;
@@ -311,7 +319,10 @@ public class ZigoteApp
                 null,
                 System.Reflection.BindingFlags.OptionalParamBinding,
                 null,
-                new object?[] { app, Type.Missing },
+                new object?[] {
+                    app,
+                    Type.Missing,
+                },
                 null
             );
         }

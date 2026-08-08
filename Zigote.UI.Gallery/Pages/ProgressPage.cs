@@ -76,7 +76,8 @@ internal sealed class ProgressPageState : WidgetState<ProgressPage>
                             new SizedBox(24),
                             new SizedBox(160, child: new ProgressBar(_progress)),
                         ]
-                    ))
+                    )
+                )
             )
         );
     }

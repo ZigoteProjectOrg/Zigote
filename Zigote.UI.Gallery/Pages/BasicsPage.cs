@@ -59,25 +59,29 @@ internal sealed class BasicsPage : StatelessWidget
             Section(
                 "Icon buttons & gestures",
                 new AdaptiveBuilder((_, size) => new Row(
-                    [
-                        new IconButton(new Icon(MaterialIcons.Home), () => Toast("home")),
-                        new IconButton(new Icon(MaterialIcons.Search), () => Toast("search")),
-                        new IconButton(new Icon(MaterialIcons.Settings), () => Toast("settings")),
-                        new SizedBox(16),
-                        new InkWell(
-                            onTap: () => Toast("InkWell tapped"),
-                            child: new Container(
-                                // A bare Container gets no control metrics of its own, so its
-                                // padding is the only thing sizing the tap target — 44 px on touch.
-                                padding: size == WindowSizeClass.Compact
-                                    ? EdgeInsets.Symmetric(16, 14)
-                                    : EdgeInsets.Symmetric(12, 8),
-                                color: Colors.Blue,
-                                child: new Text("InkWell")
-                            )
-                        ),
-                    ]
-                ))
+                        [
+                            new IconButton(new Icon(MaterialIcons.Home), () => Toast("home")),
+                            new IconButton(new Icon(MaterialIcons.Search), () => Toast("search")),
+                            new IconButton(
+                                new Icon(MaterialIcons.Settings),
+                                () => Toast("settings")
+                            ),
+                            new SizedBox(16),
+                            new InkWell(
+                                onTap: () => Toast("InkWell tapped"),
+                                child: new Container(
+                                    // A bare Container gets no control metrics of its own, so its
+                                    // padding is the only thing sizing the tap target — 44 px on touch.
+                                    padding: size == WindowSizeClass.Compact
+                                        ? EdgeInsets.Symmetric(16, 14)
+                                        : EdgeInsets.Symmetric(12, 8),
+                                    color: Colors.Blue,
+                                    child: new Text("InkWell")
+                                )
+                            ),
+                        ]
+                    )
+                )
             )
         );
     }

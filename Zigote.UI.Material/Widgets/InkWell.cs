@@ -21,12 +21,14 @@ public sealed class InkWell : StatelessWidget
         _child = child;
         OnTap = onTap;
         OnDoubleTap = onDoubleTap;
-        OnLongPress = onLongPress;
+        OnLongPressed = onLongPress;
     }
 
     public Action? OnTap { get; set; }
     public Action? OnDoubleTap { get; set; }
-    public Action? OnLongPress { get; set; }
+
+    /// <inheritdoc cref="GestureDetector.OnLongPressed" />
+    public Action? OnLongPressed { get; set; }
 
     protected override Widget Build(BuildContext context)
     {
@@ -34,7 +36,7 @@ public sealed class InkWell : StatelessWidget
             _child,
             OnTap,
             OnDoubleTap,
-            OnLongPress
+            OnLongPressed
         );
     }
 }

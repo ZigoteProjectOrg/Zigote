@@ -59,13 +59,12 @@ internal sealed class DragDropPageState : WidgetState<DragDropPage>
                 ),
                 Section(
                     "External file drop (OS → app)",
-                    new AdaptiveBuilder(
-                        (_, size) => size == WindowSizeClass.Compact
-                            ? DesktopOnly("Desktop only — phones have no OS file drag.")
-                            : new Column(
-                                crossAxisAlignment: CrossAxisAlignment.Start,
-                                children: [FileZone(), new SizedBox(height: 8), _files]
-                            )
+                    new AdaptiveBuilder((_, size) => size == WindowSizeClass.Compact
+                        ? DesktopOnly("Desktop only — phones have no OS file drag.")
+                        : new Column(
+                            crossAxisAlignment: CrossAxisAlignment.Start,
+                            children: [FileZone(), new SizedBox(height: 8), _files]
+                        )
                     )
                 ),
                 Section(
@@ -93,23 +92,20 @@ internal sealed class DragDropPageState : WidgetState<DragDropPage>
                 ),
                 Section(
                     "Drag OUT to the OS (macOS best-effort)",
-                    new AdaptiveBuilder(
-                        (_, size) => size == WindowSizeClass.Compact
-                            ? DesktopOnly("Desktop only — no app-to-app drag on a phone.")
-                            : new Column(
-                                crossAxisAlignment: CrossAxisAlignment.Start,
-                                children: [
-                                    new Text(
-                                        "Drag this onto Finder or a text field in another app:"
-                                    ),
-                                    new SizedBox(height: 10),
-                                    new Draggable<string>(
-                                        "Zigote drag-out",
-                                        Pill("⤴  Drag me out", Color.Purple),
-                                        dragText: "Dragged out of Zigote"
-                                    ) { AllowDragOut = true },
-                                ]
-                            )
+                    new AdaptiveBuilder((_, size) => size == WindowSizeClass.Compact
+                        ? DesktopOnly("Desktop only — no app-to-app drag on a phone.")
+                        : new Column(
+                            crossAxisAlignment: CrossAxisAlignment.Start,
+                            children: [
+                                new Text("Drag this onto Finder or a text field in another app:"),
+                                new SizedBox(height: 10),
+                                new Draggable<string>(
+                                    "Zigote drag-out",
+                                    Pill("⤴  Drag me out", Color.Purple),
+                                    dragText: "Dragged out of Zigote"
+                                ) { AllowDragOut = true },
+                            ]
+                        )
                     )
                 ),
             ]

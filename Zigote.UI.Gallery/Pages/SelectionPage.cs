@@ -153,7 +153,8 @@ internal sealed class SelectionPageState : WidgetState<SelectionPage>
                         [
                             Radio(s, 0, "One"), Radio(s, 1, "Two"), Radio(s, 2, "Three"),
                         ]
-                    ))
+                    )
+                )
             ),
             Section(
                 "Slider",

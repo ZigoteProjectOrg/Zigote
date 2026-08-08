@@ -40,7 +40,13 @@ public abstract class StatelessWidget : Widget
     {
         if (!NeedsBuild) return;
         RebuildCount++;
-        _child?.Detach();
+
+        // Build first, detach after, and only if Build actually returned a different subtree —
+        // widgets that retain their root (every Adw* control that keeps a Pressable field) would
+        // otherwise be torn down and re-attached on every property change, which clears focus
+        // (Widget.Detach → Owner.NotifyDetached → RequestFocus(null)) and replays entrance
+        // animations. Watch.Apply has always done it in this order.
+        var previous = _child;
 
         // Mark this widget as the build owner so DependOn<T>() inside Build registers it as a
         // dependent of any inherited widget it reads (theme, media query, …).
@@ -57,8 +63,35 @@ public abstract class StatelessWidget : Widget
         }
 
         _childCache = _child is not null ? [_child] : null;
+
+        // ATTACH FIRST, then detach what the new tree did not take over. The attach must run even
+        // when Build handed back the same instance: a retained root whose contents changed (a
+        // Container given a fresh child, an overlay re-pointed at a new page) has newly-inserted
+        // descendants that have never been mounted, and this cascade is what gives them an Owner.
+        // Skipping it leaves them with a null Owner, so every Watch inside them never starts and the
+        // subtree renders blank.
+        //
+        // The order is load-bearing for the common "wrap/unwrap a retained subtree" build — a sheet
+        // or scrim that returns `content` when closed and `new Stack { content, … }` when open.
+        // Detaching first tears `content` (and every StatefulWidget state, scroll offset and focus
+        // inside it) down, only for the very next line to re-attach it. Attaching first re-parents
+        // the shared subtree, so the guard below sees it was re-adopted and leaves it alone; only
+        // the genuinely-dropped wrapper is detached, and Widget.Detach's own re-adoption check keeps
+        // its cascade off the shared child.
         if (_child != null && Owner != null) _child.Attach(Owner, this);
+        if (!ReferenceEquals(previous, _child) &&
+            (previous?.Parent is null || ReferenceEquals(previous.Parent, this)))
+            previous?.Detach();
+
         NeedsBuild = false;
+
+        // The child is a brand-new instance, so it has never been measured. Invalidate the measure
+        // cache (as StatefulWidget.RebuildIfNeeded does) or the check right below can early-return a
+        // stale MeasuredSize at an unchanged window size and Layout will then walk the fresh subtree
+        // without a single Measure — a Wrap whose offset table is empty, a Column with no metrics:
+        // a blank render at best, an IndexOutOfRange in the frame loop at worst. Reachable whenever
+        // NeedsBuild is set without NeedsLayout (hot reload, a re-attached subtree).
+        _measuredGen = -1;
     }
 
     // ── Widget protocol ───────────────────────────────────────────────────────

@@ -38,6 +38,12 @@ public class ScrollView : RenderWidget
     public bool ScrollVertical { get; set; } = true;
     public bool ScrollHorizontal { get; set; } = false;
 
+    /// <summary>
+    ///     Draw the scrollbars. Off for scrollers where the bar is noise rather than information — a
+    ///     one-line strip of tabs, a chip row — which still scroll by wheel, drag and fling.
+    /// </summary>
+    public bool ShowScrollbars { get; set; } = true;
+
     /// <summary>Ease wheel scrolling (true) or jump instantly (false).</summary>
     public bool Smooth { get; set; } = true;
 
@@ -161,6 +167,8 @@ public class ScrollView : RenderWidget
         Child?.Paint(paint);
         paint.AddClipEnd();
 
+        if (!ShowScrollbars) return;
+
         if (ScrollVertical)
             _vbar.PaintVertical(
                 paint,
@@ -200,6 +208,25 @@ public class ScrollView : RenderWidget
     // The strip is a cursor affordance: 14 px is precise under a mouse and, under a finger, sits
     // exactly where a full-width row's trailing control does — a tap there would jump-scroll
     // instead of hitting the row. Fingers drag the content itself (CanTouchScroll) and need none of it.
+    public override void OnPointerEnter()
+    {
+        // Enter has no position; a move follows immediately and resolves which strip, if either.
+    }
+
+    public override void OnPointerExit()
+    {
+        SetBarHover(false, false);
+    }
+
+    /// <summary>Widen whichever bar the pointer is on, so a 3 px target becomes a grabbable one.</summary>
+    private void SetBarHover(bool vertical, bool horizontal)
+    {
+        if (_vbar.Hovered == vertical && _hbar.Hovered == horizontal) return;
+        _vbar.Hovered = vertical;
+        _hbar.Hovered = horizontal;
+        MarkNeedsPaint();
+    }
+
     private bool OverVBar(Offset p)
     {
         return !App.PointerIsTouch && ScrollVertical && _sy.Max > 0f &&
@@ -267,6 +294,11 @@ public class ScrollView : RenderWidget
 
     public override void OnPointerMove(Offset point)
     {
+        SetBarHover(
+            OverVBar(point) || _vbar.Dragging,
+            OverHBar(point) || _hbar.Dragging
+        );
+
         if (_vbar.Dragging)
         {
             var (ts, tl) = Scrollbar.VTrack(Bounds);

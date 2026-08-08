@@ -3,7 +3,6 @@
         <TargetFramework>net10.0</TargetFramework>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <Nullable>enable</Nullable>
-        <LangVersion>latest</LangVersion>
         <ImplicitUsings>enable</ImplicitUsings>
         <RootNamespace>Zigote.UI</RootNamespace>
         <AssemblyName>Zigote.UI</AssemblyName>
@@ -18,6 +17,20 @@
          Inter = default UI face; Iosevka = code/monospace; Material Icons = glyphs; Noto Emoji bundled. -->
     <ItemGroup>
         <Content Include="Fonts\Inter\static\Inter_18pt-Regular.ttf" Link="Fonts\Inter-Regular.ttf">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+        <!-- Real weight variants: the FreeType renderer resolves one face per family, so each
+             weight is registered as its own family and FontFaces maps FontWeight onto them. -->
+        <Content Include="Fonts\Inter\static\Inter_18pt-Medium.ttf" Link="Fonts\Inter-Medium.ttf">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+        <Content Include="Fonts\Inter\static\Inter_18pt-SemiBold.ttf" Link="Fonts\Inter-SemiBold.ttf">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+        <Content Include="Fonts\Inter\static\Inter_18pt-Bold.ttf" Link="Fonts\Inter-Bold.ttf">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+        <Content Include="Fonts\Inter\static\Inter_18pt-ExtraBold.ttf" Link="Fonts\Inter-ExtraBold.ttf">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </Content>
         <Content Include="Fonts\PkgTTC-SGr-Iosevka-34\SGr-Iosevka-Regular.ttc" Link="Fonts\Iosevka-Regular.ttc">

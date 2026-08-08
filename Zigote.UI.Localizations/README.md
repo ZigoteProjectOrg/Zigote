@@ -1,18 +1,17 @@
 # Zigote.UI.Localizations
 
 A flexible, declarative, modular localization (i18n) framework for `Zigote.UI` — a widget-tree
-`Localizations` provider + ICU `MessageFormat`, in dependency-light C#. It references
-only `Zigote.UI`; the pure-logic core (locales, plural rules, message formatting, catalogs,
-number/date formatting) is headless and unit-tested (206 tests).
+`Localizations` provider + ICU `MessageFormat`, in dependency-light C#. It references only `Zigote.UI`; the pure-logic
+core (locales, plural rules, message formatting, catalogs, number/date formatting) is headless and unit-tested (206
+tests).
 
 ## The three pieces
 
-1. **Declare** your translations as a `LocalizationBundle` of `LocalizationCatalog`s (in code, or
-   loaded from JSON), or plug in typed `LocalizationsDelegate<T>`s for advanced/generated resources.
+1. **Declare** your translations as a `LocalizationBundle` of `LocalizationCatalog`s (in code, or loaded from JSON), or
+   plug in typed `LocalizationsDelegate<T>`s for advanced/generated resources.
 2. **Provide** them by wrapping your `Home` in a `LocalizationsScope`.
-3. **Consume** them from any widget via `context.Tr("key", …)` / `LocalizedText`, and switch locale at
-   runtime with `context.SetLocale(...)` — dependent widgets rebuild automatically (the reactive path
-   the theme uses).
+3. **Consume** them from any widget via `context.Tr("key", …)` / `LocalizedText`, and switch locale at runtime with
+   `context.SetLocale(...)` — dependent widgets rebuild automatically (the reactive path the theme uses).
 
 ## Quick start
 
@@ -73,11 +72,10 @@ protected override Widget Build(BuildContext ctx) => new Column
 | Typed date/time    | `{d, date, medium}` · `{t, time, short}`                                      |
 | Escaping           | `it''s` → `it's`, `'{'literal'}'` → `{literal}`                               |
 
-`#` renders the (offset-adjusted) count; nested submessages compose (a `plural` inside a `select`,
-etc.). Plural categories follow the Unicode CLDR rules — English/Germanic, Romance, Slavic (ru/uk/pl/
-cs/sk), Arabic, Hebrew, Baltic, Romanian, Indic, and the "no-plural" languages are implemented
-exactly; unlisted languages default to the English one/other split. A malformed template never
-crashes the UI — it falls back to its raw text.
+`#` renders the (offset-adjusted) count; nested submessages compose (a `plural` inside a `select`, etc.). Plural
+categories follow the Unicode CLDR rules — English/Germanic, Romance, Slavic (ru/uk/pl/ cs/sk), Arabic, Hebrew, Baltic,
+Romanian, Indic, and the "no-plural" languages are implemented exactly; unlisted languages default to the English
+one/other split. A malformed template never crashes the UI — it falls back to its raw text.
 
 ## Loading from JSON
 
@@ -92,17 +90,17 @@ var bundle = LocalizationJson.LoadBundle(allJson);
 ## Formatting
 
 `context.FormatNumber/FormatInteger/FormatPercent/FormatCurrency/FormatDate/FormatTime` (and
-`LocaleFormatting.For(locale)`) format according to the active locale's `CultureInfo`, degrading
-gracefully for exotic tags.
+`LocaleFormatting.For(locale)`) format according to the active locale's `CultureInfo`, degrading gracefully for exotic
+tags.
 
 ## Text direction
 
 `Locale.TextDirection` and the `Directionality` provider expose LTR/RTL (a `LocalizationsScope`
-installs one from the active locale). Direction-aware widgets read `Directionality.Of(ctx)` and mirror
-their own layout — the base paint path does not auto-mirror.
+installs one from the active locale). Direction-aware widgets read `Directionality.Of(ctx)` and mirror their own
+layout — the base paint path does not auto-mirror.
 
 ## Typed delegates
 
-For generated/strongly-typed resource classes, register a `LocalizationsDelegate<T>` and retrieve it
-with `Localizations.Of<T>(ctx)`. The string bundle is itself exposed this way
-(`Localizations.Of<StringLocalizations>(ctx)`), so both styles coexist in one scope.
+For generated/strongly-typed resource classes, register a `LocalizationsDelegate<T>` and retrieve it with
+`Localizations.Of<T>(ctx)`. The string bundle is itself exposed this way (`Localizations.Of<StringLocalizations>(ctx)`),
+so both styles coexist in one scope.

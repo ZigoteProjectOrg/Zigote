@@ -127,9 +127,7 @@ public sealed class SegmentedControl : Widget, ITickerProvider
 
         var segW = _textWidth + Spacing.Md * 2f;
         var totalW = segW * Math.Max(Segments.Count, 1);
-        _size = c.Constrain(
-            new Size(totalW, TouchMetrics.Pick(ControlMetrics.RegularHeight))
-        );
+        _size = c.Constrain(new Size(totalW, TouchMetrics.Pick(ControlMetrics.RegularHeight)));
         return _size;
     }
 

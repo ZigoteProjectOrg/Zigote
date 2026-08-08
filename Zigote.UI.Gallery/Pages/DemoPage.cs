@@ -40,7 +40,12 @@ internal sealed class DemoPage : StatelessWidget
             ),
             new SingleChildScrollView {
                 Child = new Padding(
-                    EdgeInsets.FromLtrb(16, 16, 16, 16 + keyboard),
+                    EdgeInsets.FromLtrb(
+                        16,
+                        16,
+                        16,
+                        16 + keyboard
+                    ),
                     _demo.BuildPage()
                 ),
             }

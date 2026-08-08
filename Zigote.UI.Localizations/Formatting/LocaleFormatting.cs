@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text;
+using Zigote.Core.Diagnostics;
 
 namespace Zigote.UI.Localizations;
 
@@ -81,6 +82,21 @@ public sealed class LocaleFormatting
                 // try the next, looser tag
             }
 
+        // Falling back is correct — a formatter that threw on an exotic tag would take the screen
+        // down over a date — but it is never what the caller wanted, and it is invisible: the app
+        // renders fully translated text next to 8/7/2026 and 1,234.56. Said once per locale, since
+        // the cache only builds each one once.
+        //
+        // The usual cause is not an exotic locale at all but InvariantGlobalization=true, under
+        // which GetCultureInfo throws for *every* named culture. An app that ships a non-English
+        // catalog and sets that flag gets correct words (catalog lookup and PluralRules are both
+        // ICU-free by design) and wrong numbers, with nothing else to say so.
+        DebugLog.Warn(
+            $"no CultureInfo for '{locale.ToBcp47()}' — dates, numbers and currency will format as " +
+            "invariant. If the app sets InvariantGlobalization=true, that is the cause: clear it to " +
+            "format for this locale, or ignore this if the app never shows a formatted date or number.",
+            "localizations"
+        );
         return CultureInfo.InvariantCulture;
     }
 

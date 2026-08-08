@@ -120,8 +120,17 @@ public class Wrap : MultiChildWidget
             _size.Width,
             _size.Height
         );
-        for (var i = 0; i < Children.Count; i++)
+
+        // The same guard FlexLayout.Layout carries: the child list can grow between the Measure
+        // that sized _offsets and this Layout — a reconcile, a re-entrant relayout from a native
+        // live-resize, or a subtree swapped in by an ancestor that then skipped re-measuring. Lay
+        // out the measured prefix instead of indexing past the table, and ask for another layout so
+        // the rest arrives next frame rather than staying invisible.
+        var count = Math.Min(Children.Count, _offsets.Length);
+        for (var i = 0; i < count; i++)
             Children[i].Layout(new Offset(origin.X + _offsets[i].X, origin.Y + _offsets[i].Y));
+
+        if (count < Children.Count) MarkNeedsLayout();
     }
 
     public override void Paint(PaintList paint)

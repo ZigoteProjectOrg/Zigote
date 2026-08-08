@@ -73,7 +73,8 @@ internal sealed class AnimatePageState : WidgetState<AnimatePage>
                     : new Row(
                         mainAxisSize: MainAxisSize.Min,
                         children: [replay, new SizedBox(12), replayHint]
-                    ))
+                    )
+                )
             ),
             Section(
                 "Fluent API — the flutter_animate way",
@@ -83,9 +84,12 @@ internal sealed class AnimatePageState : WidgetState<AnimatePage>
                         // Only the sample re-builds with the size class; the animated text below
                         // stays put so a resize doesn't replay its entrance.
                         new AdaptiveBuilder((_, size) => new Text(
-                            size == WindowSizeClass.Compact ? FluentSampleStacked : FluentSample,
-                            new TextStyle(12, fontStyle: FontStyle.Italic, color: Colors.Gray)
-                        )),
+                                size == WindowSizeClass.Compact
+                                    ? FluentSampleStacked
+                                    : FluentSample,
+                                new TextStyle(12, fontStyle: FontStyle.Italic, color: Colors.Gray)
+                            )
+                        ),
                         new SizedBox(height: 12),
                         new Text("Hello, Zigote!", new TextStyle(28, fontWeight: FontWeight.Bold))
                             .Animate()

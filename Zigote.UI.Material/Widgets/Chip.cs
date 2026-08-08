@@ -101,7 +101,10 @@ internal sealed class ChipState : SingleTickerProviderState<Chip>
     private readonly DecoratedBox _box = new();
     private readonly Label _label = new("") { MaxLines = 1 };
     private readonly LayoutPadding _padding = new(EdgeInsets.Zero);
-    private readonly ConstrainedBox _minHeight = new(new Constraints(minHeight: ControlMetrics.CompactHeight));
+
+    private readonly ConstrainedBox _minHeight =
+        new(new Constraints(minHeight: ControlMetrics.CompactHeight));
+
     private AnimationController _sel = null!;
     private bool _selTarget;
     private Pressable _root = null!;

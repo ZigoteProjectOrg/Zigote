@@ -50,9 +50,11 @@ public static class FilePickerDialog
                 }
 
                 var relative = Path.GetRelativePath(rootPath, picked[0]).Replace('\\', '/');
-                onSelected(relative.StartsWith("..", StringComparison.Ordinal)
-                    ? picked[0]
-                    : relative);
+                onSelected(
+                    relative.StartsWith("..", StringComparison.Ordinal)
+                        ? picked[0]
+                        : relative
+                );
             }
             catch (Exception ex)
             {

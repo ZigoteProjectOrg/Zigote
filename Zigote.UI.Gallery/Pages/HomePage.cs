@@ -56,28 +56,29 @@ internal sealed class HomePage : StatelessWidget
             // card-grid density. Compact stacks everything; wider classes keep the original
             // desktop composition.
             body: new AdaptiveBuilder((ctx, size) => new SingleChildScrollView {
-                Child = new Padding(
-                    EdgeInsets.All(size == WindowSizeClass.Compact ? 16 : 24),
-                    new Column(
-                        crossAxisAlignment: CrossAxisAlignment.Stretch,
-                        children: [
-                            Header(ctx, l, size),
-                            new SizedBox(height: 20),
-                            GridView.Count(
-                                size switch {
-                                    WindowSizeClass.Compact => 1,
-                                    WindowSizeClass.Medium => 2,
-                                    _ => 3,
-                                },
-                                cards,
-                                16,
-                                16,
-                                size == WindowSizeClass.Compact ? 2.6 : 2.1
-                            ),
-                        ]
-                    )
-                ),
-            })
+                    Child = new Padding(
+                        EdgeInsets.All(size == WindowSizeClass.Compact ? 16 : 24),
+                        new Column(
+                            crossAxisAlignment: CrossAxisAlignment.Stretch,
+                            children: [
+                                Header(ctx, l, size),
+                                new SizedBox(height: 20),
+                                GridView.Count(
+                                    size switch {
+                                        WindowSizeClass.Compact => 1,
+                                        WindowSizeClass.Medium => 2,
+                                        _ => 3,
+                                    },
+                                    cards,
+                                    16,
+                                    16,
+                                    size == WindowSizeClass.Compact ? 2.6 : 2.1
+                                ),
+                            ]
+                        )
+                    ),
+                }
+            )
         );
     }
 
@@ -116,10 +117,11 @@ internal sealed class HomePage : StatelessWidget
         // Watch rebuilds just this control when the theme signal changes. Labels are captured
         // from the locale-resolved `l` (this whole page rebuilds on a locale switch anyway).
         var appearance = new Watch(() => new SegmentedControl(
-            [l.HomeThemeLight, l.HomeThemeDark],
-            _theme.Mode.Value == ThemeMode.Dark ? 1 : 0,
-            i => _theme.Set(i == 1 ? ThemeMode.Dark : ThemeMode.Light)
-        ));
+                [l.HomeThemeLight, l.HomeThemeDark],
+                _theme.Mode.Value == ThemeMode.Dark ? 1 : 0,
+                i => _theme.Set(i == 1 ? ThemeMode.Dark : ThemeMode.Light)
+            )
+        );
 
         // Phone widths can't fit headline + both controls on one line — stack them, with each
         // control on its own labelled row. Wider classes keep the single-row composition.

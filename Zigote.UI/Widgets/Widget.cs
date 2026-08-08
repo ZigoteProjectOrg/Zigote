@@ -119,12 +119,24 @@ public abstract class Widget
     {
         Owner = owner;
         Parent = parent;
-        foreach (var child in GetChildren()) child.Attach(owner, this);
+        // Snapshot before cascading: attaching a child can run app build code (Watch.EnsureStarted,
+        // a lazy StatefulWidget build) that reconciles THIS widget's live child list mid-iteration —
+        // GetChildren() returns the actual List for multi-child containers. Children added by such
+        // a reconcile are attached by the reconcile itself, so iterating the snapshot loses nothing.
+        foreach (var child in GetChildren().ToArray()) child.Attach(owner, this);
     }
 
     public virtual void Detach()
     {
-        foreach (var child in GetChildren()) child.Detach();
+        // Skip children another parent has since adopted: during an overlap transition (e.g.
+        // AdaptiveBuilder cross-fading two subtrees that share a retained instance — the documented
+        // "return the same grid, reconcile its children" pattern), the incoming subtree attaches
+        // the shared child (re-parenting it) while the outgoing one is still fading. Cascading the
+        // outgoing tree's detach into it would tear it out of the live tree. Sequential
+        // detach-then-attach swaps are unaffected: at detach time the child still points here.
+        foreach (var child in GetChildren().ToArray())
+            if (ReferenceEquals(child.Parent, this))
+                child.Detach();
         // Drop app-level references (focus/hover/capture) to this widget before the Owner link goes
         // away — otherwise removing a focused/hovered widget via SetChildren, a Root swap, or a route
         // pop leaves App pointing at an off-tree widget (misrouted keys, stranded StartTextInput, a
@@ -132,6 +144,17 @@ public abstract class Widget
         Owner?.NotifyDetached(this);
         Owner = null;
         Parent = null;
+        // A detached widget may be re-attached later (a wrapper swapped around a retained subtree, a
+        // route re-entered, a tab re-shown). Nothing in the re-attach path invalidates measure caches,
+        // so a StatelessWidget/StatefulWidget ancestor whose NeedsLayout is still false, at unchanged
+        // constraints and generation, early-returns its cached size and never re-measures the subtree
+        // below it — which is the only thing that would rebuild the StatefulWidgets whose state Detach
+        // just disposed and re-Attach the descendants their (now-null) child cache stopped exposing.
+        // The result is a subtree with a null Owner: no Watch ever starts and it renders blank. Flag it
+        // here (no upward propagation — the parent link is already gone) so a re-attach always
+        // re-measures. Costs nothing when the subtree really is being thrown away.
+        NeedsLayout = true;
+        NeedsPaint = true;
     }
 
     public virtual void MarkNeedsBuild()
@@ -313,6 +336,32 @@ public abstract class Widget
     public virtual void OnTouchFling(float velocityX, float velocityY)
     {
         ScrollParent?.OnTouchFling(velocityX, velocityY);
+    }
+
+    // ── Pinch-to-zoom ───────────────────────────────────────────────────────────
+    //
+    // A second finger down turns the gesture into a pinch. The App walks hit → Parent… for the
+    // first widget that answers CanTouchScale, cancels whatever the first finger had pressed, and
+    // from then until a finger lifts drives OnTouchScale (spread/squeeze) and OnTouchScroll
+    // (the two-finger centroid moving — panning the zoomed content) on that widget.
+
+    /// <summary>
+    ///     Can this widget consume a two-finger pinch right now? Default: no, which lets the
+    ///     gesture fall through to an ancestor (a zoomable page inside a scrolling list).
+    /// </summary>
+    public virtual bool CanTouchScale()
+    {
+        return false;
+    }
+
+    /// <summary>
+    ///     Scale by <paramref name="scale" /> (a per-event multiplier: &gt;1 the fingers spread,
+    ///     &lt;1 they closed) about <paramref name="focus" /> in window coordinates — the point
+    ///     under the fingers' centroid, which must stay put as the content scales, or the zoom
+    ///     drifts away from what the user is holding.
+    /// </summary>
+    public virtual void OnTouchScale(float scale, Offset focus)
+    {
     }
 
     // ── Drag-and-drop targets ───────────────────────────────────────────────────

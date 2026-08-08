@@ -43,8 +43,11 @@ public sealed class ResponsiveGrid(IEnumerable<Widget>? children = null)
         Span<float> colHeights = stackalloc float[cols];
         colHeights.Clear();
 
+        // `i < _positions.Length` tolerates Children growing under the loop: a tile's Measure can
+        // run app code (a load-more signal, a deferred Watch apply) that adds tiles. The extras are
+        // skipped this pass and picked up next frame — the mutation always marks layout.
         var childC = new Constraints(colW, colW);
-        for (var i = 0; i < Children.Count; i++)
+        for (var i = 0; i < Children.Count && i < _positions.Length; i++)
         {
             var sz = Children[i].Measure(childC);
             var h = float.IsFinite(sz.Height) ? sz.Height : colW;
@@ -74,7 +77,7 @@ public sealed class ResponsiveGrid(IEnumerable<Widget>? children = null)
             _size.Width,
             _size.Height
         );
-        for (var i = 0; i < Children.Count; i++)
+        for (var i = 0; i < Children.Count && i < _positions.Length; i++)
             Children[i].Layout(new Offset(origin.X + _positions[i].X, origin.Y + _positions[i].Y));
     }
 

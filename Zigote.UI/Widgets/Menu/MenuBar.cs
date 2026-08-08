@@ -4,7 +4,6 @@ using Zigote.UI.Theme;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
 using AppInstance = Zigote.UI.Host.App;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.Widgets.Menu;
 
@@ -49,7 +48,10 @@ public sealed class MenuBar : Widget
             _row.Children.Add(btn);
         }
 
-        _scroller = new ScrollView(_row) { ScrollHorizontal = true, ScrollVertical = false };
+        _scroller = new ScrollView(_row) {
+            ScrollHorizontal = true,
+            ScrollVertical = false,
+        };
     }
 
     public override Size Measure(Constraints c)
@@ -75,9 +77,13 @@ public sealed class MenuBar : Widget
         _scroller.Layout(origin);
     }
 
+    /// <summary>Strip background. Null = the theme surface (its own strip); set it to the host's
+    ///     colour when the bar is embedded in something else, e.g. a GNOME headerbar.</summary>
+    public Color? Background { get; set; }
+
     public override void Paint(PaintList paint)
     {
-        paint.AddRect(Bounds, _theme.Surface);
+        paint.AddRect(Bounds, Background ?? _theme.Surface);
         _scroller.Paint(paint);
     }
 

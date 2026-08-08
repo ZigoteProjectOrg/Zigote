@@ -43,7 +43,7 @@ public sealed class EditableCurve
 
     public EditableCurve(IEnumerable<CurveKey> keys)
     {
-        Keys = [..keys];
+        Keys = [.. keys];
         Keys.Sort(static (a, b) => a.Time.CompareTo(b.Time));
         if (Keys.Count == 0)
         {

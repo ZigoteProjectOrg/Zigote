@@ -18,7 +18,7 @@ namespace Zigote.UI.Widgets.DragDrop;
 ///         a dedicated handle rather than an interactive control if you need the child to stay clickable.
 ///     </para>
 /// </summary>
-public class Draggable<T> : Widget
+public class Draggable<T> : Widget, IPointerCapture
 {
     private bool _armed;
     private bool _dragging;
@@ -142,7 +142,7 @@ public class Draggable<T> : Widget
     {
         if (_dragging)
         {
-            Owner?.EndDrag(_startPoint, cancelled: true);
+            Owner?.EndDrag(_startPoint, true);
             _dragging = false;
             OnDragCompleted?.Invoke(false);
         }

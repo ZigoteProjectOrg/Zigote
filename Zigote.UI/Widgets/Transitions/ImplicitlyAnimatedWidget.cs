@@ -64,7 +64,13 @@ public abstract class ImplicitlyAnimatedWidget : Widget
     public override void Attach(App owner, Widget? parent)
     {
         base.Attach(owner, parent);
-        // Detach disposed the ticker; recreate it so the widget still animates after a re-attach.
+        // Detach unsubscribed the tick handler as well as disposing the ticker — restore BOTH, or a
+        // re-attached widget animates without ever asking for a frame: the controller advances, the
+        // painted progress never changes, and the subtree only appears once something else (a
+        // resize) forces a relayout. That is every implicit animation inside a container that
+        // unmounts and remounts, e.g. a split view's content pane folding on a narrow window.
+        Controller.OnTick -= OnControllerTick;
+        Controller.OnTick += OnControllerTick;
         _ticker.Dispose();
         _ticker = new Ticker(Step);
         if (Controller.Status is AnimationStatus.Forward or AnimationStatus.Reverse)

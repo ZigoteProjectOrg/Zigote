@@ -25,11 +25,19 @@ public sealed class WindowTitleBar : Widget
 
     private int _hover = -1; // 0 minimize · 1 maximize · 2 close
     private Rect _lastDragRect;
+    private float _leadingW;
     private Size _size;
     private ThemeData _theme = ThemeData.Dark;
 
     public string Title { get; set; } = "";
     public WindowChromeStyle Style { get; set; } = WindowChromeStyle.System;
+
+    /// <summary>
+    ///     Optional widget hosted at the left of the bar — the GNOME headerbar pattern, where the
+    ///     app menu shares the titlebar row instead of costing a second strip below it. It is
+    ///     excluded from the drag region, so its own controls stay clickable.
+    /// </summary>
+    public Widget? Leading { get; set; }
 
     /// <summary>Adwaita: also offer minimize/maximize (off = close only, the GNOME dialog look).</summary>
     public bool ShowMinMax { get; set; } = true;
@@ -43,10 +51,35 @@ public sealed class WindowTitleBar : Widget
     private bool HasButtons => Style == WindowChromeStyle.AdwaitaCsd;
     private int ButtonCount => HasButtons ? ShowMinMax ? 3 : 1 : 0;
 
+    /// <summary>Width the window buttons claim on the right — off-limits to drags and the title.</summary>
+    private float RightReserve => ButtonCount * (ButtonDiameter + ButtonGap) + RightMargin;
+
+    private float LeftInset => Style == WindowChromeStyle.MacUnified ? TrafficLightInset : 0f;
+
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
         _size = c.Constrain(new Size(float.IsFinite(c.MaxWidth) ? c.MaxWidth : 400f, BarHeight));
+
+        _leadingW = 0f;
+        if (Leading is { } lead)
+        {
+            // Unbounded width so content-sized children report their intrinsic width (a bar that
+            // fills whatever it is given would otherwise claim the entire strip); clamped after.
+            var room = MathF.Max(0f, _size.Width - LeftInset - RightReserve);
+            _leadingW = MathF.Min(
+                room,
+                lead.Measure(
+                    new Constraints(
+                        0f,
+                        float.PositiveInfinity,
+                        BarHeight,
+                        BarHeight
+                    )
+                ).Width
+            );
+        }
+
         return _size;
     }
 
@@ -58,6 +91,7 @@ public sealed class WindowTitleBar : Widget
             _size.Width,
             _size.Height
         );
+        Leading?.Layout(new Offset(origin.X + LeftInset, origin.Y));
         PushDragRegion();
     }
 
@@ -66,8 +100,8 @@ public sealed class WindowTitleBar : Widget
     private void PushDragRegion()
     {
         if (ForWindow is not { } win || Style == WindowChromeStyle.System) return;
-        var left = Style == WindowChromeStyle.MacUnified ? TrafficLightInset : 0f;
-        var right = ButtonCount * (ButtonDiameter + ButtonGap) + RightMargin;
+        var left = LeftInset + _leadingW;
+        var right = RightReserve;
         var rect = new Rect(
             Bounds.X + left,
             Bounds.Y,
@@ -95,20 +129,30 @@ public sealed class WindowTitleBar : Widget
             _theme.Separator
         );
 
+        Leading?.Paint(paint);
+
         if (Title.Length > 0)
         {
             var fs = _theme.FontSizeCaption + 1f;
             var textW = (App.Active ?? ForWindow)?.Engine
                 .MeasureText(Title, fs, weight: FontWeight.Bold).Width ?? Title.Length * fs * 0.55f;
             var textY = Bounds.Y + (BarHeight - fs) / 2f + fs * 0.8f;
-            paint.AddText(
-                Title,
-                Bounds.X + (_size.Width - textW) / 2f,
-                textY,
-                _theme.TextSecondary,
-                fs,
-                fontWeight: FontWeight.Bold
-            );
+            // Centered on the bar, then pushed clear of the leading widget / window buttons if the
+            // window is too narrow for a true centre — the GNOME headerbar behaviour. Dropped
+            // entirely when even the shifted title would collide (a title is not worth clipping).
+            var free0 = Bounds.X + LeftInset + _leadingW;
+            var free1 = Bounds.Right - RightReserve;
+            // Guard before the clamp: once the gap is narrower than the title, free1 - textW falls
+            // below free0 and Math.Clamp throws on an inverted range (it did, mid window-resize).
+            if (free1 - free0 >= textW)
+                paint.AddText(
+                    Title,
+                    Math.Clamp(Bounds.X + (_size.Width - textW) / 2f, free0, free1 - textW),
+                    textY,
+                    _theme.TextSecondary,
+                    fs,
+                    fontWeight: FontWeight.Bold
+                );
         }
 
         for (var i = 0; i < ButtonCount; i++) PaintButton(paint, i);
@@ -183,10 +227,25 @@ public sealed class WindowTitleBar : Widget
         );
     }
 
-    /// <summary>Anywhere in the bar except the window buttons drags the window.</summary>
+    /// <summary>Anywhere in the bar except the window buttons and the leading widget drags the
+    ///     window.</summary>
     internal bool IsDragPoint(Offset point)
     {
-        return Bounds.Contains(point.X, point.Y) && ButtonAt(point) < 0;
+        return Bounds.Contains(point.X, point.Y) && ButtonAt(point) < 0 &&
+               Leading?.HitTest(point) is null;
+    }
+
+    /// <summary>The leading widget claims its own points; the rest of the bar stays the drag/button
+    ///     surface (so the base <see cref="Widget.HitTest" /> result — this bar — is kept).</summary>
+    public override Widget? HitTest(Offset point)
+    {
+        if (!Bounds.Contains(point.X, point.Y)) return null;
+        return Leading?.HitTest(point) ?? this;
+    }
+
+    public override IEnumerable<Widget> GetChildren()
+    {
+        return ChildOrEmpty(Leading);
     }
 
     private int ButtonAt(Offset point)

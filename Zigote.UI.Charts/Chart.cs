@@ -1716,6 +1716,17 @@ public class Chart : Widget
         base.OnScroll(dx, dy);
     }
 
+    /// <summary>Pinch zooms the chart wherever ⌘/Ctrl-wheel would (<see cref="ZoomableX" />).</summary>
+    public override bool CanTouchScale()
+    {
+        return ZoomableX || ZoomableY;
+    }
+
+    public override void OnTouchScale(float scale, Offset focus)
+    {
+        ZoomBy(scale, focus);
+    }
+
     private static bool HoverEquals(ChartHoverInfo? a, ChartHoverInfo? b)
     {
         if (ReferenceEquals(a, b)) return true;

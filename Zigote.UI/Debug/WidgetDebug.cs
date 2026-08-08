@@ -115,6 +115,12 @@ public static class WidgetDebug
     /// </summary>
     public static string? Describe(Widget w)
     {
+        // A Watch has no property worth summarising, but it has the one number the inspector is most
+        // often opened to find: how often this subtree has rebuilt. The row that keeps climbing while
+        // the screen is still is the one to look at.
+        if (w is Watch watch)
+            return watch.RebuildCount == 0 ? null : $"{watch.RebuildCount} rebuilds";
+
         var prop = SummaryProps.GetOrAdd(
             w.GetType(),
             static t =>
@@ -157,8 +163,9 @@ public static class WidgetDebug
     /// <summary>
     ///     The deepest widget whose bounds contain <paramref name="point" /> — the inspector's
     ///     tap-to-select pick. Later (topmost-painted) children win over earlier ones; widgets with
-    ///     unpaintable bounds are skipped. Unlike <see cref="Widget.HitTest" /> this never consults
-    ///     hit-transparency, so decorative leaves (labels, boxes) are pickable.
+    ///     unpaintable bounds are skipped. Unlike <see cref="Widget.HitTest" /> this does not require
+    ///     hit-transparency to pick a widget, so decorative leaves (labels, boxes) stay pickable — it
+    ///     only consults it to break a tie between overlapping siblings, see below.
     /// </summary>
     public static Widget? DeepestAt(Widget root, Offset point, int maxDepth = 64)
     {
@@ -170,22 +177,27 @@ public static class WidgetDebug
             var self = b is { Width: > 0f, Height: > 0f } && b.Contains(p.X, p.Y);
             if (depth <= 0) return self ? w : null;
 
-            Widget? best = null;
             var kids = Children(w);
-            if (kids is IReadOnlyList<Widget> list)
+            var list = kids as IReadOnlyList<Widget> ?? kids.ToList();
+
+            // Topmost-first, but a sibling only *wins* if the real hit test also reaches into it.
+            // A full-screen overlay layer that is currently showing nothing (AdwToastOverlay's
+            // Align with a null child, a dismissed scrim, an idle drag layer) covers the whole
+            // window by bounds while being completely transparent to input, and taking it on bounds
+            // alone made every pick anywhere on screen select that empty layer. Its bounds hit is
+            // kept only as a fallback, for when no sibling claims the point at all — that is what
+            // keeps a wholly decorative subtree (a Column of Labels) pickable.
+            Widget? best = null;
+            Widget? fallback = null;
+            for (var i = list.Count - 1; i >= 0 && best is null; i--)
             {
-                for (var i = list.Count - 1; i >= 0 && best is null; i--)
-                    best = Descend(list[i], p, depth - 1);
-            }
-            else
-            {
-                // Cold path: materialize to walk topmost-first.
-                var all = kids.ToList();
-                for (var i = all.Count - 1; i >= 0 && best is null; i--)
-                    best = Descend(all[i], p, depth - 1);
+                var hit = Descend(list[i], p, depth - 1);
+                if (hit is null) continue;
+                fallback ??= hit;
+                if (list[i].HitTest(p) is not null) best = hit;
             }
 
-            return best ?? (self ? w : null);
+            return best ?? fallback ?? (self ? w : null);
         }
     }
 
@@ -240,63 +252,268 @@ public static class WidgetDebug
     /// <summary>A small, human-readable property list for the inspector (header rows + reflected props).</summary>
     public static List<(string Name, string Value)> Properties(Widget w)
     {
-        var type = w.GetType();
         var list = new List<(string, string)> {
-            ("Type", type.Name),
+            ("Type", w.GetType().Name),
             ("Bounds",
                 $"{w.Bounds.X:0.#}, {w.Bounds.Y:0.#}  {w.Bounds.Width:0.#}×{w.Bounds.Height:0.#}"),
             ("Dirty", $"B:{Bit(w.NeedsBuild)} L:{Bit(w.NeedsLayout)} P:{Bit(w.NeedsPaint)}"),
             ("Counts", $"M:{w.MeasureCount} L:{w.LayoutCount} P:{w.PaintCount} R:{w.RebuildCount}"),
-            ("Focusable", Bool(w.Focusable)),
         };
 
-        if (w.Key is not null) list.Add(("Key", w.Key.ToString() ?? ""));
-        if (w.TooltipText is not null) list.Add(("Tooltip", Format(w.TooltipText)));
+        foreach (var m in Members(w)) list.Add((m.Name, m.Value));
+        return list;
+    }
 
-        // Reflect the widget's properties, declared (most-derived) ones first so the type-specific state
-        // (Text/Value/Checked/Color/…) shows above the inherited base-widget plumbing.
-        var props = DumpProps.GetOrAdd(
+    // ── Nested member walk (property tree / JSON view) ──
+
+    /// <summary>
+    ///     One row of the property tree: the display name, its formatted one-line value, the boxed
+    ///     value itself (null when the property is null) and whether it has members worth expanding.
+    /// </summary>
+    public readonly record struct DebugMember(
+        string Name,
+        string Value,
+        object? Raw,
+        bool Expandable
+    );
+
+    /// <summary>Cap on how many elements of a collection are listed / serialized.</summary>
+    private const int MaxItems = 200;
+
+    /// <summary>Values that <see cref="Format" /> already renders in full — never expanded.</summary>
+    private static bool IsLeaf(object v)
+    {
+        return v is string or char or bool or Enum or Delegate or Color or Size or Offset or Rect
+                   or EdgeInsets or Alignment or decimal ||
+               v.GetType().IsPrimitive;
+    }
+
+    /// <summary>True when a value has nested members the inspector can drill into. Type-level, so cheap.</summary>
+    public static bool CanExpand(object? v)
+    {
+        return v is not null && !IsLeaf(v) &&
+               (v is IEnumerable || MemberProps(v.GetType()).Length > 0);
+    }
+
+    private static PropertyInfo[] MemberProps(Type type)
+    {
+        return ObjProps.GetOrAdd(
             type,
             static t => t
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                .Where(p =>
-                    p.GetIndexParameters().Length == 0 && p.CanRead && !SkipProps.Contains(p.Name)
-                )
+                .Where(p => p.GetIndexParameters().Length == 0 && p.CanRead)
                 .Where(p => !typeof(Widget).IsAssignableFrom(p.PropertyType))
                 .Where(p => !typeof(IEnumerable<Widget>).IsAssignableFrom(p.PropertyType))
                 .OrderBy(p => p.DeclaringType == t ? 0 : 1)
                 .ToArray()
         );
+    }
+
+    private static readonly ConcurrentDictionary<Type, PropertyInfo[]> ObjProps = new();
+
+    /// <summary>
+    ///     The inspectable members of any value: a widget's reflected properties (declared ones first,
+    ///     plumbing skipped), a collection's elements, or a plain object's public properties. Null
+    ///     properties are dropped for widgets (noise) but kept for nested objects, where "this token is
+    ///     unset" is the answer you opened the row for.
+    /// </summary>
+    public static List<DebugMember> Members(object o)
+    {
+        var list = new List<DebugMember>();
+        var isWidget = o is Widget;
+
+        if (o is Widget w)
+        {
+            list.Add(
+                new DebugMember(
+                    "Focusable",
+                    Bool(w.Focusable),
+                    w.Focusable,
+                    false
+                )
+            );
+            if (w.Key is not null) list.Add(Member("Key", w.Key));
+            if (w.TooltipText is not null) list.Add(Member("Tooltip", w.TooltipText));
+        }
+        else if (o is IEnumerable seq)
+        {
+            var i = 0;
+            foreach (var item in seq)
+            {
+                if (i >= MaxItems)
+                {
+                    list.Add(
+                        new DebugMember(
+                            "…",
+                            "more elements",
+                            null,
+                            false
+                        )
+                    );
+                    break;
+                }
+
+                list.Add(Member($"[{i++}]", item));
+            }
+
+            return list;
+        }
+
+        // Declared (most-derived) properties first so the type-specific state (Text/Value/Color/…)
+        // shows above the inherited base plumbing.
+        var props = isWidget
+            ? DumpProps.GetOrAdd(
+                o.GetType(),
+                static t => MemberProps(t).Where(p => !SkipProps.Contains(p.Name)).ToArray()
+            )
+            : MemberProps(o.GetType());
 
         foreach (var prop in props)
         {
             object? val;
             try
             {
-                val = prop.GetValue(w);
+                val = prop.GetValue(o);
             }
             catch
             {
                 continue;
             }
 
-            if (val is null) continue;
-
-            string s;
-            try
-            {
-                s = Format(val);
-            }
-            catch
-            {
-                s = "{" + val.GetType().Name + "}";
-            }
-
-            if (s.Length > 160) s = s[..157] + "…";
-            list.Add((prop.Name, s));
+            if (val is null && isWidget) continue;
+            list.Add(Member(prop.Name, val));
         }
 
         return list;
+    }
+
+    private static DebugMember Member(string name, object? val)
+    {
+        if (val is null)
+            return new DebugMember(
+                name,
+                "null",
+                null,
+                false
+            );
+
+        var expandable = CanExpand(val);
+        string s;
+        try
+        {
+            // An expandable object's own ToString is the noise the tree exists to replace — a record's
+            // full member dump on one clipped line. Show the type; the children carry the detail.
+            s = expandable && val is not IEnumerable ? "{" + val.GetType().Name + "}" : Format(val);
+        }
+        catch
+        {
+            s = "{" + val.GetType().Name + "}";
+        }
+
+        if (s.Length > 160) s = s[..157] + "…";
+        return new DebugMember(
+            name,
+            s,
+            val,
+            expandable
+        );
+    }
+
+    /// <summary>
+    ///     The same member walk rendered as JSON, for copying a whole widget's state out in one go.
+    ///     Bounded on every axis a live object graph can run away on: <paramref name="maxDepth" />,
+    ///     <see cref="MaxItems" /> per collection, a reference-cycle guard, and a total length cap.
+    /// </summary>
+    public static string ToJson(object? root, int maxDepth = 4, int maxChars = 64_000)
+    {
+        var sb = new System.Text.StringBuilder();
+        var path = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        Write(root, 0);
+        if (sb.Length >= maxChars) sb.Append("\n…truncated");
+        return sb.ToString();
+
+        void Write(object? v, int depth)
+        {
+            switch (v)
+            {
+                case null:
+                    sb.Append("null");
+                    return;
+                case bool b:
+                    sb.Append(Bool(b));
+                    return;
+                case float f:
+                    sb.Append(Num(f));
+                    return;
+                case double d:
+                    sb.Append(Num((float)d));
+                    return;
+                case string s:
+                    Str(s);
+                    return;
+            }
+
+            if (v.GetType().IsPrimitive && v is not char)
+            {
+                sb.Append(Convert.ToString(v, System.Globalization.CultureInfo.InvariantCulture));
+                return;
+            }
+
+            if (!CanExpand(v))
+            {
+                Str(Format(v));
+                return;
+            }
+
+            if (depth >= maxDepth || sb.Length >= maxChars)
+            {
+                Str(v is IEnumerable ? "[…]" : "{" + v.GetType().Name + "}");
+                return;
+            }
+
+            if (!path.Add(v))
+            {
+                Str("↻ " + v.GetType().Name);
+                return;
+            }
+
+            var array = v is IEnumerable;
+            var members = Members(v);
+            sb.Append(array ? '[' : '{');
+            for (var i = 0; i < members.Count; i++)
+            {
+                if (i > 0) sb.Append(',');
+                sb.Append('\n').Append(' ', (depth + 1) * 2);
+                if (!array) Str(members[i].Name).Append(": ");
+                if (members[i].Raw is null && members[i].Value is not "null") Str(members[i].Value);
+                else Write(members[i].Raw, depth + 1);
+                if (sb.Length >= maxChars) break;
+            }
+
+            if (members.Count > 0) sb.Append('\n').Append(' ', depth * 2);
+            sb.Append(array ? ']' : '}');
+            path.Remove(v);
+        }
+
+        System.Text.StringBuilder Str(string s)
+        {
+            sb.Append('"');
+            foreach (var c in s)
+                switch (c)
+                {
+                    case '"': sb.Append("\\\""); break;
+                    case '\\': sb.Append("\\\\"); break;
+                    case '\n': sb.Append("\\n"); break;
+                    case '\r': sb.Append("\\r"); break;
+                    case '\t': sb.Append("\\t"); break;
+                    default:
+                        if (c < ' ') sb.Append("\\u").Append(((int)c).ToString("x4"));
+                        else sb.Append(c);
+                        break;
+                }
+
+            return sb.Append('"');
+        }
     }
 
     private static string Bool(bool b)

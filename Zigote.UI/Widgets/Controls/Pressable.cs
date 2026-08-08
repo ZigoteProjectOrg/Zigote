@@ -20,7 +20,7 @@ namespace Zigote.UI.Widgets.Controls;
 ///         here, and the App focuses it on click because it is the hit-test result.
 ///     </para>
 /// </summary>
-public sealed class Pressable : Widget
+public sealed class Pressable : Widget, IPointerCapture
 {
     private Size _size;
     private ThemeData _theme = ThemeData.Dark;
@@ -100,10 +100,13 @@ public sealed class Pressable : Widget
             paint.AddFocusRing(Bounds, FocusRadius, _theme);
     }
 
-    // Capture all pointer events so the child's visuals are driven entirely by this wrapper.
+    // Capture all pointer events so the child's visuals are driven entirely by this wrapper — except
+    // a nested capture (a button, a drag handle), which wins over the one wrapping it. A row that
+    // is itself activatable routinely carries both; without this the row swallows their gestures.
     public override Widget? HitTest(Offset point)
     {
-        return TouchTarget().Contains(point.X, point.Y) ? this : null;
+        if (!TouchTarget().Contains(point.X, point.Y)) return null;
+        return Child?.HitTest(point) is IPointerCapture inner ? (Widget)inner : this;
     }
 
     /// <summary>

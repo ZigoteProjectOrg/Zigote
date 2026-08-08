@@ -365,7 +365,8 @@ internal sealed class FileBrowserList : Widget
     private void MoveCursor(int delta, bool extend)
     {
         if (_model.Visible.Count == 0) return;
-        var target = _cursor < 0 ? (delta > 0 ? 0 : _model.Visible.Count - 1)
+        var target = _cursor < 0
+            ? delta > 0 ? 0 : _model.Visible.Count - 1
             : Math.Clamp(_cursor + delta, 0, _model.Visible.Count - 1);
         MoveCursorTo(target, extend);
     }
@@ -392,7 +393,8 @@ internal sealed class FileBrowserList : Widget
             "wav" or "mp3" or "ogg" or "flac" => (Icons.Audio, _theme.Warning),
             "mp4" or "mov" or "avi" or "mkv" or "webm" => (Icons.Movie, _theme.Warning),
             "cs" or "fs" or "zig" or "js" or "ts" or "json" or "xml" or "yaml" or "yml"
-                or "toml" or "wgsl" or "glsl" or "hlsl" or "sh" => (Icons.Code, _theme.TextSecondary),
+                or "toml" or "wgsl" or "glsl" or "hlsl"
+                or "sh" => (Icons.Code, _theme.TextSecondary),
             "md" or "txt" or "log" => (Icons.Description, _theme.TextSecondary),
             _ => (Icons.File, _theme.TextMuted),
         };
@@ -480,10 +482,24 @@ internal sealed class FileBrowserHeader : Widget
         var fs = _theme.FontSizeCaption - 1f;
         var textY = Bounds.Y + (Bounds.Height - fs) / 2f + fs * 0.8f;
 
-        DrawLabel(paint, "Name", FileSortColumn.Name, Bounds.X + 32f, textY, fs);
+        DrawLabel(
+            paint,
+            "Name",
+            FileSortColumn.Name,
+            Bounds.X + 32f,
+            textY,
+            fs
+        );
         if (sizeW > 0f)
         {
-            DrawLabel(paint, "Size", FileSortColumn.Size, Bounds.X + nameW, textY, fs);
+            DrawLabel(
+                paint,
+                "Size",
+                FileSortColumn.Size,
+                Bounds.X + nameW,
+                textY,
+                fs
+            );
             DrawLabel(
                 paint,
                 "Modified",
@@ -493,6 +509,7 @@ internal sealed class FileBrowserHeader : Widget
                 fs
             );
         }
+
         paint.AddRect(
             new Rect(
                 Bounds.X,

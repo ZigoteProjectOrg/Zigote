@@ -67,7 +67,8 @@ internal sealed class OverlaysPage : StatelessWidget
                     : new Tooltip(
                         "Tooltips appear after a short hover",
                         new Chip("Hover for a tip")
-                    ))
+                    )
+                )
             )
         );
     }

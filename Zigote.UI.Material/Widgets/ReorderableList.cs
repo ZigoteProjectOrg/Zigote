@@ -1,5 +1,3 @@
-using Zigote.UI.Host;
-
 namespace Zigote.UI.Material;
 
 /// <summary>

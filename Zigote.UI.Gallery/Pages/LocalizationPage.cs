@@ -177,7 +177,8 @@ internal sealed class LocalizationPageState : WidgetState<LocalizationPage>
                     result,
                 ]
             )
-            : new Row([stepper, new SizedBox(12), counter, new SizedBox(24), result]));
+            : new Row([stepper, new SizedBox(12), counter, new SizedBox(24), result])
+        );
     }
 
     private static Widget FormatRow(string label, string value)
@@ -194,7 +195,8 @@ internal sealed class LocalizationPageState : WidgetState<LocalizationPage>
                     crossAxisAlignment: CrossAxisAlignment.Start,
                     children: [labelText, valueText]
                 )
-                : new Row([new SizedBox(120, child: labelText), valueText]))
+                : new Row([new SizedBox(120, child: labelText), valueText])
+            )
         );
     }
 
@@ -219,7 +221,8 @@ internal sealed class LocalizationPageState : WidgetState<LocalizationPage>
                 crossAxisAlignment: CrossAxisAlignment.Start,
                 children: [labelText, new SizedBox(height: 6), strip]
             )
-            : new Row([new SizedBox(140, child: labelText), strip]));
+            : new Row([new SizedBox(140, child: labelText), strip])
+        );
     }
 
     private static Widget StepChip(string label, bool accent, Color onSurface)

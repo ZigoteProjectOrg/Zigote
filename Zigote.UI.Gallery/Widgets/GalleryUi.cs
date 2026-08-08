@@ -66,7 +66,8 @@ internal static class GalleryUi
                 crossAxisSpacing: 16,
                 childAspectRatio: 1.85
             )
-            : Sections(sections));
+            : Sections(sections)
+        );
     }
 
     /// <summary>
@@ -77,26 +78,27 @@ internal static class GalleryUi
     public static Widget LabeledRow(Widget control, string label, Action? onTap = null)
     {
         return new AdaptiveBuilder((_, size) =>
-        {
-            var touch = size == WindowSizeClass.Compact;
+            {
+                var touch = size == WindowSizeClass.Compact;
 
-            // A zero-width strut raises the row to a finger-sized band without widening it — the
-            // row is Min-sized and sits inside horizontal groups (the radio group), so growing it
-            // on the main axis would push its siblings off the card.
-            Widget[] children = touch
-                ? [new SizedBox(0, 44), control, new SizedBox(8), new Text(label)]
-                : [control, new SizedBox(8), new Text(label)];
+                // A zero-width strut raises the row to a finger-sized band without widening it — the
+                // row is Min-sized and sits inside horizontal groups (the radio group), so growing it
+                // on the main axis would push its siblings off the card.
+                Widget[] children = touch
+                    ? [new SizedBox(0, 44), control, new SizedBox(8), new Text(label)]
+                    : [control, new SizedBox(8), new Text(label)];
 
-            var row = new Row(
-                crossAxisAlignment: CrossAxisAlignment.Center,
-                mainAxisSize: MainAxisSize.Min,
-                children: children
-            );
+                var row = new Row(
+                    crossAxisAlignment: CrossAxisAlignment.Center,
+                    mainAxisSize: MainAxisSize.Min,
+                    children: children
+                );
 
-            // The detector captures the whole row, control included, so the tap has to carry the
-            // control's intent — that is what onTap is for.
-            return touch && onTap is not null ? new GestureDetector(row, onTap) : row;
-        });
+                // The detector captures the whole row, control included, so the tap has to carry the
+                // control's intent — that is what onTap is for.
+                return touch && onTap is not null ? new GestureDetector(row, onTap) : row;
+            }
+        );
     }
 
     public static Widget Swatch(Color color, float radius)

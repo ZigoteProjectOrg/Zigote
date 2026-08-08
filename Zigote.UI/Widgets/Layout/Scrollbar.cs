@@ -15,9 +15,35 @@ public sealed class Scrollbar
 
     private const float Inset = 2f;
     private const float MinThumb = 24f;
+
+    /// <summary>Resting thickness — thin enough to stay out of the way.</summary>
+    private const float IdleThickness = 3f;
+
+    /// <summary>Thickness once the pointer is on the strip, so there is something to grab.</summary>
+    private const float ActiveThickness = 7f;
+
     private float _grab;
 
     public bool Dragging { get; private set; }
+
+    /// <summary>
+    ///     The pointer is over the grab strip. Owners set this from
+    ///     <see cref="Widget.OnPointerEnter" />/<see cref="Widget.OnPointerExit" />.
+    ///     <para>
+    ///         A 3 px bar is a hard target: it has to be visible without dominating, which means it
+    ///         is too thin to aim at. Widening it under the pointer is how every desktop scrollbar
+    ///         resolves that — the thin bar is an indicator, and it becomes a control when you reach
+    ///         for it.
+    ///     </para>
+    /// </summary>
+    public bool Hovered { get; set; }
+
+    /// <summary>Thickness for the current state, and how solid to draw it.</summary>
+    private (float Thickness, float Alpha) Look()
+    {
+        if (Dragging) return (ActiveThickness, 0.65f);
+        return Hovered ? (ActiveThickness, 0.45f) : (IdleThickness, 0.25f);
+    }
 
     public static bool Visible(float viewport, float content)
     {
@@ -91,7 +117,7 @@ public sealed class Scrollbar
             content,
             offset
         );
-        var w = Dragging ? 4f : 3f;
+        var (w, alpha) = Look();
         paint.AddRect(
             new Rect(
                 area.Right - w - Inset,
@@ -99,7 +125,7 @@ public sealed class Scrollbar
                 w,
                 len
             ),
-            tint.WithAlpha(Dragging ? 0.55f : 0.25f),
+            tint.WithAlpha(alpha),
             w / 2f
         );
     }
@@ -116,7 +142,7 @@ public sealed class Scrollbar
             content,
             offset
         );
-        var h = Dragging ? 4f : 3f;
+        var (h, alpha) = Look();
         paint.AddRect(
             new Rect(
                 start,
@@ -124,7 +150,7 @@ public sealed class Scrollbar
                 len,
                 h
             ),
-            tint.WithAlpha(Dragging ? 0.55f : 0.25f),
+            tint.WithAlpha(alpha),
             h / 2f
         );
     }

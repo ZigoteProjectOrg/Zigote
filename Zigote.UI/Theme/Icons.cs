@@ -1,6 +1,5 @@
 using Zigote.Core;
 using Zigote.Core.Paint;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.Theme;
 

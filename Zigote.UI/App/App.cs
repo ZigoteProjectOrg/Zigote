@@ -97,6 +97,14 @@ public partial class App : IDisposable
     // True while the native resize event-watch is driving a live-resize frame — prevents re-entry.
     private bool _inLiveResize;
 
+    // True while the measure/layout pass or the root/overlay paint walk is running. A reactive
+    // subtree swap landing now would mutate the tree mid-walk (shrink a ListView's items between
+    // its VisibleRange and the row loop, grow a ResponsiveGrid's children mid-measure via an
+    // OnScrolled load-more signal) — Watch.OnChanged checks this and defers the swap to the next
+    // frame instead. Watch.Measure's own deferred-apply entry point is unaffected: it swaps at a
+    // point the walk is designed to tolerate.
+    internal bool InTreeWalk { get; private set; }
+
     private long _lastPaintExplosionLogMs = long.MinValue;
     private long _lastTicks;
     private Offset _mousePos;
@@ -109,7 +117,10 @@ public partial class App : IDisposable
 
     // Widgets an off-thread caller asked to re-lay-out; drained on the UI thread each frame (the queue's
     // memory barrier also publishes the widget's own pending state). See InvalidateLayoutFromAnyThread.
-    private readonly System.Collections.Concurrent.ConcurrentQueue<Widget> _crossThreadInvalidations = new();
+    private readonly System.Collections.Concurrent.ConcurrentQueue<Widget>
+        _crossThreadInvalidations = new();
+
+    private readonly System.Collections.Concurrent.ConcurrentQueue<Action> _posted = new();
 
     // ── Viewport FPS controls (for performance testing) ───────────────────────
     private long _paceAnchorTicks;
@@ -119,6 +130,7 @@ public partial class App : IDisposable
     private Widget? _rightCapturedWidget;
 
     private Widget? _root;
+    private Widget? _titleBarLeading;
     private bool _semanticsDirty = true;
 
     private ThemeData _theme = ThemeData.Dark;
@@ -143,14 +155,36 @@ public partial class App : IDisposable
         // window — see the main ctor); assigning it here would strand the main window's animations.
     }
 
+    /// <param name="gpuPreference">
+    ///     Which GPU to run on when the machine has more than one. Defaults to
+    ///     <see cref="GpuPowerPreference.Efficiency" /> because a plain <see cref="App" /> is a 2D/UI
+    ///     app — on a laptop that keeps the discrete card asleep instead of waking it to draw
+    ///     rectangles. Hosts that drive a 3D scene (the editor, the player,
+    ///     <see cref="Zigote.Game.GameApp" />) pass <see cref="GpuPowerPreference.Performance" />.
+    ///     <c>ZIGOTE_GPU</c> / <c>ZIGOTE_GPU_POWER</c> override this at launch.
+    /// </param>
+    /// <param name="gpuIndex">
+    ///     Pin a specific GPU by its index in <see cref="ZigoteEngine.EnumerateGpus" />, ignoring
+    ///     <paramref name="gpuPreference" />. -1 (the default) means "decide from the preference".
+    ///     This is the editor's GPU setting and the developer testing knob; an index that doesn't
+    ///     exist (or can't drive the window) falls back to the automatic pick rather than failing.
+    /// </param>
     public App(string title, uint width = 960, uint height = 640,
-        string? fontPath = null, string? fontName = null)
+        string? fontPath = null, string? fontName = null,
+        GpuPowerPreference gpuPreference = GpuPowerPreference.Efficiency,
+        int gpuIndex = -1,
+        bool transparentWindow = false)
     {
         Active = this;
         MainApp = this;
         Title = title;
         Engine = new ZigoteEngine();
         FontLicenses.EnsureRegistered();
+
+        // Alpha-composited window for CSD rounded corners — a creation-time property, so it must
+        // be requested before Initialize. Harmless where the platform refuses it (the per-frame
+        // rounding check reads back what actually took).
+        if (transparentWindow) Engine.SetWindowTransparent(true);
 
         // Prefer bundled, cross-platform fonts in Fonts/ next to the executable so the UI
         // doesn't depend on system fonts. Inter is the default UI face; Iosevka is bundled
@@ -175,7 +209,9 @@ public partial class App : IDisposable
             title,
             mainFont,
             fontName ?? "Inter",
-            backend
+            backend,
+            gpuPreference,
+            gpuIndex
         );
 
         // Native file dialogs parent to the focused OS window (macOS sheet / Windows owner) —
@@ -183,6 +219,22 @@ public partial class App : IDisposable
         // sheets onto that window. Main window is the fallback while nothing is focused.
         FileDialog.DefaultParentWindow = Engine.MainWindowId;
         FileDialog.ParentWindowProvider = () => FocusedWindowId;
+
+        // Real Inter weight variants — the FreeType renderer shapes one face per family, so each
+        // weight registers as its own family and FontFaces maps FontWeight → family at the
+        // AddText/MeasureText choke points. Only when the default face is in use (fontPath null).
+        if (fontPath is null)
+            foreach (var (weight, faceName) in (ReadOnlySpan<(FontWeight, string)>) [
+                         (FontWeight.Medium, "Inter-Medium"),
+                         (FontWeight.SemiBold, "Inter-SemiBold"),
+                         (FontWeight.Bold, "Inter-Bold"),
+                         (FontWeight.ExtraBold, "Inter-ExtraBold"),
+                     ])
+            {
+                var facePath = Path.Combine(fontsDir, faceName + ".ttf");
+                if (File.Exists(facePath) && Engine.LoadFont(faceName, facePath))
+                    FontFaces.RegisterWeight(weight, faceName);
+            }
 
         // Iosevka (monospace) for code/text widgets — registered as a named font so code views
         // can request it; the general UI stays on Inter.
@@ -201,6 +253,11 @@ public partial class App : IDisposable
         var colorEmoji = Path.Combine(fontsDir, "NotoColorEmoji.ttf");
         if (File.Exists(colorEmoji) && Engine.LoadFont("emoji", colorEmoji))
             Engine.AddEmojiFont("emoji");
+
+        // Scripts the bundled face cannot draw — Japanese, Korean, Chinese, Arabic, Thai — come
+        // from the platform's own fonts. Registered last, so the app's own faces always win for
+        // the characters they do cover. See SystemFonts for why these are borrowed, not bundled.
+        SystemFonts.Register(Engine);
         _lastTicks = _clock.ElapsedTicks;
 
         // Every animation tick routes through RequestFrameAction. It must request a *relayout*, not
@@ -319,6 +376,29 @@ public partial class App : IDisposable
     ///     wherever no interactive control claims the point.</summary>
     public float TitleBarDragHeight { get; set; } = 38f;
 
+    /// <summary>Corner radius of the window frame under transparent Adwaita CSD chrome.
+    ///     libadwaita's <c>$window_radius</c> is 12px; a rounder corner is the tell that gives away
+    ///     a not-quite-GNOME window sitting next to real ones. Only observed while the window is
+    ///     unmaximized on a compositor that granted an alpha channel.</summary>
+    public float CsdCornerRadius { get; set; } = 12f;
+
+    /// <summary>
+    ///     This window's paint is clipped to a rounded rect this frame: CSD chrome on a window the
+    ///     compositor really composites with alpha (the alpha-0 clear then shows the desktop through
+    ///     the corner cutouts). Square while maximized/fullscreen, like GNOME — that state only
+    ///     flips alongside window events, which already dirty both layers via the resize path.
+    /// </summary>
+    private bool CsdRounded => ChromeStyle == WindowChromeStyle.AdwaitaCsd &&
+                               Engine.WindowIsTransparent(WindowId) &&
+                               !Engine.WindowIsMaximized(WindowId);
+
+    private Rect WindowRect => new(
+        0f,
+        0f,
+        HostLogicalWidth,
+        HostLogicalHeight
+    );
+
     public Widget? Root
     {
         get => _root;
@@ -370,13 +450,57 @@ public partial class App : IDisposable
         RequestPaint();
     }
 
+    /// <summary>
+    ///     True when this window composes an in-app titlebar strip that can host
+    ///     <see cref="TitleBarLeading" /> — i.e. AdwaitaCsd chrome. Layouts check this to decide
+    ///     whether their menu bar can move up into the titlebar row or needs its own strip.
+    /// </summary>
+    public bool HasTitleBarStrip => ChromeStyle == WindowChromeStyle.AdwaitaCsd;
+
+    /// <summary>
+    ///     Widget hosted at the left of the in-app titlebar (GNOME headerbar style — the app menu
+    ///     shares the titlebar row instead of costing a second strip). Ignored while
+    ///     <see cref="HasTitleBarStrip" /> is false; set it before assigning <see cref="Root" /> so
+    ///     the strip is built with it.
+    /// </summary>
+    public Widget? TitleBarLeading
+    {
+        get => _titleBarLeading;
+        set
+        {
+            if (ReferenceEquals(_titleBarLeading, value)) return;
+            _titleBarLeading = value;
+            if (_root is WindowChromeHost host)
+            {
+                host.Bar.Leading = value;
+                value?.Attach(this, host.Bar);
+                RequestLayout();
+            }
+        }
+    }
+
+    /// <summary>
+    ///     AdwaitaCsd without the injected <see cref="WindowChromeHost" /> strip: the app's own
+    ///     headerbars carry the window buttons and register themselves in
+    ///     <see cref="CsdDragSurfaces" /> (the GNOME headerbar-as-titlebar pattern). Set before
+    ///     assigning <see cref="Root" />.
+    /// </summary>
+    public bool SuppressChromeStrip { get; set; }
+
+    /// <summary>
+    ///     Widgets whose bounds act as the draggable titlebar when the chrome strip is suppressed
+    ///     — points over interactive children inside them still reach the app. Registered by
+    ///     headerbar widgets on Attach/Detach.
+    /// </summary>
+    public List<Widget> CsdDragSurfaces { get; } = [];
+
     /// <summary>Only Adwaita composes a strip — it must host the CSD buttons. MacUnified keeps
     ///     the content full-bleed (the native traffic lights float over it).</summary>
     private Widget? WrapWithChrome(Widget? userRoot)
     {
         if (userRoot is null || ChromeStyle != WindowChromeStyle.AdwaitaCsd ||
-            userRoot is WindowChromeHost) return userRoot;
-        return new WindowChromeHost(this, userRoot);
+            SuppressChromeStrip || userRoot is WindowChromeHost) return userRoot;
+        return new WindowChromeHost(this, userRoot) { Bar = { Leading = _titleBarLeading } };
     }
 
     // ── Titlebar drag arbitration ─────────────────────────────────────────────
@@ -416,7 +540,7 @@ public partial class App : IDisposable
     /// <summary>
     ///     Chromed windows (MacUnified especially) may have roots that don't cover the whole
     ///     window — e.g. content padded below the traffic-light band — which would violate the
-    ///     renderer's opaque-full-screen-root contract and expose the animated debug clear
+    ///     renderer's opaque-full-screen-root contract and expose the renderer's debug clear
     ///     color. Guarantee the contract by painting the window background under the root.
     /// </summary>
     private void PaintChromeBackdrop()
@@ -446,9 +570,22 @@ public partial class App : IDisposable
 
         if (ChromeStyle == WindowChromeStyle.AdwaitaCsd)
         {
-            if (_root is not WindowChromeHost host ||
-                !host.Bar.Bounds.Contains(x, y)) return 0;
-            return host.Bar.IsDragPoint(point) ? 1 : 0;
+            if (_root is WindowChromeHost host)
+                return host.Bar.Bounds.Contains(x, y) && host.Bar.IsDragPoint(point) ? 1 : 0;
+
+            // Strip suppressed: the app's registered headerbars are the titlebar — gaps drag,
+            // interactive controls inside them stay clickable.
+            for (var i = 0; i < CsdDragSurfaces.Count; i++)
+            {
+                var surface = CsdDragSurfaces[i];
+                if (!surface.Bounds.Contains(x, y)) continue;
+                for (var w = surface.HitTest(point); w is not null && w != surface; w = w.Parent)
+                    if (IsInteractive(w))
+                        return 0;
+                return 1;
+            }
+
+            return 0;
         }
 
         // MacUnified: the top band drags wherever nothing interactive claims the point.
@@ -483,6 +620,13 @@ public partial class App : IDisposable
         }
     }
 
+    /// <summary>
+    ///     How long a hidden window's frame loop blocks between turns. Ten times a second is more
+    ///     than enough for audio buffers, network pumps and a media-key round trip, and costs
+    ///     essentially nothing next to a 60 Hz render loop.
+    /// </summary>
+    private const int HiddenFrameIntervalMs = 100;
+
     public bool ShouldQuit => Engine.ShouldQuit;
 
     public float DeltaTime { get; private set; }
@@ -515,10 +659,52 @@ public partial class App : IDisposable
         Environment.GetEnvironmentVariable("ZIGOTE_DEBUG_DAMAGE") == "1";
 
     /// <summary>
-    ///     Software cap on the (continuous) render loop, in frames per second. 0 = no cap. Paced at
-    ///     the end of each frame; to exceed the display refresh, also turn <see cref="VSync" /> off.
+    ///     Software cap on the (continuous) render loop, in frames per second. 0 = "whatever the
+    ///     monitor does" (see <see cref="FrameIntervalTicks" />). Paced at the end of each frame; to
+    ///     exceed the display refresh, also turn <see cref="VSync" /> off.
+    ///     <para>
+    ///         <b>Negative = unpaced</b>: the pacer is skipped entirely and the loop runs as fast as the
+    ///         work allows. Only useful with <see cref="VSync" /> off, and only for benchmarking — an
+    ///         app that renders faster than the panel burns power for frames nobody sees.
+    ///     </para>
     /// </summary>
     public int FrameRateLimit { get; set; }
+
+    /// <summary>
+    ///     Refresh rate of the monitor this app's window is currently on, in Hz. Falls back to 60 when
+    ///     the platform reports nothing. Tracked across monitor moves — on a mixed 60 Hz + 144 Hz
+    ///     desktop, dragging the window between panels changes this.
+    /// </summary>
+    public float DisplayRefreshHz => Engine.DisplayRefreshHz > 0 ? Engine.DisplayRefreshHz : 60f;
+
+    /// <summary>
+    ///     The frame budget every host loop paces against, in <see cref="Stopwatch" /> ticks — the
+    ///     single place the app's target frame rate is decided.
+    ///     <para>
+    ///         It is the display's refresh interval, lengthened by <see cref="FrameRateLimit" /> when
+    ///         one is set. Whichever is SLOWER wins: an explicit cap can only ever slow the loop down,
+    ///         never push it past the panel (frames the monitor can't show cost power for nothing, and
+    ///         with vsync on the present would block anyway). So a game asking for 30 gets 30 on a
+    ///         144 Hz screen, and one asking for 240 still gets 144.
+    ///     </para>
+    /// </summary>
+    public long FrameIntervalTicks => ComputeFrameIntervalTicks(DisplayRefreshHz, FrameRateLimit);
+
+    /// <summary>
+    ///     The <see cref="FrameIntervalTicks" /> arithmetic, split out so it can be exercised without
+    ///     an OS window. <paramref name="displayHz" /> &lt;= 0 falls back to 60.
+    /// </summary>
+    internal static long ComputeFrameIntervalTicks(float displayHz, int frameRateLimit)
+    {
+        if (displayHz <= 0) displayHz = 60f;
+        // double, not float: Stopwatch.Frequency is 1e9 on Linux, and float has ~7 digits — a float
+        // divide rounds the interval by a tick, which is enough to fail an exact comparison.
+        var ticks = (long)(Stopwatch.Frequency / (double)displayHz);
+        // Slower of the two: an explicit cap throttles below the panel, never above it.
+        if (frameRateLimit > 0)
+            ticks = Math.Max(ticks, Stopwatch.Frequency / frameRateLimit);
+        return Math.Max(1, ticks);
+    }
 
     /// <summary>
     ///     Whether the OS window has keyboard focus (SDL focus gained/lost — tracked from
@@ -564,6 +750,27 @@ public partial class App : IDisposable
     ///     constants on <see cref="App" />.
     /// </summary>
     public Keymap Keymap { get; } = CreateDefaultKeymap();
+
+    /// <summary>
+    ///     App-defined keyboard shortcuts: <see cref="Keymap.Bind" /> a chord to an action id of your
+    ///     own and handle it here. Fired for the initial press (never an auto-repeat) of any chord
+    ///     that resolves to an id the App does not own itself, before focus traversal and Escape;
+    ///     return true to consume it. A chord carrying Ctrl/Cmd/Alt is a command and fires whatever
+    ///     holds focus; an unmodified one (Space, F9) is withheld while an <see cref="ITextInputClient" />
+    ///     is focused, so it reaches the editor as typing.
+    /// </summary>
+    public Func<string, bool>? OnShortcut { get; set; }
+
+    /// <summary>
+    ///     Whether an app shortcut fires or yields to whatever holds focus: a Ctrl/Cmd/Alt chord is a
+    ///     command and always fires; an unmodified one loses to a focused text editor, where it is
+    ///     typing. Shift alone stays "typing" — Shift+Space is still a space.
+    /// </summary>
+    internal static bool ShortcutOutranksFocus(Modifiers modifiers, Widget? focused)
+    {
+        return modifiers.HasCommand() || modifiers.HasFlag(Modifiers.Alt) ||
+               focused is not ITextInputClient;
+    }
 
     /// <summary>
     ///     Optional platform accessibility bridge. When assigned, the app rebuilds the
@@ -681,9 +888,56 @@ public partial class App : IDisposable
             height
         );
         _secondaryWindows.Add(win);
-        // New windows inherit the app-wide chrome (Settings, dialogs, torn-out panels…).
+        // New windows inherit the app-wide chrome (Settings, dialogs, torn-out panels…) — including
+        // whether the app draws its own titlebar, or the window would get an injected chrome strip
+        // above the headerbar its content already carries.
+        win.SuppressChromeStrip = SuppressChromeStrip;
         if (ChromeStyle != WindowChromeStyle.System) win.ApplyWindowChrome(ChromeStyle);
         return win;
+    }
+
+    /// <summary>
+    ///     Consulted before the main window closes. Return true to keep the application alive —
+    ///     the handler is then responsible for what happens instead, which is normally
+    ///     <see cref="Hide" />.
+    ///     <para>
+    ///         This is the seam a background-capable app needs: a media player, a sync client or a
+    ///         chat app closes its window and keeps working, and only an explicit Quit ends the
+    ///         process. It is deliberately <i>not</i> consulted by <see cref="RequestQuit" />, so a
+    ///         Quit from a menu, a media key or a session manager still quits.
+    ///     </para>
+    /// </summary>
+    public Func<bool>? OnCloseRequest { get; set; }
+
+    /// <summary>
+    ///     The main window is hidden but the application is running: no window on screen, no
+    ///     rendering, and the frame loop still turning so whatever the app does in the background
+    ///     keeps happening. Always false for a secondary window, which closes rather than hides.
+    /// </summary>
+    public bool Hidden { get; private set; }
+
+    /// <summary>
+    ///     Take the main window off screen without ending the application. Painting stops (there is
+    ///     nothing to paint to) and the loop drops to a background cadence; <see cref="Show" />
+    ///     brings it all back.
+    /// </summary>
+    public void Hide()
+    {
+        if (ParentApp is not null || Hidden) return;
+        Hidden = true;
+        Engine.MainWindowSetVisible(false);
+    }
+
+    /// <summary>Bring the main window back and redraw it from scratch — it painted nothing while
+    ///     it was away, so every layer is stale.</summary>
+    public void Show()
+    {
+        if (ParentApp is not null || !Hidden) return;
+        Hidden = false;
+        Engine.MainWindowSetVisible(true);
+        _safeAreaValid = false;
+        RequestLayout();
+        _repaint.MarkAll();
     }
 
     /// <summary>
@@ -695,6 +949,7 @@ public partial class App : IDisposable
     {
         if (ParentApp is null)
         {
+            if (OnCloseRequest?.Invoke() == true) return;
             RequestQuit();
             return;
         }
@@ -806,6 +1061,33 @@ public partial class App : IDisposable
                 w.MarkNeedsLayout();
     }
 
+    /// <summary>
+    ///     Thread-safe: run <paramref name="action" /> on the UI thread at the top of the next frame,
+    ///     before layout. The seam for finishing async work that has to touch widgets — an image
+    ///     decoded on a worker thread swapping itself in, a fetch completing — without the caller
+    ///     hand-rolling a queue per call site. Actions run in enqueue order; one that throws is
+    ///     reported and skipped rather than killing the frame loop.
+    /// </summary>
+    public void Post(Action action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        _posted.Enqueue(action);
+        RequestPaint(); // wakes the idle gate; WaitEvents' 16 ms timeout picks it up regardless
+    }
+
+    private void DrainPosted()
+    {
+        while (_posted.TryDequeue(out var action))
+            try
+            {
+                action();
+            }
+            catch (Exception ex)
+            {
+                DebugLog.Error($"App.Post action threw: {ex}");
+            }
+    }
+
     public void RequestPaint()
     {
         // A caller asked to repaint but named no widget, so we don't know the layer or region —
@@ -824,7 +1106,10 @@ public partial class App : IDisposable
     ///     (an unlaid-out widget), <see cref="PartialRepaintEnabled" /> is off, or the widget lives outside
     ///     the Root/overlay layers. UI-thread only, exactly like <see cref="Widget.MarkNeedsLayout" />.
     /// </summary>
-    public void RequestPaintFor(Widget widget) => MarkPaintFor(widget);
+    public void RequestPaintFor(Widget widget)
+    {
+        MarkPaintFor(widget);
+    }
 
     /// <summary>
     ///     Keep the frame loop pumping (both layers repainted) for at least <paramref name="count" />
@@ -869,8 +1154,11 @@ public partial class App : IDisposable
         // partial repaint is disabled, treat the mark as an unknown region so the frame full-clears.
         var region = PartialRepaintEnabled ? w.DamageBounds.Inflate(DamageMargin) : Rect.Zero;
         if (DebugDamageLog)
-            Console.Error.WriteLine(System.FormattableString.Invariant(
-                $"[dmg] mark {w.GetType().Name} bounds=({w.Bounds.X:F1},{w.Bounds.Y:F1} {w.Bounds.Width:F1}x{w.Bounds.Height:F1}) dmg=({region.X:F1},{region.Y:F1} {region.Width:F1}x{region.Height:F1})"));
+            Console.Error.WriteLine(
+                FormattableString.Invariant(
+                    $"[dmg] mark {w.GetType().Name} bounds=({w.Bounds.X:F1},{w.Bounds.Y:F1} {w.Bounds.Width:F1}x{w.Bounds.Height:F1}) dmg=({region.X:F1},{region.Y:F1} {region.Width:F1}x{region.Height:F1})"
+                )
+            );
         if (top == Root) _repaint.AddDamageRoot(region);
         else if (_overlays.Contains(top)) _repaint.AddDamageOverlay(region);
         else _repaint.MarkAll();
@@ -878,8 +1166,33 @@ public partial class App : IDisposable
 
     // ── Overlay management ────────────────────────────────────────────────────
 
+    // Push/pop requested while InTreeWalk, applied once the walk is over (see PushOverlay).
+    private readonly List<(Widget Overlay, bool Push)> _deferredOverlayOps = [];
+
+    /// <summary>Apply the overlay pushes/pops that arrived during a tree walk.</summary>
+    private void DrainDeferredOverlayOps()
+    {
+        if (_deferredOverlayOps.Count == 0 || InTreeWalk) return;
+        // Snapshot: applying an op can queue another (a popped overlay closing its child).
+        var ops = _deferredOverlayOps.ToArray();
+        _deferredOverlayOps.Clear();
+        foreach (var (overlay, push) in ops)
+            if (push) PushOverlay(overlay);
+            else PopOverlay(overlay);
+    }
+
     public void PushOverlay(Widget overlay)
     {
+        // Mutating the overlay list from inside a tree walk invalidates the walk's own enumerator
+        // (layout and paint both iterate it) — and a widget CAN legitimately push one while being
+        // measured or painted. Defer to the end of the walk, the same way Watch defers a rebuild.
+        if (InTreeWalk)
+        {
+            _deferredOverlayOps.Add((overlay, true));
+            RequestLayout();
+            return;
+        }
+
         _overlays.Add(overlay);
         overlay.Attach(this, null);
         // Auto-focus the first focusable inside a newly-pushed overlay (modal forms/dialogs) once it has
@@ -890,6 +1203,13 @@ public partial class App : IDisposable
 
     public void PopOverlay(Widget overlay)
     {
+        if (InTreeWalk)
+        {
+            _deferredOverlayOps.Add((overlay, false));
+            RequestLayout();
+            return;
+        }
+
         if (!_overlays.Remove(overlay)) return;
 
         _pendingAutoFocus.Remove(overlay);
@@ -936,6 +1256,8 @@ public partial class App : IDisposable
         _pendingAutoFocus.Clear();
         _focusRestore.Clear();
         _snackbars.Clear();
+        // …including pushes queued mid-walk, which would otherwise resurrect an overlay after this.
+        _deferredOverlayOps.Clear();
         _tooltipOverlay = null;
         _tooltipTimer = 0f;
         RequestLayout();
@@ -956,7 +1278,22 @@ public partial class App : IDisposable
             HideTooltip();
         }
 
-        if (ReferenceEquals(_capturedWidget, w)) _capturedWidget = null;
+        if (ReferenceEquals(_capturedWidget, w))
+        {
+            _capturedWidget = null;
+            // The captured widget is the one that would deliver the pointer-up that ends a drag. If
+            // it leaves the tree first — a list rebuilt under the pointer, a page swapped, a route
+            // popped — nothing ever calls EndDrag: the session stays open and its ghost floats over
+            // every later page. Cancel it instead. Deferred to the top of the next frame because
+            // this can run mid-walk, and ending a drag pops an overlay off the list being iterated.
+            if (IsDragging)
+                Post(() =>
+                    {
+                        if (IsDragging) EndDrag(_mousePos, true);
+                    }
+                );
+        }
+
         if (ReferenceEquals(_rightCapturedWidget, w)) _rightCapturedWidget = null;
     }
 
@@ -1017,13 +1354,26 @@ public partial class App : IDisposable
         // freeze — including when the window is in the background. Without this, an open panel only set
         // _needsPaint *after* this gate, so the loop still blocked here on the 16 ms event wait (capping
         // the rate well below 60 and stalling entirely on an unfocused window).
-        if (!_repaint.AnyDirty && !_needsLayout && !ContinuousUpdate && !ForceContinuousRender &&
-            !Ticker.AnyActive &&
-            !WantsContinuousFrame() && !HotReload.HasPendingReload &&
-            !AnySecondaryWindowWantsFrame())
+        // Hidden means nobody is looking: whatever is animating or repainting is invisible, so the
+        // loop drops to a background cadence unconditionally. It keeps turning — an app hides its
+        // window precisely because it still has work to do — but at a tenth of the rate and with no
+        // rendering at all (see PaintAndPresent).
+        if (Hidden)
             using (Profiler.Scope("WaitEvents"))
             {
-                Engine.WaitEvents();
+                Engine.WaitEvents(HiddenFrameIntervalMs);
+            }
+        else if (!_repaint.AnyDirty && !_needsLayout && !ContinuousUpdate &&
+                 !ForceContinuousRender &&
+                 !Ticker.AnyActive &&
+                 !WantsContinuousFrame() && !HotReload.HasPendingReload &&
+                 !AnySecondaryWindowWantsFrame())
+            using (Profiler.Scope("WaitEvents"))
+            {
+                // Time out after one frame budget rather than a hardcoded 16 ms, so the idle
+                // wake-up rate follows the monitor (and any app FPS cap) instead of pinning
+                // everything to ~60 on a 144 Hz panel.
+                Engine.WaitEvents((int)(FrameIntervalTicks * 1000 / Stopwatch.Frequency));
             }
 
         Engine.PollEventsInto(_events);
@@ -1098,6 +1448,7 @@ public partial class App : IDisposable
         // thread, BEFORE layout — so the Parent-chain walk is race-free and the marked ancestors don't
         // cache-skip re-measuring the affected subtree.
         DrainCrossThreadInvalidations();
+        DrainPosted();
 
         // Bring layout current BEFORE dispatching events so HitTest sees valid Bounds.
         // Layout runs only when structure/size actually changed (MarkNeedsLayout) or the
@@ -1211,27 +1562,47 @@ public partial class App : IDisposable
     /// </summary>
     private void PaintAndPresent()
     {
-        if (Root is null) return;
+        // Hidden: there is no surface to present to, and the GPU work would be thrown away. The
+        // damage is left dirty on purpose — Show() repaints everything anyway.
+        if (Root is null || Hidden) return;
 
         var rootWalked = _repaint.RootDirty;
         var overlayWalked = _repaint.OverlayDirty;
+
+        var csdRounded = CsdRounded;
+        var windowRect = WindowRect;
+
         using (Profiler.Scope("UI.Paint"))
         {
-            if (_repaint.RootDirty)
+            InTreeWalk = true;
+            try
             {
-                _paint.Clear();
-                PaintChromeBackdrop();
-                Root.Paint(_paint);
-                _repaint.RootPainted();
-            }
+                if (_repaint.RootDirty)
+                {
+                    _paint.Clear();
+                    if (csdRounded) _paint.AddClipStart(windowRect, CsdCornerRadius);
+                    PaintChromeBackdrop();
+                    Root.Paint(_paint);
+                    if (csdRounded) _paint.AddClipEnd();
+                    _repaint.RootPainted();
+                }
 
-            if (_repaint.OverlayDirty)
+                if (_repaint.OverlayDirty)
+                {
+                    _overlayPaint.Clear();
+                    if (csdRounded) _overlayPaint.AddClipStart(windowRect, CsdCornerRadius);
+                    foreach (var ov in _overlays) ov.Paint(_overlayPaint);
+                    if (csdRounded) _overlayPaint.AddClipEnd();
+                    _repaint.OverlayPainted();
+                }
+            }
+            finally
             {
-                _overlayPaint.Clear();
-                foreach (var ov in _overlays) ov.Paint(_overlayPaint);
-                _repaint.OverlayPainted();
+                InTreeWalk = false;
             }
         }
+
+        DrainDeferredOverlayOps();
 
         // Partial-frame consistency: a re-walked list reflects CURRENT widget state, but replay only
         // touches the damage rects — any op that changed without marking damage this frame (a missed
@@ -1242,10 +1613,11 @@ public partial class App : IDisposable
         // construction, and clean layers re-submit their previous (on-screen) list verbatim.
         if (PartialRepaintEnabled && !ContinuousUpdate && !ForceContinuousRender)
         {
+            using var _ = Profiler.Scope("UI.Damage");
             if (rootWalked && _repaint.DamageCount > 0)
-                WidenDamageFromPaintDiff(_rootSnapshot, _paint, isOverlay: false);
+                WidenDamageFromPaintDiff(_rootSnapshot, _paint, false);
             if (overlayWalked && _repaint.DamageCount > 0)
-                WidenDamageFromPaintDiff(_overlaySnapshot, _overlayPaint, isOverlay: true);
+                WidenDamageFromPaintDiff(_overlaySnapshot, _overlayPaint, true);
             if (rootWalked) _rootSnapshot.Capture(_paint);
             if (overlayWalked) _overlaySnapshot.Capture(_overlayPaint);
         }
@@ -1283,15 +1655,23 @@ public partial class App : IDisposable
                 if (_repaint.Damage.IsEmpty)
                 {
                     Console.Error.WriteLine(
-                        $"[dmg] FULL root={_repaint.RootDirty} overlay={_repaint.OverlayDirty} rootOps={_paint.Count} ovOps={_overlayPaint.Count}");
+                        $"[dmg] FULL root={_repaint.RootDirty} overlay={_repaint.OverlayDirty} rootOps={_paint.Count} ovOps={_overlayPaint.Count}"
+                    );
                 }
                 else
                 {
-                    var sb = new System.Text.StringBuilder("[dmg] PARTIAL ");
+                    var sb = new StringBuilder("[dmg] PARTIAL ");
                     foreach (var r in _repaint.Damage)
-                        sb.Append(System.FormattableString.Invariant($"({r.X:F1},{r.Y:F1} {r.Width:F1}x{r.Height:F1}) "));
-                    sb.Append(System.FormattableString.Invariant(
-                        $"root={_repaint.RootDirty} overlay={_repaint.OverlayDirty} rootOps={_paint.Count} ovOps={_overlayPaint.Count}"));
+                        sb.Append(
+                            FormattableString.Invariant(
+                                $"({r.X:F1},{r.Y:F1} {r.Width:F1}x{r.Height:F1}) "
+                            )
+                        );
+                    sb.Append(
+                        FormattableString.Invariant(
+                            $"root={_repaint.RootDirty} overlay={_repaint.OverlayDirty} rootOps={_paint.Count} ovOps={_overlayPaint.Count}"
+                        )
+                    );
                     Console.Error.WriteLine(sb.ToString());
                 }
             }
@@ -1332,13 +1712,18 @@ public partial class App : IDisposable
                 for (var i = 0; i < count; i++)
                     _repaint.AddDamageBoundsOnly(changed[i].Inflate(DamageMargin));
                 if (DebugDamageLog)
-                    Console.Error.WriteLine(System.FormattableString.Invariant(
-                        $"[dmg] diff {(isOverlay ? "overlay" : "root")} widened by {count} rect(s), first=({changed[0].X:F1},{changed[0].Y:F1} {changed[0].Width:F1}x{changed[0].Height:F1})"));
+                    Console.Error.WriteLine(
+                        FormattableString.Invariant(
+                            $"[dmg] diff {(isOverlay ? "overlay" : "root")} widened by {count} rect(s), first=({changed[0].X:F1},{changed[0].Y:F1} {changed[0].Width:F1}x{changed[0].Height:F1})"
+                        )
+                    );
                 return;
             case PaintDiffResult.Unbounded:
                 _repaint.ForceFullDamage();
                 if (DebugDamageLog)
-                    Console.Error.WriteLine($"[dmg] diff {(isOverlay ? "overlay" : "root")} UNBOUNDED -> full");
+                    Console.Error.WriteLine(
+                        $"[dmg] diff {(isOverlay ? "overlay" : "root")} UNBOUNDED -> full"
+                    );
                 return;
         }
     }
@@ -1534,20 +1919,39 @@ public partial class App : IDisposable
     {
         if (NativeWindow is null || Root is null) return;
 
-        if (_repaint.RootDirty)
+        // Same rounded-corner clip the main window gets — a devtools or Settings window sitting
+        // next to it with square corners is the tell that it is not a real GNOME window.
+        var csdRounded = CsdRounded;
+        var windowRect = WindowRect;
+
+        InTreeWalk = true;
+        try
         {
-            _paint.Clear();
-            PaintChromeBackdrop();
-            Root.Paint(_paint);
-            _repaint.RootPainted();
+            if (_repaint.RootDirty)
+            {
+                _paint.Clear();
+                if (csdRounded) _paint.AddClipStart(windowRect, CsdCornerRadius);
+                PaintChromeBackdrop();
+                Root.Paint(_paint);
+                if (csdRounded) _paint.AddClipEnd();
+                _repaint.RootPainted();
+            }
+
+            if (_repaint.OverlayDirty)
+            {
+                _overlayPaint.Clear();
+                if (csdRounded) _overlayPaint.AddClipStart(windowRect, CsdCornerRadius);
+                foreach (var ov in _overlays) ov.Paint(_overlayPaint);
+                if (csdRounded) _overlayPaint.AddClipEnd();
+                _repaint.OverlayPainted();
+            }
+        }
+        finally
+        {
+            InTreeWalk = false;
         }
 
-        if (_repaint.OverlayDirty)
-        {
-            _overlayPaint.Clear();
-            foreach (var ov in _overlays) ov.Paint(_overlayPaint);
-            _repaint.OverlayPainted();
-        }
+        DrainDeferredOverlayOps();
 
         NativeWindow.SubmitPaint(_paint);
         NativeWindow.SubmitOverlay(_overlayPaint);
@@ -1570,19 +1974,20 @@ public partial class App : IDisposable
     }
 
     /// <summary>
-    ///     Software frame-rate limiter for testing: when <see cref="FrameRateLimit" /> &gt; 0, sleep
-    ///     (then briefly spin for accuracy) so the continuous render loop holds the target FPS. Resyncs
-    ///     instead of bursting when a heavy frame falls behind, so the cap never overshoots afterwards.
+    ///     Software frame-rate limiter: sleeps (then briefly spins for accuracy) so the continuous
+    ///     render loop holds <see cref="FrameIntervalTicks" /> — the monitor's refresh, or
+    ///     <see cref="FrameRateLimit" /> when that is slower. Resyncs instead of bursting when a heavy
+    ///     frame falls behind, so the cap never overshoots afterwards.
+    ///     <para>
+    ///         With vsync on the present already blocks at the panel's rate, so this mostly matters for
+    ///         an explicit cap, for vsync-off, and for keeping the CPU-side loop from spinning ahead of
+    ///         a swapchain synced to a different monitor than the one the window is on.
+    ///     </para>
     /// </summary>
     private void PaceFrame()
     {
-        if (FrameRateLimit <= 0)
-        {
-            _paceAnchorTicks = 0;
-            return;
-        }
-
-        var interval = Stopwatch.Frequency / FrameRateLimit;
+        if (FrameRateLimit < 0) return; // unpaced — see FrameRateLimit
+        var interval = FrameIntervalTicks;
         var now = _clock.ElapsedTicks;
         if (_paceAnchorTicks == 0) _paceAnchorTicks = now;
         _paceAnchorTicks += interval;
@@ -1631,6 +2036,7 @@ public partial class App : IDisposable
     {
         if (Root is null) return;
 
+        using var _ = Profiler.Scope("UI.Layout");
         BuildContext.Current.Reset();
         // Refresh ambient context (MediaQuery) before measuring — every widget can read it.
         // Padding carries the real device safe area (notch / home indicator; zero on desktop)
@@ -1641,7 +2047,12 @@ public partial class App : IDisposable
             if (ParentApp is null)
             {
                 var (l, t, r, b) = Engine.GetSafeArea();
-                _safeArea = new EdgeInsets(l, t, r, b);
+                _safeArea = new EdgeInsets(
+                    l,
+                    t,
+                    r,
+                    b
+                );
             }
 
             _safeAreaValid = true;
@@ -1662,6 +2073,7 @@ public partial class App : IDisposable
         _appThemeScope.SetDataSilently(Theme);
         var ctx = BuildContext.Current;
         ctx.Push(_appThemeScope);
+        InTreeWalk = true;
         try
         {
             Root.Measure(c);
@@ -1675,17 +2087,28 @@ public partial class App : IDisposable
         }
         finally
         {
+            InTreeWalk = false;
             ctx.Pop(_appThemeScope);
         }
 
         _needsLayout = false;
         _pendingRelayout = false;
+
+        DrainDeferredOverlayOps();
     }
 
     // ── Focus ─────────────────────────────────────────────────────────────────
 
+    /// <summary>
+    ///     Focus a widget. A composite control that is not focusable itself (an entry that delegates
+    ///     its text editing to an inner field, a row wrapping one) hands the focus to its first
+    ///     focusable descendant — "focus this control" is what every caller means, and focusing the
+    ///     wrapper instead would silently take the caret nowhere. Unlike Tab traversal this does not
+    ///     require a laid-out rect, so it works on the frame a control is first mounted.
+    /// </summary>
     public void RequestFocus(Widget? widget)
     {
+        if (widget is { Focusable: false }) widget = FirstFocusableIn(widget) ?? widget;
         if (FocusedWidget == widget) return;
         FocusedWidget?.Focused = false;
         if (FocusedWidget is ITextInputClient) StopHostTextInput();
@@ -1708,6 +2131,18 @@ public partial class App : IDisposable
     public void ClearFocus()
     {
         RequestFocus(null);
+    }
+
+    /// <summary>Depth-first search for the first focusable under <paramref name="widget" />.</summary>
+    private static Widget? FirstFocusableIn(Widget widget)
+    {
+        foreach (var child in widget.GetVisibleChildren())
+        {
+            if (child.Focusable) return child;
+            if (FirstFocusableIn(child) is { } deeper) return deeper;
+        }
+
+        return null;
     }
 
     // ── System back ───────────────────────────────────────────────────────────
@@ -1905,6 +2340,14 @@ public partial class App : IDisposable
         if (rootTarget is IDismissableOverlay rootDismiss && rootDismiss.RequestDismiss())
             return true;
 
+        // In-tree dismissables (a modal bottom sheet, a navigation stack) register a back handler
+        // rather than sitting on the overlay stack. Escape is the desktop spelling of the same
+        // gesture as the Android back button, so it runs the same handlers — otherwise Escape on a
+        // modal sheet merely clears focus and leaves the sheet up.
+        for (var i = _backHandlers.Count - 1; i >= 0; i--)
+            if (_backHandlers[i]())
+                return true;
+
         if (FocusedWidget != null)
         {
             ClearFocus();
@@ -1985,11 +2428,36 @@ public partial class App : IDisposable
     {
         switch (evt)
         {
+            case DisplayChangedEvent:
+                // Moved to another monitor (or that monitor's mode/scale changed). The engine has
+                // already refreshed the cached scale + refresh rate, so FrameIntervalTicks now
+                // reflects the new panel. Relayout because HostScale feeds every logical→physical
+                // conversion, and repaint because nothing else wakes the loop after a drag between
+                // screens. Resync the pacer so the first frame at the new rate isn't slept against
+                // the old one's anchor.
+                _paceAnchorTicks = 0;
+                RequestLayout();
+                _repaint.MarkAll();
+                return;
+
             case WindowFocusEvent wf:
                 // App/host state only — never routed to widgets (widget focus is unrelated). Hosts read
                 // WindowFocused to throttle background frame rates; repaint once on regain so anything
                 // that went stale while throttled refreshes immediately.
                 WindowFocused = wf.Focused;
+
+                // Losing focus mid-drag means the release will never arrive: the pointer left the
+                // window (or the user alt-tabbed) and the button came up somewhere we hear nothing
+                // about. Without this the capture survives, and a slider or scrollbar keeps
+                // tracking the cursor the next time it wanders back over the window — the control
+                // appears to be "stuck" to the pointer with no button held.
+                if (!wf.Focused && _capturedWidget is not null)
+                {
+                    var dragging = _capturedWidget;
+                    _capturedWidget = null;
+                    dragging.OnPointerCancel();
+                }
+
                 if (wf.Focused) _repaint.MarkAll();
                 // Focus is the desktop face of Resumed↔Inactive (never Paused — that's the
                 // mobile suspend pair). Secondary windows don't drive app-level lifecycle.
@@ -2062,7 +2530,8 @@ public partial class App : IDisposable
 
             case MouseDownEvent { Button: MouseButton.Left } d:
             {
-                PointerIsTouchFlag = false; // a click can arrive without a preceding move (tablet, remote)
+                PointerIsTouchFlag =
+                    false; // a click can arrive without a preceding move (tablet, remote)
                 var point = new Offset(d.X, d.Y);
                 var hit = HitTestAll(point);
                 _capturedWidget = hit;
@@ -2157,6 +2626,18 @@ public partial class App : IDisposable
                         break;
                     }
 
+                    // App-defined shortcuts (see OnShortcut), ahead of the focus-scoped ones so an app
+                    // can own a chord the framework has no meaning for. A modifier-less chord is
+                    // withheld while a text editor holds focus — Space in a search box is typing,
+                    // not play/pause.
+                    // ponytail: blocks every unmodified chord (F-keys too) while typing; refine per
+                    // key if an app wants F9 mid-search.
+                    if (!k.Repeat && action is not null && OnShortcut is { } onShortcut &&
+                        action is not (ActionFocusNext or ActionFocusPrev or ActionDismiss) &&
+                        ShortcutOutranksFocus(k.Modifiers, FocusedWidget) &&
+                        onShortcut(action))
+                        break;
+
                     // Focus-scoped shortcuts — skipped while a keyboard-trap widget (e.g. the devtools
                     // console field) holds focus so it keeps Tab (command auto-complete) and Esc for itself.
                     if (FocusedWidget is not IKeyboardTrap)
@@ -2232,7 +2713,8 @@ public partial class App : IDisposable
                 // routed per window, so this instance is always the one being closed.
                 if (ParentApp is null)
                 {
-                    RequestQuit();
+                    // An app that wants to keep running answers here; everything else quits.
+                    if (OnCloseRequest?.Invoke() != true) RequestQuit();
                 }
                 else
                 {

@@ -43,8 +43,15 @@ public sealed class GridView : MultiChildWidget
         };
     }
 
-    /// <summary>Builds a grid with a fixed cross-axis count from an item builder (materialized eagerly).</summary>
-    public static GridView Builder(
+    /// <summary>
+    ///     Flutter's <c>GridView.builder</c>: a virtualized, self-scrolling grid. Cells are built on
+    ///     demand one grid row at a time, so only the rows in the viewport exist — construction,
+    ///     measure, layout and paint are all O(viewport). Returns a <see cref="ListView" /> of rows
+    ///     (that is what virtualization needs); the same caveat applies as for
+    ///     <see cref="ListView.Builder" /> — a cell scrolled out is destroyed, so keep cell state in
+    ///     your model.
+    /// </summary>
+    public static ListView Builder(
         int crossAxisCount,
         int itemCount,
         Func<int, Widget> itemBuilder,
@@ -52,15 +59,43 @@ public sealed class GridView : MultiChildWidget
         double crossAxisSpacing = 0,
         double childAspectRatio = 1)
     {
-        var items = new List<Widget>(Math.Max(0, itemCount));
-        for (var i = 0; i < itemCount; i++) items.Add(itemBuilder(i));
-        return Count(
-            crossAxisCount,
-            items,
-            mainAxisSpacing,
-            crossAxisSpacing,
-            childAspectRatio
+        var cols = Math.Max(1, crossAxisCount);
+        var count = Math.Max(0, itemCount);
+        var rows = (count + cols - 1) / cols;
+        var crossGap = (float)crossAxisSpacing;
+        var mainGap = (float)mainAxisSpacing;
+        var ratio = childAspectRatio > 0 ? (float)childAspectRatio : 1f;
+
+        var list = new ListView();
+        // Cell height follows the width the list actually got, so a resize re-derives it (the list
+        // rebuilds its offset table when its width changes). Cells themselves are Expanded, so they
+        // stay correct without rebuilding.
+        list.HeightOf = r =>
+            MathF.Max(0f, (list.ViewportWidth - (cols - 1) * crossGap) / cols) / ratio
+            + (r < rows - 1 ? mainGap : 0f);
+        list.SetBuilder(
+            rows,
+            r =>
+            {
+                var cells = new List<Widget>(cols);
+                for (var c = 0; c < cols; c++)
+                {
+                    var i = r * cols + c;
+                    cells.Add(new Expanded(i < count ? itemBuilder(i) : new SizedBox()));
+                }
+
+                var row = new Row(
+                    cells,
+                    crossAxisAlignment: CrossAxisAlignment.Stretch,
+                    spacing: crossGap
+                );
+                // The trailing gap lives in the row height (see HeightOf), so pad it off the cells.
+                return mainGap > 0f && r < rows - 1
+                    ? new Padding(EdgeInsets.Only(bottom: mainGap), row)
+                    : row;
+            }
         );
+        return list;
     }
 
     public override Size Measure(Constraints c)

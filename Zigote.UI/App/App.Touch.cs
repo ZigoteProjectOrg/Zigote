@@ -18,9 +18,15 @@ namespace Zigote.UI.Host;
 //   • Long-press: held in place past the threshold → Widget.OnLongPress, whose default maps
 //     to OnRightClick so context menus work on touch without per-widget changes.
 //
-// Additional fingers are tracked only enough to be ignored safely (multi-touch gestures —
-// pinch/rotate — are a later layer; see Chart.ZoomBy for the consumer seam). Touch produces no
-// hover: OnPointerEnter/Exit never fire from fingers, and no cursor is resolved.
+//   • Pinch: a second finger down promotes the gesture to a scale. The nearest ancestor that
+//     answers Widget.CanTouchScale takes it; the first finger's press is cancelled (a pinch is
+//     never also a tap), and finger-distance ratio drives OnTouchScale while centroid movement
+//     drives OnTouchScroll, so zooming and panning are one continuous gesture. Nothing resumes
+//     when a finger lifts — the whole gesture ends, which is what every platform does.
+//
+// A third finger is tracked but ignored: no gesture here uses one, and letting it perturb the
+// pinch's centroid would only make two-finger zoom jitter. Touch produces no hover:
+// OnPointerEnter/Exit never fire from fingers, and no cursor is resolved.
 public partial class App
 {
     /// <summary>Movement budget (logical px) within which a touch still counts as a tap/long-press.</summary>
@@ -47,6 +53,19 @@ public partial class App
 
     /// <summary>Finger slot driving the pointer pipeline; -1 = no touch interaction active.</summary>
     private int _touchPrimaryFinger = -1;
+
+    /// <summary>Second finger of a pinch; -1 = none down.</summary>
+    private int _touchSecondFinger = -1;
+
+    private Offset _touchSecondLast;
+
+    /// <summary>Finger separation at the last scale event — the denominator of the next ratio.</summary>
+    private float _pinchLastDistance;
+
+    private Offset _pinchLastCentroid;
+
+    /// <summary>The widget consuming the active pinch, null when no pinch is in flight.</summary>
+    private Widget? _touchScaleTarget;
 
     private Widget? _touchScrollTarget;
 
@@ -108,9 +127,80 @@ public partial class App
                 break;
             }
 
+            case TouchDownEvent when _touchSecondFinger < 0 && evt.Finger != _touchPrimaryFinger:
+            {
+                // Second finger: try to promote to a pinch. If nothing in the chain zooms, the
+                // finger is simply ignored and the primary keeps its drag.
+                var target = FindTouchScaleTarget();
+                if (target is null) break;
+
+                _touchSecondFinger = evt.Finger;
+                _touchSecondLast = point;
+                _touchScaleTarget = target;
+                _pinchLastDistance = Distance(_touchLast, point);
+                _pinchLastCentroid = Centroid(_touchLast, point);
+
+                // A pinch is not a tap, a long-press, or a drag: whatever the first finger was
+                // doing must abandon rather than commit. A scroll in flight keeps its position
+                // but stops receiving deltas — the pinch owns both fingers now.
+                _touchScrollTarget = null;
+                _touchMovedPastSlop = true; // disarms the long-press timer
+                _touchEdgeBack = false;
+                if (_capturedWidget is not null && _capturedWidget != target)
+                {
+                    _capturedWidget.OnPointerCancel();
+                    MarkPaintFor(_capturedWidget);
+                    _capturedWidget = null;
+                }
+
+                break;
+            }
+
             case TouchDownEvent:
-                // Secondary fingers don't join the pointer pipeline (yet — pinch is a later
-                // layer). They are ignored here; the engine still tracks their slots.
+                // Third and later fingers: tracked by the engine, ignored here (see the header).
+                break;
+
+            case TouchMoveEvent when _touchScaleTarget is not null &&
+                                     (evt.Finger == _touchPrimaryFinger ||
+                                      evt.Finger == _touchSecondFinger):
+            {
+                if (evt.Finger == _touchPrimaryFinger) _touchLast = point;
+                else _touchSecondLast = point;
+
+                var distance = Distance(_touchLast, _touchSecondLast);
+                var centroid = Centroid(_touchLast, _touchSecondLast);
+
+                // Guard the ratio: fingers can land on the same pixel, and dividing by ~0 would
+                // send an infinite scale into the consumer's transform.
+                if (_pinchLastDistance > 1f && distance > 1f)
+                {
+                    var scale = distance / _pinchLastDistance;
+                    if (MathF.Abs(scale - 1f) > 0.0001f)
+                        _touchScaleTarget.OnTouchScale(scale, centroid);
+                    _pinchLastDistance = distance;
+                }
+
+                // Centroid travel pans the zoomed content — same 1:1 finger-pixel contract as a
+                // one-finger drag, so a widget that already implements OnTouchScroll gets pan free.
+                var panX = centroid.X - _pinchLastCentroid.X;
+                var panY = centroid.Y - _pinchLastCentroid.Y;
+                if (panX != 0f || panY != 0f)
+                {
+                    _touchScaleTarget.OnTouchScroll(panX, panY);
+                    _pinchLastCentroid = centroid;
+                }
+
+                MarkPaintFor(_touchScaleTarget);
+                break;
+            }
+
+            case TouchUpEvent or TouchCancelEvent
+                when _touchScaleTarget is not null &&
+                     (evt.Finger == _touchPrimaryFinger || evt.Finger == _touchSecondFinger):
+                // Either finger leaving ends the pinch outright. Handing the remaining finger back
+                // as a drag would jerk the content by the centroid-to-finger offset; every
+                // platform ends the gesture instead and waits for a clean new touch.
+                ResetTouch();
                 break;
 
             case TouchMoveEvent when evt.Finger == _touchPrimaryFinger:
@@ -277,13 +367,42 @@ public partial class App
         return null;
     }
 
+    /// <summary>
+    ///     The widget that should consume a pinch: the pressed widget if it zooms, else the nearest
+    ///     ancestor that does. Walks <see cref="Widget.Parent" /> rather than the scroll chain — a
+    ///     zoomable image is not a scroller, and the two hierarchies do not coincide.
+    /// </summary>
+    private Widget? FindTouchScaleTarget()
+    {
+        var start = _capturedWidget ?? _touchScrollTarget ?? HitTestAll(_touchLast);
+        for (var w = start; w is not null; w = w.Parent)
+            if (w.CanTouchScale())
+                return w;
+        return null;
+    }
+
+    private static float Distance(Offset a, Offset b)
+    {
+        var dx = a.X - b.X;
+        var dy = a.Y - b.Y;
+        return MathF.Sqrt(dx * dx + dy * dy);
+    }
+
+    private static Offset Centroid(Offset a, Offset b)
+    {
+        return new Offset((a.X + b.X) * 0.5f, (a.Y + b.Y) * 0.5f);
+    }
+
     /// <summary>End the active touch interaction (finger lifted, cancelled, or app paused).</summary>
     private void ResetTouch()
     {
         _touchPrimaryFinger = -1;
+        _touchSecondFinger = -1;
         _touchEdgeBack = false;
         _capturedWidget = null;
         _touchScrollTarget = null;
+        _touchScaleTarget = null;
+        _pinchLastDistance = 0f;
         _touchLongPressFired = false;
         _touchMovedPastSlop = false;
     }

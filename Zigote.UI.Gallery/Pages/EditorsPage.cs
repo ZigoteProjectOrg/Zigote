@@ -59,8 +59,7 @@ internal sealed class EditorsPage : StatelessWidget
                 "Code editor",
                 // The editor scrolls its own content with the wheel only, so on a phone whatever
                 // the box shows is all that is reachable — give the sample room to fit uncut.
-                new AdaptiveBuilder(
-                    (_, size) => new SizedBox(
+                new AdaptiveBuilder((_, size) => new SizedBox(
                         height: size == WindowSizeClass.Compact ? 220 : 170,
                         child: code
                     )

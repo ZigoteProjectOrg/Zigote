@@ -18,7 +18,14 @@ internal sealed class FileBrowserPreview : Widget
         new(StringComparer.Ordinal);
 
     private static readonly HashSet<string> ImageExts = new(StringComparer.OrdinalIgnoreCase) {
-        "png", "jpg", "jpeg", "webp", "gif", "bmp", "tga", "hdr",
+        "png",
+        "jpg",
+        "jpeg",
+        "webp",
+        "gif",
+        "bmp",
+        "tga",
+        "hdr",
     };
 
     private readonly FileBrowserEntry _entry;
@@ -42,10 +49,12 @@ internal sealed class FileBrowserPreview : Widget
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        _size = c.Constrain(new Size(
-            float.IsFinite(c.MaxWidth) ? c.MaxWidth : 220f,
-            float.IsFinite(c.MaxHeight) ? c.MaxHeight : 300f
-        ));
+        _size = c.Constrain(
+            new Size(
+                float.IsFinite(c.MaxWidth) ? c.MaxWidth : 220f,
+                float.IsFinite(c.MaxHeight) ? c.MaxHeight : 300f
+            )
+        );
         return _size;
     }
 

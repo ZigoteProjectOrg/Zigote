@@ -41,6 +41,16 @@ public class Opacity : Widget
         Child?.Layout(origin);
     }
 
+    /// <summary>
+    ///     A fully transparent subtree is not paintable and not hit-testable, so it must not be
+    ///     focusable or announced either — otherwise Tab lands on invisible controls (a hidden
+    ///     tab-close button, a collapsed row's suffix) and screen readers read them out.
+    /// </summary>
+    public override IEnumerable<Widget> GetVisibleChildren()
+    {
+        return Value <= 0.001f ? [] : GetChildren();
+    }
+
     public override void Paint(PaintList paint)
     {
         var a = Math.Clamp(Value, 0f, 1f);

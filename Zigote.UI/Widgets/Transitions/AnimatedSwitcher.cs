@@ -65,8 +65,25 @@ public sealed class AnimatedSwitcher : ImplicitlyAnimatedWidget
         }
 
         var cur = _current?.Measure(c) ?? Size.Zero;
-        _outgoing?.Measure(c);
-        _size = cur;
+        if (_outgoing is not null && Progress < 0.999f)
+        {
+            // Mid-cross-fade: ease the reported size from the outgoing child's toward the incoming
+            // child's, so a switch between different-sized subtrees reflows smoothly instead of
+            // snapping the surrounding layout on frame one.
+            var old = _outgoing.Measure(c);
+            var t = Progress;
+            _size = c.Constrain(
+                new Size(
+                    old.Width + (cur.Width - old.Width) * t,
+                    old.Height + (cur.Height - old.Height) * t
+                )
+            );
+        }
+        else
+        {
+            _size = cur;
+        }
+
         return _size;
     }
 
