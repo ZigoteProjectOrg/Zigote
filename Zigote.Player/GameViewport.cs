@@ -162,6 +162,11 @@ public sealed class GameViewport : Widget
         }
 
         if (_host.Session is not { } play) return;
+
+        // Publish the raw key to the session's general held-key set, so a game script can read ANY
+        // key (menus, a second couch player, custom bindings) — not just the built-in drive keys.
+        if (Enum.GetName((KeyCode)scancode) is { } keyName) play.SetKey(keyName, down);
+
         switch (char.ToLower(keyChar))
         {
             case 'w': play.MoveForward = down; break;

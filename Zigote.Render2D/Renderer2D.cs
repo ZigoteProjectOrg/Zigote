@@ -10,7 +10,9 @@ namespace Zigote.Render2D;
 /// </summary>
 public sealed class Renderer2D
 {
-    private const int FloatsPerInstance = 14;
+    // pos.xyz, rot, size.xy, uv0.xy, uv1.xy, rgba, corner_radius, border_width — must match
+    // SpriteSystem.INSTANCE_FLOATS and the sprite shader's VsIn.
+    private const int FloatsPerInstance = 16;
 
     private readonly ISpriteDevice _device;
     private readonly float[] _overlayVp = new float[16];
@@ -209,5 +211,8 @@ public sealed class Renderer2D
         dst[o + 11] = d.Color.Y;
         dst[o + 12] = d.Color.Z;
         dst[o + 13] = d.Color.W;
+
+        dst[o + 14] = d.CornerRadius;
+        dst[o + 15] = d.BorderWidth;
     }
 }

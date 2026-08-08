@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Reflection;
 using Zigote.Core.Native;
+using Zigote.Core.Rendering;
 using Zigote.Runtime;
 using Zigote.Scripting.Metadata;
 using Zigote.UI.Host;
@@ -15,8 +16,6 @@ namespace Zigote.Player;
 /// </summary>
 public static class PlayerMain
 {
-    private const int TargetFps = 60;
-
     public static int Run(Action<ScriptRegistry> registerScripts)
     {
         // iOS owns the process entry: UIApplicationMain must run before any window exists, and
@@ -53,10 +52,13 @@ public static class PlayerMain
             return 1;
         }
 
+        // The player runs the game's 3D scene, so it takes the fastest GPU on a multi-GPU machine
+        // (a plain UI App defaults to the power-efficient one).
         using var app = new App(
             host.Project.Name,
             (uint)Math.Max(320, host.Project.WindowWidth),
-            (uint)Math.Max(240, host.Project.WindowHeight)
+            (uint)Math.Max(240, host.Project.WindowHeight),
+            gpuPreference: GpuPowerPreference.Performance
         );
         app.Theme = ThemeData.Dark;
         if (host.Project.DevToolsEnabled) TryInstallDevTools(app);
@@ -72,7 +74,6 @@ public static class PlayerMain
         app.Root = viewport;
         app.RequestFocus(viewport);
 
-        var targetTicks = Stopwatch.Frequency / TargetFps;
         var clock = Stopwatch.StartNew();
         while (!app.ShouldQuit)
         {
@@ -80,7 +81,9 @@ public static class PlayerMain
             app.Frame();
             host.Tick(app.DeltaTime);
 
-            var remaining = targetTicks - (clock.ElapsedTicks - frameStart);
+            // Re-read each frame: the target follows whichever monitor the window is on (and the
+            // project's own FPS cap, when it asks for something slower).
+            var remaining = app.FrameIntervalTicks - (clock.ElapsedTicks - frameStart);
             if (remaining > 0) Thread.Sleep((int)(remaining * 1000 / Stopwatch.Frequency));
         }
 

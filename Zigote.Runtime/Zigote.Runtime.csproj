@@ -3,7 +3,6 @@
         <TargetFramework>net10.0</TargetFramework>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <Nullable>enable</Nullable>
-        <LangVersion>latest</LangVersion>
         <ImplicitUsings>enable</ImplicitUsings>
         <RootNamespace>Zigote.Runtime</RootNamespace>
         <AssemblyName>Zigote.Runtime</AssemblyName>
@@ -16,6 +15,7 @@
         <ProjectReference Include="..\Zigote.ECS\Zigote.ECS.csproj"/>
         <ProjectReference Include="..\Zigote.Cinematics\Zigote.Cinematics.csproj"/>
         <ProjectReference Include="..\Zigote.Render2D\Zigote.Render2D.csproj"/>
+        <ProjectReference Include="..\Zigote.Physics2D\Zigote.Physics2D.csproj"/>
         <ProjectReference Include="..\Zigote.World\Zigote.World.csproj"/>
     </ItemGroup>
     <ItemGroup>

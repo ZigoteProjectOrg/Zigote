@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using Zigote.Core.Math3D;
 using Zigote.Render2D;
 using Zigote.Scripting;
@@ -28,6 +29,18 @@ public sealed class Sprite2DSystem : IDisposable
     private readonly Dictionary<string, uint> _shaders = new();
     private readonly Dictionary<string, SpriteTexture?> _textures = new();
 
+    // Second index on the UNRESOLVED path, so the per-frame lookup never has to canonicalise.
+    // Both are cleared together in Clear().
+    private readonly Dictionary<string, SpriteTexture?> _byRawPath = new();
+    private readonly Dictionary<string, (Tileset Set, SpriteFrame[] Frames)?> _tilesets = new();
+
+    private readonly Dictionary<string, (Tileset Set, SpriteFrame[] Frames)?> _tilesetsByRawPath =
+        new();
+
+    // This frame's camera world-XY bounds, used to cull tiles (see ComputeCullRect).
+    private float _cullMaxX, _cullMaxY, _cullMinX, _cullMinY;
+    private bool _cullValid;
+
     public Sprite2DSystem(ISpriteDevice? device = null)
     {
         Device = device ?? new EngineSpriteDevice();
@@ -49,6 +62,8 @@ public sealed class Sprite2DSystem : IDisposable
     {
         foreach (var tex in _textures.Values) tex?.Destroy();
         _textures.Clear();
+        _byRawPath.Clear();
+        _tilesets.Clear();
         _shaders.Clear();
         _materials.Clear();
         _animElapsed.Clear();
@@ -65,8 +80,20 @@ public sealed class Sprite2DSystem : IDisposable
         bool srgb = true, SpriteWrap wrap = SpriteWrap.Clamp)
     {
         if (string.IsNullOrEmpty(path)) return null;
+
+        // Hit the cache on the path as given BEFORE canonicalising. This runs once per sprite per
+        // frame, and Path.GetFullPath allocates a fresh string every call — with a few hundred
+        // sprites that was tens of KB of garbage per frame and periodic gen0 pauses, for a lookup
+        // that almost always resolves to something already loaded.
+        if (_byRawPath.TryGetValue(path, out var byRaw)) return byRaw;
+
         var abs = Path.GetFullPath(path);
-        if (_textures.TryGetValue(abs, out var cached)) return cached;
+        if (_textures.TryGetValue(abs, out var cached))
+        {
+            _byRawPath[path] = cached;
+            return cached;
+        }
+
         var tex = File.Exists(abs)
             ? SpriteTexture.Load(
                 Device,
@@ -77,6 +104,7 @@ public sealed class Sprite2DSystem : IDisposable
             )
             : null;
         _textures[abs] = tex;
+        _byRawPath[path] = tex;
         return tex;
     }
 
@@ -147,6 +175,7 @@ public sealed class Sprite2DSystem : IDisposable
         float viewportH,
         bool includeScriptQueue)
     {
+        ComputeCullRect(in sceneViewProjection);
         var overlay = Camera2D.PixelOverlay(viewportW, viewportH);
         _renderer.Begin(
             sceneViewProjection,
@@ -166,7 +195,13 @@ public sealed class Sprite2DSystem : IDisposable
 
     private void CollectNode(SceneNode node, bool playMode)
     {
-        if (node is { Kind: NodeKind.Sprite, Visible: true }) DrawSpriteNode(node, playMode);
+        if (node.Visible)
+            switch (node.Kind)
+            {
+                case NodeKind.Sprite: DrawSpriteNode(node, playMode); break;
+                case NodeKind.Tilemap: DrawTilemapNode(node); break;
+            }
+
         for (var i = 0; i < node.Children.Count; i++) CollectNode(node.Children[i], playMode);
     }
 
@@ -209,6 +244,8 @@ public sealed class Sprite2DSystem : IDisposable
                 Color = node.SpriteColor,
                 FlipX = node.SpriteFlipX,
                 FlipY = node.SpriteFlipY,
+                CornerRadius = node.SpriteCornerRadius,
+                BorderWidth = node.SpriteBorderWidth,
                 SortingLayer =
                     (short)Math.Clamp(node.SpriteSortingLayer, short.MinValue, short.MaxValue),
                 OrderInLayer =
@@ -225,17 +262,191 @@ public sealed class Sprite2DSystem : IDisposable
         var shader = string.IsNullOrEmpty(node.SpriteShaderPath)
             ? 0u
             : GetShader(node.SpriteShaderPath);
-        if (node.SpriteBlend == 0 && node.SpriteStage == 0 && shader == 0)
-            return null; // Material2D.Default
-        var key = (node.SpriteBlend, node.SpriteStage, shader);
+        return MaterialFor(node.SpriteBlend, node.SpriteStage, shader);
+    }
+
+    private Material2D? MaterialFor(int blend, int stage, uint shader)
+    {
+        if (blend == 0 && stage == 0 && shader == 0) return null; // Material2D.Default
+        var key = (blend, stage, shader);
         if (_materials.TryGetValue(key, out var mat)) return mat;
         mat = new Material2D {
-            Blend = (Blend2D)Math.Clamp(node.SpriteBlend, 0, 2),
-            Stage = (Stage2D)Math.Clamp(node.SpriteStage, 0, 1),
+            Blend = (Blend2D)Math.Clamp(blend, 0, 2),
+            Stage = (Stage2D)Math.Clamp(stage, 0, 1),
             ShaderHandle = shader,
         };
         _materials[key] = mat;
         return mat;
+    }
+
+    // ── Tilemaps ──────────────────────────────────────────────────────────────
+
+    /// <summary>Load (and cache) a tileset plus its computed UV frames; null when missing/invalid.</summary>
+    public (Tileset Set, SpriteFrame[] Frames)? GetTileset(string? path)
+    {
+        if (string.IsNullOrEmpty(path)) return null;
+        if (_tilesetsByRawPath.TryGetValue(path, out var byRaw)) return byRaw;
+
+        var abs = Path.GetFullPath(path);
+        if (_tilesets.TryGetValue(abs, out var cached))
+        {
+            _tilesetsByRawPath[path] = cached;
+            return cached;
+        }
+
+        (Tileset, SpriteFrame[])? entry = null;
+        try
+        {
+            if (File.Exists(abs))
+            {
+                var set = Tileset.Load(abs);
+                entry = (set, set.BuildFrames());
+            }
+        }
+        catch (Exception e) when (e is IOException or JsonException)
+        {
+            // Corrupt/unreadable tileset behaves like a missing one; the null is cached too, so a
+            // broken path costs one failed read rather than one per frame.
+        }
+
+        _tilesets[abs] = entry;
+        _tilesetsByRawPath[path] = entry;
+        return entry;
+    }
+
+    /// <summary>Drop a cached tileset so the next frame re-reads it (the editor calls this on save).</summary>
+    public void InvalidateTileset(string? path)
+    {
+        if (string.IsNullOrEmpty(path)) return;
+        _tilesets.Remove(Path.GetFullPath(path));
+        _tilesetsByRawPath.Remove(path);
+    }
+
+    /// <summary>
+    ///     Emit one sprite instance per visible tile. Every tile shares the tileset texture and one
+    ///     material, so the batcher collapses an entire tilemap into a single GPU draw call.
+    /// </summary>
+    private void DrawTilemapNode(SceneNode node)
+    {
+        if (node.TilemapLayers.Count == 0) return;
+        if (GetTileset(node.TilesetPath) is not { } ts) return;
+        var tex = GetTexture(ts.Set.TexturePath);
+        if (tex == null || ts.Frames.Length == 0) return;
+
+        var world = WorldTransform(node);
+        var size = MathF.Max(1e-4f, node.TileWorldSize);
+        var stepX = size * world.Scale.X;
+        var stepY = size * world.Scale.Y;
+        var rot = world.Rotation.ToEulerRadians().Z;
+        var cos = MathF.Cos(rot);
+        var sin = MathF.Sin(rot);
+        var material = MaterialFor(node.TilemapBlend, node.TilemapStage, 0u);
+        var tint = node.TilemapColor;
+
+        // Cull to the camera rect in this node's tile space. Skipped for a rotated map (the rect no
+        // longer maps to a tile range) — rotated tilemaps are rare and still draw correctly, just
+        // without the early-out.
+        var cull = _cullValid && MathF.Abs(rot) < 1e-4f && stepX > 1e-6f && stepY > 1e-6f;
+        var minTx = int.MinValue;
+        var maxTx = int.MaxValue;
+        var minTy = int.MinValue;
+        var maxTy = int.MaxValue;
+        if (cull)
+        {
+            minTx = (int)MathF.Floor((_cullMinX - world.Position.X) / stepX) - 1;
+            maxTx = (int)MathF.Ceiling((_cullMaxX - world.Position.X) / stepX) + 1;
+            minTy = (int)MathF.Floor((_cullMinY - world.Position.Y) / stepY) - 1;
+            maxTy = (int)MathF.Ceiling((_cullMaxY - world.Position.Y) / stepY) + 1;
+        }
+
+        foreach (var layer in node.TilemapLayers)
+        {
+            if (!layer.Visible || layer.IsEmpty || layer.Opacity <= 0f) continue;
+
+            var x0 = Math.Max(layer.OriginX, minTx);
+            var x1 = Math.Min(layer.OriginX + layer.Width - 1, maxTx);
+            var y0 = Math.Max(layer.OriginY, minTy);
+            var y1 = Math.Min(layer.OriginY + layer.Height - 1, maxTy);
+            if (x0 > x1 || y0 > y1) continue;
+
+            var color = new Vec4(
+                tint.X,
+                tint.Y,
+                tint.Z,
+                tint.W * Math.Clamp(layer.Opacity, 0f, 1f)
+            );
+            var sortLayer = (short)Math.Clamp(layer.SortingLayer, short.MinValue, short.MaxValue);
+            var order = (short)Math.Clamp(layer.OrderInLayer, short.MinValue, short.MaxValue);
+
+            for (var ty = y0; ty <= y1; ty++)
+            for (var tx = x0; tx <= x1; tx++)
+            {
+                var tile = layer.GetTile(tx, ty);
+                if (tile < 0 || tile >= ts.Frames.Length) continue;
+
+                // Cell centre in the node's local 2D space, rotated into world.
+                var lx = (tx + 0.5f) * stepX;
+                var ly = (ty + 0.5f) * stepY;
+                _renderer.Draw(
+                    new SpriteDraw {
+                        X = world.Position.X + lx * cos - ly * sin,
+                        Y = world.Position.Y + lx * sin + ly * cos,
+                        Z = world.Position.Z,
+                        Rotation = rot,
+                        Width = stepX,
+                        Height = stepY,
+                        PivotX = 0.5f,
+                        PivotY = 0.5f,
+                        Frame = ts.Frames[tile],
+                        Color = color,
+                        SortingLayer = sortLayer,
+                        OrderInLayer = order,
+                        Texture = tex.Handle,
+                        Material = material,
+                    }
+                );
+            }
+        }
+    }
+
+    /// <summary>
+    ///     World-XY bounds of the view frustum, from the view-projection inverse over the NDC box
+    ///     (wgpu clip space: xy ∈ [-1,1], z ∈ [0,1]). Tight under the 2D ortho camera; merely
+    ///     conservative under the perspective edit camera, so it never culls a visible tile.
+    /// </summary>
+    private void ComputeCullRect(in Mat4 viewProjection)
+    {
+        var inv = viewProjection.Inverse();
+        _cullMinX = float.MaxValue;
+        _cullMinY = float.MaxValue;
+        _cullMaxX = float.MinValue;
+        _cullMaxY = float.MinValue;
+
+        for (var i = 0; i < 8; i++)
+        {
+            var ndc = new Vec4(
+                (i & 1) == 0 ? -1f : 1f,
+                (i & 2) == 0 ? -1f : 1f,
+                (i & 4) == 0 ? 0f : 1f,
+                1f
+            );
+            var p = inv.MulVec4(ndc);
+            if (MathF.Abs(p.W) < 1e-6f)
+            {
+                _cullValid = false; // corner at infinity — draw everything rather than guess
+                return;
+            }
+
+            var invW = 1f / p.W;
+            var x = p.X * invW;
+            var y = p.Y * invW;
+            _cullMinX = MathF.Min(_cullMinX, x);
+            _cullMaxX = MathF.Max(_cullMaxX, x);
+            _cullMinY = MathF.Min(_cullMinY, y);
+            _cullMaxY = MathF.Max(_cullMaxY, y);
+        }
+
+        _cullValid = _cullMaxX >= _cullMinX && _cullMaxY >= _cullMinY;
     }
 
     private static SceneNode? FindOrthoCamera(SceneNode node)

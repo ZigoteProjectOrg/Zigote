@@ -1,5 +1,5 @@
-using System.Diagnostics;
 using Zigote.Core.Physics;
+using Zigote.Core.Rendering;
 using Zigote.Game.Scene;
 using Zigote.UI.Host;
 
@@ -15,7 +15,14 @@ namespace Zigote.Game;
 ///     UiApp already owns DeltaTime and Time.
 /// </summary>
 public abstract class GameApp(string title, uint width = 1280, uint height = 720)
-    : App(title, width, height)
+    // A game renders a 3D scene every frame, so it wants the fastest GPU on a multi-GPU machine —
+    // unlike a plain UI App, which defaults to the power-efficient one.
+    : App(
+        title,
+        width,
+        height,
+        gpuPreference: GpuPowerPreference.Performance
+    )
 {
     /// <summary>Fixed gameplay + physics tick — matches the play session's 120 Hz.</summary>
     public const float FixedDt = 1f / 120f;
@@ -25,8 +32,17 @@ public abstract class GameApp(string title, uint width = 1280, uint height = 720
 
     private float _accumulator;
 
-    /// <summary>Target frames per second. 0 = uncapped.</summary>
-    public int TargetFps { get; set; } = 60;
+    /// <summary>
+    ///     Target frames per second. 0 (the default) follows the monitor the window is on. An
+    ///     explicit value can only slow the loop below the panel's refresh, never past it — see
+    ///     <see cref="App.FrameIntervalTicks" />, which does the actual pacing at the end of every
+    ///     <see cref="App.Frame" />.
+    /// </summary>
+    public int TargetFps
+    {
+        get => FrameRateLimit;
+        set => FrameRateLimit = value;
+    }
 
     /// <summary>The main 3D world (C# scene graph with typed transforms and components).</summary>
     public World World { get; } = new();
@@ -71,14 +87,9 @@ public abstract class GameApp(string title, uint width = 1280, uint height = 720
         OnStart();
         World.AttachPhysics(Physics);
 
-        var targetTicks = TargetFps > 0 ? Stopwatch.Frequency / TargetFps : 0;
-        var clock = Stopwatch.StartNew();
-
         while (!ShouldQuit)
         {
-            var frameStart = clock.ElapsedTicks;
-
-            Frame(); // UiApp.Frame() updates DeltaTime internally
+            Frame(); // UiApp.Frame() updates DeltaTime internally — and paces the frame on the way out
             OnUpdate(DeltaTime);
 
             _accumulator = MathF.Min(_accumulator + DeltaTime, MaxCatchUp);
@@ -94,13 +105,6 @@ public abstract class GameApp(string title, uint width = 1280, uint height = 720
             World.SyncFromPhysics(Physics);
             World.Update(DeltaTime); // update transforms, clear per-frame input deltas
             World.Sync(); // push world transforms to Zig renderer
-
-            if (targetTicks > 0)
-            {
-                var remaining = targetTicks - (clock.ElapsedTicks - frameStart);
-                if (remaining > 0)
-                    Thread.Sleep((int)(remaining * 1000 / Stopwatch.Frequency));
-            }
         }
 
         Physics.Dispose();

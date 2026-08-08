@@ -26,6 +26,7 @@ public enum NodeKind
     AudioSource,
     VfxEmitter,
     Sprite,
+    Tilemap,
 }
 
 public enum LightType : byte
@@ -502,6 +503,74 @@ public sealed class SceneNode : IEcsSceneNode
     /// <summary>Optional custom material shader (.wgsl, sprite contract). Resolved relative to the scene.</summary>
     public string? SpriteShaderPath { get; set; }
 
+    /// <summary>
+    ///     Corner radius in world units; 0 = square. At half the shorter side the quad becomes a
+    ///     capsule (a circle when square) — how the 2D canvas draws rounded panels and discs.
+    /// </summary>
+    public float SpriteCornerRadius { get; set; }
+
+    /// <summary>Outline thickness in world units; 0 fills, greater than 0 strokes a ring in the tint.</summary>
+    public float SpriteBorderWidth { get; set; }
+
+    // ── Tilemap (2D; only meaningful when Kind == Tilemap) ─────────────────────
+    // Tiles are drawn by Sprite2DSystem through the same Renderer2D batcher as sprites: one layer's
+    // visible cells become sprite instances sharing the tileset texture, so a whole tilemap collapses
+    // into one GPU batch. World placement: tile (0,0)'s lower-left corner sits at the node's world
+    // position; one tile spans TileWorldSize units, and the node's scale multiplies that.
+
+    /// <summary>Path to the <c>.tileset</c> asset backing every layer, relative to the project root.</summary>
+    public string? TilesetPath { get; set; }
+
+    /// <summary>Layers, painted back-to-front within their sorting layer / order-in-layer.</summary>
+    public List<TilemapLayer> TilemapLayers { get; set; } = [];
+
+    /// <summary>World size of one tile edge. 1 tile = 1 unit by default.</summary>
+    public float TileWorldSize { get; set; } = 1f;
+
+    /// <summary>Tint applied to every tile (straight alpha), multiplied with the texture.</summary>
+    public Vec4 TilemapColor { get; set; } = new(
+        1f,
+        1f,
+        1f,
+        1f
+    );
+
+    /// <summary>Material blend: 0 alpha, 1 additive, 2 opaque (Zigote.Render2D.Blend2D).</summary>
+    public int TilemapBlend { get; set; }
+
+    /// <summary>Render stage: 0 scene, 1 overlay — same meaning as <see cref="SpriteStage" />.</summary>
+    public int TilemapStage { get; set; }
+
+    /// <summary>Bake solid-flagged tiles into the 2D collision world on play.</summary>
+    public bool TilemapCollision { get; set; } = true;
+
+    // ── 2D collider (Physics2D; any 2D node) ───────────────────────────────────
+    // Physics2D is an axis-aligned box/circle world with no rotation and no polygons — these fields
+    // mirror exactly what CollisionWorld2D.AddBox/AddCircle accept, and nothing more.
+
+    /// <summary>Contribute a collider to the 2D collision world.</summary>
+    public bool Collider2DEnabled { get; set; }
+
+    /// <summary>0 = box (<see cref="Collider2DSize" />), 1 = circle (<see cref="Collider2DRadius" />).</summary>
+    public int Collider2DShape { get; set; }
+
+    /// <summary>Offset from the node's world position, in world units.</summary>
+    public Vec2 Collider2DOffset { get; set; }
+
+    /// <summary>Box half-extents in world units.</summary>
+    public Vec2 Collider2DSize { get; set; } = new(0.5f, 0.5f);
+
+    public float Collider2DRadius { get; set; } = 0.5f;
+
+    /// <summary>Collision layer bitmask handed to <c>CollisionWorld2D</c>.</summary>
+    public uint Collider2DLayer { get; set; } = 1;
+
+    /// <summary>Reports overlaps without blocking movement.</summary>
+    public bool Collider2DIsTrigger { get; set; }
+
+    /// <summary>Jump-through platform: blocks only downward crossings.</summary>
+    public bool Collider2DOneWayUp { get; set; }
+
     public string KindIcon => Kind switch {
         NodeKind.Mesh => "[M]",
         NodeKind.Light => "[L]",
@@ -511,6 +580,7 @@ public sealed class SceneNode : IEcsSceneNode
         NodeKind.AudioSource => "[A]",
         NodeKind.VfxEmitter => "[V]",
         NodeKind.Sprite => "[2]",
+        NodeKind.Tilemap => "[#]",
         _ => "[ ]",
     };
 
@@ -780,6 +850,23 @@ public sealed class SceneNode : IEcsSceneNode
         c.SpriteBlend = SpriteBlend;
         c.SpriteStage = SpriteStage;
         c.SpriteShaderPath = SpriteShaderPath;
+        c.SpriteCornerRadius = SpriteCornerRadius;
+        c.SpriteBorderWidth = SpriteBorderWidth;
+        c.TilesetPath = TilesetPath;
+        c.TilemapLayers = [.. TilemapLayers.Select(l => l.Clone())];
+        c.TileWorldSize = TileWorldSize;
+        c.TilemapColor = TilemapColor;
+        c.TilemapBlend = TilemapBlend;
+        c.TilemapStage = TilemapStage;
+        c.TilemapCollision = TilemapCollision;
+        c.Collider2DEnabled = Collider2DEnabled;
+        c.Collider2DShape = Collider2DShape;
+        c.Collider2DOffset = Collider2DOffset;
+        c.Collider2DSize = Collider2DSize;
+        c.Collider2DRadius = Collider2DRadius;
+        c.Collider2DLayer = Collider2DLayer;
+        c.Collider2DIsTrigger = Collider2DIsTrigger;
+        c.Collider2DOneWayUp = Collider2DOneWayUp;
         c.PrefabSource = PrefabSource;
         c.Tag = Tag;
         foreach (var kv in ScriptExports) c.ScriptExports[kv.Key] = kv.Value;

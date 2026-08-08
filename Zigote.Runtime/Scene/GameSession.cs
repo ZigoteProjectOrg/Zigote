@@ -10,7 +10,6 @@ using Zigote.Runtime.Vfx;
 using Zigote.Scripting;
 using Zigote.Scripting.Metadata;
 using Zigote.Vfx;
-using Zigote.UI.Host;
 
 namespace Zigote.Runtime.Scene;
 
@@ -51,9 +50,22 @@ public sealed class GameSession : IWorldSessionHooks
     // Backs the generic Audio scripting API in play mode, and tracks the native source created for each
     // editor-authored AudioSource node (node id → source id) so they can be positioned + freed.
     private readonly RuntimeAudioBackend? _audio;
-    private readonly Dictionary<int, uint> _audioSources = new();
 
-    private readonly Dictionary<int, uint> _bodyIds = new();
+    /// <summary>
+    ///     Live spatial sources by node id, carrying the node so the per-frame position update does not
+    ///     have to find it again. Keeping the node here rather than re-walking the scene is what turns
+    ///     that update from O(nodes) into O(sources); the reference lives exactly as long as the sound
+    ///     handle beside it, since both are removed together in <see cref="ReleaseNodeResources" />.
+    /// </summary>
+    private readonly Dictionary<int, (SceneNode Node, uint Sound)> _audioSources = new();
+
+    /// <summary>
+    ///     Physics bodies by node id, carrying the node the transform is written back to. The node is
+    ///     here for the same reason it is in <see cref="_audioSources" />: the read-back runs at the
+    ///     fixed-step rate, and re-deriving this list by walking the scene made a 10k-node level cost a
+    ///     full traversal per tick to find a few dozen dynamic bodies.
+    /// </summary>
+    private readonly Dictionary<int, (SceneNode Node, uint BodyId)> _bodyIds = new();
 
     // Backs the generic Cinematics scripting API: runtime control of the active camera's physical model.
     private readonly RuntimeCameraBackend? _cameraBackend;
@@ -125,6 +137,23 @@ public sealed class GameSession : IWorldSessionHooks
     public bool MoveDown;
 
     // ── Input (written by ViewportPanel, read by Update) ──────────────────────
+
+    /// <summary>
+    ///     Every key currently held, by lower-case name ("a", "space", "enter", "left", …). The
+    ///     named movement flags above cover the built-in drive controls; this is what lets a game
+    ///     read ANY key — menus, a second couch player, custom bindings — through
+    ///     <see cref="Input.IsKeyDown" /> without the host having to know the game's control scheme.
+    /// </summary>
+    public readonly HashSet<string> HeldKeys = [];
+
+    /// <summary>Record a key transition. Hosts call this from their key handler.</summary>
+    public void SetKey(string name, bool down)
+    {
+        if (string.IsNullOrEmpty(name)) return;
+        var key = name.ToLowerInvariant();
+        if (down) HeldKeys.Add(key);
+        else HeldKeys.Remove(key);
+    }
 
     public bool MoveForward;
     public bool MoveLeft;
@@ -317,7 +346,7 @@ public sealed class GameSession : IWorldSessionHooks
                     Mass = node.PhysicsMass,
                 }
             );
-            _bodyIds[node.Id] = bodyId;
+            _bodyIds[node.Id] = (node, bodyId);
         }
 
         foreach (var c in node.Children) RegisterBodies(c);
@@ -357,7 +386,8 @@ public sealed class GameSession : IWorldSessionHooks
         DebugDraw.Clear(); // drop queued debug lines + disable
         _scripts.Dispose(); // runs each component's OnDestroy — Audio.Backend is still live here so a
         // SoundEmitter can release its own source. Tear down audio after, then silence anything left.
-        foreach (var id in _audioSources.Values) ZigoteEngine.Instance?.AudioSoundDestroy(id);
+        foreach (var (_, sound) in _audioSources.Values)
+            ZigoteEngine.Instance?.AudioSoundDestroy(sound);
         _audioSources.Clear();
         Music.Reset(); // frees its tracks — must run while Audio.Backend is still live
         Audio.Backend = null;
@@ -414,7 +444,9 @@ public sealed class GameSession : IWorldSessionHooks
             "q" or "descend" => MoveDown,
             "space" or "handbrake" => Handbrake,
             "r" or "reset" => ResetCar,
-            _ => false,
+            // Anything else falls through to the general held-key set, so a game can bind whatever
+            // it likes without the host knowing about it.
+            var other => HeldKeys.Contains(other),
         };
 
         // Mouse-look delta (right-drag) for scripts that own the camera (e.g. orbit a chase cam).
@@ -443,13 +475,18 @@ public sealed class GameSession : IWorldSessionHooks
 
     public void Update(SceneNode root, float dt)
     {
+        // Found once and passed down. FindCamera walks the tree until it hits a Camera node, and this
+        // ran twice per render frame — here and inside PublishRenderView — for an answer that cannot
+        // change between the two calls. On a large scene with the camera late in the tree that is a
+        // full traversal per frame spent re-deriving what was just derived.
+        var cam = FindCamera(root);
+
         // 0. Publish the camera once per render frame so scripts can do view-dependent work (frustum
         //    culling / LOD). One-frame-stale transform + last paint's viewport size — invisible for culling.
-        PublishRenderView(root, dt);
+        PublishRenderView(root, cam, dt);
 
         // Whether a game script owns the Camera node decides who drives the camera and who consumes the
         // mouse-look delta: a chase-cam script reads it inside the fixed loop, the free-fly fallback after.
-        var cam = FindCamera(root);
         var freeFlyCamera = cam != null && _scripts.GetComponents(cam.Id).Count == 0;
 
         // 1. Fixed-timestep core. Advance gameplay + physics in constant FixedDt slices, so behaviour is
@@ -471,7 +508,7 @@ public sealed class GameSession : IWorldSessionHooks
             _world?.ApplyDeferred(); // World.Destroy/SetParent queued by scripts — before physics steps dead bodies
             _scenes?.ApplyPending(); // a requested scene swap runs at the same safe point
             _physics.Step(FixedDt);
-            SyncFromPhysics(root);
+            SyncFromPhysics();
             _vfx.Step(
                 FixedDt
             ); // node emitters: step after transforms settle so spawn origins are current
@@ -514,7 +551,7 @@ public sealed class GameSession : IWorldSessionHooks
 
         // 3. Audio: keep editor-authored spatial sources glued to their (now-updated) node transforms, then
         //    service the engine so fire-and-forget one-shots get reaped. Music fades ride the render dt.
-        UpdateAudioSources(root);
+        UpdateAudioSources();
         Music.Tick(dt);
         ZigoteEngine.Instance?.AudioUpdate(dt);
 
@@ -570,16 +607,25 @@ public sealed class GameSession : IWorldSessionHooks
             engine.AudioSoundSetPosition(id, WorldTransform(node).Position);
         }
 
-        _audioSources[node.Id] = id;
+        _audioSources[node.Id] = (node, id);
         if (node.AudioAutoPlay) engine.AudioSoundPlay(id);
     }
 
-    private void UpdateAudioSources(SceneNode node)
+    /// <summary>
+    ///     Glue every spatial source to its node's world transform, once per render frame.
+    ///     <para>
+    ///         Over the index rather than the scene: this used to walk the whole node tree looking for
+    ///         the handful of nodes that are <c>AudioSource</c>s, every frame, when the sources were
+    ///         already indexed by the walk that created them. A scene is thousands of nodes and a
+    ///         soundscape is tens of sources.
+    ///     </para>
+    /// </summary>
+    private void UpdateAudioSources()
     {
-        if (node.Kind == NodeKind.AudioSource && node.AudioSpatial &&
-            _audioSources.TryGetValue(node.Id, out var id))
-            ZigoteEngine.Instance?.AudioSoundSetPosition(id, WorldTransform(node).Position);
-        foreach (var c in node.Children) UpdateAudioSources(c);
+        if (_audioSources.Count == 0 || ZigoteEngine.Instance is not { } engine) return;
+        foreach (var (node, sound) in _audioSources.Values)
+            if (node.AudioSpatial)
+                engine.AudioSoundSetPosition(sound, WorldTransform(node).Position);
     }
 
     /// <summary>
@@ -594,11 +640,11 @@ public sealed class GameSession : IWorldSessionHooks
         MoveForward = MoveBack = MoveLeft = MoveRight = MoveUp = MoveDown = false;
         Handbrake = ResetCar = false;
         LookDx = LookDy = 0f;
+        HeldKeys.Clear();
     }
 
-    private void PublishRenderView(SceneNode root, float dt)
+    private void PublishRenderView(SceneNode root, SceneNode? cam, float dt)
     {
-        var cam = FindCamera(root);
         if (cam == null)
         {
             _physDriver.Restore(); // camera gone → hand the global settings back to SettingsPanel
@@ -691,10 +737,22 @@ public sealed class GameSession : IWorldSessionHooks
             : local;
     }
 
-    private void SyncFromPhysics(SceneNode root)
+    /// <summary>
+    ///     Read every dynamic body's transform back onto its node, once per fixed step.
+    ///     <para>
+    ///         The list is gathered from the body index rather than by walking the scene: static
+    ///         geometry is most of a level and none of it moves, so a traversal per tick was
+    ///         proportional to the wrong number. Order is irrelevant — each body writes only its own
+    ///         node — so the dictionary's is as good as the tree's.
+    ///     </para>
+    /// </summary>
+    private void SyncFromPhysics()
     {
         _syncBodies.Clear();
-        CollectDynamicBodies(root);
+        foreach (var (node, bodyId) in _bodyIds.Values)
+            if (bodyId != PhysicsWorld.InvalidBodyId && !node.IsStatic)
+                _syncBodies.Add((node, bodyId));
+
         var count = _syncBodies.Count;
         if (count == 0) return;
 
@@ -715,16 +773,6 @@ public sealed class GameSession : IWorldSessionHooks
                 xforms[b + 6]
             );
         }
-    }
-
-    private void CollectDynamicBodies(SceneNode node)
-    {
-        if (_bodyIds.TryGetValue(node.Id, out var bodyId)
-            && bodyId != PhysicsWorld.InvalidBodyId
-            && !node.IsStatic)
-            _syncBodies.Add((node, bodyId));
-
-        foreach (var c in node.Children) CollectDynamicBodies(c);
     }
 
     private void TickCamera(SceneNode cam, float dt)
@@ -765,8 +813,9 @@ public sealed class GameSession : IWorldSessionHooks
     /// <summary>Apply an instantaneous impulse to a physics-enabled node.</summary>
     public void ApplyImpulse(int nodeId, Vec3 impulse)
     {
-        if (_bodyIds.TryGetValue(nodeId, out var bodyId) && bodyId != PhysicsWorld.InvalidBodyId)
-            _physics.AddImpulse(bodyId, impulse);
+        if (_bodyIds.TryGetValue(nodeId, out var body) &&
+            body.BodyId != PhysicsWorld.InvalidBodyId)
+            _physics.AddImpulse(body.BodyId, impulse);
     }
 
     /// <summary>Live-tune a running script: apply a changed exported field to the node's components.</summary>
@@ -777,10 +826,10 @@ public sealed class GameSession : IWorldSessionHooks
 
     private void ReleaseNodeResources(SceneNode node)
     {
-        if (_bodyIds.Remove(node.Id, out var bodyId) && bodyId != PhysicsWorld.InvalidBodyId)
-            _physics.DestroyBody(bodyId);
-        if (_audioSources.Remove(node.Id, out var sourceId))
-            ZigoteEngine.Instance?.AudioSoundDestroy(sourceId);
+        if (_bodyIds.Remove(node.Id, out var body) && body.BodyId != PhysicsWorld.InvalidBodyId)
+            _physics.DestroyBody(body.BodyId);
+        if (_audioSources.Remove(node.Id, out var source))
+            ZigoteEngine.Instance?.AudioSoundDestroy(source.Sound);
         foreach (var c in node.Children) ReleaseNodeResources(c);
     }
 }

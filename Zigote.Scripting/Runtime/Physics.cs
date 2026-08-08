@@ -226,13 +226,24 @@ public static class Physics
 
     public static RaycastHit? Raycast(Vec3 origin, Vec3 direction, float maxDistance)
     {
-        return Raycast(origin, direction, maxDistance, RigidBodyHandle.None);
+        return Raycast(
+            origin,
+            direction,
+            maxDistance,
+            RigidBodyHandle.None
+        );
     }
 
     public static RaycastHit? Raycast(Vec3 origin, Vec3 direction, float maxDistance,
         RigidBodyHandle ignore)
     {
-        return TryRaycast(origin, direction, maxDistance, ignore, out var hit)
+        return TryRaycast(
+            origin,
+            direction,
+            maxDistance,
+            ignore,
+            out var hit
+        )
             ? new RaycastHit {
                 Body = hit.Body,
                 Point = hit.Point,
