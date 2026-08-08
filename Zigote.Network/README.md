@@ -6,6 +6,6 @@
 > `NetworkManager` itself and assign it to `Net.Manager` (and clear it on stop) — until
 > then every `Net` query is a safe no-op.
 
-Client/server networking building blocks for Zigote games: transport, message
-serialization, replication, client prediction, and clock synchronization. Game
+Client/server networking building blocks for Zigote games: transport, message serialization, replication, client
+prediction, and clock synchronization. Game
 `Component` scripts reach the active session through the static `Net` accessor.
