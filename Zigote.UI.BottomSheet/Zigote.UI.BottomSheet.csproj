@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>Zigote.UI.BottomSheets</RootNamespace>
+        <AssemblyName>Zigote.UI.BottomSheet</AssemblyName>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
+    </ItemGroup>
+</Project>
