@@ -2,10 +2,7 @@ namespace Zigote.UI.FSharp
 
 open System
 open System.Collections.Generic
-open Zigote.Core
-open Zigote.Core.Paint
 open Zigote.Core.State
-open Zigote.UI.Theme
 open Zigote.UI.Widgets
 
 /// Adapts an F# equality function to the <see cref="IEqualityComparer{T}" /> the reactive core takes
@@ -16,11 +13,15 @@ type internal FuncEqualityComparer<'T>(eq: 'T -> 'T -> bool) =
         member _.GetHashCode(v) = 0
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Fine-grained reactive UI — thin F# ergonomics + widget integration over the
-//  C#-first reactive core (`Zigote.Core.State`: auto-tracking Signal/Computed/
-//  Effect + Reactive.Batch, one graph for the whole engine). This is the reactive
-//  alternative to the MVU loop: state lives in signals, and `Ui.bind` updates only
-//  the widgets that read a changed signal.
+//  F# ergonomics over the C#-first reactive core (`Zigote.Core.State`: auto-tracking
+//  Signal/Computed/Effect + Reactive.Batch, one graph for the whole engine).
+//
+//  This module is ONLY the reactive surface. The UI itself is the C# widget API,
+//  used directly — F# constructor calls take named args and set properties inline
+//  (`Button("Reset", reset, Style = ButtonStyle.Flat)`), so there is no view DSL, no
+//  attribute vocabulary and no code generator to keep in sync. State lives in
+//  signals; `watch` (the C# `Watch` widget) rebuilds only the subtree that read a
+//  changed one.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// A mutable reactive value (the C# `Signal<'T>`): read/write `.Value`; `.Update` for
@@ -28,7 +29,7 @@ type internal FuncEqualityComparer<'T>(eq: 'T -> 'T -> bool) =
 type Signal<'T> = Zigote.Core.State.Signal<'T>
 
 /// A readable reactive value (Signal or Computed) — the interface the combinators work over.
-type IReadable<'T> = Zigote.Core.State.IReadableSignal<'T>
+type IReadable<'T> = IReadableSignal<'T>
 
 /// Combinators over any readable reactive value (Signal or Computed). Derived values are
 /// auto-tracking Computeds (dispose them if they outlive their sources; app-lifetime ones are GC'd).
@@ -100,200 +101,19 @@ module ReactiveOps =
     /// enclosing computed/effect (SolidJS `untrack`). Also `signal.Peek()` for a single untracked read.
     let untracked (fn: unit -> 'T) : 'T = Reactive.Untracked(Func<'T>(fn))
 
-// ── UI integration (fine-grained binding) ────────────────────────────────────
+// ── widget bridge ────────────────────────────────────────────────────────────
 
-/// The widget that makes a subtree reactive. It wraps `render` in a `Computed<View>` (which
-/// auto-tracks every signal `render` reads) and reconciles its subtree whenever that view changes.
-/// The View is immutable data, so it is recomputed on whatever thread set the signal; the reconcile
-/// (widget mutation) is marshalled to the UI thread — off-thread changes wake the loop via
-/// Owner.RequestLayout(), exactly like MvuHost.
-type internal ReactiveNode(initialRender: unit -> View) =
-    inherit Widget()
+/// The two spots F# won't infer a widget upcast for you: a `Watch` builder's return type, and the
+/// first element of a mixed child array. Everything else is the plain C# widget API.
+[<AutoOpen>]
+module WidgetOps =
 
-    // Mutable so a parent reconcile that reuses this bind node can swap the thunk (SetRender) instead
-    // of leaving it rendering stale content — see Reactive.bind's `render` attr.
-    let mutable render: unit -> View = initialRender
-    let mutable viewSignal: Computed<View> = null
-    let mutable sub: IDisposable = null
-    let mutable node: Node option = None
-    let mutable children: Widget[] = [||]
-    let mutable size = Size.Zero
-    let mutable started = false
-    let mutable detached = false
-    let mutable dirty = false
-    let mutable uiThread = 0
+    /// Upcast any widget to `Widget` — for the head of a mixed child array
+    /// (`[| w (Text "a"); SizedBox(height = 8f) |]`), which F# types from its first element.
+    let inline w (widget: #Widget) : Widget = widget :> Widget
 
-    member private this.ApplyView() =
-        let v = viewSignal.Value
-
-        match node with
-        | Some n when Reconcile.canReuse n.View v -> node <- Some(Reconcile.patch n v)
-        | Some n ->
-            n.Widget.Detach()
-            let fresh = Reconcile.create v
-
-            match this.Owner with
-            | null -> ()
-            | o -> fresh.Widget.Attach(o, this)
-
-            node <- Some fresh
-            this.MarkNeedsLayout()
-        | None ->
-            let fresh = Reconcile.create v
-
-            match this.Owner with
-            | null -> ()
-            | o -> fresh.Widget.Attach(o, this)
-
-            node <- Some fresh
-            this.MarkNeedsLayout()
-
-        children <-
-            match node with
-            | Some n -> [| n.Widget |]
-            | None -> [||]
-
-    member private this.OnViewChanged() =
-        if not detached then
-            if Environment.CurrentManagedThreadId = uiThread then
-                this.ApplyView()
-            else
-                // Off the UI thread (async/timer set a signal): flag the reconcile and ask the App to
-                // mark this node's ancestor chain for layout ON THE UI THREAD next frame — otherwise the
-                // App-level layout flag alone lets cached ancestors (StatelessWidget) skip re-measuring
-                // this subtree, so the reconcile in Measure below never runs.
-                dirty <- true
-
-                match this.Owner with
-                | null -> ()
-                | app -> app.InvalidateLayoutFromAnyThread(this)
-
-    // Wrap the current `render` in a tracked Computed<View>, reconcile once, and observe for changes.
-    member private this.Start() =
-        viewSignal <- Computed.From(Func<View>(fun () -> render ()))
-        this.ApplyView()
-        sub <- ReactiveExtensions.Observe(viewSignal :> ISignal, Action(fun () -> this.OnViewChanged()))
-
-    member private this.Stop() =
-        match sub with
-        | null -> ()
-        | s -> s.Dispose()
-
-        sub <- null
-
-        if not (obj.ReferenceEquals(viewSignal, null)) then
-            (viewSignal :> IDisposable).Dispose()
-            viewSignal <- null
-
-    member private this.EnsureStarted() =
-        if not started then
-            started <- true
-            uiThread <- Environment.CurrentManagedThreadId
-            this.Start()
-
-    /// Swap the render thunk and re-render. A parent reconcile that reuses this bind node calls this —
-    /// the `render` attr's value (a closure) never compares equal, so patch always re-applies it — so a
-    /// reused bind adopts the new closure instead of rendering stale content. A create-time call (before
-    /// Attach, `started=false`) just records the thunk; the first reconcile happens in EnsureStarted.
-    member this.SetRender(newRender: unit -> View) =
-        render <- newRender
-
-        if started && not detached then
-            this.Stop()
-            this.Start()
-
-    override this.Attach(owner, parent) =
-        detached <- false
-        // base.Attach sets Owner first, so the initial ApplyView in EnsureStarted can attach its freshly
-        // built child directly (rather than relying on base.Attach's child loop, which runs before the
-        // child exists).
-        base.Attach(owner, parent)
-        this.EnsureStarted()
-
-    override this.Detach() =
-        detached <- true
-        this.Stop()
-        base.Detach() // detaches the current subtree via GetChildren
-        node <- None
-        children <- [||]
-        started <- false
-        dirty <- false // don't carry a pending reconcile across detach/re-attach
-
-    override this.Measure(c: Constraints) =
-        this.EnsureStarted()
-
-        if dirty then
-            dirty <- false
-            this.ApplyView()
-
-        size <-
-            match node with
-            | Some n -> n.Widget.Measure c
-            | None -> c.Constrain Size.Zero
-
-        this.MeasuredSize <- size
-        size
-
-    override this.Layout(origin: Offset) =
-        this.Bounds <- Rect(origin.X, origin.Y, size.Width, size.Height)
-
-        match node with
-        | Some n -> n.Widget.Layout origin
-        | None -> ()
-
-    override _.Paint(paint: PaintList) =
-        match node with
-        | Some n -> n.Widget.Paint paint
-        | None -> ()
-
-    override this.HitTest(point: Offset) =
-        if not (this.Bounds.Contains(point.X, point.Y)) then
-            null
-        else
-            match node with
-            | Some n ->
-                match n.Widget.HitTest point with
-                | null -> this :> Widget
-                | hit -> hit
-            | None -> this :> Widget
-
-    override _.GetChildren() = children :> seq<Widget>
-
-    override _.DebugStateHash() =
-        match node with
-        | Some n -> n.Widget.DebugStateHash()
-        | None -> 0
-
-/// The reactive host API — the non-MVU way to build an app. State lives in signals; the view is a
-/// static tree with `Reactive.bind`/`Ui.bind` nodes wired to those signals for fine-grained updates.
-[<RequireQualifiedAccess>]
-module Reactive =
-
-    /// A reactive subtree: `render` re-runs (and its subtree reconciles) whenever any signal it reads
-    /// changes. Auto-tracking — no need to name the dependency. Also exposed as `Ui.bind`.
-    let bind (render: unit -> View) : View =
-        // The render thunk rides an attr so a parent reconcile that REUSES this bind node (same kind,
-        // no key — e.g. sibling binds swapped by a tab switch) swaps the thunk in via SetRender rather
-        // than leaving the reused node rendering stale content. A closure never compares equal, so patch
-        // always re-applies it (only fires on an actual reconcile, not per signal-change).
-        { Kind = "bind"
-          Key = None
-          Create = fun () -> ReactiveNode(render) :> Widget
-          Attrs =
-            [ { Name = "render"
-                Value = box render
-                Apply = (fun w v -> (w :?> ReactiveNode).SetRender(v :?> (unit -> View)))
-                Unset = None } ]
-          Children = Children.None
-          SetChild = None }
-
-    /// Materialize a view (with its `bind` nodes) into a retained widget — embeddable anywhere a
-    /// Widget goes, including inside C# apps. No MVU loop.
-    let toWidget (view: View) : Widget = (Reconcile.create view).Widget
-
-    /// Boot a standalone window from an <see cref="AppConfig" /> (window size + the `OnReady` host
-    /// hook, e.g. DevTools). Blocks until the window closes.
-    let runConfig (config: AppConfig) (view: View) = Host.run config (toWidget view)
-
-    /// Boot a ZigoteApp with the reactive view as Home. Blocks until the window closes.
-    let run (title: string) (theme: ThemeData) (view: View) = runConfig (AppConfig.create title theme) view
+    /// A reactive subtree (the C# <see cref="Watch" />): `build` re-runs, and its subtree is swapped,
+    /// whenever a signal it read changes. Auto-tracked — no dependency list.
+    /// `watch (fun () -> Text(string count.Value))` updates just that label.
+    let watch (build: unit -> #Widget) : Widget =
+        Watch(fun () -> build () :> Widget) :> Widget

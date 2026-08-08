@@ -33,7 +33,7 @@ module AppConfig =
 /// A <see cref="ZigoteApp" /> subclass that surfaces the live <c>App</c> at init so an F# runner can
 /// invoke <see cref="AppConfig.OnReady" /> with the same timing a C# host gets in its own
 /// <c>OnInit</c> — after the window/engine are ready, before the first frame.
-type internal HostApp(onReady: App -> unit) =
+type HostApp(onReady: App -> unit) =
     inherit ZigoteApp()
 
     override this.OnInit() =
@@ -44,9 +44,9 @@ type internal HostApp(onReady: App -> unit) =
             onReady app
 
 [<RequireQualifiedAccess>]
-module internal Host =
-    /// Boot a standalone window hosting <paramref name="root" /> as Home (shared by the MVU and
-    /// reactive runners). Blocks until the window closes.
+module Host =
+    /// Boot a standalone window hosting <paramref name="root" /> as Home. Blocks until the window
+    /// closes.
     let run (config: AppConfig) (root: Zigote.UI.Widgets.Widget) =
         let app = HostApp(config.OnReady)
         app.Title <- config.Title
