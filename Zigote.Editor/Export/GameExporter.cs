@@ -399,17 +399,23 @@ public static class GameExporter
         csproj.AppendLine("    <PropertyGroup>");
         csproj.AppendLine("        <OutputType>Exe</OutputType>");
         csproj.AppendLine($"        <TargetFramework>{RidTfm(rid)}</TargetFramework>");
+        // Staged outside the repo, so it can't inherit Directory.Build.props — pin the same C# level.
+        csproj.AppendLine("        <LangVersion>14.0</LangVersion>");
         if (IsMobile(rid))
         {
             // The app identity the platform installers key on, plus the phone-shaped defaults.
             csproj.AppendLine($"        <ApplicationTitle>{name}</ApplicationTitle>");
-            csproj.AppendLine($"        <ApplicationId>{BundleId(input.Project.Name)}</ApplicationId>");
+            csproj.AppendLine(
+                $"        <ApplicationId>{BundleId(input.Project.Name)}</ApplicationId>"
+            );
             csproj.AppendLine($"        <RuntimeIdentifier>{rid}</RuntimeIdentifier>");
         }
 
         if (rid.StartsWith("ios"))
         {
-            csproj.AppendLine("        <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>");
+            csproj.AppendLine(
+                "        <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>"
+            );
             // SdkOnly, never None: @(NativeReference) is collected by the managed linker pipeline,
             // and the engine archives would silently never reach the native link without it.
             csproj.AppendLine("        <MtouchLink>SdkOnly</MtouchLink>");
@@ -417,7 +423,9 @@ public static class GameExporter
 
         if (rid.StartsWith("android"))
         {
-            csproj.AppendLine("        <SupportedOSPlatformVersion>26</SupportedOSPlatformVersion>");
+            csproj.AppendLine(
+                "        <SupportedOSPlatformVersion>26</SupportedOSPlatformVersion>"
+            );
             csproj.AppendLine("        <AndroidPackageFormat>apk</AndroidPackageFormat>");
             // Assemblies INSIDE the apk: a hand-installed apk (adb install) otherwise aborts at
             // startup with "No assemblies found" (Fast Deployment pushes them out-of-band).
@@ -505,7 +513,12 @@ public static class GameExporter
             // the linker sees no reference to any of them. The archives are produced by the
             // engine's `static-lib` step during this same publish (see Zigote.Native.targets).
             // Simulator builds keep the bundled dylib instead.
-            var zigOut = Path.Combine(sdkRoot, "Zigote.Engine", "zig-out", "lib");
+            var zigOut = Path.Combine(
+                sdkRoot,
+                "Zigote.Engine",
+                "zig-out",
+                "lib"
+            );
             csproj.AppendLine("    <ItemGroup>");
             csproj.AppendLine(
                 $"""        <NativeReference Include="{Path.Combine(zigOut, "libzigote.a")}" Kind="Static" IsCxx="True" ForceLoad="True" Frameworks="UIKit Metal QuartzCore Foundation CoreGraphics CoreVideo CoreMotion GameController CoreAudio AudioToolbox AVFoundation" WeakFrameworks="CoreHaptics" LinkerFlags="-liconv -Wl,-export_dynamic" />"""
@@ -513,7 +526,9 @@ public static class GameExporter
             csproj.AppendLine(
                 $"""        <_ZigoteDepArchive Include="{Path.Combine(zigOut, "*.a")}" Exclude="{Path.Combine(zigOut, "libzigote.a")}" />"""
             );
-            csproj.AppendLine("""        <NativeReference Include="@(_ZigoteDepArchive)" Kind="Static" IsCxx="True" />""");
+            csproj.AppendLine(
+                """        <NativeReference Include="@(_ZigoteDepArchive)" Kind="Static" IsCxx="True" />"""
+            );
             csproj.AppendLine("    </ItemGroup>");
         }
 
@@ -578,7 +593,12 @@ public static class GameExporter
             );
         csproj.AppendLine("</Project>");
         File.WriteAllText(Path.Combine(playerDir, "Game.csproj"), csproj.ToString());
-        WriteMobilePlatformFiles(playerDir, rid, name, input.Project.Name);
+        WriteMobilePlatformFiles(
+            playerDir,
+            rid,
+            name,
+            input.Project.Name
+        );
 
         var reg = new StringBuilder();
         reg.AppendLine(
@@ -702,7 +722,8 @@ public static class GameExporter
             // the symbols and manifests — and point the log at the package.
             CopyTree(publishDir, outDir);
             var package = Directory.EnumerateFileSystemEntries(outDir)
-                .FirstOrDefault(e => e.EndsWith(".apk") || e.EndsWith(".ipa") || e.EndsWith(".app"));
+                .FirstOrDefault(e => e.EndsWith(".apk") || e.EndsWith(".ipa") || e.EndsWith(".app")
+                );
             log.Report($"[{artifact}] → {package ?? outDir}");
             return true;
         }
@@ -1044,8 +1065,8 @@ public static class GameExporter
     {
         var slug = new string(
             (projectName ?? "game").ToLowerInvariant()
-                .Select(ch => char.IsLetterOrDigit(ch) ? ch : '.')
-                .ToArray()
+            .Select(ch => char.IsLetterOrDigit(ch) ? ch : '.')
+            .ToArray()
         ).Trim('.');
         while (slug.Contains("..")) slug = slug.Replace("..", ".");
         return $"com.zigote.{(slug.Length == 0 ? "game" : slug)}";

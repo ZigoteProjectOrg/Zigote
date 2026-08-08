@@ -7,6 +7,7 @@ using Zigote.Core.State;
 using Zigote.Editor.Assets;
 using Zigote.Editor.History;
 using Zigote.Editor.Prefab;
+using Zigote.Editor.Settings;
 using Zigote.Runtime.Animation;
 using Zigote.Runtime.Scene;
 using Zigote.Scripting;
@@ -52,6 +53,17 @@ public sealed class EditorState : IDisposable
     ///     loses what the user authored.
     /// </summary>
     public ZgRenderSettings3D Authored3D;
+
+    /// <summary>
+    ///     Where the editor's off-thread work runs, and the frame budget deferred UI work spends.
+    ///     Panels take a <see cref="Zigote.Core.Threading.Background.Child" /> of it, so a failed
+    ///     project scan is reported as <c>app/assets</c> and does not stop anything else. The host
+    ///     wires the UI-thread hop and the per-frame drain (see <c>Program</c>).
+    /// </summary>
+    public Core.Threading.Background Background { get; } = new(
+        action => UI.Host.App.Active?.Post(action),
+        () => UI.Host.App.Active?.RequestLayout()
+    );
 
     public EditorState()
     {
@@ -159,6 +171,13 @@ public sealed class EditorState : IDisposable
     /// </summary>
     public ZigoteProject? Project { get; set; }
 
+    /// <summary>
+    ///     Per-project editor preferences (viewport toggles, dock layout) over the project-relative
+    ///     prefs file — set on open, disposed (and thereby flushed) with the session. Null for a
+    ///     scratch session: writers fall back to the plain session flags.
+    /// </summary>
+    public ProjectPreferences? Preferences { get; set; }
+
     // Asset browser
     public string AssetFilter { get; set; } = "";
 
@@ -260,6 +279,9 @@ public sealed class EditorState : IDisposable
         // providers. Without this, quitting / closing / switching projects mid-play leaks the Jolt world
         // for the engine's lifetime and strands Physics/Input/Instancing on a dead session. Must precede
         // ScriptDomain.Dispose() (which unloads the collectible AssemblyLoadContext).
+        // Before anything it might deliver into: a scan landing on a torn-down project is the one
+        // failure mode a background result has, and this is the moment it would happen.
+        Background.Dispose();
         StopPlay();
         StopScriptWatcher();
         Sprites2D.Dispose(); // destroy cached sprite textures/shaders before the project goes away
@@ -274,6 +296,9 @@ public sealed class EditorState : IDisposable
         }
 
         ScriptDomain.Dispose();
+
+        Preferences?.Dispose(); // flushes the project-relative prefs file
+        Preferences = null;
     }
 
     /// <summary>Force the viewport to re-render the 3D scene on its next paint.</summary>

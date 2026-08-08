@@ -4,7 +4,6 @@
         <TargetFramework>net10.0</TargetFramework>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <Nullable>enable</Nullable>
-        <LangVersion>latest</LangVersion>
         <ImplicitUsings>enable</ImplicitUsings>
         <RootNamespace>Zigote.Editor</RootNamespace>
         <AssemblyName>Zigote.Editor</AssemblyName>
@@ -25,6 +24,8 @@
         <ProjectReference Include="..\Zigote.Graphs.Vfx\Zigote.Graphs.Vfx.csproj"/>
         <ProjectReference Include="..\Zigote.ECS\Zigote.ECS.csproj"/>
         <ProjectReference Include="..\Zigote.Cinematics\Zigote.Cinematics.csproj"/>
+        <ProjectReference Include="..\Zigote.Preferences\Zigote.Preferences.csproj"/>
+        <ProjectReference Include="..\Zigote.Persistence.SQLite\Zigote.Persistence.SQLite.csproj"/>
     </ItemGroup>
     <!-- Fonts are bundled by Zigote.UI (their canonical home) and flow into this app's Fonts/ output
          transitively via the Zigote.UI project reference — no per-app font list. Publish-time font

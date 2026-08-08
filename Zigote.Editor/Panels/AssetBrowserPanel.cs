@@ -1,6 +1,9 @@
+using System.Collections.Immutable;
 using Zigote.Core;
 using Zigote.Core.Paint;
+using Zigote.Core.Threading;
 using Zigote.Editor.Scene;
+using Zigote.UI.Host;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 
@@ -18,11 +21,26 @@ public sealed class AssetBrowserPanel : RenderWidget, IDisposable
     private const float Indent = 14f;
     private const float DragThreshold = 5f;
 
+    /// <summary>
+    ///     How long a burst of keystrokes or filesystem events is allowed to coalesce before the tree
+    ///     is walked. Editors save whole directories at once, so watcher events arrive in floods —
+    ///     without this each one costs its own walk.
+    /// </summary>
+    private static readonly TimeSpan ScanDebounce = TimeSpan.FromMilliseconds(120);
+
     private readonly HashSet<string> _expanded = new(StringComparer.Ordinal);
-    private readonly List<Entry> _rows = [];
     private readonly TextField _searchField;
     private readonly EditorState _state;
     private readonly FileSystemWatcher? _watcher;
+    private readonly Background _work;
+    private readonly Latest _scan;
+
+    /// <summary>
+    ///     The visible tree, produced whole on a worker and swapped in on the UI thread. Immutable
+    ///     rather than a mutating list: it crosses a thread boundary, and the walk that produced it is
+    ///     still allowed to be superseded on its way back.
+    /// </summary>
+    private ImmutableArray<Entry> _rows = [];
 
     private volatile bool _dirty = true;
     private Offset _dragStart;
@@ -40,6 +58,10 @@ public sealed class AssetBrowserPanel : RenderWidget, IDisposable
     {
         _state = state;
         _theme = theme;
+        // Held, not orphaned: the scope registers itself with its parent and only leaves that list
+        // when disposed, so keeping just the Latest would strand one entry per panel rebuild.
+        _work = state.Background.Child("assets");
+        _scan = _work.Latest();
 
         _searchField = new TextField(decoration: new InputDecoration("Search files...")) {
             Height = 24f,
@@ -86,6 +108,8 @@ public sealed class AssetBrowserPanel : RenderWidget, IDisposable
 
     public void Dispose()
     {
+        _scan.Dispose();
+        _work.Dispose();
         _watcher?.Dispose();
     }
 
@@ -94,26 +118,65 @@ public sealed class AssetBrowserPanel : RenderWidget, IDisposable
         return name.StartsWith('.') || name is "obj" or "bin";
     }
 
-    private void RebuildRows()
+    /// <summary>
+    ///     Walk the project on a worker and swap the finished tree in.
+    ///     <para>
+    ///         This used to happen inside <see cref="Measure" />: a filtered search enumerated every
+    ///         file under the project root, recursively, during layout — on <b>every keystroke</b>, and
+    ///         again on every filesystem event. On a project with a real <c>Assets/</c> tree that is a
+    ///         frozen editor per character typed. Debounced and latest-wins, so a burst of either costs
+    ///         one walk and only the newest one is shown.
+    ///     </para>
+    /// </summary>
+    private void RequestRebuild()
     {
-        _rows.Clear();
         var root = RootPath;
-        if (root == null || !Directory.Exists(root)) return;
+        var filter = _filter;
+        // Snapshotted: the worker must not read a set the UI thread expands under it.
+        var expanded = new HashSet<string>(_expanded, StringComparer.Ordinal);
 
-        if (!string.IsNullOrWhiteSpace(_filter))
+        _scan.Run(
+            token => Scan(
+                root,
+                filter,
+                expanded,
+                token
+            ),
+            rows =>
+            {
+                _rows = rows;
+                App.Active?.RequestLayout(); // the tree changed size; nothing else marks it
+            },
+            ScanDebounce
+        );
+    }
+
+    /// <summary>
+    ///     The whole panel content as a pure function of (root, filter, expanded folders). No widget,
+    ///     no engine, no field of this panel — which is what makes it safe to run off the UI thread.
+    /// </summary>
+    private static ImmutableArray<Entry> Scan(string? root, string filter,
+        HashSet<string> expanded, CancellationToken token)
+    {
+        if (root == null || !Directory.Exists(root)) return [];
+        var rows = ImmutableArray.CreateBuilder<Entry>();
+
+        if (!string.IsNullOrWhiteSpace(filter))
         {
             // Flat filtered view of matching files.
             try
             {
                 foreach (var f in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
                              .Where(p => Path.GetFileName(p).Contains(
-                                     _filter,
+                                     filter,
                                      StringComparison.OrdinalIgnoreCase
                                  )
                              )
                              .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
                              .Take(500))
-                    _rows.Add(
+                {
+                    token.ThrowIfCancellationRequested();
+                    rows.Add(
                         new Entry(
                             f,
                             Path.GetRelativePath(root, f).Replace('\\', '/'),
@@ -121,20 +184,31 @@ public sealed class AssetBrowserPanel : RenderWidget, IDisposable
                             0
                         )
                     );
+                }
             }
-            catch
+            catch (Exception e) when (e is not OperationCanceledException)
             {
                 /* directory vanished mid-scan */
             }
 
-            return;
+            return rows.ToImmutable();
         }
 
-        WalkDir(root, 0);
+        WalkDir(
+            rows,
+            root,
+            0,
+            expanded,
+            token
+        );
+        return rows.ToImmutable();
     }
 
-    private void WalkDir(string dir, int depth)
+    private static void WalkDir(ImmutableArray<Entry>.Builder rows, string dir, int depth,
+        HashSet<string> expanded, CancellationToken token)
     {
+        token.ThrowIfCancellationRequested();
+
         List<string> dirs, files;
         try
         {
@@ -150,7 +224,7 @@ public sealed class AssetBrowserPanel : RenderWidget, IDisposable
 
         foreach (var d in dirs)
         {
-            _rows.Add(
+            rows.Add(
                 new Entry(
                     d,
                     Path.GetFileName(d),
@@ -158,11 +232,18 @@ public sealed class AssetBrowserPanel : RenderWidget, IDisposable
                     depth
                 )
             );
-            if (_expanded.Contains(d)) WalkDir(d, depth + 1);
+            if (expanded.Contains(d))
+                WalkDir(
+                    rows,
+                    d,
+                    depth + 1,
+                    expanded,
+                    token
+                );
         }
 
         foreach (var f in files)
-            _rows.Add(
+            rows.Add(
                 new Entry(
                     f,
                     Path.GetFileName(f),
@@ -179,12 +260,12 @@ public sealed class AssetBrowserPanel : RenderWidget, IDisposable
         _theme = ThemeProvider.Of(BuildContext.Current);
         if (_dirty)
         {
-            RebuildRows();
             _dirty = false;
+            RequestRebuild();
         }
 
         _searchField.Measure(new Constraints(maxWidth: c.MaxWidth - 12f, maxHeight: 24f));
-        var h = HeaderH + _rows.Count * RowH + 6f;
+        var h = HeaderH + _rows.Length * RowH + 6f;
         _size = c.Constrain(new Size(c.MaxWidth, MathF.Max(h, c.MinHeight)));
         return _size;
     }
@@ -212,7 +293,7 @@ public sealed class AssetBrowserPanel : RenderWidget, IDisposable
         _searchField.Paint(paint);
 
         var fs = _theme.FontSizeCaption;
-        for (var i = 0; i < _rows.Count; i++)
+        for (var i = 0; i < _rows.Length; i++)
         {
             var row = _rows[i];
             var y = Bounds.Y + HeaderH + i * RowH;
@@ -310,7 +391,7 @@ public sealed class AssetBrowserPanel : RenderWidget, IDisposable
     {
         if (point.Y < Bounds.Y + HeaderH) return -1;
         var i = (int)((point.Y - (Bounds.Y + HeaderH)) / RowH);
-        return i >= 0 && i < _rows.Count ? i : -1;
+        return i >= 0 && i < _rows.Length ? i : -1;
     }
 
     public override void OnPointerEnter()

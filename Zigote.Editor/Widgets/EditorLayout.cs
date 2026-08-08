@@ -5,6 +5,7 @@ using Zigote.Editor.Export;
 using Zigote.Editor.Panels;
 using Zigote.Editor.Panels.AssetPreview;
 using Zigote.Editor.Scene;
+using Zigote.Editor.Settings;
 using Zigote.Graphs.Core;
 using Zigote.Graphs.Editor;
 using Zigote.Graphs.Registry;
@@ -72,19 +73,18 @@ public sealed class EditorLayout : RenderWidget
     ///     sizes, and — after a "code" face swap — drop the editor's cached native text layouts
     ///     (they embed glyphs shaped with the old face).
     /// </summary>
-    public void ApplyEditorFontPreferences(EditorConfig config)
+    public void ApplyEditorFontPreferences(EditorSettings settings)
     {
         if (_codeEditor is { } ce)
         {
-            ce.FontSize = Math.Abs(config.EditorFontSize - 13f) < 0.01f
-                ? null
-                : config.EditorFontSize;
+            var size = settings.EditorFontSize.Value;
+            ce.FontSize = Math.Abs(size - 13f) < 0.01f ? null : size;
             ce.InvalidateTextLayouts();
         }
 
         if (_consolePanel is { } console)
         {
-            console.FontSize = config.ConsoleFontSize;
+            console.FontSize = settings.ConsoleFontSize.Value;
             console.MarkNeedsPaint();
         }
     }
@@ -101,11 +101,19 @@ public sealed class EditorLayout : RenderWidget
             CrossAxisAlignment = CrossAxisAlignment.Start,
         };
 
-        // Hand menus to a native bar if one is available (e.g. macOS NSMenu);
-        // otherwise show the cross-platform in-window menu bar above the toolbar.
+        // Hand menus to a native bar if one is available (e.g. macOS NSMenu); otherwise show the
+        // cross-platform in-window menu bar. On a window that draws its own titlebar (GNOME CSD)
+        // the menu goes INTO that row, headerbar-style — one strip instead of two.
         var menus = BuildMenus();
         if (!NativeMenuBar.TryInstall(menus))
-            column.Children.Add(new SizedBox(height: MenuBarH, child: new MenuBar(_app, menus)));
+        {
+            var inHeaderBar = _app.HasTitleBarStrip;
+            var menuBar = new MenuBar(_app, menus) {
+                Background = inHeaderBar ? _theme.TitleBar : null,
+            };
+            if (inHeaderBar) _app.TitleBarLeading = menuBar;
+            else column.Children.Add(new SizedBox(height: MenuBarH, child: menuBar));
+        }
 
         column.Children.Add(new SizedBox(height: ToolbarH, child: toolbar));
         column.Children.Add(new Expanded(dock));
@@ -116,7 +124,7 @@ public sealed class EditorLayout : RenderWidget
 
     private IReadOnlyList<AppMenu> BuildMenus()
     {
-        var recent = _actions.Config.RecentProjects
+        var recent = _actions.History.Recent.Value
             .Select(p => new ContextMenuItem(
                     Path.GetFileNameWithoutExtension(p),
                     () => _actions.OpenProject(p)
@@ -369,10 +377,20 @@ public sealed class EditorLayout : RenderWidget
                 Content = new TimelinePanel(State, _theme),
             },
             new() {
+                PanelId = "tiles",
+                Title = "Tiles",
+                Content = new ScrollView(
+                    new Padding(
+                        EdgeInsets.All(6f),
+                        new TilePalettePanel(State, _theme, viewport)
+                    )
+                ),
+            },
+            new() {
                 PanelId = "console",
                 Title = "Console",
                 Content = _consolePanel = new ConsolePanel(_theme) {
-                    FontSize = _actions.Config.ConsoleFontSize,
+                    FontSize = _actions.Settings.ConsoleFontSize.Value,
                 },
             },
             new() {
@@ -391,7 +409,9 @@ public sealed class EditorLayout : RenderWidget
 
         // Restore the saved per-project layout if present and valid; otherwise default.
         var known = panels.Select(p => p.PanelId).ToHashSet();
-        var tree = (State.ProjectPath is { } pp ? DockLayoutStore.Load(pp, known) : null) ??
+        var tree = (State.Preferences?.Layout.Dock.Value is { } saved
+                       ? DockLayoutStore.FromData(saved, known)
+                       : null) ??
                    DefaultDockTree();
         // Projects saved before a panel existed won't reference it — add it as a tab so newly
         // introduced panels (e.g. Settings, Info) are reachable without a manual layout reset.
@@ -408,8 +428,8 @@ public sealed class EditorLayout : RenderWidget
             tree,
             panels
         );
-        if (State.ProjectPath is { } projPath)
-            Dock.LayoutChanged = () => DockLayoutStore.Save(projPath, Dock!.Root);
+        if (State.Preferences is { } prefs)
+            Dock.LayoutChanged = () => prefs.Layout.Dock.Value = DockLayoutStore.ToData(Dock!.Root);
         return Dock;
     }
 
@@ -494,7 +514,7 @@ public sealed class EditorLayout : RenderWidget
     public void ResetLayout()
     {
         Dock?.SetRoot(DefaultDockTree());
-        if (State.ProjectPath is { } pp && Dock != null) DockLayoutStore.Save(pp, Dock.Root);
+        State.Preferences?.Layout.Dock.Reset(); // back to "no saved layout" — the default
     }
 
     // ── Toolbar ───────────────────────────────────────────────────────────────
@@ -573,7 +593,7 @@ public sealed class EditorLayout : RenderWidget
             {
                 if (!State.IsPlaying)
                 {
-                    if (_actions.Config.ConsoleClearOnPlay) EditorLog.Clear();
+                    if (_actions.Settings.ConsoleClearOnPlay.Value) EditorLog.Clear();
                     State.StartPlay();
                 }
                 else
@@ -678,14 +698,19 @@ public sealed class EditorLayout : RenderWidget
             Tb(Icons.Settings, () => _actions.OpenSettings?.Invoke())
         );
 
-        // Snap-to-grid dropdown.
+        // Snap-to-grid dropdown — persisted per project; the session binding mirrors the
+        // preference back into State.SnapGrid, which the viewport drag reads.
         string[] snapLabels = ["Grid: Off", "0.25 m", "0.5 m", "1.0 m"];
         float[] snapValues = [0f, 0.25f, 0.5f, 1.0f];
         var snapDd = new Dropdown<string>(
             snapLabels,
-            0,
+            Math.Max(0, Array.IndexOf(snapValues, State.SnapGrid)),
             s => s,
-            (i, _) => State.SnapGrid = snapValues[i]
+            (i, _) =>
+            {
+                if (State.Preferences is { } p) p.Viewport.SnapGrid.Value = snapValues[i];
+                else State.SnapGrid = snapValues[i];
+            }
         );
 
         // The toolbar is its own elevation layer (a touch lighter than the window) closed off by a

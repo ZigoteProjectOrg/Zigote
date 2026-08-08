@@ -1,7 +1,3 @@
-using System.Globalization;
-using System.Text.Json;
-using System.Text.Json.Nodes;
-using Zigote.Cinematics;
 using Zigote.Core;
 using Zigote.Core.Assets;
 using Zigote.Core.Engine;
@@ -9,7 +5,6 @@ using Zigote.Core.Math3D;
 using Zigote.Core.Paint;
 using Zigote.Core.Physics;
 using Zigote.Editor.History;
-using Zigote.Editor.Prefab;
 using Zigote.Editor.Scene;
 using Zigote.Editor.Shading;
 using Zigote.Editor.Vfx;
@@ -21,14 +16,12 @@ using Zigote.Modules.UI.CodeEditor;
 using Zigote.Runtime.Prefab;
 using Zigote.Runtime.Scene;
 using Zigote.Scripting.Compilation;
-using Zigote.Scripting.Metadata;
 using Zigote.UI.Host;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
 // Dropdown<T> must be referenced with a concrete type — alias for clarity:
-using StringDropdown = Zigote.UI.Material.Dropdown<string>;
 
 namespace Zigote.Editor.Panels;
 
@@ -1413,6 +1406,14 @@ public sealed partial class InspectorPanel : Widget
                 )
             );
         }
+        else if (_shown.Kind == NodeKind.Tilemap)
+        {
+            BuildTilemapRows(capturedNode);
+        }
+
+        // A 2D collider belongs to anything that can sit in the 2D world, not to one node kind.
+        if (_shown.Kind is NodeKind.Sprite or NodeKind.Tilemap or NodeKind.Empty)
+            BuildCollider2DRows(capturedNode);
 
         if (_shown.Kind is NodeKind.Mesh or NodeKind.Empty)
         {

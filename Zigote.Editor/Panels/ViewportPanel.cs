@@ -33,7 +33,7 @@ namespace Zigote.Editor.Panels;
 ///     WASD + Q/E = move camera
 ///     Right drag  = mouse look
 /// </summary>
-public sealed class ViewportPanel : Widget
+public sealed partial class ViewportPanel : Widget
 {
     // ── Keyboard (play mode WASD) ─────────────────────────────────────────────
 
@@ -45,7 +45,7 @@ public sealed class ViewportPanel : Widget
     private const float ToolRailBtn = 30f;
     private const float ToolRailGap = 4f;
     private const float ToolRailInset = 5f;
-    private const float CameraModeWidth = 148f;
+    private const float CameraModeWidth = 210f;
     private const float CameraModeHeight = 30f;
 
     // ── Change-gated 3D render ─────────────────────────────────────────────────
@@ -79,6 +79,7 @@ public sealed class ViewportPanel : Widget
     private static readonly CameraNavigationMode[] CameraModes = [
         CameraNavigationMode.Orbit,
         CameraNavigationMode.Fly,
+        CameraNavigationMode.TwoD,
     ];
 
     // Edit-mode physical-camera preview: applies the active camera's DoF/exposure/film grade to the
@@ -190,6 +191,18 @@ public sealed class ViewportPanel : Widget
     {
         _state = state;
         _theme = theme;
+        // ZIGOTE_VIEW=2d opens straight into 2D authoring mode — the dev-loop/capture hook for the
+        // 2D viewport, alongside ZIGOTE_SCENE / ZIGOTE_AUTOPLAY.
+        if (string.Equals(
+                Environment.GetEnvironmentVariable("ZIGOTE_VIEW"),
+                "2d",
+                StringComparison.OrdinalIgnoreCase
+            ))
+        {
+            _cameraMode = CameraNavigationMode.TwoD;
+            Enter2DMode();
+        }
+
         _flyTicker = new Ticker(TickFlyCamera);
         _state.AssetDropped += OnAssetDropped;
         _state.PlayStarted += () =>
@@ -423,6 +436,7 @@ public sealed class ViewportPanel : Widget
                 null,
                 texHandle
             );
+            Draw2DOverlay(paint); // no-op outside 2D mode
             if (_state.ShowPhysicsWireframe) DrawPhysicsWireframe(paint);
             if (!_state.UseNativeVfx && !_state.UseGpuVfx) DrawVfxParticles(paint);
             if (_gizmoMode is GizmoMode.Rotate && !_state.IsPlaying) DrawRotateRings(paint);
@@ -430,8 +444,16 @@ public sealed class ViewportPanel : Widget
         }
         else
         {
-            DrawGrid(paint);
-            DrawAxes(paint);
+            if (Is2D)
+            {
+                Draw2DOverlay(paint);
+            }
+            else
+            {
+                DrawGrid(paint);
+                DrawAxes(paint);
+            }
+
             if (_state.ShowPhysicsWireframe) DrawPhysicsWireframe(paint);
             if (!_state.UseNativeVfx && !_state.UseGpuVfx) DrawVfxParticles(paint);
             if (_gizmoMode is GizmoMode.Rotate && !_state.IsPlaying) DrawRotateRings(paint);
@@ -630,6 +652,8 @@ public sealed class ViewportPanel : Widget
             _orbitTarget = GetCameraPosition() + GetCameraForward() * _orbitDistance;
 
         _cameraMode = mode;
+        if (mode == CameraNavigationMode.TwoD) Enter2DMode();
+        else ResetTileStroke();
         ResetFlyInput();
         App.Active?.RequestPaint();
     }
@@ -821,6 +845,9 @@ public sealed class ViewportPanel : Widget
 
     private Vec3 Snap(Vec3 p)
     {
+        // In 2D, snap to the tile grid the user is actually looking at rather than the 3D snap grid.
+        if (Is2D) return SnapWorld2D(p);
+
         var g = _state.SnapGrid;
         if (g <= 0f) return p;
         return new Vec3(
@@ -840,6 +867,9 @@ public sealed class ViewportPanel : Widget
     private Vec2 ProjectToScreen(Vec3 worldPos)
     {
         if (Bounds.Width < 1f || Bounds.Height < 1f) return Vec2.Zero;
+        // Gizmo/overlay projection must use whatever camera the frame was drawn with.
+        if (Is2D) return WorldToScreen2D(new Vec2(worldPos.X, worldPos.Y));
+
         var vp = Mat4.PerspectiveRhZo(
                      MathF.PI / 4f,
                      Bounds.Width / Bounds.Height,
@@ -1104,6 +1134,10 @@ public sealed class ViewportPanel : Widget
     /// </summary>
     private Mat4 EditorSpriteViewProjection()
     {
+        // 2D mode draws sprites and tiles through a true orthographic camera so tile edges stay
+        // pixel-exact; the 3D pass has no ortho mode, so meshes in a 2D scene will not line up.
+        if (Is2D) return Camera2DViewProjection();
+
         var aspect = MathF.Max(1f, Bounds.Width) / MathF.Max(1f, Bounds.Height);
         var cam = FindCameraNode(_state.Scene.Root);
         var fovRad = (cam?.EffectiveFovDegrees() ?? 45f) * (MathF.PI / 180f);
@@ -1544,6 +1578,10 @@ public sealed class ViewportPanel : Widget
         if (ToolRailHit(point)) return;
         if (!_state.IsPlaying && ToolRailBounds().Contains(point.X, point.Y)) return;
 
+        // 2D tile tools claim the press before selection/gizmo picking, so painting never also
+        // re-selects whatever sprite happens to sit under the cursor.
+        if (BeginTileStroke(point)) return;
+
         if (_state is { Selected: not null, IsPlaying: false })
         {
             _dragStartPos = _state.Selected.Position;
@@ -1772,19 +1810,35 @@ public sealed class ViewportPanel : Widget
         StopFraming(); // manual orbit/look cancels an in-flight frame animation
         _isOrbitDragging = !_state.IsPlaying && _cameraMode == CameraNavigationMode.Orbit;
         _isRightDragging = _state.IsPlaying || _cameraMode == CameraNavigationMode.Fly;
+        // 2D has nothing to orbit — right-drag pans instead.
+        _isPanning2D = Is2D && !_state.IsPlaying;
     }
 
     public override void OnRightPointerUp(Offset point)
     {
         _isOrbitDragging = false;
         _isRightDragging = false;
+        _isPanning2D = false;
     }
 
     public override void OnPointerMove(Offset point)
     {
         var dx = point.X - _lastMousePos.X;
         var dy = point.Y - _lastMousePos.Y;
+        var lastPos = _lastMousePos;
         _lastMousePos = point;
+
+        if (Is2D && !_state.IsPlaying)
+        {
+            if (_isPanning2D)
+            {
+                Pan2D(new Offset(point.X - lastPos.X, point.Y - lastPos.Y));
+                return;
+            }
+
+            ContinueTileStroke(point);
+            if (_strokePainting || _rectAnchor is not null) return;
+        }
 
         // Left-drag: gizmo (edit mode only)
         if (_state is { Selected: not null, IsPlaying: false })
@@ -1923,6 +1977,12 @@ public sealed class ViewportPanel : Widget
 
     public override void OnPointerUp(Offset point)
     {
+        if (Is2D && !_state.IsPlaying && (_strokePainting || _rectAnchor is not null))
+        {
+            EndTileStroke(point);
+            return;
+        }
+
         if (_state is { IsPlaying: false, Selected: not null })
         {
             if (_isDraggingGizmoX || _isDraggingGizmoY || _isDraggingGizmoZ)
@@ -1977,6 +2037,12 @@ public sealed class ViewportPanel : Widget
     {
         if (_state.IsPlaying) return;
         StopFraming(); // manual zoom cancels an in-flight frame animation
+        if (Is2D)
+        {
+            Zoom2DAt(_lastMousePos, dy);
+            return;
+        }
+
         if (_cameraMode == CameraNavigationMode.Fly)
         {
             _flySpeed = Math.Clamp(_flySpeed * MathF.Pow(1.15f, dy), 0.25f, 100f);
@@ -2075,6 +2141,10 @@ public sealed class ViewportPanel : Widget
         }
 
         var play = _state.ActivePlay;
+        // Publish the raw key to the session's general held-key set, so a game script can read ANY
+        // key (menus, a second couch player, custom bindings) — not just the built-in drive keys.
+        if (Enum.GetName((KeyCode)scancode) is { } keyName) play.SetKey(keyName, down);
+
         switch (char.ToLower(keyChar))
         {
             case 'w': play.MoveForward = down; break;
@@ -2372,20 +2442,15 @@ public sealed class ViewportPanel : Widget
     private Rect CameraModeButtonRect(CameraNavigationMode mode)
     {
         var bounds = CameraModeBounds();
-        var half = bounds.Width * 0.5f;
-        return mode == CameraNavigationMode.Orbit
-            ? new Rect(
-                bounds.X + 3f,
-                bounds.Y + 3f,
-                half - 3f,
-                bounds.Height - 6f
-            )
-            : new Rect(
-                bounds.X + half,
-                bounds.Y + 3f,
-                half - 3f,
-                bounds.Height - 6f
-            );
+        var index = Array.IndexOf(CameraModes, mode);
+        if (index < 0) index = 0;
+        var seg = (bounds.Width - 6f) / CameraModes.Length;
+        return new Rect(
+            bounds.X + 3f + index * seg,
+            bounds.Y + 3f,
+            seg,
+            bounds.Height - 6f
+        );
     }
 
     private void DrawCameraModeSwitch(PaintList paint)
@@ -2397,6 +2462,7 @@ public sealed class ViewportPanel : Widget
 
         DrawMode(CameraNavigationMode.Orbit, "Orbit");
         DrawMode(CameraNavigationMode.Fly, "Fly");
+        DrawMode(CameraNavigationMode.TwoD, "2D");
 
         void DrawMode(CameraNavigationMode mode, string label)
         {
@@ -2721,5 +2787,8 @@ public sealed class ViewportPanel : Widget
     {
         Orbit,
         Fly,
+
+        /// <summary>Orthographic front view of the XY plane — see ViewportPanel.TwoD.cs.</summary>
+        TwoD,
     }
 }

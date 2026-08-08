@@ -32,23 +32,44 @@ public sealed class ImagePreviewProvider : IAssetPreviewProvider
             yield return ("Dimensions", $"{w} × {h}");
     }
 
+    /// <summary>
+    ///     The image's pixel size, for the metadata list.
+    ///     <para>
+    ///         There is no measure-without-decode call, so this uploads and immediately releases.
+    ///         Texture handles are owned by whoever created them and nothing else frees them — keeping
+    ///         this one would strand a full-size texture per image whose metadata was ever shown, for
+    ///         the editor's lifetime.
+    ///     </para>
+    /// </summary>
     internal static (uint W, uint H) TryDimensions(string path)
     {
+        var handle = 0UL;
         try
         {
             if (ZigoteEngine.Instance is null) return (0, 0);
-            var handle = ZigoteEngine.LoadTexture(path, out var w, out var h);
+            handle = ZigoteEngine.LoadTexture(path, out var w, out var h);
             return handle != 0 ? (w, h) : (0, 0);
         }
         catch
         {
             return (0, 0);
         }
+        finally
+        {
+            if (handle != 0) ZigoteEngine.ReleaseTexture(handle);
+        }
     }
 }
 
-/// <summary>Leaf widget: alpha checkerboard background + fit-contained engine texture blit.</summary>
-internal sealed class ImagePreviewWidget : Widget
+/// <summary>
+///     Leaf widget: alpha checkerboard background + fit-contained engine texture blit.
+///     <para>
+///         Owns the texture it loads, so it is <see cref="IDisposable" /> — the panel builds a new one
+///         per selection, and without a release each browsed image left its full-size texture resident
+///         forever. At 2000×3000 that is 24 MB a click.
+///     </para>
+/// </summary>
+internal sealed class ImagePreviewWidget : Widget, IDisposable
 {
     private const float CheckerSize = 10f;
     private readonly string _path;
@@ -63,6 +84,15 @@ internal sealed class ImagePreviewWidget : Widget
     {
         _path = path;
         _theme = theme;
+    }
+
+    /// <summary>Free the texture. Idempotent, and safe to call mid-frame (the engine defers the free).</summary>
+    public void Dispose()
+    {
+        if (_handle == 0) return;
+        ZigoteEngine.ReleaseTexture(_handle);
+        _handle = 0;
+        _texW = _texH = 0;
     }
 
     private void EnsureLoaded()

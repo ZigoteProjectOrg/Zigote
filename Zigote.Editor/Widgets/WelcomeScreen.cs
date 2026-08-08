@@ -1,4 +1,5 @@
 using Zigote.Core;
+using Zigote.Editor.Settings;
 using Zigote.UI.Host;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
@@ -15,22 +16,23 @@ namespace Zigote.Editor.Widgets;
 public sealed class WelcomeScreen : StatelessWidget
 {
     private readonly App _app;
-    private readonly EditorConfig _config;
+    private readonly ProjectHistory _history;
     private readonly Action<string> _onOpen;
     private readonly ThemeData _theme;
 
-    public WelcomeScreen(App app, ThemeData theme, EditorConfig config, Action<string> onOpen)
+    public WelcomeScreen(App app, ThemeData theme, ProjectHistory history, Action<string> onOpen)
     {
         _app = app;
         _theme = theme;
-        _config = config;
+        _history = history;
         _onOpen = onOpen;
     }
 
     protected override Widget Build(BuildContext context)
     {
         var recents = new Column { CrossAxisAlignment = CrossAxisAlignment.Stretch };
-        if (_config.RecentProjects.Count == 0)
+        var recentProjects = _history.Recent.Value;
+        if (recentProjects.Length == 0)
             recents.Children.Add(
                 new Padding(
                     EdgeInsets.All(10f),
@@ -38,7 +40,7 @@ public sealed class WelcomeScreen : StatelessWidget
                 )
             );
         else
-            foreach (var path in _config.RecentProjects)
+            foreach (var path in recentProjects)
                 recents.Children.Add(RecentRow(path));
 
         var content = new Column {
@@ -98,7 +100,7 @@ public sealed class WelcomeScreen : StatelessWidget
                     }
                     else
                     {
-                        _config.Forget(path);
+                        _history.Forget(path);
                         Invalidate();
                         _app.RequestLayout();
                     }

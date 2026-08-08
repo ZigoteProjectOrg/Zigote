@@ -44,12 +44,28 @@ public sealed class AssetPreviewPanel : RenderWidget, IDisposable
     public void Dispose()
     {
         _state.AssetSelected -= _onAssetSelected;
+        DisposeContent();
+    }
+
+    /// <summary>
+    ///     Release the current preview's resources. A preview is free to own a texture or a mesh — the
+    ///     engine hands those out caller-owned and frees none of them — so the panel that stops
+    ///     showing one is the thing that has to say so. Providers with nothing to release simply do
+    ///     not implement <see cref="IDisposable" />.
+    /// </summary>
+    private void DisposeContent()
+    {
+        if (_content is IDisposable disposable) disposable.Dispose();
     }
 
     private void OnAssetSelected(string path)
     {
         if (_selectedPath == path) return;
         _selectedPath = path;
+        // The outgoing preview may own native resources (an image preview owns its texture, and
+        // nothing else frees those). One rule for every provider, present and future: whatever we
+        // stop showing, we dispose.
+        DisposeContent();
         _content = BuildContent();
         MarkNeedsLayout();
         MarkNeedsPaint();

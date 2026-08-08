@@ -119,6 +119,7 @@ public static class ExportDialog
         rows.Children.Add(new SizedBox(height: 12f));
 
         rows.Children.Add(SectionHeader("Output", theme));
+
         // Native folder picker beside the field; the export folder may not exist yet, so the
         // field stays editable and the picker just replaces its text.
         async void BrowseOutput()

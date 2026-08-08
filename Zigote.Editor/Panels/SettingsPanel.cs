@@ -618,7 +618,8 @@ public sealed class SettingsPanel : Widget
     }
 
     // Preset buttons for the viewport frame-rate cap. Picking a non-Off preset also forces
-    // continuous rendering so the cap actually governs the loop. Off (0) = unlimited.
+    // continuous rendering so the cap actually governs the loop. Off (0) = follow the monitor the
+    // window is on; a preset above that refresh has no effect (the display rate is the ceiling).
     private Widget FpsLimitRow()
     {
         Widget Preset(string label, int fps)
@@ -648,7 +649,7 @@ public sealed class SettingsPanel : Widget
                 MainAxisSize = MainAxisSize.Min,
                 Children = {
                     new Label(
-                        $"FPS Limit  (current: {(current == 0 ? "unlimited" : current.ToString())})",
+                        $"FPS Limit  (current: {(current == 0 ? $"display {App.Active?.DisplayRefreshHz ?? 60f:0} Hz" : current.ToString())})",
                         _theme.FontSizeCaption,
                         _theme.Hint
                     ),
@@ -763,7 +764,16 @@ public sealed class SettingsPanel : Widget
                 var path = await FileDialog.OpenFileAsync(
                     "Load HDRI / Environment",
                     root,
-                    [new FileDialogFilter("Images", "hdr", "png", "jpg", "jpeg", "webp")]
+                    [
+                        new FileDialogFilter(
+                            "Images",
+                            "hdr",
+                            "png",
+                            "jpg",
+                            "jpeg",
+                            "webp"
+                        ),
+                    ]
                 );
                 if (path is not null) ApplyHdri(path);
             }

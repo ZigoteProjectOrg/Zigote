@@ -467,6 +467,7 @@ public sealed class HierarchyPanel : Widget
                 NodeKind.AudioSource => new Color(1f, 0.6f, 0.3f),
                 NodeKind.VfxEmitter => new Color(0.85f, 0.5f, 1f),
                 NodeKind.Sprite => new Color(0.5f, 0.85f, 1f),
+                NodeKind.Tilemap => new Color(0.6f, 0.9f, 0.7f),
                 _ => theme.Hint.WithAlpha(0.6f),
             };
         }
@@ -482,6 +483,7 @@ public sealed class HierarchyPanel : Widget
                 NodeKind.AudioSource => Icons.Audio,
                 NodeKind.VfxEmitter => Icons.LightMode,
                 NodeKind.Sprite => Icons.Image,
+                NodeKind.Tilemap => Icons.Grid,
                 _ => Icons.Category,
             };
         }
@@ -723,6 +725,16 @@ public sealed class HierarchyPanel : Widget
                     () => state.History.Execute(
                         new AddNodeCommand(state, node, new SceneNode("Sprite", NodeKind.Sprite))
                     )
+                ),
+                new ContextMenuItem(
+                    "Add Tilemap",
+                    () =>
+                    {
+                        // Seed one layer so the palette has somewhere to paint immediately.
+                        var map = new SceneNode("Tilemap", NodeKind.Tilemap);
+                        map.TilemapLayers.Add(new TilemapLayer { Name = "Ground" });
+                        state.History.Execute(new AddNodeCommand(state, node, map));
+                    }
                 ),
                 new ContextMenuItem("", null, true),
                 new ContextMenuItem("Rename...", () => renameNode(node)),

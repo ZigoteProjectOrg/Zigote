@@ -199,5 +199,4 @@ public static class ProjectDialogs
             ? path
             : rel.Replace('\\', '/');
     }
-
 }

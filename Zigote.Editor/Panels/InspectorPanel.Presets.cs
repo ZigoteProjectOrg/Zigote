@@ -1,34 +1,10 @@
-using System.Globalization;
-using System.Text.Json;
-using System.Text.Json.Nodes;
-using Zigote.Cinematics;
-using Zigote.Core;
-using Zigote.Core.Assets;
-using Zigote.Core.Engine;
-using Zigote.Core.Math3D;
-using Zigote.Core.Paint;
-using Zigote.Core.Physics;
 using Zigote.Editor.History;
-using Zigote.Editor.Prefab;
 using Zigote.Editor.Scene;
-using Zigote.Editor.Shading;
-using Zigote.Editor.Vfx;
-using Zigote.Game.Resources;
-using Zigote.Graphs.Editor;
-using Zigote.Graphs.Shading;
-using Zigote.Graphs.Vfx;
-using Zigote.Modules.UI.CodeEditor;
-using Zigote.Runtime.Prefab;
 using Zigote.Runtime.Scene;
-using Zigote.Scripting.Compilation;
-using Zigote.Scripting.Metadata;
-using Zigote.UI.Host;
-using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
 // Dropdown<T> must be referenced with a concrete type — alias for clarity:
-using StringDropdown = Zigote.UI.Material.Dropdown<string>;
 
 namespace Zigote.Editor.Panels;
 
