@@ -15,7 +15,7 @@ Everything below follows from that.
 ## 1. `Build` runs once
 
 ```csharp
-public sealed class Header : StatelessWidget
+public sealed class Header : ComposedWidget
 {
     protected override Widget Build(BuildContext ctx)
     {
@@ -26,7 +26,7 @@ public sealed class Header : StatelessWidget
 ```
 
 `Build` is called on the first `Measure` and the returned subtree is cached. It runs again only when
-something explicitly marks the widget dirty: `Invalidate()`, `SetStateRebuild`, an
+something explicitly marks the widget dirty: `Invalidate()`, `MarkNeedsBuild()`, an
 `InheritedWidget` you depended on changing, or a hot reload.
 
 **Consequences:**
@@ -103,38 +103,44 @@ new Watch(() =>
 Signals may be written from any thread. An off-thread write is marshalled: the loop is woken and the
 subtree swap happens on the UI thread in the next `Measure`.
 
-## 4. `SetState` does not re-run `Build`
+## 4. Changing state does not re-run `Build`
 
-This is the single most common surprise, whichever toolkit you came from.
+This is the single most common surprise, whichever toolkit you came from. There is no
+stateless/stateful split and no `setState`: a widget is a retained object, so its fields *are* its
+state, and you mutate them and say what that invalidated.
 
 ```csharp
-sealed class CounterState : WidgetState<Counter>
+sealed class Counter : ComposedWidget
 {
     private readonly Label _label = new("0");
     private int _count;
 
-    public override Widget Build(BuildContext ctx) => new Column
+    protected override Widget Build(BuildContext ctx) => new Column
     {
         Children =
         {
             _label,
-            new Button("Increment", () => SetState(() => _label.Text = (++_count).ToString())),
+            new Button("Increment", () =>
+            {
+                _label.Text = (++_count).ToString();
+                MarkNeedsLayout();          // relayout + repaint; Build does not re-run
+            }),
         }
     };
 }
 ```
 
-`SetState(action)` runs `action`, then marks the widget for **relayout and repaint**. It does *not*
-call `Build`. The action must mutate the retained children — which is why `_label` is a field.
+The mutation must target the retained children — which is why `_label` is a field.
 
 | Call | Rebuild | Relayout | Repaint | Use for |
 |---|---|---|---|---|
 | `MarkNeedsPaint()` | — | — | ✓ | Visual-only change; size provably unchanged (hover tint, animation tick) |
-| `SetState(a)` / `MarkNeedsLayout()` | — | ✓ | ✓ | **The default.** Mutated a child's text, size, visibility |
-| `SetStateRebuild(a)` / `RequestRebuild()` | ✓ | ✓ | ✓ | The child *structure* must genuinely change |
+| `MarkNeedsLayout()` | — | ✓ | ✓ | **The default.** Mutated a child's text, size, visibility |
+| `MarkNeedsBuild()` / `Invalidate()` | ✓ | ✓ | ✓ | The child *structure* must genuinely change |
 
-Reach for `SetStateRebuild` only when the tree's shape depends on the state. If you find yourself
-calling it on every keystroke, the answer is a `Watch` or a mutated child, not a rebuild.
+Reach for `MarkNeedsBuild` only when the tree's shape depends on the state. If you find yourself
+calling it on every keystroke, the answer is an `OwnEffect`, a `Watch`, or a mutated child — not a
+rebuild.
 
 ## 5. The frame
 
@@ -202,32 +208,34 @@ One UI thread. The frame loop, layout, paint and event dispatch all run on it.
 
 Never block the frame. See [`cookbook.md`](cookbook.md#background-work-without-hitching-the-frame).
 
-## 9. Disposal
+## 9. Mount lifetime and disposal
 
-`WidgetState.Dispose` runs when the owning widget detaches. Anything you subscribe to must be
-released there, because **signals hold their observers strongly** — a bare `new Effect(...)` outlives
-the widget and keeps running against a detached tree.
+`OnMount` runs when the widget enters the tree and `OnUnmount` when it leaves — paired 1:1, so a
+re-attached widget mounts again. Anything you subscribe to must be scoped to that period, because
+**signals hold their observers strongly** — a bare `new Effect(...)` outlives the widget and keeps
+running against a detached tree.
 
 ```csharp
-public override void InitState()
+protected override void OnMount()
 {
-    OwnEffect(() => _label.Text = _bloc.State.Value.Title);   // disposed with the state, always
-}
-
-public override void Dispose()
-{
-    _subscription.Dispose();
-    base.Dispose();   // required — releases the OwnEffect() effects
+    OwnEffect(() => _label.Text = _bloc.State.Value.Title);   // tracked, disposed on unmount
+    Own(_service.Changed.Subscribe(OnChanged));          // same for any IDisposable
 }
 ```
+
+Everything registered with `Own`/`OwnEffect`/`CreateTicker` is released automatically —
+override `OnUnmount` only for teardown those cannot express.
+
+One-time composition — building the child widgets you keep in fields — belongs in the **constructor**,
+not `OnMount`: it should happen once per instance, not once per mount.
 
 ## 10. Hot reload
 
 Edit a widget's `Build()` while the app runs and the live UI updates without a restart. Widget
-instances and `WidgetState` are preserved; only `Build()` re-runs. Run under `dotnet watch`, or use
-Rider / VS "apply changes".
+instances (and every field they hold) are preserved; only `Build()` re-runs. Run under `dotnet watch`,
+or use Rider / VS "apply changes".
 
-Constructor bodies, field initializers, `InitState`, and native Zig / shader changes still need a
+Constructor bodies, field initializers, `OnMount`, and native Zig / shader changes still need a
 full restart — which is the usual reason a hot-reloaded change "did nothing".
 
 ---
@@ -237,6 +245,5 @@ full restart — which is the usual reason a hot-reloaded change "did nothing".
 1. Never recreate a widget you can mutate.
 2. State that outlives a frame goes in a field, a `Signal`, or a `Bloc` — never a `Build` local.
 3. `Watch` is how a signal reaches the tree. Scope it tight; hoist stateful children out of it.
-4. `SetState` mutates and relayouts. It does not rebuild. `SetStateRebuild` is the exception, not
-   the habit.
-5. Dispose what you subscribe to, and call `base.Dispose()`.
+4. Mutate and `MarkNeedsLayout`. `MarkNeedsBuild` is the exception, not the habit.
+5. Scope what you subscribe to with `Own`/`OwnEffect`/`Bind` in `OnMount`.

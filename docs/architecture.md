@@ -106,6 +106,10 @@ Three bases: `Bloc<TEvent, TState>` (one immutable record — the default), `Syn
 nested, synchronous when the handler is, allocation-free on that synchronous path, one throwing event
 does not take the screen down (`BlocErrors.OnError`), one unit of work in flight (`Restart()`),
 dispose is the off switch. `Emit` writes state under the graph lock via `Reactive.Sync`.
+`BlocObserver.OnEvent`/`OnChange` put every event and every real transition on one ordered timeline
+when an app assigns them, and cost a null check when it does not. There is no `droppable` transformer:
+`Add` is `virtual` and `Current` is in scope, so "ignore the second tap while busy" is a guard at the
+top of an override rather than a policy the base has to model.
 
 ### Watch — the bridge to the tree
 
@@ -268,6 +272,7 @@ The real one:
 | `Zigote.Persistence` (+ `.SQLite`) | `IKeyValueStore` — "where do strings live" |
 | `Zigote.Preferences` | `Preference<T> : IReadableSignal<T>` — persisted signals |
 | `Zigote.Network` | Transport, replication, prediction, sync |
+| `Zigote.Audioplayer` | Media playback over `IAudioApi`: queue, transport, gapless, equalizer. just_audio's API shape, signals instead of streams |
 | `Zigote.Reactive.R3` | Optional R3 bridge |
 | `Zigote.Logging` | Serilog wiring (`AppLog`) |
 | `Zigote.Render2D`, `Zigote.Physics2D`, `Zigote.ECS`, `Zigote.World`, `Zigote.Vfx`, `Zigote.Cinematics`, `Zigote.Scripting`, `Zigote.Graphs.*` | The game-side stack |
@@ -276,7 +281,9 @@ The real one:
 Renamed from the proposal: `Zigote.R3` → `Zigote.Reactive.R3`, `Zigote.Storage` →
 `Zigote.Persistence` + `Zigote.Preferences`. Never built: `Zigote.Navigation` (it lives inside
 `Zigote.UI`), `Zigote.Graphics` (2D paint is in `Zigote.Core`, rendering in `Zigote.Render2D` and the
-native engine), `Zigote.Audio` (see below), `Zigote.Markdown` (nothing in tree).
+native engine), `Zigote.Markdown` (nothing in tree). The proposal's `Zigote.Audio` split in two: the
+device surface is `engine.Audio` → `IAudioApi` (see below), and the player built on it is
+`Zigote.Audioplayer`.
 
 ### Engine domains
 
@@ -293,7 +300,9 @@ to gain a project reference — the domains are named on the class:
 
 Audio is the interface because the device is the one part of a media app that **cannot exist in CI**:
 behind that seam a queue, a transport and an equalizer are pure state machines a fake can drive.
-Nothing tests a scene without a GPU, so `Scene3D` is a struct — a vtable and a second implementation
+`Zigote.Audioplayer` is what collects that: it takes an `IAudioApi` and nothing else, so its whole
+surface — playlist, gapless advance, clipping, buffering — is tested against an in-memory fake in
+`AudioPlayerTests`. Nothing tests a scene without a GPU, so `Scene3D` is a struct — a vtable and a second implementation
 nobody writes would be the cost of symmetry for its own sake.
 
 Applications reference only what they need — `Zigote.UI` depends on nothing above the GPU and is
@@ -366,6 +375,11 @@ Shipping today:
   and `BlocErrors.OnError` into Serilog.
 - `Reactive.OnError` / `BlocErrors.OnError` — failure isolation seams; unset, failures land in
   `DebugLog`.
+- `BlocObserver.OnEvent` / `BlocObserver.OnChange` — the bloc timeline: every event as it comes off
+  the pump and every transition it caused, interleaved in order, deduplicated emits omitted. Unset by
+  default (one null check per event), so an app can turn the timeline on in a release build by
+  assigning a hook rather than rebuilding. This is the input a replay or a time-travel panel needs;
+  neither is built.
 - `Reactive.LockTimeoutMs`, the DEBUG boxing-equality assert, the DEBUG slow-cross-thread-effect
   warning.
 

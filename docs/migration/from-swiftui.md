@@ -44,7 +44,7 @@ struct Counter: View {
 
 ```csharp
 // Zigote
-public sealed class Counter : StatelessWidget
+public sealed class Counter : ComposedWidget
 {
     private readonly Signal<int> _count = new(0);          // ← @State
 
@@ -82,7 +82,7 @@ Here it is explicit rather than inferred.
 
 | SwiftUI | Zigote | Notes |
 |---|---|---|
-| `struct V: View` + `var body` | `class V : StatelessWidget` + `Build` | `Build` runs **once** |
+| `struct V: View` + `var body` | `class V : ComposedWidget` + `Build` | `Build` runs **once** |
 | `@State` | `Signal<T>` field | |
 | `@Binding` | pass the `Signal<T>`, or a `(get, set)` pair | Reference type — passing it *is* the binding |
 | `$value` projection | pass `_value` itself | No projected-value machinery |
@@ -149,7 +149,7 @@ last-applied.
 | `.fixedSize()` | `MainAxisSize.Min`, `ConstrainedBox` |
 
 Nesting a few wrappers reads fine and costs the same as a modifier chain — both are one object per
-stage. When a stack gets deep, factor it into a `StatelessWidget` (your `ViewModifier`) or a static
+stage. When a stack gets deep, factor it into a `ComposedWidget` (your `ViewModifier`) or a static
 helper method (your `.buttonStyle`).
 
 ### Controls and containers
@@ -191,9 +191,9 @@ helper method (your `.buttonStyle`).
 
 | SwiftUI | Zigote |
 |---|---|
-| `.onAppear { }` | `WidgetState.InitState()` |
-| `.onDisappear { }` | `WidgetState.Dispose()` — **must call `base.Dispose()`** |
-| `.task { }` | `InitState()` + `Background.RunAsync(async ct => …)` |
+| `.onAppear { }` | `Widget.OnMount()` |
+| `.onDisappear { }` | `Widget.OnUnmount()` — or just `Own(...)` it in `OnMount` |
+| `.task { }` | `OnMount()` + `Background.RunAsync(async ct => …)` |
 | `.task(id:) { }` | `OwnEffect(() => { var id = _id.Value; … })` — auto-tracks the id |
 | `.onChange(of: x) { }` | `OwnEffect(() => { _ = _x.Value; … })`, or `_x.Changed += …` |
 | structured cancellation on disappear | `Bloc.Restart()` / `Bloc.Track()` / the state's `OwnEffect` |
@@ -202,7 +202,7 @@ helper method (your `.buttonStyle`).
 `.task(id:)` and `.onChange`, ported:
 
 ```csharp
-public override void InitState()
+protected override void OnMount()
 {
     // Re-runs whenever _userId changes. No dependency list — the effect tracks what it reads.
     OwnEffect(() =>
@@ -375,8 +375,9 @@ no animation. Hold it in a field and mutate it.
 **`Build` locals are frozen.** A `let label = "Count: \(count)"` in `body` re-evaluates. The C#
 equivalent inside `Build` does not.
 
-**`SetState` does not re-run `Build`.** It mutates and relayouts. `SetStateRebuild` re-runs `Build` —
-reserve it for when the tree's *shape* changes, not for every value change.
+**Mutating state does not re-run `Build`.** Write to the retained child and call `MarkNeedsLayout`.
+`MarkNeedsBuild` re-runs `Build` — reserve it for when the tree's *shape* changes, not for every
+value change.
 
 **Setting a property on a custom widget is not enough.** Call `MarkNeedsPaint()` (visuals only) or
 `MarkNeedsLayout()` (size may have changed), or nothing redraws.
@@ -423,7 +424,7 @@ lifetime directly.
   animations, and previews all have to be written out longhand or done without.
 - **Xcode previews.** You get C# hot reload instead: edit a `Build()` under `dotnet watch` and the
   live UI updates with instances and state preserved. Constructor bodies, field initializers and
-  `InitState` edits still need a restart.
+  `OnMount` edits still need a restart.
 - **Swift.** Value semantics, `some View` opaque types, result builders and structured concurrency
   are being traded for C#'s records, pattern matching and `Task`. `Bloc` + `Background` cover most of
   the concurrency ground, but result builders have no analogue — trees are built with collection

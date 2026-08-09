@@ -74,7 +74,7 @@ public sealed class ProfileBloc(IUserApi api)
 ```
 
 ```csharp
-public sealed class ProfilePage(ProfileBloc bloc, int userId) : StatelessWidget
+public sealed class ProfilePage(ProfileBloc bloc, int userId) : ComposedWidget
 {
     protected override Widget Build(BuildContext ctx)
     {
@@ -236,7 +236,7 @@ Two rules for the list itself:
 Size classes: `Compact` (< 600), `Medium` (< 840), `Expanded`.
 
 ```csharp
-public sealed class LibraryShell : StatelessWidget
+public sealed class LibraryShell : ComposedWidget
 {
     private readonly Sidebar _sidebar = new();      // hoisted: shared by both layouts,
     private readonly DetailPane _detail = new();    // so selection and scroll survive the fold
@@ -272,7 +272,7 @@ Draft state in a signal, per-field errors derived with `Computed`, submit gated 
 ```csharp
 public sealed record SignupDraft(string Email = "", string Password = "");
 
-public sealed class SignupForm : StatelessWidget
+public sealed class SignupForm : ComposedWidget
 {
     private readonly Signal<SignupDraft> _draft = new(new SignupDraft());
     private readonly Signal<bool> _submitted = new(false);
@@ -389,7 +389,7 @@ if (confirmed is true) _bloc.Add(new LibraryEvent.Delete(item.Id));
 ```
 
 ```csharp
-public sealed class ConfirmPage(string question) : StatelessWidget
+public sealed class ConfirmPage(string question) : ComposedWidget
 {
     protected override Widget Build(BuildContext ctx) => new Center(new Column(
         mainAxisSize: MainAxisSize.Min,
@@ -481,32 +481,31 @@ new AnimatedSwitcher(_pages[index], duration: 0.25f)       // cross-fades page s
 new Card { Child = content }.Animate().Fade(300.ms).Move(delay: 100.ms)
 ```
 
-**Explicit** — when you need the driving value. Your state must be a
-`SingleTickerProviderState<T>` (or `TickerProviderState<T>` for several controllers), which is what
-supplies the vsync:
+**Explicit** — when you need the driving value. Every `Widget` is an `ITickerProvider`, so
+`vsync: this` just works; the ticker is owned by the mount period and disposed with it. Build the
+controller in `OnMount`, not the constructor — its ticker's lifetime is the mount, not the instance:
 
 ```csharp
-public sealed class PulseState : SingleTickerProviderState<Pulse>
+public sealed class Pulse : ComposedWidget
 {
-    private readonly AnimationController _controller;
     private readonly Opacity _fade = new(1.0, new Icon(MaterialIcons.Circle));
+    private AnimationController _controller = null!;
 
-    public PulseState()
+    protected override void OnMount()
     {
         _controller = new AnimationController(durationSeconds: 0.8f, vsync: this)
         {
             Curve = Curves.EaseInOut,
         };
         _controller.OnTick += () => { _fade.Value = 0.3f + 0.7f * _controller.Value; MarkNeedsPaint(); };
+        _controller.Repeat(reverse: true);
     }
 
-    public override void InitState() => _controller.Repeat(reverse: true);
-
-    public override Widget Build(BuildContext ctx) => _fade;
+    protected override Widget Build(BuildContext ctx) => _fade;
 }
 ```
 
-`MarkNeedsPaint`, not `SetState` — an opacity change cannot alter the measured size, and skipping the
+`MarkNeedsPaint`, not `MarkNeedsLayout` — an opacity change cannot alter the measured size, and skipping the
 relayout keeps a 60 Hz animation off the layout path entirely.
 
 ---

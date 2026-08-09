@@ -118,7 +118,7 @@ let inline w (x: #Widget) : Widget = x :> Widget
 ```
 
 Do not write more than this until a real app asks. Skipped: a `contextual`/`BuildContext` helper —
-the gallery never used it, and an app that needs one subclasses `StatelessWidget` in four lines.
+the gallery never used it, and an app that needs one subclasses `ComposedWidget` in four lines.
 
 **Final layout:** `Reactive.fs`, `Host.fs`, `Widgets.fs`. One project, no generator, no build target.
 

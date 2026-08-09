@@ -1,12 +1,12 @@
 # Migrating from Flutter
 
-Zigote's widget vocabulary was taken from Flutter deliberately: `StatelessWidget`, `StatefulWidget`,
-`BuildContext`, `InheritedWidget`, `Column`/`Row`/`Expanded`/`Stack`, `Navigator` with `Push`/`Pop`,
+Zigote's widget vocabulary was taken from Flutter deliberately: `Widget`, `BuildContext`,
+`InheritedWidget`, `Column`/`Row`/`Expanded`/`Stack`, `Navigator` with `Push`/`Pop`,
 `MediaQuery`, `AnimationController`, `Tween`, implicit and explicit transitions. A Flutter tree ports
 across close to line for line, and `Zigote.UI.Material` exists to make that literal.
 
 The vocabulary is the same. **The execution model is not.** Read [`concepts.md`](concepts.md) first —
-in particular §1 (`Build` runs once) and §4 (`setState` does not rebuild). Those two differences
+in particular §1 (`Build` runs once) and §4 (changing state does not rebuild). Those two differences
 account for essentially every problem a Flutter developer hits in their first week.
 
 ---
@@ -62,23 +62,23 @@ class _CounterState extends State<Counter> {
 ```
 
 ```csharp
-// Zigote — the direct translation
-public sealed class Counter : StatefulWidget
-{
-    protected override WidgetState CreateState() => new CounterState();
-}
-
-public sealed class CounterState : WidgetState<Counter>
+// Zigote — the direct translation. There is no StatefulWidget/State pair: the widget is
+// retained, so its fields ARE the state.
+public sealed class Counter : ComposedWidget
 {
     private readonly Label _text = new("Count: 0");   // hoisted: Build runs once
     private int _count;
 
-    public override Widget Build(BuildContext ctx) => new Scaffold(
+    protected override Widget Build(BuildContext ctx) => new Scaffold(
         appBar: new AppBar(title: new Label("Counter")),
         body: new Center(_text),
         floatingActionButton: new FloatingActionButton(
             child: new Icon(MaterialIcons.Add),
-            onPressed: () => SetState(() => _text.Text = $"Count: {++_count}")));
+            onPressed: () =>
+            {
+                _text.Text = $"Count: {++_count}";
+                MarkNeedsLayout();
+            }));
 }
 ```
 
@@ -89,7 +89,7 @@ If you would rather not hoist widget references, use a signal and a `Watch` — 
 Zigote code actually uses, and it is closer to Riverpod than to `setState`:
 
 ```csharp
-public sealed class CounterPage : StatelessWidget
+public sealed class CounterPage : ComposedWidget
 {
     private readonly Signal<int> _count = new(0);
 
@@ -102,8 +102,9 @@ public sealed class CounterPage : StatelessWidget
 }
 ```
 
-Note the class is `StatelessWidget` — with signals you rarely need `StatefulWidget` at all. Reach for
-`StatefulWidget` when you need `InitState` / `Dispose` lifecycle or a ticker.
+Both classes are `ComposedWidget`, because there is only one. Need lifecycle or a ticker? Override
+`OnMount`/`OnUnmount` and use `Own(...)`/`OwnEffect(...)`/`CreateTicker(...)` — available on any
+widget, not a separate base class.
 
 ---
 
@@ -113,10 +114,12 @@ Note the class is `StatelessWidget` — with signals you rarely need `StatefulWi
 
 | Flutter | Zigote | Notes |
 |---|---|---|
-| `StatelessWidget.build` | `StatelessWidget.Build` | Runs **once**; `Invalidate()` re-runs it |
-| `StatefulWidget` + `State<T>` | `StatefulWidget` + `WidgetState<T>` | `CreateState()`, `InitState()`, `Dispose()` |
-| `setState` | `SetState` | Mutates + relayouts; does **not** re-run `Build` |
-| — | `SetStateRebuild` | What `setState` does in Flutter |
+| `ComposedWidget.build` | `ComposedWidget.Build` | Runs **once**; `Invalidate()` re-runs it |
+| `StatefulWidget` + `State<T>` | `ComposedWidget` | No pair — fields on the widget are the state |
+| `initState` / `dispose` | `OnMount()` / `OnUnmount()` | Paired per mount; `Own(...)` auto-disposes |
+| `setState` | mutate a field + `MarkNeedsLayout()` | Does **not** re-run `Build` |
+| — | `MarkNeedsBuild()` / `Invalidate()` | What `setState` does in Flutter |
+| `ValueListenableBuilder` | `OwnEffect(() => …)` | Writes into retained children; allocates nothing |
 | `const` widgets | *(nothing)* | Nothing to optimize — trees are not rebuilt |
 | `Container` | `Container` | `color:`, `padding:`, `margin:`, `decoration:`, `alignment:`, `constraints:` |
 | `Column`/`Row` | `Column`/`Row` | Same alignment enums, plus a `spacing:` argument |
@@ -175,8 +178,8 @@ Note the class is `StatelessWidget` — with signals you rarely need `StatefulWi
 | Flutter | Zigote |
 |---|---|
 | `AnimationController(vsync: this)` | `new AnimationController(durationSeconds, vsync)` |
-| `SingleTickerProviderStateMixin` | `SingleTickerProviderState<TWidget>` (a `WidgetState<T>` base) |
-| `TickerProviderStateMixin` | `TickerProviderState<TWidget>` |
+| `SingleTickerProviderStateMixin` | *(nothing)* — every `Widget` is an `ITickerProvider` |
+| `TickerProviderStateMixin` | *(nothing)* — `CreateTicker` is on `Widget`, any number of them |
 | `Tween`/`CurvedAnimation`/`Curves` | `Curves`, `AnimationController.Curve` |
 | `FadeTransition` / `SlideTransition` / `ScaleTransition` | same names |
 | `AnimatedOpacity` / `AnimatedAlign` / `AnimatedPadding` / `AnimatedContainer` | same names |
@@ -295,9 +298,9 @@ a grid cell's aspect ratio) stays correct across a resize.
 **`Build` locals are frozen.** A `var label = 'Count: $_count'` inside `build` re-evaluates in Flutter
 every rebuild. Here it evaluates once, at first measure. Move it into a `Watch` or onto a field.
 
-**`SetState` will not change your tree's shape.** If the state decides *which* widgets exist, either
-mutate the existing ones (`_switcher.Child = _pages[i]`) or use `SetStateRebuild`. `SetState` only
-relayouts what is already there.
+**`MarkNeedsLayout` will not change your tree's shape.** If the state decides *which* widgets exist,
+either mutate the existing ones (`_switcher.Child = _pages[i]`) or call `MarkNeedsBuild`.
+`MarkNeedsLayout` only relayouts what is already there.
 
 **Recreating widgets loses state.** In Flutter, `Button('x', onTap)` in `build` is free and the
 element tree preserves state. Here it is a new object with no hover, no focus, no animation. Hoist to

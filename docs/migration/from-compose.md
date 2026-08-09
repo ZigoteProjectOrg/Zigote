@@ -36,7 +36,7 @@ fun Counter() {
 
 ```csharp
 // Zigote
-public sealed class Counter : StatelessWidget
+public sealed class Counter : ComposedWidget
 {
     private readonly Signal<int> _count = new(0);          // ← the `remember { mutableStateOf(0) }`
 
@@ -75,7 +75,7 @@ recomposition stays narrow — just made explicit.
 
 | Compose | Zigote | Notes |
 |---|---|---|
-| `@Composable fun Foo()` | `class Foo : StatelessWidget` + `Build` | Build runs once |
+| `@Composable fun Foo()` | `class Foo : ComposedWidget` + `Build` | Build runs once |
 | `remember { x }` | a field | |
 | `remember(key) { x }` | a field + recompute when the key changes | No implicit key invalidation |
 | `rememberSaveable` | *(nothing built in)* | Persist via `Zigote.Preferences` / `Zigote.Persistence` |
@@ -84,7 +84,7 @@ recomposition stays narrow — just made explicit.
 | `derivedStateOf { … }` | `Computed.From(() => …)` | Auto-tracks, caches, no key list |
 | `snapshotFlow { … }.collect` | `OwnEffect(() => …)` | Auto-tracks its reads |
 | implicit recomposition scope | `new Watch(() => …)` | **Explicit.** |
-| `LaunchedEffect(Unit) { … }` | `InitState()` + `Background.RunAsync` | |
+| `LaunchedEffect(Unit) { … }` | `OnMount()` + `Background.RunAsync` | |
 | `LaunchedEffect(key) { … }` | `OwnEffect(() => { … })` reading the key signal | |
 | `DisposableEffect { … onDispose { } }` | `OwnEffect(() => { …; return cleanup; })` | Cleanup runs before each re-run and on dispose |
 | `rememberCoroutineScope()` | the bloc's `Restart()` / `Track()`, or `Background` | |
@@ -119,7 +119,7 @@ Compose's `Modifier` chain has no counterpart. Zigote follows Flutter: **wrapper
 
 Nesting a few wrappers is idiomatic here and costs no more than a modifier chain does — both are one
 object per stage. If a wrapper stack gets deep enough to hurt readability, factor it into a
-`StatelessWidget` or a static helper method.
+`ComposedWidget` or a static helper method.
 
 ### Containers and controls
 
@@ -155,20 +155,24 @@ object per stage. If a wrapper stack gets deep enough to hurt readability, facto
 `LaunchedEffect(Unit)` — run once when the widget enters:
 
 ```csharp
-public sealed class ProfileState : WidgetState<ProfilePage>
+public sealed class ProfilePage : ComposedWidget
 {
     private readonly Label _name = new("…");
 
-    public override void InitState()
+    protected override void OnMount()
     {
         _env.Background.RunAsync(async ct =>
         {
-            var user = await _api.LoadAsync(Widget.UserId, ct);
-            _env.Background.Post(() => SetState(() => _name.Text = user.Name));   // back on the UI thread
+            var user = await _api.LoadAsync(UserId, ct);
+            _env.Background.Post(() =>                    // back on the UI thread
+            {
+                _name.Text = user.Name;
+                MarkNeedsLayout();
+            });
         });
     }
 
-    public override Widget Build(BuildContext ctx) => _name;
+    protected override Widget Build(BuildContext ctx) => _name;
 }
 ```
 
@@ -176,7 +180,7 @@ public sealed class ProfileState : WidgetState<ProfilePage>
 does the rest:
 
 ```csharp
-public override void InitState()
+protected override void OnMount()
 {
     // Re-runs whenever _userId changes. No key list — the effect tracks what it reads.
     OwnEffect(() =>
@@ -273,8 +277,8 @@ Recreating a widget loses its hover, focus, scroll and in-flight animation.
 **No `@Stable` / `@Immutable` / skipping.** There is no skippability analysis because there is no
 re-execution. Equality of your data classes affects `Signal`/`Computed` change detection only.
 
-**`SetState` does not rebuild.** It mutates and relayouts. `SetStateRebuild` re-runs `Build` — reserve
-it for when the tree's *shape* changes.
+**Mutating state does not rebuild.** Write to the retained child and call `MarkNeedsLayout`.
+`MarkNeedsBuild` re-runs `Build` — reserve it for when the tree's *shape* changes.
 
 **`Home` must be set before `Run()`.** `ZigoteApp.Run` captures `Home` into the root `Navigator`
 before calling `OnInit`, so a tree built in `OnInit` is never mounted. Set it in the constructor.

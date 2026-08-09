@@ -26,7 +26,7 @@ work, dialogs with results, theming, and headless tests.
 using Zigote.Core.State;          // Signal<T>, Computed, Effect
 using Zigote.UI.Host;             // ZigoteApp, App
 using Zigote.UI.Theme;            // ThemeData, Spacing, Typography, Radii
-using Zigote.UI.Widgets;          // Widget, StatelessWidget, WidgetState, Watch, BuildContext
+using Zigote.UI.Widgets;          // Widget, ComposedWidget, Watch, BuildContext
 using Zigote.UI.Widgets.Controls; // Label, Button, Icon, GestureDetector
 using Zigote.UI.Widgets.Layout;   // Column, Row, Stack, Padding, ListView, ScrollView
 
@@ -37,7 +37,7 @@ new ZigoteApp
     Home   = new CounterPage(),
 }.Run();
 
-public sealed class CounterPage : StatelessWidget
+public sealed class CounterPage : ComposedWidget
 {
     private readonly Signal<int> _count = new(0);
 
@@ -141,7 +141,7 @@ manual — most of them explain *why*, not just *what*.
 | Question | File |
 |---|---|
 | What is the widget contract? | `Zigote.UI/Widgets/Widget.cs` |
-| How does state work? | `Zigote.UI/Widgets/StatefulWidget.cs`, `Zigote.Core/State/Signal.cs` |
+| How does state work? | `Zigote.UI/Widgets/ComposedWidget.cs`, `Zigote.Core/State/Signal.cs` |
 | What does the frame loop do? | `Zigote.UI/App/App.cs` |
 | What controls exist? | `Zigote.UI/Widgets/Controls/`, `Zigote.UI.Material/Widgets/` |
 | How do I test this? | `Zigote.Tests/` — every test is headless |

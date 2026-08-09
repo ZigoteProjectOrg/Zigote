@@ -46,7 +46,7 @@ new ZigoteApp
     Home   = new CounterPage(),
 }.Run();
 
-public sealed class CounterPage : StatelessWidget
+public sealed class CounterPage : ComposedWidget
 {
     private readonly Signal<int> _count = new(0);
 
@@ -122,7 +122,7 @@ push whole lists into a retained control:
 private readonly Signal<ImmutableArray<Track>> _tracks = new([]);
 private readonly ListView _list = new();          // hoisted, mutated, never recreated
 
-public override void InitState()
+protected override void OnMount()
 {
     OwnEffect(() =>
     {
@@ -257,7 +257,7 @@ new Row(children: [new Expanded(left, flex: 1), new Expanded(right, flex: 2)]);
 | WPF / Avalonia | Zigote |
 |---|---|
 | `ResourceDictionary` / `StaticResource` | `ThemeData` (appearance colours) + static token classes |
-| Implicit `Style TargetType` | a factory method, or a `StatelessWidget` subclass |
+| Implicit `Style TargetType` | a factory method, or a `ComposedWidget` subclass |
 | `Setter` | a property assignment |
 | `Trigger` / `DataTrigger` | a `Watch` over a signal, or `Pressable`'s hover/pressed state |
 | `VisualStateManager` | `Pressable` (`Hovered`, `Pressed`, `Focused`) + `StateStyle` |
@@ -293,7 +293,7 @@ private static Button PrimaryButton(string label, Action? onPressed) =>
 A `ControlTemplate` is a widget:
 
 ```csharp
-public sealed class TagChip(string text, Action onRemove) : StatelessWidget
+public sealed class TagChip(string text, Action onRemove) : ComposedWidget
 {
     protected override Widget Build(BuildContext ctx)
     {
@@ -360,7 +360,7 @@ is for genuine primitives — canvases, virtualized lists, text editors, animate
 | `Dispatcher.CheckAccess` | not needed; signal writes are marshalled for you |
 | `BackgroundWorker` / `Task.Run` | `Zigote.Core.Threading.Background` — `Run`, `RunAsync`, `Latest()`, `Slice` |
 | `CancellationTokenSource` per operation | `Bloc.Restart()` — latest-wins, one call |
-| `IDisposable` subscriptions | `Bloc.Track(sub)`, or `WidgetState.OwnEffect` |
+| `IDisposable` subscriptions | `Bloc.Track(sub)`, or `Widget.Own` / `Widget.OwnEffect` |
 
 Writing a signal from a worker thread is legal: the frame loop is woken and the subtree swap happens
 on the UI thread in the next `Measure`.
@@ -421,7 +421,7 @@ before calling `OnInit`, so a tree built in `OnInit` is never mounted and the wi
 
 **There is no designer and no XAML hot reload.** There *is* C# hot reload: edit a `Build()` under
 `dotnet watch` and the live UI updates with widget instances and state preserved. Constructor bodies,
-field initializers and `InitState` edits still need a restart.
+field initializers and `OnMount` edits still need a restart.
 
 ---
 
