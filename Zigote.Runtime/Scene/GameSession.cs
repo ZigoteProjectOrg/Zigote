@@ -372,6 +372,10 @@ public sealed class GameSession : IWorldSessionHooks
         Input.Axis2DProvider = null;
         Input.KeyDownProvider = null;
         Input.LookDeltaProvider = null;
+        // Never leave the pointer trapped after play stops.
+        Input.CaptureSetProvider?.Invoke(false);
+        Input.CaptureGetProvider = null;
+        Input.CaptureSetProvider = null;
         Gamepad.ConnectedProvider = null;
         Gamepad.AxisProvider = null;
         Gamepad.ButtonProvider = null;
@@ -451,6 +455,14 @@ public sealed class GameSession : IWorldSessionHooks
 
         // Mouse-look delta (right-drag) for scripts that own the camera (e.g. orbit a chase cam).
         Input.LookDeltaProvider = () => new Vec2(LookDx, LookDy);
+
+        // Pointer capture for mouselook. Routed through the engine so the cursor is genuinely hidden
+        // and pinned by the OS — a game cannot emulate this, and without it a first-person camera
+        // stops turning the moment the cursor reaches a window edge. The engine holds the host's veto
+        // (AllowRelativeMouseMode), so a script asking for capture the editor has forbidden is refused
+        // here rather than trapping the pointer.
+        Input.CaptureGetProvider = () => ZigoteEngine.Instance?.RelativeMouseMode ?? false;
+        Input.CaptureSetProvider = enabled => ZigoteEngine.Instance?.SetRelativeMouseMode(enabled);
 
         // Generic game-controller input (SDL gamepad), read from the native engine each query.
         // OPT-IN: initializing SDL's gamepad subsystem with a controller connected can hang on some

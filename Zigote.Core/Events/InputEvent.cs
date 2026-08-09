@@ -58,13 +58,29 @@ public sealed class MouseMoveEvent : InputEvent
     public float X { get; private set; }
     public float Y { get; private set; }
 
+    /// <summary>
+    ///     Motion since the previous move event, straight from the OS.
+    ///     <para>
+    ///         This is the only motion available while the pointer is captured
+    ///         (<see cref="Engine.ZigoteEngine.RelativeMouseMode" />): the cursor is held in place, so
+    ///         <see cref="X" />/<see cref="Y" /> stop changing and differencing them yields nothing. It
+    ///         is also more accurate than a difference when the cursor is free, because it is not
+    ///         quantized to the pixel grid or clamped at the window edge.
+    ///     </para>
+    /// </summary>
+    public float RelativeX { get; private set; }
+
+    public float RelativeY { get; private set; }
+
     // Overwrite in place so PollEventsInto can reuse a pooled instance (see EventPool) instead of
     // allocating a fresh MouseMoveEvent for every move — mouse-moves flood faster than the frame rate
     // during a drag, so this is the dominant input-rate allocation.
-    internal void Reuse(float x, float y, uint windowId)
+    internal void Reuse(float x, float y, uint windowId, float relativeX, float relativeY)
     {
         X = x;
         Y = y;
+        RelativeX = relativeX;
+        RelativeY = relativeY;
         WindowId = windowId;
     }
 }

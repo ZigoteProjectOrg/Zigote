@@ -157,7 +157,10 @@ public sealed class GameViewport : Widget
     {
         if (down && scancode == (uint)KeyCode.Escape)
         {
-            App.Active?.RequestQuit();
+            // Esc releases a captured pointer first and only quits once the cursor is back — quitting
+            // out from under a hidden, pinned cursor is not a choice the player meant to make.
+            if (Owner is { Engine.RelativeMouseMode: true }) Owner.Engine.SetRelativeMouseMode(false);
+            else App.Active?.RequestQuit();
             return;
         }
 
@@ -178,6 +181,14 @@ public sealed class GameViewport : Widget
             case ' ': play.Handbrake = down; break;
             case 'r': play.ResetCar = down; break;
         }
+    }
+
+    /// <summary>Motion while the game has captured the pointer — see the editor viewport's copy.</summary>
+    public override void OnPointerRelative(float deltaX, float deltaY)
+    {
+        if (_host.Session is not { } play) return;
+        play.LookDx += deltaX;
+        play.LookDy += deltaY;
     }
 
     protected override void OnFocusChanged(bool focused)

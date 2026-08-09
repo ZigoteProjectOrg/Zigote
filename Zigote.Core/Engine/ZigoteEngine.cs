@@ -51,6 +51,8 @@ public sealed unsafe class ZigoteEngine : IDisposable
     // reset at the top of every PollEventsInto. Used only by the allocation-free frame-loop drain.
     private readonly EventPool _eventPool = new();
 
+    private bool _allowRelativeMouseMode = true;
+
     // Active backend capabilities, cached at Initialize() (see Caps).
     private RendererCaps _caps;
     private bool _disposed;
@@ -193,6 +195,51 @@ public sealed unsafe class ZigoteEngine : IDisposable
     {
         if (!_initialized || _disposed) return;
         NativeEngine.SetCursor((uint)cursor);
+    }
+
+    /// <summary>
+    ///     Capture the pointer for mouselook: the cursor is hidden and held inside the window, and
+    ///     motion arrives as <see cref="Events.MouseMoveEvent.RelativeX" />/<c>RelativeY</c> deltas
+    ///     instead of a position.
+    ///     <para>
+    ///         A first-person camera cannot be built without this. With a free cursor the pointer
+    ///         eventually reaches a window edge and stops producing motion, so the view stops turning —
+    ///         no amount of application-side compensation fixes that, because the input simply is not
+    ///         there. While captured, <see cref="Events.MouseMoveEvent.X" />/<c>Y</c> are meaningless
+    ///         and hit-testing should be suspended.
+    ///     </para>
+    ///     <para>
+    ///         Release it whenever the player needs the cursor back — a menu, a pause screen, or focus
+    ///         leaving the window. Returns false if capture is disallowed or the platform refused.
+    ///     </para>
+    /// </summary>
+    public bool SetRelativeMouseMode(bool enabled)
+    {
+        if (!_initialized || _disposed) return false;
+        if (enabled && !AllowRelativeMouseMode) return false;
+        if (!NativeEngine.SetRelativeMouseMode(_handle, enabled)) return false;
+        RelativeMouseMode = enabled;
+        return true;
+    }
+
+    /// <summary>Whether the pointer is currently captured.</summary>
+    public bool RelativeMouseMode { get; private set; }
+
+    /// <summary>
+    ///     Host veto on capture. Capture hides and pins the cursor, which is right in a fullscreen game
+    ///     and hostile inside a tool — an editor's other panels become unreachable. Clearing this
+    ///     refuses further capture and releases it immediately, so the host has the last word and a
+    ///     misbehaving script cannot trap the pointer. Lives here rather than in the UI layer because
+    ///     this is the only door to capture; a veto anywhere else could be walked around.
+    /// </summary>
+    public bool AllowRelativeMouseMode
+    {
+        get => _allowRelativeMouseMode;
+        set
+        {
+            _allowRelativeMouseMode = value;
+            if (!value) SetRelativeMouseMode(false);
+        }
     }
 
     /// <summary>
@@ -564,7 +611,15 @@ public sealed unsafe class ZigoteEngine : IDisposable
             // The flooding event kinds are rented from the per-poll pool (no allocation once warm);
             // everything else fires at human rates and takes the plain allocating decode path.
             var evt = (EventKind)raw.Kind switch {
-                EventKind.MouseMove => _eventPool.RentMouseMove(raw.X, raw.Y, raw.WindowId),
+                // A move event carries no scroll, so native reuses those two slots for the frame's
+                // relative motion (see zigote_poll_events).
+                EventKind.MouseMove => _eventPool.RentMouseMove(
+                    raw.X,
+                    raw.Y,
+                    raw.WindowId,
+                    raw.ScrollX,
+                    raw.ScrollY
+                ),
                 EventKind.Scroll => _eventPool.RentScroll(
                     raw.X,
                     raw.Y,
@@ -850,6 +905,40 @@ public sealed unsafe class ZigoteEngine : IDisposable
         {
             return NativeEngine.LoadTextureFromRgba(
                 engine._handle,
+                ptr,
+                (nuint)rgba.Length,
+                width,
+                height
+            );
+        }
+    }
+
+    /// <summary>
+    ///     Rewrite an existing texture's pixels, keeping the handle, its GPU texture and its bind
+    ///     group. For a source of frames — a video, a camera, a procedural surface — where
+    ///     <see cref="LoadTextureFromRgba" /> plus <see cref="ReleaseTexture" /> would build and tear
+    ///     down a GPU texture sixty times a second to show the same rectangle.
+    ///     <para>
+    ///         <paramref name="width" /> and <paramref name="height" /> must match the handle's: this
+    ///         overwrites, it does not resize. Returns false for an unknown handle, a size mismatch or
+    ///         a short buffer — a caller whose resolution changed should create a new handle.
+    ///     </para>
+    ///     <para>
+    ///         Thread-safe. The texel upload happens at the top of the next frame, on the render
+    ///         thread, so the pixels must be complete when this returns.
+    ///     </para>
+    /// </summary>
+    public static bool UpdateTextureRgba(ulong textureHandle, ReadOnlySpan<byte> rgba, uint width,
+        uint height)
+    {
+        var engine = Instance;
+        if (engine is null || textureHandle == 0) return false;
+
+        fixed (byte* ptr = rgba)
+        {
+            return NativeEngine.UpdateTextureRgba(
+                engine._handle,
+                textureHandle,
                 ptr,
                 (nuint)rgba.Length,
                 width,

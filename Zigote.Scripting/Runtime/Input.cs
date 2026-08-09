@@ -22,9 +22,30 @@ public static class Input
     {
         return KeyDownProvider?.Invoke(name) ?? false;
     }
+
+    /// <summary>
+    ///     Capture the pointer for mouselook. While captured the cursor is hidden and pinned, and
+    ///     <see cref="LookDelta" /> reports raw motion that never runs out at a window edge — which is
+    ///     what a first-person camera needs and what a free cursor cannot provide.
+    ///     <para>
+    ///         Release it whenever the player needs the cursor: a menu, an inventory, a pause screen.
+    ///         The host drops capture automatically when the window loses focus, so a game that forgets
+    ///         cannot trap the pointer.
+    ///     </para>
+    /// </summary>
+    public static bool MouseCaptured
+    {
+        get => CaptureGetProvider?.Invoke() ?? false;
+        set => CaptureSetProvider?.Invoke(value);
+    }
+
+    /// <summary>True when the host supports capturing the pointer at all.</summary>
+    public static bool CanCaptureMouse => CaptureSetProvider != null;
 #pragma warning disable CS0649 // assigned from ScriptWorld in Zigote.Editor
     internal static Func<string, Vec2>? Axis2DProvider;
     internal static Func<string, bool>? KeyDownProvider;
     internal static Func<Vec2>? LookDeltaProvider;
+    internal static Func<bool>? CaptureGetProvider;
+    internal static Action<bool>? CaptureSetProvider;
 #pragma warning restore CS0649
 }

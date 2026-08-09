@@ -35,7 +35,8 @@ public sealed class EventPool
     }
 
     /// <summary>Rent (or grow) a <see cref="MouseMoveEvent" /> and overwrite it with the given values.</summary>
-    public MouseMoveEvent RentMouseMove(float x, float y, uint windowId)
+    public MouseMoveEvent RentMouseMove(float x, float y, uint windowId,
+        float relativeX = 0f, float relativeY = 0f)
     {
         MouseMoveEvent e;
         if (_mouseMoveNext < _mouseMove.Count)
@@ -49,7 +50,13 @@ public sealed class EventPool
         }
 
         _mouseMoveNext++;
-        e.Reuse(x, y, windowId);
+        e.Reuse(
+            x,
+            y,
+            windowId,
+            relativeX,
+            relativeY
+        );
         return e;
     }
 

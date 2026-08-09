@@ -54,6 +54,31 @@ public class EventPoolTests
     }
 
     [Fact]
+    public void RentMouseMove_AfterReset_ClearsRelativeMotionOfPreviousPoll()
+    {
+        var pool = new EventPool();
+
+        var a1 = pool.RentMouseMove(
+            1f,
+            2f,
+            0,
+            5f,
+            -5f
+        );
+        Assert.Equal(5f, a1.RelativeX);
+        Assert.Equal(-5f, a1.RelativeY);
+
+        pool.Reset();
+
+        // A free-cursor move carries no relative motion. The reused instance must report zero rather
+        // than the previous poll's delta — a stale delta here is a camera that keeps turning by itself.
+        var a2 = pool.RentMouseMove(3f, 4f, 0);
+        Assert.Same(a1, a2);
+        Assert.Equal(0f, a2.RelativeX);
+        Assert.Equal(0f, a2.RelativeY);
+    }
+
+    [Fact]
     public void RentMouseMove_GrowsWhenPollHasMoreThanBefore()
     {
         var pool = new EventPool();
