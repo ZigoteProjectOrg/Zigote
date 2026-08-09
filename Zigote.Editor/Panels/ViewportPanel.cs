@@ -228,6 +228,18 @@ public sealed partial class ViewportPanel : Widget
         base.Detach();
     }
 
+    /// <summary>
+    ///     Motion while the game has captured the pointer. The cursor is hidden and pinned by the OS,
+    ///     so this is the only motion that arrives — and unlike a drag it never runs out at the edge of
+    ///     the panel, which is what makes a first-person camera work inside the editor.
+    /// </summary>
+    public override void OnPointerRelative(float deltaX, float deltaY)
+    {
+        if (_state is not { IsPlaying: true, IsPaused: false, ActivePlay: { } play }) return;
+        play.LookDx += deltaX;
+        play.LookDy += deltaY;
+    }
+
     // Keyboard events reach only the focused widget, and the play-mode drive keys are latched
     // (set on key-down, cleared on key-up here). If focus leaves the viewport while a key is held —
     // clicking another panel, Tab, etc. — the key-up routes elsewhere and the latch would stick "on",
@@ -239,6 +251,9 @@ public sealed partial class ViewportPanel : Widget
         ResetFlyInput();
         _isOrbitDragging = false;
         _isRightDragging = false;
+        // Clicking another panel gives the cursor back, so a captured game cannot hold the pointer
+        // while the player is trying to use the inspector.
+        Owner?.Engine.SetRelativeMouseMode(false);
     }
 
     // ── Asset drop ────────────────────────────────────────────────────────────
@@ -1949,6 +1964,9 @@ public sealed partial class ViewportPanel : Widget
 
         // Right-drag: mouse look in play mode (frozen while paused — Update isn't consuming the delta,
         // so accumulating it would snap the camera on resume).
+        //
+        // This is the un-captured path. A game that asks for pointer capture gets its motion through
+        // OnPointerRelative below instead, which keeps working past the window edge.
         if (_isRightDragging && _state is
                 { IsPlaying: true, IsPaused: false, ActivePlay: not null })
         {
@@ -2055,6 +2073,16 @@ public sealed partial class ViewportPanel : Widget
 
     public override void OnKey(char keyChar, uint scancode, bool down, Modifiers mods)
     {
+        // Esc — hand the cursor back. This is the only escape hatch that works while the pointer is
+        // captured: the cursor is hidden and pinned, so the menu bar cannot be clicked and every mouse
+        // button routes to this panel. Swallowed only when it actually released something, so Esc
+        // keeps meaning whatever the game wants the rest of the time.
+        if (down && scancode == (uint)KeyCode.Escape && Owner is { Engine.RelativeMouseMode: true })
+        {
+            Owner.Engine.SetRelativeMouseMode(false);
+            return;
+        }
+
         // F11 — toggle viewport fullscreen (works in both edit and play mode).
         if (down && scancode == ScF11)
         {
