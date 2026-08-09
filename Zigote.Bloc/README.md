@@ -55,7 +55,38 @@ bloc.Add(new CounterEvent.Bumped());                     // the only way state e
 - **One unit of work in flight.** `Restart()` cancels the previous one and hands back a token for its replacement, so
   type → switch source → refresh ends with the *refresh*'s result, not whichever request happened to land last.
 - **Dispose is the off switch.** Tracked subscriptions (`Track`) die with the bloc, in-flight work is cancelled, and a
-  dead bloc drops events rather than throwing at whoever still holds it.
+  dead bloc drops events rather than throwing at whoever still holds it. A handler that resumes after the bloc has gone
+  reads `Lifetime` as cancelled — the token outlives its source.
+
+## Watching every bloc at once
+
+`BlocObserver` is the seam for a log, a DevTools timeline or a replay. Both hooks are process-wide and unset by default,
+so a bloc that nobody is watching pays one null check per event:
+
+```csharp
+BlocObserver.OnEvent  = (bloc, e)        => timeline.Add($"{bloc.GetType().Name} ← {e}");
+BlocObserver.OnChange = (bloc, from, to) => timeline.Add($"{bloc.GetType().Name} {from} → {to}");
+```
+
+They fire on the pump in the order things happened, so the two interleave into one readable log without correlation ids.
+`OnChange` skips emits the signal deduplicated — a transition the widget tree never saw is not on the timeline. A
+throwing hook goes to `BlocErrors.OnError` and is otherwise ignored; observation cannot break the feature it observes.
+
+## Dropping an event instead of queueing it
+
+The queue is strictly sequential, so a double-tapped submit runs twice. There is no `droppable` transformer to reach
+for — `Add` is `virtual` and `Current` is right there:
+
+```csharp
+public override void Add(CounterEvent e)
+{
+    if (Current.Busy && e is CounterEvent.Bumped) return; // second tap, same in-flight work
+    base.Add(e);
+}
+```
+
+Guard on the state rather than on a private "am I handling something" flag: an `Add` from *inside* a handler is a
+supported ordering, and a flag that is true for the whole dispatch would swallow it.
 
 No package dependencies — `Zigote.Core` only. A bloc that needed a logging package would push that package onto every
 app using the pattern.

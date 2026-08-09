@@ -24,6 +24,7 @@
              host), but the tests here are CPU-only: ABI layout, math, layout, undo, reconciliation —
              none load the native library at runtime. -->
         <ProjectReference Include="..\Zigote.Core\Zigote.Core.csproj"/>
+        <ProjectReference Include="..\Zigote.Bloc\Zigote.Bloc.csproj"/>
         <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
         <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
         <ProjectReference Include="..\Zigote.UI.Adwaita\Zigote.UI.Adwaita.csproj"/>

@@ -20,6 +20,45 @@ public static class BlocErrors
 }
 
 /// <summary>
+///     Where every bloc's events and state changes go, for a log, a DevTools timeline or a replay.
+///     Unset — the default — a bloc reports nothing and pays one null check per event, which is why
+///     this is not behind a compile flag: an app that wants the timeline in a release build gets it
+///     by assigning a hook, not by rebuilding.
+///     <para>
+///         Both fire on the pump, in the order things happened: an <see cref="OnEvent" /> and the
+///         <see cref="OnChange" /> its handler caused arrive interleaved, so a flat append-only log
+///         already reads as "this event, then this transition" with no correlation ids to thread
+///         through. The bloc arrives as <see cref="object" /> for the same reason
+///         <see cref="BlocErrors" /> is not a static member of the generic type — one hook has to
+///         reach every bloc in the app, not one per constructed type.
+///     </para>
+///     <para>
+///         The hooks run on whichever thread the pump is on and inside the dispatch, so a slow one
+///         slows the app down. Queue the record and format it elsewhere. A throwing hook is reported
+///         through <see cref="BlocErrors.OnError" /> and otherwise ignored — observation must not be
+///         able to break the feature it is observing.
+///     </para>
+/// </summary>
+/// <example>
+///     <code>
+/// BlocObserver.OnEvent = (bloc, e) => DebugLog.Add(DebugLogLevel.Info, $"{bloc.GetType().Name} ← {e}", "bloc");
+/// BlocObserver.OnChange = (bloc, from, to) => DebugLog.Add(DebugLogLevel.Info, $"{bloc.GetType().Name} {from} → {to}", "bloc");
+///     </code>
+/// </example>
+public static class BlocObserver
+{
+    /// <summary>An event came off the queue and is about to be handled.</summary>
+    public static Action<object, object?>? OnEvent;
+
+    /// <summary>
+    ///     A bloc published a state that differs from the one before it. Deduplicated emits — the
+    ///     ones a <see cref="Signal{T}" /> swallows because the record compares equal — do not fire:
+    ///     a timeline of transitions that never happened is worse than no timeline.
+    /// </summary>
+    public static Action<object, object?, object?>? OnChange;
+}
+
+/// <summary>
 ///     Business logic as one object per feature: events in, ordered, one at a time; state out as
 ///     signals; no widget anywhere in the type.
 ///     <para>
@@ -52,12 +91,29 @@ public abstract class Bloc<TEvent> : IDisposable
     private readonly CancellationTokenSource _lifetime = new();
     private readonly List<IDisposable> _subscriptions = [];
 
+    /// <summary>
+    ///     Taken while the source is alive, because <see cref="Dispose" /> disposes it and
+    ///     <see cref="CancellationTokenSource.Token" /> throws afterwards. The token itself keeps
+    ///     working — an already-cancelled token is exactly what a handler resuming into a dead bloc
+    ///     should see, and that resume is the normal case, not an edge one: dispose is what cancelled
+    ///     the await it was parked on.
+    /// </summary>
+    private readonly CancellationToken _lifetimeToken;
+
     private bool _disposed;
     private bool _pumping;
     private CancellationTokenSource? _work;
 
-    /// <summary>Cancelled when the bloc is disposed. Handed to every handler.</summary>
-    protected CancellationToken Lifetime => _lifetime.Token;
+    protected Bloc()
+    {
+        _lifetimeToken = _lifetime.Token;
+    }
+
+    /// <summary>
+    ///     Cancelled when the bloc is disposed. Handed to every handler, and safe to read at any
+    ///     point in a handler's life — including after the bloc has gone, where it reads cancelled.
+    /// </summary>
+    protected CancellationToken Lifetime => _lifetimeToken;
 
     public void Dispose()
     {
@@ -112,10 +168,26 @@ public abstract class Bloc<TEvent> : IDisposable
     /// <summary>
     ///     Tie a subscription to this bloc's lifetime — the shape of every "repository stream in,
     ///     event out" wire, disposed with the bloc so a closed bloc stops receiving.
+    ///     <para>
+    ///         Safe from any thread, and safe after <see cref="Dispose" />: a wire registered against
+    ///         a bloc that is already gone is disposed on the spot rather than added to a list nobody
+    ///         will walk again. Both matter now that <see cref="Bloc{TEvent,TState}.Select{T}" /> goes
+    ///         through here — a projection can be built off the pump, and a view that outlives its
+    ///         bloc by a frame is ordinary.
+    ///     </para>
     /// </summary>
     protected void Track(IDisposable subscription)
     {
-        _subscriptions.Add(subscription);
+        lock (_events)
+        {
+            if (!_disposed)
+            {
+                _subscriptions.Add(subscription);
+                return;
+            }
+        }
+
+        subscription.Dispose();
     }
 
     /// <summary>
@@ -123,22 +195,44 @@ public abstract class Bloc<TEvent> : IDisposable
     ///     that starts async work calls this first, so a user who types, switches source and hits
     ///     refresh ends up with the result of the refresh rather than whichever request happened to
     ///     land last.
+    ///     <para>
+    ///         Safe against a concurrent <see cref="Dispose" />, which is not a theoretical pairing: a
+    ///         handler that resumed on a pool thread and restarts its work is racing whatever closed
+    ///         the screen. The source published here can be taken and torn down by that dispose before
+    ///         this method has finished with it, so the token is read out first and the tidy-up
+    ///         tolerates finding it already gone.
+    ///     </para>
     /// </summary>
     protected CancellationToken Restart()
     {
         if (_disposed) return new CancellationToken(true);
 
         var next = new CancellationTokenSource();
+
+        // Before publishing: once `next` is reachable from _work, a concurrent Dispose may take it and
+        // dispose it, and CancellationTokenSource.Token throws after that. The token itself keeps
+        // working — reading a captured token never throws, whatever happened to its source.
+        var token = next.Token;
+
         var previous = Interlocked.Exchange(ref _work, next);
 
         previous?.Cancel();
         previous?.Dispose();
 
-        // Disposed between the exchange and here: cancel the token we just published rather than
+        // Disposed between the exchange and here: cancel the source we just published rather than
         // leaving work running against a dead bloc.
-        if (_disposed) next.Cancel();
+        if (_disposed)
+            try
+            {
+                next.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Dispose got to it first, and it cancels before it disposes — so the token this
+                // returns is already cancelled and there is nothing left to do.
+            }
 
-        return next.Token;
+        return token;
     }
 
     /// <summary>Cancel the in-flight unit of work without starting a replacement.</summary>
@@ -184,11 +278,23 @@ public abstract class Bloc<TEvent> : IDisposable
                 next = _events.Dequeue();
             }
 
+            // Before the handler, so the log reads "event, then what it did" — and so an event whose
+            // handler hangs or throws is still on the timeline that has to explain it.
+            if (BlocObserver.OnEvent is { } observer)
+                try
+                {
+                    observer(this, next);
+                }
+                catch (Exception ex)
+                {
+                    Report(ex, $"{GetType().Name} observer failed on {next?.GetType().Name ?? "null"}");
+                }
+
             ValueTask handling;
 
             try
             {
-                handling = OnEventAsync(next, _lifetime.Token);
+                handling = OnEventAsync(next, _lifetimeToken);
             }
             catch (Exception ex)
             {
@@ -217,7 +323,7 @@ public abstract class Bloc<TEvent> : IDisposable
         {
             await handling;
         }
-        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        catch (OperationCanceledException) when (_lifetimeToken.IsCancellationRequested)
         {
             lock (_events)
             {
@@ -239,7 +345,7 @@ public abstract class Bloc<TEvent> : IDisposable
         Report(ex, $"{GetType().Name} failed handling {@event?.GetType().Name ?? "null"}");
     }
 
-    private static void Report(Exception ex, string context)
+    private protected static void Report(Exception ex, string context)
     {
         try
         {
@@ -295,7 +401,15 @@ public abstract class Bloc<TEvent, TState> : Bloc<TEvent>
     ///     <para>
     ///         Hold the returned value for the lifetime of the view rather than calling this inside a
     ///         build: it is a live node in the graph, and a fresh one per build would subscribe, fire
-    ///         once and be thrown away every frame.
+    ///         once and be thrown away every frame — and, because the bloc keeps every projection it
+    ///         hands out alive until it is itself disposed, one per build is an unbounded leak rather
+    ///         than garbage.
+    ///     </para>
+    ///     <para>
+    ///         Dropping one without disposing it is safe: an unobserved <see cref="Computed{T}" />
+    ///         detaches from its sources, so a projection whose view has gone is ordinary garbage and
+    ///         the bloc does not keep it alive. Do <b>not</b> expect the reverse — a projection you
+    ///         hold past the bloc's own disposal keeps answering, but with whatever it last computed.
     ///     </para>
     /// </summary>
     /// <example>
@@ -335,13 +449,46 @@ public abstract class Bloc<TEvent, TState> : Bloc<TEvent>
     /// </summary>
     protected void Emit(TState next)
     {
+        // The read is only worth its trip through the graph lock when somebody is listening; with no
+        // observer attached this is the same two lines it always was.
+        var observed = BlocObserver.OnChange is not null;
+        var previous = observed ? _state.Peek() : default!;
+
         Reactive.Sync(() => _state.Value = next);
+
+        if (observed) Notify(previous, next);
     }
 
     /// <inheritdoc cref="Emit(TState)" />
     protected void Emit(Func<TState, TState> next)
     {
+        var observed = BlocObserver.OnChange is not null;
+        var previous = observed ? _state.Peek() : default!;
+
         Reactive.Sync(() => _state.Update(next));
+
+        if (observed) Notify(previous, _state.Peek());
+    }
+
+    /// <summary>
+    ///     Report a transition, skipping the emits the signal deduplicated — <see cref="Emit(TState)" />
+    ///     with the state the bloc is already in is a no-op the widget tree never sees, and a timeline
+    ///     that shows it as a change sends whoever is reading it looking for a rebuild that never
+    ///     happened.
+    /// </summary>
+    private void Notify(TState previous, TState next)
+    {
+        if (BlocObserver.OnChange is not { } hook) return;
+        if (EqualityComparer<TState>.Default.Equals(previous, next)) return;
+
+        try
+        {
+            hook(this, previous, next);
+        }
+        catch (Exception ex)
+        {
+            Report(ex, $"{GetType().Name} observer failed on change");
+        }
     }
 }
 
