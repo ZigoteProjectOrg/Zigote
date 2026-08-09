@@ -7,6 +7,14 @@
         <RootNamespace>Zigote.UI.Adwaita</RootNamespace>
         <AssemblyName>Zigote.UI.Adwaita</AssemblyName>
     </PropertyGroup>
+    <!-- Same seam Zigote.Core uses: internals that are pure logic (accelerator parsing, layout
+         maths) are unit-tested directly rather than pushed into the public surface just to be
+         reachable — this kit mirrors libadwaita's API, so it should not grow extras. -->
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+            <_Parameter1>Zigote.Tests</_Parameter1>
+        </AssemblyAttribute>
+    </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
         <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>

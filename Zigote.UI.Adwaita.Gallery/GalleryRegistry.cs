@@ -46,6 +46,18 @@ internal static class GalleryRegistry
                     () => new SplitViewsPage()
                 ),
                 new GalleryEntry(
+                    "Paned",
+                    "Two panes and a draggable handle",
+                    MaterialIcons.Splitscreen,
+                    () => new PanedPage()
+                ),
+                new GalleryEntry(
+                    "Breakpoints",
+                    "Containers that fold on their own size",
+                    MaterialIcons.Rule,
+                    () => new BreakpointsPage()
+                ),
+                new GalleryEntry(
                     "View Switcher",
                     "One stack, a header switcher and a bottom bar",
                     MaterialIcons.SwitchLeft,
@@ -103,6 +115,18 @@ internal static class GalleryRegistry
                     "Text, search and password entries, plain and as rows",
                     MaterialIcons.TextFields,
                     () => new EntriesPage()
+                ),
+                new GalleryEntry(
+                    "Colour & Completion",
+                    "Colour button, suggestion entry and separators",
+                    MaterialIcons.Palette,
+                    () => new ColorAndCompletionPage()
+                ),
+                new GalleryEntry(
+                    "Shortcuts",
+                    "Key caps and the keyboard-shortcuts dialog",
+                    MaterialIcons.Keyboard,
+                    () => new ShortcutsPage()
                 ),
                 new GalleryEntry(
                     "Menus & Popovers",
@@ -236,6 +260,12 @@ internal static class GalleryRegistry
                     "Signals, computed values and effects driving the UI",
                     MaterialIcons.Bolt,
                     () => new ReactivityPage()
+                ),
+                new GalleryEntry(
+                    "Concurrency",
+                    "Threads writing signals, frame-budgeted delivery and sliced work",
+                    MaterialIcons.Speed,
+                    () => new ConcurrencyPage()
                 ),
                 new GalleryEntry(
                     "Drag and Drop",
