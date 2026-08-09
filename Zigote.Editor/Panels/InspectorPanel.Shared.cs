@@ -10,8 +10,9 @@ using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
-// Dropdown<T> must be referenced with a concrete type — alias for clarity:
-using StringDropdown = Zigote.UI.Material.Dropdown<string>;
+// FilePickerDialog: the in-app file browser. GTK's file chooser is a shell portal with no
+// libadwaita widget behind it, so this stays Material until one exists here.
+using Zigote.UI.Material;
 
 namespace Zigote.Editor.Panels;
 
@@ -76,7 +77,7 @@ public sealed partial class InspectorPanel
                         0f,
                         4f
                     ),
-                    new SizedBox(height: 26f, child: new Button(label, onClick))
+                    new AdwButton(label, onClick) { Compact = true }
                 )
             );
         }
@@ -121,7 +122,7 @@ public sealed partial class InspectorPanel
         }
 
         /// <summary>Node name field + kind badge at the top of the inspector.</summary>
-        public static PropRow NodeHeader(TextField nameField, NodeKind kind, ThemeData theme)
+        public static PropRow NodeHeader(AdwEntry nameField, NodeKind kind, ThemeData theme)
         {
             var kindColor = kind switch {
                 NodeKind.Mesh => new Color(0.4f, 0.75f, 1f),
@@ -150,7 +151,7 @@ public sealed partial class InspectorPanel
                             }
                         ),
                         // Editable name
-                        new SizedBox(height: 28f, child: nameField),
+                        nameField,
                     },
                 }
             );
@@ -168,10 +169,7 @@ public sealed partial class InspectorPanel
         public static PropRow Text(string label, string value,
             Action<string> onChange, ThemeData theme, App app)
         {
-            var tf = new TextField {
-                Text = value,
-                OnChanged = onChange,
-            };
+            var tf = new AdwEntry { Text = value, OnChanged = onChange, Compact = true };
             return new PropRow(
                 new Padding(
                     new EdgeInsets(
@@ -190,7 +188,7 @@ public sealed partial class InspectorPanel
                                 new Label(label, theme.FontSizeCaption, theme.Hint)
                             ),
                             new SizedBox(4f),
-                            new SizedBox(height: 24f, child: tf),
+                            new Expanded(tf),
                         },
                     }
                 )
@@ -202,12 +200,7 @@ public sealed partial class InspectorPanel
             Func<string, IReadOnlyList<(string Value, string Display)>> suggest,
             Action<string> onCommit, ThemeData theme, App app)
         {
-            var f = new AutoSuggestField(
-                app,
-                value,
-                suggest,
-                onCommit
-            ) { Height = 24f };
+            var f = new AdwSuggestionEntry(value, suggest, onCommit) { Compact = true };
             return new PropRow(
                 new Padding(
                     new EdgeInsets(
@@ -225,7 +218,7 @@ public sealed partial class InspectorPanel
                                 child: new Label(label, theme.FontSizeCaption, theme.Hint)
                             ),
                             new SizedBox(4f),
-                            new Expanded(new SizedBox(height: 24f, child: f)),
+                            new Expanded(f),
                         },
                     }
                 )
@@ -236,7 +229,7 @@ public sealed partial class InspectorPanel
         public static PropRow ColorSwatch(string label, Vec3 current, Action<Vec3> setter,
             ThemeData theme, App app)
         {
-            var sw = new ColorSwatchField(new Color(current.X, current.Y, current.Z), app) {
+            var sw = new AdwColorButton(new Color(current.X, current.Y, current.Z), app) {
                 OnChanged = c => setter(new Vec3(c.R, c.G, c.B)),
             };
             return new PropRow(
@@ -282,33 +275,28 @@ public sealed partial class InspectorPanel
         public static PropRow Path(string label, string value,
             Action<string> onChange, string rootPath, string[] extensions, ThemeData theme, App app)
         {
-            var tf = new TextField {
-                Text = value,
-                OnChanged = onChange,
-            };
-            var pickBtn = new SizedBox(
-                24f,
-                24f,
-                new Button(
-                    "...",
-                    () =>
-                    {
-                        FilePickerDialog.Show(
-                            app,
-                            "Select " + label,
-                            rootPath,
-                            extensions,
-                            selectedPath =>
-                            {
-                                tf.Text = selectedPath;
-                                onChange(selectedPath);
-                            }
-                        );
-                    }
-                ) {
-                    Padding = EdgeInsets.Zero,
+            var tf = new AdwEntry { Text = value, OnChanged = onChange, Compact = true };
+            var pickBtn = new AdwButton(
+                "Browse",
+                () =>
+                {
+                    FilePickerDialog.Show(
+                        app,
+                        "Select " + label,
+                        rootPath,
+                        extensions,
+                        selectedPath =>
+                        {
+                            tf.Text = selectedPath;
+                            onChange(selectedPath);
+                        }
+                    );
                 }
-            );
+            ) {
+                IconName = Icons.Folder,
+                Style = AdwButtonStyle.Flat,
+                Circular = true,
+            };
             return new PropRow(
                 new Padding(
                     new EdgeInsets(
@@ -327,7 +315,7 @@ public sealed partial class InspectorPanel
                                 new Label(label, theme.FontSizeCaption, theme.Hint)
                             ),
                             new SizedBox(4f),
-                            new Expanded(new SizedBox(height: 24f, child: tf)),
+                            new Expanded(tf),
                             new SizedBox(4f),
                             pickBtn,
                         },
@@ -339,12 +327,7 @@ public sealed partial class InspectorPanel
         public static PropRow DropdownRow(string label, string[] items, int selectedIndex,
             Action<int> onChange, ThemeData theme)
         {
-            var dd = new StringDropdown(
-                items,
-                selectedIndex,
-                s => s,
-                (i, _) => onChange(i)
-            );
+            var dd = new AdwDropDown(items, selectedIndex, onChange) { Compact = true };
             return new PropRow(
                 new Padding(
                     new EdgeInsets(
@@ -362,7 +345,7 @@ public sealed partial class InspectorPanel
                                 child: new Label(label, theme.FontSizeCaption, theme.Hint)
                             ),
                             new SizedBox(4f),
-                            new SizedBox(height: 24f, width: 130f, child: dd),
+                            new SizedBox(width: 150f, child: dd),
                         },
                     }
                 )
@@ -372,7 +355,7 @@ public sealed partial class InspectorPanel
         public static PropRow Toggle(string label, bool value, Action<bool> onChange,
             ThemeData theme)
         {
-            var cb = new Checkbox(value, onChange);
+            var cb = new AdwSwitch(value, onChange);
             return new PropRow(
                 new Padding(
                     new EdgeInsets(
@@ -401,15 +384,20 @@ public sealed partial class InspectorPanel
             ThemeData theme,
             float min = 0f, float max = 1f, float step = 0.05f)
         {
-            var ni = new NumberInput(
+            // Adwaita has no scrub grip, so an edit is a discrete commit: open and close the
+            // history interaction around each one rather than around a drag.
+            var ni = new AdwSpinButton(
                 value,
-                step,
                 min,
-                max
-            ) { Decimals = 2 };
-            ni.OnChanged = onChange;
-            ni.OnScrubStart = () => History?.BeginInteraction();
-            ni.OnScrubEnd = () => History?.EndInteraction();
+                max,
+                step,
+                v =>
+                {
+                    History?.BeginInteraction();
+                    onChange((float)v);
+                    History?.EndInteraction();
+                }
+            ) { Compact = true };
             return new PropRow(
                 new Padding(
                     new EdgeInsets(
@@ -427,7 +415,7 @@ public sealed partial class InspectorPanel
                                 child: new Label(label, theme.FontSizeCaption, theme.Hint)
                             ),
                             new SizedBox(4f),
-                            new SizedBox(height: 26f, width: 110f, child: ni),
+                            new SizedBox(width: 120f, child: ni),
                         },
                     }
                 )
@@ -439,15 +427,18 @@ public sealed partial class InspectorPanel
         public static PropRow Float(string label, NodeBind<float> bind, ThemeData theme,
             float min = 0f, float max = 1f, float step = 0.05f)
         {
-            var ni = new NumberInput(
+            var ni = new AdwSpinButton(
                 bind.Value,
-                step,
                 min,
-                max
-            ) { Decimals = 2 };
-            ni.OnChanged = bind.Set;
-            ni.OnScrubStart = bind.BeginEdit;
-            ni.OnScrubEnd = bind.EndEdit;
+                max,
+                step,
+                v =>
+                {
+                    bind.BeginEdit();
+                    bind.Set((float)v);
+                    bind.EndEdit();
+                }
+            ) { Compact = true };
             return new PropRow(
                 new Padding(
                     new EdgeInsets(
@@ -465,7 +456,7 @@ public sealed partial class InspectorPanel
                                 child: new Label(label, theme.FontSizeCaption, theme.Hint)
                             ),
                             new SizedBox(4f),
-                            new SizedBox(height: 26f, width: 110f, child: ni),
+                            new SizedBox(width: 120f, child: ni),
                         },
                     }
                 )
@@ -474,7 +465,7 @@ public sealed partial class InspectorPanel
 
         public static PropRow Toggle(string label, NodeBind<bool> bind, ThemeData theme)
         {
-            var cb = new Checkbox(bind.Value, bind.Set);
+            var cb = new AdwSwitch(bind.Value, bind.Set);
             return new PropRow(
                 new Padding(
                     new EdgeInsets(
@@ -503,7 +494,7 @@ public sealed partial class InspectorPanel
             App app)
         {
             var v = bind.Value;
-            var sw = new ColorSwatchField(new Color(v.X, v.Y, v.Z), app) {
+            var sw = new AdwColorButton(new Color(v.X, v.Y, v.Z), app) {
                 OnChanged = c => bind.Set(new Vec3(c.R, c.G, c.B)),
             };
             return new PropRow(
@@ -573,15 +564,15 @@ public sealed partial class InspectorPanel
                                 Children = {
                                     new Label("X", theme.FontSizeCaption, theme.Accent),
                                     new SizedBox(2f),
-                                    new SizedBox(height: 22f, width: 64f, child: tfX),
+                                    new SizedBox(width: 64f, child: tfX),
                                     new SizedBox(8f),
                                     new Label("Y", theme.FontSizeCaption, theme.Success),
                                     new SizedBox(2f),
-                                    new SizedBox(height: 22f, width: 64f, child: tfY),
+                                    new SizedBox(width: 64f, child: tfY),
                                     new SizedBox(8f),
                                     new Label("Z", theme.FontSizeCaption, theme.Primary),
                                     new SizedBox(2f),
-                                    new SizedBox(height: 22f, width: 64f, child: tfZ),
+                                    new SizedBox(width: 64f, child: tfZ),
                                 },
                             },
                         },
@@ -776,15 +767,15 @@ public sealed partial class InspectorPanel
                                 Children = {
                                     new Label("X", theme.FontSizeCaption, theme.Accent),
                                     new SizedBox(2f),
-                                    new SizedBox(height: 22f, width: 64f, child: tfX),
+                                    new SizedBox(width: 64f, child: tfX),
                                     new SizedBox(8f),
                                     new Label("Y", theme.FontSizeCaption, theme.Success),
                                     new SizedBox(2f),
-                                    new SizedBox(height: 22f, width: 64f, child: tfY),
+                                    new SizedBox(width: 64f, child: tfY),
                                     new SizedBox(8f),
                                     new Label("Z", theme.FontSizeCaption, theme.Primary),
                                     new SizedBox(2f),
-                                    new SizedBox(height: 22f, width: 64f, child: tfZ),
+                                    new SizedBox(width: 64f, child: tfZ),
                                 },
                             },
                         },
@@ -793,13 +784,9 @@ public sealed partial class InspectorPanel
             );
         }
 
-        private static TextField MiniFloat(string val, ThemeData theme)
+        private static AdwEntry MiniFloat(string val, ThemeData theme)
         {
-            return new TextField {
-                Text = val,
-                MinWidth = 64f,
-                Height = 22f,
-            };
+            return new AdwEntry { Text = val, Width = 64f, Compact = true };
         }
 
         public override Size Measure(Constraints c)

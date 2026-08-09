@@ -35,15 +35,14 @@ public static class ProjectDialogs
     }
 
     /// <summary>Prompt for a target folder, scaffold a new project there, and open it.</summary>
-    public static void ShowNew(App app, ThemeData theme, Action<string> onOpen)
+    public static void ShowNew(App app, Action<string> onOpen)
     {
         var defaultDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             "ZigoteProjects",
             "MyProject"
         );
-        var pathField =
-            new TextField(decoration: new InputDecoration("Project folder")) { Text = defaultDir };
+        var pathField = new AdwEntry { Placeholder = "Project folder", Text = defaultDir };
 
         // The project folder itself doesn't exist yet, so the native picker chooses the PARENT
         // directory and the field keeps the (editable) new folder name.
@@ -82,75 +81,43 @@ public static class ProjectDialogs
                 Children = {
                     new Expanded(pathField),
                     new SizedBox(8f),
-                    new Button("Browse…", BrowseLocation) { Style = ButtonStyle.Outlined },
+                    new AdwButton("Browse…", BrowseLocation),
                 },
             }
             : pathField;
 
-        Dialog? dialog = null;
-        var body = new SizedBox(
-            460f,
-            child: new Padding(
-                EdgeInsets.All(20f),
-                new Column {
-                    CrossAxisAlignment = CrossAxisAlignment.Stretch,
-                    Children = {
-                        new Label("New Project", theme.FontSizeTitle, theme.OnSurface),
-                        new SizedBox(height: 6f),
-                        new Label(
-                            "A .zigoteproj, assets/ folder and starter scene are created here.",
-                            theme.FontSizeCaption,
-                            theme.Hint
-                        ),
-                        new SizedBox(height: 12f),
-                        pathRow,
-                        new SizedBox(height: 16f),
-                        new Row {
-                            MainAxisAlignment = MainAxisAlignment.End,
-                            Children = {
-                                new Button("Cancel", () => dialog?.Dismiss()) {
-                                    Style = ButtonStyle.Outlined,
-                                },
-                                new SizedBox(10f),
-                                new Button(
-                                    "Create",
-                                    () =>
-                                    {
-                                        var dirPath = pathField.Text.Trim();
-                                        if (string.IsNullOrWhiteSpace(dirPath)) return;
-                                        try
-                                        {
-                                            var name = Path.GetFileName(dirPath.TrimEnd('/', '\\'));
-                                            if (string.IsNullOrWhiteSpace(name)) name = "MyProject";
-                                            var projPath = ZigoteProject.Scaffold(dirPath, name);
-                                            dialog?.Dismiss();
-                                            onOpen(projPath);
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            Console.Error.WriteLine(
-                                                $"[Zigote] New project failed: {ex.Message}"
-                                            );
-                                            app.ShowSnackbar(
-                                                $"Could not create project: {ex.Message}"
-                                            );
-                                        }
-                                    }
-                                ) { BackgroundColor = theme.Primary },
-                            },
-                        },
-                    },
-                }
-            )
-        );
-
-        dialog = new Dialog(body, app) { Dismissible = true };
+        var dialog = new AdwAlertDialog(
+            "New Project",
+            "A .zigoteproj, assets/ folder and starter scene are created here."
+        ) {
+            ExtraChild = pathRow,
+            DefaultResponse = "create",
+            CloseResponse = "cancel",
+        };
+        dialog.AddResponse("cancel", "Cancel");
+        dialog.AddResponse("create", "Create", AdwResponseAppearance.Suggested);
+        dialog.OnResponse = id =>
+        {
+            if (id != "create") return;
+            var dirPath = pathField.Text.Trim();
+            if (string.IsNullOrWhiteSpace(dirPath)) return;
+            try
+            {
+                var name = Path.GetFileName(dirPath.TrimEnd('/', '\\'));
+                if (string.IsNullOrWhiteSpace(name)) name = "MyProject";
+                onOpen(ZigoteProject.Scaffold(dirPath, name));
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[Zigote] New project failed: {ex.Message}");
+                app.ShowSnackbar($"Could not create project: {ex.Message}");
+            }
+        };
         dialog.Show();
     }
 
     /// <summary>Pick a path and save the current scene there (Save As).</summary>
-    public static void ShowSaveSceneAs(App app, ThemeData theme, string currentPath,
-        Action<string> onSave)
+    public static void ShowSaveSceneAs(App app, string currentPath, Action<string> onSave)
     {
         Run(
             app,

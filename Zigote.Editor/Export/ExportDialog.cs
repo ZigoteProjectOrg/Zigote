@@ -59,7 +59,8 @@ public static class ExportDialog
         var jitSelected = true;
         var aotSelected = false;
 
-        var outField = new TextField(decoration: new InputDecoration("Output folder")) {
+        var outField = new AdwEntry {
+            Placeholder = "Output folder",
             Text = Path.Combine(Path.GetDirectoryName(state.ProjectPath)!, "export"),
         };
         var validation = new Label("", theme.FontSizeCaption, theme.Error);
@@ -90,7 +91,8 @@ public static class ExportDialog
                         (Platforms[idx].Rid == hostRid ? "  — this machine" : "");
             rows.Children.Add(
                 CheckRow(
-                    new Checkbox(platformSelected[idx], v => platformSelected[idx] = v),
+                    new AdwCheckButton(value: platformSelected[idx],
+                        onChanged: v => platformSelected[idx] = v),
                     label,
                     null,
                     theme
@@ -102,7 +104,7 @@ public static class ExportDialog
         rows.Children.Add(SectionHeader("Build flavors", theme));
         rows.Children.Add(
             CheckRow(
-                new Checkbox(jitSelected, v => jitSelected = v),
+                new AdwCheckButton(value: jitSelected, onChanged: v => jitSelected = v),
                 "Self-contained (JIT)",
                 "single-file on Windows/Linux; every platform buildable from here",
                 theme
@@ -110,7 +112,7 @@ public static class ExportDialog
         );
         rows.Children.Add(
             CheckRow(
-                new Checkbox(aotSelected, v => aotSelected = v),
+                new AdwCheckButton(value: aotSelected, onChanged: v => aotSelected = v),
                 "Native AOT",
                 $"fastest startup, smallest runtime; only for this machine's OS ({RidOsLabel(hostRid)})",
                 theme
@@ -148,7 +150,7 @@ public static class ExportDialog
                     Children = {
                         new Expanded(outField),
                         new SizedBox(8f),
-                        new Button("Browse…", BrowseOutput) { Style = ButtonStyle.Outlined },
+                        new AdwButton("Browse…", BrowseOutput),
                     },
                 }
                 : outField
@@ -161,9 +163,9 @@ public static class ExportDialog
             new Row {
                 MainAxisAlignment = MainAxisAlignment.End,
                 Children = {
-                    new Button("Cancel", () => dialog?.Dismiss()) { Style = ButtonStyle.Outlined },
+                    new AdwButton("Cancel", () => dialog?.Dismiss()),
                     new SizedBox(10f),
-                    new Button(
+                    new AdwButton(
                         "Export",
                         () =>
                         {
@@ -203,7 +205,7 @@ public static class ExportDialog
                                 options
                             );
                         }
-                    ) { BackgroundColor = theme.Primary },
+                    ) { Style = AdwButtonStyle.Suggested },
                 },
             }
         );
@@ -255,11 +257,11 @@ public static class ExportDialog
         rows.Children.Add(logLine);
         rows.Children.Add(new SizedBox(height: 12f));
 
-        var closeButton = new Button("Close", null) {
-            Style = ButtonStyle.Outlined,
+        var closeButton = new AdwButton("Close") { Enabled = false };
+        var revealButton = new AdwButton("Show in file manager") {
+            Style = AdwButtonStyle.Suggested,
             Enabled = false,
         };
-        var revealButton = new Button("Show in file manager", null) { Enabled = false };
         rows.Children.Add(
             new Row {
                 MainAxisAlignment = MainAxisAlignment.End,
@@ -339,7 +341,8 @@ public static class ExportDialog
         );
     }
 
-    private static Widget CheckRow(Checkbox box, string label, string? caption, ThemeData theme)
+    private static Widget CheckRow(AdwCheckButton box, string label, string? caption,
+        ThemeData theme)
     {
         // Min, or this column absorbs the Row's bounded height (the dialog's full remaining space).
         var text = new Column {

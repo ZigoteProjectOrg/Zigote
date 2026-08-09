@@ -30,7 +30,7 @@ public sealed class MaterialPreviewWidget : Widget
         _surface = new PreviewSurface(theme);
         _caption = new Label("—", theme.FontSizeCaption, theme.Hint);
 
-        var toggle = new SegmentedControl(
+        var toggle = new AdwToggleGroup(
             ["Sphere", "Cube"],
             0,
             i => _surface.Shape = (PreviewShape)i
@@ -46,7 +46,7 @@ public sealed class MaterialPreviewWidget : Widget
                 new Padding(EdgeInsets.Symmetric(8f, 6f), toggle),
                 new SizedBox(height: 168f, child: _surface),
                 new Padding(EdgeInsets.Symmetric(8f, 4f), _caption),
-                new Divider(),
+                new AdwSeparator(),
             },
         };
     }

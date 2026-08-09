@@ -47,9 +47,8 @@ public sealed partial class InspectorPanel
                 row.Children.Add(
                     new SizedBox(
                         74f,
-                        22f,
-                        new Button(p.Name, () => ApplyMaterialPreset(p)) {
-                            FontSize = _theme.FontSizeCaption - 1f,
+                        child: new AdwButton(p.Name, () => ApplyMaterialPreset(p)) {
+                            Compact = true,
                         }
                     )
                 );

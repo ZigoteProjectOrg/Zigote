@@ -15,10 +15,10 @@ namespace Zigote.Editor.Panels;
 /// </summary>
 public sealed class TimelinePanel : Widget
 {
-    private readonly Checkbox _loop;
+    private readonly AdwCheckButton _loop;
 
-    private readonly Button _playBtn;
-    private readonly Slider _scrub;
+    private readonly AdwButton _playBtn;
+    private readonly AdwSlider _scrub;
     private readonly EditorState _state;
     private readonly ThemeData _theme;
     private readonly Label _timeLabel;
@@ -32,14 +32,18 @@ public sealed class TimelinePanel : Widget
         _state = state;
         _theme = theme;
 
-        _playBtn = new Button("Play", _state.ToggleAnimationPlay);
+        _playBtn = new AdwButton("Play", _state.ToggleAnimationPlay) { Compact = true };
         _timeLabel = new Label("0.00 / 0.00", theme.FontSizeCaption, theme.Hint);
-        _scrub = new Slider(0f) {
+        _scrub = new AdwSlider(0f) {
             Min = 0f,
             Max = 1f,
             OnChanged = _state.SeekAnimation,
         };
-        _loop = new Checkbox(_state.AnimationPlayer.Loop, v => _state.AnimationPlayer.Loop = v);
+        _loop = new AdwCheckButton(
+            "Loop",
+            _state.AnimationPlayer.Loop,
+            v => _state.AnimationPlayer.Loop = v
+        );
 
         _content = Build();
     }
@@ -60,26 +64,21 @@ public sealed class TimelinePanel : Widget
 
         var row = new Row {
             Children = {
-                new SizedBox(64f, 28f, _playBtn),
+                _playBtn,
                 new SizedBox(6f),
-                new SizedBox(
-                    56f,
-                    28f,
-                    new Button(
-                        "Stop",
-                        () =>
-                        {
-                            _state.AnimationPlayer.Stop();
-                            _state.SeekAnimation(0f);
-                        }
-                    )
-                ),
+                new AdwButton(
+                    "Stop",
+                    () =>
+                    {
+                        _state.AnimationPlayer.Stop();
+                        _state.SeekAnimation(0f);
+                    }
+                ) { Compact = true },
                 new SizedBox(10f),
                 new Expanded(_scrub),
                 new SizedBox(10f),
                 new SizedBox(96f, child: _timeLabel),
                 new SizedBox(8f),
-                new Label("Loop", _theme.FontSizeCaption, _theme.OnSurface),
                 _loop,
             },
         };
@@ -92,12 +91,11 @@ public sealed class TimelinePanel : Widget
             row.Children.Add(new SizedBox(8f));
             row.Children.Add(
                 new Expanded(
-                    new Dropdown<int>(
-                        indices,
+                    new AdwDropDown(
+                        [.. indices.Select(i => _state.AnimationClips[i].Name)],
                         selected,
-                        i => _state.AnimationClips[i].Name,
-                        (i, _) => _state.SetActiveClip(i)
-                    )
+                        _state.SetActiveClip
+                    ) { Compact = true }
                 )
             );
         }

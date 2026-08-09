@@ -9,11 +9,13 @@ using Zigote.UI.Widgets.Layout;
 namespace Zigote.Editor.Widgets;
 
 /// <summary>
-///     First screen shown when the editor launches without a project to reopen.
-///     Lists recent projects and offers New / Open actions. Selecting a project
-///     invokes <c>onOpen</c>, which swaps the app root to the editor shell.
+///     First screen shown when the editor launches without a project to reopen: an Adwaita status
+///     page offering New / Open, with the recent projects as a boxed list under it. Selecting a
+///     project invokes <c>onOpen</c>, which swaps the app root to the editor shell. It carries its
+///     own header bar because it IS the window root — under GNOME CSD nothing else would host the
+///     window buttons.
 /// </summary>
-public sealed class WelcomeScreen : StatelessWidget
+public sealed class WelcomeScreen : ComposedWidget
 {
     private readonly App _app;
     private readonly ProjectHistory _history;
@@ -30,86 +32,71 @@ public sealed class WelcomeScreen : StatelessWidget
 
     protected override Widget Build(BuildContext context)
     {
-        var recents = new Column { CrossAxisAlignment = CrossAxisAlignment.Stretch };
-        var recentProjects = _history.Recent.Value;
-        if (recentProjects.Length == 0)
-            recents.Children.Add(
-                new Padding(
-                    EdgeInsets.All(10f),
-                    new Label("No recent projects yet.", _theme.FontSizeBody, _theme.Hint)
-                )
-            );
-        else
-            foreach (var path in recentProjects)
-                recents.Children.Add(RecentRow(path));
-
-        var content = new Column {
-            CrossAxisAlignment = CrossAxisAlignment.Stretch,
+        var actions = new Row(spacing: 12f, mainAxisSize: MainAxisSize.Min) {
             Children = {
-                new Label("Zigote Editor", 28f, _theme.OnBackground),
-                new SizedBox(height: 4f),
-                new Label("Open a project to begin.", _theme.FontSizeBody, _theme.Hint),
-                new SizedBox(height: 18f),
-                new Row {
-                    Children = {
-                        new Button(
-                            "New Project",
-                            () => ProjectDialogs.ShowNew(_app, _theme, _onOpen)
-                        ) { BackgroundColor = _theme.Primary },
-                        new SizedBox(10f),
-                        new Button("Open Project…", () => ProjectDialogs.ShowOpen(_app, _onOpen)) {
-                            Style = ButtonStyle.Outlined,
-                        },
-                    },
+                new AdwButton("New Project", () => ProjectDialogs.ShowNew(_app, _onOpen)) {
+                    Style = AdwButtonStyle.Suggested,
+                    Pill = true,
                 },
-                new SizedBox(height: 18f),
-                new Label("Recent", _theme.FontSizeCaption, _theme.Hint),
-                new SizedBox(height: 4f),
-                new Expanded(new ScrollView(recents)),
+                new AdwButton("Open Project…", () => ProjectDialogs.ShowOpen(_app, _onOpen)) {
+                    Pill = true,
+                },
             },
         };
 
-        return new ColoredBox(
-            _theme.Background,
-            new Center(
-                new SizedBox(
-                    560f,
-                    520f,
-                    new Card(new Padding(EdgeInsets.All(24f), content)) { Color = _theme.Surface }
-                )
-            )
-        );
+        var recent = new AdwPreferencesGroup("Recent");
+        var recentProjects = _history.Recent.Value;
+        if (recentProjects.Length == 0)
+            recent.Rows.Add(
+                new AdwActionRow("No recent projects yet", "Create or open one to begin") {
+                    Enabled = false,
+                }
+            );
+        else
+            foreach (var path in recentProjects)
+                recent.Rows.Add(RecentRow(path));
+
+        var page = new AdwStatusPage {
+            IconName = Icons.Cube,
+            Title = "Zigote Editor",
+            Description = "Open a project to begin.",
+            Child = new Column(spacing: 24f, crossAxisAlignment: CrossAxisAlignment.Stretch) {
+                Children = {
+                    new Center(actions),
+                    recent,
+                },
+            },
+        };
+
+        return new AdwToolbarView(
+            new ScrollView(new AdwClamp(page))
+        ) {
+            TopBars = { new AdwHeaderBar { Flat = true } },
+        };
     }
 
     private Widget RecentRow(string path)
     {
         var name = Path.GetFileNameWithoutExtension(path);
-        var dir = Path.GetFileName(Path.GetDirectoryName(path)) ?? "";
+        var dir = Path.GetDirectoryName(path) ?? "";
         var exists = File.Exists(path);
-        var label = exists ? $"{name}   ·   {dir}" : $"{name}   ·   {dir}   (missing)";
-
-        return new Padding(
-            EdgeInsets.Only(bottom: 4f),
-            new Button(
-                label,
-                () =>
+        return new AdwActionRow(name, exists ? dir : $"{dir}   (missing)") {
+            IconName = exists ? Icons.Folder : Icons.Warning,
+            ShowChevron = true,
+            OnActivated = () =>
+            {
+                if (exists)
                 {
-                    if (exists)
-                    {
-                        _onOpen(path);
-                    }
-                    else
-                    {
-                        _history.Forget(path);
-                        Invalidate();
-                        _app.RequestLayout();
-                    }
+                    _onOpen(path);
+                    return;
                 }
-            ) {
-                Style = ButtonStyle.Flat,
-                FontSize = _theme.FontSizeBody,
-                TextColor = exists ? _theme.OnSurface : _theme.Hint,
-            }
-        );
+
+                // A project that moved or was deleted drops off the list on the click that
+                // discovers it, rather than sitting there un-openable.
+                _history.Forget(path);
+                Invalidate();
+                _app.RequestLayout();
+            },
+        };
     }
 }

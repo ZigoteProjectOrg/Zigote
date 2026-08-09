@@ -11,6 +11,7 @@
     <ItemGroup>
         <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
         <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Adwaita\Zigote.UI.Adwaita.csproj"/>
         <ProjectReference Include="..\Zigote.UI.Charts\Zigote.UI.Charts.csproj"/>
         <ProjectReference Include="..\Zigote.UI.DevTools\Zigote.UI.DevTools.csproj"/>
         <ProjectReference Include="..\Zigote.Game\Zigote.Game.csproj"/>
@@ -31,7 +32,12 @@
          transitively via the Zigote.UI project reference — no per-app font list. Publish-time font
          subsetting is applied repo-wide by Directory.Build.targets, not imported per app. The native
          libzigote is copied transitively from Zigote.Core's RID-aware Content. -->
+    <!-- Adwaita is the editor's design system, and the only widget namespace imported globally.
+         Material is still referenced (transitively it must be — Adwaita builds on it) but is NOT
+         a global using, so every remaining dependency on it is a visible `using Zigote.UI.Material`
+         at the top of one file: today that is CodeEditor and FilePickerDialog, which have no
+         libadwaita counterpart. Retiring the package means emptying that list, not a sweep. -->
     <ItemGroup>
-        <Using Include="Zigote.UI.Material"/>
+        <Using Include="Zigote.UI.Adwaita"/>
     </ItemGroup>
 </Project>

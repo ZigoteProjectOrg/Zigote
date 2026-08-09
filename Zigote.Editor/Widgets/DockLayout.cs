@@ -35,7 +35,12 @@ public sealed class DockPanel
 public sealed class DockLayout : Widget
 {
     // ── Constants ─────────────────────────────────────────────────────────────
-    private const float HeaderH = 26f;
+    // The tab strip. Adwaita's tab bar is a band of rounded tab cards with a hairline under it,
+    // so the strip needs room for the card plus its inset — 30/3 is the dense-IDE reading of the
+    // 38px libadwaita bar.
+    private const float HeaderH = 30f;
+    private const float TabInset = 3f; // vertical gap between the tab card and the strip edges
+    private const float TabRadius = 6f;
     private const float DivW = 4f;
     private const float DragStart = 6f;
     private const float ArrowSz = 26f;
@@ -582,8 +587,19 @@ public sealed class DockLayout : Widget
             HeaderH
         );
 
-        // Tab bar background — recedes below the panel body so the active tab reads as raised.
-        paint.AddRect(hdr, _theme.PanelSunken);
+        // Adwaita tab bar: a headerbar-toned band closed by a hairline, with the selected tab
+        // riding on it as a rounded card in the content colour — the card merges into the panel
+        // body below, which is what marks it selected. No accent underline; Adwaita has none.
+        paint.AddRect(hdr, _theme.Toolbar);
+        paint.AddRect(
+            new Rect(
+                hdr.X,
+                hdr.Bottom - 1f,
+                hdr.Width,
+                1f
+            ),
+            _theme.Separator
+        );
 
         var fs = _theme.FontSizeCaption;
         var multi = leaf.PanelIds.Count > 1;
@@ -593,27 +609,19 @@ public sealed class DockLayout : Widget
             var isHover = _hoverTabPanelId == panelId;
             var showClose = isActive || isHover;
 
-            // Active tab reads as part of the content below (surface fill + accent bar on top);
-            // hovered inactive tabs get a subtle highlight.
-            if (isActive)
-            {
-                paint.AddRect(tab, _theme.Surface);
-                paint.AddRect(
-                    new Rect(
-                        tab.X,
-                        tab.Y,
-                        tab.Width,
-                        2f
-                    ),
-                    _theme.Primary
-                );
-            }
-            else if (isHover)
-            {
-                paint.AddRect(tab, _theme.OnSurface.WithAlpha(0.06f));
-            }
+            // The card: inset from the strip edges, square along the bottom so it runs into the
+            // panel body. Unselected tabs are bare until hovered, then take the shared row wash.
+            var card = new Rect(
+                tab.X + 1f,
+                tab.Y + TabInset,
+                MathF.Max(0f, tab.Width - 2f),
+                MathF.Max(0f, tab.Height - TabInset)
+            );
+            if (isActive) paint.AddRect(card, _theme.Panel, TabRadius);
+            else if (AdwStyle.RowFill(_theme, isHover, false) is { A: > 0f } wash)
+                paint.AddRect(card, wash, TabRadius);
 
-            if (panelId == _draggingId) paint.AddRect(tab, _theme.Primary.WithAlpha(0.15f));
+            if (panelId == _draggingId) paint.AddRect(card, _theme.Primary.WithAlpha(0.15f), TabRadius);
 
             _panels.TryGetValue(panelId, out var dp);
             var title = dp?.Title ?? panelId;
@@ -622,8 +630,8 @@ public sealed class DockLayout : Widget
             var reserveRight = showClose || dirty;
             var maxChars = (int)((tab.Width - 16f - (reserveRight ? CloseSz : 0f)) / (fs * 0.52f));
             if (title.Length > maxChars && maxChars > 1) title = title[..(maxChars - 1)] + "…";
-            var titleColor = isActive ? _theme.OnSurface :
-                isHover ? _theme.OnSurface.WithAlpha(0.85f) : _theme.Hint;
+            // Adwaita dims unselected tab labels rather than recolouring them per hover state.
+            var titleColor = isActive ? _theme.OnSurface : AdwPalette.For(_theme).DimLabel;
             paint.AddText(
                 title,
                 tab.X + 8f,
@@ -651,25 +659,29 @@ public sealed class DockLayout : Widget
             }
             else if (showClose)
             {
-                paint.AddText(
-                    "×",
-                    cr.X + 2f,
-                    cr.Y + cr.Height * 0.82f,
-                    isHover ? _theme.OnSurface : _theme.Hint.WithAlpha(0.6f),
-                    fs
+                // The real close glyph, not a "×" character — the multiplication sign renders at
+                // whatever weight the UI face happens to give it and never matched the icon set.
+                Icons.Draw(
+                    paint,
+                    Icons.Close,
+                    cr,
+                    isHover ? _theme.OnBackground : AdwPalette.For(_theme).DimLabel,
+                    12f
                 );
             }
 
-            // Divider between tabs (only when there are several).
-            if (multi && index < leaf.PanelIds.Count - 1)
+            // Hairline between two unselected tabs, as AdwTabBar draws it — never beside the
+            // selected card, whose rounded edge is its own separation.
+            var nextActive = index + 1 == leaf.ActiveIndex;
+            if (multi && index < leaf.PanelIds.Count - 1 && !isActive && !nextActive)
                 paint.AddRect(
                     new Rect(
                         tab.Right - 1f,
-                        tab.Y + 5f,
+                        tab.Y + TabInset + 4f,
                         1f,
-                        HeaderH - 10f
+                        MathF.Max(0f, HeaderH - TabInset * 2f - 8f)
                     ),
-                    _theme.Background.WithAlpha(0.4f)
+                    _theme.Separator
                 );
         }
 
@@ -712,14 +724,16 @@ public sealed class DockLayout : Widget
         paint.AddBorder(bounds, _theme.Border);
     }
 
+    /// <summary>A flat circular header action, the shape AdwButton gives a header-bar icon.</summary>
     private void PaintHdrBtn(PaintList paint, Rect r, string icon, bool headerHover)
     {
-        if (headerHover) paint.AddRect(r, _theme.OnSurface.WithAlpha(0.08f), 3f);
+        if (AdwStyle.RowFill(_theme, headerHover, false) is { A: > 0f } wash)
+            paint.AddRect(r, wash, r.Height * 0.5f);
         Icons.Draw(
             paint,
             icon,
             r,
-            headerHover ? _theme.OnSurface : _theme.Hint.WithAlpha(0.7f),
+            headerHover ? _theme.OnBackground : AdwPalette.For(_theme).DimLabel,
             14f
         );
     }
@@ -731,11 +745,11 @@ public sealed class DockLayout : Widget
     /// </summary>
     private void PaintCollapsedLeaf(DockLeaf leaf, Rect bounds, PaintList paint)
     {
-        paint.AddRect(bounds, _theme.PanelSunken);
+        paint.AddRect(bounds, _theme.Toolbar);
 
         var fs = _theme.FontSizeCaption;
         var hovered = _hoverHeaderLeafId == leaf.LeafId;
-        var col = hovered ? _theme.OnSurface : _theme.Hint;
+        var col = hovered ? _theme.OnBackground : AdwPalette.For(_theme).DimLabel;
         var title = _panels.TryGetValue(leaf.ActivePanelId, out var dp)
             ? dp.Title
             : leaf.ActivePanelId;

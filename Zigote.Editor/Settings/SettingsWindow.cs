@@ -11,25 +11,29 @@ namespace Zigote.Editor.Settings;
 
 /// <summary>
 ///     The editor Settings window content (hosted in its own OS window — see
-///     <see cref="SettingsWindowHost" />): a Zed-style two-pane layout with a searchable section
-///     sidebar (General / Appearance / UI Font / Editor Font / Panels / Terminal / Developer) and a
-///     scrollable content pane of setting rows. Every control writes an
-///     <see cref="EditorSettings" /> preference — persistence (SQLite) happens inside the
-///     preference and the reactive appliers in <see cref="EditorPreferences" /> push the change
-///     into the running editor, so a row never applies anything by hand. "Reset All" is the
+///     <see cref="SettingsWindowHost" />): GNOME's preferences shape — a header bar carrying the
+///     search entry, a navigation sidebar of sections (General / Appearance / UI Font / Editor Font
+///     / Panels / Terminal / Developer), and a preferences page of boxed-list rows beside it. Every
+///     control writes an <see cref="EditorSettings" /> preference — persistence (SQLite) happens
+///     inside the preference and the reactive appliers in <see cref="EditorPreferences" /> push the
+///     change into the running editor, so a row never applies anything by hand. "Reset All" is the
 ///     group's batched <c>Reset()</c>.
 /// </summary>
 public sealed class SettingsWindow : Widget
 {
-    private const float SidebarW = 220f;
-    private const float RowVPad = 10f;
-
     private readonly Func<EditorLayout?> _layout;
     private readonly EditorPreferences _prefs;
-    private readonly SearchField _searchField;
+    private readonly AdwSearchEntry _searchField;
+    private readonly AdwSidebar _sidebar;
 
     private readonly string[] _sections =
         ["General", "Appearance", "UI Font", "Editor Font", "Panels", "Terminal", "Developer"];
+
+    /// <summary>Sidebar glyphs, positionally matched to <see cref="_sections" />.</summary>
+    private readonly string[] _sectionIcons = [
+        Icons.Tune, Icons.Palette, Icons.Description, Icons.Code, Icons.Dashboard,
+        Icons.Terminal, Icons.Bolt,
+    ];
 
     private Widget _content;
     private string _search = string.Empty;
@@ -42,15 +46,30 @@ public sealed class SettingsWindow : Widget
         _prefs = prefs;
         _layout = layout;
         _theme = theme;
-        // Retained across rebuilds so typing in it never loses focus/caret state.
-        _searchField = new SearchField(
-            "Search settings",
-            s =>
+        // Both are retained across rebuilds: typing must never lose focus/caret state, and the
+        // sidebar owns the selected index it would otherwise be handed back every rebuild.
+        _searchField = new AdwSearchEntry { Placeholder = "Search settings" };
+        _searchField.OnChanged = s =>
+        {
+            _search = s;
+            Rebuild();
+        };
+        _sidebar = new AdwSidebar(
+            new AdwSidebarSection(
+                null,
+                [
+                    .. _sections.Select((s, i) => new AdwSidebarItem(s, _sectionIcons[i])),
+                ]
+            )
+        ) {
+            OnSelected = i =>
             {
-                _search = s;
+                _selected = i;
+                _searchField.Text = string.Empty;
+                _search = string.Empty;
                 Rebuild();
-            }
-        );
+            },
+        };
         _content = Build();
     }
 
@@ -63,8 +82,11 @@ public sealed class SettingsWindow : Widget
 
     private void Rebuild()
     {
+        // SwapChild, not a bare attach: the outgoing content used to be left mounted forever — still
+        // owning its effects and tickers — because nothing ever detached it.
+        var previous = _content;
         _content = Build();
-        if (Owner is not null) _content.Attach(Owner, this);
+        SwapChild(previous, _content);
         RequestLayout();
     }
 
@@ -73,51 +95,16 @@ public sealed class SettingsWindow : Widget
     private Widget Build()
     {
         var searching = !string.IsNullOrWhiteSpace(_search);
-
-        var sidebar = new Column {
-            CrossAxisAlignment = CrossAxisAlignment.Stretch,
-            MainAxisAlignment = MainAxisAlignment.Start,
-        };
-        sidebar.Children.Add(
-            new Padding(
-                new EdgeInsets(
-                    Spacing.Md,
-                    Spacing.Md,
-                    Spacing.Md,
-                    Spacing.Sm
-                ),
-                new SizedBox(height: 26f, child: _searchField)
-            )
-        );
-        for (var i = 0; i < _sections.Length; i++)
-        {
-            var idx = i;
-            sidebar.Children.Add(
-                new SectionRow(
-                    _sections[i],
-                    _theme,
-                    !searching && _selected == i,
-                    () =>
-                    {
-                        _selected = idx;
-                        _searchField.Text = string.Empty;
-                        _search = string.Empty;
-                        Rebuild();
-                    }
-                )
-            );
-        }
+        _sidebar.Selected = _selected;
 
         var rows = BuildRows();
-        var content = new Column {
-            CrossAxisAlignment = CrossAxisAlignment.Stretch,
-            MainAxisSize = MainAxisSize.Min,
-        };
+        var page = new AdwPreferencesPage();
 
         if (searching)
         {
+            // Search spans every section, so each one that still has a match becomes its own group
+            // — the same page shape, filtered, rather than a separate results list.
             var q = _search.Trim();
-            var any = false;
             foreach (var section in _sections)
             {
                 var matches = rows.Where(r =>
@@ -126,93 +113,50 @@ public sealed class SettingsWindow : Widget
                      (r.Desc?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false) ||
                      r.Section.Contains(q, StringComparison.OrdinalIgnoreCase))
                 ).ToList();
-                if (matches.Count == 0) continue;
-                any = true;
-                AddSectionHeader(content, section);
-                foreach (var r in matches) AddRow(content, r);
+                if (matches.Count > 0) page.Groups.Add(Group(section, matches));
             }
 
-            if (!any)
-                content.Children.Add(
-                    new Padding(
-                        EdgeInsets.All(Spacing.Lg),
-                        new Label($"No settings match \"{q}\"", _theme.FontSizeBody, _theme.Hint)
-                    )
+            if (page.Groups.Count == 0)
+                page.Groups.Add(
+                    new AdwStatusPage {
+                        IconName = Icons.Search,
+                        Title = "No Results Found",
+                        Description = $"No settings match “{q}”.",
+                        Compact = true,
+                    }
                 );
         }
         else
         {
             var section = _sections[_selected];
-            AddSectionHeader(content, section);
-            foreach (var r in rows.Where(r => r.Section == section)) AddRow(content, r);
+            page.Groups.Add(Group(section, rows.Where(r => r.Section == section).ToList()));
         }
 
-        return new ColoredBox(
-            _theme.Window,
-            new Row {
-                CrossAxisAlignment = CrossAxisAlignment.Stretch,
-                Children = {
-                    new SizedBox(SidebarW, child: new ColoredBox(_theme.Sidebar, sidebar)),
-                    new SizedBox(1f, child: new ColoredBox(_theme.Separator)),
-                    new Expanded(
-                        new ScrollView(
-                            new Padding(
-                                new EdgeInsets(
-                                    Spacing.Xl,
-                                    Spacing.Lg,
-                                    Spacing.Xl,
-                                    Spacing.Xl
-                                ),
-                                content
-                            )
-                        )
-                    ),
-                },
-            }
-        );
-    }
-
-    private void AddSectionHeader(Column content, string section)
-    {
-        content.Children.Add(
-            new Padding(
-                EdgeInsets.Only(bottom: Spacing.Sm),
-                new Label(section, _theme.FontSizeTitle, _theme.OnSurface) {
-                    FontWeight = FontWeight.SemiBold,
-                }
-            )
-        );
-    }
-
-    private void AddRow(Column content, RowDef row)
-    {
-        var text = new Column {
-            CrossAxisAlignment = CrossAxisAlignment.Start,
-            MainAxisSize = MainAxisSize.Min,
-        };
-        text.Children.Add(new Label(row.Title, _theme.FontSizeBody, _theme.OnSurface));
-        if (row.Desc is not null)
-            text.Children.Add(
-                new Padding(
-                    EdgeInsets.Only(top: 2f),
-                    new Label(row.Desc, _theme.FontSizeCaption, _theme.Hint)
-                )
-            );
-
-        content.Children.Add(
-            new Padding(
-                EdgeInsets.Symmetric(0f, RowVPad),
-                new Row {
-                    CrossAxisAlignment = CrossAxisAlignment.Center,
-                    Children = {
-                        new Expanded(text),
-                        new SizedBox(Spacing.Md),
-                        row.Control(),
+        var split = new AdwNavigationSplitView {
+            Sidebar = new AdwToolbarView(_sidebar) {
+                TopBars = { new AdwHeaderBar { Title = "Settings", ShowEndWindowControls = false } },
+            },
+            Content = new AdwToolbarView(new ScrollView(page)) {
+                TopBars = {
+                    new AdwHeaderBar {
+                        TitleWidget = new AdwClamp(_searchField, 360f),
+                        ShowStartWindowControls = false,
                     },
-                }
-            )
-        );
-        content.Children.Add(new SizedBox(height: 1f, child: new ColoredBox(_theme.Separator)));
+                },
+            },
+        };
+        return new ColoredBox(_theme.Window, split);
+    }
+
+    /// <summary>One boxed list: the section's rows, each control hung off its row's end.</summary>
+    private static AdwPreferencesGroup Group(string title, IReadOnlyList<RowDef> rows)
+    {
+        var group = new AdwPreferencesGroup(title);
+        foreach (var row in rows)
+            group.Rows.Add(
+                new AdwActionRow(row.Title, row.Desc) { Suffixes = { row.Control() } }
+            );
+        return group;
     }
 
     // ── Rows ──────────────────────────────────────────────────────────────────
@@ -230,7 +174,7 @@ public sealed class SettingsWindow : Widget
                 "General",
                 "Reopen last project",
                 "Open the most recent project on launch instead of the welcome screen.",
-                () => new Switch(
+                () => new AdwSwitch(
                     settings.ReopenLastProject.Value,
                     v => settings.ReopenLastProject.Value = v
                 )
@@ -242,7 +186,7 @@ public sealed class SettingsWindow : Widget
                     "General",
                     "Native menu bar",
                     "Use the macOS system menu bar; off shows the in-window menu bar instead.",
-                    () => new Switch(
+                    () => new AdwSwitch(
                         settings.NativeMenuBar.Value,
                         v => settings.NativeMenuBar.Value = v
                     )
@@ -253,16 +197,13 @@ public sealed class SettingsWindow : Widget
                 "General",
                 "Recent projects",
                 $"{history.Recent.Value.Length} entries in the File ▸ Open Recent menu.",
-                () => new SizedBox(
-                    height: 24f,
-                    child: new Button(
-                        "Clear",
-                        () =>
-                        {
-                            history.ClearRecent();
-                            Rebuild();
-                        }
-                    )
+                () => new AdwButton(
+                    "Clear",
+                    () =>
+                    {
+                        history.ClearRecent();
+                        Rebuild();
+                    }
                 )
             )
         );
@@ -271,16 +212,13 @@ public sealed class SettingsWindow : Widget
                 "General",
                 "Settings database",
                 EditorSettings.DbPath,
-                () => new SizedBox(
-                    height: 24f,
-                    child: new Button(
-                        "Copy Path",
-                        () =>
-                        {
-                            _prefs.App.Engine.SetClipboard(EditorSettings.DbPath);
-                            Owner?.ShowSnackbar("Settings path copied");
-                        }
-                    )
+                () => new AdwButton(
+                    "Copy Path",
+                    () =>
+                    {
+                        _prefs.App.Engine.SetClipboard(EditorSettings.DbPath);
+                        Owner?.ShowSnackbar("Settings path copied");
+                    }
                 )
             )
         );
@@ -289,20 +227,17 @@ public sealed class SettingsWindow : Widget
                 "General",
                 "Reset settings",
                 "Restore every editor setting to its default. Recent projects are kept.",
-                () => new SizedBox(
-                    height: 24f,
-                    child: new Button(
-                        "Reset All",
-                        () =>
-                        {
-                            // One batched group reset: the appliers settle once each, then the
-                            // shell (and this window, via ApplyTheme) restyle to the defaults.
-                            settings.Reset();
-                            Rebuild();
-                            Owner?.ShowSnackbar("Settings restored to defaults");
-                        }
-                    )
-                )
+                () => new AdwButton(
+                    "Reset All",
+                    () =>
+                    {
+                        // One batched group reset: the appliers settle once each, then the
+                        // shell (and this window, via ApplyTheme) restyle to the defaults.
+                        settings.Reset();
+                        Rebuild();
+                        Owner?.ShowSnackbar("Settings restored to defaults");
+                    }
+                ) { Style = AdwButtonStyle.Destructive }
             )
         );
 
@@ -315,15 +250,10 @@ public sealed class SettingsWindow : Widget
                 () =>
                 {
                     string[] labels = ["System", "Dark", "Light"];
-                    return new SizedBox(
-                        140f,
-                        26f,
-                        new Dropdown<string>(
-                            labels,
-                            (int)settings.ThemeMode.Value,
-                            s => s,
-                            (i, _) => settings.ThemeMode.Value = (EditorThemeMode)i
-                        )
+                    return new AdwDropDown(
+                        labels,
+                        (int)settings.ThemeMode.Value,
+                        i => settings.ThemeMode.Value = (EditorThemeMode)i
                     );
                 }
             )
@@ -396,7 +326,7 @@ public sealed class SettingsWindow : Widget
                         "Panels",
                         panel.Title,
                         $"Show the {panel.Title} panel in the dock.",
-                        () => new Switch(
+                        () => new AdwSwitch(
                             dock.IsPanelOpen(id),
                             v =>
                             {
@@ -414,16 +344,13 @@ public sealed class SettingsWindow : Widget
                     "Panels",
                     "Reset layout",
                     "Restore the default dock arrangement.",
-                    () => new SizedBox(
-                        height: 24f,
-                        child: new Button(
-                            "Reset",
-                            () =>
-                            {
-                                layout.ResetLayout();
-                                Rebuild();
-                            }
-                        )
+                    () => new AdwButton(
+                        "Reset",
+                        () =>
+                        {
+                            layout.ResetLayout();
+                            Rebuild();
+                        }
                     )
                 )
             );
@@ -462,7 +389,7 @@ public sealed class SettingsWindow : Widget
                 "Terminal",
                 "Clear on play",
                 "Empty the console every time play mode starts.",
-                () => new Switch(
+                () => new AdwSwitch(
                     settings.ConsoleClearOnPlay.Value,
                     v => settings.ConsoleClearOnPlay.Value = v
                 )
@@ -475,7 +402,7 @@ public sealed class SettingsWindow : Widget
                 "Developer",
                 "Reduced editor graphics",
                 "Disable TAA/bloom/SSR/DoF while authoring; play mode always renders full.",
-                () => new Switch(
+                () => new AdwSwitch(
                     settings.ReducedEditorGraphics.Value,
                     v => settings.ReducedEditorGraphics.Value = v
                 )
@@ -486,7 +413,7 @@ public sealed class SettingsWindow : Widget
                 "Developer",
                 "VSync",
                 "Cap presentation to the display refresh rate.",
-                () => new Switch(settings.VSync.Value, v => settings.VSync.Value = v)
+                () => new AdwSwitch(settings.VSync.Value, v => settings.VSync.Value = v)
             )
         );
         rows.Add(
@@ -494,7 +421,7 @@ public sealed class SettingsWindow : Widget
                 "Developer",
                 "Partial repaint",
                 "Redraw only damaged regions on idle frames (GPU-scissor).",
-                () => new Switch(
+                () => new AdwSwitch(
                     _prefs.App.PartialRepaintEnabled,
                     v => _prefs.App.PartialRepaintEnabled = v
                 )
@@ -505,7 +432,7 @@ public sealed class SettingsWindow : Widget
                 "Developer",
                 "Continuous render",
                 "Render every frame even when idle (throughput testing; burns CPU/GPU).",
-                () => new Switch(
+                () => new AdwSwitch(
                     _prefs.App.ForceContinuousRender,
                     v => _prefs.App.ForceContinuousRender = v
                 )
@@ -517,7 +444,7 @@ public sealed class SettingsWindow : Widget
                     "Developer",
                     "Native file dialogs",
                     "Use the OS open/save dialogs; off uses the in-app picker everywhere.",
-                    () => new Switch(
+                    () => new AdwSwitch(
                         settings.NativeFileDialogs.Value,
                         v => settings.NativeFileDialogs.Value = v
                     )
@@ -537,14 +464,10 @@ public sealed class SettingsWindow : Widget
                     string[] labels = ["Auto", "System", "macOS Unified", "GNOME (Adwaita)"];
                     var sel = Array.IndexOf(modes, settings.WindowChromeMode.Value);
                     if (sel < 0) sel = 0;
-                    return new SizedBox(
-                        190f,
-                        26f,
-                        new Dropdown<string>(
-                            labels,
-                            sel,
-                            (i, _) => settings.WindowChromeMode.Value = modes[i]
-                        )
+                    return new AdwDropDown(
+                        labels,
+                        sel,
+                        i => settings.WindowChromeMode.Value = modes[i]
                     );
                 }
             )
@@ -570,15 +493,7 @@ public sealed class SettingsWindow : Widget
                         // Entry 0 is Automatic, so a stored index shifts by one.
                         var stored = settings.GpuIndex.Value;
                         var sel = stored >= 0 && stored < gpus.Count ? stored + 1 : 0;
-                        return new SizedBox(
-                            190f,
-                            26f,
-                            new Dropdown<string>(
-                                labels,
-                                sel,
-                                (i, _) => settings.GpuIndex.Value = i - 1
-                            )
-                        );
+                        return new AdwDropDown(labels, sel, i => settings.GpuIndex.Value = i - 1);
                     }
                 )
             );
@@ -587,10 +502,7 @@ public sealed class SettingsWindow : Widget
                 "Developer",
                 "Debug menu",
                 "The in-engine diagnostics overlay (Shift+D in any window).",
-                () => new SizedBox(
-                    height: 24f,
-                    child: new Button("Open", () => { _prefs.App.ToggleDebugPanel(); })
-                )
+                () => new AdwButton("Open", () => _prefs.App.ToggleDebugPanel())
             )
         );
 
@@ -611,30 +523,19 @@ public sealed class SettingsWindow : Widget
                 sel = i + 1;
         }
 
-        return new SizedBox(
-            190f,
-            26f,
-            new Dropdown<string>(
-                labels,
-                sel,
-                s => s,
-                (i, _) => apply(i == 0 ? null : fonts[i - 1].Path)
-            )
-        );
+        return new AdwDropDown(labels, sel, i => apply(i == 0 ? null : fonts[i - 1].Path));
     }
 
     private static Widget NumberBox(float value, float min, float max, float step,
         Action<float> apply)
     {
-        // Wide enough for NumberInput's fixed chrome (scrub grip + ▲/▼) plus the 60px-min field.
-        var ni = new NumberInput(
+        return new AdwSpinButton(
             value,
-            step,
             min,
-            max
-        ) { Decimals = step < 1f ? 1 : 0 };
-        ni.OnChanged = apply;
-        return new SizedBox(150f, 28f, ni);
+            max,
+            step,
+            v => apply((float)v)
+        );
     }
 
     // ── Widget protocol ───────────────────────────────────────────────────────
@@ -677,89 +578,4 @@ public sealed class SettingsWindow : Widget
         string Title,
         string? Desc,
         Func<Widget> Control);
-
-    /// <summary>A sidebar section entry: hover highlight + accent selection pill, Zed-style.</summary>
-    private sealed class SectionRow : Widget
-    {
-        private const float H = 30f;
-        private readonly Action _onSelect;
-        private readonly bool _selected;
-        private readonly ThemeData _theme;
-        private readonly string _title;
-        private bool _hovered;
-        private Size _size;
-
-        public SectionRow(string title, ThemeData theme, bool selected, Action onSelect)
-        {
-            _title = title;
-            _theme = theme;
-            _selected = selected;
-            _onSelect = onSelect;
-        }
-
-        public override Size Measure(Constraints c)
-        {
-            _size = c.Constrain(new Size(c.MaxWidth, H));
-            return _size;
-        }
-
-        public override void Layout(Offset origin)
-        {
-            Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                _size.Width,
-                _size.Height
-            );
-        }
-
-        public override void Paint(PaintList paint)
-        {
-            var pill = new Rect(
-                Bounds.X + Spacing.Sm,
-                Bounds.Y + 2f,
-                Bounds.Width - Spacing.Sm * 2f,
-                Bounds.Height - 4f
-            );
-            if (_selected)
-                paint.AddRect(pill, _theme.Accent.WithAlpha(0.22f), Radii.Md);
-            else if (_hovered)
-                paint.AddRect(pill, _theme.Fill4, Radii.Md);
-
-            paint.AddText(
-                _title,
-                pill.X + Spacing.Sm,
-                Bounds.Y + Bounds.Height * 0.5f + _theme.FontSizeBody * 0.36f,
-                _selected ? _theme.OnSurface : _theme.TextSecondary,
-                _theme.FontSizeBody
-            );
-        }
-
-        public override Widget? HitTest(Offset point)
-        {
-            return Bounds.Contains(point.X, point.Y) ? this : null;
-        }
-
-        public override void OnPointerDown(Offset point)
-        {
-            _onSelect();
-        }
-
-        public override void OnPointerEnter()
-        {
-            _hovered = true;
-            MarkNeedsPaint();
-        }
-
-        public override void OnPointerExit()
-        {
-            _hovered = false;
-            MarkNeedsPaint();
-        }
-
-        public override int DebugStateHash()
-        {
-            return HashCode.Combine(_hovered, _selected);
-        }
-    }
 }

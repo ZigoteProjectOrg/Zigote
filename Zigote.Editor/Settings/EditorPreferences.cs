@@ -33,11 +33,17 @@ public sealed class EditorPreferences(App app, EditorSettings settings, ProjectH
     /// <summary>Project history (recent projects) — its own preference group, not a setting.</summary>
     public ProjectHistory History => history;
 
-    /// <summary>Dark after resolving "system" against the OS appearance (unknown → dark).</summary>
+    /// <summary>
+    ///     Dark after resolving "system" against the OS appearance. SDL answers first; where it
+    ///     cannot tell (Unknown), GNOME's own <c>color-scheme</c> decides, and an editor on a
+    ///     desktop that reports neither stays dark.
+    /// </summary>
     public bool IsDarkResolved => settings.ThemeMode.Peek() switch {
         EditorThemeMode.Dark => true,
         EditorThemeMode.Light => false,
-        _ => app.Engine.GetSystemTheme() != SystemTheme.Light,
+        var _ when app.Engine.GetSystemTheme() is var sdl && sdl != SystemTheme.Unknown =>
+            sdl == SystemTheme.Dark,
+        _ => !GnomeDesktop.IsGnome || GnomeDesktop.PrefersDark,
     };
 
     private float UiFontScale => Math.Clamp(settings.UiFontSize.Peek(), 9f, 26f) / 13f;
@@ -48,17 +54,31 @@ public sealed class EditorPreferences(App app, EditorSettings settings, ProjectH
     /// <summary>The "code" face or editor font size changed (re-style CodeEditor/Console).</summary>
     public event Action? EditorFontChanged;
 
-    /// <summary>The ThemeData the editor should currently run (mode + UI font scale applied).</summary>
+    /// <summary>
+    ///     The ThemeData the editor should currently run: Adwaita in the system's accent hue
+    ///     (GNOME 47+; Blue elsewhere), light/dark per <see cref="IsDarkResolved" />, scaled by the
+    ///     UI font-size preference. Adwaita is the editor's design system — there is no Material
+    ///     appearance to fall back to.
+    /// </summary>
     public ThemeData ResolveTheme()
     {
-        var t = IsDarkResolved ? ThemeData.Dark : ThemeData.Light;
-        return t.WithFontScale(UiFontScale);
+        return AdwTheme.Create(GnomeDesktop.Accent, IsDarkResolved).WithFontScale(UiFontScale);
     }
 
     /// <summary>Re-resolve a "system" theme after the OS switched appearance.</summary>
     public void OnSystemThemeChanged()
     {
         if (settings.ThemeMode.Peek() == EditorThemeMode.System) ThemeChanged?.Invoke();
+    }
+
+    /// <summary>
+    ///     GNOME published new desktop settings (accent hue, color-scheme, titlebar button layout).
+    ///     The accent feeds every theme regardless of the light/dark mode preference, so unlike
+    ///     <see cref="OnSystemThemeChanged" /> this always rebuilds. Pumped from the main loop.
+    /// </summary>
+    public void PumpSystemStyle()
+    {
+        if (GnomeDesktop.ConsumeDirty()) ThemeChanged?.Invoke();
     }
 
     internal static WindowChromePreference ParseChrome(string mode)
@@ -162,6 +182,7 @@ public sealed class EditorPreferences(App app, EditorSettings settings, ProjectH
                 // dialogs, torn-out panels) inherit it at CreateWindow.
                 WindowChrome.Preference = ParseChrome(settings.WindowChromeMode.Value);
                 app.ApplyWindowChrome(WindowChrome.Resolve());
+                ApplyAdwaitaCsd(app);
                 if (boot) return;
                 // The shell reads the titlebar insets at build time (toolbar leading gap) — rebuild it
                 // so the layout tracks the new chrome, same as the native-menu-bar toggle.
@@ -170,6 +191,23 @@ public sealed class EditorPreferences(App app, EditorSettings settings, ProjectH
         );
 
         boot = false;
+    }
+
+    /// <summary>
+    ///     The GNOME headerbar-as-titlebar arrangement, applied to any editor window: no injected
+    ///     chrome strip (each window's own <see cref="AdwHeaderBar" /> hosts the frame buttons and
+    ///     registers the drag surface) and one shared corner radius, so the window clip and every
+    ///     Adwaita surface that rounds cannot drift apart. Under non-Adwaita chrome the strip stays,
+    ///     and the headerbars degrade to plain toolbars. Windows created later inherit both from the
+    ///     main one, so only the main window is set here.
+    /// </summary>
+    private static void ApplyAdwaitaCsd(App window)
+    {
+        // ChromeStyle, not WindowChrome.Resolve(): a platform that refuses the requested style
+        // degrades that window to System decorations, and suppressing the strip on the strength of
+        // the request alone would then leave it with neither.
+        window.SuppressChromeStrip = window.ChromeStyle == WindowChromeStyle.AdwaitaCsd;
+        window.CsdCornerRadius = AdwMetrics.WindowRadius;
     }
 
     private void ApplyUiFontFace(string? configured)

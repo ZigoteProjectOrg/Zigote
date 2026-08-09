@@ -11,6 +11,9 @@ using Zigote.Graphs.Editor;
 using Zigote.Graphs.Registry;
 using Zigote.Modules.UI.CodeEditor;
 using Zigote.Runtime.Scene;
+// CodeEditor: Adwaita has no source view (GtkSourceView has no libadwaita counterpart either),
+// so the editor keeps this one Material widget. The rest of the shell is Adwaita.
+using Zigote.UI.Material;
 using Zigote.UI.Host;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
@@ -27,11 +30,8 @@ namespace Zigote.Editor.Widgets;
 ///     (shrink the region to a strip) and a maximize button (fill the dock); the viewport
 ///     also maximizes with F11 for fullscreen testing.
 /// </summary>
-public sealed class EditorLayout : RenderWidget
+public sealed class EditorLayout : Widget
 {
-    private const float ToolbarH = 38f;
-    private const float MenuBarH = 30f;
-
     private readonly EditorActions _actions;
     private readonly App _app;
     private readonly Widget _root;
@@ -93,31 +93,14 @@ public sealed class EditorLayout : RenderWidget
 
     private Widget BuildRoot()
     {
-        var toolbar = BuildToolbar();
         var dock = BuildDock();
 
-        var column = new Column {
-            MainAxisAlignment = MainAxisAlignment.Start,
-            CrossAxisAlignment = CrossAxisAlignment.Start,
-        };
-
-        // Hand menus to a native bar if one is available (e.g. macOS NSMenu); otherwise show the
-        // cross-platform in-window menu bar. On a window that draws its own titlebar (GNOME CSD)
-        // the menu goes INTO that row, headerbar-style — one strip instead of two.
+        // Hand the menus to a native bar where one exists (macOS NSMenu). Everywhere else they
+        // collapse into the GNOME primary menu — the ☰ button at the end of the header bar — so the
+        // shell is one strip: header bar over dock, the arrangement AdwToolbarView exists for.
         var menus = BuildMenus();
-        if (!NativeMenuBar.TryInstall(menus))
-        {
-            var inHeaderBar = _app.HasTitleBarStrip;
-            var menuBar = new MenuBar(_app, menus) {
-                Background = inHeaderBar ? _theme.TitleBar : null,
-            };
-            if (inHeaderBar) _app.TitleBarLeading = menuBar;
-            else column.Children.Add(new SizedBox(height: MenuBarH, child: menuBar));
-        }
-
-        column.Children.Add(new SizedBox(height: ToolbarH, child: toolbar));
-        column.Children.Add(new Expanded(dock));
-        return column;
+        var header = BuildHeaderBar(NativeMenuBar.TryInstall(menus) ? null : menus);
+        return new AdwToolbarView(dock) { TopBars = { header } };
     }
 
     // ── Menu bar ────────────────────────────────────────────────────────────────
@@ -139,7 +122,7 @@ public sealed class EditorLayout : RenderWidget
             [
                 new ContextMenuItem(
                     "New Project",
-                    () => ProjectDialogs.ShowNew(_app, _theme, _actions.OpenProject)
+                    () => ProjectDialogs.ShowNew(_app, _actions.OpenProject)
                 ),
                 new ContextMenuItem(
                     "Open Project…",
@@ -162,6 +145,16 @@ public sealed class EditorLayout : RenderWidget
             [
                 new ContextMenuItem("Undo", DoUndo, Shortcut: "⌘Z"),
                 new ContextMenuItem("Redo", DoRedo, Shortcut: "⌘⇧Z"),
+                new ContextMenuItem("", null, true),
+                // A running game can capture the pointer for mouselook, which hides the cursor and
+                // makes every other panel unreachable. Esc in the viewport is the per-session way out
+                // (this menu is not clickable while the cursor is captured); this toggle is the
+                // standing veto, so a game that re-takes capture every frame can still be stopped.
+                new ContextMenuItem(
+                    "Allow Mouse Capture in Play",
+                    ToggleMouseCapture,
+                    Checked: _app.Engine.AllowRelativeMouseMode
+                ),
                 new ContextMenuItem("", null, true),
                 new ContextMenuItem("Reset Layout", ResetLayout),
             ]
@@ -191,6 +184,17 @@ public sealed class EditorLayout : RenderWidget
         return [file, edit, help];
     }
 
+    /// <summary>Forbid or re-allow capture entirely. Releases immediately when turning it off.</summary>
+    private void ToggleMouseCapture()
+    {
+        var allowed = _app.Engine.AllowRelativeMouseMode = !_app.Engine.AllowRelativeMouseMode;
+        _app.ShowSnackbar(
+            allowed
+                ? "Mouse capture allowed — play mode can use free mouselook (Esc releases)."
+                : "Mouse capture disabled — the cursor stays visible in play mode."
+        );
+    }
+
     private void SaveScene()
     {
         State.Scene.Save(State.ScenePath);
@@ -203,7 +207,6 @@ public sealed class EditorLayout : RenderWidget
     {
         ProjectDialogs.ShowSaveSceneAs(
             _app,
-            _theme,
             State.ScenePath,
             p =>
             {
@@ -362,14 +365,11 @@ public sealed class EditorLayout : RenderWidget
                 // Project = file tree (top) + asset preview (bottom) in one tab, split vertically.
                 PanelId = "browser",
                 Title = "Project",
-                Content = new SplitPane(
-                    _theme,
+                Content = new AdwPaned(
                     new ScrollView(new Padding(EdgeInsets.Symmetric(6f, 4f), browser)),
-                    assetPreview
-                ) {
-                    Vertical = true,
-                    SplitRatio = 0.6f,
-                },
+                    assetPreview,
+                    true
+                ) { Position = 0.6f },
             },
             new() {
                 PanelId = "timeline",
@@ -517,53 +517,39 @@ public sealed class EditorLayout : RenderWidget
         State.Preferences?.Layout.Dock.Reset(); // back to "no saved layout" — the default
     }
 
-    // ── Toolbar ───────────────────────────────────────────────────────────────
+    // ── Header bar ────────────────────────────────────────────────────────────
 
-    private Widget BuildToolbar()
+    /// <summary>
+    ///     The editor's single strip of chrome, GNOME-style: the transport and node actions packed
+    ///     at the start, the scene/project title centred, the view actions plus the primary menu at
+    ///     the end, and — under Adwaita CSD — the window buttons hosted by the bar itself.
+    /// </summary>
+    /// <param name="menus">
+    ///     Menus to fold into the ☰ primary menu, or null when a native menu bar already took them.
+    /// </param>
+    private AdwHeaderBar BuildHeaderBar(IReadOnlyList<AppMenu>? menus)
     {
-        ToolbarButton Tb(string? icon, Action? onClick, string? label = null,
-            ToolbarTone tone = ToolbarTone.Default, bool dropdown = false)
+        // A header-bar icon action: flat + circular, named by its tooltip (the icon is the label).
+        Widget Icon(string icon, Action onPressed, string tooltip)
         {
-            return new ToolbarButton(icon, onClick, label) {
-                Tone = tone,
-                Dropdown = dropdown,
-            };
-        }
-
-        // Thin hairline between action groups.
-        Widget Sep()
-        {
-            return new Padding(
-                EdgeInsets.Symmetric(6f, 8f),
-                new SizedBox(1f, 20f, new ColoredBox(_theme.Separator))
+            return new Tooltip(
+                tooltip,
+                new AdwButton(tooltip, onPressed) {
+                    IconName = icon,
+                    Style = AdwButtonStyle.Flat,
+                    Circular = true,
+                }
             );
         }
 
-        // 2-pt gap between sibling buttons inside one group.
-        Widget Gap()
-        {
-            return new SizedBox(2f);
-        }
-
-        // Project chip (left) — current scene/project name with a selector affordance.
-        var projectName = State.ProjectPath is { } pp
-            ? Path.GetFileNameWithoutExtension(pp)
-            : "Untitled";
-        var projectChip = Tb(
-            Icons.Dashboard,
-            null,
-            projectName,
-            dropdown: true
-        );
-
-        // Play ⇄ Stop toggle (the one prominent, accent-filled action) + a Pause/Resume sibling that is
-        // only live while playing.
-        ToolbarButton? playBtn = null;
-        ToolbarButton? pauseBtn = null;
+        // Play ⇄ Stop (the one suggested-action button) and a Pause/Resume sibling that is live
+        // only while playing.
+        var playBtn = new AdwButton("Play") { Style = AdwButtonStyle.Suggested };
+        var pauseBtn = new AdwButton("Pause") { Enabled = false };
 
         // Drive both transport buttons + continuous-update from the authoritative play state, so every
         // path that changes it (these buttons, the viewport's P shortcut, a StartPlay that threw and
-        // left IsPlaying false) keeps the toolbar consistent. This is the SOLE owner of
+        // left IsPlaying false) keeps the header bar consistent. This is the SOLE owner of
         // app.ContinuousUpdate: edit mode is event-driven (the viewport change-gates its 3D render and
         // self-schedules settle frames); only a running play session renders continuously.
         void SyncTransport()
@@ -574,49 +560,40 @@ public sealed class EditorLayout : RenderWidget
             // Paused = frozen simulation: drop continuous rendering so a paused session idles like a
             // static edit scene (the viewport keeps showing its cached frame); resume flips it back.
             _app.ContinuousUpdate = playing && !paused;
-            playBtn!.Icon = playing ? Icons.Stop : Icons.Play;
+            playBtn.IconName = playing ? Icons.Stop : Icons.Play;
             playBtn.Label = playing ? "Stop" : building ? "Building…" : "Play";
-            playBtn.Tone = playing ? ToolbarTone.Danger : ToolbarTone.Primary;
+            // Stopping a running game is the destructive half of the toggle, starting one the
+            // suggested half — the two Adwaita accent styles, in place of a custom tone scale.
+            playBtn.Style = playing ? AdwButtonStyle.Destructive : AdwButtonStyle.Suggested;
             // Can't enter play while the user scripts are still compiling (StartPlay refuses anyway, but
             // disabling the button makes that obvious). Stopping a running session is always allowed.
             playBtn.Enabled = playing || !building;
-            pauseBtn!.Enabled = playing; // meaningful only in play mode
-            pauseBtn.Icon = paused ? Icons.Play : Icons.Pause;
+            pauseBtn.Enabled = playing; // meaningful only in play mode
+            pauseBtn.IconName = paused ? Icons.Play : Icons.Pause;
             pauseBtn.Label = paused ? "Resume" : "Pause";
-            pauseBtn.Tone = paused ? ToolbarTone.Primary : ToolbarTone.Default;
+            pauseBtn.Style = paused ? AdwButtonStyle.Suggested : AdwButtonStyle.Regular;
             _app.RequestPaint();
         }
 
-        playBtn = Tb(
-            Icons.Play,
-            () =>
+        playBtn.OnPressed = () =>
+        {
+            if (!State.IsPlaying)
             {
-                if (!State.IsPlaying)
-                {
-                    if (_actions.Settings.ConsoleClearOnPlay.Value) EditorLog.Clear();
-                    State.StartPlay();
-                }
-                else
-                {
-                    State.StopPlay();
-                }
-
-                SyncTransport();
-            },
-            "Play",
-            ToolbarTone.Primary
-        );
-
-        pauseBtn = Tb(
-            Icons.Pause,
-            () =>
+                if (_actions.Settings.ConsoleClearOnPlay.Value) EditorLog.Clear();
+                State.StartPlay();
+            }
+            else
             {
-                State.TogglePause();
-                SyncTransport();
-            },
-            "Pause"
-        );
-        pauseBtn.Enabled = false;
+                State.StopPlay();
+            }
+
+            SyncTransport();
+        };
+        pauseBtn.OnPressed = () =>
+        {
+            State.TogglePause();
+            SyncTransport();
+        };
 
         // The viewport's P shortcut toggles pause directly on the state — re-sync the buttons when it does.
         State.PlayPausedChanged += SyncTransport;
@@ -625,143 +602,142 @@ public sealed class EditorLayout : RenderWidget
         State.ScriptBuildStatusChanged += SyncTransport;
         SyncTransport(); // initial state (Play is disabled while the project's first script build runs)
 
-        // Add Node menu.
-        ToolbarButton? addBtn = null;
-        var addMenu = new ContextMenu(
-            new ContextMenuItem("Empty Node", () => State.AddNode("Node", NodeKind.Empty)),
-            new ContextMenuItem("Mesh Node", () => State.AddNode("Mesh", NodeKind.Mesh)),
-            new ContextMenuItem(
-                "Cube",
-                () =>
+        // Add Node — a split button: pressing it drops an empty node, the arrow picks a kind.
+        (string Label, Action Add)[] nodeKinds = [
+            ("Empty Node", () => State.AddNode("Node", NodeKind.Empty)),
+            ("Mesh Node", () => State.AddNode("Mesh", NodeKind.Mesh)),
+            ("Cube", () =>
                 {
                     var n = State.AddNode("Cube", NodeKind.Mesh);
                     n.MeshPath = "#cube";
                     State.NotifySceneChanged();
                 }
             ),
-            new ContextMenuItem(
-                "Sphere",
-                () =>
+            ("Sphere", () =>
                 {
                     var n = State.AddNode("Sphere", NodeKind.Mesh);
                     n.MeshPath = "#sphere";
                     State.NotifySceneChanged();
                 }
             ),
-            new ContextMenuItem("Light", () => State.AddNode("Light", NodeKind.Light)),
-            new ContextMenuItem(
-                "Camera",
-                () =>
+            ("Light", () => State.AddNode("Light", NodeKind.Light)),
+            ("Camera", () =>
                 {
                     var n = State.AddNode("Camera", NodeKind.Camera);
                     n.Position = new Vec3(0, 0, -3f);
                     State.NotifySceneChanged();
                 }
             ),
-            new ContextMenuItem("Script Node", () => State.AddNode("Script", NodeKind.Script))
-        );
-        addBtn = Tb(
-            Icons.Add,
-            () => addMenu.ShowAt(new Offset(addBtn!.Bounds.X, addBtn.Bounds.Bottom + 4f)),
-            "Add",
-            dropdown: true
-        );
-
-        var deleteBtn = Tb(Icons.Delete, () => State.DeleteSelected());
-        var undoBtn = Tb(Icons.Undo, () => State.History.Undo());
-        var redoBtn = Tb(Icons.Redo, () => State.History.Redo());
-        var saveBtn = Tb(
-            Icons.Save,
-            () =>
-            {
-                State.Scene.Save(State.ScenePath);
-                State.SaveAssets();
-                State.SaveProjectSettings(); // persist render settings (minus debug) into the .zigoteproj
-                _app.ShowSnackbar($"Saved to {State.ScenePath}");
-            },
-            "Save"
-        );
-        var loadBtn = Tb(
-            Icons.FolderOpen,
-            () =>
-            {
-                var loaded = SceneGraph.Load(State.ScenePath);
-                State.LoadScene(loaded);
-                _app.ShowSnackbar($"Loaded from {State.ScenePath}");
-            },
-            "Load"
-        );
-
-        // Settings window (gear, right-aligned next to the FPS chip).
-        var settingsBtn = new Tooltip(
-            "Settings",
-            Tb(Icons.Settings, () => _actions.OpenSettings?.Invoke())
-        );
+            ("Script Node", () => State.AddNode("Script", NodeKind.Script)),
+        ];
+        var addBtn = new AdwSplitButton("Add", nodeKinds[0].Add) {
+            IconName = Icons.Add,
+            MenuItems = nodeKinds.Select(k => k.Label).ToArray(),
+            OnMenuSelected = i => nodeKinds[i].Add(),
+        };
 
         // Snap-to-grid dropdown — persisted per project; the session binding mirrors the
         // preference back into State.SnapGrid, which the viewport drag reads.
         string[] snapLabels = ["Grid: Off", "0.25 m", "0.5 m", "1.0 m"];
         float[] snapValues = [0f, 0.25f, 0.5f, 1.0f];
-        var snapDd = new Dropdown<string>(
+        var snapDd = new AdwDropDown(
             snapLabels,
             Math.Max(0, Array.IndexOf(snapValues, State.SnapGrid)),
-            s => s,
-            (i, _) =>
+            i =>
             {
                 if (State.Preferences is { } p) p.Viewport.SnapGrid.Value = snapValues[i];
                 else State.SnapGrid = snapValues[i];
             }
         );
 
-        // The toolbar is its own elevation layer (a touch lighter than the window) closed off by a
-        // hairline along its bottom edge — grouped icon actions, the layered look from the spec.
-        // With MacUnified window chrome the toolbar IS the titlebar band (no separate strip):
-        // lead with the traffic-light inset, and the gaps between controls drag the window.
-        var row = new Padding(
-            EdgeInsets.Symmetric(8f, 0f),
-            new Row {
-                MainAxisAlignment = MainAxisAlignment.Start,
-                CrossAxisAlignment = CrossAxisAlignment.Center,
-                Children = {
-                    new SizedBox(MathF.Max(0f, _app.TitleBarLeftInset - 8f)),
-                    projectChip,
-                    Sep(),
-                    playBtn,
-                    Gap(),
-                    pauseBtn,
-                    Sep(),
-                    addBtn,
-                    Gap(),
-                    deleteBtn,
-                    Sep(),
-                    undoBtn,
-                    Gap(),
-                    redoBtn,
-                    Sep(),
-                    saveBtn,
-                    Gap(),
-                    loadBtn,
-                    Sep(),
-                    new SizedBox(104f, 26f, snapDd),
-                    new Spacer(),
-                    settingsBtn,
-                    Gap(),
-                    new FpsChip(),
-                    new SizedBox(8f),
-                },
-            }
-        );
+        var bar = new AdwHeaderBar {
+            TitleWidget = new AdwWindowTitle(
+                Path.GetFileNameWithoutExtension(State.ScenePath) is { Length: > 0 } scene
+                    ? scene
+                    : "Untitled Scene",
+                State.ProjectPath is { } pp ? Path.GetFileNameWithoutExtension(pp) : null
+            ),
+            Start = {
+                playBtn,
+                pauseBtn,
+                new AdwSeparator(true, 8f) { Length = AdwMetrics.ButtonHeight },
+                addBtn,
+                Icon(Icons.Delete, () => State.DeleteSelected(), "Delete Node"),
+            },
+            End = {
+                Icon(Icons.Undo, () => State.History.Undo(), "Undo"),
+                Icon(Icons.Redo, () => State.History.Redo(), "Redo"),
+                Icon(Icons.Save, SaveScene, "Save Scene"),
+                Icon(Icons.FolderOpen, ReloadScene, "Reload Scene"),
+                snapDd,
+                new AdwSeparator(true, 8f) { Length = AdwMetrics.ButtonHeight },
+                new FpsChip(),
+                Icon(Icons.Settings, () => _actions.OpenSettings?.Invoke(), "Settings"),
+            },
+        };
+        // GNOME's primary menu is the last thing in the bar before the window buttons.
+        if (menus is not null) bar.End.Add(new AdwMenuButton { Sections = PrimaryMenu(menus) });
+        return bar;
+    }
 
-        return new ColoredBox(
-            _theme.Toolbar,
-            new Column {
-                CrossAxisAlignment = CrossAxisAlignment.Stretch,
-                Children = {
-                    new Expanded(row),
-                    new SizedBox(height: 1f, child: new ColoredBox(_theme.Border)),
-                },
+    /// <summary>Re-read the scene from disk, discarding unsaved edits.</summary>
+    private void ReloadScene()
+    {
+        State.LoadScene(SceneGraph.Load(State.ScenePath));
+        _app.ShowSnackbar($"Loaded from {State.ScenePath}");
+    }
+
+    /// <summary>
+    ///     The <see cref="AppMenu" /> model flattened into the GNOME primary menu: one section per
+    ///     top-level menu, split further at each separator, with a submenu ("Open Recent") folded
+    ///     in under its own caption. Keeping the conversion here means the native menu bar and the
+    ///     ☰ button stay one source of truth — <see cref="BuildMenus" />.
+    /// </summary>
+    private static List<List<AdwMenuItem>> PrimaryMenu(IReadOnlyList<AppMenu> menus)
+    {
+        List<List<AdwMenuItem>> sections = [];
+        foreach (var menu in menus)
+        {
+            if (menu.Role != AppMenuRole.None) continue; // OS-populated (Window); nothing to show
+            List<AdwMenuItem> section = [];
+            foreach (var item in menu.Items)
+            {
+                if (item.Separator)
+                {
+                    if (section.Count > 0) sections.Add(section);
+                    section = [];
+                    continue;
+                }
+
+                if (item.Children is { Count: > 0 } children)
+                {
+                    if (section.Count > 0) sections.Add(section);
+                    section = [AdwMenuItem.Header(item.Label)];
+                    foreach (var child in children)
+                        section.Add(
+                            new AdwMenuItem(child.Label, child.OnSelect) {
+                                Enabled = child.IsEnabled,
+                            }
+                        );
+                    sections.Add(section);
+                    section = [];
+                    continue;
+                }
+
+                section.Add(
+                    new AdwMenuItem(item.Label, item.OnSelect) {
+                        Accel = item.Shortcut,
+                        Enabled = item.IsEnabled,
+                        Role = item.Checked is null ? AdwMenuItemRole.Normal : AdwMenuItemRole.Check,
+                        Checked = item.Checked ?? false,
+                    }
+                );
             }
-        );
+
+            if (section.Count > 0) sections.Add(section);
+        }
+
+        return sections;
     }
 
     // ── Widget plumbing ───────────────────────────────────────────────────────

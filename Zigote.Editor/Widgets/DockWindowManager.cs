@@ -148,7 +148,17 @@ public sealed class DockWindowManager(App app)
             [panel]
         );
         Wire(win, dock);
-        win.Root = new ThemeProvider(win.Theme, new ColoredBox(_theme.Window, dock));
+        // Its own header bar, because the app suppresses the injected chrome strip under Adwaita
+        // CSD — without one this window would have no way to be moved or closed.
+        win.Root = new ThemeProvider(
+            win.Theme,
+            new ColoredBox(
+                _theme.Window,
+                new AdwToolbarView(dock) {
+                    TopBars = { new AdwHeaderBar { Title = panel.Title } },
+                }
+            )
+        );
         // Position so the tab lands roughly under the cursor.
         win.NativeWindow!.SetPosition((int)(global.X - 80f), (int)(global.Y - 14f));
 

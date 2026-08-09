@@ -293,52 +293,27 @@ public sealed class HierarchyPanel : Widget
 
     private void ShowRenameDialog(SceneNode node)
     {
-        var app = App.Active!;
-        Dialog? dlg = null;
-        var tf = new TextField {
-            Text = node.Name,
-            Height = 28f,
+        var entry = new AdwEntry { Text = node.Name };
+        var dlg = new AdwAlertDialog("Rename Node") {
+            ExtraChild = entry,
+            DefaultResponse = "rename",
+            CloseResponse = "cancel",
         };
-
-        var content = new Column {
-            MainAxisAlignment = MainAxisAlignment.Start,
-            CrossAxisAlignment = CrossAxisAlignment.Start,
-            Children = {
-                new Label("Rename Node", _theme.FontSizeBody, _theme.OnSurface) {
-                    FontWeight = FontWeight.Bold,
-                },
-                new SizedBox(height: 10f),
-                new SizedBox(height: 28f, child: tf),
-                new SizedBox(height: 14f),
-                new Row {
-                    MainAxisAlignment = MainAxisAlignment.Start,
-                    CrossAxisAlignment = CrossAxisAlignment.Center,
-                    Children = {
-                        new Button(
-                            "Rename",
-                            () =>
-                            {
-                                var trimmed = tf.Text.Trim();
-                                if (trimmed.Length > 0 && trimmed != node.Name)
-                                    _state.History.Execute(
-                                        new ChangePropertyCommand<string>(
-                                            _state,
-                                            node.Name,
-                                            trimmed,
-                                            v => node.Name = v
-                                        )
-                                    );
-                                dlg?.Dismiss();
-                            }
-                        ),
-                        new SizedBox(8f),
-                        new Button("Cancel", () => dlg?.Dismiss()) { Style = ButtonStyle.Flat },
-                    },
-                },
-            },
+        dlg.AddResponse("cancel", "Cancel");
+        dlg.AddResponse("rename", "Rename", AdwResponseAppearance.Suggested);
+        dlg.OnResponse = id =>
+        {
+            var trimmed = entry.Text.Trim();
+            if (id != "rename" || trimmed.Length == 0 || trimmed == node.Name) return;
+            _state.History.Execute(
+                new ChangePropertyCommand<string>(
+                    _state,
+                    node.Name,
+                    trimmed,
+                    v => node.Name = v
+                )
+            );
         };
-
-        dlg = new Dialog(new SizedBox(280f, child: content), app);
         dlg.Show();
     }
 
@@ -509,16 +484,13 @@ public sealed class HierarchyPanel : Widget
             var isPrimary = state.Selected == node;
             var isAnySelected = state.SelectedNodes.Contains(node);
             var isDropTarget = drag.Active && drag.DropTarget == node;
-            var bg = isDropTarget ? theme.Primary.WithAlpha(0.35f)
-                : isPrimary ? theme.Primary.WithAlpha(0.22f)
-                : isAnySelected ? theme.Primary.WithAlpha(0.11f)
-                : _hovered ? theme.OnSurface.WithAlpha(0.06f)
-                : new Color(
-                    0,
-                    0,
-                    0,
-                    0
-                );
+            // Adwaita list selection is a translucent accent wash (SelectionTint), not a filled
+            // accent bar with inverted text; hover is the same neutral wash every other row-like
+            // surface uses, so the hierarchy, the asset list and the menus all feel identical.
+            var bg = isDropTarget ? theme.SelectionTint.WithAlpha(theme.SelectionTint.A * 1.4f)
+                : isPrimary ? theme.SelectionTint
+                : isAnySelected ? theme.SelectionTint.WithAlpha(theme.SelectionTint.A * 0.5f)
+                : AdwStyle.RowFill(theme, _hovered, false);
 
             // macOS-style inset rounded selection/hover pill (not a full-bleed bar).
             if (bg.A > 0)

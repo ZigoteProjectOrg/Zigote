@@ -124,11 +124,11 @@ public sealed class SettingsPanel : Widget
                 CrossAxisAlignment = CrossAxisAlignment.Center,
                 Children = {
                     new Expanded(
-                        new SizedBox(height: 26f, child: new Button("Load HDRI…", LoadHdri))
+                        new AdwButton("Load HDRI…", LoadHdri) { Compact = true }
                     ),
                     new SizedBox(6f),
                     new Expanded(
-                        new SizedBox(height: 26f, child: new Button("Procedural", UseProceduralEnv))
+                        new AdwButton("Procedural", UseProceduralEnv) { Compact = true }
                     ),
                 },
             },
@@ -514,7 +514,9 @@ public sealed class SettingsPanel : Widget
         outer.Children.Add(
             new Padding(
                 EdgeInsets.Only(top: Spacing.Md),
-                new SizedBox(height: 28f, child: new Button("Reset all to defaults", ResetDefaults))
+                new AdwButton("Reset all to defaults", ResetDefaults) {
+                    Style = AdwButtonStyle.Destructive,
+                }
             )
         );
 
@@ -570,16 +572,15 @@ public sealed class SettingsPanel : Widget
                         child: new Label("Debug View", _theme.FontSizeCaption, _theme.OnSurface)
                     ),
                     new Expanded(
-                        new Dropdown<DebugView>(
-                            debugViews,
+                        new AdwDropDown(
+                            [.. debugViews.Select(PrettyDebugView)],
                             Array.IndexOf(debugViews, (DebugView)(int)_s.DebugView),
-                            PrettyDebugView,
-                            (_, dv) =>
+                            i =>
                             {
-                                _s.DebugView = (int)dv;
+                                _s.DebugView = (int)debugViews[i];
                                 Apply();
                             }
-                        )
+                        ) { Compact = true }
                     ),
                 },
             }
@@ -596,7 +597,7 @@ public sealed class SettingsPanel : Widget
                         LabelColW,
                         child: new Label(label, _theme.FontSizeCaption, _theme.OnSurface)
                     ),
-                    new Checkbox(
+                    new AdwSwitch(
                         value,
                         v =>
                         {
@@ -625,19 +626,16 @@ public sealed class SettingsPanel : Widget
         Widget Preset(string label, int fps)
         {
             return new Expanded(
-                new SizedBox(
-                    height: 24f,
-                    child: new Button(
-                        label,
-                        () =>
-                        {
-                            if (App.Active is not { } a) return;
-                            a.FrameRateLimit = fps;
-                            if (fps != 0) a.ForceContinuousRender = true;
-                            Rebuild();
-                        }
-                    )
-                )
+                new AdwButton(
+                    label,
+                    () =>
+                    {
+                        if (App.Active is not { } a) return;
+                        a.FrameRateLimit = fps;
+                        if (fps != 0) a.ForceContinuousRender = true;
+                        Rebuild();
+                    }
+                ) { Compact = true }
             );
         }
 
@@ -720,7 +718,7 @@ public sealed class SettingsPanel : Widget
     private Widget SliderRow(string label, float value, float min, float max, Action<float> set)
     {
         var valLabel = new Label(value.ToString("0.###"), _theme.FontSizeCaption, _theme.Hint);
-        var slider = new Slider(value) {
+        var slider = new AdwSlider(value) {
             Min = min,
             Max = max,
         };

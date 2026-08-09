@@ -14,10 +14,10 @@ namespace Zigote.Editor.Panels;
 ///     Folders expand/collapse on click; files can be selected and dragged into the
 ///     viewport (same drop pipeline as before). A search box flattens to matching files.
 /// </summary>
-public sealed class AssetBrowserPanel : RenderWidget, IDisposable
+public sealed class AssetBrowserPanel : Widget, IDisposable
 {
     private const float RowH = 22f;
-    private const float HeaderH = 32f;
+    private const float HeaderH = AdwMetrics.CompactControlHeight + 8f;
     private const float Indent = 14f;
     private const float DragThreshold = 5f;
 
@@ -29,7 +29,7 @@ public sealed class AssetBrowserPanel : RenderWidget, IDisposable
     private static readonly TimeSpan ScanDebounce = TimeSpan.FromMilliseconds(120);
 
     private readonly HashSet<string> _expanded = new(StringComparer.Ordinal);
-    private readonly TextField _searchField;
+    private readonly AdwSearchEntry _searchField;
     private readonly EditorState _state;
     private readonly FileSystemWatcher? _watcher;
     private readonly Background _work;
@@ -63,8 +63,9 @@ public sealed class AssetBrowserPanel : RenderWidget, IDisposable
         _work = state.Background.Child("assets");
         _scan = _work.Latest();
 
-        _searchField = new TextField(decoration: new InputDecoration("Search files...")) {
-            Height = 24f,
+        _searchField = new AdwSearchEntry {
+            Placeholder = "Search files",
+            Compact = true,
             OnChanged = f =>
             {
                 _filter = f;
@@ -264,7 +265,9 @@ public sealed class AssetBrowserPanel : RenderWidget, IDisposable
             RequestRebuild();
         }
 
-        _searchField.Measure(new Constraints(maxWidth: c.MaxWidth - 12f, maxHeight: 24f));
+        _searchField.Measure(
+            new Constraints(maxWidth: c.MaxWidth - 12f, maxHeight: AdwMetrics.CompactControlHeight)
+        );
         var h = HeaderH + _rows.Length * RowH + 6f;
         _size = c.Constrain(new Size(c.MaxWidth, MathF.Max(h, c.MinHeight)));
         return _size;
@@ -312,7 +315,8 @@ public sealed class AssetBrowserPanel : RenderWidget, IDisposable
                 rowRect.Height - 2f
             );
             if (selected) paint.AddRect(pill, _theme.SelectionTint, 5f);
-            else if (_hoverIndex == i) paint.AddRect(pill, _theme.OnSurface.WithAlpha(0.05f), 5f);
+            else if (AdwStyle.RowFill(_theme, _hoverIndex == i, false) is { A: > 0f } wash)
+                paint.AddRect(pill, wash, 5f);
 
             var x = Bounds.X + 6f + row.Depth * Indent;
             var ty = y + (RowH - fs) / 2f + fs * 0.8f;

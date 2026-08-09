@@ -18,7 +18,7 @@ namespace Zigote.Editor.Panels.AssetPreview;
 ///     layout — no manual paint positioning (which previously overlapped the metadata onto the preview
 ///     because child <see cref="Widget.MeasuredSize" /> is only set during normal dispatch).
 /// </summary>
-public sealed class AssetPreviewPanel : RenderWidget, IDisposable
+public sealed class AssetPreviewPanel : Widget, IDisposable
 {
     private readonly Action<string> _onAssetSelected;
     private readonly AssetPreviewRegistry _registry;
@@ -127,7 +127,7 @@ public sealed class AssetPreviewPanel : RenderWidget, IDisposable
             CrossAxisAlignment = CrossAxisAlignment.Stretch,
             Children = {
                 new Expanded(new Padding(EdgeInsets.All(8f), previewArea)),
-                new Divider(),
+                new AdwSeparator(),
                 new Padding(EdgeInsets.All(8f), footer),
             },
         };

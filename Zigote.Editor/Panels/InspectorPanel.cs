@@ -16,6 +16,9 @@ using Zigote.Modules.UI.CodeEditor;
 using Zigote.Runtime.Prefab;
 using Zigote.Runtime.Scene;
 using Zigote.Scripting.Compilation;
+// CodeEditor: Adwaita has no source view (nor does libadwaita — GtkSourceView is its own
+// library), so this one Material widget stays. Everything else in the panel is Adwaita.
+using Zigote.UI.Material;
 using Zigote.UI.Host;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
@@ -104,9 +107,9 @@ public sealed partial class InspectorPanel : Widget
     private void SetContent(Widget content)
     {
         if (ReferenceEquals(_content, content)) return;
-        if (Owner != null) _content.Detach();
+        var previous = _content;
         _content = content;
-        if (Owner != null) _content.Attach(Owner, this);
+        SwapChild(previous, _content); // attach-then-detach; see Widget.SwapChild
     }
 
     public override IEnumerable<Widget> GetChildren()
@@ -151,24 +154,14 @@ public sealed partial class InspectorPanel : Widget
         wgslView.Text = initial.Wgsl;
 
         // Two tabs: the node canvas and a read-only view of the WGSL the graph generates.
-        var tabs = new TabView {
-            Children = {
-                panel,
-                wgslView,
+        var stack = new AdwViewStack {
+            Pages = {
+                new AdwViewStackPage("nodes", "Nodes", panel),
+                new AdwViewStackPage("wgsl", "Generated WGSL", wgslView),
             },
-            SelectedIndex = 0,
         };
-        var tabBar = new TabBar(
-            [new Tab("Nodes"), new Tab("Generated WGSL")],
-            0,
-            i => tabs.SelectedIndex = i
-        );
-        var root = new Column {
-            CrossAxisAlignment = CrossAxisAlignment.Stretch,
-            Children = {
-                tabBar,
-                new Expanded(tabs),
-            },
+        var root = new AdwToolbarView(stack) {
+            TopBars = { new AdwHeaderBar { TitleWidget = new AdwViewSwitcher(stack) } },
         };
         new Dialog(root, _app) {
             Dismissible = true,
@@ -301,10 +294,7 @@ public sealed partial class InspectorPanel : Widget
         }
 
         // ── Node header: editable name + kind badge ───────────────────────────
-        var nameField = new TextField {
-            Text = _shown.Name,
-            Height = 26f,
-        };
+        var nameField = new AdwEntry { Text = _shown.Name, Compact = true };
         var capturedNode = _shown;
         nameField.OnChanged = name =>
         {

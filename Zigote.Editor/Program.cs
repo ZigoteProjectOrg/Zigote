@@ -39,6 +39,13 @@ EditorLog.CaptureConsole();
 // while an exported player reads the baked JSON instead (same pattern as Physics.Backend).
 VfxAssets.GraphCompiler = n => VfxNodeEditor.Compile(n).Asset;
 
+// Adwaita is the editor's design system: read GNOME's accent, color-scheme and titlebar button
+// layout (and start monitoring them) before anything reads a theme, and settle the window chrome
+// preference now — rounded CSD corners need an alpha-composited window, which can only be asked
+// for at creation time.
+GnomeDesktop.Start();
+WindowChrome.Preference = EditorPreferences.ParseChrome(settings.WindowChromeMode.Value);
+
 // The editor drives a 3D viewport, so it takes the fastest GPU on a multi-GPU machine (a plain UI
 // App defaults to the power-efficient one). settings.GpuIndex pins a specific one for testing —
 // read here because the GPU is chosen when the device is created and never afterwards.
@@ -47,7 +54,8 @@ using var app = new App(
     1280,
     800,
     gpuPreference: GpuPowerPreference.Performance,
-    gpuIndex: settings.GpuIndex.Value
+    gpuIndex: settings.GpuIndex.Value,
+    transparentWindow: WindowChrome.Resolve() == WindowChromeStyle.AdwaitaCsd
 );
 
 // Editor preferences (theme mode, fonts, vsync) — reactive appliers over the EditorSettings
@@ -171,7 +179,7 @@ void ShowWelcome()
                 [
                     new ContextMenuItem(
                         "New Project",
-                        () => ProjectDialogs.ShowNew(app, theme, OpenProject)
+                        () => ProjectDialogs.ShowNew(app, OpenProject)
                     ),
                     new ContextMenuItem(
                         "Open Project…",
@@ -462,6 +470,11 @@ var assetFrame = 0L;
 while (!app.ShouldQuit)
 {
     var frameStart = clock.ElapsedTicks;
+    // GNOME publishes accent / color-scheme / titlebar-button changes on a background monitor
+    // process; the flag it sets is drained here because the accent restyles the shell in every
+    // theme mode, not just "system" (which SystemThemeChanged already covers).
+    prefs.PumpSystemStyle();
+
     Profiler.BeginFrame();
     using (Profiler.Scope("Frame"))
     {
