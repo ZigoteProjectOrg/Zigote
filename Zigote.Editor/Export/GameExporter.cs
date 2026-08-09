@@ -694,7 +694,13 @@ public static class GameExporter
                 .Append(aot ? " -p:GameAot=true" : IsMobile(rid) ? "" : " -p:PublishTrimmed=false")
                 .Append(
                     singleFile
+                        // Extracted at first start rather than memory-mapped: an assembly inside a
+                        // bundle reports no Assembly.Location, and anything reading metadata off
+                        // disk — Roslyn scripting, which Minemake's in-game computers are — fails
+                        // with "Can't create a metadata reference to an assembly without location".
+                        // Costs one extraction into ~/.net the first time the game runs.
                         ? " -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true"
+                          + " -p:IncludeAllContentForSelfExtract=true"
                         : ""
                 )
                 .Append($" -o \"{publishDir}\"");
