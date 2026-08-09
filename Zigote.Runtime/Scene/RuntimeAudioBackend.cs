@@ -145,4 +145,41 @@ internal sealed class RuntimeAudioBackend(ZigoteEngine engine) : IAudioBackend
     {
         engine.AudioStopAll();
     }
+
+    // ── Streaming + transport ────────────────────────────────────────────────
+
+    public SoundHandle CreateStream()
+    {
+        return new SoundHandle(engine.AudioStreamCreate());
+    }
+
+    public int PushStream(SoundHandle sound, ReadOnlySpan<byte> bytes)
+    {
+        return engine.AudioStreamPush(sound.Id, bytes);
+    }
+
+    public void FinishStream(SoundHandle sound)
+    {
+        engine.AudioStreamFinish(sound.Id);
+    }
+
+    public float StreamBuffered(SoundHandle sound)
+    {
+        return engine.AudioStreamBuffered(sound.Id);
+    }
+
+    public float GetCursor(SoundHandle sound)
+    {
+        return engine.AudioSoundCursor(sound.Id);
+    }
+
+    public float GetDuration(SoundHandle sound)
+    {
+        return engine.AudioSoundDuration(sound.Id);
+    }
+
+    public void Seek(SoundHandle sound, float seconds)
+    {
+        engine.AudioSoundSeek(sound.Id, MathF.Max(0f, seconds));
+    }
 }

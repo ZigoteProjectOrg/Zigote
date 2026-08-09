@@ -51,6 +51,7 @@
         <ProjectReference Include="..\Zigote.Persistence\Zigote.Persistence.csproj"/>
         <ProjectReference Include="..\Zigote.Persistence.SQLite\Zigote.Persistence.SQLite.csproj"/>
         <ProjectReference Include="..\Zigote.Preferences\Zigote.Preferences.csproj"/>
+        <ProjectReference Include="..\Zigote.Audioplayer\Zigote.Audioplayer.csproj"/>
     </ItemGroup>
     <ItemGroup>
         <Using Include="Zigote.UI.Material"/>

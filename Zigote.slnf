@@ -2,6 +2,7 @@
   "solution": {
     "path": "Zigote.sln",
     "projects": [
+      "Zigote.Audioplayer\\Zigote.Audioplayer.csproj",
       "Zigote.Bloc\\Zigote.Bloc.csproj",
       "Zigote.Cinematics\\Zigote.Cinematics.csproj",
       "Zigote.Core\\Zigote.Core.csproj",

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>Zigote.Audioplayer</RootNamespace>
+        <AssemblyName>Zigote.Audioplayer</AssemblyName>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- Only Core: the player talks to `IAudioApi` and publishes `Signal<T>`, nothing else. -->
+        <ProjectReference Include="..\Zigote.Core\Zigote.Core.csproj"/>
+    </ItemGroup>
+</Project>

@@ -101,6 +101,13 @@ public interface IAudioApi
     /// <summary>Per-sound gain [0,4]; 1 = unity. Flat gains (preamp, ReplayGain) fold in here.</summary>
     void SetVolume(uint id, float volume);
 
+    /// <summary>
+    ///     Playback rate; 1 = as recorded. <b>Varispeed — pitch follows rate</b>, because this resamples
+    ///     rather than time-stretches: 1.5× speech is 1.5× speech an octave-ish up, not a podcast app's
+    ///     1.5×. Pitch-preserving playback needs a time-stretcher in the engine, not a caller-side trick.
+    /// </summary>
+    void SetRate(uint id, float rate);
+
     /// <summary>Pan and attenuate against the listener. Music is not a point in a world: pass false.</summary>
     void SetSpatial(uint id, bool enabled);
 
@@ -225,6 +232,11 @@ internal sealed class EngineAudioApi(ZigoteEngine engine) : IAudioApi
     public void SetVolume(uint id, float volume)
     {
         engine.AudioSoundSetVolume(id, volume);
+    }
+
+    public void SetRate(uint id, float rate)
+    {
+        engine.AudioSoundSetPitch(id, rate);
     }
 
     public void SetSpatial(uint id, bool enabled)

@@ -134,6 +134,52 @@ public interface IAudioBackend
 
     bool IsPlaying(SoundHandle sound);
 
+    // Streaming and transport are optional: they default to "not supported" so a backend that only
+    // needs tones and files — a test fake, a headless host — stays a handful of methods.
+
+    /// <summary>
+    ///     Create a source fed by <see cref="PushStream" /> rather than from a file — an internet
+    ///     radio station, or anything else arriving as bytes over time.
+    /// </summary>
+    SoundHandle CreateStream()
+    {
+        return SoundHandle.None;
+    }
+
+    /// <summary>Hand container bytes to a stream source. Returns how many were accepted.</summary>
+    int PushStream(SoundHandle sound, ReadOnlySpan<byte> bytes)
+    {
+        return 0;
+    }
+
+    /// <summary>No more bytes are coming; the source plays out what it has and ends.</summary>
+    void FinishStream(SoundHandle sound)
+    {
+    }
+
+    /// <summary>Seconds of audio buffered ahead of the play cursor — the underrun early warning.</summary>
+    float StreamBuffered(SoundHandle sound)
+    {
+        return 0f;
+    }
+
+    /// <summary>Play position in seconds, or −1 when unknown.</summary>
+    float GetCursor(SoundHandle sound)
+    {
+        return -1f;
+    }
+
+    /// <summary>Total length in seconds, or −1 for a stream of unknown length.</summary>
+    float GetDuration(SoundHandle sound)
+    {
+        return -1f;
+    }
+
+    /// <summary>Jump the play cursor. The lever shared playback uses to correct drift.</summary>
+    void Seek(SoundHandle sound, float seconds)
+    {
+    }
+
     /// <summary>
     ///     Create a mixer bus. <see cref="AudioBus.None" /> on failure. Buses live for the whole
     ///     play session — create a handful once (music/sfx/ambience), there is no per-bus destroy.
@@ -247,6 +293,48 @@ public static class Audio
     public static void SetPitch(SoundHandle sound, float pitch)
     {
         Backend?.SetPitch(sound, pitch);
+    }
+
+    /// <summary>
+    ///     A source fed by <see cref="PushStream" /> instead of a file. Push container bytes as they
+    ///     arrive — the decoder identifies the format once enough have landed — and the source plays
+    ///     continuously. Spatialise it like any other sound.
+    /// </summary>
+    public static SoundHandle CreateStream()
+    {
+        return Backend?.CreateStream() ?? SoundHandle.None;
+    }
+
+    public static int PushStream(SoundHandle sound, ReadOnlySpan<byte> bytes)
+    {
+        return Backend?.PushStream(sound, bytes) ?? 0;
+    }
+
+    public static void FinishStream(SoundHandle sound)
+    {
+        Backend?.FinishStream(sound);
+    }
+
+    public static float StreamBuffered(SoundHandle sound)
+    {
+        return Backend?.StreamBuffered(sound) ?? 0f;
+    }
+
+    /// <summary>Play position in seconds, or −1 when unknown.</summary>
+    public static float GetCursor(SoundHandle sound)
+    {
+        return Backend?.GetCursor(sound) ?? -1f;
+    }
+
+    public static float GetDuration(SoundHandle sound)
+    {
+        return Backend?.GetDuration(sound) ?? -1f;
+    }
+
+    /// <summary>Jump the play cursor — how shared playback pulls a drifting listener back into line.</summary>
+    public static void Seek(SoundHandle sound, float seconds)
+    {
+        Backend?.Seek(sound, seconds);
     }
 
     public static void SetLooping(SoundHandle sound, bool looping)
