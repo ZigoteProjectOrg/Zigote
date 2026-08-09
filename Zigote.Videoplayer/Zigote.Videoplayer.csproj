@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>Zigote.Videoplayer</RootNamespace>
+        <AssemblyName>Zigote.Videoplayer</AssemblyName>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Zigote.Core\Zigote.Core.csproj"/>
+        <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
+        <!-- VideoControls is built from the Material slider/buttons; the player and the view
+             themselves only need Core + UI. -->
+        <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
+    </ItemGroup>
+</Project>

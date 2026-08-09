@@ -37,6 +37,8 @@
   "demoAnimateDesc": "Текучий API .Animate(): появление, сдвиг, масштаб.",
   "demoDragDropTitle": "Перетаскивание",
   "demoDragDropDesc": "Перетаскивание внутри приложения, файлы из ОС, буфер обмена.",
+  "demoVideoTitle": "Видео",
+  "demoVideoDesc": "Плеер на ffmpeg: перемотка, скорость, громкость и вписывание.",
   "demoLocalizationTitle": "Локализация",
   "demoLocalizationDesc": "Множественное число, форматирование и RTL — i18n-фреймворк в действии.",
 

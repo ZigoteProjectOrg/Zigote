@@ -44,6 +44,7 @@
       "Zigote.UI.Material\\Zigote.UI.Material.csproj",
       "Zigote.UI\\Zigote.UI.csproj",
       "Zigote.Vfx\\Zigote.Vfx.csproj",
+      "Zigote.Videoplayer\\Zigote.Videoplayer.csproj",
       "Zigote.World\\Zigote.World.csproj"
     ]
   }

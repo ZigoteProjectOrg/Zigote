@@ -45,6 +45,7 @@
         <ProjectReference Include="..\Zigote.Scripting\Zigote.Scripting.csproj"/>
         <ProjectReference Include="..\Zigote.Render2D\Zigote.Render2D.csproj"/>
         <ProjectReference Include="..\Zigote.Runtime\Zigote.Runtime.csproj"/>
+        <ProjectReference Include="..\Zigote.Videoplayer\Zigote.Videoplayer.csproj"/>
         <ProjectReference Include="..\Zigote.World\Zigote.World.csproj"/>
         <ProjectReference Include="..\Zigote.Save\Zigote.Save.csproj"/>
         <ProjectReference Include="..\Zigote.Physics2D\Zigote.Physics2D.csproj"/>

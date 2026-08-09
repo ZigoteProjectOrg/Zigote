@@ -37,6 +37,8 @@
   "demoAnimateDesc": "واجهة تحريك انسيابية: تلاشٍ وانزلاق وتحجيم.",
   "demoDragDropTitle": "السحب والإفلات",
   "demoDragDropDesc": "سحب داخل التطبيق وملفات النظام والحافظة.",
+  "demoVideoTitle": "فيديو",
+  "demoVideoDesc": "مشغّل يعتمد على ffmpeg: التمرير والسرعة والصوت والملاءمة.",
   "demoLocalizationTitle": "التوطين",
   "demoLocalizationDesc": "الجمع والتنسيق والكتابة من اليمين — إطار التوطين عمليًا.",
 

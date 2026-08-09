@@ -13,6 +13,7 @@
         <ProjectReference Include="..\Zigote.UI.Charts\Zigote.UI.Charts.csproj"/>
         <ProjectReference Include="..\Zigote.UI.Localizations\Zigote.UI.Localizations.csproj"/>
         <ProjectReference Include="..\Zigote.UI.DevTools\Zigote.UI.DevTools.csproj"/>
+        <ProjectReference Include="..\Zigote.Videoplayer\Zigote.Videoplayer.csproj"/>
         <ProjectReference Include="..\Zigote.Generators\Zigote.Generators.csproj"
                           OutputItemType="Analyzer" ReferenceOutputAssembly="false"/>
     </ItemGroup>

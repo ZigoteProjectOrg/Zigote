@@ -119,6 +119,14 @@ internal static class DemoRegistry
             () => new DragDropPage()
         ),
         new(
+            "video",
+            MaterialIcons.Movie,
+            Colors.DeepOrange,
+            l => l.DemoVideoTitle,
+            l => l.DemoVideoDesc,
+            () => new VideoPage()
+        ),
+        new(
             "localization",
             MaterialIcons.Translate,
             Colors.DeepPurple,
