@@ -116,21 +116,29 @@ public static class PlayerMain
     /// <summary>
     ///     Locate the bundled Content dir: next to the executable (Windows/Linux), or in
     ///     Contents/Resources for a macOS .app (the executable lives in Contents/MacOS).
+    ///     Both AppContext.BaseDirectory and the real executable's directory are probed — a
+    ///     self-extracting single-file build (the desktop JIT flavor) reports the extraction
+    ///     dir under ~/.net as BaseDirectory, while Content sits next to the exe.
     /// </summary>
     private static string? ResolveContentDir()
     {
-        var baseDir = AppContext.BaseDirectory;
-        string[] candidates = [
-            Path.Combine(baseDir, "Content"),
-            Path.GetFullPath(
-                Path.Combine(
-                    baseDir,
-                    "..",
-                    "Resources",
-                    "Content"
-                )
-            ),
+        string?[] baseDirs = [
+            AppContext.BaseDirectory,
+            Path.GetDirectoryName(Environment.ProcessPath),
         ];
-        return candidates.FirstOrDefault(Directory.Exists);
+        return baseDirs
+            .OfType<string>()
+            .SelectMany(dir => new[] {
+                Path.Combine(dir, "Content"),
+                Path.GetFullPath(
+                    Path.Combine(
+                        dir,
+                        "..",
+                        "Resources",
+                        "Content"
+                    )
+                ),
+            })
+            .FirstOrDefault(Directory.Exists);
     }
 }
