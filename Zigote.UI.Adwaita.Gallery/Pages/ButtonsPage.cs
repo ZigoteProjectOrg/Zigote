@@ -4,7 +4,7 @@ namespace AdwaitaGallery.Pages;
 ///     Buttons — the Adwaita button in every style, shape and size it ships with, plus the split
 ///     button and the button row.
 /// </summary>
-public sealed class ButtonsPage : StatelessWidget
+public sealed class ButtonsPage : ComposedWidget
 {
     private static readonly string[] SampleMenu = ["Save As…", "Duplicate", "Export"];
 

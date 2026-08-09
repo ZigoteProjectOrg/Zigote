@@ -4,7 +4,7 @@ namespace Zigote.UI.Adwaita;
 ///     AdwWindowTitle — the standard header-bar title: a centered column with a bold title and an
 ///     optional dim subtitle.
 /// </summary>
-public sealed class AdwWindowTitle : StatelessWidget
+public sealed class AdwWindowTitle : ComposedWidget
 {
     private string _title;
     private string? _subtitle;
@@ -55,7 +55,7 @@ public sealed class AdwWindowTitle : StatelessWidget
 ///     AdwHeaderBar — the GNOME window bar: start widgets (with an optional back button), an
 ///     absolutely-centered title, end widgets, and a bottom hairline unless <see cref="Flat" />.
 /// </summary>
-public sealed class AdwHeaderBar : StatelessWidget
+public sealed class AdwHeaderBar : ComposedWidget
 {
     private string? _title;
     private Widget? _titleWidget;

@@ -9,7 +9,7 @@ namespace Zigote.UI.Adwaita;
 ///     AdwLinkButton — a flat button whose label renders in the standalone accent colour and
 ///     underlines on hover, like a GtkLinkButton.
 /// </summary>
-public sealed class AdwLinkButton : StatelessWidget
+public sealed class AdwLinkButton : ComposedWidget
 {
     private bool _enabled = true;
     private string _label;

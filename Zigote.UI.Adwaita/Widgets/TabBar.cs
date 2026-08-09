@@ -11,7 +11,7 @@ namespace Zigote.UI.Adwaita;
 ///         reordering and a scrolling strip if a real app outgrows this.
 ///     </para>
 /// </summary>
-public sealed class AdwTabBar : StatelessWidget
+public sealed class AdwTabBar : ComposedWidget
 {
     private const float StripHeight = 37f; // + 1px hairline = 38 total
     private const float PinnedWidth = 40f;

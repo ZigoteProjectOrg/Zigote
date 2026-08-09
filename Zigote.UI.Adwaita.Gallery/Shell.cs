@@ -6,7 +6,7 @@ namespace AdwaitaGallery;
 ///     under a header that names it — and grows a back button only once the window is narrow enough
 ///     for the two panes to become one.
 /// </summary>
-internal sealed class Shell : StatelessWidget
+internal sealed class Shell : ComposedWidget
 {
     // The width at which the panes fold into a single navigable page (the demo's phone breakpoint).
     private const float CollapseWidth = 620f;

@@ -4,7 +4,7 @@ namespace AdwaitaGallery.Pages;
 ///     Navigation View — AdwNavigationView driving a page stack, both inline (the stage below) and
 ///     as the whole content of a dialog.
 /// </summary>
-public sealed class NavigationViewPage : StatelessWidget
+public sealed class NavigationViewPage : ComposedWidget
 {
     protected override Widget Build(BuildContext context)
     {

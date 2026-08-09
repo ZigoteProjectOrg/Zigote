@@ -4,7 +4,7 @@ namespace AdwaitaGallery.Pages;
 ///     Colors — the libadwaita named colors of the appearance in force, and the nine system accents.
 ///     Change either and the whole gallery follows on the next frame: one ThemeData, one push.
 /// </summary>
-public sealed class ColorsPage : StatelessWidget
+public sealed class ColorsPage : ComposedWidget
 {
     protected override Widget Build(BuildContext context)
     {
@@ -85,7 +85,7 @@ public sealed class ColorsPage : StatelessWidget
 }
 
 /// <summary>A rounded colour chip with a hairline, so a white swatch is still visible on white.</summary>
-internal sealed class Swatch(Color color) : StatelessWidget
+internal sealed class Swatch(Color color) : ComposedWidget
 {
     protected override Widget Build(BuildContext context)
     {

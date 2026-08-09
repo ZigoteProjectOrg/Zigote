@@ -24,7 +24,7 @@ public sealed class AdwTabPage
 ///     AdwTabView — holds a dynamic list of <see cref="AdwTabPage" />s and renders the selected
 ///     page's content. Pair with <see cref="AdwTabBar" /> for the tab strip.
 /// </summary>
-public sealed class AdwTabView : StatelessWidget
+public sealed class AdwTabView : ComposedWidget
 {
     /// <summary>Selection, signal-backed so the tab bar can react.</summary>
     internal readonly Signal<int> Selected = new(0);

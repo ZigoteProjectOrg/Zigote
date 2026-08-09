@@ -6,7 +6,7 @@ namespace AdwaitaGallery;
 ///     standard page padding and group spacing. Pages therefore describe only their content, and
 ///     every page shares one rhythm.
 /// </summary>
-internal sealed class GalleryPage : StatelessWidget
+internal sealed class GalleryPage : ComposedWidget
 {
     public GalleryPage(string title, string description, string iconName = "")
     {
@@ -191,7 +191,7 @@ internal static class Demo
     }
 }
 
-internal sealed class DemoStage(Widget child) : StatelessWidget
+internal sealed class DemoStage(Widget child) : ComposedWidget
 {
     public float Padding { get; set; } = Spacing.Xl;
 
@@ -211,7 +211,7 @@ internal sealed class DemoStage(Widget child) : StatelessWidget
     }
 }
 
-internal sealed class DemoTitled(string title, string? description, Widget child) : StatelessWidget
+internal sealed class DemoTitled(string title, string? description, Widget child) : ComposedWidget
 {
     protected override Widget Build(BuildContext context)
     {
@@ -245,7 +245,7 @@ internal sealed class DemoTitled(string title, string? description, Widget child
     }
 }
 
-internal sealed class DemoCaption(string text) : StatelessWidget
+internal sealed class DemoCaption(string text) : ComposedWidget
 {
     protected override Widget Build(BuildContext context)
     {
@@ -257,7 +257,7 @@ internal sealed class DemoCaption(string text) : StatelessWidget
     }
 }
 
-internal sealed class DemoValue(string text) : StatelessWidget
+internal sealed class DemoValue(string text) : ComposedWidget
 {
     protected override Widget Build(BuildContext context)
     {

@@ -5,7 +5,7 @@ namespace Zigote.UI.Adwaita;
 ///     label, the active page carrying the neutral active fill, badge counts as small accent pills.
 ///     Clicking a toggle sets <see cref="AdwViewStack.VisibleName" />.
 /// </summary>
-public sealed class AdwViewSwitcher : StatelessWidget
+public sealed class AdwViewSwitcher : ComposedWidget
 {
     private readonly AdwViewStack _stack;
 
@@ -89,7 +89,7 @@ public sealed class AdwViewSwitcher : StatelessWidget
 ///     AdwViewSwitcherBar — a bottom bar (title-bar background, top hairline) hosting a centered
 ///     <see cref="AdwViewSwitcher" />; the narrow-window companion of a header-bar switcher.
 /// </summary>
-public sealed class AdwViewSwitcherBar : StatelessWidget
+public sealed class AdwViewSwitcherBar : ComposedWidget
 {
     private readonly AdwViewStack _stack;
 
@@ -125,7 +125,7 @@ public sealed class AdwViewSwitcherBar : StatelessWidget
 ///     AdwInlineViewSwitcher — the libadwaita 1.7 joined-toggle look: one filled capsule (or 9px
 ///     rounded) container with 1px separators, the active segment carrying the stronger fill.
 /// </summary>
-public sealed class AdwInlineViewSwitcher : StatelessWidget
+public sealed class AdwInlineViewSwitcher : ComposedWidget
 {
     private readonly AdwViewStack _stack;
     private bool _round;

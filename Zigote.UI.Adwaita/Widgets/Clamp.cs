@@ -4,7 +4,7 @@ namespace Zigote.UI.Adwaita;
 ///     AdwClamp — constrains its child to a maximum width and centers it, letting it fill
 ///     narrower spaces. The standard wrapper for preferences pages and reading content.
 /// </summary>
-public sealed class AdwClamp : StatelessWidget
+public sealed class AdwClamp : ComposedWidget
 {
     private Widget _child;
     private float _maximumSize;

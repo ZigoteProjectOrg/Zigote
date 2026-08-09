@@ -15,7 +15,8 @@ public enum AdwResponseAppearance
 /// <summary>
 ///     AdwAlertDialog — the libadwaita alert: a 360px sheet with a centered bold heading, a dim
 ///     centered body, an optional extra child, and a hairline-separated response area (two
-///     responses side-by-side, one or three-plus stacked). A response press invokes
+///     responses side-by-side, one or three-plus stacked — unless
+///     <see cref="PreferWideLayout" /> keeps them in a row). A response press invokes
 ///     <see cref="OnResponse" /> with its id and closes; closing any other way (Escape, scrim)
 ///     emits <see cref="CloseResponse" /> when set.
 /// </summary>
@@ -45,6 +46,14 @@ public sealed class AdwAlertDialog : AdwDialog
 
     /// <summary>Optional widget between the body and the response area.</summary>
     public Widget? ExtraChild { get; init; }
+
+    /// <summary>
+    ///     Lay three or more responses side by side instead of stacking them — libadwaita's
+    ///     <c>prefer-wide-layout</c>. It is a preference, not a command: short labels fit in a row,
+    ///     and the stack remains the honest answer for long ones, so this is worth setting only
+    ///     when the responses really are one or two words each.
+    /// </summary>
+    public bool PreferWideLayout { get; init; }
 
     /// <summary>Invoked once with the id of the chosen response (or <see cref="CloseResponse" />).</summary>
     public Action<string>? OnResponse { get; set; }
@@ -104,7 +113,7 @@ public sealed class AdwAlertDialog : AdwDialog
         base.Close();
     }
 
-    private sealed class Content(AdwAlertDialog owner) : StatelessWidget
+    private sealed class Content(AdwAlertDialog owner) : ComposedWidget
     {
         protected override Widget Build(BuildContext context)
         {
@@ -152,16 +161,19 @@ public sealed class AdwAlertDialog : AdwDialog
 
             col.Children.Add(Hairline(theme, true));
 
-            if (owner._responses.Count == 2)
-                col.Children.Add(
-                    new Row {
-                        Children = {
-                            new Expanded(ResponseButton(theme, p, owner._responses[0])),
-                            Hairline(theme, false),
-                            new Expanded(ResponseButton(theme, p, owner._responses[1])),
-                        },
-                    }
-                );
+            // Two responses always sit side by side; more only when the caller asked for wide.
+            if (owner._responses.Count == 2 ||
+                (owner.PreferWideLayout && owner._responses.Count > 2))
+            {
+                var row = new Row();
+                for (var i = 0; i < owner._responses.Count; i++)
+                {
+                    if (i > 0) row.Children.Add(Hairline(theme, false));
+                    row.Children.Add(new Expanded(ResponseButton(theme, p, owner._responses[i])));
+                }
+
+                col.Children.Add(row);
+            }
             else
                 for (var i = 0; i < owner._responses.Count; i++)
                 {

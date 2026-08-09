@@ -5,7 +5,7 @@ namespace AdwaitaGallery.Pages;
 ///     only the rows the viewport can see, so the scroll stays flat however far down you go; the
 ///     counter is a signal the list writes on every scroll.
 /// </summary>
-public sealed class LargeListsPage : StatelessWidget
+public sealed class LargeListsPage : ComposedWidget
 {
     private const int Rows = 2000;
 

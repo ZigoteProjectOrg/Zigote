@@ -49,6 +49,10 @@ public static class Program
             }
         }
 
+        // The one page whose point is not visual: concurrent signal writes have to be exact.
+        if (Pages.ConcurrencyPage.SelfCheck() is { } concurrency)
+            failures.Add($"Concurrency: {concurrency}");
+
         foreach (var failure in failures) Console.Error.WriteLine($"FAIL {failure}");
         Console.WriteLine(
             failures.Count == 0

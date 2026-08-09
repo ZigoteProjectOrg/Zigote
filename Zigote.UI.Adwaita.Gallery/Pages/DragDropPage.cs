@@ -7,7 +7,7 @@ namespace AdwaitaGallery.Pages;
 ///     highlights while a compatible drag is over it, and the ghost under the pointer is a widget
 ///     like any other.
 /// </summary>
-public sealed class DragDropPage : StatelessWidget
+public sealed class DragDropPage : ComposedWidget
 {
     private readonly Signal<List<string>> _backlog = new(
         [
@@ -149,7 +149,7 @@ public sealed class DragDropPage : StatelessWidget
 }
 
 /// <summary>A task card — the thing being dragged, and (with <see cref="Ghost" />) its own ghost.</summary>
-internal sealed class TaskCard(string text) : StatelessWidget
+internal sealed class TaskCard(string text) : ComposedWidget
 {
     /// <summary>Lifted look for the widget painted under the pointer.</summary>
     public bool Ghost { get; set; }
@@ -191,7 +191,7 @@ internal sealed class TaskCard(string text) : StatelessWidget
 ///     <see cref="Hovering" /> recolours the retained box rather than rebuilding — the cards inside
 ///     must survive the highlight, since one of them may be the widget being dragged.
 /// </summary>
-internal sealed class DropZone(string title, int count, Widget child) : StatelessWidget
+internal sealed class DropZone(string title, int count, Widget child) : ComposedWidget
 {
     private DecoratedBox? _box;
     private bool _hovering;

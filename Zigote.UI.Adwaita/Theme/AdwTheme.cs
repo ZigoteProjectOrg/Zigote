@@ -106,6 +106,7 @@ public static class AdwTheme
             ButtonRadius = AdwMetrics.ControlRadius,
             InputRadius = AdwMetrics.ControlRadius,
             CardRadius = AdwMetrics.CardRadius,
+            ToastRadius = AdwMetrics.Pill,
             // GNOME draws a 2px focus ring; ThemeData's default is the 3px macOS one.
             FocusRingWidth = 2f,
 

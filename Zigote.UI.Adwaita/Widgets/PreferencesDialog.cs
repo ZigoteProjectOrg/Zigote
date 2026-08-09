@@ -24,7 +24,7 @@ public sealed class AdwPreferencesDialog : AdwDialog
     // init: the content sheet is built in the constructor, so a later assignment never shows.
     public string Title { get; init; } = "Preferences";
 
-    private sealed class Content(AdwPreferencesDialog owner) : StatelessWidget
+    private sealed class Content(AdwPreferencesDialog owner) : ComposedWidget
     {
         protected override Widget Build(BuildContext context)
         {

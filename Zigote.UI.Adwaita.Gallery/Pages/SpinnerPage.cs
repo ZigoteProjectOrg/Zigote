@@ -4,7 +4,7 @@ namespace AdwaitaGallery.Pages;
 ///     Spinner — the indeterminate Adwaita spinner at the sizes it is used at, and inside the
 ///     things that wait.
 /// </summary>
-public sealed class SpinnerPage : StatelessWidget
+public sealed class SpinnerPage : ComposedWidget
 {
     protected override Widget Build(BuildContext context)
     {

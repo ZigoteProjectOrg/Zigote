@@ -6,7 +6,7 @@ namespace Zigote.UI.Adwaita;
 ///     white on a stable accent hue hashed from the text; with <see cref="IconName" /> (or nothing)
 ///     it shows a dim glyph on the neutral fill.
 /// </summary>
-public sealed class AdwAvatar : StatelessWidget
+public sealed class AdwAvatar : ComposedWidget
 {
     private float _size;
     private string? _text;

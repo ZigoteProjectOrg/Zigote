@@ -4,7 +4,7 @@ namespace AdwaitaGallery.Pages;
 ///     Toasts — transient messages, raised through the window's own toast host rather than a
 ///     page-owned overlay, so they behave the same wherever they come from.
 /// </summary>
-public sealed class ToastsPage : StatelessWidget
+public sealed class ToastsPage : ComposedWidget
 {
     private const string LongTitle =
         "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor " +

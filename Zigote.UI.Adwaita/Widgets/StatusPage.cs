@@ -6,7 +6,7 @@ namespace Zigote.UI.Adwaita;
 ///     empty states, errors, and welcome screens. <see cref="Compact" /> shrinks it for
 ///     embedding inside cards and sidebars.
 /// </summary>
-public sealed class AdwStatusPage : StatelessWidget
+public sealed class AdwStatusPage : ComposedWidget
 {
     private string? _iconName;
     private string _title = "";

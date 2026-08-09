@@ -4,7 +4,7 @@ namespace AdwaitaGallery.Pages;
 ///     Checks &amp; Radios — check buttons, an exclusive radio group and the switch, each shown as a
 ///     bare control and in the row it usually lives in.
 /// </summary>
-public sealed class ChecksPage : StatelessWidget
+public sealed class ChecksPage : ComposedWidget
 {
     private static readonly string[] Qualities = ["Draft", "Standard", "High"];
 

@@ -6,7 +6,7 @@ namespace AdwaitaGallery.Pages;
 ///     Sliders &amp; Progress — the range controls and the two bars, with a real (ticking) transfer
 ///     so the progress bar shows what it looks like in motion rather than parked at 40%.
 /// </summary>
-public sealed class SlidersPage : StatelessWidget, ITickerProvider
+public sealed class SlidersPage : ComposedWidget
 {
     private readonly Signal<float> _volume = new(0.65f);
     private readonly Signal<double> _copies = new(2);
@@ -27,25 +27,16 @@ public sealed class SlidersPage : StatelessWidget, ITickerProvider
         };
     }
 
-    public Ticker CreateTicker(Action<float> onTick)
+    protected override void OnMount()
     {
-        _ticker?.Dispose();
-        _ticker = new Ticker(onTick);
-        return _ticker;
+        // Owned by the mount period; the toggle above starts/stops it.
+        _ticker = CreateTicker(Advance);
+        if (_running.Peek()) _ticker.Start();
     }
 
-    public override void Attach(App owner, Widget? parent)
+    protected override void OnUnmount()
     {
-        base.Attach(owner, parent);
-        CreateTicker(Advance);
-        if (_running.Peek()) _ticker!.Start();
-    }
-
-    public override void Detach()
-    {
-        base.Detach();
-        _ticker?.Dispose();
-        _ticker = null;
+        _ticker = null; // the Ticker itself is disposed for us
     }
 
     protected override Widget Build(BuildContext context)

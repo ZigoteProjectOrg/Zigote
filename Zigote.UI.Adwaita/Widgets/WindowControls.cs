@@ -16,7 +16,7 @@ public enum AdwControlsSide
 ///     chrome (system decorations already show buttons) or when the layout puts no buttons on
 ///     this side — so it is always safe to mount.
 /// </summary>
-public sealed class AdwWindowControls : StatelessWidget
+public sealed class AdwWindowControls : ComposedWidget
 {
     public AdwWindowControls(AdwControlsSide side)
     {
@@ -53,7 +53,7 @@ public sealed class AdwWindowControls : StatelessWidget
     ///     widget rather than a Pressable so it stays OUT of the keyboard focus order — window
     ///     buttons never show a focus ring or steal the initial focus in GNOME.
     /// </summary>
-    private sealed class FrameButton(App app, ThemeData theme, AdwWindowButton kind) : RenderWidget
+    private sealed class FrameButton(App app, ThemeData theme, AdwWindowButton kind) : Widget
     {
         private const float Diameter = 24f;
         private bool _hovered;
@@ -177,7 +177,7 @@ public sealed class AdwWindowControls : StatelessWidget
 ///     window, interactive children keep working. Wrap your headerbar containers in this when
 ///     composing custom chrome; <see cref="AdwHeaderBar" /> does it automatically.
 /// </summary>
-public sealed class AdwDragArea : StatelessWidget
+public sealed class AdwDragArea : ComposedWidget
 {
     private readonly Widget _child;
 

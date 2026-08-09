@@ -14,14 +14,13 @@ namespace Zigote.UI.Adwaita;
 ///     behind it. The capture is released during the exit fade so no row can be picked twice.
 ///     Subclasses supply their own measurement, row painting and hit mapping.
 /// </summary>
-internal abstract class AdwPopoverBase : RenderWidget, IDismissableOverlay, ITickerProvider
+internal abstract class AdwPopoverBase : Widget, IDismissableOverlay
 {
     private readonly Rect _anchor;
     private readonly App _app;
     private readonly AnimationController _enter;
 
     private bool _closing;
-    private Ticker? _ticker;
 
     protected int Hovered = -1;
     protected float PopupH;
@@ -56,25 +55,14 @@ internal abstract class AdwPopoverBase : RenderWidget, IDismissableOverlay, ITic
 
     // ── Ticker plumbing (Toast pattern: rebind on Attach, dispose on Detach) ───
 
-    public Ticker CreateTicker(Action<float> onTick)
-    {
-        _ticker?.Dispose();
-        _ticker = new Ticker(onTick);
-        return _ticker;
-    }
 
-    public override void Attach(App owner, Widget? parent)
+    // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
+    // re-attach rebinds instead of leaking one per attach cascade.
+    protected override void OnMount()
     {
-        base.Attach(owner, parent);
         _enter.AttachTicker(this);
     }
 
-    public override void Detach()
-    {
-        base.Detach();
-        _ticker?.Dispose();
-        _ticker = null;
-    }
 
     public void Show()
     {
@@ -129,7 +117,7 @@ internal abstract class AdwPopoverBase : RenderWidget, IDismissableOverlay, ITic
         if (rise > 0.01f) paint.PushTranslate(0f, -rise);
 
         var mr = PopupRect();
-        paint.AddElevation(mr, AdwMetrics.CardRadius, Elevation.Z2);
+        paint.AddElevation(mr, AdwMetrics.CardRadius, AdwMetrics.PopoverShadow);
         paint.AddRect(mr, AdwPalette.For(Theme).PopoverBg, AdwMetrics.CardRadius);
         paint.AddBorder(mr, Theme.Border, AdwMetrics.CardRadius);
         PaintRows(paint, mr);

@@ -1,7 +1,7 @@
 namespace AdwaitaGallery.Pages;
 
 /// <summary>View Switcher — the stack inline in the page, and the AdwViewSwitcher demo dialog.</summary>
-public sealed class ViewSwitcherPage : StatelessWidget
+public sealed class ViewSwitcherPage : ComposedWidget
 {
     /// <summary>The demo's <c>max-width: 550sp</c> breakpoint.</summary>
     private const float NarrowWidth = 550f;
@@ -20,6 +20,13 @@ public sealed class ViewSwitcherPage : StatelessWidget
                     "The same stack with the inline switcher — the compact form for a page.",
                     new SizedBox(height: 320f, child: Inline())
                 ),
+                Demo.Titled(
+                    "Sidebar",
+                    "AdwViewSwitcherSidebar drives the same stack from a list — what a wide window " +
+                    "uses where a narrow one would use the switcher above. Its 1.10 prefix slot " +
+                    "holds the search entry.",
+                    new SizedBox(height: 320f, child: Sidebar())
+                ),
                 Demo.Group(
                     "Full Size",
                     "At window scale the switcher moves between the header bar and a bottom bar at 550 px.",
@@ -30,6 +37,31 @@ public sealed class ViewSwitcherPage : StatelessWidget
                 ),
             },
         };
+    }
+
+    /// <summary>The same stack, switched from a sidebar with a search entry in its prefix.</summary>
+    private static Widget Sidebar()
+    {
+        var stack = Stack();
+        var sidebar = new AdwViewSwitcherSidebar(stack);
+        var search = new AdwSearchEntry { Placeholder = "Filter views", Compact = true };
+        search.OnChanged = q => sidebar.Filter = q;
+        sidebar.Prefix = new Padding(EdgeInsets.All(Spacing.Sm), search);
+
+        return new ClipRRect(
+            AdwMetrics.CardRadius,
+            new DecoratedBox {
+                Radius = AdwMetrics.CardRadius,
+                BorderColor = ThemeProvider.Of(BuildContext.Current).Border,
+                Child = new Row {
+                    Children = {
+                        new SizedBox(220f, child: sidebar),
+                        new SizedBox(1f, child: new AdwSeparator(true)),
+                        new Expanded(stack),
+                    },
+                },
+            }
+        );
     }
 
     /// <summary>The stack with an inline switcher above it, sized into the page.</summary>

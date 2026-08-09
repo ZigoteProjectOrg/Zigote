@@ -1,7 +1,7 @@
 namespace AdwaitaGallery.Pages;
 
 /// <summary>Carousel — an AdwCarousel with dots/lines indicators and its options page.</summary>
-public sealed class CarouselPage : StatelessWidget
+public sealed class CarouselPage : ComposedWidget
 {
     // 0 = Horizontal, 1 = Vertical: as in the demo, the indicators sit across the carousel's axis.
     private readonly Signal<int> _orientation = new(0);

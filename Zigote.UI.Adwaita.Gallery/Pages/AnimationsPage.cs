@@ -6,7 +6,7 @@ namespace AdwaitaGallery.Pages;
 ///     Animations — a square that slides left to right as the animation value goes 0 → 1, with the
 ///     demo's transport controls and the Timed / Spring parameter groups.
 /// </summary>
-public sealed class AnimationsPage : StatelessWidget
+public sealed class AnimationsPage : ComposedWidget
 {
     /// <summary>The AdwEasing values, in enum order; the labels come from the demo verbatim.</summary>
     private static readonly string[] EasingNames = [

@@ -38,7 +38,7 @@ public sealed class AdwToast
 ///     <see cref="AdwToast.Timeout" /> and can be dismissed early via its close button or by
 ///     activating its action.
 /// </summary>
-public sealed class AdwToastOverlay : StatelessWidget, ITickerProvider
+public sealed class AdwToastOverlay : ComposedWidget
 {
     // The toast surface is always dark, whatever the appearance — fixed colors, not theme reads.
     private static readonly Color Surface = Color.Rgba(
@@ -57,7 +57,6 @@ public sealed class AdwToastOverlay : StatelessWidget, ITickerProvider
     private readonly Signal<AdwToast?> _current = new(null);
     private readonly AnimationController _timer;
     private readonly AnimationController _present;
-    private readonly List<Ticker> _tickers = [];
     private Widget _child;
     private ThemeData _theme = AdwTheme.Light;
 
@@ -141,33 +140,11 @@ public sealed class AdwToastOverlay : StatelessWidget, ITickerProvider
         _present.Reverse();
     }
 
-    // ── Ticker plumbing (as the Material Spinner, but two controllers → a ticker list) ──
-
-    public Ticker CreateTicker(Action<float> onTick)
+    // Two controllers, two tickers — Widget.CreateTicker owns both and drops them on unmount.
+    protected override void OnMount()
     {
-        var ticker = new Ticker(onTick);
-        _tickers.Add(ticker);
-        return ticker;
-    }
-
-    public override void Attach(App owner, Widget? parent)
-    {
-        base.Attach(owner, parent);
-        DisposeTickers();
         _timer.AttachTicker(this);
         _present.AttachTicker(this);
-    }
-
-    public override void Detach()
-    {
-        base.Detach();
-        DisposeTickers();
-    }
-
-    private void DisposeTickers()
-    {
-        foreach (var t in _tickers) t.Dispose();
-        _tickers.Clear();
     }
 
     // ── Tree ───────────────────────────────────────────────────────────────────

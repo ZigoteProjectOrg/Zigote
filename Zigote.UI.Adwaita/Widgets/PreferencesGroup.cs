@@ -4,7 +4,7 @@ namespace Zigote.UI.Adwaita;
 ///     AdwPreferencesGroup — an optional header (title, dim description, right-aligned suffix) above
 ///     a boxed list: a CardBg card at radius 12 whose rows are separated by 1px CardShade hairlines.
 /// </summary>
-public sealed class AdwPreferencesGroup : StatelessWidget
+public sealed class AdwPreferencesGroup : ComposedWidget
 {
     private string? _title;
     private string? _description;

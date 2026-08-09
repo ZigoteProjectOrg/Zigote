@@ -10,7 +10,7 @@ namespace Zigote.UI.Adwaita;
 ///     plain white knob that slides across. Disabled drops the whole control to
 ///     <see cref="AdwStyle.DisabledOpacity" />.
 /// </summary>
-public sealed class AdwSwitch : RenderWidget, ITickerProvider
+public sealed class AdwSwitch : Widget
 {
     private readonly AnimationController _anim;
     private bool _enabled = true;
@@ -18,7 +18,6 @@ public sealed class AdwSwitch : RenderWidget, ITickerProvider
     private bool _pressed;
     private Size _size;
     private ThemeData _theme = ThemeData.Dark;
-    private Ticker? _ticker;
     private bool _value;
 
     public AdwSwitch(bool value = false, Action<bool>? onChanged = null)
@@ -52,12 +51,7 @@ public sealed class AdwSwitch : RenderWidget, ITickerProvider
     public bool Enabled
     {
         get => _enabled;
-        set
-        {
-            if (_enabled == value) return;
-            _enabled = value;
-            MarkNeedsPaint();
-        }
+        set => SetPaint(ref _enabled, value);
     }
 
     /// <summary>Optional accessible name (the setting this switch toggles).</summary>
@@ -65,25 +59,14 @@ public sealed class AdwSwitch : RenderWidget, ITickerProvider
 
     public override bool Focusable => Enabled;
 
-    public Ticker CreateTicker(Action<float> onTick)
-    {
-        _ticker?.Dispose();
-        _ticker = new Ticker(onTick);
-        return _ticker;
-    }
 
-    public override void Attach(App owner, Widget? parent)
+    // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
+    // re-attach rebinds instead of leaking one per attach cascade.
+    protected override void OnMount()
     {
-        base.Attach(owner, parent);
         _anim.AttachTicker(this);
     }
 
-    public override void Detach()
-    {
-        base.Detach();
-        _ticker?.Dispose();
-        _ticker = null;
-    }
 
     public override void DescribeSemantics(SemanticsConfiguration config)
     {

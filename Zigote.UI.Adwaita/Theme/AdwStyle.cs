@@ -171,10 +171,10 @@ public static class AdwStyle
 
     /// <summary>
     ///     Assign a property backing field and rebuild if it actually changed. Without this, a
-    ///     plain auto-property on a <see cref="StatelessWidget" /> silently does nothing after the
+    ///     plain auto-property on a <see cref="ComposedWidget" /> silently does nothing after the
     ///     first build — the Build result is cached.
     /// </summary>
-    internal static void Set<T>(this StatelessWidget widget, ref T field, T value)
+    internal static void Set<T>(this ComposedWidget widget, ref T field, T value)
     {
         if (EqualityComparer<T>.Default.Equals(field, value)) return;
         field = value;

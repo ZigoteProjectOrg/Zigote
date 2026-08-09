@@ -12,6 +12,7 @@ namespace Zigote.UI.Adwaita;
 /// </summary>
 public sealed class AdwDropDown : Widget
 {
+    private bool _compact;
     private bool _enabled = true;
     private bool _hovered;
     private IReadOnlyList<string> _items;
@@ -42,12 +43,7 @@ public sealed class AdwDropDown : Widget
     public int SelectedIndex
     {
         get => _selectedIndex;
-        set
-        {
-            if (_selectedIndex == value) return;
-            _selectedIndex = value;
-            MarkNeedsPaint();
-        }
+        set => SetPaint(ref _selectedIndex, value);
     }
 
     public Action<int>? OnSelected { get; set; }
@@ -61,12 +57,14 @@ public sealed class AdwDropDown : Widget
     public bool Enabled
     {
         get => _enabled;
-        set
-        {
-            if (_enabled == value) return;
-            _enabled = value;
-            MarkNeedsPaint();
-        }
+        set => SetPaint(ref _enabled, value);
+    }
+
+    /// <inheritdoc cref="AdwEntry.Compact" />
+    public bool Compact
+    {
+        get => _compact;
+        set => SetLayout(ref _compact, value);
     }
 
     public override bool Focusable => Enabled;
@@ -105,7 +103,9 @@ public sealed class AdwDropDown : Widget
             widest = MathF.Max(widest, TextMeasure.Width(Items[i], fs));
         // label padding + arrow gutter, natural width.
         var w = MathF.Max(80f, widest + Spacing.Md * 2f + 22f);
-        _size = c.Constrain(new Size(w, AdwMetrics.ButtonHeight));
+        _size = c.Constrain(
+            new Size(w, Compact ? AdwMetrics.CompactControlHeight : AdwMetrics.ButtonHeight)
+        );
         return _size;
     }
 

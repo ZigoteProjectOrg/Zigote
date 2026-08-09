@@ -4,7 +4,7 @@ namespace AdwaitaGallery.Pages;
 ///     The landing page: what the gallery is, where to start, and the app-level actions. Every row
 ///     here navigates through <see cref="GalleryHost" />, so the sidebar follows along.
 /// </summary>
-public sealed class WelcomePage : StatelessWidget
+public sealed class WelcomePage : ComposedWidget
 {
     private static readonly (string Page, string Icon, string Blurb)[] StartHere = [
         ("Boxed Lists", MaterialIcons.ViewList, "The row types every GNOME app is built from"),

@@ -4,7 +4,7 @@ namespace AdwaitaGallery.Pages;
 ///     Avatar — initials generated from a name, a fallback glyph when there is none, and the sizes
 ///     the contact list uses.
 /// </summary>
-public sealed class AvatarPage : StatelessWidget
+public sealed class AvatarPage : ComposedWidget
 {
     private static readonly string[] FirstNames = [
         "Adam", "Adrian", "Anna", "Charlotte", "Frédérique", "Ilaria", "Jakub", "Jennyfer",

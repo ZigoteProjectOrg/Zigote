@@ -10,7 +10,7 @@ namespace Zigote.UI.Adwaita;
 ///     <see cref="AdwButton.Content" /> or as an <see cref="AdwSplitButton" /> main section. Leave
 ///     <see cref="Color" /> unset and the owning button tints the built children to its foreground.
 /// </summary>
-public sealed class AdwButtonContent : StatelessWidget
+public sealed class AdwButtonContent : ComposedWidget
 {
     private Color? _color;
     private string? _iconName;
@@ -38,7 +38,7 @@ public sealed class AdwButtonContent : StatelessWidget
     ///     Foreground for the icon and label. A button that resolves its own foreground (every
     ///     .suggested-action / .destructive-action one, where the text must be accent-fg) has to set
     ///     this instead of relying on <c>AdwButtonState.TintForeground</c>: that walks GetChildren,
-    ///     and a StatelessWidget has no children until it has been built — one frame too late.
+    ///     and a ComposedWidget has no children until it has been built — one frame too late.
     /// </summary>
     public Color? Color
     {

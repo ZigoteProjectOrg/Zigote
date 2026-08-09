@@ -1,7 +1,7 @@
 namespace AdwaitaGallery.Pages;
 
 /// <summary>Split Views — the AdwNavigationSplitView and AdwOverlaySplitView demo dialogs.</summary>
-public sealed class SplitViewsPage : StatelessWidget
+public sealed class SplitViewsPage : ComposedWidget
 {
     protected override Widget Build(BuildContext context)
     {

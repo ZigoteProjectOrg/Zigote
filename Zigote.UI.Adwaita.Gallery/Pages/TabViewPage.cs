@@ -1,7 +1,7 @@
 namespace AdwaitaGallery.Pages;
 
 /// <summary>Tab View — the tab strip inline in the page, and the demo's full-size window.</summary>
-public sealed class TabViewPage : StatelessWidget
+public sealed class TabViewPage : ComposedWidget
 {
     /// <summary>Backgrounds standing in for the demo's <c>tab-page-color-1..8</c> classes.</summary>
     private static readonly Color[] PageColors = [
@@ -128,10 +128,7 @@ public sealed class TabViewPage : StatelessWidget
                             new Watch(() => TabMenu(view, revision)),
                             new Tooltip(
                                 "View Open Tabs",
-                                Demo.IconButton(
-                                    MaterialIcons.GridView,
-                                    () => ShowOverview(view, revision)
-                                )
+                                new AdwTabButton(view, () => ShowOverview(view, revision))
                             ),
                             new Tooltip(
                                 "New Tab",
@@ -339,61 +336,15 @@ public sealed class TabViewPage : StatelessWidget
     // ── Overview ────────────────────────────────────────────────────────────────
 
     /// <summary>
-    ///     ponytail: AdwTabOverview has no Zigote equivalent — this is a flat grid of tab buttons
-    ///     instead of live thumbnails; a full version would need page snapshots in AdwTabView.
+    ///     The real <see cref="AdwTabOverview" />. This used to be a hand-rolled grid of buttons
+    ///     with a note that the kit had no overview widget; it has one now, so the gallery shows
+    ///     that instead of a stand-in.
     /// </summary>
     private static void ShowOverview(AdwTabView view, Signal<int> revision)
     {
-        AdwDialog? dlg = null;
-        var grid = new Wrap(spacing: Spacing.Sm, runSpacing: Spacing.Sm);
-        foreach (var page in view.Pages)
-        {
-            var target = page;
-            grid.Children.Add(
-                new AdwButton(
-                    target.Title,
-                    () =>
-                    {
-                        view.SelectedIndex = view.Pages.IndexOf(target);
-                        dlg?.Close();
-                    }
-                ) {
-                    IconName = target.IconName,
-                }
-            );
-        }
-
-        grid.Children.Add(
-            new AdwButton(
-                "New Tab",
-                () =>
-                {
-                    view.Append(NewTab(revision));
-                    dlg?.Close();
-                }
-            ) {
-                IconName = MaterialIcons.Add,
-                Style = AdwButtonStyle.Suggested,
-            }
-        );
-
-        dlg = new AdwDialog(
-            new Padding(
-                EdgeInsets.All(Spacing.Xxl),
-                new Column(
-                    spacing: Spacing.Md,
-                    crossAxisAlignment: CrossAxisAlignment.Start,
-                    mainAxisSize: MainAxisSize.Min
-                ) {
-                    Children = {
-                        new Label("Open Tabs", AdwTypography.Heading),
-                        grid,
-                    },
-                }
-            )
-        ) {
-            ContentWidth = 520f,
-        };
-        dlg.Show();
+        new AdwTabOverview(view) {
+            Title = "Open Tabs",
+            OnCreateTab = () => view.Append(NewTab(revision)),
+        }.Show();
     }
 }

@@ -22,7 +22,7 @@ namespace Zigote.UI.Adwaita;
 ///         heights and a scrolling body that resizes it.
 ///     </para>
 /// </summary>
-public sealed class AdwBottomSheet : StatelessWidget
+public sealed class AdwBottomSheet : ComposedWidget
 {
     /// <summary>Strip of content the sheet never covers, so it always reads as a sheet.</summary>
     private const float TopGap = Spacing.Xxxl;

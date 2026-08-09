@@ -12,7 +12,7 @@ public sealed record AdwToggle(
 ///     transparent and fill on hover. <see cref="Flat" /> drops the group background,
 ///     <see cref="Round" /> makes it a pill.
 /// </summary>
-public sealed class AdwToggleGroup : StatelessWidget
+public sealed class AdwToggleGroup : ComposedWidget
 {
     private readonly IReadOnlyList<AdwToggle> _toggles;
     private int _active;
@@ -76,7 +76,14 @@ public sealed class AdwToggleGroup : StatelessWidget
     {
         var theme = ThemeProvider.Of(context);
         var p = AdwPalette.For(theme);
-        var radius = Round ? AdwMetrics.Pill : AdwMetrics.ControlRadius;
+        // libadwaita insets the toggles by --group-padding (3px) inside the group's own box and
+        // shrinks their radius by the same amount, so the active toggle reads as a card sitting IN
+        // the group rather than a segment cut out of it. Flat groups have no box, so no inset.
+        var pad = Flat ? 0f : AdwMetrics.ToggleGroupPadding;
+        var groupRadius = Round ? AdwMetrics.Pill : AdwMetrics.ControlRadius;
+        var radius = Round
+            ? MathF.Max(0f, AdwMetrics.RoundToggleRadius - pad)
+            : MathF.Max(0f, AdwMetrics.ControlRadius - pad);
 
         var boxes = new DecoratedBox[_toggles.Count];
         var pressables = new Pressable[_toggles.Count];
@@ -88,7 +95,7 @@ public sealed class AdwToggleGroup : StatelessWidget
                 row.Children.Add(
                     new Container {
                         Width = 1f,
-                        Height = AdwMetrics.ButtonHeight,
+                        Height = AdwMetrics.ButtonHeight - pad * 2f,
                         Background = theme.Separator,
                     }
                 );
@@ -150,12 +157,10 @@ public sealed class AdwToggleGroup : StatelessWidget
         };
         _applyColors();
 
-        Widget group = new ClipRRect(radius) {
-            Child = new DecoratedBox {
-                Radius = radius,
-                Fill = Flat ? Color.Transparent : p.ButtonFill,
-                Child = row,
-            },
+        Widget group = new DecoratedBox {
+            Radius = groupRadius,
+            Fill = Flat ? Color.Transparent : p.ButtonFill,
+            Child = pad > 0f ? new Padding(EdgeInsets.All(pad), row) : row,
         };
         return Enabled ? group : new Opacity(AdwStyle.DisabledOpacity, group);
     }

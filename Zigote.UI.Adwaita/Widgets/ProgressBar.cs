@@ -8,13 +8,12 @@ namespace Zigote.UI.Adwaita;
 ///     AdwProgressBar — the GNOME progress bar: a 4px fully-rounded <see cref="ThemeData.Fill2" />
 ///     trough with an accent fill. Set <see cref="Indeterminate" /> for a sliding 30% segment.
 /// </summary>
-public sealed class AdwProgressBar : RenderWidget, ITickerProvider
+public sealed class AdwProgressBar : Widget
 {
     private readonly AnimationController _anim;
     private bool _indeterminate;
     private Size _size;
     private ThemeData _theme = ThemeData.Dark;
-    private Ticker? _ticker;
     private float _value;
 
     public AdwProgressBar(float value = 0f)
@@ -54,26 +53,15 @@ public sealed class AdwProgressBar : RenderWidget, ITickerProvider
         }
     }
 
-    public Ticker CreateTicker(Action<float> onTick)
-    {
-        _ticker?.Dispose();
-        _ticker = new Ticker(onTick);
-        return _ticker;
-    }
 
-    public override void Attach(App owner, Widget? parent)
+    // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
+    // re-attach rebinds instead of leaking one per attach cascade.
+    protected override void OnMount()
     {
-        base.Attach(owner, parent);
         // Rebind the ticker Detach disposed, so an indeterminate bar keeps sliding after re-attach.
         _anim.AttachTicker(this);
     }
 
-    public override void Detach()
-    {
-        base.Detach();
-        _ticker?.Dispose();
-        _ticker = null;
-    }
 
     public override void DescribeSemantics(SemanticsConfiguration config)
     {

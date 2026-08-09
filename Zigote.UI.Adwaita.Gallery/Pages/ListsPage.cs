@@ -1,7 +1,7 @@
 namespace AdwaitaGallery.Pages;
 
 /// <summary>Boxed Lists — every row type libadwaita offers, in the order of the GNOME demo.</summary>
-public sealed class ListsPage : StatelessWidget
+public sealed class ListsPage : ComposedWidget
 {
     /// <summary>The GtkLicense enum nicks the demo feeds to its enumeration combo row.</summary>
     private static readonly string[] Licenses = [

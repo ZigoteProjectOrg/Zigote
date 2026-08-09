@@ -3,7 +3,7 @@ using Zigote.UI.Semantics;
 namespace Zigote.UI.Adwaita;
 
 /// <summary>AdwSwitchRow — an <see cref="AdwActionRow" /> with a switch suffix; clicking the row toggles.</summary>
-public sealed class AdwSwitchRow : StatelessWidget
+public sealed class AdwSwitchRow : ComposedWidget
 {
     private AdwActionRow? _row;
     private AdwSwitch? _switch;
@@ -89,7 +89,7 @@ public sealed class AdwSwitchRow : StatelessWidget
 }
 
 /// <summary>AdwSpinRow — an <see cref="AdwActionRow" /> with an <see cref="AdwSpinButton" /> suffix.</summary>
-public sealed class AdwSpinRow : StatelessWidget
+public sealed class AdwSpinRow : ComposedWidget
 {
     private AdwSpinButton? _spin;
     private double _value;
@@ -189,7 +189,7 @@ public sealed class AdwSpinRow : StatelessWidget
 ///     AdwButtonRow — a boxed-list row that acts as a button: centered bold title with an optional
 ///     leading icon. <see cref="Destructive" /> renders the content in the destructive red.
 /// </summary>
-public sealed class AdwButtonRow : StatelessWidget
+public sealed class AdwButtonRow : ComposedWidget
 {
     private string _title;
     private string? _iconName;

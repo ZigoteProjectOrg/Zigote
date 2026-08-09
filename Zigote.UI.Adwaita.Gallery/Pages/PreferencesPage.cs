@@ -4,7 +4,7 @@ namespace AdwaitaGallery.Pages;
 ///     Preferences — the dialog pattern itself: an inline page showing how the pieces stack, and the
 ///     gallery's own (working) preferences dialog one click away.
 /// </summary>
-public sealed class PreferencesPage : StatelessWidget
+public sealed class PreferencesPage : ComposedWidget
 {
     protected override Widget Build(BuildContext context)
     {

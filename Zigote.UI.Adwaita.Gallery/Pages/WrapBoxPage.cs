@@ -4,7 +4,7 @@ namespace AdwaitaGallery.Pages;
 ///     Wrap Box — children that flow onto a new line when the row runs out, with the spacing and the
 ///     count under live control.
 /// </summary>
-public sealed class WrapBoxPage : StatelessWidget
+public sealed class WrapBoxPage : ComposedWidget
 {
     private static readonly string[] Tags = [
         "adwaita", "gnome", "widgets", "retained", "signals", "layout", "dark mode", "accents",
@@ -71,7 +71,7 @@ public sealed class WrapBoxPage : StatelessWidget
 }
 
 /// <summary>A pill-shaped tag — the thing wrap boxes are usually full of.</summary>
-internal sealed class Chip(string text) : StatelessWidget
+internal sealed class Chip(string text) : ComposedWidget
 {
     protected override Widget Build(BuildContext context)
     {

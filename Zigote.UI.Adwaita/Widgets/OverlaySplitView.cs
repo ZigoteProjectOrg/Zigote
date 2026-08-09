@@ -11,7 +11,7 @@ namespace Zigote.UI.Adwaita;
 ///     ponytail: consumers that rebuild the whole view per state change (instead of mutating
 ///     ShowSidebar on a retained instance) only get the attach-time slide-in, not the slide-out.
 /// </summary>
-public sealed class AdwOverlaySplitView : StatelessWidget, ITickerProvider
+public sealed class AdwOverlaySplitView : ComposedWidget
 {
     private readonly AnimationController _anim;
     private bool _autoCollapsed;
@@ -32,7 +32,6 @@ public sealed class AdwOverlaySplitView : StatelessWidget, ITickerProvider
     private Positioned? _sidebarSlot;
     private SidebarReveal? _reveal;
     private float _sidebarWidth = 260f;
-    private Ticker? _ticker;
 
     public AdwOverlaySplitView()
     {
@@ -166,16 +165,11 @@ public sealed class AdwOverlaySplitView : StatelessWidget, ITickerProvider
 
     // ── Ticker plumbing (same pattern as AdwToastOverlay) ──────────────────────
 
-    public Ticker CreateTicker(Action<float> onTick)
-    {
-        _ticker?.Dispose();
-        _ticker = new Ticker(onTick);
-        return _ticker;
-    }
 
-    public override void Attach(App owner, Widget? parent)
+    // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
+    // re-attach rebinds instead of leaking one per attach cascade.
+    protected override void OnMount()
     {
-        base.Attach(owner, parent);
         _anim.AttachTicker(this);
         // A collapsed overlay that mounts already-open plays its entrance — this is also what lets
         // rebuild-per-state consumers (a Watch around the whole view) animate the open, since they
@@ -190,12 +184,6 @@ public sealed class AdwOverlaySplitView : StatelessWidget, ITickerProvider
         }
     }
 
-    public override void Detach()
-    {
-        base.Detach();
-        _ticker?.Dispose();
-        _ticker = null;
-    }
 
     // ── Tree ───────────────────────────────────────────────────────────────────
 

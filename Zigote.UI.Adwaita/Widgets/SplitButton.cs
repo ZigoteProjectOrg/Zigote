@@ -7,7 +7,7 @@ namespace Zigote.UI.Adwaita;
 ///     separator. Clicking the main section fires <see cref="OnPressed" />; the arrow opens a menu
 ///     popover of <see cref="MenuItems" />.
 /// </summary>
-public sealed class AdwSplitButton : StatelessWidget
+public sealed class AdwSplitButton : ComposedWidget
 {
     private bool _enabled = true;
     private string? _iconName;

@@ -16,6 +16,7 @@ namespace Zigote.UI.Adwaita;
 /// </summary>
 public sealed class AdwSpinButton : Widget, ITextInputClient
 {
+    private bool _compact;
     private const float SegmentW = AdwMetrics.ButtonHeight; // square end buttons
     private const float MinValueW = 48f;
 
@@ -86,16 +87,18 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
     public bool Enabled
     {
         get => _enabled;
-        set
-        {
-            if (_enabled == value) return;
-            _enabled = value;
-            MarkNeedsPaint();
-        }
+        set => SetPaint(ref _enabled, value);
     }
 
     /// <summary>Optional accessible name (the setting this spin button edits).</summary>
     public string? SemanticsLabel { get; set; }
+
+    /// <inheritdoc cref="AdwEntry.Compact" />
+    public bool Compact
+    {
+        get => _compact;
+        set => SetLayout(ref _compact, value);
+    }
 
     public override bool Focusable => Enabled;
 
@@ -165,7 +168,12 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
         _theme = ThemeProvider.Of(BuildContext.Current);
         var textW = TextMeasure.Width(DisplayText, _theme.FontSizeBody);
         var valueW = MathF.Max(MinValueW, textW + Spacing.Md);
-        _size = c.Constrain(new Size(SegmentW * 2f + 2f + valueW, AdwMetrics.ButtonHeight));
+        _size = c.Constrain(
+            new Size(
+                SegmentW * 2f + 2f + valueW,
+                Compact ? AdwMetrics.CompactControlHeight : AdwMetrics.ButtonHeight
+            )
+        );
         return _size;
     }
 

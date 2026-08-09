@@ -1,4 +1,5 @@
 using Zigote.Core.State;
+using Zigote.UI.Widgets.Focus;
 
 namespace Zigote.UI.Adwaita;
 
@@ -22,6 +23,13 @@ public sealed class AdwSidebarItem
     /// <summary>Dimmed second line under the title. Null for a one-line row.</summary>
     public string? Subtitle { get; set; }
 
+    /// <summary>
+    ///     Widget at the row's leading edge, before <see cref="IconName" /> — a colour swatch, an
+    ///     avatar, a check. libadwaita 1.10 (GNOME 51) added this alongside the icon rather than
+    ///     instead of it, so a row can carry both.
+    /// </summary>
+    public Widget? Prefix { get; set; }
+
     /// <summary>Widget pinned to the row's end — a status glyph, a value, a remove button.</summary>
     public Widget? Suffix { get; set; }
 }
@@ -41,6 +49,13 @@ public sealed class AdwSidebarSection
     /// <summary>Heading shown above the items, or null for an unheaded section.</summary>
     public string? Title { get; set; }
 
+    /// <summary>
+    ///     Widget pinned to the end of the heading row — the "+" that adds to this group, a count.
+    ///     New in libadwaita 1.10 (GNOME 51). A section with a suffix but no <see cref="Title" />
+    ///     still gets a heading row to hang it on.
+    /// </summary>
+    public Widget? Suffix { get; set; }
+
     public List<AdwSidebarItem> Items { get; }
 }
 
@@ -50,9 +65,17 @@ public sealed class AdwSidebarSection
 ///     the neutral <c>Fill2</c> wash, the others the activatable-row hover wash.
 ///     <see cref="Filter" /> narrows the rows by title; when nothing matches,
 ///     <see cref="Placeholder" /> (a "No Results Found" status page by default) takes over.
+///     <para>
+///         The whole list is one Tab stop (<see cref="IFocusGroup" />) — libadwaita 1.10's
+///         "tab-behavior: item". Tab lands on the selected row and the next Tab leaves the sidebar
+///         entirely; arrows still walk every row.
+///     </para>
 /// </summary>
-public sealed class AdwSidebar : StatelessWidget
+public sealed class AdwSidebar : ComposedWidget, IFocusGroup
 {
+    /// <summary>The selected row's Pressable, captured while building — see <see cref="TabTarget" />.</summary>
+    private Widget? _selectedRow;
+
     private readonly Signal<int> _selected = new(0);
     private readonly Signal<string> _filter = new("");
     private Widget? _placeholder;
@@ -97,6 +120,12 @@ public sealed class AdwSidebar : StatelessWidget
         set => this.Set(ref _placeholder, value);
     }
 
+    /// <summary>
+    ///     Tab enters the sidebar at the selected row, so a list that is already navigated with
+    ///     arrows costs one Tab press to step past instead of one per row.
+    /// </summary>
+    public Widget? TabTarget => _selectedRow;
+
     /// <summary>Row height — the 36px navigation row by default, taller for two-line rows.</summary>
     public float RowHeight
     {
@@ -113,8 +142,9 @@ public sealed class AdwSidebar : StatelessWidget
     private Widget BuildList(ThemeData theme)
     {
         var query = _filter.Value.Trim();
+        _selectedRow = null; // rebuilt below; a filtered-out selection leaves it null
         var column = new Column(
-            spacing: Spacing.Xxs,
+            spacing: AdwMetrics.SidebarRowGap,
             crossAxisAlignment: CrossAxisAlignment.Stretch
         );
         var index = 0;
@@ -131,8 +161,15 @@ public sealed class AdwSidebar : StatelessWidget
             }
 
             if (rows.Count == 0) continue;
-            if (section.Title is { } heading)
-                column.Children.Add(Heading(theme, heading, column.Children.Count == 0));
+            if (section.Title is not null || section.Suffix is not null)
+                column.Children.Add(
+                    Heading(
+                        theme,
+                        section.Title,
+                        section.Suffix,
+                        column.Children.Count == 0
+                    )
+                );
             foreach (var row in rows)
                 column.Children.Add(row);
         }
@@ -145,19 +182,42 @@ public sealed class AdwSidebar : StatelessWidget
                 Compact = true,
             };
 
-        return new Padding(EdgeInsets.All(Spacing.Sm), column);
+        // Bottom is SidebarRowGap shy of the top: the last row's own gap already supplies it, and
+        // padding both edges equally leaves the end of the list visibly looser than its start.
+        // This is what libadwaita 1.10 corrected in the navigation-sidebar stylesheet.
+        return new Padding(
+            EdgeInsets.FromLtrb(
+                Spacing.Sm,
+                Spacing.Sm,
+                Spacing.Sm,
+                MathF.Max(0f, Spacing.Sm - AdwMetrics.SidebarRowGap)
+            ),
+            column
+        );
     }
 
-    private static Widget Heading(ThemeData theme, string title, bool first)
+    private static Widget Heading(ThemeData theme, string? title, Widget? suffix, bool first)
     {
+        Widget content = new Label(title ?? "", AdwTypography.CaptionHeading, theme.TextSecondary) {
+            MaxLines = 1,
+        };
+        if (suffix is not null)
+            content = new Row(spacing: Spacing.Sm) {
+                Children = {
+                    new Expanded(content),
+                    suffix,
+                },
+            };
+
         return new Padding(
             EdgeInsets.Only(
                 Spacing.Md,
                 first ? Spacing.Xs : Spacing.Md,
-                0f,
+                // A suffix needs breathing room from the list's right edge; a bare caption does not.
+                suffix is null ? 0f : Spacing.Md,
                 Spacing.Xs
             ),
-            new Label(title, AdwTypography.CaptionHeading, theme.TextSecondary)
+            content
         );
     }
 
@@ -204,12 +264,13 @@ public sealed class AdwSidebar : StatelessWidget
                     selected ? theme.OnBackground : theme.TextSecondary
                 )
             );
+        if (item.Prefix is { } prefix) content.Children.Insert(0, prefix);
 
         var box = new Container {
             Height = RowHeight,
             CornerRadius = Radii.Md,
             Background = selected ? theme.Fill2 : Color.Transparent,
-            Padding = EdgeInsets.Symmetric(Spacing.Md),
+            Padding = EdgeInsets.Symmetric(AdwMetrics.SidebarRowPaddingX),
             // Container lays its child at the top-left, so center the row content via Align.
             Child = new Align(Alignment.CenterLeft, content),
         };
@@ -235,6 +296,7 @@ public sealed class AdwSidebar : StatelessWidget
             }
         );
         fill.Snap(selected ? theme.Fill2 : Color.Transparent);
+        if (selected) _selectedRow = press;
         press.OnStateChanged = () =>
         {
             // Selected keeps its Fill2 wash; unselected rows get the activatable-row hover wash.

@@ -7,7 +7,7 @@ namespace Zigote.UI.Adwaita;
 ///     pan-down arrow; clicking anywhere on the row opens the Adwaita popover list (popover surface,
 ///     radius 12, 32px rows, check on the selected item).
 /// </summary>
-public sealed class AdwComboRow : StatelessWidget
+public sealed class AdwComboRow : ComposedWidget
 {
     private Label? _valueLabel;
     private int _selectedIndex;

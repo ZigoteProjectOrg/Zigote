@@ -1,7 +1,7 @@
 namespace AdwaitaGallery.Pages;
 
 /// <summary>Style Classes — the demo's big style-class reference, laid out as a gallery page.</summary>
-public sealed class StylesPage : StatelessWidget
+public sealed class StylesPage : ComposedWidget
 {
     /// <summary>Flat OSD surface used for the .osd samples (no OSD style class in the toolkit).</summary>
     private static readonly Color Osd = Color.Rgba(

@@ -12,7 +12,7 @@ namespace Zigote.UI.Adwaita;
 ///     AnimationController + SlideTransition-over-a-ClipRect'd-Stack recipe, active only on the
 ///     collapsed branch.
 /// </summary>
-public sealed class AdwNavigationSplitView : StatelessWidget
+public sealed class AdwNavigationSplitView : ComposedWidget
 {
     private Widget? _sidebar;
     private Widget? _content;

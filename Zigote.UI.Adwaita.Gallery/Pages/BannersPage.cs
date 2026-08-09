@@ -4,7 +4,7 @@ namespace AdwaitaGallery.Pages;
 ///     Banner — the bar that drops in above the content when something needs an answer, with the
 ///     controls that shape it underneath.
 /// </summary>
-public sealed class BannersPage : StatelessWidget
+public sealed class BannersPage : ComposedWidget
 {
     private const string DefaultButton = "Network Settings";
 

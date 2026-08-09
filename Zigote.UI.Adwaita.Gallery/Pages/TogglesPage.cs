@@ -4,7 +4,7 @@ namespace AdwaitaGallery.Pages;
 ///     Toggles — the linked toggle group (labels, icons, flat, round) and the latching button, with
 ///     the live selection echoed underneath.
 /// </summary>
-public sealed class TogglesPage : StatelessWidget
+public sealed class TogglesPage : ComposedWidget
 {
     private static readonly string[] Views = ["Grid", "List", "Columns"];
 

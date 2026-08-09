@@ -4,7 +4,7 @@ namespace AdwaitaGallery.Pages;
 ///     Entries — the text controls, standalone and as boxed-list rows, with what you type echoed
 ///     live so the binding is visible rather than described.
 /// </summary>
-public sealed class EntriesPage : StatelessWidget
+public sealed class EntriesPage : ComposedWidget
 {
     private static readonly string[] Fruit = [
         "Apricot", "Blackberry", "Cherry", "Damson", "Elderberry", "Fig", "Greengage",

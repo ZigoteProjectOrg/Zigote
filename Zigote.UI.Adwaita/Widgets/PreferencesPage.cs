@@ -5,7 +5,7 @@ namespace Zigote.UI.Adwaita;
 ///     <see cref="AdwPreferencesGroup" />s. <see cref="Title" /> and <see cref="IconName" /> are the
 ///     page's identity for view switchers; the page itself renders only the groups.
 /// </summary>
-public sealed class AdwPreferencesPage : StatelessWidget
+public sealed class AdwPreferencesPage : ComposedWidget
 {
     // init, not set: the switchers read these once when they build their toggle, so a later
     // assignment would silently never show up.

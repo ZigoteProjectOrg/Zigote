@@ -4,7 +4,7 @@ namespace AdwaitaGallery.Pages;
 ///     Clamp — the widget that keeps text at a readable measure in a window that is anything but.
 ///     The slider changes the cap live, and the stage reports the width the child actually got.
 /// </summary>
-public sealed class ClampPage : StatelessWidget
+public sealed class ClampPage : ComposedWidget
 {
     private const string Sample =
         "Adwaita clamps its reading content because a line of text that runs the full width of a " +

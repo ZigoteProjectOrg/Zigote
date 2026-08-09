@@ -38,34 +38,19 @@ public sealed class AdwSlider : Widget
     public float Value
     {
         get => _value;
-        set
-        {
-            if (value == _value) return;
-            _value = value;
-            MarkNeedsPaint();
-        }
+        set => SetPaint(ref _value, value);
     }
 
     public float Min
     {
         get => _min;
-        set
-        {
-            if (value == _min) return;
-            _min = value;
-            MarkNeedsPaint();
-        }
+        set => SetPaint(ref _min, value);
     }
 
     public float Max
     {
         get => _max;
-        set
-        {
-            if (value == _max) return;
-            _max = value;
-            MarkNeedsPaint();
-        }
+        set => SetPaint(ref _max, value);
     }
 
     public Action<float>? OnChanged { get; set; }
@@ -74,12 +59,7 @@ public sealed class AdwSlider : Widget
     public bool Enabled
     {
         get => _enabled;
-        set
-        {
-            if (_enabled == value) return;
-            _enabled = value;
-            MarkNeedsPaint();
-        }
+        set => SetPaint(ref _enabled, value);
     }
 
     /// <summary>Optional accessible name (the parameter this slider controls).</summary>
@@ -93,12 +73,7 @@ public sealed class AdwSlider : Widget
     public bool Vertical
     {
         get => _vertical;
-        set
-        {
-            if (_vertical == value) return;
-            _vertical = value;
-            MarkNeedsLayout();
-        }
+        set => SetLayout(ref _vertical, value);
     }
 
     private bool _vertical;

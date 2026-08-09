@@ -10,7 +10,7 @@ namespace Zigote.UI.Adwaita;
 ///     pressed (ButtonFillActive) fill, or the solid accent when <see cref="Style" /> is
 ///     <see cref="AdwButtonStyle.Suggested" />.
 /// </summary>
-public sealed class AdwToggleButton : StatelessWidget
+public sealed class AdwToggleButton : ComposedWidget
 {
     private bool _active;
     private Action? _applyColors;

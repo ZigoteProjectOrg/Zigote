@@ -4,7 +4,7 @@ namespace AdwaitaGallery.Pages;
 ///     Typography — the Adwaita type scale as specimens, plus the text behaviours a real UI needs:
 ///     wrapping, ellipsis, alignment and selection.
 /// </summary>
-public sealed class TypographyPage : StatelessWidget
+public sealed class TypographyPage : ComposedWidget
 {
     private const string Paragraph =
         "The quick brown fox jumps over the lazy dog. Adwaita sets body text at 11 pt and builds " +

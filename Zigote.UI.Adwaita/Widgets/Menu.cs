@@ -75,7 +75,7 @@ public sealed class AdwMenuItem
 ///     icon button that opens a popover menu of <see cref="AdwMenuItem" /> rows grouped into
 ///     hairline-separated <see cref="Sections" />, anchored below the button.
 /// </summary>
-public sealed class AdwMenuButton : StatelessWidget
+public sealed class AdwMenuButton : ComposedWidget
 {
     private string _iconName;
 

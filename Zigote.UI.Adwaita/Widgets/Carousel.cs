@@ -15,7 +15,7 @@ namespace Zigote.UI.Adwaita;
 ///         to fling can rest between pages until the next interaction (no scroll-end hook).
 ///     </para>
 /// </summary>
-public sealed class AdwCarousel : RenderWidget
+public sealed class AdwCarousel : Widget
 {
     private const float DragSlop = 6f; // px before a press becomes a drag
     private const float FlingSpeed = 400f; // px/s that advances a page regardless of distance
@@ -317,7 +317,7 @@ public sealed class AdwCarousel : RenderWidget
 }
 
 /// <summary>8px page dots for an <see cref="AdwCarousel" />; clicking a dot jumps to its page.</summary>
-public sealed class AdwCarouselIndicatorDots(AdwCarousel carousel) : StatelessWidget
+public sealed class AdwCarouselIndicatorDots(AdwCarousel carousel) : ComposedWidget
 {
     protected override Widget Build(BuildContext context)
     {
@@ -332,7 +332,7 @@ public sealed class AdwCarouselIndicatorDots(AdwCarousel carousel) : StatelessWi
 }
 
 /// <summary>24×3px page lines for an <see cref="AdwCarousel" />; clicking a line jumps to its page.</summary>
-public sealed class AdwCarouselIndicatorLines(AdwCarousel carousel) : StatelessWidget
+public sealed class AdwCarouselIndicatorLines(AdwCarousel carousel) : ComposedWidget
 {
     protected override Widget Build(BuildContext context)
     {

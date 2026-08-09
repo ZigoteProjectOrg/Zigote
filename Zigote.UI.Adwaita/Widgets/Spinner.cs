@@ -8,14 +8,13 @@ namespace Zigote.UI.Adwaita;
 ///     grows and shrinks as it revolves. Runs on a self-owned <see cref="AnimationController" />,
 ///     no manual ticking required. Size is capped at 64 px like libadwaita's.
 /// </summary>
-public class AdwSpinner : RenderWidget, ITickerProvider
+public class AdwSpinner : Widget
 {
     private const float MaxSize = 64f;
 
     private readonly AnimationController _anim;
     private Size _box;
     private ThemeData _theme = ThemeData.Dark;
-    private Ticker? _ticker;
 
     public AdwSpinner(float size = 32f)
     {
@@ -32,25 +31,14 @@ public class AdwSpinner : RenderWidget, ITickerProvider
     /// <summary>Diameter in logical pixels (drawn capped at 64).</summary>
     public float Size { get; init; }
 
-    public Ticker CreateTicker(Action<float> onTick)
-    {
-        _ticker?.Dispose();
-        _ticker = new Ticker(onTick);
-        return _ticker;
-    }
 
-    public override void Attach(App owner, Widget? parent)
+    // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
+    // re-attach rebinds instead of leaking one per attach cascade.
+    protected override void OnMount()
     {
-        base.Attach(owner, parent);
         _anim.AttachTicker(this);
     }
 
-    public override void Detach()
-    {
-        base.Detach();
-        _ticker?.Dispose();
-        _ticker = null;
-    }
 
     public override Size Measure(Constraints c)
     {

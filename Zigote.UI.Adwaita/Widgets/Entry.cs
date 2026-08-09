@@ -11,6 +11,7 @@ public class AdwEntry : Widget
 {
     protected readonly TextField Field;
     protected ThemeData Theme = ThemeData.Dark;
+    private bool _compact;
     private bool _enabled = true;
     private Size _size;
     private float? _width;
@@ -69,13 +70,23 @@ public class AdwEntry : Widget
     public float? Width
     {
         get => _width;
-        set
-        {
-            if (_width == value) return;
-            _width = value;
-            MarkNeedsLayout();
-        }
+        set => SetLayout(ref _width, value);
     }
+
+    /// <summary>
+    ///     Shrink to <see cref="AdwMetrics.CompactControlHeight" /> — the density a property grid
+    ///     runs at, where a full-height entry per row would double the scroll length. Everything
+    ///     else about the entry is unchanged, so a compact row still reads as Adwaita.
+    /// </summary>
+    public bool Compact
+    {
+        get => _compact;
+        set => SetLayout(ref _compact, value);
+    }
+
+    /// <summary>The entry's resolved outer height; decorations inset by it to stay square.</summary>
+    protected float BoxHeight =>
+        Compact ? AdwMetrics.CompactControlHeight : AdwMetrics.EntryHeight;
 
     /// <summary>
     ///     Put the caret in this entry — the target of a Ctrl+F, a search bar revealing itself, or a
@@ -118,7 +129,7 @@ public class AdwEntry : Widget
     {
         Theme = ThemeProvider.Of(BuildContext.Current);
         var w = Width ?? (float.IsFinite(c.MaxWidth) ? c.MaxWidth : 240f);
-        _size = c.Constrain(new Size(w, AdwMetrics.EntryHeight));
+        _size = c.Constrain(new Size(w, BoxHeight));
 
         var inner = MathF.Max(0f, _size.Width - LeadingInset - TrailingInset);
         Field.Height = _size.Height;
@@ -221,10 +232,10 @@ public sealed class AdwPasswordEntry : AdwEntry
         Field.Obscure = true;
     }
 
-    protected override float TrailingInset => AdwMetrics.EntryHeight;
+    protected override float TrailingInset => BoxHeight;
 
     private Rect RevealBox => new(
-        Bounds.Right - AdwMetrics.EntryHeight,
+        Bounds.Right - BoxHeight,
         Bounds.Y,
         AdwMetrics.EntryHeight,
         Bounds.Height
@@ -268,12 +279,12 @@ public sealed class AdwSearchEntry : AdwEntry
 
     protected override float Radius => AdwMetrics.Pill;
     protected override float LeadingInset => 28f;
-    protected override float TrailingInset => AdwMetrics.EntryHeight;
+    protected override float TrailingInset => BoxHeight;
 
     private bool ShowClear => Field.Text.Length > 0;
 
     private Rect ClearBox => new(
-        Bounds.Right - AdwMetrics.EntryHeight,
+        Bounds.Right - BoxHeight,
         Bounds.Y,
         AdwMetrics.EntryHeight,
         Bounds.Height

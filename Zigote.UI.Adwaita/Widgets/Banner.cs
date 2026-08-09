@@ -10,13 +10,12 @@ namespace Zigote.UI.Adwaita;
 ///     <see cref="Revealed" /> is false; toggling it animates a ~250ms ease-out height slide, like
 ///     GtkRevealer's slide-down.
 /// </summary>
-public sealed class AdwBanner : StatelessWidget, ITickerProvider
+public sealed class AdwBanner : ComposedWidget
 {
     private readonly AnimationController _anim;
     private string _title;
     private string? _buttonLabel;
     private bool _revealed = true;
-    private Ticker? _ticker;
 
     public AdwBanner(string title = "", string? buttonLabel = null, Action? onButtonClicked = null)
     {
@@ -60,25 +59,14 @@ public sealed class AdwBanner : StatelessWidget, ITickerProvider
 
     // ── Ticker plumbing (same pattern as AdwSwitch) ────────────────────────────
 
-    public Ticker CreateTicker(Action<float> onTick)
-    {
-        _ticker?.Dispose();
-        _ticker = new Ticker(onTick);
-        return _ticker;
-    }
 
-    public override void Attach(App owner, Widget? parent)
+    // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
+    // re-attach rebinds instead of leaking one per attach cascade.
+    protected override void OnMount()
     {
-        base.Attach(owner, parent);
         _anim.AttachTicker(this);
     }
 
-    public override void Detach()
-    {
-        base.Detach();
-        _ticker?.Dispose();
-        _ticker = null;
-    }
 
     // ── Tree ───────────────────────────────────────────────────────────────────
 
@@ -114,7 +102,7 @@ public sealed class AdwBanner : StatelessWidget, ITickerProvider
                 Children = {
                     // Invisible strut: keeps the bar at min-height 44 (28 + 2×8 padding) even
                     // when the title fits one line and there is no button.
-                    new SizedBox(0f, AdwMetrics.CompactButtonHeight),
+                    new SizedBox(0f, AdwMetrics.CompactControlHeight),
                     new Flexible(title),
                 },
             };

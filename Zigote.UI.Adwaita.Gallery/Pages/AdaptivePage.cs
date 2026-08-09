@@ -5,7 +5,7 @@ namespace AdwaitaGallery.Pages;
 ///     column, the toolbar sheds its labels, and the readout names the breakpoint you are in. Resize
 ///     the window (or drag it narrow enough to fold the shell) and watch it move.
 /// </summary>
-public sealed class AdaptivePage : StatelessWidget
+public sealed class AdaptivePage : ComposedWidget
 {
     protected override Widget Build(BuildContext context)
     {
@@ -113,7 +113,7 @@ public sealed class AdaptivePage : StatelessWidget
     }
 }
 
-internal sealed class AdaptiveCard(string icon, string title, string body) : StatelessWidget
+internal sealed class AdaptiveCard(string icon, string title, string body) : ComposedWidget
 {
     protected override Widget Build(BuildContext context)
     {

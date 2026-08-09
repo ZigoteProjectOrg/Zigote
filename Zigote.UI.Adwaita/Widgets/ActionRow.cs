@@ -10,13 +10,12 @@ namespace Zigote.UI.Adwaita;
 ///     enclosing <see cref="AdwPreferencesGroup" /> card provides it) — only the hover/press wash when
 ///     <see cref="OnActivated" /> makes it activatable. The wash fades in/out over ~100ms.
 /// </summary>
-public sealed class AdwActionRow : StatelessWidget, ITickerProvider
+public sealed class AdwActionRow : ComposedWidget
 {
     private readonly AnimationController _washAnim;
     private readonly ColorTween _washTween = new(Color.Transparent, Color.Transparent);
     private bool? _checked;
     private Pressable? _pressable;
-    private Ticker? _ticker;
     private DecoratedBox? _wash;
     private string _title;
     private string? _subtitle;
@@ -42,25 +41,14 @@ public sealed class AdwActionRow : StatelessWidget, ITickerProvider
 
     // ── Ticker plumbing (same self-owned pattern as AdwToastOverlay) ───────────
 
-    public Ticker CreateTicker(Action<float> onTick)
-    {
-        _ticker?.Dispose();
-        _ticker = new Ticker(onTick);
-        return _ticker;
-    }
 
-    public override void Attach(App owner, Widget? parent)
+    // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
+    // re-attach rebinds instead of leaking one per attach cascade.
+    protected override void OnMount()
     {
-        base.Attach(owner, parent);
         _washAnim.AttachTicker(this);
     }
 
-    public override void Detach()
-    {
-        base.Detach();
-        _ticker?.Dispose();
-        _ticker = null;
-    }
 
     public string Title
     {

@@ -9,7 +9,7 @@ namespace Zigote.UI.Adwaita;
 ///     placeholder (14px) while the row is empty and unfocused, and floats to a small dim caption
 ///     above the value once the row is focused or non-empty.
 /// </summary>
-public sealed class AdwEntryRow : StatelessWidget
+public sealed class AdwEntryRow : ComposedWidget
 {
     private Label? _caption;
     private SizedBox? _captionBox;
@@ -155,7 +155,7 @@ public sealed class AdwEntryRow : StatelessWidget
 ///     AdwPasswordEntryRow — an <see cref="AdwEntryRow" /> whose value is masked, with a reveal-eye
 ///     suffix toggling visibility.
 /// </summary>
-public sealed class AdwPasswordEntryRow : StatelessWidget
+public sealed class AdwPasswordEntryRow : ComposedWidget
 {
     private bool _revealed;
     private string _title;

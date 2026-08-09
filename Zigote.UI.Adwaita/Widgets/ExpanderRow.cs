@@ -10,7 +10,7 @@ namespace Zigote.UI.Adwaita;
 ///     expansion (switching off collapses and disables it). The body slides open/closed over ~250ms
 ///     (ease-out) and the chevron crossfades between its two glyphs.
 /// </summary>
-public sealed class AdwExpanderRow : StatelessWidget
+public sealed class AdwExpanderRow : ComposedWidget
 {
     private readonly Signal<bool> _expanded = new(false);
     private string _title;

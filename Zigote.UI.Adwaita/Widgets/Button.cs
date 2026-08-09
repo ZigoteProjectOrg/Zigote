@@ -25,6 +25,9 @@ internal sealed class FillTransition
     private readonly ColorTween _tween = new(Color.Transparent, Color.Transparent);
     private bool _started;
 
+    /// <summary>Theme the last target was computed from — see <see cref="Target(Color, ThemeData)" />.</summary>
+    private ThemeData? _theme;
+
     /// <param name="apply">Writes the colour to the retained widget and marks it for repaint.</param>
     public FillTransition(Action<Color> apply)
     {
@@ -39,6 +42,26 @@ internal sealed class FillTransition
         _anim.Tick(dt);
         if (_anim.Status is AnimationStatus.Completed or AnimationStatus.Dismissed)
             _ticker.Stop();
+    }
+
+    /// <summary>
+    ///     Fade to <paramref name="target" /> unless the THEME changed, in which case snap. A theme
+    ///     swap is not an interaction: fading it would smear every retained control across ~100ms of
+    ///     the old palette, and on an idle event-driven frame — where nothing schedules the ticker —
+    ///     the control would simply keep the old colour until something else repainted it. Callers
+    ///     that rebuild their transition per frame already get this from the constructor's snap;
+    ///     this overload is for the ones that retain it across builds.
+    /// </summary>
+    public void Target(Color target, ThemeData theme)
+    {
+        if (!ReferenceEquals(_theme, theme))
+        {
+            _theme = theme;
+            Snap(target);
+            return;
+        }
+
+        Target(target);
     }
 
     /// <summary>Fade to <paramref name="target" />. The first call (or an unchanged colour) snaps.</summary>
@@ -78,8 +101,15 @@ internal sealed class FillTransition
 ///     feedback is a recolour, never a rebuild. Disabled = whole-control 50% opacity, as Adwaita
 ///     does.
 /// </summary>
-public class AdwButton : StatefulWidget
+public class AdwButton : ComposedWidget
 {
+    private readonly DecoratedBox _box = new();
+    private readonly Opacity _fade = new(1.0);
+    private readonly FillTransition _fill;
+    private readonly Pressable _root;
+    private AdwButtonContent? _defaultContent;
+    private ThemeData _theme = ThemeData.Dark;
+
     private bool _circular;
     private bool _compact;
     private Widget? _content;
@@ -93,29 +123,32 @@ public class AdwButton : StatefulWidget
     {
         _label = label;
         OnPressed = onPressed;
+
+        _fill = new FillTransition(c =>
+            {
+                _box.Fill = c;
+                _box.MarkNeedsPaint();
+            }
+        );
+        _root = new Pressable {
+            Child = _box,
+            OnStateChanged = ApplyColors,
+            OnPressed = () => OnPressed?.Invoke(),
+        };
+        _fade.Child = _root;
     }
 
     public string Label
     {
         get => _label;
-        set
-        {
-            if (_label == value) return;
-            _label = value;
-            MarkNeedsBuild();
-        }
+        set => SetBuild(ref _label, value);
     }
 
     /// <summary>Optional icon glyph (an <see cref="Icons" /> constant) drawn before the label.</summary>
     public string? IconName
     {
         get => _iconName;
-        set
-        {
-            if (_iconName == value) return;
-            _iconName = value;
-            MarkNeedsBuild();
-        }
+        set => SetBuild(ref _iconName, value);
     }
 
     /// <summary>Optional widget child shown instead of the label + icon.</summary>
@@ -133,68 +166,38 @@ public class AdwButton : StatefulWidget
     public AdwButtonStyle Style
     {
         get => _style;
-        set
-        {
-            if (_style == value) return;
-            _style = value;
-            MarkNeedsBuild();
-        }
+        set => SetBuild(ref _style, value);
     }
 
     /// <summary>.pill — fully-rounded capsule shape.</summary>
     public bool Pill
     {
         get => _pill;
-        set
-        {
-            if (_pill == value) return;
-            _pill = value;
-            MarkNeedsBuild();
-        }
+        set => SetBuild(ref _pill, value);
     }
 
     /// <summary>.circular — a fixed 34×34 round icon button (icon only).</summary>
     public bool Circular
     {
         get => _circular;
-        set
-        {
-            if (_circular == value) return;
-            _circular = value;
-            MarkNeedsBuild();
-        }
+        set => SetBuild(ref _circular, value);
     }
 
     /// <summary>Toolbar-density height (28px instead of 34px).</summary>
     public bool Compact
     {
         get => _compact;
-        set
-        {
-            if (_compact == value) return;
-            _compact = value;
-            MarkNeedsBuild();
-        }
+        set => SetBuild(ref _compact, value);
     }
 
     public bool Enabled
     {
         get => _enabled;
-        set
-        {
-            if (_enabled == value) return;
-            _enabled = value;
-            MarkNeedsBuild();
-        }
+        set => SetBuild(ref _enabled, value);
     }
 
     // Read live by the Pressable on each press; a null callback renders as disabled.
     public Action? OnPressed { get; set; }
-
-    protected override WidgetState CreateState()
-    {
-        return new AdwButtonState();
-    }
 
     public override void UpdateFrom(Widget newWidget)
     {
@@ -218,59 +221,39 @@ public class AdwButton : StatefulWidget
             base.DebugStateHash()
         );
     }
-}
 
-internal sealed class AdwButtonState : WidgetState<AdwButton>
-{
-    private readonly DecoratedBox _box = new();
-    private readonly Opacity _fade = new(1.0);
-    private AdwButtonContent? _content;
-    private FillTransition _fill = null!;
-    private Pressable _root = null!;
-    private ThemeData _theme = ThemeData.Dark;
-
-    public override void InitState()
-    {
-        _fill = new FillTransition(c =>
-            {
-                _box.Fill = c;
-                _box.MarkNeedsPaint();
-            }
-        );
-        _root = new Pressable {
-            Child = _box,
-            OnStateChanged = ApplyColors,
-            OnPressed = () => Widget.OnPressed?.Invoke(),
-        };
-        _fade.Child = _root;
-    }
-
-    public override Widget Build(BuildContext context)
+    protected override Widget Build(BuildContext context)
     {
         _theme = ThemeProvider.Of(context);
-        var w = Widget;
 
-        var radius = w.Circular ? 17f : w.Pill ? AdwMetrics.Pill : AdwMetrics.ControlRadius;
-        var height = w.Compact ? AdwMetrics.CompactButtonHeight : AdwMetrics.ButtonHeight;
-        var enabled = w.Enabled && w.OnPressed is not null;
+        var radius = Circular ? 17f : Pill ? AdwMetrics.Pill : AdwMetrics.ControlRadius;
+        var height = Compact ? AdwMetrics.CompactControlHeight
+            : Pill ? AdwMetrics.PillHeight
+            : AdwMetrics.ButtonHeight;
+        // libadwaita pads by role, not by one number: 17px around a bare label, 9px once an icon
+        // shares the row (the icon is its own leading space), 32px inside a pill.
+        var paddingX = Pill ? AdwMetrics.PillPaddingX
+            : IconName is not null && Label.Length > 0 ? AdwMetrics.ImageTextPaddingX
+            : AdwMetrics.ButtonPaddingX;
+        var enabled = Enabled && OnPressed is not null;
 
         // .circular is icon-only in Adwaita, so the label is dropped from the content (it survives
         // as the accessible name) rather than allowed to size the square.
-        _content = w.Content is null
-            ? new AdwButtonContent(w.IconName, w.Circular ? "" : w.Label)
+        _defaultContent = Content is null
+            ? new AdwButtonContent(IconName, Circular ? "" : Label)
             : null;
-        var content = w.Content ?? _content!;
+        var content = Content ?? _defaultContent!;
 
-        if (w.Circular || (w.Content is null && w.Label.Length == 0))
+        if (Circular || (Content is null && Label.Length == 0))
             // Icon-only: a fixed square, capsule-round when Circular.
-            _box.Child = SizedBox.Square(w.Circular ? 34f : height, new Center(content));
+            _box.Child = SizedBox.Square(Circular ? 34f : height, new Center(content));
         else
-            _box.Child = AdwStyle.ButtonBody(content, height);
+            _box.Child = AdwStyle.ButtonBody(content, height, paddingX);
 
         _box.Radius = radius;
         _root.Enabled = enabled;
         _root.FocusRadius = radius;
-        _root.SemanticsLabel = w.Label.Length > 0 ? w.Label : null;
+        _root.SemanticsLabel = Label.Length > 0 ? Label : null;
         _fade.Value = enabled ? 1f : AdwStyle.DisabledOpacity;
 
         ApplyColors();
@@ -279,21 +262,21 @@ internal sealed class AdwButtonState : WidgetState<AdwButton>
 
     private void ApplyColors()
     {
-        var w = Widget;
-        var enabled = w.Enabled && w.OnPressed is not null;
+        var enabled = Enabled && OnPressed is not null;
         _fill.Target(
             AdwStyle.ButtonFill(
                 _theme,
-                w.Style,
+                Style,
                 _root.Hovered,
                 _root.Pressed,
                 enabled
-            )
+            ),
+            _theme
         );
 
-        var fg = AdwStyle.ButtonForeground(_theme, w.Style);
-        if (_content is not null) _content.Color = fg;
-        if (w.Content is not null) TintForeground(w.Content, fg);
+        var fg = AdwStyle.ButtonForeground(_theme, Style);
+        if (_defaultContent is not null) _defaultContent.Color = fg;
+        if (Content is not null) TintForeground(Content, fg);
         _box.MarkNeedsPaint();
     }
 

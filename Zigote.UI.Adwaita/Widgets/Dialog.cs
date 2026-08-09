@@ -12,7 +12,7 @@ namespace Zigote.UI.Adwaita;
 ///     pushed on the App overlay stack via <see cref="Show()" />, removed via <see cref="Close" />;
 ///     the scrim click and Escape close it while <see cref="CanClose" /> is true.
 /// </summary>
-public class AdwDialog : RenderWidget, IDismissableOverlay, ITickerProvider
+public class AdwDialog : Widget, IDismissableOverlay
 {
     private readonly AnimationController _anim;
     private readonly DecoratedBox _card;
@@ -23,7 +23,6 @@ public class AdwDialog : RenderWidget, IDismissableOverlay, ITickerProvider
     private float? _contentHeight;
     private Size _size;
     private ThemeData _theme = ThemeData.Dark;
-    private Ticker? _ticker;
     private App? _host;
 
     public AdwDialog(Widget? child = null)
@@ -43,25 +42,14 @@ public class AdwDialog : RenderWidget, IDismissableOverlay, ITickerProvider
 
     // ── Ticker plumbing (Toast.cs pattern: rebind on every Attach) ─────────────
 
-    public Ticker CreateTicker(Action<float> onTick)
-    {
-        _ticker?.Dispose();
-        _ticker = new Ticker(onTick);
-        return _ticker;
-    }
 
-    public override void Attach(App owner, Widget? parent)
+    // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
+    // re-attach rebinds instead of leaking one per attach cascade.
+    protected override void OnMount()
     {
-        base.Attach(owner, parent);
         _anim.AttachTicker(this);
     }
 
-    public override void Detach()
-    {
-        base.Detach();
-        _ticker?.Dispose();
-        _ticker = null;
-    }
 
     /// <summary>The dialog content, clipped to the card's rounded corners.</summary>
     public Widget? Child
@@ -85,24 +73,14 @@ public class AdwDialog : RenderWidget, IDismissableOverlay, ITickerProvider
     public float? ContentWidth
     {
         get => _contentWidth;
-        set
-        {
-            if (_contentWidth == value) return;
-            _contentWidth = value;
-            MarkNeedsLayout();
-        }
+        set => SetLayout(ref _contentWidth, value);
     }
 
     /// <summary>Fixed content height; null hugs the content under 85% of the window. Re-lays out.</summary>
     public float? ContentHeight
     {
         get => _contentHeight;
-        set
-        {
-            if (_contentHeight == value) return;
-            _contentHeight = value;
-            MarkNeedsLayout();
-        }
+        set => SetLayout(ref _contentHeight, value);
     }
 
     /// <summary>Invoked whenever the dialog leaves the overlay stack, whatever closed it.</summary>

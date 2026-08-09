@@ -4,7 +4,7 @@ namespace AdwaitaGallery.Pages;
 ///     Menus &amp; Popovers — the menu button with its sections, headers, radios and checks, the
 ///     drop-down, and the combo row that wraps one for a boxed list.
 /// </summary>
-public sealed class MenusPage : StatelessWidget
+public sealed class MenusPage : ComposedWidget
 {
     private static readonly string[] Zooms = ["50 %", "100 %", "200 %"];
     private static readonly string[] Fonts = ["Inter", "Iosevka", "Cantarell", "Source Sans"];

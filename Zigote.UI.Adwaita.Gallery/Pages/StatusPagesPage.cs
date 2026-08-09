@@ -4,7 +4,7 @@ namespace AdwaitaGallery.Pages;
 ///     Status Pages — the empty, error and welcome states, switched live so the three read as one
 ///     component rather than three screenshots.
 /// </summary>
-public sealed class StatusPagesPage : StatelessWidget
+public sealed class StatusPagesPage : ComposedWidget
 {
     private static readonly string[] Kinds = ["Empty", "No Results", "Error", "Welcome"];
 

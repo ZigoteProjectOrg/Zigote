@@ -46,7 +46,7 @@ public sealed class AdwAboutDialog : AdwDialog
     ///     boxed list under the website, which is where the HIG puts them.</summary>
     public List<AdwAboutLink> Links { get; init; } = [];
 
-    private sealed class Content(AdwAboutDialog owner) : StatelessWidget
+    private sealed class Content(AdwAboutDialog owner) : ComposedWidget
     {
         protected override Widget Build(BuildContext context)
         {

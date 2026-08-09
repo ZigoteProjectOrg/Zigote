@@ -6,7 +6,7 @@ using Zigote.UI.Widgets.Transitions;
 namespace Zigote.UI.Adwaita;
 
 /// <summary>One page in an <see cref="AdwNavigationView" /> stack.</summary>
-public sealed class AdwNavigationPage : StatelessWidget
+public sealed class AdwNavigationPage : ComposedWidget
 {
     private Widget _page;
 
@@ -41,14 +41,13 @@ public sealed class AdwNavigationPage : StatelessWidget
 ///     page back out, revealing the page beneath. Popped-from pages still lose transient state once
 ///     the transition settles (the retained instances survive, rebuilt subtrees do not).
 /// </summary>
-public sealed class AdwNavigationView : StatelessWidget, ITickerProvider
+public sealed class AdwNavigationView : ComposedWidget
 {
     private readonly List<AdwNavigationPage> _pages = [];
     private readonly AnimationController _slide;
     private readonly Signal<int> _version = new(0);
     private AdwNavigationPage? _moving; // slides above: incoming on push, departing on pop
     private SlideTransition? _movingSlide;
-    private Ticker? _ticker;
     private AdwNavigationPage? _under; // painted beneath during a transition
     private bool _autoHeaderBar = true;
     private bool _showStartWindowControls = true;
@@ -143,30 +142,19 @@ public sealed class AdwNavigationView : StatelessWidget, ITickerProvider
 
     // ── Ticker plumbing (same pattern as AdwToastOverlay) ──────────────────────
 
-    public Ticker CreateTicker(Action<float> onTick)
-    {
-        _ticker?.Dispose();
-        _ticker = new Ticker(onTick);
-        return _ticker;
-    }
 
-    public override void Attach(App owner, Widget? parent)
+    // OnMount, not Attach: Attach re-runs on every rebuild cascade, so registering here would
+    // both leak a ticker per pass and stack duplicate back handlers. A mount is once per tree entry,
+    // paired with exactly one OnUnmount — which is the guard the old Remove-before-Add hack faked.
+    protected override void OnMount()
     {
-        base.Attach(owner, parent);
         _slide.AttachTicker(this);
-        // Remove first: Widget.Attach has no already-attached guard, so a re-parent can attach
-        // twice with no intervening Detach — and Detach only removes one registration, which would
-        // leave a handler behind swallowing the back button forever. AdwBottomSheet does the same.
-        owner.RemoveBackHandler(TryPop);
-        owner.AddBackHandler(TryPop);
+        Owner?.AddBackHandler(TryPop);
     }
 
-    public override void Detach()
+    protected override void OnUnmount()
     {
-        Owner?.RemoveBackHandler(TryPop); // before base: Widget.Detach drops the Owner link
-        base.Detach();
-        _ticker?.Dispose();
-        _ticker = null;
+        Owner?.RemoveBackHandler(TryPop); // still set: Widget.Detach unmounts before dropping Owner
     }
 
     /// <summary>

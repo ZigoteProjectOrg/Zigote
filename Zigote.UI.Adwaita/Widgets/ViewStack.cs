@@ -42,7 +42,7 @@ public sealed class AdwViewStackPage
 ///     <see cref="AdwViewSwitcherBar" /> or <see cref="AdwInlineViewSwitcher" /> to switch pages.
 ///     Page changes cross-fade (~200 ms ease-out); both layers stay retained during the fade.
 /// </summary>
-public sealed class AdwViewStack : StatelessWidget
+public sealed class AdwViewStack : ComposedWidget
 {
     /// <summary>The visible page name, signal-backed so switchers can react.</summary>
     internal readonly Signal<string> Visible;

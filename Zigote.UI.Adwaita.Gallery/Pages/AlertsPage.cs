@@ -4,7 +4,7 @@ namespace AdwaitaGallery.Pages;
 ///     Alert Dialogs — the adaptive alert with its response appearances, and the plain dialog it is
 ///     built on.
 /// </summary>
-public sealed class AlertsPage : StatelessWidget
+public sealed class AlertsPage : ComposedWidget
 {
     protected override Widget Build(BuildContext context)
     {

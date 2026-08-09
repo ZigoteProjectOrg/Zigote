@@ -92,7 +92,7 @@ public class AdwaitaThemeTests
     }
 
     /// <summary>
-    ///     A StatelessWidget that returns the same retained child must not tear it down on rebuild —
+    ///     A ComposedWidget that returns the same retained child must not tear it down on rebuild —
     ///     that is what used to clear focus on every property change.
     /// </summary>
     /// <summary>
@@ -145,7 +145,7 @@ public class AdwaitaThemeTests
     // The other half of this contract — that a retained root whose CONTENTS changed still gets the
     // attach cascade, so newly-inserted descendants receive an Owner — is not covered here: it is
     // only observable with a live App, which needs the native window and cannot be built headless.
-    private sealed class RetainedRoot : StatelessWidget
+    private sealed class RetainedRoot : ComposedWidget
     {
         public CountingBox Root { get; } = new();
 

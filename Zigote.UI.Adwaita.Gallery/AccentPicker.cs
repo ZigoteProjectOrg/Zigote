@@ -5,7 +5,7 @@ namespace AdwaitaGallery;
 ///     Bound straight to <see cref="GalleryApp.Accent" />, so picking one re-themes every open
 ///     window on the next frame.
 /// </summary>
-internal sealed class AccentPicker : StatelessWidget
+internal sealed class AccentPicker : ComposedWidget
 {
     public static readonly (AdwAccent Accent, string Name)[] Accents = [
         (AdwAccent.Blue, "Blue"),

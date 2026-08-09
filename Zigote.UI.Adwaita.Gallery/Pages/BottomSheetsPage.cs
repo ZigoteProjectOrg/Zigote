@@ -5,7 +5,7 @@ namespace AdwaitaGallery.Pages;
 ///     that pulls up into the full player. Drag the bar or the handle: the sheet tracks the pointer
 ///     and settles to whichever end you let go nearer.
 /// </summary>
-public sealed class BottomSheetsPage : StatelessWidget
+public sealed class BottomSheetsPage : ComposedWidget
 {
     private readonly AdwBottomSheet _sheet = new();
     private readonly Signal<bool> _open = new(false);

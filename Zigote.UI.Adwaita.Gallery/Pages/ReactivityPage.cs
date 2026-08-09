@@ -5,7 +5,7 @@ namespace AdwaitaGallery.Pages;
 ///     refresh: signals hold the state, computed values derive from them, a Watch subscribes to
 ///     whatever it happened to read, and an effect runs on the side.
 /// </summary>
-public sealed class ReactivityPage : StatelessWidget
+public sealed class ReactivityPage : ComposedWidget
 {
     private static readonly (string Name, float Price)[] Catalogue = [
         ("Espresso", 2.40f),

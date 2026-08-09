@@ -5,7 +5,7 @@ namespace Zigote.UI.Adwaita;
 ///     background plus a hairline toward the content; flat bars are transparent over the content
 ///     background.
 /// </summary>
-public sealed class AdwToolbarView : StatelessWidget
+public sealed class AdwToolbarView : ComposedWidget
 {
     private Widget? _content;
     private bool _raisedTopBar;
