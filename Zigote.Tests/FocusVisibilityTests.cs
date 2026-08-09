@@ -65,7 +65,7 @@ public class FocusVisibilityTests
         Assert.Same(inTab1, FocusTraversal.NextInTab(order, inTab1, false));
     }
 
-    private sealed class FakeFocusable : RenderWidget
+    private sealed class FakeFocusable : Widget
     {
         public override bool Focusable => true;
 

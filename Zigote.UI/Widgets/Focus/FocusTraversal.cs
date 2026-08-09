@@ -53,6 +53,66 @@ public static class FocusTraversal
     }
 
     /// <summary>
+    ///     The Tab order for <paramref name="scope" />: the full focusable list, except that each
+    ///     <see cref="IFocusGroup" /> subtree collapses to a single entry. The surviving entry is
+    ///     whichever descendant currently holds focus — so Tab leaves a group from wherever the
+    ///     arrows left off — otherwise the group's <see cref="IFocusGroup.TabTarget" />, otherwise
+    ///     its first focusable.
+    ///     <para>
+    ///         Arrow traversal deliberately keeps using <see cref="Focusables" />: grouping is about
+    ///         how many Tab presses a list costs, not about which rows the arrows can reach.
+    ///     </para>
+    /// </summary>
+    public static List<Widget> TabOrder(Widget scope, Widget? focused)
+    {
+        // Groups are tracked on the way DOWN, not by walking Parent back up: Parent is only set by
+        // Attach, so an unmounted subtree (and every headless test) has none, and the answer would
+        // silently degrade to "no groups" — the exact bug this is meant to prevent.
+        List<(Widget Widget, IFocusGroup? Group)> all = [];
+        CollectGrouped(scope, null, all);
+
+        var focusedGroup = focused is null
+            ? null
+            : all.FirstOrDefault(e => ReferenceEquals(e.Widget, focused)).Group;
+
+        List<Widget> order = [];
+        IFocusGroup? current = null;
+        foreach (var (widget, group) in all)
+        {
+            if (group is null)
+            {
+                current = null;
+                order.Add(widget);
+                continue;
+            }
+
+            // A group's focusables are contiguous in reading order, so its run is represented by
+            // one entry and the rest are skipped.
+            if (ReferenceEquals(group, current)) continue;
+            current = group;
+            // Tab leaves from wherever the arrows left off; otherwise the group's own target.
+            var keep = ReferenceEquals(group, focusedGroup) && focused is not null
+                ? focused
+                : group.TabTarget ?? widget;
+            if (IsFocusVisible(keep)) order.Add(keep);
+        }
+
+        return order;
+    }
+
+    /// <summary>
+    ///     Reading-order collection that tags each focusable with the innermost
+    ///     <see cref="IFocusGroup" /> enclosing it, or null.
+    /// </summary>
+    private static void CollectGrouped(Widget w, IFocusGroup? group,
+        List<(Widget Widget, IFocusGroup? Group)> into)
+    {
+        var inner = w as IFocusGroup ?? group;
+        if (w.Focusable && IsFocusVisible(w)) into.Add((w, inner));
+        foreach (var child in w.GetVisibleChildren()) CollectGrouped(child, inner, into);
+    }
+
+    /// <summary>
     ///     Next/previous focusable in Tab order, wrapping at the ends. Null when
     ///     <paramref name="order" /> is empty.
     /// </summary>
