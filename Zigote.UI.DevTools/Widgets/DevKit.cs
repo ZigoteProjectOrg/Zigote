@@ -63,7 +63,7 @@ public static class DevKit
 }
 
 /// <summary>A boxed-list group heading: Adwaita <c>.heading</c> over the rows it introduces.</summary>
-public sealed class DevSectionHeader(string title) : StatelessWidget
+public sealed class DevSectionHeader(string title) : ComposedWidget
 {
     protected override Widget Build(BuildContext context)
     {
@@ -119,7 +119,7 @@ public sealed class DevFillBox(Color color, float radius = 0f) : LeafWidget
 ///     the key in body text on the left, a monospace value on the right. The <see cref="Value" /> and
 ///     <see cref="ValueColor" /> are live-mutable so panels update them each frame without a rebuild.
 /// </summary>
-public sealed class DevKeyValue : StatelessWidget
+public sealed class DevKeyValue : ComposedWidget
 {
     private readonly string _key;
     private readonly Label _valueLabel;
@@ -175,7 +175,7 @@ public sealed class DevKeyValue : StatelessWidget
 }
 
 /// <summary>A dim caption line (hints / notes), Adwaita <c>.caption</c>. <see cref="Text" /> is live-mutable.</summary>
-public sealed class DevNote : StatelessWidget
+public sealed class DevNote : ComposedWidget
 {
     private readonly Label _label;
 
@@ -207,7 +207,7 @@ public sealed class DevNote : StatelessWidget
 ///     A labelled meter: key + value on one line over an Adwaita progress bar. Panels mutate
 ///     <see cref="Value" />, <see cref="Fraction" /> and <see cref="Color" /> each frame.
 /// </summary>
-public sealed class DevMeter : StatelessWidget
+public sealed class DevMeter : ComposedWidget
 {
     private readonly DevFillBox _fill = new(Color.Transparent, AdwMetrics.Pill);
     private readonly string _key;
@@ -274,7 +274,7 @@ public sealed class DevMeter : StatelessWidget
     }
 
     /// <summary>A track rect with a proportional fill of <see cref="Fill" />; sizes to full width.</summary>
-    private sealed class FractionBox(DevFillBox fill, Color track, float height) : RenderWidget
+    private sealed class FractionBox(DevFillBox fill, Color track, float height) : Widget
     {
         private readonly DevFillBox _track = new(track, AdwMetrics.Pill);
         private Size _size;
@@ -322,7 +322,7 @@ public sealed class DevMeter : StatelessWidget
 ///     A label + switch row — an <see cref="AdwSwitchRow" />, so the whole row is the (finger-sized)
 ///     target and the state reaches a screen reader. <see cref="OnChanged" /> fires with the new value.
 /// </summary>
-public sealed class DevToggle : StatelessWidget
+public sealed class DevToggle : ComposedWidget
 {
     private readonly AdwSwitchRow _row;
 
@@ -358,7 +358,7 @@ public sealed class DevToggle : StatelessWidget
 ///     A label + ◀ value ▶ stepper row for values that cycle rather than count (enum debug views,
 ///     variable presets). Chevrons fire <see cref="OnPrev" />/<see cref="OnNext" />.
 /// </summary>
-public sealed class DevStepper : StatefulWidget
+public sealed class DevStepper : ComposedWidget
 {
     private string _value;
 
@@ -381,64 +381,51 @@ public sealed class DevStepper : StatefulWidget
         {
             if (_value == value) return;
             _value = value;
-            (InternalState as DevStepperState)?.SyncValue(value);
+            _valueLabel.Text = value;
         }
     }
 
-    protected override WidgetState CreateState()
+    private readonly Label _valueLabel = new("", AdwTypography.Monospace) {
+        MaxLines = 1,
+        Overflow = TextOverflow.Ellipsis,
+        Align = TextAlign.Center,
+    };
+
+    protected override Widget Build(BuildContext context)
     {
-        return new DevStepperState();
+        var t = ThemeProvider.Of(context);
+        _valueLabel.Text = Value;
+        _valueLabel.Color = t.OnSurface;
+        return new SizedBox(
+            height: MathF.Max(AdwMetrics.RowMinHeight, DevKit.Row),
+            child: new Padding(
+                EdgeInsets.Symmetric(DevKit.RowInset),
+                new Row(crossAxisAlignment: CrossAxisAlignment.Center) {
+                    Children = {
+                        new Flexible(
+                            new Label(Label, AdwTypography.Body, t.OnSurface) {
+                                MaxLines = 1,
+                                Overflow = TextOverflow.Ellipsis,
+                            },
+                            fit: FlexFit.Loose
+                        ),
+                        new Spacer(),
+                        Chip(Icons.ChevronLeft, "Previous", OnPrev),
+                        new SizedBox(88f, child: _valueLabel),
+                        Chip(Icons.ChevronRight, "Next", OnNext),
+                    },
+                }
+            )
+        );
     }
 
-    private sealed class DevStepperState : WidgetState<DevStepper>
+    private static AdwButton Chip(string icon, string label, Action onTap)
     {
-        private readonly Label _value = new("", AdwTypography.Monospace) {
-            MaxLines = 1,
-            Overflow = TextOverflow.Ellipsis,
-            Align = TextAlign.Center,
+        return new AdwButton(label, onTap) {
+            IconName = icon,
+            Style = AdwButtonStyle.Flat,
+            Circular = true,
+            Compact = true,
         };
-
-        public void SyncValue(string v)
-        {
-            _value.Text = v;
-        }
-
-        public override Widget Build(BuildContext context)
-        {
-            var t = ThemeProvider.Of(context);
-            _value.Text = Widget.Value;
-            _value.Color = t.OnSurface;
-            return new SizedBox(
-                height: MathF.Max(AdwMetrics.RowMinHeight, DevKit.Row),
-                child: new Padding(
-                    EdgeInsets.Symmetric(DevKit.RowInset),
-                    new Row(crossAxisAlignment: CrossAxisAlignment.Center) {
-                        Children = {
-                            new Flexible(
-                                new Label(Widget.Label, AdwTypography.Body, t.OnSurface) {
-                                    MaxLines = 1,
-                                    Overflow = TextOverflow.Ellipsis,
-                                },
-                                fit: FlexFit.Loose
-                            ),
-                            new Spacer(),
-                            Chip(Icons.ChevronLeft, "Previous", Widget.OnPrev),
-                            new SizedBox(88f, child: _value),
-                            Chip(Icons.ChevronRight, "Next", Widget.OnNext),
-                        },
-                    }
-                )
-            );
-        }
-
-        private static AdwButton Chip(string icon, string label, Action onTap)
-        {
-            return new AdwButton(label, onTap) {
-                IconName = icon,
-                Style = AdwButtonStyle.Flat,
-                Circular = true,
-                Compact = true,
-            };
-        }
     }
 }

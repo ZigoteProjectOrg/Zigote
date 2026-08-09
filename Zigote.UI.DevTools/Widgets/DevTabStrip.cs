@@ -14,7 +14,7 @@ namespace Zigote.UI.DevTools.Widgets;
 ///     <c>DevToolsView.CategorySwitcher</c>). Tabs/selection are set via <see cref="Set" />, and the
 ///     strip only rebuilds when they actually change.
 /// </summary>
-public sealed class DevTabStrip : StatefulWidget
+public sealed class DevTabStrip : ComposedWidget
 {
     private int _selected;
     private IReadOnlyList<string> _tabs;
@@ -46,92 +46,79 @@ public sealed class DevTabStrip : StatefulWidget
         if (!changed) return;
         _tabs = tabs;
         _selected = selected;
-        (InternalState as DevTabStripState)?.Rebuild();
+        MarkNeedsBuild();
     }
 
-    protected override WidgetState CreateState()
+    protected override Widget Build(BuildContext context)
     {
-        return new DevTabStripState();
-    }
-
-    private sealed class DevTabStripState : WidgetState<DevTabStrip>
-    {
-        public void Rebuild()
+        var t = ThemeProvider.Of(context);
+        var row = new Row(spacing: Spacing.Xs, mainAxisSize: MainAxisSize.Min);
+        for (var i = 0; i < Tabs.Count; i++)
         {
-            SetStateRebuild(() => { });
-        }
-
-        public override Widget Build(BuildContext context)
-        {
-            var t = ThemeProvider.Of(context);
-            var row = new Row(spacing: Spacing.Xs, mainAxisSize: MainAxisSize.Min);
-            for (var i = 0; i < Widget.Tabs.Count; i++)
-            {
-                var idx = i;
-                row.Children.Add(
-                    Pill(
-                        Widget.Tabs[i],
-                        i == Widget.Selected,
-                        () => Widget.OnSelect(idx),
-                        t
-                    )
-                );
-            }
-
-            var height = DevKit.Compact
-                ? ControlMetrics.MinTouchTarget
-                : AdwMetrics.CompactButtonHeight;
-            return new SizedBox(
-                height: height,
-                child: new ScrollView(row) {
-                    ScrollVertical = false,
-                    ScrollHorizontal = true,
-                    // A bar under a single row of tabs reads as a divider, not as a scrollbar.
-                    ShowScrollbars = false,
-                }
+            var idx = i;
+            row.Children.Add(
+                Pill(
+                    Tabs[i],
+                    i == Selected,
+                    () => OnSelect(idx),
+                    t
+                )
             );
         }
 
-        private static Widget Pill(string label, bool selected, Action onTap, ThemeData t)
-        {
-            var p = AdwPalette.For(t);
-            var box = new DecoratedBox {
-                Radius = AdwMetrics.Pill,
-                Child = new Padding(
-                    EdgeInsets.Symmetric(Spacing.Md, Spacing.Xs),
-                    new Center(
-                        new Label(
-                            label,
-                            selected ? AdwTypography.CaptionHeading : AdwTypography.Caption,
-                            selected ? t.OnBackground : p.DimLabel
-                        ) { MaxLines = 1 }
-                    )
-                ),
-            };
-
-            var press = new Pressable {
-                Child = box,
-                FocusRadius = AdwMetrics.Pill,
-                OnPressed = onTap,
-                SelectedState = selected,
-                SemanticsLabel = label,
-            };
-
-            void Recolor()
-            {
-                box.Fill = selected
-                    ? p.ButtonFillActive
-                    : press.Pressed
-                        ? p.ButtonFillHover
-                        : press.Hovered
-                            ? p.ButtonFill
-                            : Color.Transparent;
-                box.MarkNeedsPaint();
+        var height = DevKit.Compact
+            ? ControlMetrics.MinTouchTarget
+            : AdwMetrics.CompactControlHeight;
+        return new SizedBox(
+            height: height,
+            child: new ScrollView(row) {
+                ScrollVertical = false,
+                ScrollHorizontal = true,
+                // A bar under a single row of tabs reads as a divider, not as a scrollbar.
+                ShowScrollbars = false,
             }
+        );
+    }
 
-            Recolor();
-            press.OnStateChanged = Recolor;
-            return press;
+    private static Widget Pill(string label, bool selected, Action onTap, ThemeData t)
+    {
+        var p = AdwPalette.For(t);
+        var box = new DecoratedBox {
+            Radius = AdwMetrics.Pill,
+            Child = new Padding(
+                EdgeInsets.Symmetric(Spacing.Md, Spacing.Xs),
+                new Center(
+                    new Label(
+                        label,
+                        selected ? AdwTypography.CaptionHeading : AdwTypography.Caption,
+                        selected ? t.OnBackground : p.DimLabel
+                    ) { MaxLines = 1 }
+                )
+            ),
+        };
+
+        var press = new Pressable {
+            Child = box,
+            FocusRadius = AdwMetrics.Pill,
+            OnPressed = onTap,
+            SelectedState = selected,
+            SemanticsLabel = label,
+        };
+
+        void Recolor()
+        {
+            box.Fill = selected
+                ? p.ButtonFillActive
+                : press.Pressed
+                    ? p.ButtonFillHover
+                    : press.Hovered
+                        ? p.ButtonFill
+                        : Color.Transparent;
+            box.MarkNeedsPaint();
         }
+
+        Recolor();
+        press.OnStateChanged = Recolor;
+        return press;
     }
 }

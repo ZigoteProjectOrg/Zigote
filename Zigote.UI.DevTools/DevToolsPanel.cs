@@ -21,7 +21,7 @@ namespace Zigote.UI.DevTools;
 ///     Non-modal: it opts out of auto-focus (<see cref="INoAutoFocus" />) so opening it never steals
 ///     focus, and closes on Escape (<see cref="IDismissableOverlay" />).
 /// </summary>
-public sealed class DevToolsPanel : StatefulWidget, IDismissableOverlay, INoAutoFocus
+public sealed class DevToolsPanel : ComposedWidget, IDismissableOverlay, INoAutoFocus
 {
     /// <summary>Default width of the docked column, before the user drags it.</summary>
     public const float PanelWidth = 408f;
@@ -61,7 +61,7 @@ public sealed class DevToolsPanel : StatefulWidget, IDismissableOverlay, INoAuto
     }
 
     // Only the panel's own column is interactive; clicks elsewhere fall through to the app so the panel
-    // never blocks the scene/UI behind it. (StatefulWidget.HitTest otherwise returns `this` on a
+    // never blocks the scene/UI behind it. (ComposedWidget.HitTest otherwise returns `this` on a
     // child-miss, which would swallow every click over the full-screen overlay.) The drag handle sits
     // just outside the column, so the interactive band is a little wider than the view.
     public override Widget? HitTest(Offset point)
@@ -70,59 +70,50 @@ public sealed class DevToolsPanel : StatefulWidget, IDismissableOverlay, INoAuto
         return base.HitTest(point);
     }
 
-    protected override WidgetState CreateState()
+    // Built through an AdaptiveBuilder so a host-window resize across the phone breakpoint
+    // actually re-picks the arm: the ambient MediaQuery is not an inherited widget here, so a
+    // plain Build() would keep whatever layout it chose the first time.
+    protected override Widget Build(BuildContext context)
     {
-        return new DevToolsPanelState(_controller);
+        return new AdaptiveBuilder(BuildArm, 0f);
     }
 
-    private sealed class DevToolsPanelState(DevToolsController controller)
-        : WidgetState<DevToolsPanel>
+    private Widget BuildArm(BuildContext context, WindowSizeClass cls)
     {
-        // Built through an AdaptiveBuilder so a host-window resize across the phone breakpoint
-        // actually re-picks the arm: the ambient MediaQuery is not an inherited widget here, so a
-        // plain Build() would keep whatever layout it chose the first time.
-        public override Widget Build(BuildContext context)
-        {
-            return new AdaptiveBuilder(BuildArm, 0f);
-        }
+        var mq = MediaQuery.Of(context);
+        // A phone is always fullscreen: a docked column plus a drag handle is a pointer idea.
+        var full = _controller.Fullscreen || cls == WindowSizeClass.Compact;
+        var width = full ? mq.Width : _controller.DockWidth;
+        _full = full;
 
-        private Widget BuildArm(BuildContext context, WindowSizeClass cls)
-        {
-            var mq = MediaQuery.Of(context);
-            // A phone is always fullscreen: a docked column plus a drag handle is a pointer idea.
-            var full = controller.Fullscreen || cls == WindowSizeClass.Compact;
-            var width = full ? mq.Width : controller.DockWidth;
-            Widget._full = full;
+        var view = new DevToolsView(
+            _controller,
+            full ? DevToolsChrome.Fullscreen : DevToolsChrome.Docked
+        );
 
-            var view = new DevToolsView(
-                controller,
-                full ? DevToolsChrome.Fullscreen : DevToolsChrome.Docked
+        var stack = new Stack {
+            Children = {
+                new Positioned(
+                    view,
+                    top: 0,
+                    bottom: 0,
+                    right: 0,
+                    left: full ? 0 : null,
+                    width: full ? null : width
+                ),
+            },
+        };
+        if (!full)
+            stack.Children.Add(
+                new Positioned(
+                    new DevResizeHandle(_controller),
+                    top: 0,
+                    bottom: 0,
+                    right: width,
+                    width: DevResizeHandle.Width
+                )
             );
-
-            var stack = new Stack {
-                Children = {
-                    new Positioned(
-                        view,
-                        top: 0,
-                        bottom: 0,
-                        right: 0,
-                        left: full ? 0 : null,
-                        width: full ? null : width
-                    ),
-                },
-            };
-            if (!full)
-                stack.Children.Add(
-                    new Positioned(
-                        new DevResizeHandle(controller),
-                        top: 0,
-                        bottom: 0,
-                        right: width,
-                        width: DevResizeHandle.Width
-                    )
-                );
-            return stack;
-        }
+        return stack;
     }
 }
 

@@ -17,7 +17,7 @@ namespace Zigote.UI.DevTools;
 ///     <see cref="App.Root" /> but never captures input, so it is invisible to hit-testing and
 ///     focus. The panel chrome is a separate overlay (<see cref="DevToolsPanel" />).
 /// </summary>
-public sealed class DevOverlayLayer : RenderWidget, INoAutoFocus
+public sealed class DevOverlayLayer : Widget, INoAutoFocus
 {
     private const float BadgeW = 66f;
     private const float BadgeH = 22f;

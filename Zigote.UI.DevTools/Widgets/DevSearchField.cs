@@ -15,7 +15,7 @@ namespace Zigote.UI.DevTools.Widgets;
 ///     monospace, with a clear affordance; fires <see cref="OnChanged" /> on every edit. Esc clears
 ///     the text first, then blurs (<see cref="IKeyboardTrap" /> keeps it from closing the panel).
 /// </summary>
-public sealed class DevSearchField : RenderWidget, ITextInputClient, IKeyboardTrap
+public sealed class DevSearchField : Widget, ITextInputClient, IKeyboardTrap
 {
     private float _height = AdwMetrics.EntryHeight;
 

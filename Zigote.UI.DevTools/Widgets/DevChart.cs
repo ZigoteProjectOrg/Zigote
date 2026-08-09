@@ -37,7 +37,7 @@ public static class DevChart
 ///     the card shifts the window and invalidates the chart so it re-resolves scales + geometry from the
 ///     live rings (a data-only ring push does not otherwise dirty the chart).
 /// </summary>
-public sealed class DevChartCard : StatelessWidget
+public sealed class DevChartCard : ComposedWidget
 {
     private readonly float _height;
     private readonly string? _title;

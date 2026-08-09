@@ -18,7 +18,7 @@ namespace Zigote.UI.DevTools.Widgets;
 ///     <see cref="ITextInputClient" />. Command output goes to <see cref="DebugLog" />, which the console
 ///     panel's log tail renders — this widget only owns the input line.
 /// </summary>
-public sealed class DevConsoleField : RenderWidget, ITextInputClient, IKeyboardTrap
+public sealed class DevConsoleField : Widget, ITextInputClient, IKeyboardTrap
 {
     private const string Placeholder = "type a command — try 'help'";
 
