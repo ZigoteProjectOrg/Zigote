@@ -13,7 +13,7 @@ namespace Zigote.UI.Material;
 ///     </c>
 ///     .
 /// </summary>
-public sealed class ListTile : StatelessWidget
+public sealed class ListTile : ComposedWidget
 {
     public ListTile(
         Widget? leading = null,
@@ -92,7 +92,7 @@ public sealed class ListTile : StatelessWidget
 }
 
 /// <summary>A <see cref="ListTile" /> with a trailing <see cref="Switch" />.</summary>
-public sealed class SwitchListTile : StatelessWidget
+public sealed class SwitchListTile : ComposedWidget
 {
     public SwitchListTile(
         bool value,
@@ -127,7 +127,7 @@ public sealed class SwitchListTile : StatelessWidget
 }
 
 /// <summary>A <see cref="ListTile" /> with a trailing <see cref="Checkbox" />.</summary>
-public sealed class CheckboxListTile : StatelessWidget
+public sealed class CheckboxListTile : ComposedWidget
 {
     public CheckboxListTile(
         bool value,
@@ -162,7 +162,7 @@ public sealed class CheckboxListTile : StatelessWidget
 }
 
 /// <summary>A <see cref="ListTile" /> with a trailing <see cref="Radio{T}" />.</summary>
-public sealed class RadioListTile<T> : StatelessWidget where T : IEquatable<T>
+public sealed class RadioListTile<T> : ComposedWidget where T : IEquatable<T>
 {
     public RadioListTile(
         T value,

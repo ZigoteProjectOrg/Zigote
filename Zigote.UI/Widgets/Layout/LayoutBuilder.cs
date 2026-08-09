@@ -8,7 +8,7 @@ namespace Zigote.UI.Widgets.Layout;
 ///     <see cref="BoxConstraints" />. The <c>builder</c> runs during Measure (and re-runs when the
 ///     constraints change), so it can size children against the space actually available.
 /// </summary>
-public sealed class LayoutBuilder : RenderWidget
+public sealed class LayoutBuilder : Widget
 {
     private readonly Func<BuildContext, BoxConstraints, Widget> _builder;
     private Widget? _child;
@@ -37,9 +37,12 @@ public sealed class LayoutBuilder : RenderWidget
             // frame for the whole of a window-resize drag, which is what made resizing flicker.
             if (!ReferenceEquals(next, _child))
             {
-                _child?.Detach();
+                // Attach-then-detach (Widget.SwapChild): a builder can return a DIFFERENT wrapper
+                // around the SAME retained subtree, and detaching first would tear that shared
+                // subtree down for the same reasons the identity check above avoids.
+                var previous = _child;
                 _child = next;
-                if (Owner is not null) _child.Attach(Owner, this);
+                SwapChild(previous, _child);
             }
 
             _lastConstraints = c;

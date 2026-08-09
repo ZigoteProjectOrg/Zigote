@@ -25,12 +25,12 @@ public class NavigatorTests
         );
     }
 
-    // Build the navigator into existence: Measure runs the StatefulWidget lifecycle (InitState),
-    // which creates the NavigatorState and initial routes.
-    private static NavigatorState Mount(Navigator nav)
+    // Build the navigator into existence: Measure runs the mount lifecycle (OnMount), which
+    // creates the initial routes.
+    private static Navigator Mount(Navigator nav)
     {
         nav.Measure(Tight);
-        return nav.State!;
+        return nav;
     }
 
     [Fact]
@@ -82,17 +82,17 @@ public class NavigatorTests
     }
 
     [Fact]
-    public async Task Dispose_CompletesPendingPushTasks()
+    public async Task Detach_CompletesPendingPushTasks()
     {
         // Regression: tearing the navigator down mid-flow must complete any awaited Push, or the
-        // awaiter (and its captured continuation) leaks forever. Dispose previously only DisposeRoute'd.
+        // awaiter (and its captured continuation) leaks forever. Unmount previously only DisposeRoute'd.
         var nav = new Navigator { Home = new SizedBox(10, 10) };
         var state = Mount(nav);
 
         var task = state.Push(Page<string>());
         Assert.False(task.IsCompleted);
 
-        state.Dispose();
+        state.Detach();
 
         Assert.True(task.IsCompleted);
         Assert.Null(await task); // no result supplied → completes with default

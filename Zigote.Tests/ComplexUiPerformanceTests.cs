@@ -233,7 +233,7 @@ public class ComplexUiPerformanceTests
     public void RealisticSettingsPage_ColdBuildCost_CollectsMetrics()
     {
         // First-frame cost: constructing the retained tree + the very first Measure/Layout/Paint,
-        // which fires every StatefulWidget's CreateState/InitState/Build and warms text measurement.
+        // which fires every widget's OnMount/Build and warms text measurement.
         // This is the "time to first frame" a screen pays once — distinct from the steady-state cost.
         var viewport = Constraints.Tight(480f, 900f);
 

@@ -22,7 +22,7 @@ public sealed class AnimationController
 
     /// <param name="durationSeconds">Animation duration.</param>
     /// <param name="vsync">
-    ///     Optional ticker provider (usually the enclosing <c>WidgetState</c>).
+    ///     Optional ticker provider (usually the enclosing widget — every <c>Widget</c> is one).
     ///     When supplied the controller ticks automatically each frame without
     ///     any manual <see cref="Tick" /> calls. When null, call <see cref="Tick" /> yourself.
     /// </param>

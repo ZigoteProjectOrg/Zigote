@@ -108,7 +108,7 @@ public class LiquidGlass : Widget
 /// <summary>
 ///     Stateless widget implementing the LiquidGlass.Auto factory logic.
 /// </summary>
-internal class LiquidGlassAuto : StatelessWidget
+internal class LiquidGlassAuto : ComposedWidget
 {
     private readonly Widget _child;
 

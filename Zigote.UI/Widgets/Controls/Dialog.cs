@@ -14,7 +14,7 @@ namespace Zigote.UI.Widgets.Controls;
 ///     centered, opaque <see cref="ThemeData.Surface" /> card floating above it on a soft Z3 shadow.
 ///     Push onto the overlay stack with <see cref="Show" />; remove with <see cref="Dismiss" />.
 /// </summary>
-public class Dialog : RenderWidget, IDismissableOverlay, ITickerProvider
+public class Dialog : Widget, IDismissableOverlay
 {
     private readonly App _app;
     private readonly Card _card;
@@ -37,24 +37,10 @@ public class Dialog : RenderWidget, IDismissableOverlay, ITickerProvider
         _enter.OnTick += MarkNeedsLayout;
     }
 
-    public Ticker CreateTicker(Action<float> onTick)
+    // The ticker CreateTicker hands out is owned by the mount period, so a re-attach just rebinds.
+    protected override void OnMount()
     {
-        _ticker?.Dispose();
-        _ticker = new Ticker(onTick);
-        return _ticker;
-    }
-
-    public override void Attach(App owner, Widget? parent)
-    {
-        base.Attach(owner, parent);
         _enter.AttachTicker(this);
-    }
-
-    public override void Detach()
-    {
-        base.Detach();
-        _ticker?.Dispose();
-        _ticker = null;
     }
 
     /// <summary>When true (default), clicking the scrim dismisses the dialog.</summary>

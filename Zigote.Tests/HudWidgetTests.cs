@@ -166,10 +166,10 @@ public class HudWidgetTests
     }
 
     /// <summary>
-    ///     A trivial <see cref="StatelessWidget" /> that reports the ambient context during Build —
+    ///     A trivial <see cref="ComposedWidget" /> that reports the ambient context during Build —
     ///     proves theme/media-aware HUD widgets resolve their inherited data when hosted.
     /// </summary>
-    private sealed class ContextProbe(Action<BuildContext> onBuild) : StatelessWidget
+    private sealed class ContextProbe(Action<BuildContext> onBuild) : ComposedWidget
     {
         protected override Widget Build(BuildContext context)
         {

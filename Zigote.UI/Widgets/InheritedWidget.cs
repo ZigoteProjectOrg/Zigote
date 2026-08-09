@@ -7,7 +7,7 @@ namespace Zigote.UI.Widgets;
 /// <summary>
 ///     A widget that provides data to all of its descendants.
 ///     During the Measure pass it pushes itself onto <see cref="BuildContext.Current" />;
-///     nested widgets (including <see cref="StatelessWidget" /> and <see cref="StatefulWidget" />)
+///     nested widgets (including every <see cref="ComposedWidget" />)
 ///     can call <c>BuildContext.Of&lt;T&gt;(ctx)</c> or <c>ctx.FindAncestor&lt;T&gt;()</c>
 ///     to retrieve it.
 /// </summary>

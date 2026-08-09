@@ -33,21 +33,16 @@ widgets are thin **aliases** over a `Zigote.UI` control (`FilterChip`/`ChoiceChi
 ```csharp
 using Zigote.UI.Material;
 
-class HomePage : StatefulWidget
-{
-    protected override WidgetState CreateState() => new HomeState();
-}
-
-class HomeState : WidgetState<HomePage>
+class HomePage : ComposedWidget
 {
     private int _count;
 
-    public override Widget Build(BuildContext ctx) => new Scaffold(
+    protected override Widget Build(BuildContext ctx) => new Scaffold(
         appBar: new AppBar(title: new Label("Counter")),
         body: new Center(child: new Label($"Count: {_count}")),
         floatingActionButton: new FloatingActionButton(
             icon: Icons.Add,
-            onPressed: () => SetState(() => _count++)));
+            onPressed: () => { _count++; MarkNeedsBuild(); }));
 }
 
 new MaterialApp(title: "Demo", theme: ThemeData.Dark, home: new HomePage()).Run();

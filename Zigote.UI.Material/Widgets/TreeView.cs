@@ -16,7 +16,7 @@ namespace Zigote.UI.Material;
 ///     content is clipped to <see cref="Widget.Bounds" />. Expanding a node fades + slides its freshly
 ///     revealed descendant rows into place.
 /// </summary>
-public sealed class TreeView<T> : Widget, ITickerProvider where T : notnull
+public sealed class TreeView<T> : Widget where T : notnull
 {
     private readonly Func<T, IReadOnlyList<T>> _childrenOf;
 
@@ -33,7 +33,6 @@ public sealed class TreeView<T> : Widget, ITickerProvider where T : notnull
     private bool _compact;
     private int _hoverIndex = -1;
     private Size _size;
-    private Ticker? _ticker;
     private ThemeData _theme = ThemeData.Dark;
 
     public TreeView(
@@ -58,25 +57,14 @@ public sealed class TreeView<T> : Widget, ITickerProvider where T : notnull
         };
     }
 
-    public Ticker CreateTicker(Action<float> onTick)
-    {
-        _ticker?.Dispose();
-        _ticker = new Ticker(onTick);
-        return _ticker;
-    }
 
-    public override void Attach(App owner, Widget? parent)
+    // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
+    // re-attach rebinds instead of leaking one per attach cascade.
+    protected override void OnMount()
     {
-        base.Attach(owner, parent);
         _expand.AttachTicker(this);
     }
 
-    public override void Detach()
-    {
-        base.Detach();
-        _ticker?.Dispose();
-        _ticker = null;
-    }
 
     /// <summary>
     ///     Equality comparer used to track expand/collapse and selection. Default: reference/default

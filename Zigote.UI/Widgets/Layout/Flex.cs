@@ -10,7 +10,7 @@ namespace Zigote.UI.Widgets.Layout;
 ///     )
 ///     or may be smaller (<see cref="FlexFit.Loose" />).
 /// </summary>
-public class Flexible : RenderWidget
+public class Flexible : Widget
 {
     // Single-element child array reused across GetChildren() calls. Flexible/Expanded/Spacer are
     // pervasive in Row/Column trees; returning a fresh `[Child]` each call allocated a Widget[] on

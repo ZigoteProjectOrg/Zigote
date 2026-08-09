@@ -8,7 +8,7 @@ using static Gallery.GalleryUi;
 namespace Gallery;
 
 /// <summary>Dialogs, snackbars and tooltips.</summary>
-internal sealed class OverlaysPage : StatelessWidget
+internal sealed class OverlaysPage : ComposedWidget
 {
     protected override Widget Build(BuildContext context)
     {

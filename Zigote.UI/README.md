@@ -58,28 +58,35 @@ while (!app.ShouldQuit) app.Frame();   // Measure → Layout → Events → Pain
 ## Widget kinds
 
 ```csharp
-// StatelessWidget — pure function of its props; Build() is cached (call Invalidate() to rerun)
-class MyCard : StatelessWidget
+// ComposedWidget — pure function of its props; Build() is cached (call Invalidate() to rerun)
+class MyCard : ComposedWidget
 {
     protected override Widget Build(BuildContext ctx) =>
         new Card(Theme.Of(ctx)) { Child = new Label("Hello") };
 }
 
-// StatefulWidget — interactive; SetState mutates retained children in place (no tree rebuild)
-class CounterState : WidgetState<Counter>
+// Interactive — a widget's fields ARE its state; mutate the retained children in place
+class Counter : ComposedWidget
 {
     private readonly Label _label = new("0");
     private int _count;
-    public override Widget Build(BuildContext ctx) => new Column
+    protected override Widget Build(BuildContext ctx) => new Column
     {
-        Children = { _label, new Button("Increment",
-            () => SetState(() => _label.Text = (++_count).ToString())) }
+        Children = { _label, new Button("Increment", () =>
+        {
+            _label.Text = (++_count).ToString();
+            MarkNeedsLayout();          // relayout + repaint; Build does not re-run
+        }) }
     };
 }
 ```
 
-- **`SetState(action)`** relayouts + repaints without re-running `Build`; **`SetStateRebuild`** re-runs
-  `Build`. `RequestRebuild()`/`Invalidate()` force a `Build` on the next frame.
+- **`MarkNeedsPaint()` < `MarkNeedsLayout()` < `MarkNeedsBuild()`/`Invalidate()`** — pick the cheapest that
+  covers the change. Only the last re-runs `Build`.
+- **`OwnEffect(() => …)`** is the fine-grained path: a signal-tracked effect that writes into retained
+  children, allocating nothing. **`Watch`** is for when the tree's *shape* depends on a signal.
+- **`OnMount`/`OnUnmount` + `Own(...)`** scope subscriptions and tickers to the time the widget is
+  actually in the tree.
 - **`InheritedWidget`** (`ThemeProvider`, `MediaQuery`) propagates data down the tree; consumers read it with
   `BuildContext.DependOn<T>()` and rebuild only when it changes.
 - **Compose by default** — controls are built from the layout kernel + `DecoratedBox` (background) +
@@ -132,9 +139,9 @@ and a reserved `ISemanticsBridge` seam.
 ## Hot reload
 
 Edit a widget's `Build()` while the app runs and the live UI updates without a restart — widget instances and
-`WidgetState` are preserved, only `Build()` re-runs. Run any
+their fields are preserved, only `Build()` re-runs. Run any
 `App`-based app under `dotnet watch`, or use Rider/VS "apply changes". Constructor/field-initializer/
-`InitState` edits and native Zig/shader changes still need a full restart.
+`OnMount` edits and native Zig/shader changes still need a full restart.
 
 ## Fonts
 

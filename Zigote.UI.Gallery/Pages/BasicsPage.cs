@@ -10,7 +10,7 @@ using static Gallery.GalleryUi;
 namespace Gallery;
 
 /// <summary>Typography, buttons, icon buttons and gestures. Stateless — actions only toast.</summary>
-internal sealed class BasicsPage : StatelessWidget
+internal sealed class BasicsPage : ComposedWidget
 {
     protected override Widget Build(BuildContext context)
     {

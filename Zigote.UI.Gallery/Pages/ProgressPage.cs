@@ -7,28 +7,20 @@ using static Gallery.GalleryUi;
 namespace Gallery;
 
 /// <summary>Progress indicators, with a slider driving the determinate ones.</summary>
-internal sealed class ProgressPage : StatefulWidget
-{
-    protected override WidgetState CreateState()
-    {
-        return new ProgressPageState();
-    }
-}
-
-internal sealed class ProgressPageState : WidgetState<ProgressPage>
+internal sealed class ProgressPage : ComposedWidget
 {
     private float _progress = 0.65f;
 
     // Retained: a rebuild mid-drag would recreate the slider and drop the drag.
     private Slider? _slider;
 
-    public override Widget Build(BuildContext context)
+    protected override Widget Build(BuildContext context)
     {
         _slider ??= new Slider(
             _progress,
             0,
             1,
-            v => SetStateRebuild(() => _progress = v)
+            v => { _progress = v; MarkNeedsBuild(); }
         );
 
         return Sections(

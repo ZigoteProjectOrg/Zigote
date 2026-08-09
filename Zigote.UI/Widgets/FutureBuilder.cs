@@ -35,8 +35,10 @@ public readonly struct AsyncSnapshot<T>(ConnectionState connectionState, T? data
 ///     one-shot async UI (loading a detail record, a computed result) where a full signal store is
 ///     overkill.
 /// </summary>
-public sealed class FutureBuilder<T> : StatefulWidget
+public sealed class FutureBuilder<T> : ComposedWidget
 {
+    private bool _settled;
+
     public FutureBuilder(Task<T>? future, Func<BuildContext, AsyncSnapshot<T>, Widget> builder)
     {
         Future = future;
@@ -46,31 +48,20 @@ public sealed class FutureBuilder<T> : StatefulWidget
     public Task<T>? Future { get; }
     public Func<BuildContext, AsyncSnapshot<T>, Widget> Builder { get; }
 
-    protected override WidgetState CreateState()
+    protected override void OnMount()
     {
-        return new FutureBuilderState<T>();
-    }
-}
-
-internal sealed class FutureBuilderState<T> : SingleTickerProviderState<FutureBuilder<T>>
-{
-    private bool _settled;
-
-    public override void InitState()
-    {
-        base.InitState();
-        _settled = Widget.Future is null or { IsCompleted: true };
+        _settled = Future is null or { IsCompleted: true };
         CreateTicker(OnTick).Start();
     }
 
-    public override Widget Build(BuildContext context)
+    protected override Widget Build(BuildContext context)
     {
-        return Widget.Builder(context, Snapshot());
+        return Builder(context, Snapshot());
     }
 
     private AsyncSnapshot<T> Snapshot()
     {
-        var future = Widget.Future;
+        var future = Future;
         if (future is null) return new AsyncSnapshot<T>(ConnectionState.None, default, null);
         if (!future.IsCompleted)
             return new AsyncSnapshot<T>(ConnectionState.Waiting, default, null);
@@ -87,11 +78,11 @@ internal sealed class FutureBuilderState<T> : SingleTickerProviderState<FutureBu
 
     private void OnTick(float dt)
     {
-        if (Disposed || !Mounted || _settled) return;
-        if (Widget.Future is { IsCompleted: true })
+        if (!Mounted || _settled) return;
+        if (Future is { IsCompleted: true })
         {
             _settled = true;
-            SetStateRebuild(() => { });
+            MarkNeedsBuild();
         }
     }
 }

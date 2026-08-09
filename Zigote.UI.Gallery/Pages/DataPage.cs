@@ -9,20 +9,12 @@ using static Gallery.GalleryUi;
 namespace Gallery;
 
 /// <summary>Trees, reorderable lists, tabs and split views.</summary>
-internal sealed class DataPage : StatefulWidget
-{
-    protected override WidgetState CreateState()
-    {
-        return new DataPageState();
-    }
-}
-
-internal sealed class DataPageState : WidgetState<DataPage>
+internal sealed class DataPage : ComposedWidget
 {
     private int _innerTab;
     private int _navSel;
 
-    public override Widget Build(BuildContext context)
+    protected override Widget Build(BuildContext context)
     {
         var theme = ThemeProvider.Of(context);
 
@@ -90,7 +82,7 @@ internal sealed class DataPageState : WidgetState<DataPage>
                                 new Tab("Third"),
                             ],
                             _innerTab,
-                            i => SetStateRebuild(() => _innerTab = i)
+                            i => { _innerTab = i; MarkNeedsBuild(); }
                         ),
                         new SizedBox(
                             // Finger-sized tabs eat most of a 72-px box; give the page below room.
@@ -132,7 +124,7 @@ internal sealed class DataPageState : WidgetState<DataPage>
                             mail,
                             i => new Center(new Text($"{mail[i]} detail")),
                             _navSel,
-                            i => SetStateRebuild(() => _navSel = i)
+                            i => { _navSel = i; MarkNeedsBuild(); }
                         )
                     )
             ),
@@ -155,7 +147,7 @@ internal sealed class DataPageState : WidgetState<DataPage>
             stack.Children.Add(
                 new ListTile(
                     title: new Text(mail[index]),
-                    onPressed: () => SetStateRebuild(() => _navSel = index),
+                    onPressed: () => { _navSel = index; MarkNeedsBuild(); },
                     selected: index == _navSel
                 )
             );

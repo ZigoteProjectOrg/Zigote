@@ -21,7 +21,7 @@ namespace Zigote.UI.BottomSheets;
 ///         <see cref="ThemeData" />.
 ///     </para>
 /// </summary>
-public sealed class FlexibleBottomSheet : RenderWidget
+public sealed class FlexibleBottomSheet : Widget
 {
     private readonly Column _body;
     private readonly DecoratedBox _card;

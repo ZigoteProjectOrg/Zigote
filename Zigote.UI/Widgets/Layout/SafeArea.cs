@@ -8,7 +8,7 @@ namespace Zigote.UI.Widgets.Layout;
 ///     per-edge
 ///     flags and <c>minimum</c> select which edges are inset.
 /// </summary>
-public sealed class SafeArea : StatelessWidget
+public sealed class SafeArea : ComposedWidget
 {
     public SafeArea(
         Widget? child = null,

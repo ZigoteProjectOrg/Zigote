@@ -161,12 +161,7 @@ public class TextField : Widget, ITextInputClient
     public bool Obscure
     {
         get => _obscure;
-        set
-        {
-            if (_obscure == value) return;
-            _obscure = value;
-            MarkNeedsPaint();
-        }
+        set => SetPaint(ref _obscure, value);
     }
 
     /// <summary>What the field actually renders/measures — the masked form when <see cref="Obscure" />.</summary>
@@ -175,12 +170,7 @@ public class TextField : Widget, ITextInputClient
     public string Hint
     {
         get => _hint;
-        set
-        {
-            if (value == _hint) return;
-            _hint = value;
-            MarkNeedsPaint();
-        }
+        set => SetPaint(ref _hint, value);
     }
 
     public Action<string>? OnChanged { get; set; }
@@ -228,12 +218,7 @@ public class TextField : Widget, ITextInputClient
     public bool Multiline
     {
         get => _multiline;
-        set
-        {
-            if (_multiline == value) return;
-            _multiline = value;
-            MarkNeedsLayout();
-        }
+        set => SetLayout(ref _multiline, value);
     }
 
     /// <summary>

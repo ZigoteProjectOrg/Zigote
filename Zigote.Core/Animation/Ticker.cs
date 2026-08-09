@@ -2,7 +2,7 @@ namespace Zigote.Core.Animation;
 
 /// <summary>
 ///     Factory that creates <see cref="Ticker" /> instances tied to the provider's lifecycle.
-///     Implement via <c>SingleTickerProviderState&lt;T&gt;</c> or <c>TickerProviderState&lt;T&gt;</c>.
+///     Every <c>Widget</c> implements it — pass <c>vsync: this</c> from a widget.
 /// </summary>
 public interface ITickerProvider
 {
@@ -11,7 +11,7 @@ public interface ITickerProvider
 
 /// <summary>
 ///     A handle that receives per-frame dt callbacks while running.
-///     Created by an <see cref="ITickerProvider" />; disposed when the owning state is disposed.
+///     Created by an <see cref="ITickerProvider" />; disposed when the owning widget unmounts.
 ///     <para>
 ///         Set <see cref="Muted" /> to true to pause ticking without stopping (analogous to
 ///         TickerMode).

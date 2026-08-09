@@ -164,7 +164,7 @@ public class UiReleaseFixTests
         }
     }
 
-    private sealed class Reader : StatelessWidget
+    private sealed class Reader : ComposedWidget
     {
         protected override Widget Build(BuildContext ctx)
         {

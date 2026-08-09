@@ -46,7 +46,7 @@ public sealed class FileBrowserOptions
 ///     loads), so every FileDialog call falls back here when the native OS dialog is unavailable,
 ///     disabled, or fails.
 /// </summary>
-public sealed class FileBrowserDialog : StatefulWidget, IDismissableOverlay
+public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
 {
     private const uint WindowWidth = 780;
     private const uint WindowHeight = 540;
@@ -163,18 +163,10 @@ public sealed class FileBrowserDialog : StatefulWidget, IDismissableOverlay
         }
     }
 
-    protected override WidgetState CreateState()
-    {
-        return new FileBrowserDialogState();
-    }
-
-    /// <summary>INoAutoFocus: the state focuses the list (or the save-name field) itself instead
+    /// <summary>INoAutoFocus: the dialog focuses the list (or the save-name field) itself instead
     ///     of letting the overlay auto-focus the first toolbar button.</summary>
     private sealed class BrowserHost(Widget content, App app) : Dialog(content, app), INoAutoFocus;
-}
 
-internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
-{
     private int _activeFilter;
     private FileDialogFilter[] _filters = [];
     private string[] _filterLabels = [];
@@ -190,9 +182,9 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
     /// <summary>Phone width: the dialog drops to a single column (no places sidebar, no preview).</summary>
     private bool _compact;
 
-    private FileBrowserOptions Options => Widget.Options;
-
-    public override void InitState()
+    // Everything below is built at mount, not construction: Options arrives through the object
+    // initialiser, after the constructor has run.
+    protected override void OnMount()
     {
         var o = Options;
         _model = new FileBrowserModel { LockRoot = o.LockRoot };
@@ -204,19 +196,23 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
 
         _list = new FileBrowserList(_model) {
             OnActivate = OnActivate,
-            OnSelectionChanged = () => SetStateRebuild(() => { }),
+            OnSelectionChanged = MarkNeedsBuild,
             OnNavigateUp = GoUp,
             OnContextMenu = ShowContextMenu,
         };
         _scroll = new ScrollView { Child = _list };
         _list.Scroll = _scroll;
         _header = new FileBrowserHeader(_model) {
-            OnSort = column => SetStateRebuild(() => _model.SortBy(column)),
+            OnSort = column =>
+            {
+                _model.SortBy(column);
+                MarkNeedsBuild();
+            },
         };
         _search = new SearchField("Search", OnSearchChanged);
         _sidebarScroll = new ScrollView();
         _nameField = new TextField(
-            onChanged: _ => SetStateRebuild(() => { }),
+            onChanged: _ => MarkNeedsBuild(),
             onSubmitted: _ => Confirm(),
             decoration: new InputDecoration("File name")
         ) { Text = o.SuggestedName ?? "" };
@@ -226,7 +222,7 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
         _model.NavigateTo(ResolveStartDirectory());
 
         // Owner is the hosting window's App when the browser runs as a separate OS window.
-        (Widget.Owner ?? App.Active)?.RequestFocus(
+        (Owner ?? App.Active)?.RequestFocus(
             o.Kind == FileDialogKind.SaveFile ? _nameField : _list
         );
     }
@@ -282,7 +278,7 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
 
     // ── Build ─────────────────────────────────────────────────────────────────
 
-    public override Widget Build(BuildContext context)
+    protected override Widget Build(BuildContext context)
     {
         var theme = ThemeProvider.Of(context);
         _compact = TouchMetrics.IsCompact;
@@ -299,7 +295,7 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
         // As a separate OS window the titlebar names the dialog — either the OS's own (System
         // chrome) or the app-injected WindowTitleBar strip (unified/CSD). The in-content title
         // row only earns its place in the overlay/embedded presentations.
-        if (Widget.HostWindow is null)
+        if (HostWindow is null)
             body.Children.Insert(
                 0,
                 new Padding(
@@ -343,7 +339,7 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
 
         // MacUnified windows have no titlebar strip — this toolbar IS the titlebar band, so it
         // leads with the traffic-light inset and its gaps drag the window.
-        var lightsInset = MathF.Max(0f, (Widget.HostWindow?.TitleBarLeftInset ?? 0f) - 10f);
+        var lightsInset = MathF.Max(0f, (HostWindow?.TitleBarLeftInset ?? 0f) - 10f);
         var nav = new Row {
             CrossAxisAlignment = CrossAxisAlignment.Center,
             Children = {
@@ -679,12 +675,9 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
 
     private void Navigate(Action move)
     {
-        SetStateRebuild(() =>
-            {
-                move();
-                AfterNavigate();
-            }
-        );
+        move();
+        AfterNavigate();
+        MarkNeedsBuild();
     }
 
     private void NavigateTo(string path)
@@ -710,35 +703,26 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
 
     private void OnSearchChanged(string text)
     {
-        SetStateRebuild(() =>
-            {
-                _model.SearchText = text;
-                _model.ApplyView();
-            }
-        );
+        _model.SearchText = text;
+        _model.ApplyView();
+        MarkNeedsBuild();
     }
 
     private void ToggleHidden(bool value)
     {
-        SetStateRebuild(() =>
-            {
-                _model.ShowHidden = value;
-                _model.ApplyView();
-            }
-        );
+        _model.ShowHidden = value;
+        _model.ApplyView();
+        MarkNeedsBuild();
     }
 
     private void OnFilterChanged(int index, string _)
     {
-        SetStateRebuild(() =>
-            {
-                _activeFilter = index;
-                var exts = NormalizedExts(_filters[index]);
-                _model.ExtensionFilter = exts;
-                _model.ApplyView();
-                RetargetSaveExtension(exts);
-            }
-        );
+        _activeFilter = index;
+        var exts = NormalizedExts(_filters[index]);
+        _model.ExtensionFilter = exts;
+        _model.ApplyView();
+        RetargetSaveExtension(exts);
+        MarkNeedsBuild();
     }
 
     /// <summary>Switching the save format swaps the name's extension, like native format pickers.</summary>
@@ -762,7 +746,8 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
 
         if (Options.Kind == FileDialogKind.SaveFile)
         {
-            SetStateRebuild(() => _nameField.Text = entry.Name);
+            _nameField.Text = entry.Name;
+            MarkNeedsBuild();
             return;
         }
 
@@ -901,12 +886,9 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
                 failed++;
         if (failed > 0)
             App.Active?.ShowSnackbar($"Could not move {failed} item(s) to the Trash.");
-        SetStateRebuild(() =>
-            {
-                _model.Refresh();
-                _list.ResetCursor();
-            }
-        );
+        _model.Refresh();
+        _list.ResetCursor();
+        MarkNeedsBuild();
     }
 
     private void PromptRename(FileBrowserEntry entry)
@@ -972,12 +954,9 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
             }
 
             prompt?.Dismiss();
-            SetStateRebuild(() =>
-                {
-                    _model.Refresh();
-                    SelectPath(target);
-                }
-            );
+            _model.Refresh();
+            SelectPath(target);
+            MarkNeedsBuild();
         }
     }
 
@@ -1052,12 +1031,9 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
             }
 
             prompt?.Dismiss();
-            SetStateRebuild(() =>
-                {
-                    _model.Refresh();
-                    SelectPath(path);
-                }
-            );
+            _model.Refresh();
+            SelectPath(path);
+            MarkNeedsBuild();
         }
     }
 
@@ -1068,7 +1044,7 @@ internal sealed class FileBrowserDialogState : WidgetState<FileBrowserDialog>
 
     private void Complete(string[] paths)
     {
-        Widget.CompleteAndClose(paths);
+        CompleteAndClose(paths);
     }
 }
 

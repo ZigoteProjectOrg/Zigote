@@ -98,12 +98,7 @@ public class ListView : Widget
     public EdgeInsets Padding
     {
         get => _padding;
-        set
-        {
-            if (_padding == value) return;
-            _padding = value;
-            MarkNeedsLayout();
-        }
+        set => SetLayout(ref _padding, value);
     }
 
     public float ScrollSpeed { get; set; } = 40f;

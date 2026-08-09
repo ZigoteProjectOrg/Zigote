@@ -10,7 +10,7 @@ namespace Zigote.UI.Widgets.Controls;
 ///     Wraps any widget and shows a tooltip bubble after hovering for ~0.7 s.
 ///     UiApp reads <see cref="TooltipText" /> from the hovered widget automatically.
 /// </summary>
-public sealed class Tooltip(string message, Widget? child = null) : StatelessWidget
+public sealed class Tooltip(string message, Widget? child = null) : ComposedWidget
 {
     public Widget? Child { get; set; } = child;
     public string Message { get; set; } = message;

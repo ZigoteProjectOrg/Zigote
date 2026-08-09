@@ -42,7 +42,7 @@ public sealed record ContextMenuItem(
 ///     item
 ///     selection or click outside. Items with Children open a nested submenu on hover.
 /// </summary>
-public sealed class ContextMenu : RenderWidget, ITickerProvider
+public sealed class ContextMenu : Widget
 {
     private const float SeparatorH = 9f; // compact divider row height
 
@@ -72,24 +72,10 @@ public sealed class ContextMenu : RenderWidget, ITickerProvider
         _enter.OnTick += MarkNeedsLayout;
     }
 
-    public Ticker CreateTicker(Action<float> onTick)
+    // The ticker CreateTicker hands out is owned by the mount period, so a re-attach just rebinds.
+    protected override void OnMount()
     {
-        _ticker?.Dispose();
-        _ticker = new Ticker(onTick);
-        return _ticker;
-    }
-
-    public override void Attach(AppInstance owner, Widget? parent)
-    {
-        base.Attach(owner, parent);
         _enter.AttachTicker(this);
-    }
-
-    public override void Detach()
-    {
-        base.Detach();
-        _ticker?.Dispose();
-        _ticker = null;
     }
 
     private void PlayEnter()

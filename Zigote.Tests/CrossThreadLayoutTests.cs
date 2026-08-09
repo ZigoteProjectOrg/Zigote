@@ -7,7 +7,7 @@ namespace Zigote.Tests;
 
 /// <summary>
 ///     The mechanism the off-thread reactive marshal relies on (App.InvalidateLayoutFromAnyThread →
-///     MarkNeedsLayout on the UI thread): a cached <see cref="StatelessWidget" /> ancestor skips
+///     MarkNeedsLayout on the UI thread): a cached <see cref="ComposedWidget" /> ancestor skips
 ///     re-measuring its subtree, so a deep reactive bind whose only signal is the App-level layout flag
 ///     is never reached. Marking the deep widget's chain defeats that cache-skip. (Regression for the
 ///     "timer/async don't update the Effects tab" bug: the deep bind sat inside cached section Cards.)
@@ -15,7 +15,7 @@ namespace Zigote.Tests;
 public class CrossThreadLayoutTests
 {
     [Fact]
-    public void MarkNeedsLayout_on_a_deep_widget_defeats_a_cached_StatelessWidget_ancestor()
+    public void MarkNeedsLayout_on_a_deep_widget_defeats_a_cached_ComposedWidget_ancestor()
     {
         var leaf = new CountingLeaf();
         var host = new CachingHost(leaf);
@@ -29,7 +29,7 @@ public class CrossThreadLayoutTests
         var afterFirst = leaf.Measures;
         Assert.True(afterFirst >= 1);
 
-        // Same constraints, nothing marked → the StatelessWidget returns its cached size WITHOUT
+        // Same constraints, nothing marked → the ComposedWidget returns its cached size WITHOUT
         // re-measuring the child (this is exactly why the off-thread App-flag-only path failed).
         host.Measure(c);
         Assert.Equal(afterFirst, leaf.Measures);
@@ -66,7 +66,7 @@ public class CrossThreadLayoutTests
         }
     }
 
-    private sealed class CachingHost(Widget child) : StatelessWidget
+    private sealed class CachingHost(Widget child) : ComposedWidget
     {
         protected override Widget Build(BuildContext context)
         {

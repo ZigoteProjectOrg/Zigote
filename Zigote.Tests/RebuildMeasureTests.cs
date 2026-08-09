@@ -10,8 +10,8 @@ namespace Zigote.Tests;
 ///     survives that rebuild, Measure can early-return the previous size at an unchanged window size
 ///     and Layout then walks a subtree that was never measured — the layout containers below it
 ///     replay per-child tables sized by a measure that never ran (blank render, or an
-///     IndexOutOfRangeException out of the frame loop). StatefulWidget already drops its cache on
-///     rebuild; this pins that StatelessWidget does too.
+///     IndexOutOfRangeException out of the frame loop). ComposedWidget already drops its cache on
+///     rebuild; this pins that ComposedWidget does too.
 /// </summary>
 public class RebuildMeasureTests
 {
@@ -47,7 +47,7 @@ public class RebuildMeasureTests
         }
     }
 
-    private sealed class Host : StatelessWidget
+    private sealed class Host : ComposedWidget
     {
         public Widget Next = new Probe();
 

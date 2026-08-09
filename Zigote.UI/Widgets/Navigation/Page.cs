@@ -4,7 +4,7 @@ namespace Zigote.UI.Widgets.Navigation;
 
 /// <summary>
 ///     A declarative description of a route for the <b>Navigator 2.0</b> page API. A list of pages
-///     describes the whole navigation stack; the <see cref="NavigatorState" /> reconciles its live
+///     describes the whole navigation stack; the <see cref="Navigator" /> reconciles its live
 ///     routes against that list (matching by <see cref="Key" />), animating pages in and out as the
 ///     list changes.
 ///     <para>Give pages a stable <see cref="Key" /> so their route state survives reordering.</para>

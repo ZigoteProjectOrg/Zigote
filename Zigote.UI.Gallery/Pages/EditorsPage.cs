@@ -10,7 +10,7 @@ namespace Gallery;
 ///     Editor widgets (color, gradient, curve, code). Built once per visit — the route caches the
 ///     page content, so in-editor edits survive while the page is on the navigation stack.
 /// </summary>
-internal sealed class EditorsPage : StatelessWidget
+internal sealed class EditorsPage : ComposedWidget
 {
     protected override Widget Build(BuildContext context)
     {

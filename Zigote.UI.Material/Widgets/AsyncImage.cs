@@ -32,7 +32,7 @@ public enum ImageFit
 ///         is drawn at.
 ///     </para>
 /// </remarks>
-public sealed class AsyncImage : RenderWidget, ITickerProvider
+public sealed class AsyncImage : Widget
 {
     private readonly Func<CancellationToken, Task<byte[]?>> _loader;
 
@@ -90,17 +90,10 @@ public sealed class AsyncImage : RenderWidget, ITickerProvider
     /// </summary>
     public int MaxDecodeSize { get; init; }
 
-    public Ticker CreateTicker(Action<float> onTick)
+    protected override void OnMount()
     {
-        _ticker?.Dispose();
-        _ticker = new Ticker(onTick);
-        return _ticker;
-    }
-
-    public override void Attach(App owner, Widget? parent)
-    {
-        base.Attach(owner, parent);
-        _ticker ??= CreateTicker(OnTick);
+        // Owned by the mount period — the previous one went with the last unmount.
+        _ticker = CreateTicker(OnTick);
         _ticker.Start();
         if (!_decoded)
         {
@@ -118,8 +111,6 @@ public sealed class AsyncImage : RenderWidget, ITickerProvider
     {
         base.Detach();
         _cts?.Cancel();
-        _ticker?.Dispose();
-        _ticker = null;
 
         // Give the GPU memory back — but a frame LATER, not here. Rebuild churn (an AdaptiveBuilder
         // breakpoint crossing, a Watch reconcile) detaches and reattaches a kept tile within the

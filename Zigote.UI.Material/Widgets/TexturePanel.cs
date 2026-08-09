@@ -3,7 +3,7 @@ namespace Zigote.UI.Material;
 /// <summary>
 ///     A widget that composites an offscreen 3D scene render into the 2D UI.
 /// </summary>
-public class TexturePanel(ulong textureId) : RenderWidget
+public class TexturePanel(ulong textureId) : Widget
 {
     private Size _size;
 

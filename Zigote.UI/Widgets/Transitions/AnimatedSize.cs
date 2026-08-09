@@ -31,9 +31,9 @@ public sealed class AnimatedSize : ImplicitlyAnimatedWidget
         set
         {
             if (ReferenceEquals(_child, value)) return;
-            _child?.Detach();
+            var previous = _child;
             _child = value;
-            if (_child is not null && Owner is not null) _child.Attach(Owner, this);
+            SwapChild(previous, _child); // attach-then-detach; see Widget.SwapChild
             MarkNeedsLayout();
         }
     }

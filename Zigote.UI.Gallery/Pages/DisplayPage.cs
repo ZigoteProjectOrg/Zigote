@@ -9,20 +9,12 @@ using static Gallery.GalleryUi;
 namespace Gallery;
 
 /// <summary>Chips, badges, avatars, dividers, list tiles and tooltips.</summary>
-internal sealed class DisplayPage : StatefulWidget
-{
-    protected override WidgetState CreateState()
-    {
-        return new DisplayPageState();
-    }
-}
-
-internal sealed class DisplayPageState : WidgetState<DisplayPage>
+internal sealed class DisplayPage : ComposedWidget
 {
     private readonly bool[] _filters = [true, false, false];
     private bool _switch = true;
 
-    public override Widget Build(BuildContext context)
+    protected override Widget Build(BuildContext context)
     {
         return Sections(
             Section(
@@ -124,6 +116,7 @@ internal sealed class DisplayPageState : WidgetState<DisplayPage>
 
     private void Set(Action mutate)
     {
-        SetStateRebuild(mutate);
+        mutate();
+        MarkNeedsBuild();
     }
 }

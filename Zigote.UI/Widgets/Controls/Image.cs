@@ -34,7 +34,7 @@ namespace Zigote.UI.Widgets.Controls;
 ///         mechanics and adds cover/contain fit, a placeholder fill and a fade-in.
 ///     </para>
 /// </remarks>
-public sealed class Image : RenderWidget, IDisposable
+public sealed class Image : Widget, IDisposable
 {
     private CancellationTokenSource? _loadCts;
     private bool _disposed;

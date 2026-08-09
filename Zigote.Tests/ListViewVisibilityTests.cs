@@ -55,7 +55,7 @@ public class ListViewVisibilityTests
         Assert.Contains(rows[50], focusables);
     }
 
-    private sealed class FakeFocusable : RenderWidget
+    private sealed class FakeFocusable : Widget
     {
         public override bool Focusable => true;
 

@@ -97,12 +97,9 @@ public class ZigoteApp
 
     /// <summary>
     ///     The root navigator hosting <see cref="Home" />/<see cref="Pages" />. Valid inside
-    ///     <see cref="Run" />.
+    ///     <see cref="Run" />. Use for <c>SetPages</c>, <c>Push</c>, <c>Pop</c>.
     /// </summary>
     public Navigator? RootNavigator { get; private set; }
-
-    /// <summary>The root navigator's state, once built. Use for <c>SetPages</c>, <c>Push</c>, <c>Pop</c>.</summary>
-    public NavigatorState? RootNavigatorState => RootNavigator?.State;
 
     // ── Runtime state (valid only inside Run()) ───────────────────────────────
 

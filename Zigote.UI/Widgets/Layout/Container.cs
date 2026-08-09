@@ -6,7 +6,7 @@ namespace Zigote.UI.Widgets.Layout;
 /// <summary>
 ///     A single-child layout widget with decoration, padding and margin.
 /// </summary>
-public sealed class Container : RenderWidget
+public sealed class Container : Widget
 {
     private Size _childSize;
     private Size _totalSize;
@@ -72,100 +72,55 @@ public sealed class Container : RenderWidget
     public Widget? Child
     {
         get => _child;
-        set
-        {
-            if (_child == value) return;
-            _child = value;
-            MarkNeedsLayout();
-        }
+        set => SetLayout(ref _child, value);
     }
 
     public Color Background
     {
         get => _background;
-        set
-        {
-            if (_background == value) return;
-            _background = value;
-            MarkNeedsPaint();
-        }
+        set => SetPaint(ref _background, value);
     }
 
     public EdgeInsets Padding
     {
         get => _padding;
-        set
-        {
-            if (_padding == value) return;
-            _padding = value;
-            MarkNeedsLayout();
-        }
+        set => SetLayout(ref _padding, value);
     }
 
     public EdgeInsets Margin
     {
         get => _margin;
-        set
-        {
-            if (_margin == value) return;
-            _margin = value;
-            MarkNeedsLayout();
-        }
+        set => SetLayout(ref _margin, value);
     }
 
     public float? Width
     {
         get => _width;
-        set
-        {
-            if (_width == value) return;
-            _width = value;
-            MarkNeedsLayout();
-        }
+        set => SetLayout(ref _width, value);
     }
 
     public float? Height
     {
         get => _height;
-        set
-        {
-            if (_height == value) return;
-            _height = value;
-            MarkNeedsLayout();
-        }
+        set => SetLayout(ref _height, value);
     }
 
     public float CornerRadius
     {
         get => _cornerRadius;
-        set
-        {
-            if (value == _cornerRadius) return;
-            _cornerRadius = value;
-            MarkNeedsPaint();
-        }
+        set => SetPaint(ref _cornerRadius, value);
     }
 
     public Color BorderColor
     {
         get => _borderColor;
-        set
-        {
-            if (_borderColor == value) return;
-            _borderColor = value;
-            MarkNeedsPaint();
-        }
+        set => SetPaint(ref _borderColor, value);
     }
 
     public float BorderWidth
     {
         get => _borderWidth;
-        set
-        {
-            if (value == _borderWidth) return;
-            _borderWidth = value;
-            MarkNeedsPaint();
-        }
+        set => SetPaint(ref _borderWidth, value);
     }
 
     public override Size Measure(Constraints c)

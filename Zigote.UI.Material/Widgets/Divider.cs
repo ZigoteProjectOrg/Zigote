@@ -5,7 +5,7 @@ namespace Zigote.UI.Material;
 ///     theme's <see cref="ThemeData.Separator" /> colour; honours the <see cref="Vertical" />,
 ///     <see cref="Thickness" />, <see cref="Indent" /> and <see cref="EndIndent" /> properties.
 /// </summary>
-public sealed class Divider : StatelessWidget
+public sealed class Divider : ComposedWidget
 {
     public Divider(float thickness = 1f, float indent = 0f)
     {

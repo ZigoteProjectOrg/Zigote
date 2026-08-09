@@ -45,9 +45,12 @@ public sealed class TweenAnimationBuilder<T> : ImplicitlyAnimatedWidget
         if (!float.IsNaN(_lastProgress) && MathF.Abs(p - _lastProgress) < 0.001f &&
             _built is not null) return;
         _lastProgress = p;
-        _built?.Detach();
+        // Attach-then-detach (Widget.SwapChild), and it matters most here: this re-runs on every
+        // animation frame, so a builder that wraps a retained child used to unmount and remount that
+        // child ~60×/second — disposing and re-creating everything it owns each time.
+        var previous = _built;
         _built = Builder(_tween.Evaluate(p));
-        if (Owner is not null) _built.Attach(Owner, this);
+        SwapChild(previous, _built);
     }
 
     public override Size Measure(Constraints c)

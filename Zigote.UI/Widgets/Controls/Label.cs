@@ -17,7 +17,7 @@ public enum TextOverflow
 }
 
 /// <summary>Renders a single string of text in the flat macOS type scale.</summary>
-public class Label : RenderWidget
+public class Label : Widget
 {
     public enum LabelStyle
     {
@@ -88,12 +88,7 @@ public class Label : RenderWidget
     public string Text
     {
         get => _text;
-        set
-        {
-            if (_text == value) return;
-            _text = value;
-            MarkNeedsLayout();
-        }
+        set => SetLayout(ref _text, value);
     }
 
     public LabelStyle Style { get; set; } = LabelStyle.Body;

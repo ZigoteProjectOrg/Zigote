@@ -12,7 +12,7 @@ namespace Gallery;
 ///     The Zigote.UI.Charts showcase. Built once per visit (the route caches the content), so chart
 ///     animation/interaction state survives while the page is on the stack.
 /// </summary>
-internal sealed class ChartsPage : StatelessWidget
+internal sealed class ChartsPage : ComposedWidget
 {
     protected override Widget Build(BuildContext context)
     {

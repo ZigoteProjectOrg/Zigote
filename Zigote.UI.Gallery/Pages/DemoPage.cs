@@ -13,7 +13,7 @@ namespace Gallery;
 ///     <see cref="NavigationStore" />) over the demo's scrollable content. The title translates
 ///     (and the back chevron flips) with the active locale.
 /// </summary>
-internal sealed class DemoPage : StatelessWidget
+internal sealed class DemoPage : ComposedWidget
 {
     private readonly DemoInfo _demo;
 

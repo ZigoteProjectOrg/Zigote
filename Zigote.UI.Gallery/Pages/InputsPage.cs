@@ -10,18 +10,10 @@ namespace Gallery;
 /// <summary>
 ///     Text entry and pickers. Keystroke state is ephemeral UI state, so it stays in the widget
 ///     (per BLoC guidance — cubits hold app state, not caret positions): the field and its echo
-///     label are retained and updated via <c>SetState</c> so typing never recreates the focused
+///     label are retained and mutated in place so typing never recreates the focused
 ///     field.
 /// </summary>
-internal sealed class InputsPage : StatefulWidget
-{
-    protected override WidgetState CreateState()
-    {
-        return new InputsPageState();
-    }
-}
-
-internal sealed class InputsPageState : WidgetState<InputsPage>
+internal sealed class InputsPage : ComposedWidget
 {
     /// <summary>Smallest comfortable finger target; 28 pt controls are mouse-sized.</summary>
     private const float TouchHeight = 44f;
@@ -30,7 +22,7 @@ internal sealed class InputsPageState : WidgetState<InputsPage>
     private string _fruit = "Apple";
     private TextField? _typedField;
 
-    public override Widget Build(BuildContext context)
+    protected override Widget Build(BuildContext context)
     {
         var fruits = new List<DropdownMenuItem<string>> {
             new("Apple", "Apple"),
@@ -39,12 +31,12 @@ internal sealed class InputsPageState : WidgetState<InputsPage>
             new("Durian", "Durian"),
         };
 
-        // Retain the field + result label and update the label with SetState (relayout, no rebuild)
+        // Retain the field + result label and mutate the label directly (relayout, no rebuild)
         // so typing never recreates the field — otherwise the rebuild detaches it and focus is lost
         // after the first character.
         var typed = _typedField ??= new TextField(
             decoration: new InputDecoration("Type something…"),
-            onChanged: v => SetState(() => _typedLabel.Text = $"You typed: {v}")
+            onChanged: v => { _typedLabel.Text = $"You typed: {v}"; MarkNeedsLayout(); }
         );
 
         // Single-line fields are the page's primary targets, so they take the touch height on a
@@ -99,7 +91,7 @@ internal sealed class InputsPageState : WidgetState<InputsPage>
                         new DropdownButton<string>(
                             fruits,
                             _fruit,
-                            v => SetStateRebuild(() => _fruit = v ?? "Apple")
+                            v => { _fruit = v ?? "Apple"; MarkNeedsBuild(); }
                         )
                     )
                 );

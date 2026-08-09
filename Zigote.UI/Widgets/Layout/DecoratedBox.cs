@@ -13,7 +13,7 @@ namespace Zigote.UI.Widgets.Layout;
 ///     Sizes to its child (or to the constraints' minimum when childless), like
 ///     <see cref="ColoredBox" />.
 /// </summary>
-public sealed class DecoratedBox : RenderWidget
+public sealed class DecoratedBox : Widget
 {
     private Size _size;
 

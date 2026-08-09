@@ -294,7 +294,7 @@ public class MaterialApiConsistencyTests
         Assert.True(Assert.IsType<Pressable>(live.HitTest(Center(live))).Enabled);
     }
 
-    private sealed class RowBox : RenderWidget
+    private sealed class RowBox : Widget
     {
         private Size _size;
 

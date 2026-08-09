@@ -13,7 +13,7 @@ namespace Zigote.UI.Material;
 ///     Equal-width text segments; arrow keys move the selection. Sizing and colour come from theme
 ///     tokens.
 /// </summary>
-public sealed class SegmentedControl : Widget, ITickerProvider
+public sealed class SegmentedControl : Widget
 {
     private readonly AnimationController _slide;
     private int _hovered = -1;
@@ -24,7 +24,6 @@ public sealed class SegmentedControl : Widget, ITickerProvider
     private Size _size;
     private float _textWidth; // widest segment label, drives equal-width sizing
     private ThemeData _theme = ThemeData.Dark;
-    private Ticker? _ticker;
     private int _selected;
 
     public SegmentedControl(IEnumerable<string> segments, int selected = 0,
@@ -37,41 +36,25 @@ public sealed class SegmentedControl : Widget, ITickerProvider
         _slide.OnTick += MarkNeedsPaint;
     }
 
-    public Ticker CreateTicker(Action<float> onTick)
-    {
-        _ticker?.Dispose();
-        _ticker = new Ticker(onTick);
-        return _ticker;
-    }
 
     /// <summary>The animated (possibly fractional) index the selection pill is drawn at.</summary>
     private float PillPos =>
         _pillInit ? _pillFrom + (_pillTo - _pillFrom) * _slide.Value : SelectedIndex;
 
-    public override void Attach(App owner, Widget? parent)
+    // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
+    // re-attach rebinds instead of leaking one per attach cascade.
+    protected override void OnMount()
     {
-        base.Attach(owner, parent);
         _slide.AttachTicker(this);
     }
 
-    public override void Detach()
-    {
-        base.Detach();
-        _ticker?.Dispose();
-        _ticker = null;
-    }
 
     public List<string> Segments { get; set; }
 
     public int SelectedIndex
     {
         get => _selected;
-        set
-        {
-            if (_selected == value) return;
-            _selected = value;
-            MarkNeedsPaint();
-        }
+        set => SetPaint(ref _selected, value);
     }
 
     [Obsolete("Renamed — use SelectedIndex.")]

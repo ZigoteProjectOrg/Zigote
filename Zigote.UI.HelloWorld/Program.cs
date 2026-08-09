@@ -61,12 +61,12 @@ internal sealed class HelloWorldApp : MaterialApp
 ///         watch <c>ui.watch_rebuilds</c> tick by one per press to see it.
 ///     </para>
 ///     <para>
-///         The page can therefore be a <see cref="StatelessWidget" />: the state lives in the signal,
-///         not in the widget. (Coming from Flutter? A <c>StatefulWidget</c> + <c>SetState</c> also
-///         exists and works the way you'd expect — but a signal is less ceremony and rebuilds less.)
+///         The state lives in the signal, not in the widget. (Coming from Flutter? A widget's fields
+///         are its state here — mutate them and call <c>MarkNeedsLayout</c>. But a signal is less
+///         ceremony and rebuilds less.)
 ///     </para>
 /// </summary>
-internal sealed class CounterPage : StatelessWidget
+internal sealed class CounterPage : ComposedWidget
 {
     // Safe as a field here because this page instance is retained for the app's lifetime. A signal
     // that must outlive rebuilds of its *owner* belongs above it — in a store the page is handed,

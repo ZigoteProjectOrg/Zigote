@@ -9,7 +9,7 @@ namespace Zigote.UI.Material;
 ///     A flat, macOS-style toggle switch. Capsule track tinted by the accent when on, a neutral fill
 ///     when off, with a white knob that animates between ends via a self-owned AnimationController.
 /// </summary>
-public class Switch : RenderWidget, ITickerProvider
+public class Switch : Widget
 {
     private readonly AnimationController _anim;
     private bool _hovered;
@@ -17,7 +17,6 @@ public class Switch : RenderWidget, ITickerProvider
     private float _hitPadX, _hitPadY;
     private Size _size;
     private ThemeData _theme = ThemeData.Dark;
-    private Ticker? _ticker;
     private bool _value;
     private float _trackW = ControlMetrics.SwitchWidth;
     private float _trackH = ControlMetrics.SwitchHeight;
@@ -55,23 +54,13 @@ public class Switch : RenderWidget, ITickerProvider
     public float TrackW
     {
         get => _trackW;
-        set
-        {
-            if (value == _trackW) return;
-            _trackW = value;
-            MarkNeedsLayout();
-        }
+        set => SetLayout(ref _trackW, value);
     }
 
     public float TrackH
     {
         get => _trackH;
-        set
-        {
-            if (value == _trackH) return;
-            _trackH = value;
-            MarkNeedsLayout();
-        }
+        set => SetLayout(ref _trackH, value);
     }
 
     public override bool Focusable => true;
@@ -79,12 +68,6 @@ public class Switch : RenderWidget, ITickerProvider
     /// <summary>Optional accessible name (e.g. the setting this switch toggles).</summary>
     public string? SemanticsLabel { get; set; }
 
-    public Ticker CreateTicker(Action<float> onTick)
-    {
-        _ticker?.Dispose();
-        _ticker = new Ticker(onTick);
-        return _ticker;
-    }
 
     public override void DescribeSemantics(SemanticsConfiguration config)
     {
@@ -98,20 +81,15 @@ public class Switch : RenderWidget, ITickerProvider
             .AddFlag(SemanticsFlags.Disabled, !Enabled);
     }
 
-    public override void Attach(App owner, Widget? parent)
+    // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
+    // re-attach rebinds instead of leaking one per attach cascade.
+    protected override void OnMount()
     {
-        base.Attach(owner, parent);
         // Detach disposed the ticker; rebind so the knob still animates after a detach→re-attach cycle
         // (overlay push/pop, Root swap, keyed list remove/re-add).
         _anim.AttachTicker(this);
     }
 
-    public override void Detach()
-    {
-        base.Detach();
-        _ticker?.Dispose();
-        _ticker = null;
-    }
 
     public override void UpdateFrom(Widget newWidget)
     {

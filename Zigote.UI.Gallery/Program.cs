@@ -27,7 +27,7 @@ public static class Program
 ///         <item>
 ///             <see cref="NavigationStore" /> is the single source of truth for routing — a
 ///             <c>Signal&lt;GalleryRoute&gt;</c> projected into a declarative Navigator 2.0 page stack
-///             (<see cref="BuildPages" /> → <c>NavigatorState.SetPages</c>, pages matched by stable
+///             (<see cref="BuildPages" /> → <c>Navigator.SetPages</c>, pages matched by stable
 ///             keys), and pops flow back into it through <c>OnPopPage</c> — the navigator never owns
 ///             state the store doesn't know.
 ///         </item>
@@ -84,7 +84,7 @@ internal sealed class GalleryApp : MaterialApp
 
         // Signals as the app's state layer: project routing into the page stack, and appearance into
         // the framework theme. Signal.Changed fires only on an actual change (equality-gated).
-        _navigation.Route.Changed += route => _navigator.State?.SetPages(BuildPages(route));
+        _navigation.Route.Changed += route => _navigator.SetPages(BuildPages(route));
         _theme.Mode.Changed += _ => Theme = _theme.Data;
     }
 

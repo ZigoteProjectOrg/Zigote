@@ -8,10 +8,11 @@ using Zigote.UI.Host;
 namespace Zigote.UI.Widgets.Controls;
 
 /// <summary>
-///     Flat macOS-style toast shown near the bottom-centre of the window. An opaque near-black
-///     surface floats on a soft Z2 shadow with the message in <see cref="ThemeData.OnSurface" /> and
-///     an optional accent action label. Created by <c>App.ShowSnackbar</c>; auto-dismissed after
-///     <see cref="Duration" /> seconds.
+///     Flat toast shown near the bottom-centre of the window. An opaque near-black surface — the
+///     OSD colour both Material and Adwaita keep dark in either appearance — floats on a soft Z2
+///     shadow, shaped by <see cref="ThemeData.ToastRadius" /> (a rounded rectangle under Material, a
+///     capsule under Adwaita) and carrying an optional accent action label. Created by
+///     <c>App.ShowSnackbar</c>; auto-dismissed after <see cref="Duration" /> seconds.
 /// </summary>
 /// <remarks>
 ///     The action button's hit-rect is derived from the measured label width (via
@@ -100,13 +101,14 @@ public sealed class Snackbar(
 
         paint.PushAlpha(alpha);
 
-        // Flat opaque near-black surface on a soft Z2 shadow.
-        paint.AddElevation(sRect, Radii.Lg, Elevation.Z2);
-        paint.AddRect(sRect, ToastSurface, Radii.Lg);
+        // Flat opaque near-black surface on a soft Z2 shadow, in the theme's toast shape.
+        var radius = MathF.Min(_theme.ToastRadius, sRect.Height / 2f);
+        paint.AddElevation(sRect, radius, Elevation.Z2);
+        paint.AddRect(sRect, ToastSurface, radius);
 
         // The surface is capped at the screen width but the message is drawn at its measured
         // width — clip so a long message ends at the toast instead of running off-screen.
-        paint.AddClipStart(sRect);
+        paint.AddClipStart(sRect, radius);
 
         var fs = _theme.FontSizeBody;
         var baselineY = sRect.Y + (Height - fs) / 2f + fs * 0.8f;

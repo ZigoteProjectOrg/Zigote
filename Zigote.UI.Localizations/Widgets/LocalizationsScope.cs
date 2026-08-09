@@ -22,11 +22,11 @@ namespace Zigote.UI.Localizations;
 ///   </code>
 ///     Switch at runtime from anywhere below it: <c>context.SetLocale(Locale.Es)</c>.
 ///     <para>
-///         It is a transparent single-child wrapper (not a rebuilding <c>StatefulWidget</c>): it
+///         It is a transparent single-child wrapper (not a rebuilding <c>ComposedWidget</c>): it
 ///         builds
 ///         the retained provider subtree once and delegates layout/paint to it, so a hot reload
 ///         rebuilds
-///         the consumers below it <b>without</b> tearing down and recreating their <c>WidgetState</c>.
+///         the consumers below it <b>without</b> tearing down and remounting them.
 ///     </para>
 /// </summary>
 public sealed class LocalizationsScope : Widget

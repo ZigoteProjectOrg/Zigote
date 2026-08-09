@@ -94,7 +94,7 @@ public class ListViewBuilderTests
         Assert.InRange(built, 4, 4 * 8); // a few rows of 4 cells, not 10 000
     }
 
-    private sealed class FakeRow : RenderWidget
+    private sealed class FakeRow : Widget
     {
         public override Size Measure(Constraints c)
         {

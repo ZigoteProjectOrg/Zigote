@@ -54,7 +54,7 @@ public class DragTarget<T> : Widget
     ///         </item>
     ///         <item>
     ///             Otherwise the incoming child is attached first and the outgoing one is retired
-    ///             only after the next Measure. A StatelessWidget builds its subtree lazily in
+    ///             only after the next Measure. A ComposedWidget builds its subtree lazily in
     ///             Measure, so until then it has adopted nothing — detaching the old tree right
     ///             here would take shared children (the dragged Draggable among them) with it, and
     ///             App drops the pointer capture of anything it detaches, killing the drag.

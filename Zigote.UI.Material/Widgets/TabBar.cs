@@ -13,7 +13,7 @@ namespace Zigote.UI.Material;
 ///     show
 ///     matching content.
 /// </summary>
-public class TabBar : RenderWidget, ITickerProvider
+public class TabBar : Widget
 {
     private readonly List<TabCell> _cells = [];
     private readonly AnimationController _slide;
@@ -27,7 +27,6 @@ public class TabBar : RenderWidget, ITickerProvider
 
     private IReadOnlyList<string> _tabs = [];
     private ThemeData _theme = ThemeData.Dark;
-    private Ticker? _ticker;
     private float _underFrom;
     private bool _underInit;
     private float _underTo;
@@ -67,12 +66,7 @@ public class TabBar : RenderWidget, ITickerProvider
     public int SelectedIndex
     {
         get => _selected;
-        set
-        {
-            if (_selected == value) return;
-            _selected = value;
-            MarkNeedsPaint();
-        }
+        set => SetPaint(ref _selected, value);
     }
 
     [Obsolete("Renamed — use SelectedIndex.")]
@@ -87,12 +81,7 @@ public class TabBar : RenderWidget, ITickerProvider
     public ThemeData Theme
     {
         get => _theme;
-        set
-        {
-            if (_theme == value) return;
-            _theme = value;
-            MarkNeedsPaint();
-        }
+        set => SetPaint(ref _theme, value);
     }
 
     public float TabHeight { get; set; } = ControlMetrics.LargeHeight;
@@ -103,25 +92,14 @@ public class TabBar : RenderWidget, ITickerProvider
     /// <summary>Owns Left/Right to move between tabs, so the app must not repurpose them for focus.</summary>
     public override bool HandlesDirectionalKeys => true;
 
-    public Ticker CreateTicker(Action<float> onTick)
-    {
-        _ticker?.Dispose();
-        _ticker = new Ticker(onTick);
-        return _ticker;
-    }
 
-    public override void Attach(App owner, Widget? parent)
+    // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
+    // re-attach rebinds instead of leaking one per attach cascade.
+    protected override void OnMount()
     {
-        base.Attach(owner, parent);
         _slide.AttachTicker(this);
     }
 
-    public override void Detach()
-    {
-        base.Detach();
-        _ticker?.Dispose();
-        _ticker = null;
-    }
 
     private void RebuildCells()
     {
@@ -362,7 +340,7 @@ public class TabBar : RenderWidget, ITickerProvider
     }
 
     private sealed class TabCell(string label, Func<bool> isSelected, Action onTap, TabBar owner)
-        : RenderWidget
+        : Widget
     {
         private bool _hovered;
         private Size _size;
@@ -437,13 +415,12 @@ public class TabBar : RenderWidget, ITickerProvider
 ///     Shows the child at index <see cref="SelectedIndex" /> from its <see cref="Children" /> list.
 ///     Pair with <see cref="TabBar" /> so indices stay in sync.
 /// </summary>
-public class TabView : RenderWidget, ITickerProvider
+public class TabView : Widget
 {
     private readonly AnimationController _fade;
     private int _prevIndex = -1;
     private int _selectedIndex;
     private Size _size;
-    private Ticker? _ticker;
 
     public TabView()
     {
@@ -485,12 +462,6 @@ public class TabView : RenderWidget, ITickerProvider
     private bool Transitioning =>
         _prevIndex >= 0 && _prevIndex < Children.Count && _prevIndex != _selectedIndex;
 
-    public Ticker CreateTicker(Action<float> onTick)
-    {
-        _ticker?.Dispose();
-        _ticker = new Ticker(onTick);
-        return _ticker;
-    }
 
     private static bool IsInside(Widget w, Widget root)
     {
@@ -500,18 +471,13 @@ public class TabView : RenderWidget, ITickerProvider
         return false;
     }
 
-    public override void Attach(App owner, Widget? parent)
+    // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
+    // re-attach rebinds instead of leaking one per attach cascade.
+    protected override void OnMount()
     {
-        base.Attach(owner, parent);
         _fade.AttachTicker(this);
     }
 
-    public override void Detach()
-    {
-        base.Detach();
-        _ticker?.Dispose();
-        _ticker = null;
-    }
 
     public override Size Measure(Constraints c)
     {

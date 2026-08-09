@@ -9,8 +9,20 @@ namespace Zigote.UI.Material;
 ///     from <see cref="Pressable" /> over a capsule <see cref="DecoratedBox" /> + centred
 ///     <see cref="Label" />. Sizing, colour and shape come from the theme tokens.
 /// </summary>
-public sealed class Chip : StatefulWidget
+public sealed class Chip : ComposedWidget
 {
+    private readonly DecoratedBox _box = new();
+    private readonly Label _text = new("") { MaxLines = 1 };
+    private readonly LayoutPadding _padding = new(EdgeInsets.Zero);
+
+    private readonly ConstrainedBox _minHeight =
+        new(new Constraints(minHeight: ControlMetrics.CompactHeight));
+
+    private readonly Pressable _root;
+    private AnimationController _sel = null!;
+    private bool _selTarget;
+    private ThemeData _theme = ThemeData.Dark;
+
     private Color? _color;
     private bool _enabled = true;
     private string _label;
@@ -21,28 +33,48 @@ public sealed class Chip : StatefulWidget
         _label = label;
         _selected = selected;
         OnPressed = onPressed;
+
+        _padding.Child = _text;
+        _box.Radius = Radii.Capsule;
+        _minHeight.Child = new Align(Alignment.Center, _padding) {
+            WidthFactor = 1f,
+            HeightFactor = 1f,
+        };
+        _box.Child = _minHeight;
+        _root = new Pressable {
+            Child = _box,
+            FocusRadius = Radii.Capsule,
+            OnStateChanged = ApplyColors,
+            OnPressed = () => OnPressed?.Invoke(),
+        };
+    }
+
+    // The controller owns a Ticker, whose lifetime is the mount period — so it is built here rather
+    // than in the constructor, and rebuilt if this chip is re-attached.
+    protected override void OnMount()
+    {
+        // Crossfades the fill/border/text between the neutral and accent states on selection.
+        _sel = new AnimationController(Motion.Fast, this) { Curve = Curves.EaseOut };
+        _sel.OnTick += () =>
+        {
+            ApplyColors();
+            _root.MarkNeedsPaint();
+        };
+        _selTarget = Selected;
+        if (_selTarget) _sel.Complete();
+        else _sel.Dismiss();
     }
 
     public string Label
     {
         get => _label;
-        set
-        {
-            if (_label == value) return;
-            _label = value;
-            MarkNeedsBuild();
-        }
+        set => SetBuild(ref _label, value);
     }
 
     public bool Selected
     {
         get => _selected;
-        set
-        {
-            if (_selected == value) return;
-            _selected = value;
-            MarkNeedsBuild();
-        }
+        set => SetBuild(ref _selected, value);
     }
 
     public Action? OnPressed { get; set; }
@@ -60,17 +92,7 @@ public sealed class Chip : StatefulWidget
     public bool Enabled
     {
         get => _enabled;
-        set
-        {
-            if (_enabled == value) return;
-            _enabled = value;
-            MarkNeedsBuild();
-        }
-    }
-
-    protected override WidgetState CreateState()
-    {
-        return new ChipState();
+        set => SetBuild(ref _enabled, value);
     }
 
     public override void UpdateFrom(Widget newWidget)
@@ -94,65 +116,21 @@ public sealed class Chip : StatefulWidget
             base.DebugStateHash()
         );
     }
-}
 
-internal sealed class ChipState : SingleTickerProviderState<Chip>
-{
-    private readonly DecoratedBox _box = new();
-    private readonly Label _label = new("") { MaxLines = 1 };
-    private readonly LayoutPadding _padding = new(EdgeInsets.Zero);
-
-    private readonly ConstrainedBox _minHeight =
-        new(new Constraints(minHeight: ControlMetrics.CompactHeight));
-
-    private AnimationController _sel = null!;
-    private bool _selTarget;
-    private Pressable _root = null!;
-    private ThemeData _theme = ThemeData.Dark;
-
-    public override void InitState()
-    {
-        _padding.Child = _label;
-        _box.Radius = Radii.Capsule;
-        _minHeight.Child = new Align(Alignment.Center, _padding) {
-            WidthFactor = 1f,
-            HeightFactor = 1f,
-        };
-        _box.Child = _minHeight;
-        _root = new Pressable {
-            Child = _box,
-            FocusRadius = Radii.Capsule,
-            OnStateChanged = ApplyColors,
-            OnPressed = () => Widget.OnPressed?.Invoke(),
-        };
-
-        // Crossfades the fill/border/text between the neutral and accent states on selection.
-        _sel = new AnimationController(Motion.Fast, this) { Curve = Curves.EaseOut };
-        _sel.OnTick += () =>
-        {
-            ApplyColors();
-            _root.MarkNeedsPaint();
-        };
-        _selTarget = Widget.Selected;
-        if (_selTarget) _sel.Complete();
-        else _sel.Dismiss();
-    }
-
-    public override Widget Build(BuildContext context)
+    protected override Widget Build(BuildContext context)
     {
         _theme = ThemeProvider.Of(context);
-        var w = Widget;
 
-        if (w.Selected != _selTarget)
+        if (Selected != _selTarget)
         {
-            _selTarget = w.Selected;
+            _selTarget = Selected;
             if (_selTarget) _sel.Forward();
             else _sel.Reverse();
         }
 
-        _label.Text = w.Label;
-        _label.FontSize = _theme.FontSizeCaption;
-        _label.FontWeight = w.Selected ? FontWeight.Medium : FontWeight.Normal;
+        _text.Text = Label;
+        _text.FontSize = _theme.FontSizeCaption;
+        _text.FontWeight = Selected ? FontWeight.Medium : FontWeight.Normal;
         // Filter/choice chips are toggles: 22pt tall is unusable with a finger. Grow the capsule
         // itself (a hit-rect trick would overlap neighbours in a tightly-spaced Wrap).
         var compact = TouchMetrics.IsCompact;
@@ -160,7 +138,7 @@ internal sealed class ChipState : SingleTickerProviderState<Chip>
             minHeight: compact ? 36f : ControlMetrics.CompactHeight
         );
         _padding.Insets = EdgeInsets.Symmetric(compact ? Spacing.Lg : Spacing.Md, Spacing.Xxs);
-        _root.Enabled = w.Enabled;
+        _root.Enabled = Enabled;
 
         ApplyColors();
         return _root;
@@ -168,14 +146,13 @@ internal sealed class ChipState : SingleTickerProviderState<Chip>
 
     private void ApplyColors()
     {
-        var w = Widget;
         var hovered = _root.Hovered;
         var pressed = _root.Pressed;
 
         // Selected style (accent).
-        var bgSel = StateStyle.Fill(w.Color ?? _theme.Primary, hovered, pressed);
+        var bgSel = StateStyle.Fill(Color ?? _theme.Primary, hovered, pressed);
         var fgSel = _theme.OnPrimary;
-        var borderSel = Color.Transparent;
+        var borderSel = Zigote.Core.Color.Transparent;
 
         // Unselected style: a clearly visible neutral fill (translucent so it adapts to any backdrop)
         // plus a hairline border so the chip always reads as a shape — the Fill2 token alone is too faint.
@@ -189,7 +166,7 @@ internal sealed class ChipState : SingleTickerProviderState<Chip>
         var fg = Lerp(fgUn, fgSel, t);
         var border = Lerp(borderUn, borderSel, t);
 
-        if (!w.Enabled)
+        if (!Enabled)
         {
             bg = StateStyle.Disabled(bg);
             fg = StateStyle.Disabled(fg);
@@ -197,7 +174,7 @@ internal sealed class ChipState : SingleTickerProviderState<Chip>
 
         _box.Fill = bg;
         _box.BorderColor = border;
-        _label.Color = fg;
+        _text.Color = fg;
     }
 
     private static Color Lerp(Color a, Color b, float t)

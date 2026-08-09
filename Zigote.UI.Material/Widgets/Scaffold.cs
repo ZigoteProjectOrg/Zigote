@@ -3,7 +3,7 @@ namespace Zigote.UI.Material;
 /// <summary>
 ///     Page-level layout widget: app bar on top, body fills the rest, optional FAB at bottom-right.
 /// </summary>
-public sealed class Scaffold : RenderWidget
+public sealed class Scaffold : Widget
 {
     private const float FabSize = 56f;
     private const float FabPadding = 16f;

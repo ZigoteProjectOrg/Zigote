@@ -14,7 +14,7 @@ namespace Zigote.UI.Host;
 /// <summary>
 ///     .NET hot-reload (Edit &amp; Continue) bridge for the retained widget tree.
 ///     <para>
-///         The retained model caches every <see cref="StatelessWidget" />/<see cref="StatefulWidget" />
+///         The retained model caches every <see cref="ComposedWidget" />
 ///         <c>Build()</c> result, so a hot-reload delta that swaps a <c>Build</c> body has no visible
 ///         effect until the tree is told to rebuild. This class is that bridge: the runtime calls
 ///         <see cref="ZigoteHotReloadHandler" /> after applying a delta, which flags a pending reload;
@@ -24,11 +24,11 @@ namespace Zigote.UI.Host;
 ///     <para>
 ///         Widget
 ///         <b>
-///             instances and their <see cref="WidgetState" /> are
+///             instances (and a widget's fields ARE its state) are
 ///             preserved
 ///         </b>
 ///         — only <c>Build()</c> re-runs. Edits to constructors, field initialisers, or
-///         <see cref="WidgetState.InitState" /> do not take effect until a full restart (those run once).
+///         <see cref="Widget.OnMount" /> do not take effect until a full restart (those run once per mount).
 ///         Adding/removing fields or changing a type's shape is a "rude" edit the runtime rejects, also
 ///         requiring a restart.
 ///     </para>
@@ -108,9 +108,9 @@ public static class HotReload
     }
 
     /// <summary>
-    ///     Force every <see cref="StatelessWidget" />/<see cref="StatefulWidget" /> in the subtree rooted
+    ///     Force every <see cref="ComposedWidget" /> in the subtree rooted
     ///     at <paramref name="root" /> to re-run its <c>Build()</c> on the next Measure pass, while keeping
-    ///     widget instances and (for <see cref="StatefulWidget" />) their <see cref="WidgetState" />.
+    ///     widget instances, and with them every field they hold.
     ///     Plain leaf widgets ignore the build flag but are re-measured (so size/colour changes show).
     ///     Static and allocation-free so it is unit-testable without a running <see cref="UI.App" />.
     /// </summary>

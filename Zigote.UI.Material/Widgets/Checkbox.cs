@@ -9,8 +9,16 @@ namespace Zigote.UI.Material;
 ///     whose child is a <see cref="CheckGlyph" /> (the tick). Sizing, colour and shape come from
 ///     tokens.
 /// </summary>
-public class Checkbox : StatefulWidget
+public class Checkbox : ComposedWidget
 {
+    private readonly DecoratedBox _box = new() { Radius = Radii.Xs };
+    private readonly CheckGlyph _glyph = new();
+
+    // Phone hit box: the tick keeps its 16pt look, centred in a finger-sized press area.
+    private readonly SizedBox _touchBox = new(TouchMetrics.MinTarget, TouchMetrics.MinTarget);
+    private readonly Pressable _root;
+    private ThemeData _theme = ThemeData.Dark;
+
     private bool _value;
     private bool _enabled = true;
     private float _size = ControlMetrics.CheckboxSize;
@@ -20,17 +28,21 @@ public class Checkbox : StatefulWidget
     {
         _value = value;
         OnChanged = onChanged;
+
+        _box.Child = _glyph;
+        _touchBox.Child = new Center(_box);
+        _root = new Pressable {
+            Child = _box,
+            FocusRadius = Radii.Xs,
+            OnStateChanged = ApplyColors,
+            OnPressed = Toggle,
+        };
     }
 
     public bool Value
     {
         get => _value;
-        set
-        {
-            if (_value == value) return;
-            _value = value;
-            MarkNeedsBuild();
-        }
+        set => SetBuild(ref _value, value);
     }
 
     [Obsolete("Renamed — use Value.")]
@@ -56,17 +68,7 @@ public class Checkbox : StatefulWidget
     public bool Enabled
     {
         get => _enabled;
-        set
-        {
-            if (_enabled == value) return;
-            _enabled = value;
-            MarkNeedsBuild();
-        }
-    }
-
-    protected override WidgetState CreateState()
-    {
-        return new CheckboxState();
+        set => SetBuild(ref _enabled, value);
     }
 
     public override void UpdateFrom(Widget newWidget)
@@ -84,40 +86,16 @@ public class Checkbox : StatefulWidget
     {
         return HashCode.Combine(Value, Enabled, base.DebugStateHash());
     }
-}
 
-internal sealed class CheckboxState : WidgetState<Checkbox>
-{
-    private readonly DecoratedBox _box = new() { Radius = Radii.Xs };
-    private readonly CheckGlyph _glyph = new();
-
-    // Phone hit box: the tick keeps its 16pt look, centred in a finger-sized press area.
-    private readonly SizedBox _touchBox = new(TouchMetrics.MinTarget, TouchMetrics.MinTarget);
-    private Pressable _root = null!;
-    private ThemeData _theme = ThemeData.Dark;
-
-    public override void InitState()
-    {
-        _box.Child = _glyph;
-        _touchBox.Child = new Center(_box);
-        _root = new Pressable {
-            Child = _box,
-            FocusRadius = Radii.Xs,
-            OnStateChanged = ApplyColors,
-            OnPressed = Toggle,
-        };
-    }
-
-    public override Widget Build(BuildContext context)
+    protected override Widget Build(BuildContext context)
     {
         _theme = ThemeProvider.Of(context);
-        var w = Widget;
 
-        _glyph.GlyphSize = w.Size;
+        _glyph.GlyphSize = Size;
         _root.Child = TouchMetrics.IsCompact ? _touchBox : _box;
-        _root.Enabled = w.Enabled;
+        _root.Enabled = Enabled;
         _root.Role = SemanticsRole.Checkbox;
-        _root.Checked = w.Value;
+        _root.Checked = Value;
 
         ApplyColors();
         return _root;
@@ -125,19 +103,18 @@ internal sealed class CheckboxState : WidgetState<Checkbox>
 
     private void Toggle()
     {
-        Widget.Value = !Widget.Value;
-        Widget.OnChanged?.Invoke(Widget.Value);
+        Value = !Value;
+        OnChanged?.Invoke(Value);
     }
 
     private void ApplyColors()
     {
-        var w = Widget;
         var hovered = _root.Hovered;
         var pressed = _root.Pressed;
 
-        if (!w.Enabled)
+        if (!Enabled)
         {
-            if (w.Value)
+            if (Value)
             {
                 _box.Fill = StateStyle.Disabled(_theme.Primary);
                 _box.BorderColor = Color.Transparent;
@@ -151,7 +128,7 @@ internal sealed class CheckboxState : WidgetState<Checkbox>
                 _glyph.Visible = false;
             }
         }
-        else if (w.Value)
+        else if (Value)
         {
             _box.Fill = StateStyle.Fill(_theme.Primary, hovered, pressed);
             _box.BorderColor = Color.Transparent;

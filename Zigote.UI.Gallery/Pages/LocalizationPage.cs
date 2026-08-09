@@ -17,21 +17,13 @@ namespace Gallery;
 ///     when the locale switches (<c>GalleryL10n.Of</c> registers a dependency on the ambient
 ///     <see cref="Localizations" /> provider).
 /// </summary>
-internal sealed class LocalizationPage : StatefulWidget
-{
-    protected override WidgetState CreateState()
-    {
-        return new LocalizationPageState();
-    }
-}
-
-internal sealed class LocalizationPageState : WidgetState<LocalizationPage>
+internal sealed class LocalizationPage : ComposedWidget
 {
     private static readonly string[] Genders = ["male", "female", "other"];
     private float _count = 2;
     private int _gender;
 
-    public override Widget Build(BuildContext context)
+    protected override Widget Build(BuildContext context)
     {
         var l = GalleryL10n.Of(context);
         var direction = context.TextDirectionOf();
@@ -77,7 +69,7 @@ internal sealed class LocalizationPageState : WidgetState<LocalizationPage>
                         new SegmentedControl(
                             [l.GenderMale, l.GenderFemale, l.GenderOther],
                             _gender,
-                            i => SetStateRebuild(() => _gender = i)
+                            i => { _gender = i; MarkNeedsBuild(); }
                         ),
                         new SizedBox(height: 12),
                         new Text(l.Invite(Genders[_gender]), new TextStyle(15)),
@@ -155,7 +147,7 @@ internal sealed class LocalizationPageState : WidgetState<LocalizationPage>
             1,
             0,
             111,
-            v => SetStateRebuild(() => _count = v)
+            v => { _count = v; MarkNeedsBuild(); }
         );
         var counter = new Text(
             $"{label}: {(int)_count}",

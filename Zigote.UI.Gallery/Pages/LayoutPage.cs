@@ -12,7 +12,7 @@ namespace Gallery;
 ///     Layout primitives. Reads the ambient theme via <see cref="ThemeProvider.Of" /> (registering a
 ///     dependency), so the adaptive outlines rebuild on appearance change.
 /// </summary>
-internal sealed class LayoutPage : StatelessWidget
+internal sealed class LayoutPage : ComposedWidget
 {
     protected override Widget Build(BuildContext context)
     {

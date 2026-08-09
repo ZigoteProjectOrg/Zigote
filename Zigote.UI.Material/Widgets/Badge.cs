@@ -8,7 +8,7 @@ namespace Zigote.UI.Material;
 ///     <see cref="Color" /> (defaults to the theme accent). Hides when
 ///     <see cref="Count" /> is 0; collapses to a circle for single digits.
 /// </summary>
-public sealed class Badge(Widget? child = null, int count = 0) : RenderWidget
+public sealed class Badge(Widget? child = null, int count = 0) : Widget
 {
     private Size _childSize;
     private ThemeData _theme = ThemeData.Dark;

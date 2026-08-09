@@ -5,7 +5,7 @@ namespace Zigote.UI.Material;
 ///     Reads <see cref="ThemeData" /> from <see cref="BuildContext.Current" /> during Measure
 ///     so it always reflects the ambient <see cref="ZigoteTheme" />.
 /// </summary>
-public sealed class AppBar : RenderWidget
+public sealed class AppBar : Widget
 {
     public const float DefaultHeight = 56f;
 

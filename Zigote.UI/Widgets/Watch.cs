@@ -48,7 +48,7 @@ public sealed class Watch : Widget
     /// </summary>
     /// <remarks>
     ///     Per-instance counts live on the inherited <see cref="Widget.RebuildCount" /> — the same field
-    ///     <c>StatelessWidget</c>/<c>StatefulWidget</c> bump, and what the inspector already reads.
+    ///     <c>ComposedWidget</c> bumps, and what the inspector already reads.
     /// </remarks>
     public static long Rebuilds { get; private set; }
 
@@ -104,10 +104,6 @@ public sealed class Watch : Widget
         var next = _computed!.Value;
         if (ReferenceEquals(next, _child)) return;
 
-        // Attach the incoming subtree before tearing down the outgoing one, and skip the teardown
-        // when the new tree re-adopted it — a builder that wraps/unwraps a retained child otherwise
-        // detaches it (disposing every StatefulWidget state inside) only to re-attach it one line
-        // later. See StatelessWidget.EnsureBuilt.
         var previous = _child;
         if (previous is not null)
         {
@@ -116,10 +112,7 @@ public sealed class Watch : Widget
         }
 
         _child = next;
-        if (Owner != null) _child?.Attach(Owner, this);
-        if (previous is not null &&
-            (previous.Parent is null || ReferenceEquals(previous.Parent, this)))
-            previous.Detach();
+        SwapChild(previous, _child); // attach-then-detach; see Widget.SwapChild for why that order
 
         if (inPlace && TryRelayoutInPlace()) return;
         MarkNeedsLayout();
@@ -141,7 +134,7 @@ public sealed class Watch : Widget
         {
             // Off the UI thread: flag the swap and ask the App to mark this widget's ancestor chain for
             // layout on the UI thread next frame — the App-level layout flag alone lets cached ancestors
-            // (StatelessWidget) skip re-measuring this subtree, so the swap in Measure would never run.
+            // (ComposedWidget) skip re-measuring this subtree, so the swap in Measure would never run.
             _dirty = true;
             Owner?.InvalidateLayoutFromAnyThread(this);
         }

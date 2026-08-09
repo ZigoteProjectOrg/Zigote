@@ -18,7 +18,7 @@ namespace Gallery;
 ///     <see cref="GalleryL10n" /> — <c>GalleryL10n.Of(context)</c> registers a dependency, so a
 ///     locale switch rebuilds this page (and mirrors it under RTL).
 /// </summary>
-internal sealed class HomePage : StatelessWidget
+internal sealed class HomePage : ComposedWidget
 {
     private readonly NavigationStore _navigation;
     private readonly ThemeStore _theme;

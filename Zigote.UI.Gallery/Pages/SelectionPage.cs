@@ -11,17 +11,9 @@ namespace Gallery;
 /// <summary>
 ///     Selection controls — the page-level state exemplar: all state lives in an immutable
 ///     <see cref="SelectionState" /> record inside a <see cref="SelectionStore" />'s
-///     <c>Signal&lt;SelectionState&gt;</c>; widgets write intents and the page (a StatefulWidget
+///     <c>Signal&lt;SelectionState&gt;</c>; widgets write intents and the page (a ComposedWidget
 ///     subscribed to the signal — the same pattern the editor uses) re-renders from the new state.
 /// </summary>
-internal sealed class SelectionPage : StatefulWidget
-{
-    protected override WidgetState CreateState()
-    {
-        return new SelectionPageState();
-    }
-}
-
 internal sealed record SelectionState(
     bool Checked,
     bool SwitchOn,
@@ -82,7 +74,7 @@ internal sealed class SelectionStore
     }
 }
 
-internal sealed class SelectionPageState : WidgetState<SelectionPage>
+internal sealed class SelectionPage : ComposedWidget
 {
     private readonly SelectionStore _store = new();
 
@@ -91,19 +83,17 @@ internal sealed class SelectionPageState : WidgetState<SelectionPage>
     private NumberInput? _number;
     private Slider? _slider;
 
-    public override void InitState()
+    protected override void OnMount()
     {
-        base.InitState();
         _store.State.Changed += OnStateChanged;
     }
 
-    public override void Dispose()
+    protected override void OnUnmount()
     {
         _store.State.Changed -= OnStateChanged;
-        base.Dispose();
     }
 
-    public override Widget Build(BuildContext context)
+    protected override Widget Build(BuildContext context)
     {
         var s = _store.State.Value;
 
@@ -199,7 +189,7 @@ internal sealed class SelectionPageState : WidgetState<SelectionPage>
 
     private void OnStateChanged(SelectionState _)
     {
-        SetStateRebuild(() => { });
+        MarkNeedsBuild();
     }
 
     private Widget Radio(SelectionState s, int value, string label)

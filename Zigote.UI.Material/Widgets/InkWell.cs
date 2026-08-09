@@ -8,7 +8,7 @@ namespace Zigote.UI.Material;
 ///         child: …)
 ///     </c>
 /// </summary>
-public sealed class InkWell : StatelessWidget
+public sealed class InkWell : ComposedWidget
 {
     private readonly Widget? _child;
 

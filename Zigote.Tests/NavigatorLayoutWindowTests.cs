@@ -11,7 +11,7 @@ namespace Zigote.Tests;
 ///     (Paint already skips them), but any running transition lays out the whole stack so a route
 ///     being revealed has fresh geometry from its first visible frame.
 ///     <para>
-///         Each pass measures with fresh constraints: the StatefulWidget wrapper measure-caches on
+///         Each pass measures with fresh constraints: the ComposedWidget wrapper measure-caches on
 ///         (constraints, NeedsLayout), and a headless tree has no Parent chain to propagate the
 ///         body's dirty flag up to the Navigator.
 ///     </para>
@@ -25,7 +25,7 @@ public class NavigatorLayoutWindowTests
         var nav = new Navigator { Home = home };
         nav.Measure(Constraints.Tight(200, 200));
         nav.Layout(Offset.Zero);
-        var state = nav.State!;
+        var state = nav;
         var measures = home.Measures;
         var layouts = home.Layouts;
         Assert.True(measures > 0);
@@ -57,7 +57,7 @@ public class NavigatorLayoutWindowTests
         var nav = new Navigator { Home = home };
         nav.Measure(Constraints.Tight(200, 200));
         nav.Layout(Offset.Zero);
-        var state = nav.State!;
+        var state = nav;
         var measures = home.Measures;
 
         // An animated route stays Pushing (no ticker runs in tests) — the whole stack must keep
@@ -68,7 +68,7 @@ public class NavigatorLayoutWindowTests
 
         Assert.True(home.Measures > measures);
 
-        state.Dispose(); // stop the in-flight route's ticker
+        state.Detach(); // stop the in-flight route's ticker
     }
 
     // A page route with no transition — push/pop settle in the same call.
@@ -77,7 +77,7 @@ public class NavigatorLayoutWindowTests
         public override float TransitionDuration => 0f;
     }
 
-    private sealed class CountingBox : RenderWidget
+    private sealed class CountingBox : Widget
     {
         public int Layouts;
         public int Measures;

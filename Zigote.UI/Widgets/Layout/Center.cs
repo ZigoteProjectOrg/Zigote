@@ -4,7 +4,7 @@ using Zigote.Core.Paint;
 namespace Zigote.UI.Widgets.Layout;
 
 /// <summary>Centers its child in the space the parent grants.</summary>
-public class Center : RenderWidget
+public class Center : Widget
 {
     private Size _childSize;
     private Size _ownSize;

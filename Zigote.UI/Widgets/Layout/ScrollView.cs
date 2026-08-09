@@ -11,7 +11,7 @@ namespace Zigote.UI.Widgets.Layout;
 ///     child is re-laid-out at the scrolled offset so descendants that derive screen-space state from
 ///     their Bounds (e.g. LiquidGlass backdrop capture, hit-testing) stay correct.
 /// </summary>
-public class ScrollView : RenderWidget
+public class ScrollView : Widget
 {
     private readonly Scrollbar _hbar = new();
     private readonly SmoothScroller _sx;

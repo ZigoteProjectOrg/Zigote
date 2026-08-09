@@ -6,7 +6,7 @@ namespace Zigote.UI.Material;
 ///     Set <see cref="Vertical" /> = true for a top/bottom split.
 /// </summary>
 public sealed class SplitPane(ThemeData theme, Widget? first = null, Widget? second = null)
-    : RenderWidget
+    : Widget
 {
     private bool _compact;
     private Rect _dividerRect;

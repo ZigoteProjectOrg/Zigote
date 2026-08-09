@@ -38,34 +38,19 @@ public class Slider : Widget
     public float Value
     {
         get => _value;
-        set
-        {
-            if (value == _value) return;
-            _value = value;
-            MarkNeedsPaint();
-        }
+        set => SetPaint(ref _value, value);
     }
 
     public float Min
     {
         get => _min;
-        set
-        {
-            if (value == _min) return;
-            _min = value;
-            MarkNeedsPaint();
-        }
+        set => SetPaint(ref _min, value);
     }
 
     public float Max
     {
         get => _max;
-        set
-        {
-            if (value == _max) return;
-            _max = value;
-            MarkNeedsPaint();
-        }
+        set => SetPaint(ref _max, value);
     }
 
     public Action<float>? OnChanged { get; set; }
@@ -73,12 +58,7 @@ public class Slider : Widget
     public float Height
     {
         get => _height;
-        set
-        {
-            if (value == _height) return;
-            _height = value;
-            MarkNeedsLayout();
-        }
+        set => SetLayout(ref _height, value);
     }
 
     public bool Enabled { get; set; } = true;

@@ -1,99 +1,13 @@
-using Zigote.Core.Animation;
-using Zigote.UI.Host;
-
 namespace Zigote.UI.Material;
 
 /// <summary>
-///     Paint-only leaf: the check-mark tick, drawn as two rounded strokes inside its bounds. Used by
-///     the
-///     composed <see cref="Checkbox" /> as the child of its box <see cref="Layout.DecoratedBox" />;
-///     the
-///     box draws the fill/border, this draws only the mark. Toggling <see cref="Visible" /> pops the
-///     tick in (scale + fade) and eases it back out — the first assignment snaps without animating so
-///     an initially-checked box shows its mark immediately.
+///     The check-mark tick, drawn as two rounded strokes inside its bounds. The entrance/exit
+///     animation and all the plumbing live in <see cref="ToggleGlyph" />; this is only the geometry.
 /// </summary>
-public sealed class CheckGlyph : LeafWidget, ITickerProvider
+public sealed class CheckGlyph() : ToggleGlyph(Motion.Standard)
 {
-    private readonly AnimationController _anim;
-    private bool _initialized;
-    private Size _size;
-    private Ticker? _ticker;
-    private bool _visible;
-
-    public CheckGlyph()
+    protected override void PaintGlyph(PaintList paint, float t)
     {
-        _anim = new AnimationController(Motion.Standard, this) { Curve = Curves.EaseOutBack };
-        _anim.OnTick += MarkNeedsPaint;
-    }
-
-    public float GlyphSize { get; set; }
-    public Color Color { get; set; } = Color.White;
-
-    public bool Visible
-    {
-        get => _visible;
-        set
-        {
-            if (_initialized && _visible == value) return;
-            _visible = value;
-            if (!_initialized)
-            {
-                _initialized = true;
-                if (value) _anim.Complete();
-                else _anim.Dismiss();
-            }
-            else if (value)
-            {
-                _anim.Forward();
-            }
-            else
-            {
-                _anim.Reverse();
-            }
-        }
-    }
-
-    public Ticker CreateTicker(Action<float> onTick)
-    {
-        _ticker?.Dispose();
-        _ticker = new Ticker(onTick);
-        return _ticker;
-    }
-
-    public override void Attach(App owner, Widget? parent)
-    {
-        base.Attach(owner, parent);
-        _anim.AttachTicker(this);
-    }
-
-    public override void Detach()
-    {
-        base.Detach();
-        _ticker?.Dispose();
-        _ticker = null;
-    }
-
-    public override Size Measure(Constraints c)
-    {
-        _size = c.Constrain(new Size(GlyphSize, GlyphSize));
-        return _size;
-    }
-
-    public override void Layout(Offset origin)
-    {
-        Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
-        );
-    }
-
-    public override void Paint(PaintList paint)
-    {
-        var t = _anim.Value;
-        if (t <= 0.001f) return;
-
         var s = MathF.Min(Bounds.Width, Bounds.Height);
         var stroke = MathF.Max(1.5f, s * 0.12f);
         var color = Color.WithAlpha(Math.Clamp(t, 0f, 1f));
@@ -158,15 +72,5 @@ public sealed class CheckGlyph : LeafWidget, ITickerProvider
                 half
             );
         }
-    }
-
-    public override int DebugStateHash()
-    {
-        return HashCode.Combine(
-            _visible,
-            _anim.Value,
-            Color,
-            Bounds.Width
-        );
     }
 }

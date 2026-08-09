@@ -4,87 +4,18 @@ using Zigote.Core.Paint;
 namespace Zigote.UI.Widgets.Navigation;
 
 /// <summary>
-///     A stack of routes, supporting both the
-///     imperative API (<c>Push</c>/<c>Pop</c>, named routes) and the declarative <b>Navigator 2.0</b>
-///     page API (<see cref="Pages" /> + <see cref="OnPopPage" />).
-///     <para>
-///         <see cref="ZigoteApp" /> wraps <c>Home</c> in a root Navigator automatically, so any widget
-///         can navigate with <c>context.Push(...)</c> / <c>context.Pop()</c>. Insert nested Navigators
-///         for sub-flows (e.g. a wizard inside a panel).
-///     </para>
-///     <para>Look up the nearest navigator with <see cref="Of" /> / <see cref="MaybeOf" />.</para>
-/// </summary>
-public sealed class Navigator : StatefulWidget
-{
-    /// <summary>Declarative page stack (Navigator 2.0). When set, describes the initial routes.</summary>
-    public List<Page>? Pages { get; set; }
-
-    /// <summary>
-    ///     Called when a page-based route asks to pop (system back, <c>BackButton</c>, <c>Pop()</c>).
-    ///     Return true to allow the pop (the navigator animates the page out and removes it); return
-    ///     false to veto it. If null, page pops are always allowed.
-    /// </summary>
-    public Func<Route, object?, bool>? OnPopPage { get; set; }
-
-    /// <summary>The base content when no <see cref="Pages" /> / named initial route is supplied.</summary>
-    public Widget? Home { get; set; }
-
-    /// <summary>Name resolved at startup (via <see cref="Routes" /> / <see cref="OnGenerateRoute" />).</summary>
-    public string InitialRoute { get; set; } = "/";
-
-    /// <summary>Named route table: name → content builder.</summary>
-    public Dictionary<string, WidgetBuilder>? Routes { get; set; }
-
-    /// <summary>Fallback factory for names not found in <see cref="Routes" />.</summary>
-    public RouteFactory? OnGenerateRoute { get; set; }
-
-    /// <summary>Last-resort factory when a name resolves to nothing.</summary>
-    public RouteFactory? OnUnknownRoute { get; set; }
-
-    /// <summary>The live state, valid once the navigator has been built into the tree.</summary>
-    public NavigatorState? State { get; internal set; }
-
-    protected override WidgetState CreateState()
-    {
-        return new NavigatorState();
-    }
-
-    /// <summary>A predicate matching a route by its settings name — for <c>PopUntil</c>.</summary>
-    public static Predicate<Route> WithName(string name)
-    {
-        return r => r.Settings.Name == name;
-    }
-
-    /// <summary>The nearest enclosing navigator. Throws if none is found.</summary>
-    public static NavigatorState Of(BuildContext context)
-    {
-        return context.FindAncestor<NavigatorScope>()?.State
-               ?? throw new InvalidOperationException(
-                   "No Navigator found in the widget tree. Wrap your UI in a ZigoteApp (which "
-                   + "installs a root Navigator) or add a Navigator widget above this point."
-               );
-    }
-
-    /// <summary>The nearest enclosing navigator, or null if none is found.</summary>
-    public static NavigatorState? MaybeOf(BuildContext context)
-    {
-        return context.FindAncestor<NavigatorScope>()?.State;
-    }
-}
-
-/// <summary>
-///     <see cref="InheritedWidget" /> that exposes the <see cref="NavigatorState" /> to descendants so
+///     <see cref="InheritedWidget" /> that exposes the <see cref="Navigator" /> to descendants so
 ///     <c>Navigator.Of(context)</c> and the <c>context.Push/Pop</c> extensions can find it.
 /// </summary>
 public sealed class NavigatorScope : InheritedWidget
 {
-    public NavigatorScope(NavigatorState state, Widget child)
+    public NavigatorScope(Navigator state, Widget child)
     {
         State = state;
         Child = child;
     }
 
-    public NavigatorState State { get; }
+    public Navigator State { get; }
 
     public override bool UpdateShouldNotify(InheritedWidget oldWidget)
     {
@@ -99,10 +30,10 @@ public sealed class NavigatorScope : InheritedWidget
 /// </summary>
 internal sealed class NavigatorBody : Widget
 {
-    private readonly NavigatorState _state;
+    private readonly Navigator _state;
     private Size _size;
 
-    public NavigatorBody(NavigatorState state)
+    public NavigatorBody(Navigator state)
     {
         _state = state;
     }
@@ -232,12 +163,66 @@ internal sealed class NavigatorBody : Widget
 }
 
 /// <summary>
-///     Mutable state and navigation API for a <see cref="Navigator" />. The stack is kept as two
-///     ordered sections — declarative <c>Pages</c> at the bottom and imperatively-pushed routes on
-///     top — plus a transient set of routes still animating out.
+///     A stack of routes, supporting both the imperative API (<c>Push</c>/<c>Pop</c>, named routes)
+///     and the declarative <b>Navigator 2.0</b> page API (<see cref="Pages" /> + <see cref="OnPopPage" />).
+///     The stack is kept as two ordered sections — declarative <c>Pages</c> at the bottom and
+///     imperatively-pushed routes on top — plus a transient set of routes still animating out.
+///     <para>
+///         <see cref="ZigoteApp" /> wraps <c>Home</c> in a root Navigator automatically, so any widget
+///         can navigate with <c>context.Push(...)</c> / <c>context.Pop()</c>. Insert nested Navigators
+///         for sub-flows (e.g. a wizard inside a panel).
+///     </para>
+///     <para>Look up the nearest navigator with <see cref="Of" /> / <see cref="MaybeOf" />.</para>
 /// </summary>
-public sealed class NavigatorState : WidgetState<Navigator>
+public sealed class Navigator : ComposedWidget
 {
+    /// <summary>Declarative page stack (Navigator 2.0). When set, describes the initial routes.</summary>
+    public List<Page>? Pages { get; set; }
+
+    /// <summary>
+    ///     Called when a page-based route asks to pop (system back, <c>BackButton</c>, <c>Pop()</c>).
+    ///     Return true to allow the pop (the navigator animates the page out and removes it); return
+    ///     false to veto it. If null, page pops are always allowed.
+    /// </summary>
+    public Func<Route, object?, bool>? OnPopPage { get; set; }
+
+    /// <summary>The base content when no <see cref="Pages" /> / named initial route is supplied.</summary>
+    public Widget? Home { get; set; }
+
+    /// <summary>Name resolved at startup (via <see cref="Routes" /> / <see cref="OnGenerateRoute" />).</summary>
+    public string InitialRoute { get; set; } = "/";
+
+    /// <summary>Named route table: name → content builder.</summary>
+    public Dictionary<string, WidgetBuilder>? Routes { get; set; }
+
+    /// <summary>Fallback factory for names not found in <see cref="Routes" />.</summary>
+    public RouteFactory? OnGenerateRoute { get; set; }
+
+    /// <summary>Last-resort factory when a name resolves to nothing.</summary>
+    public RouteFactory? OnUnknownRoute { get; set; }
+
+    /// <summary>A predicate matching a route by its settings name — for <c>PopUntil</c>.</summary>
+    public static Predicate<Route> WithName(string name)
+    {
+        return r => r.Settings.Name == name;
+    }
+
+    /// <summary>The nearest enclosing navigator. Throws if none is found.</summary>
+    public static Navigator Of(BuildContext context)
+    {
+        return context.FindAncestor<NavigatorScope>()?.State
+               ?? throw new InvalidOperationException(
+                   "No Navigator found in the widget tree. Wrap your UI in a ZigoteApp (which "
+                   + "installs a root Navigator) or add a Navigator widget above this point."
+               );
+    }
+
+    /// <summary>The nearest enclosing navigator, or null if none is found.</summary>
+    public static Navigator? MaybeOf(BuildContext context)
+    {
+        return context.FindAncestor<NavigatorScope>()?.State;
+    }
+
     // Routes removed from the stack but still animating out (painted on top until gone).
     private readonly List<Route> _exiting = [];
 
@@ -250,8 +235,15 @@ public sealed class NavigatorState : WidgetState<Navigator>
     // Imperatively-pushed routes, stacked on top of the pages.
     private readonly List<Route> _pushed = [];
 
-    private NavigatorBody _body = null!;
-    private NavigatorScope _scope = null!;
+    private readonly NavigatorBody _body;
+    private readonly NavigatorScope _scope;
+    private bool _backRegistered;
+
+    public Navigator()
+    {
+        _body = new NavigatorBody(this);
+        _scope = new NavigatorScope(this, _body);
+    }
 
     /// <summary>Combined route stack in render order (bottom → top).</summary>
     public IReadOnlyList<Route> History => _history;
@@ -271,12 +263,11 @@ public sealed class NavigatorState : WidgetState<Navigator>
         }
     }
 
-    public override void InitState()
+    // The route stack is per-mount: it is torn down in OnUnmount, so a re-attached navigator starts
+    // from its declared Pages/Home again — the same lifetime the state object used to give it.
+    // Not the constructor: Pages/Home/InitialRoute arrive via the object initialiser, after it runs.
+    protected override void OnMount()
     {
-        base.InitState();
-        Widget.State = this;
-        _body = new NavigatorBody(this);
-        _scope = new NavigatorScope(this, _body);
         BuildInitialRoutes();
     }
 
@@ -286,13 +277,13 @@ public sealed class NavigatorState : WidgetState<Navigator>
         return MaybePop();
     }
 
-    public override Widget Build(BuildContext context)
+    protected override Widget Build(BuildContext context)
     {
         // The system back action (Android's back gesture/button, an iOS edge swipe) pops this
-        // navigator. Registered here rather than in InitState because the owning App is only
+        // navigator. Registered here rather than in OnMount because the owning App is only
         // known once the widget is attached; registration order also gets the nesting right —
         // the innermost navigator registers last and so receives the gesture first.
-        if (!_backRegistered && Widget.Owner is { } app)
+        if (!_backRegistered && Owner is { } app)
         {
             app.AddBackHandler(HandleSystemBack);
             _backRegistered = true;
@@ -301,11 +292,13 @@ public sealed class NavigatorState : WidgetState<Navigator>
         return _scope;
     }
 
-    private bool _backRegistered;
-
-    public override void Dispose()
+    protected override void OnUnmount()
     {
-        if (_backRegistered) Widget.Owner?.RemoveBackHandler(HandleSystemBack);
+        if (_backRegistered)
+        {
+            Owner?.RemoveBackHandler(HandleSystemBack);
+            _backRegistered = false;
+        }
 
         // Complete any pending Popped task (an awaited context.Push) and detach content — otherwise a
         // navigator torn down mid-flow leaves awaiters hung forever and route subtrees attached.
@@ -321,7 +314,6 @@ public sealed class NavigatorState : WidgetState<Navigator>
         _pushed.Clear();
         _exiting.Clear();
         _history.Clear();
-        base.Dispose();
     }
 
     // ── Imperative API ────────────────────────────────────────────────────────
@@ -396,7 +388,7 @@ public sealed class NavigatorState : WidgetState<Navigator>
         {
             var r = _pages[^1];
             if (r.Status == RouteStatus.Popping) return;
-            var handler = Widget.OnPopPage;
+            var handler = OnPopPage;
             if (handler is null || handler(r, result)) BeginPop(r, result);
         }
     }
@@ -474,11 +466,10 @@ public sealed class NavigatorState : WidgetState<Navigator>
 
     private void BuildInitialRoutes()
     {
-        var w = Widget;
 
-        if (w.Pages is { Count: > 0 })
+        if (Pages is { Count: > 0 })
         {
-            foreach (var p in w.Pages)
+            foreach (var p in Pages)
             {
                 var r = AdoptPageRoute(p);
                 r.StartEnter(false);
@@ -488,9 +479,9 @@ public sealed class NavigatorState : WidgetState<Navigator>
         else
         {
             Route? initial = null;
-            if (w.Routes is not null || w.OnGenerateRoute is not null)
-                initial = GenerateRoute(new RouteSettings(w.InitialRoute));
-            initial ??= w.Home is not null ? new WidgetRoute(w.Home) : null;
+            if (Routes is not null || OnGenerateRoute is not null)
+                initial = GenerateRoute(new RouteSettings(InitialRoute));
+            initial ??= Home is not null ? new WidgetRoute(Home) : null;
 
             if (initial is not null)
             {
@@ -505,16 +496,15 @@ public sealed class NavigatorState : WidgetState<Navigator>
 
     private Route? GenerateRoute(RouteSettings settings)
     {
-        var w = Widget;
-        if (settings.Name is not null && w.Routes is not null &&
-            w.Routes.TryGetValue(settings.Name, out var builder))
+        if (settings.Name is not null && Routes is not null &&
+            Routes.TryGetValue(settings.Name, out var builder))
         {
             var r = new MaterialPageRoute<object?>(builder, settings);
             Install(r);
             return r;
         }
 
-        var generated = w.OnGenerateRoute?.Invoke(settings) ?? w.OnUnknownRoute?.Invoke(settings);
+        var generated = OnGenerateRoute?.Invoke(settings) ?? OnUnknownRoute?.Invoke(settings);
         if (generated is not null) Install(generated);
         return generated;
     }

@@ -158,12 +158,7 @@ public sealed class CodeEditor : Widget, ITextInputClient
     public bool SoftWrap
     {
         get => _softWrap;
-        set
-        {
-            if (_softWrap == value) return;
-            _softWrap = value;
-            MarkNeedsLayout();
-        }
+        set => SetLayout(ref _softWrap, value);
     }
 
     public override bool Focusable => true;

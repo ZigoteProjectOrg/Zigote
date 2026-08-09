@@ -9,7 +9,7 @@ public delegate Widget WidgetBuilder(BuildContext context);
 /// <summary>Generates a <see cref="Route" /> for a set of <see cref="RouteSettings" />, or null.</summary>
 public delegate Route? RouteFactory(RouteSettings settings);
 
-/// <summary>Lifecycle phase of a route within the <see cref="NavigatorState" /> stack.</summary>
+/// <summary>Lifecycle phase of a route within the <see cref="Navigator" /> stack.</summary>
 public enum RouteStatus
 {
     /// <summary>Animating in after a push.</summary>
@@ -23,7 +23,7 @@ public enum RouteStatus
 }
 
 /// <summary>
-///     A single entry in a <see cref="NavigatorState" />'s history stack. A route owns its
+///     A single entry in a <see cref="Navigator" />'s history stack. A route owns its
 ///     (lazily-built, retained) content widget and an
 ///     <see cref="AnimationController" /> that drives its enter/exit transition.
 ///     <para>
@@ -43,7 +43,7 @@ public abstract class Route
     }
 
     /// <summary>The navigator this route is installed in, or null if detached.</summary>
-    public NavigatorState? Navigator { get; internal set; }
+    public Navigator? Navigator { get; internal set; }
 
     /// <summary>Name + arguments this route was created with.</summary>
     public RouteSettings Settings { get; internal set; } = RouteSettings.Empty;

@@ -15,7 +15,7 @@ namespace Zigote.UI.Widgets;
 ///     For a plain string instead (log, file, custom UI), use
 ///     <see cref="LicenseRegistry.BuildText" />.
 /// </summary>
-public class LicensesView : StatelessWidget
+public class LicensesView : ComposedWidget
 {
     private string? _title;
 

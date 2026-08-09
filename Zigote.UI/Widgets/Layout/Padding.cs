@@ -3,7 +3,7 @@ using Zigote.Core.Paint;
 
 namespace Zigote.UI.Widgets.Layout;
 
-public class Padding(EdgeInsets padding, Widget? child = null) : RenderWidget
+public class Padding(EdgeInsets padding, Widget? child = null) : Widget
 {
     private Size _size;
 

@@ -31,7 +31,7 @@ namespace Zigote.UI.Widgets;
 ///         intentionally absent — the renderer has no such primitives.
 ///     </para>
 /// </summary>
-public sealed class Animate : Widget, ITickerProvider
+public sealed class Animate : Widget
 {
     /// <summary>Duration used by the first effect (and any effect that omits its own). 300 ms like flutter_animate.</summary>
     public static TimeSpan DefaultDuration { get; set; } = TimeSpan.FromMilliseconds(300);
@@ -246,17 +246,10 @@ public sealed class Animate : Widget, ITickerProvider
 
     // ── Lifecycle ──────────────────────────────────────────────────────────────
 
-    public Ticker CreateTicker(Action<float> onTick)
+    protected override void OnMount()
     {
-        _ticker?.Dispose();
-        _ticker = new Ticker(onTick);
-        return _ticker;
-    }
-
-    public override void Attach(App owner, Widget? parent)
-    {
-        base.Attach(owner, parent);
-        // Detach disposed the ticker; rebind so the timeline resumes after a detach→re-attach cycle.
+        // The previous ticker went with the last unmount; rebind so the timeline resumes after a
+        // detach→re-attach cycle. CreateTicker owns it, so nothing to dispose by hand.
         _controller.AttachTicker(this);
         EnsureResolved();
 
@@ -274,13 +267,6 @@ public sealed class Animate : Widget, ITickerProvider
                 OnPlay?.Invoke(_controller);
             }
         }
-    }
-
-    public override void Detach()
-    {
-        base.Detach();
-        _ticker?.Dispose();
-        _ticker = null;
     }
 
     // ── Timeline resolution + per-frame fold ─────────────────────────────────────

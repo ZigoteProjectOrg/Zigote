@@ -8,12 +8,11 @@ namespace Zigote.UI.Material;
 ///     Set Value to null for an indeterminate animated bar — animation runs automatically
 ///     via a self-owned AnimationController; no manual Tick call required.
 /// </summary>
-public class ProgressBar : RenderWidget, ITickerProvider
+public class ProgressBar : Widget
 {
     private readonly AnimationController _anim;
     private Size _size;
     private ThemeData _theme = ThemeData.Dark;
-    private Ticker? _ticker;
     private float? _value;
     private float _height = ControlMetrics.SliderTrack + 2f;
 
@@ -42,36 +41,20 @@ public class ProgressBar : RenderWidget, ITickerProvider
     public float Height
     {
         get => _height;
-        set
-        {
-            if (value == _height) return;
-            _height = value;
-            MarkNeedsLayout();
-        }
+        set => SetLayout(ref _height, value);
     }
 
     public float? Radius { get; set; }
 
-    public Ticker CreateTicker(Action<float> onTick)
-    {
-        _ticker?.Dispose();
-        _ticker = new Ticker(onTick);
-        return _ticker;
-    }
 
-    public override void Attach(App owner, Widget? parent)
+    // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
+    // re-attach rebinds instead of leaking one per attach cascade.
+    protected override void OnMount()
     {
-        base.Attach(owner, parent);
         // Rebind the ticker Detach disposed, so an indeterminate bar keeps sliding after a re-attach.
         _anim.AttachTicker(this);
     }
 
-    public override void Detach()
-    {
-        base.Detach();
-        _ticker?.Dispose();
-        _ticker = null;
-    }
 
     public override int DebugStateHash()
     {

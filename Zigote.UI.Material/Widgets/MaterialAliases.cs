@@ -1,7 +1,7 @@
 namespace Zigote.UI.Material;
 
 /// <summary>A hairline vertical separator (a vertical <see cref="Divider" />).</summary>
-public sealed class VerticalDivider : StatelessWidget
+public sealed class VerticalDivider : ComposedWidget
 {
     public VerticalDivider(double thickness = 1, double indent = 0, double endIndent = 0,
         Color? color = null)
@@ -33,7 +33,7 @@ public sealed class VerticalDivider : StatelessWidget
 ///     doing
 ///     <c>if (newIndex &gt; oldIndex) newIndex--</c> lands on the correct index.
 /// </summary>
-public sealed class ReorderableListView : StatelessWidget
+public sealed class ReorderableListView : ComposedWidget
 {
     private readonly IList<Widget> _children;
     private readonly Action<int, int>? _onReorder;
@@ -56,7 +56,7 @@ public sealed class ReorderableListView : StatelessWidget
 }
 
 /// <summary>A selectable chip. Alias over <see cref="Chip" />.</summary>
-public sealed class FilterChip : StatelessWidget
+public sealed class FilterChip : ComposedWidget
 {
     private readonly Widget _label;
 
@@ -78,7 +78,7 @@ public sealed class FilterChip : StatelessWidget
 }
 
 /// <summary>A single-choice chip. Alias over <see cref="Chip" />.</summary>
-public sealed class ChoiceChip : StatelessWidget
+public sealed class ChoiceChip : ComposedWidget
 {
     private readonly Widget _label;
 
@@ -103,7 +103,7 @@ public sealed class ChoiceChip : StatelessWidget
 ///     A circular container for an icon/initials/image.
 ///     <c>new CircleAvatar(radius: 24, child: new Text("A"))</c>. Background images are not modelled.
 /// </summary>
-public sealed class CircleAvatar : StatelessWidget
+public sealed class CircleAvatar : ComposedWidget
 {
     private readonly Widget? _child;
 

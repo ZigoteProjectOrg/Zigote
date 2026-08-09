@@ -14,21 +14,13 @@ namespace Gallery;
 ///     Live bench for the drag-and-drop + clipboard support: in-app <see cref="Draggable{T}" /> →
 ///     <see cref="DragTarget{T}" />, external OS file drops, two-way clipboard, and macOS drag-out.
 /// </summary>
-internal sealed class DragDropPage : StatefulWidget
-{
-    protected override WidgetState CreateState()
-    {
-        return new DragDropPageState();
-    }
-}
-
-internal sealed class DragDropPageState : WidgetState<DragDropPage>
+internal sealed class DragDropPage : ComposedWidget
 {
     private readonly Label _files = new("Drop files from Finder / Explorer onto the box above.");
     private readonly Label _lastDrop = new("Nothing dropped yet.");
     private readonly Label _pasted = new("(paste result appears here)");
 
-    public override Widget Build(BuildContext ctx)
+    protected override Widget Build(BuildContext ctx)
     {
         return new Column(
             crossAxisAlignment: CrossAxisAlignment.Stretch,

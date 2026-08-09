@@ -284,6 +284,14 @@ public sealed class ThemeData
     public float InputRadius { get; init; } = Radii.Md; // 6
     public float CardRadius { get; init; } = Radii.Lg; // 8
 
+    /// <summary>
+    ///     Corner radius of the transient toast surface (<see cref="Widgets.Controls.Snackbar" />).
+    ///     Its own token rather than a reuse of <see cref="CardRadius" />: design systems disagree
+    ///     about this shape more than any other — a Material snackbar is a rounded rectangle, an
+    ///     Adwaita toast is a full capsule.
+    /// </summary>
+    public float ToastRadius { get; init; } = Radii.Lg; // 8
+
     // ── Spacing (default control padding) ─────────────────────────────────────
     public float Padding { get; init; } = Spacing.Md; // 12
 

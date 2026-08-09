@@ -9,7 +9,7 @@ namespace Zigote.UI.Material;
 ///     runs automatically via a self-owned <see cref="AnimationController" /> on a Repeat
 ///     loop — no manual Tick call is required.
 /// </summary>
-public class Spinner : Widget, ITickerProvider
+public class Spinner : Widget
 {
     private const int SpokeCount = 12;
 
@@ -17,7 +17,6 @@ public class Spinner : Widget, ITickerProvider
     private readonly Color? _color;
     private Size _size;
     private ThemeData _theme = ThemeData.Dark;
-    private Ticker? _ticker;
 
     /// <param name="size">Diameter of the indicator in logical pixels.</param>
     /// <param name="color">Spoke colour; defaults to the theme accent (Primary).</param>
@@ -34,26 +33,15 @@ public class Spinner : Widget, ITickerProvider
     /// <summary>Diameter of the indicator in logical pixels.</summary>
     public float Size { get; set; }
 
-    public Ticker CreateTicker(Action<float> onTick)
-    {
-        _ticker?.Dispose();
-        _ticker = new Ticker(onTick);
-        return _ticker;
-    }
 
-    public override void Attach(App owner, Widget? parent)
+    // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
+    // re-attach rebinds instead of leaking one per attach cascade.
+    protected override void OnMount()
     {
-        base.Attach(owner, parent);
         // Rebind the ticker Detach disposed, so the spinner keeps spinning after a re-attach.
         _anim.AttachTicker(this);
     }
 
-    public override void Detach()
-    {
-        base.Detach();
-        _ticker?.Dispose();
-        _ticker = null;
-    }
 
     public override int DebugStateHash()
     {

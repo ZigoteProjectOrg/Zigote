@@ -40,10 +40,13 @@ public sealed class AnimatedSwitcher : ImplicitlyAnimatedWidget
                 return;
             }
 
-            _outgoing?.Detach();
+            // The child already fading out is the one genuinely dropped here (a second switch
+            // landing mid-cross-fade). Attach-then-detach via SwapChild so an incoming tree that
+            // re-adopts part of it keeps that part alive — see Widget.SwapChild.
+            var dropped = _outgoing;
             _outgoing = _current;
             _current = value;
-            if (_current is not null && Owner is not null) _current.Attach(Owner, this);
+            SwapChild(dropped, _current);
             Animate();
         }
     }

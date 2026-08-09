@@ -21,14 +21,14 @@ public sealed class BuildContext
 
     /// <summary>
     ///     The widget whose <c>Build</c> is currently executing, or null when no build is in flight.
-    ///     Set by <see cref="StatelessWidget" />/<see cref="StatefulWidget" /> around their Build call
+    ///     Set by <see cref="ComposedWidget" /> around its Build call
     ///     so <see cref="DependOn{T}" /> can register the builder as a dependent of an inherited widget.
     /// </summary>
     internal Widget? BuildOwner { get; set; }
 
     /// <summary>
     ///     Monotonic counter bumped whenever an inherited widget's data changes (theme, media query).
-    ///     Measure caches in <see cref="StatelessWidget" />/<see cref="StatefulWidget" /> include it, so
+    ///     Measure caches in <see cref="ComposedWidget" /> include it, so
     ///     a wrapper that does not itself depend on the theme is still forced to re-measure its subtree
     ///     when the theme flips — otherwise controls that read the theme in <c>Measure</c> (not
     ///     <c>Build</c>)

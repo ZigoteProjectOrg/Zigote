@@ -14,15 +14,7 @@ namespace Gallery;
 ///     The zigote_animate fluent API. Effects play once on mount, so "Replay" simply rebuilds the
 ///     page (fresh widget instances → fresh entrance animations).
 /// </summary>
-internal sealed class AnimatePage : StatefulWidget
-{
-    protected override WidgetState CreateState()
-    {
-        return new AnimatePageState();
-    }
-}
-
-internal sealed class AnimatePageState : WidgetState<AnimatePage>
+internal sealed class AnimatePage : ComposedWidget
 {
     private const string FluentSample =
         "Text(\"Hello\").Animate().Fade(duration: 500.ms).Scale(delay: 500.ms)";
@@ -32,7 +24,7 @@ internal sealed class AnimatePageState : WidgetState<AnimatePage>
     private const string FluentSampleStacked =
         "Text(\"Hello\").Animate()\n    .Fade(duration: 500.ms)\n    .Scale(delay: 500.ms)";
 
-    public override Widget Build(BuildContext context)
+    protected override Widget Build(BuildContext context)
     {
         // Staggered entrance of a small list.
         var list = new Column(crossAxisAlignment: CrossAxisAlignment.Stretch);
@@ -53,7 +45,7 @@ internal sealed class AnimatePageState : WidgetState<AnimatePage>
 
         var replay = new FilledButton(
             new Text("Replay animations"),
-            () => SetStateRebuild(() => { })
+            () => MarkNeedsBuild()
         );
         var replayHint = new Text(
             "Effects play once on mount — rebuild to replay.",

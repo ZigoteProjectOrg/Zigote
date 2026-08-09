@@ -14,7 +14,7 @@ internal sealed record GalleryRoute(string? DemoId)
 /// <summary>
 ///     Single source of truth for routing (Navigator 2.0), held in a <see cref="Signal{T}" />. The UI
 ///     never pushes routes itself — it writes intents here, and <see cref="GalleryApp" /> projects the
-///     value into a declarative page stack via <c>NavigatorState.SetPages</c>.
+///     value into a declarative page stack via <c>Navigator.SetPages</c>.
 /// </summary>
 internal sealed class NavigationStore
 {

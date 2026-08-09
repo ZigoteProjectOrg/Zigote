@@ -9,7 +9,7 @@ namespace Zigote.UI.Material;
 ///     </c>
 ///     .
 /// </summary>
-public sealed class FloatingActionButton : StatelessWidget
+public sealed class FloatingActionButton : ComposedWidget
 {
     private readonly Widget? _child;
 

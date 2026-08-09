@@ -9,7 +9,7 @@ namespace Zigote.UI.Material;
 ///     . Composes a <see cref="Pressable" /> over the icon; an optional
 ///     <see cref="Tooltip" /> wraps it.
 /// </summary>
-public sealed class IconButton : StatelessWidget
+public sealed class IconButton : ComposedWidget
 {
     private readonly Widget _icon;
 

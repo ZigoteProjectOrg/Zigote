@@ -11,7 +11,7 @@ namespace Zigote.UI.Widgets.Controls;
 ///     elevation shadow. Cards are content, not floating chrome — Liquid Glass is intentionally not
 ///     used here. Composed from a <see cref="DecoratedBox" /> + <see cref="LayoutPadding" />.
 /// </summary>
-public class Card(Widget? child = null) : StatelessWidget
+public class Card(Widget? child = null) : ComposedWidget
 {
     private bool _bordered = true;
     private Widget? _child = child;

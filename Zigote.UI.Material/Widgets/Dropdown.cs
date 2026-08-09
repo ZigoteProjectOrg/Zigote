@@ -43,23 +43,13 @@ public class Dropdown<T>(
     public IReadOnlyList<T> Items
     {
         get => _items;
-        set
-        {
-            if (_items == value) return;
-            _items = value;
-            MarkNeedsPaint();
-        }
+        set => SetPaint(ref _items, value);
     }
 
     public int SelectedIndex
     {
         get => _selectedIndex;
-        set
-        {
-            if (_selectedIndex == value) return;
-            _selectedIndex = value;
-            MarkNeedsPaint();
-        }
+        set => SetPaint(ref _selectedIndex, value);
     }
 
     public Func<T, string> DisplayText { get; set; } = displayText;
@@ -226,7 +216,7 @@ public class Dropdown<T>(
 ///     an
 ///     item selects it, clicking outside (or Esc) dismisses — mirroring <see cref="ContextMenu" />.
 /// </summary>
-internal sealed class DropdownPopup : RenderWidget, IDismissableOverlay, ITickerProvider
+internal sealed class DropdownPopup : Widget, IDismissableOverlay
 {
     private const float CheckW = Spacing.Xl; // left gutter reserved for the selected ✓
     private const float MaxPopupH = 360f;
@@ -253,7 +243,6 @@ internal sealed class DropdownPopup : RenderWidget, IDismissableOverlay, ITicker
     private Size _screen;
     private bool _scrolledToSelection;
     private float _scrollY;
-    private Ticker? _ticker;
     private ThemeData _theme = ThemeData.Dark;
 
     public DropdownPopup(AppInstance app, string[] labels, int selected, Rect anchor,
@@ -272,25 +261,14 @@ internal sealed class DropdownPopup : RenderWidget, IDismissableOverlay, ITicker
         _enter.OnTick += MarkNeedsLayout;
     }
 
-    public Ticker CreateTicker(Action<float> onTick)
-    {
-        _ticker?.Dispose();
-        _ticker = new Ticker(onTick);
-        return _ticker;
-    }
 
-    public override void Attach(AppInstance owner, Widget? parent)
+    // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
+    // re-attach rebinds instead of leaking one per attach cascade.
+    protected override void OnMount()
     {
-        base.Attach(owner, parent);
         _enter.AttachTicker(this);
     }
 
-    public override void Detach()
-    {
-        base.Detach();
-        _ticker?.Dispose();
-        _ticker = null;
-    }
 
     public bool RequestDismiss()
     {

@@ -1,6 +1,8 @@
 using Zigote.Core;
+using Zigote.Core.Animation;
 using Zigote.Core.Events;
 using Zigote.Core.Paint;
+using Zigote.Core.State;
 using Zigote.UI.Semantics;
 using Zigote.UI.Host;
 
@@ -12,11 +14,12 @@ namespace Zigote.UI.Widgets;
 ///     Each frame the framework calls Measure → Layout → Paint in sequence.
 ///     Input is routed via HitTest + OnPointer* callbacks.
 /// </summary>
-public abstract class Widget
+public abstract class Widget : ITickerProvider
 {
     [ThreadStatic] public static Widget? CurrentScrollParent;
 
     private bool _focused;
+    private List<IDisposable>? _owned;
 
     protected Constraints LastConstraints;
 
@@ -119,8 +122,9 @@ public abstract class Widget
     {
         Owner = owner;
         Parent = parent;
+        EnsureMounted();
         // Snapshot before cascading: attaching a child can run app build code (Watch.EnsureStarted,
-        // a lazy StatefulWidget build) that reconciles THIS widget's live child list mid-iteration —
+        // a lazy ComposedWidget build) that reconciles THIS widget's live child list mid-iteration —
         // GetChildren() returns the actual List for multi-child containers. Children added by such
         // a reconcile are attached by the reconcile itself, so iterating the snapshot loses nothing.
         foreach (var child in GetChildren().ToArray()) child.Attach(owner, this);
@@ -137,6 +141,10 @@ public abstract class Widget
         foreach (var child in GetChildren().ToArray())
             if (ReferenceEquals(child.Parent, this))
                 child.Detach();
+        // Children first, then self: a teardown body must never observe a half-dead parent.
+        // Runs while Owner is still set so OnUnmount can still reach the app (unregister a back
+        // handler, release a text-input session).
+        Unmount();
         // Drop app-level references (focus/hover/capture) to this widget before the Owner link goes
         // away — otherwise removing a focused/hovered widget via SetChildren, a Root swap, or a route
         // pop leaves App pointing at an off-tree widget (misrouted keys, stranded StartTextInput, a
@@ -146,15 +154,199 @@ public abstract class Widget
         Parent = null;
         // A detached widget may be re-attached later (a wrapper swapped around a retained subtree, a
         // route re-entered, a tab re-shown). Nothing in the re-attach path invalidates measure caches,
-        // so a StatelessWidget/StatefulWidget ancestor whose NeedsLayout is still false, at unchanged
+        // so a ComposedWidget ancestor whose NeedsLayout is still false, at unchanged
         // constraints and generation, early-returns its cached size and never re-measures the subtree
-        // below it — which is the only thing that would rebuild the StatefulWidgets whose state Detach
-        // just disposed and re-Attach the descendants their (now-null) child cache stopped exposing.
-        // The result is a subtree with a null Owner: no Watch ever starts and it renders blank. Flag it
+        // below it — which is the only thing that would re-Attach the descendants an unmounted subtree
+        // stopped exposing. The result is a subtree with a null Owner: no Watch ever starts and it
+        // renders blank. Flag it
         // here (no upward propagation — the parent link is already gone) so a re-attach always
         // re-measures. Costs nothing when the subtree really is being thrown away.
         NeedsLayout = true;
         NeedsPaint = true;
+    }
+
+    // ── Mount lifecycle ───────────────────────────────────────────────────────
+
+    /// <summary>
+    ///     True between <see cref="OnMount" /> and <see cref="OnUnmount" /> — i.e. while this widget is
+    ///     live in a tree. A detached widget instance is not destroyed (its fields <em>are</em> its
+    ///     state, and they survive), so re-attaching it mounts it again.
+    /// </summary>
+    public bool Mounted { get; private set; }
+
+    /// <summary>
+    ///     Start anything that must stop when this widget leaves the tree: signal subscriptions,
+    ///     tickers, async work. Runs on attach and again on every re-attach, so it is paired 1:1 with
+    ///     <see cref="OnUnmount" />. Register what you start via <see cref="Own{T}" /> /
+    ///     <see cref="OwnEffect(Action)" /> and the teardown is automatic.
+    ///     <para>
+    ///         <b>Do not compose the child tree here</b> — this is a retained framework, so the child
+    ///         widgets you keep in fields belong in the constructor or a field initializer, where they
+    ///         are built once per instance instead of once per mount. Per-frame/per-theme wiring belongs
+    ///         in <c>Build</c>.
+    ///     </para>
+    /// </summary>
+    protected virtual void OnMount()
+    {
+    }
+
+    /// <summary>
+    ///     Counterpart to <see cref="OnMount" />, run when the widget leaves the tree. Everything
+    ///     registered with <see cref="Own{T}" />/<see cref="OwnEffect(Action)" /> is disposed right
+    ///     after this returns — override only for teardown that those cannot express.
+    /// </summary>
+    protected virtual void OnUnmount()
+    {
+    }
+
+    /// <summary>
+    ///     Fire <see cref="OnMount" /> if it has not run for the current mount period. Called from
+    ///     <see cref="Attach" />, and again from the build owner before its first build — a widget can
+    ///     legitimately be measured before anything attaches it (tests, off-tree measurement passes),
+    ///     and mounting must not depend on which of the two happens first.
+    /// </summary>
+    protected void EnsureMounted()
+    {
+        if (Mounted) return;
+        Mounted = true;
+        OnMount();
+    }
+
+    private void Unmount()
+    {
+        if (!Mounted) return;
+        Mounted = false;
+        OnUnmount();
+        if (_owned == null) return;
+        // Reverse order: later registrations may depend on earlier ones (a controller owning a ticker).
+        for (var i = _owned.Count - 1; i >= 0; i--) _owned[i].Dispose();
+        _owned.Clear();
+    }
+
+    /// <summary>
+    ///     Tie <paramref name="disposable" />'s lifetime to this widget's mount period and return it
+    ///     unchanged, so it reads as a wrapper: <c>Own(signal.Observe(Sync))</c>. Disposed on unmount,
+    ///     in reverse registration order.
+    /// </summary>
+    protected T Own<T>(T disposable) where T : IDisposable
+    {
+        (_owned ??= []).Add(disposable);
+        return disposable;
+    }
+
+    /// <summary>
+    ///     Create an <see cref="Effect" /> owned by this widget: it runs now, re-runs whenever a signal
+    ///     it read changes, and is disposed on unmount. Always use this rather than a bare
+    ///     <c>new Effect(...)</c> — signals hold their observers strongly, so an unowned effect outlives
+    ///     the widget and keeps re-running against a detached subtree.
+    ///     <para>
+    ///         This is also the framework's <b>finest-grained update</b>: have the body write straight
+    ///         into the retained child widgets instead of returning a new subtree.
+    ///         <code>
+    ///   OwnEffect(() => _label.Text = $"Count: {count.Value}");
+    /// </code>
+    ///         Use it wherever a <see cref="Zigote.UI.Widgets.Watch" /> would only be swapping in a tree
+    ///         of the same shape. A <c>Watch</c> allocates a fresh subtree per change, re-measures it and
+    ///         throws the old one away (losing focus and press state inside it); this allocates nothing
+    ///         and touches exactly the properties that changed — and the property setters raise whatever
+    ///         invalidation they actually need, so a colour change repaints and never relayouts. Reach
+    ///         for <c>Watch</c> when the tree's <em>shape</em> depends on the signal.
+    ///     </para>
+    ///     <para>
+    ///         Thread rule: the body runs on whichever thread wrote the signal, so an effect fed from a
+    ///         background thread must marshal to the UI thread itself (see <c>VideoControls</c>).
+    ///     </para>
+    /// </summary>
+    protected Effect OwnEffect(Action body)
+    {
+        return Own(new Effect(body));
+    }
+
+    /// <summary><see cref="OwnEffect(Action)" /> for a body returning a cleanup thunk (run before each re-run and on dispose).</summary>
+    protected Effect OwnEffect(Func<Action> bodyWithCleanup)
+    {
+        return Own(new Effect(bodyWithCleanup));
+    }
+
+    /// <summary>
+    ///     Put <paramref name="next" /> in this widget's single-child slot and tear down
+    ///     <paramref name="previous" /> — unless the new tree re-adopted it. Every widget that rebuilds
+    ///     a cached child goes through here, because the ORDER is load-bearing in two directions:
+    ///     <list type="number">
+    ///         <item>
+    ///             <b>Attach first, always</b> — even when <paramref name="next" /> is the same instance.
+    ///             A retained root whose contents changed (a Container given a fresh child, an overlay
+    ///             re-pointed at a new page) has newly-inserted descendants that have never been mounted,
+    ///             and this cascade is what gives them an Owner. Skip it and they keep a null Owner, so
+    ///             every Watch inside them never starts and the subtree renders blank.
+    ///         </item>
+    ///         <item>
+    ///             <b>Detach second, and only what was really dropped.</b> The common
+    ///             "wrap/unwrap a retained subtree" build — a sheet or scrim returning <c>content</c> when
+    ///             closed and <c>new Stack { content, … }</c> when open — would otherwise tear
+    ///             <c>content</c> down (unmounting every widget, scroll offset and focus inside it) only
+    ///             to re-attach it one line later. Attaching first re-parents the shared subtree, so the
+    ///             re-adoption check below sees it and leaves it alone; only the genuinely-dropped wrapper
+    ///             is detached, and <see cref="Detach" />'s own re-adoption check keeps that cascade off
+    ///             the shared child.
+    ///         </item>
+    ///     </list>
+    /// </summary>
+    protected void SwapChild(Widget? previous, Widget? next)
+    {
+        if (next != null && Owner != null) next.Attach(Owner, this);
+        if (ReferenceEquals(previous, next) || previous is null) return;
+        if (previous.Parent is null || ReferenceEquals(previous.Parent, this)) previous.Detach();
+    }
+
+    /// <summary>
+    ///     Create a <see cref="Ticker" /> owned by this widget's mount period — the
+    ///     <see cref="ITickerProvider" /> every <c>AnimationController(…, vsync: this)</c> wants. Muted
+    ///     while unmounted, disposed on unmount.
+    /// </summary>
+    public Ticker CreateTicker(Action<float> onTick)
+    {
+        return Own(new Ticker(onTick) { Muted = !Mounted });
+    }
+
+    // ── Invalidating property setters ─────────────────────────────────────────
+    //
+    // The body of nearly every public widget property: store it if it changed, then raise the
+    // CHEAPEST invalidation that actually covers the change. Picking the right one of these three is
+    // most of this framework's per-frame performance, so they are named rather than folded into one
+    // call with a flag — `set => SetPaint(ref _color, value);` says at a glance that a colour change
+    // can never move anything.
+    //
+    // Change detection is EqualityComparer<T>.Default, which for float/double differs from `==` on
+    // exactly two inputs, both in the safe direction: NaN equals NaN (so a NaN size settles instead
+    // of re-invalidating every frame forever), and -0.0 does not equal 0.0 (one redundant repaint).
+    // Color/EdgeInsets and friends define `operator ==` as Equals, so they are unaffected.
+
+    /// <summary>Store <paramref name="value" /> and rebuild if it differs. Use when the child <em>structure</em> depends on it.</summary>
+    protected bool SetBuild<T>(ref T field, T value)
+    {
+        if (EqualityComparer<T>.Default.Equals(field, value)) return false;
+        field = value;
+        MarkNeedsBuild();
+        return true;
+    }
+
+    /// <summary>Store <paramref name="value" /> and relayout if it differs. Use when the measured size may change.</summary>
+    protected bool SetLayout<T>(ref T field, T value)
+    {
+        if (EqualityComparer<T>.Default.Equals(field, value)) return false;
+        field = value;
+        MarkNeedsLayout();
+        return true;
+    }
+
+    /// <summary>Store <paramref name="value" /> and repaint if it differs. Use when the size provably cannot change.</summary>
+    protected bool SetPaint<T>(ref T field, T value)
+    {
+        if (EqualityComparer<T>.Default.Equals(field, value)) return false;
+        field = value;
+        MarkNeedsPaint();
+        return true;
     }
 
     public virtual void MarkNeedsBuild()
@@ -165,8 +357,8 @@ public abstract class Widget
 
     public virtual void MarkNeedsLayout()
     {
-        // No early-out on NeedsLayout: the per-widget flag is only reset by the StatelessWidget/
-        // StatefulWidget wrappers in Measure — raw control widgets never reset it, so guarding on it
+        // No early-out on NeedsLayout: the per-widget flag is only reset by the ComposedWidget/
+        // ComposedWidget wrappers in Measure — raw control widgets never reset it, so guarding on it
         // would make repeated calls (e.g. a drag emitting MarkNeedsLayout every move) no-op after the
         // first. The propagation is cheap (interaction-rate, tree-depth bounded), so always run it.
         NeedsLayout = true;
@@ -242,6 +434,20 @@ public abstract class Widget
     }
 
     public virtual void OnPointerMove(Offset point)
+    {
+    }
+
+    /// <summary>
+    ///     Raw pointer motion, in logical pixels, delivered while the pointer is captured
+    ///     (<see cref="Core.Engine.ZigoteEngine.SetRelativeMouseMode" />).
+    ///     <para>
+    ///         Capture hides the cursor and pins it in place, so there is no position to report and
+    ///         <see cref="OnPointerMove" /> stops arriving; this replaces it. The widget holding focus
+    ///         receives the deltas — that is the one driving the camera. Ignore it unless you asked for
+    ///         capture.
+    ///     </para>
+    /// </summary>
+    public virtual void OnPointerRelative(float deltaX, float deltaY)
     {
     }
 

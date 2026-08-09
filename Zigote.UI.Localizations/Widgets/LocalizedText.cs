@@ -8,7 +8,7 @@ namespace Zigote.UI.Localizations;
 ///   new LocalizedText("greeting", ("name", user.Name)) { FontSize = 18f }
 ///   </code>
 /// </summary>
-public sealed class LocalizedText : StatelessWidget
+public sealed class LocalizedText : ComposedWidget
 {
     private (string Name, object? Value)[] _args;
 

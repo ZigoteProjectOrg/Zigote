@@ -53,7 +53,7 @@ public static class WindowSize
 ///     : new Row(...))     // side-by-side
 /// </code>
 /// </summary>
-public sealed class AdaptiveBuilder : RenderWidget
+public sealed class AdaptiveBuilder : Widget
 {
     private readonly Func<BuildContext, WindowSizeClass, Widget> _builder;
     private readonly Transitions.AnimatedSwitcher _switcher;

@@ -11,9 +11,8 @@ namespace Zigote.Tests;
 /// <summary>
 ///     Headless coverage for <see cref="HotReload" /> — the .NET hot-reload (Edit &amp; Continue)
 ///     bridge.
-///     The hot-reload contract: marking the tree reruns <c>Build()</c> while
-///     preserving
-///     widget instances and their <see cref="WidgetState" />. Also guards the off-thread pending-flag
+///     The hot-reload contract: marking the tree reruns <c>Build()</c> while preserving widget
+///     instances — and a widget's fields ARE its state. Also guards the off-thread pending-flag
 ///     plumbing the metadata-update handler drives.
 /// </summary>
 public class HotReloadTests
@@ -42,18 +41,17 @@ public class HotReloadTests
     [Fact]
     public void MarkSubtreeForRebuild_PreservesStateButRerunsBuild()
     {
-        var w = new CountingStateful();
+        var w = new CountingMounted();
         Pump(w);
-        var state = (CountingStateful.S)w.InternalState!;
-        Assert.Equal(1, state.Inits);
-        Assert.Equal(1, state.Builds);
+        Assert.Equal(1, w.Mounts);
+        Assert.Equal(1, w.Builds);
 
         HotReload.MarkSubtreeForRebuild(w);
         Pump(w);
 
-        Assert.Same(state, w.InternalState); // State instance preserved across reload
-        Assert.Equal(1, state.Inits); // InitState NOT re-run
-        Assert.Equal(2, state.Builds); // Build re-ran against the new code
+        // The widget instance IS the state, so a reload cannot lose it; only Build re-runs.
+        Assert.Equal(1, w.Mounts); // OnMount NOT re-run
+        Assert.Equal(2, w.Builds); // Build re-ran against the new code
     }
 
     [Fact]
@@ -162,7 +160,7 @@ public class HotReloadTests
         Assert.Equal(typeof(Type[]), ps[0].ParameterType);
     }
 
-    private sealed class CountingStateless : StatelessWidget
+    private sealed class CountingStateless : ComposedWidget
     {
         public int Builds;
 
@@ -173,28 +171,20 @@ public class HotReloadTests
         }
     }
 
-    private sealed class CountingStateful : StatefulWidget
+    private sealed class CountingMounted : ComposedWidget
     {
-        protected override WidgetState CreateState()
+        public int Builds;
+        public int Mounts;
+
+        protected override void OnMount()
         {
-            return new S();
+            Mounts++;
         }
 
-        internal sealed class S : WidgetState<CountingStateful>
+        protected override Widget Build(BuildContext context)
         {
-            public int Builds;
-            public int Inits;
-
-            public override void InitState()
-            {
-                Inits++;
-            }
-
-            public override Widget Build(BuildContext context)
-            {
-                Builds++;
-                return new SizedBox(5, 5);
-            }
+            Builds++;
+            return new SizedBox(5, 5);
         }
     }
 }
