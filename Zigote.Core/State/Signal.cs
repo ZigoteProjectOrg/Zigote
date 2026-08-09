@@ -26,6 +26,14 @@ public sealed class Signal<T> : Source, IReadableSignal<T>
     private readonly IEqualityComparer<T> _equals;
     private T _value;
 
+    /// <summary>
+    ///     Seqlock counter: even means <see cref="_value" /> is stable, odd means a write is in flight.
+    ///     Bumped only by <see cref="Write" />, which always runs under the graph gate, so writers never
+    ///     race each other here — this exists purely so a reader on another thread can take a coherent
+    ///     snapshot WITHOUT the gate. One <c>long</c> per signal, no allocation.
+    /// </summary>
+    private long _seq;
+
     public Signal(T initialValue, IEqualityComparer<T>? comparer = null)
     {
         Reactive.AssertUnboxedEquality(comparer);
@@ -37,6 +45,12 @@ public sealed class Signal<T> : Source, IReadableSignal<T>
     {
         get
         {
+            // Not inside a reaction → there is no dependency to register, and a single signal read has
+            // no cross-node invariant to uphold (that is what Reactive.Sync is for). The gate would be
+            // protecting nothing, so skip it: one process-wide lock word is what made concurrent reads
+            // collapse (measured: 6.6ns at one thread, 47.8ns at sixteen).
+            if (!Reactive.InReaction) return Snapshot();
+
             using (Reactive.Hold())
             {
                 Reactive.EvalContext?.AddSource(this);
@@ -73,9 +87,36 @@ public sealed class Signal<T> : Source, IReadableSignal<T>
     /// <summary>Read the current value WITHOUT subscribing (does not become a dependency of the reader).</summary>
     public T Peek()
     {
+        if (!Reactive.InReaction) return Snapshot();
+
         using (Reactive.Hold())
         {
             return _value;
+        }
+    }
+
+    /// <summary>
+    ///     Lock-free coherent read. Retries while a write is in flight, and rejects any snapshot a write
+    ///     straddled — so a value wider than a machine word (a 16-byte struct) can never be observed torn,
+    ///     which is the guarantee the gate used to provide on this path.
+    ///     <para>
+    ///         Only valid when this thread is NOT inside a reaction: it registers no dependency. The two
+    ///         volatile reads of <see cref="_seq" /> are also the acquire fences that stop the JIT hoisting
+    ///         <see cref="_value" /> out of a caller's spin loop.
+    ///     </para>
+    /// </summary>
+    private T Snapshot()
+    {
+        while (true)
+        {
+            var before = Volatile.Read(ref _seq);
+            if ((before & 1) == 0)
+            {
+                var snapshot = _value;
+                if (Volatile.Read(ref _seq) == before) return snapshot;
+            }
+
+            Thread.SpinWait(1); // a writer holds the gate; it will be brief
         }
     }
 
@@ -150,7 +191,14 @@ public sealed class Signal<T> : Source, IReadableSignal<T>
     // Commit a new value and cascade — always called under the lock.
     private void Write(T value)
     {
+        // Seqlock publish, so a gate-free reader (see Snapshot) either misses this write entirely or
+        // sees all of it. Interlocked for the opening bump rather than Volatile.Write: a release store
+        // stops earlier work drifting later, but NOT the `_value` store below drifting earlier — which
+        // on a weakly-ordered target (arm64: the mobile players) is exactly the reordering that would
+        // let a reader observe a torn value under an even counter. x64 would be fine either way.
+        Interlocked.Increment(ref _seq); // now odd: write in flight
         _value = value;
+        Volatile.Write(ref _seq, _seq + 1); // now even: publish, with _value ordered before it
 
         // Cascade BEFORE firing Changed/Invalidated: a user handler is allowed to re-enter and
         // subscribe/dispose an observer of this same signal, which would otherwise mutate the observer

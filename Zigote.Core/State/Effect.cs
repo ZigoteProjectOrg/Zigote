@@ -11,7 +11,9 @@ public enum EffectAffinity
 
     /// <summary>
     ///     A write only <em>marks</em> this effect; the body runs when the host calls
-    ///     <see cref="Reactive.DrainDeferred" /> (once per frame, on its own thread). Use it for any body
+    ///     <see cref="Reactive.DrainDeferred" /> — which <c>Zigote.UI.Host.App</c> does once per frame, on
+    ///     the UI thread, before the measure/layout pass. A host that never calls it never runs these
+    ///     bodies, so a non-UI host driving its own loop must call it too. Use it for any body
     ///     that touches the UI, blocks, or takes another lock: an inline body reached from a background
     ///     write runs on that background thread while holding the graph lock — both a priority inversion
     ///     (an audio/network thread doing UI work) and the one shape that can deadlock, since it can block

@@ -11,10 +11,20 @@ if (args is ["selfcheck"])
     return;
 }
 
+// Correctness under contention, both libraries — run this before trusting any contended throughput
+// number (see ConcurrencyProbe).
+if (args is ["concurrency"])
+{
+    ConcurrencyProbe.Run();
+    return;
+}
+
 // No args → run everything (both the core suite and the SignalsDotnet head-to-head) instead of dropping
 // into BenchmarkSwitcher's interactive menu.
 if (args.Length == 0) args = ["--filter", "*"];
-BenchmarkSwitcher.FromTypes([typeof(ReactiveBenchmarks), typeof(SignalsDotnetComparison)])
+BenchmarkSwitcher.FromTypes(
+        [typeof(ReactiveBenchmarks), typeof(SignalsDotnetComparison), typeof(ContentionBenchmarks)]
+    )
     .Run(args);
 
 /// <summary>Medium-run, in-process — same shape as the SignalsDotnet perf project this is ported from.</summary>

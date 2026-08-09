@@ -397,24 +397,37 @@ public abstract class Reaction : Source
         if (Reactive.TrackReactions) Reactive.RecordRun(this);
         var prev = Reactive.EvalContext;
 
-        // Cleanup (effects) runs untracked so its reads don't become dependencies.
-        Reactive.EvalContext = null;
-        BeforeExecute();
+        // Marks this thread for the whole run, including the untracked cleanup below: while it is set,
+        // every Signal read on this thread takes the gated path, so EvalContext is consulted exactly as
+        // before. Deliberately coarser than EvalContext (which goes null across BeforeExecute) — being
+        // conservative here only costs a reaction's own reads the old price, and never mis-tracks.
+        var wasInReaction = Reactive.EnterReaction();
 
-        Reactive.EvalContext = this;
-        _matched = 0;
-        _readCount = 0;
-        _diverged = false;
-        _lastRead = null;
-        _running = true;
         try
         {
-            Execute();
+            // Cleanup (effects) runs untracked so its reads don't become dependencies.
+            Reactive.EvalContext = null;
+            BeforeExecute();
+
+            Reactive.EvalContext = this;
+            _matched = 0;
+            _readCount = 0;
+            _diverged = false;
+            _lastRead = null;
+            _running = true;
+            try
+            {
+                Execute();
+            }
+            finally
+            {
+                _running = false;
+                Reactive.EvalContext = prev;
+            }
         }
         finally
         {
-            _running = false;
-            Reactive.EvalContext = prev;
+            Reactive.LeaveReaction(wasInReaction);
         }
 
         // Execute (user code) may have disposed this reaction (or been disposed by a re-entrant callback).
@@ -540,6 +553,38 @@ public static class Reactive
 
     /// <summary>Managed id of the thread that most recently took the gate (diagnostics only).</summary>
     private static int _holderThread;
+
+    /// <summary>
+    ///     Is THIS thread inside a reaction body? Thread-static on purpose, unlike
+    ///     <see cref="EvalContext" />: it is what lets an untracked <see cref="Signal{T}.Value" /> read
+    ///     skip the gate entirely (see the seqlock fast path there). A reader that is not in a reaction
+    ///     has no dependency to register, so the gate would be protecting nothing — and one process-wide
+    ///     lock word is exactly what made concurrent reads collapse.
+    ///     <para>
+    ///         The TLS cost that rules <see cref="EvalContext" /> out does not apply here: this is written
+    ///         once per reaction <em>run</em>, not once per read, and read only on the path that is
+    ///         skipping a lock acquisition in exchange.
+    ///     </para>
+    /// </summary>
+    [ThreadStatic]
+    private static bool _inReaction;
+
+    /// <inheritdoc cref="_inReaction" />
+    internal static bool InReaction => _inReaction;
+
+    /// <summary>Set for the duration of a reaction body; restores the previous value (bodies nest).</summary>
+    internal static bool EnterReaction()
+    {
+        var previous = _inReaction;
+        _inReaction = true;
+        return previous;
+    }
+
+    /// <inheritdoc cref="EnterReaction" />
+    internal static void LeaveReaction(bool previous)
+    {
+        _inReaction = previous;
+    }
 
     /// <summary>
     ///     The reaction currently running (its reads become dependencies). Plain static, NOT thread-static:
@@ -691,6 +736,19 @@ public static class Reactive
     private static readonly List<Effect> Effects = [];
     private static readonly List<Effect> Deferred = [];
 
+    // Lock-free mirror of Deferred.Count, so a host's per-frame idle gate can ask "is there parked
+    // cross-thread work?" without taking the graph gate on every frame it would otherwise sleep
+    // through. Written under the lock, read from anywhere.
+    private static int _deferredCount;
+
+    /// <summary>
+    ///     Whether any <see cref="EffectAffinity.Deferred" /> effect is parked, waiting for the host's
+    ///     next <see cref="DrainDeferred" />. A frame loop that idles when nothing is dirty must treat
+    ///     this as work — otherwise a background write parks an effect and the loop sleeps through it.
+    ///     Lock-free, safe from any thread.
+    /// </summary>
+    public static bool HasPendingDeferred => Volatile.Read(ref _deferredCount) > 0;
+
     /// <summary>
     ///     Guards against a dependency cycle (an effect that keeps dirtying a source it reads). Deliberately
     ///     small: a spin holds the global gate, stalling every other thread, and nothing legitimate needs
@@ -802,6 +860,7 @@ public static class Reactive
             {
                 e.QueuedDeferred = true;
                 Deferred.Add(e);
+                Volatile.Write(ref _deferredCount, Deferred.Count);
             }
 
             return;
@@ -855,6 +914,7 @@ public static class Reactive
             finally
             {
                 Deferred.Clear();
+                Volatile.Write(ref _deferredCount, 0);
                 LeaveBatch();
             }
 

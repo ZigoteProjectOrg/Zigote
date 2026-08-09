@@ -34,6 +34,11 @@ public class SignalsDotnetComparison
 {
     private const int FanOut = 32;
     private const int ChainDepth = 10;
+    private const int ContendedThreads = 8;
+    private const int ContendedOps = 16_000; // divisible by ContendedThreads
+
+    private static readonly ParallelOptions ParallelOptions =
+        new() { MaxDegreeOfParallelism = ContendedThreads };
 
     private readonly List<IDisposable> _roots = [];
 
@@ -47,6 +52,7 @@ public class SignalsDotnetComparison
     private readonly ZComputed _zChain;
     private readonly ZSignal _zFanSource = new(0);
     private readonly ZComputed[] _zFan = new ZComputed[FanOut];
+    private readonly ZSignal _zContended = new(0);
     private readonly ZSignal _zBatchA = new(0);
     private readonly ZSignal _zBatchB = new(0);
     private readonly Action _zBatchBody;
@@ -62,6 +68,7 @@ public class SignalsDotnetComparison
     private readonly SdReadOnly _sdChain;
     private readonly SdSignal _sdFanSource = new(0);
     private readonly SdReadOnly[] _sdFan = new SdReadOnly[FanOut];
+    private readonly SdSignal _sdContended = new(0);
     private readonly SdSignal _sdBatchA = new(0);
     private readonly SdSignal _sdBatchB = new(0);
     private readonly Action _sdBatchBody;
@@ -102,6 +109,10 @@ public class SignalsDotnetComparison
         }
 
         _roots.Add(new ZEffect(() => _zEffectSink = _zEffectSource.Value));
+
+        // Contended pair: a live computed on each side, so a write actually cascades.
+        var zc = ZComputeds.From(() => _zContended.Value + 1);
+        _roots.Add(ZExt.Observe(zc, () => { }));
         _zBatchBody = () =>
         {
             _zBatchA.Value = _batchValue;
@@ -134,6 +145,7 @@ public class SignalsDotnetComparison
             _sdFan[i] = Live(SdSignals.Computed(() => _sdFanSource.Value + 1));
 
         _roots.Add(new SdEffect(() => _sdEffectSink = _sdEffectSource.Value));
+        Live(SdSignals.Computed(() => _sdContended.Value + 1));
         _sdBatchBody = () =>
         {
             _sdBatchA.Value = _batchValue;
@@ -267,6 +279,78 @@ public class SignalsDotnetComparison
     {
         _batchValue = ++_flip;
         SdEffect.AtomicOperation(_sdBatchBody);
+    }
+
+    // ── contended: the same work split across 8 threads ──────────────────────────
+    //
+    // Total work is fixed at ContendedOps however many threads share it, and OperationsPerInvoke is that
+    // same constant, so Mean reads as nanoseconds per operation and is directly comparable to the
+    // single-threaded rows above. Read `ConcurrencyProbe` first: SignalsDotnet has no graph lock, so its
+    // numbers here are what UNSYNCHRONISED access costs, not what safe access costs — the probe shows it
+    // tearing struct reads that Zigote never tears. Fastest is not the same as correct.
+
+    [Benchmark(Baseline = true, OperationsPerInvoke = ContendedOps)]
+    [BenchmarkCategory("ContendedWrites")]
+    public void Zigote_ContendedWrites()
+    {
+        Fan(t =>
+            {
+                var offset = t << 20;
+                for (var i = 0; i < ContendedOps / ContendedThreads; i++)
+                    _zContended.Value = offset | i;
+            }
+        );
+    }
+
+    [Benchmark(OperationsPerInvoke = ContendedOps)]
+    [BenchmarkCategory("ContendedWrites")]
+    public void SignalsDotnet_ContendedWrites()
+    {
+        Fan(t =>
+            {
+                var offset = t << 20;
+                for (var i = 0; i < ContendedOps / ContendedThreads; i++)
+                    _sdContended.Value = offset | i;
+            }
+        );
+    }
+
+    [Benchmark(Baseline = true, OperationsPerInvoke = ContendedOps)]
+    [BenchmarkCategory("ContendedReads")]
+    public int Zigote_ContendedReads()
+    {
+        var sink = 0;
+        Fan(_ =>
+            {
+                var local = 0;
+                for (var i = 0; i < ContendedOps / ContendedThreads; i++) local += _zContended.Value;
+                Interlocked.Add(ref sink, local);
+            }
+        );
+        return sink;
+    }
+
+    [Benchmark(OperationsPerInvoke = ContendedOps)]
+    [BenchmarkCategory("ContendedReads")]
+    public int SignalsDotnet_ContendedReads()
+    {
+        var sink = 0;
+        Fan(_ =>
+            {
+                var local = 0;
+                for (var i = 0; i < ContendedOps / ContendedThreads; i++) local += _sdContended.Value;
+                Interlocked.Add(ref sink, local);
+            }
+        );
+        return sink;
+    }
+
+    // ponytail: Parallel.For, not barrier-synced dedicated threads — the pool is warm after warmup and
+    // its dispatch amortises to ~1ns over 16k ops. Swap in a Barrier if the two sides ever disagree on
+    // thread count mid-run.
+    private void Fan(Action<int> body)
+    {
+        Parallel.For(0, ContendedThreads, ParallelOptions, body);
     }
 
     /// <summary>Keep a SignalsDotnet computed live (the counterpart of an observed Zigote computed).</summary>
