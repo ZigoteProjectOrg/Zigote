@@ -3,6 +3,7 @@ using Zigote.Core;
 using Zigote.Core.Engine;
 using Zigote.Core.Paint;
 using Zigote.UI.Host;
+using Zigote.UI.Net;
 using Zigote.UI.Semantics;
 
 namespace Zigote.UI.Widgets.Controls;
@@ -36,6 +37,14 @@ namespace Zigote.UI.Widgets.Controls;
 /// </remarks>
 public sealed class Image : Widget, IDisposable
 {
+    // Decoding is blocking native work. Without a gate, ten thousand LoadAsync calls would each
+    // park a thread-pool thread inside the decoder; the pool only grows a thread or so per second
+    // under starvation, so the queue would drain over minutes and every other pool user — the
+    // fetches feeding it included — would stall behind it. One slot per core keeps the decoders
+    // saturated and the pool free, and the wait is an await, so a queued load costs no thread.
+    private static readonly SemaphoreSlim DecodeGate =
+        new(Environment.ProcessorCount, Environment.ProcessorCount);
+
     private CancellationTokenSource? _loadCts;
     private bool _disposed;
     private Size _size;
@@ -97,6 +106,19 @@ public sealed class Image : Widget, IDisposable
 
     /// <summary>True once a texture is loaded and paintable.</summary>
     public bool HasTexture => _textureHandle != 0;
+
+    /// <summary>
+    ///     Runs on the UI thread once a <see cref="LoadAsync" /> texture is in place — the hook a
+    ///     placeholder or a fade-in hangs off. Set it before starting the load.
+    /// </summary>
+    public Action? OnLoaded { get; set; }
+
+    /// <summary>
+    ///     Runs on the UI thread when a <see cref="LoadAsync" /> could not produce a texture: the
+    ///     fetch threw (no network, 404, timeout) or the bytes were not a decodable image. A load
+    ///     that was merely superseded or disposed is not a failure and does not fire this.
+    /// </summary>
+    public Action<Exception>? OnFailed { get; set; }
 
     /// <summary>Pixel dimensions of the loaded texture (0×0 when empty). Post-downsample.</summary>
     public (uint Width, uint Height) TextureSize => (_texWidth, _texHeight);
@@ -197,8 +219,16 @@ public sealed class Image : Widget, IDisposable
     ///     second load cancels the first, so an image recycled through a scrolling list never shows a
     ///     stale row's picture. The engine's loaders are thread-safe; the GPU upload still happens on
     ///     the render thread, at first paint.
+    ///     <para>
+    ///         Outcomes arrive through <see cref="OnLoaded" /> and <see cref="OnFailed" />, both on
+    ///         the UI thread — set them before calling. The returned task completes when the load
+    ///         has been dealt with either way and never faults, so a fire-and-forget call is safe.
+    ///     </para>
     /// </summary>
-    /// <param name="fetch">Produces the encoded bytes (file read, archive entry, HTTP body).</param>
+    /// <param name="fetch">
+    ///     Produces the encoded bytes (file read, archive entry, HTTP body — see
+    ///     <see cref="NetworkCache.FetchAsync" /> for a cached, coalesced, rate-gated HTTP one).
+    /// </param>
     /// <param name="maxDim">Caps the longest edge of the decoded texture; 0 = unbounded.</param>
     public Task LoadAsync(Func<CancellationToken, Task<byte[]>> fetch, uint maxDim = 0)
     {
@@ -213,18 +243,50 @@ public sealed class Image : Widget, IDisposable
         return Task.Run(
             async () =>
             {
-                var bytes = await fetch(token).ConfigureAwait(false);
-                token.ThrowIfCancellationRequested();
+                ulong handle;
+                uint w, h;
+                try
+                {
+                    var bytes = await fetch(token).ConfigureAwait(false);
+                    token.ThrowIfCancellationRequested();
 
-                var handle = maxDim == 0
-                    ? ZigoteEngine.LoadTextureFromMemory(bytes, out var w, out var h)
-                    : ZigoteEngine.LoadTextureFromMemoryScaled(
-                        bytes,
-                        maxDim,
-                        out w,
-                        out h
-                    );
-                if (handle == 0) return;
+                    await DecodeGate.WaitAsync(token).ConfigureAwait(false);
+                    try
+                    {
+                        // Re-checked after the queue: a tile that scrolled away while it waited is
+                        // the common case in a fast-flung grid, and its decode is pure waste.
+                        token.ThrowIfCancellationRequested();
+                        handle = maxDim == 0
+                            ? ZigoteEngine.LoadTextureFromMemory(bytes, out w, out h)
+                            : ZigoteEngine.LoadTextureFromMemoryScaled(
+                                bytes,
+                                maxDim,
+                                out w,
+                                out h
+                            );
+                    }
+                    finally
+                    {
+                        DecodeGate.Release();
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    return; // superseded or disposed — the caller asked for this, not a failure
+                }
+                catch (Exception error)
+                {
+                    Fail(error, token);
+                    return;
+                }
+
+                if (handle == 0)
+                {
+                    // The fetch succeeded but the engine could not decode the bytes — an HTML error
+                    // page served with an image URL, a truncated file, a format not built in.
+                    Fail(new InvalidDataException("The fetched bytes are not a decodable image."), token);
+                    return;
+                }
 
                 // Superseded or disposed while decoding: the texture exists but nothing will ever
                 // paint it, so drop it here rather than leaking a page-sized allocation.
@@ -252,10 +314,23 @@ public sealed class Image : Widget, IDisposable
                         }
 
                         SetTexture(handle, w, h);
+                        OnLoaded?.Invoke();
                     }
                 );
             },
             token
+        );
+    }
+
+    /// <summary>Report a load failure on the UI thread, unless the load was cancelled meanwhile.</summary>
+    private void Fail(Exception error, CancellationToken token)
+    {
+        if (token.IsCancellationRequested || _disposed || OnFailed is null) return;
+        App.Active?.Post(() =>
+            {
+                if (token.IsCancellationRequested || _disposed) return;
+                OnFailed?.Invoke(error);
+            }
         );
     }
 

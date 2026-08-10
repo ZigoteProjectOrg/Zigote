@@ -59,6 +59,39 @@ public sealed class GridView : MultiChildWidget
         double crossAxisSpacing = 0,
         double childAspectRatio = 1)
     {
+        var list = new ListView();
+        Rebind(
+            list,
+            crossAxisCount,
+            itemCount,
+            itemBuilder,
+            mainAxisSpacing,
+            crossAxisSpacing,
+            childAspectRatio,
+            false
+        );
+        return list;
+    }
+
+    /// <summary>
+    ///     Re-point a grid from <see cref="Builder" /> at a new item count — the append step of a
+    ///     paged or infinite grid, which is otherwise impossible: rebuilding the grid widget makes a
+    ///     new <see cref="ListView" /> and drops the reader back to the top.
+    ///     <para>
+    ///         <paramref name="keepScroll" /> is the point (leave it on); pass false to re-bind and
+    ///         jump to the top, as a filter or a sort change would.
+    ///     </para>
+    /// </summary>
+    public static void Rebind(
+        ListView list,
+        int crossAxisCount,
+        int itemCount,
+        Func<int, Widget> itemBuilder,
+        double mainAxisSpacing = 0,
+        double crossAxisSpacing = 0,
+        double childAspectRatio = 1,
+        bool keepScroll = true)
+    {
         var cols = Math.Max(1, crossAxisCount);
         var count = Math.Max(0, itemCount);
         var rows = (count + cols - 1) / cols;
@@ -66,7 +99,6 @@ public sealed class GridView : MultiChildWidget
         var mainGap = (float)mainAxisSpacing;
         var ratio = childAspectRatio > 0 ? (float)childAspectRatio : 1f;
 
-        var list = new ListView();
         // Cell height follows the width the list actually got, so a resize re-derives it (the list
         // rebuilds its offset table when its width changes). Cells themselves are Expanded, so they
         // stay correct without rebuilding.
@@ -93,9 +125,9 @@ public sealed class GridView : MultiChildWidget
                 return mainGap > 0f && r < rows - 1
                     ? new Padding(EdgeInsets.Only(bottom: mainGap), row)
                     : row;
-            }
+            },
+            keepScroll
         );
-        return list;
     }
 
     public override Size Measure(Constraints c)

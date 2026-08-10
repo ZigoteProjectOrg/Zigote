@@ -1,6 +1,6 @@
 # Zigote.UI.Adwaita.Gallery
 
-The reference app for [`Zigote.UI.Adwaita`](../Zigote.UI.Adwaita/README.md) — **36 pages**, one per
+The reference app for [`Zigote.UI.Adwaita`](../Zigote.UI.Adwaita/README.md) — **37 pages**, one per
 widget family, every one of them live. No screenshots, no mock rows: what you see is the widget doing
 the thing.
 
@@ -41,7 +41,7 @@ All use the platform command modifier — ⌘ on macOS, Ctrl elsewhere.
 
 | Section | Pages |
 | --- | --- |
-| **Navigation** | Navigation View · Split Views · Paned · Breakpoints · View Switcher · Tab View · Bottom Sheet · Carousel |
+| **Navigation** | Navigation View · Split Views · Paned · Breakpoints · View Switcher · Tab View · Bottom Sheet · Carousel · Image Grid |
 | **Controls** | Buttons · Toggles · Checks & Radios · Sliders & Progress · Entries · Colour & Completion · Shortcuts · Menus & Popovers |
 | **Lists** | Boxed Lists · Preferences · Large Lists (2 000 rows, recycled while you scroll) |
 | **Feedback** | Banners · Toasts · Alert Dialogs · Spinner · Status Pages · Avatar |

@@ -81,6 +81,12 @@ internal static class GalleryRegistry
                     MaterialIcons.ViewCarousel,
                     () => new CarouselPage()
                 ),
+                new GalleryEntry(
+                    "Image Grid",
+                    "A lazy, virtualized grid that pages as it scrolls",
+                    MaterialIcons.GridView,
+                    () => new ImageGridPage()
+                ),
             ]
         ),
         new(

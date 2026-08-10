@@ -11,8 +11,9 @@ namespace Zigote.UI.Adwaita;
 ///     <para>
 ///         ponytail: while <see cref="Interactive" />, the carousel claims the pointer for
 ///         dragging, so controls inside pages are not clickable (no gesture arena to arbitrate a
-///         drag vs a child tap — that is the upgrade path); and a touch drag released too slowly
-///         to fling can rest between pages until the next interaction (no scroll-end hook).
+///         drag vs a child tap — that is the upgrade path). Put page controls — turn buttons, an
+///         overlaid caption — in a <c>Stack</c> above the carousel instead, where they are hit
+///         first and the rest of the surface still drags.
 ///     </para>
 /// </summary>
 public sealed class AdwCarousel : Widget
@@ -31,9 +32,13 @@ public sealed class AdwCarousel : Widget
     private float _lastPageWidth = -1f;
     private float _wheelAccum;
     private long _wheelLastMs;
-    private long _wheelPagedMs = long.MinValue;
+    // Not long.MinValue: `now - long.MinValue` overflows to a large NEGATIVE number, which reads as
+    // "paged a moment ago" and made the debounce below swallow every wheel event ever — the whole
+    // wheel and trackpad path was dead until the first drag. Halved, the subtraction stays in range.
+    private long _wheelPagedMs = long.MinValue / 2;
     private bool _armed;
     private bool _dragging;
+    private bool _touchDragging;
     private float _dragStartX;
     private float _dragStartOffset;
 
@@ -204,16 +209,20 @@ public sealed class AdwCarousel : Widget
 
     public override void OnPointerUp(Offset point)
     {
-        if (_dragging) SnapToNearest();
+        // A finger drag arrives as OnTouchScroll but still lifts through here, and one released too
+        // slowly to fling gets no OnTouchFling — without _touchDragging it would rest between pages.
+        if (_dragging || _touchDragging) SnapToNearest();
         _armed = false;
         _dragging = false;
+        _touchDragging = false;
     }
 
     public override void OnPointerCancel()
     {
-        if (_dragging) SnapToNearest();
+        if (_dragging || _touchDragging) SnapToNearest();
         _armed = false;
         _dragging = false;
+        _touchDragging = false;
     }
 
     private void SnapToNearest()
@@ -261,11 +270,15 @@ public sealed class AdwCarousel : Widget
 
     public override void OnTouchScroll(float dx, float dy)
     {
+        _touchDragging = true; // the lift snaps, whether or not it is fast enough to fling
         _scroller.JumpTo(_scroller.Offset - dx);
     }
 
     public override void OnTouchFling(float velocityX, float velocityY)
     {
+        // Settled here: the OnPointerUp that follows the fling must not snap back to where the
+        // finger left off, which is still the previous page while the glide animates.
+        _touchDragging = false;
         if (_pageWidth <= 0f) return;
         // Finger right (+vx) reveals the previous page; a fast fling always advances one page.
         if (velocityX <= -FlingSpeed)

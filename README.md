@@ -19,7 +19,7 @@ framework's own, drawn by a Zig + wgpu backend.
 
 <img src="docs/images/adwaita-welcome.png" alt="The Adwaita gallery running on macOS" width="900">
 
-<sub>`Zigote.UI.Adwaita.Gallery` — 36 live pages of the GNOME design system, rendered by Zigote's own widget tree.</sub>
+<sub>`Zigote.UI.Adwaita.Gallery` — 37 live pages of the GNOME design system, rendered by Zigote's own widget tree.</sub>
 
 </div>
 
@@ -61,7 +61,7 @@ dotnet build Zigote.sln
 ```
 
 ```sh
-dotnet run --project Zigote.UI.Adwaita.Gallery   # the GNOME widget set, 36 pages
+dotnet run --project Zigote.UI.Adwaita.Gallery   # the GNOME widget set, 37 pages
 dotnet run --project Zigote.UI.HelloWorld        # smallest complete app — start here
 dotnet run --project Zigote.UI.Gallery           # the core toolkit: charts, i18n, navigation
 dotnet run --project Zigote.UI.FSharp.Gallery    # the same toolkit from F#
@@ -216,7 +216,7 @@ sealed class CounterPage : ComposedWidget
 | **Dialogs & overlays** | `AdwDialog`, `AdwPreferencesDialog`, `AdwAboutDialog`, `AdwShortcutsDialog`, `AdwShortcutLabel`, `AdwBottomSheet`, `AdwMenuItem` (popovers are raised by `AdwMenuButton` / `AdwSplitButton`) |
 | **Layout & style** | `AdwClamp`, `AdwClampScrollable`, `AdwWrapBox`, `AdwBreakpoint`/`Bin`, `AdwMultiLayoutView`, `AdwSeparator`, `AdwTheme`, `AdwPalette`, `AdwTypography`, `AdwMetrics`, `AdwStyle` |
 
-The gallery is the spec: **36 pages**, each one live, with a headless self-test that constructs every
+The gallery is the spec: **37 pages**, each one live, with a headless self-test that constructs every
 page and checks the catalogue.
 
 ```sh
@@ -439,7 +439,7 @@ the three worth reading first.
 
 - **[`Zigote.UI.HelloWorld`](Zigote.UI.HelloWorld/README.md)** — hello world plus a counter in one
   documented file. The place to start.
-- **[`Zigote.UI.Adwaita.Gallery`](Zigote.UI.Adwaita.Gallery/README.md)** — 36 pages of the GNOME
+- **[`Zigote.UI.Adwaita.Gallery`](Zigote.UI.Adwaita.Gallery/README.md)** — 37 pages of the GNOME
   design system, an adaptive shell, multi-window, and a headless `--self-test`.
 - **`Zigote.UI.Gallery`** — the core toolkit end to end: widgets, navigation, theming, charts,
   localization and DevTools.
