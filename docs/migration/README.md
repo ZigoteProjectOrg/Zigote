@@ -67,7 +67,7 @@ Three things to notice, because they all differ from where you came from:
 |---|---|
 | `Zigote.UI` | Always. The kernel: layout, controls, focus, navigation, animation, semantics. Terse, positional constructors, Zigote-native names. |
 | `Zigote.UI.Material` | You are porting Material or Flutter code. Material names (`Scaffold`, `AppBar`, `ElevatedButton`, `ListTile`, `TextField`) with named-argument constructors, over the same kernel. Also the home of `TextField`, `Dropdown`, `Slider`, `Switch`, `TabBar` — the kernel does not duplicate them. |
-| `Zigote.UI.Adwaita` | Linux-first apps that must look native on GNOME: `AdwHeaderBar`, `AdwNavigationSplitView`, `AdwPreferencesPage`, live system light/dark + accent. |
+| `Zigote.UI.Adwaita` | You want the GNOME look — on any OS. 83 `Adw*` types: `AdwHeaderBar`, `AdwNavigationSplitView`, the boxed-list rows, `AdwPreferencesDialog`, adaptive breakpoints, and client-side decorations the app draws itself. On GNOME it follows the system light/dark and accent live; on macOS it hosts the traffic lights in its own header bar. See [`Zigote.UI.Adwaita/README.md`](../../Zigote.UI.Adwaita/README.md). |
 | `Zigote.Bloc` | Any app with more than trivial state. Events in, ordered; state out as signals. |
 | `Zigote.UI.Charts` | Declarative charts. |
 | `Zigote.UI.Localizations` | Locales, plural rules, typed message codegen. |

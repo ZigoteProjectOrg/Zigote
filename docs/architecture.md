@@ -266,7 +266,8 @@ The real one:
 | `Zigote.Core` | `Signal`/`Computed`/`Effect`/`LinkedSignal`/`Trigger`/`Reactive`, `Threading.Background`, plus the native seam: paint & event ABI, math, animation, assets, diagnostics registries |
 | `Zigote.UI` | Widgets, layout, theming, navigation (`Widgets/Navigation` — Navigator 2.0), focus, semantics, `Watch` |
 | `Zigote.UI.FSharp` | F# reactive ergonomics (`signal`/`computed`/`effect`/`watch`) + `Host.run` |
-| `Zigote.UI.Material`, `.Adwaita`, `.Charts`, `.Localizations` | Design languages and add-ons |
+| `Zigote.UI.Adwaita` | The GNOME Adwaita design system on the kernel — 83 `Adw*` types, live system theming, client-side decorations ([README](../Zigote.UI.Adwaita/README.md)) |
+| `Zigote.UI.Material`, `.Charts`, `.Localizations` | The other design language, and the add-ons |
 | `Zigote.UI.DevTools` | Debug overlay: panels, charts, diagnostics |
 | `Zigote.Bloc` | The event pump and its three bases. `Zigote.Core` only, no other dependencies |
 | `Zigote.Persistence` (+ `.SQLite`) | `IKeyValueStore` — "where do strings live" |
