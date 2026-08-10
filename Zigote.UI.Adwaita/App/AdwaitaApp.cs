@@ -34,13 +34,28 @@ public class AdwaitaApp : ZigoteApp
         _followSystem = followSystem;
         // Rounded window corners need an alpha-composited window, which is a creation-time
         // property — decide from the chrome that WILL be applied in OnInit.
-        TransparentWindow = WindowChrome.Resolve() == Core.Engine.WindowChromeStyle.AdwaitaCsd;
+        TransparentWindow = ResolveChrome() == Core.Engine.WindowChromeStyle.AdwaitaCsd;
         Theme = theme ?? AdwTheme.Light;
         Routes = routes;
         InitialRoute = initialRoute;
         OnGenerateRoute = onGenerateRoute;
         Pages = pages;
         OnPopPage = onPopPage;
+    }
+
+    /// <summary>
+    ///     The chrome an Adwaita app wants: its own headerbars ARE its titlebars, so it asks for
+    ///     client-side decorations wherever a desktop can host them — GNOME, and macOS, where
+    ///     <see cref="AdwWindowControls" /> draws the traffic lights (centred in the bar, as macOS
+    ///     centres them) instead of the libadwaita circles. Everywhere else the shared
+    ///     <see cref="WindowChrome.Resolve" /> policy stands, and an explicit
+    ///     <see cref="WindowChrome.Preference" /> always wins over both.
+    /// </summary>
+    private static Core.Engine.WindowChromeStyle ResolveChrome()
+    {
+        return WindowChrome.Preference == WindowChromePreference.Auto && OperatingSystem.IsMacOS()
+            ? Core.Engine.WindowChromeStyle.AdwaitaCsd
+            : WindowChrome.Resolve();
     }
 
     /// <summary>The system accent hue (GNOME 47+); Blue where unavailable.</summary>
@@ -68,7 +83,11 @@ public class AdwaitaApp : ZigoteApp
         // One source of truth for the corner: the window's clip and everything Adwaita rounds
         // (dialogs, sheets) come from the same metric, so they can never drift apart.
         app.CsdCornerRadius = AdwMetrics.WindowRadius;
-        app.ApplyWindowChrome(WindowChrome.Resolve());
+        // Unified chrome (the editor's setting can still force it) drags by band rather than by
+        // registered surface: an Adwaita window leads with a headerbar, so the band is that bar —
+        // the default 38px would leave its bottom strip inert.
+        app.TitleBarDragHeight = AdwMetrics.HeaderBarHeight;
+        app.ApplyWindowChrome(ResolveChrome());
 
         if (!_followSystem) return;
         GnomeDesktop.Start();

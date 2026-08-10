@@ -363,10 +363,18 @@ public partial class App : IDisposable
     /// </summary>
     public WindowChromeStyle ChromeStyle { get; private set; }
 
+    /// <summary>
+    ///     Width of the macOS close/minimize/zoom cluster plus its margin — where the leading edge
+    ///     of a titlebar's content belongs on macOS. Exposed as a constant so an app that draws the
+    ///     lights itself (client-side decorations) can size its cluster to the same band the OS
+    ///     would have used, instead of guessing a second number.
+    /// </summary>
+    public const float MacTrafficLightInset = 78f;
+
     /// <summary>Left inset the native traffic lights occupy in MacUnified chrome — top-left
     ///     content (toolbars) should lead with this much space. 0 in other chromes.</summary>
     public float TitleBarLeftInset =>
-        ChromeStyle == WindowChromeStyle.MacUnified ? 78f : 0f;
+        ChromeStyle == WindowChromeStyle.MacUnified ? MacTrafficLightInset : 0f;
 
     /// <summary>Suggested top inset for MacUnified windows whose content has no toolbar row to
     ///     absorb the titlebar band (e.g. the Settings window). 0 in other chromes.</summary>
@@ -377,11 +385,33 @@ public partial class App : IDisposable
     ///     wherever no interactive control claims the point.</summary>
     public float TitleBarDragHeight { get; set; } = 38f;
 
-    /// <summary>Corner radius of the window frame under transparent Adwaita CSD chrome.
-    ///     libadwaita's <c>$window_radius</c> is 12px; a rounder corner is the tell that gives away
-    ///     a not-quite-GNOME window sitting next to real ones. Only observed while the window is
-    ///     unmaximized on a compositor that granted an alpha channel.</summary>
-    public float CsdCornerRadius { get; set; } = 12f;
+    /// <summary>Corner radius of the window frame under Adwaita CSD chrome. libadwaita's
+    ///     <c>$window_radius</c> is 12px; a rounder corner is the tell that gives away a
+    ///     not-quite-GNOME window sitting next to real ones. Only observed while the window is
+    ///     unmaximized, and — where the renderer draws the corner rather than the OS — on a
+    ///     compositor that granted an alpha channel.</summary>
+    public float CsdCornerRadius
+    {
+        get => _csdCornerRadius;
+        set
+        {
+            if (_csdCornerRadius.Equals(value)) return;
+            _csdCornerRadius = value;
+            Engine.WindowChromeSetCornerRadius(WindowId, value);
+            RequestPaint();
+        }
+    }
+
+    private float _csdCornerRadius = 12f;
+
+    /// <summary>
+    ///     Whether the corner belongs to the renderer at all. macOS masks the CSD window's own
+    ///     layer (see <c>macos_window_chrome.m</c>): the OS cuts an antialiased, correctly-shadowed
+    ///     corner after the frame is composited, and clipping the paint to a second rounded rect
+    ///     underneath it only strands whatever the render target was cleared to in the sliver
+    ///     between the two curves.
+    /// </summary>
+    private static bool PlatformRoundsCsdCorners => OperatingSystem.IsMacOS();
 
     /// <summary>
     ///     This window's paint is clipped to a rounded rect this frame: CSD chrome on a window the
@@ -389,7 +419,8 @@ public partial class App : IDisposable
     ///     the corner cutouts). Square while maximized/fullscreen, like GNOME — that state only
     ///     flips alongside window events, which already dirty both layers via the resize path.
     /// </summary>
-    private bool CsdRounded => ChromeStyle == WindowChromeStyle.AdwaitaCsd &&
+    private bool CsdRounded => !PlatformRoundsCsdCorners &&
+                               ChromeStyle == WindowChromeStyle.AdwaitaCsd &&
                                Engine.WindowIsTransparent(WindowId) &&
                                !Engine.WindowIsMaximized(WindowId);
 
@@ -444,6 +475,10 @@ public partial class App : IDisposable
         }
 
         if (effective != WindowChromeStyle.System) EnsureDragHitProvider(Engine);
+        // After the style, not before: applying one allocates the window's native chrome entry and
+        // resets the radius it remembers to the default.
+        if (effective == WindowChromeStyle.AdwaitaCsd)
+            Engine.WindowChromeSetCornerRadius(WindowId, CsdCornerRadius);
 
         // Cascade the REQUESTED style — each window degrades independently.
         for (var i = 0; i < _secondaryWindows.Count; i++)

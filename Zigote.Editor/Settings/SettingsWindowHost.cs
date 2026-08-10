@@ -1,8 +1,6 @@
-using Zigote.Core;
 using Zigote.Editor.Widgets;
 using Zigote.UI.Host;
 using Zigote.UI.Widgets;
-using Zigote.UI.Widgets.Layout;
 
 namespace Zigote.Editor.Settings;
 
@@ -34,19 +32,10 @@ public sealed class SettingsWindowHost(EditorPreferences prefs)
         win.Theme = theme;
         _content = new SettingsWindow(prefs, () => LayoutProvider(), theme);
         _themeScope = new ThemeProvider(theme, _content);
-        // MacUnified chrome hides the titlebar entirely — pad the content below the
-        // traffic-light band so the sidebar doesn't collide with the native buttons.
-        win.Root = win.TitleBarTopInset > 0f
-            ? new Padding(
-                new EdgeInsets(
-                    0f,
-                    win.TitleBarTopInset,
-                    0f,
-                    0f
-                ),
-                _themeScope
-            )
-            : _themeScope;
+        // No top inset under MacUnified: this window leads with an AdwHeaderBar, which reserves
+        // the traffic lights' band at its own start — padding the whole tree down as well would
+        // both waste a strip of window and leave that reserve stranded below the buttons.
+        win.Root = _themeScope;
         win.CloseRequested += () =>
         {
             _win = null;

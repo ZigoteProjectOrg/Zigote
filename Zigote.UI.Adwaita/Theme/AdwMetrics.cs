@@ -32,6 +32,14 @@ public static class AdwMetrics
     /// </summary>
     public const float CompactControlHeight = 28f;
     public const float HeaderBarHeight = 47f;
+
+    /// <summary>
+    ///     A headerbar's own padding, and the gap between the widgets packed into it. One constant
+    ///     because <see cref="AdwWindowControls" /> works backwards from it to size the macOS
+    ///     traffic-light spacer — if the two drifted apart, the first packed widget would drift off
+    ///     the window's titlebar inset.
+    /// </summary>
+    public const float HeaderBarPadding = 6f;
     public const float RowMinHeight = 50f;
     public const float MenuRowHeight = 32f;
 

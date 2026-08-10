@@ -124,7 +124,9 @@ internal sealed class Shell : ComposedWidget
         // 280 px row, the title is already down to what fits between them.
         var bar = new AdwHeaderBar {
             Title = "Adwaita Demo",
-            ShowEndWindowControls = false,
+            // Side by side the content pane's header owns the end of the titlebar; once the panes
+            // fold, this bar can be the only one on screen and has to carry both ends itself.
+            ShowEndWindowControls = _split.IsCollapsed.Value,
         };
         bar.Start.Add(
             new Tooltip(
@@ -155,7 +157,9 @@ internal sealed class Shell : ComposedWidget
         var entry = Current;
         var bar = new AdwHeaderBar {
             TitleWidget = new AdwWindowTitle(entry.Title, entry.Subtitle),
-            ShowStartWindowControls = false,
+            // Collapsed, this bar stands alone at the top of the window — so it takes over the
+            // start of the titlebar (the sidebar's bar is no longer on screen to hold it).
+            ShowStartWindowControls = _split.IsCollapsed.Value,
             // Only once the panes have folded is there anywhere to go back to. Read off the split
             // view's own fold state — it computed the breakpoint already, this Watch just follows.
             ShowBackButton = _split.IsCollapsed.Value,

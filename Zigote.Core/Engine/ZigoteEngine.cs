@@ -430,6 +430,17 @@ public sealed unsafe class ZigoteEngine : IDisposable
         );
     }
 
+    /// <summary>
+    ///     Tell the platform what radius a CSD window's corners are, in logical px. Only platforms
+    ///     that round the frame themselves act on it — macOS masks the window's layer, which is how
+    ///     its corners come out antialiased and correctly shadowed; elsewhere the app clips its own
+    ///     corners and this is inert. Re-applied by <see cref="WindowChromeSet" />.
+    /// </summary>
+    public void WindowChromeSetCornerRadius(uint windowId, float radius)
+    {
+        if (!_disposed) NativeEngine.WindowChromeSetCornerRadius(windowId, radius);
+    }
+
     /// <summary>Minimize the window (client-side-decoration button action).</summary>
     public void WindowChromeMinimize(uint windowId)
     {

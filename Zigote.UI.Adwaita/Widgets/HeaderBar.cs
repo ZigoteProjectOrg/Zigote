@@ -122,7 +122,10 @@ public sealed class AdwHeaderBar : ComposedWidget
         var theme = ThemeProvider.Of(context);
         var p = AdwPalette.For(theme);
 
-        var startRow = new Row(spacing: 6f, mainAxisSize: MainAxisSize.Min);
+        var startRow = new Row(
+            spacing: AdwMetrics.HeaderBarPadding,
+            mainAxisSize: MainAxisSize.Min
+        );
         if (ShowStartWindowControls)
             startRow.Children.Add(new AdwWindowControls(AdwControlsSide.Start));
         if (ShowBackButton)
@@ -135,14 +138,17 @@ public sealed class AdwHeaderBar : ComposedWidget
             );
         foreach (var w in Start) startRow.Children.Add(w);
 
-        var endRow = new Row(spacing: 6f, mainAxisSize: MainAxisSize.Min);
+        var endRow = new Row(
+            spacing: AdwMetrics.HeaderBarPadding,
+            mainAxisSize: MainAxisSize.Min
+        );
         foreach (var w in End) endRow.Children.Add(w);
         if (ShowEndWindowControls)
             endRow.Children.Add(new AdwWindowControls(AdwControlsSide.End));
 
         var bar = new DecoratedBox {
             Fill = Flat ? Color.Transparent : theme.TitleBar,
-            Child = new Padding(EdgeInsets.Symmetric(6f)) {
+            Child = new Padding(EdgeInsets.Symmetric(AdwMetrics.HeaderBarPadding)) {
                 Child = new HeaderLayout(
                     startRow,
                     TitleWidget ?? new AdwWindowTitle(Title ?? ""),
