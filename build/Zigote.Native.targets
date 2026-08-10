@@ -212,9 +212,12 @@
   <!-- macOS→macOS cross-arch needs the SDK as an explicit sysroot: zig only auto-detects the SDK
        (frameworks, libSystem) for native targets, so a -Dtarget=x86_64-macos build from an arm64
        host fails on SDL/miniaudio/Cocoa without it. Resolved here (not in the static PropertyGroup)
-       because it shells out to xcrun. -->
+       because it shells out to xcrun.
+       NOT gated on ZigCross: vendored SDL treats any non-native target QUERY as a cross build, and
+       the -Dcpu floor above (baseline / x86_64_v2) makes the query non-native even when the OS and
+       arch match the host — so a plain host build needs the SDK spelled out just the same. -->
   <Target Name="ZigMacosSysroot" BeforeTargets="BuildZigEngine"
-          Condition="'$(ZigCross)' == 'true' And '$(ZigTargetOS)' == 'macos' And '$(_HostOS)' == 'macos'">
+          Condition="'$(ZigTargetOS)' == 'macos' And '$(_HostOS)' == 'macos'">
     <Exec Command="xcrun --show-sdk-path" ConsoleToMSBuild="true" StandardOutputImportance="low">
       <Output TaskParameter="ConsoleOutput" PropertyName="_MacSdkPath" />
     </Exec>
