@@ -130,6 +130,27 @@ public sealed class Image : Widget, IDisposable
         return new Image(path, maxDim);
     }
 
+    /// <summary>
+    ///     An image from the app's deployed <c>Assets/</c> tree —
+    ///     <c>Image.FromAsset("Sprites/hero.png")</c> — resolved by <see cref="AppAssets" /> so the
+    ///     same path works in a dev build, a published bundle and a macOS .app.
+    ///     <para>
+    ///         Prefer this to composing the path yourself: a literal asset path is one the publish-time
+    ///         asset shake can see, and an asset nothing names by literal is an asset it will drop.
+    ///     </para>
+    ///     <para>
+    ///         Distinct from <see cref="FromResource" />, which loads a file compiled into an assembly
+    ///         manifest. Kept as a separate name rather than an overload of it: C# prefers the
+    ///         candidate with fewer omitted optional parameters, so an overload would have quietly
+    ///         become the better match for a one-argument embedded-resource call and turned it into a
+    ///         missing-file error.
+    ///     </para>
+    /// </summary>
+    public static Image FromAsset(string relativePath, uint maxDim = 0)
+    {
+        return new Image(AppAssets.Path(relativePath), maxDim);
+    }
+
     public static Image FromBytes(ReadOnlySpan<byte> data, uint maxDim = 0)
     {
         uint w, h;
@@ -144,7 +165,17 @@ public sealed class Image : Widget, IDisposable
         return new Image(handle, w, h);
     }
 
-    public static Image FromAsset(string resourceName, Type? assemblyType = null, uint maxDim = 0)
+    /// <summary>
+    ///     An image from an <b>embedded resource</b> — a file compiled into an assembly's manifest,
+    ///     named by its resource name (<c>MyApp.Images.logo.png</c>), not by any path on disk.
+    ///     <paramref name="assemblyType" /> selects the assembly to read from; the caller's own is used
+    ///     when it is null.
+    ///     <para>
+    ///         For a file the app ships in its deployed <c>Assets/</c> tree, use
+    ///         <see cref="FromAsset" /> instead — different mechanism, different lookup.
+    ///     </para>
+    /// </summary>
+    public static Image FromResource(string resourceName, Type? assemblyType = null, uint maxDim = 0)
     {
         var asm = assemblyType?.Assembly ?? Assembly.GetCallingAssembly();
         using var stream = asm.GetManifestResourceStream(resourceName);

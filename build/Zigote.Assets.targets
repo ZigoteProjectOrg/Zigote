@@ -1,0 +1,52 @@
+<Project>
+  <!--
+    App assets for Zigote UI apps: files an app loads at runtime by path — sprites, textures, audio,
+    data — deployed to Assets/ next to the executable, on build and on publish.
+
+      <ItemGroup>
+        <ZigoteAsset Include="Assets/**" />
+      </ItemGroup>
+
+    Loose files under a known directory, not embedded resources, because that is what the engine reads:
+    Image.FromFile / ISpriteDevice.CreateTextureFromFile open a path, and the native side opens textures
+    and audio itself. Zigote.UI's Fonts/ works the same way and this mirrors it deliberately — an app
+    ends up with Assets/ and Fonts/ beside the binary, and Zigote.UI's AppAssets resolves the first.
+
+    The DEPLOYED folder is always Assets/ regardless of where the files sit in the project, so the path
+    an app passes to AppAssets is the same string in a dev build and in a publish.
+
+    Assets flow transitively, as Content does: a widget library that ships its own Assets/ tree lands
+    them in every app that references it — the same mechanism that gets Zigote.UI's fonts everywhere.
+
+    NOT globbed by default, deliberately. `Assets` is also an ordinary C# namespace folder in this repo
+    (Zigote.Core/Assets/ holds AssetManager, AssetRegistry, AssetPath …), so a default include of
+    Assets/** would quietly deploy that source tree as runtime content. Apps opt in by naming the glob.
+
+    Imported repo-wide by Directory.Build.targets; a project that declares no ZigoteAsset is unaffected.
+  -->
+  <ItemGroup Condition="'@(ZigoteAsset)' != '' AND '$(TargetPlatformIdentifier)' != 'ios' AND '$(TargetPlatformIdentifier)' != 'android'">
+    <Content Include="@(ZigoteAsset)"
+             Exclude="**/bin/**;**/obj/**"
+             Link="Assets\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!--
+    Mobile takes the same files through its own item type: neither resource pipeline lifts Content
+    (referenced-project Content least of all) into the package, which is why the mobile gallery
+    projects already re-declare the bundled fonts by hand as BundleResource / AndroidAsset. Link keeps
+    the Assets/ layout, so AppAssets resolves the identical relative path on every platform.
+  -->
+  <ItemGroup Condition="'@(ZigoteAsset)' != '' AND '$(TargetPlatformIdentifier)' == 'ios'">
+    <BundleResource Include="@(ZigoteAsset)"
+                    Exclude="**/bin/**;**/obj/**"
+                    Link="Assets\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'@(ZigoteAsset)' != '' AND '$(TargetPlatformIdentifier)' == 'android'">
+    <AndroidAsset Include="@(ZigoteAsset)"
+                  Exclude="**/bin/**;**/obj/**"
+                  Link="Assets\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

@@ -42,7 +42,9 @@
         <!-- The desktop Gallery's sources verbatim (its Program.Main is the entry point). -->
         <Compile Include="..\Zigote.UI.Gallery\**\*.cs"
                  Exclude="..\Zigote.UI.Gallery\bin\**;..\Zigote.UI.Gallery\obj\**"/>
-        <None Include="..\Zigote.UI.Gallery\assets\**" CopyToOutputDirectory="PreserveNewest"/>
+        <!-- The desktop Gallery's app assets, deployed to Assets/ by build/Zigote.Assets.targets the
+             same way they are on desktop (was a lowercase 'assets\**' glob that matched nothing). -->
+        <ZigoteAsset Include="..\Zigote.UI.Gallery\Assets\**"/>
         <!-- ARB catalogs → the generated compile-safe GalleryL10n class (LocalizationsGenerator). -->
         <AdditionalFiles Include="..\Zigote.UI.Gallery\l10n\*.arb"/>
     </ItemGroup>

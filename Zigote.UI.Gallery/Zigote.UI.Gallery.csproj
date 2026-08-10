@@ -5,6 +5,19 @@
         <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <!-- Subset the bundled text fonts on publish (build/Zigote.Fonts.targets): 66 MB of Iosevka +
+             Inter down to under 1 MB, the largest single item in this app's release bundle. Safe despite the
+             ar/ja/zh l10n catalogues: Inter and Iosevka have no Arabic, kana or CJK to begin with, so
+             those screens already render entirely through the system faces SystemFonts registers as
+             fallbacks, and subsetting cannot take away what was never there. What the bundled fonts DO
+             serve — Latin, the ru catalogue's Cyrillic, punctuation, and the kit's own shortcut and
+             inspector symbols — is inside the default ranges. Publish-only; build/run is untouched. -->
+        <EnableFontStripping>true</EnableFontStripping>
+        <!-- Drop deployed asset files this app's code cannot name, and derive the font ranges above
+             from its own string literals instead of the static default (build/Zigote.Shake.targets).
+             Every asset here is opened by a literal path, and the l10n catalogues compile to literals
+             too — which is how the ru catalogue's Cyrillic stays in the subset without being listed. -->
+        <EnableAssetShaking>true</EnableAssetShaking>
     </PropertyGroup>
 
     <ItemGroup>
@@ -19,17 +32,17 @@
     </ItemGroup>
 
     <ItemGroup>
-        <None Include="assets/**" CopyToOutputDirectory="PreserveNewest"/>
+        <!-- App assets → Assets/ next to the executable (build/Zigote.Assets.targets). Was a lowercase
+             'assets/**' None glob that matched nothing on any platform with a case-sensitive filesystem
+             and deployed to the wrong place on the others. -->
+        <ZigoteAsset Include="Assets/**"/>
         <!-- ARB catalogs → the generated compile-safe GalleryL10n class (LocalizationsGenerator). -->
         <AdditionalFiles Include="l10n/*.arb"/>
     </ItemGroup>
 
     <!-- NativeAOT publish opt-in (gated behind ZigoteAot; build/publish.sh AOT flag). Plain build/run
-         stays JIT. Localizations formats via CultureInfo + is late-resolved, so root it on top of the
-         shared UI-stack roots. -->
+         stays JIT. Zigote.UI.Localizations — CultureInfo formatting, late-resolved — needs no root of
+         its own here: the shared targets root every Zigote.UI* assembly this app references. -->
     <Import Project="..\build\Zigote.Aot.targets"/>
-    <ItemGroup Condition="'$(ZigoteAot)' == 'true'">
-        <TrimmerRootAssembly Include="Zigote.UI.Localizations"/>
-    </ItemGroup>
 
 </Project>

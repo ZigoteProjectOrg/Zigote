@@ -5,10 +5,29 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <RootNamespace>AdwaitaGallery</RootNamespace>
+        <!-- Subset the bundled text fonts on publish (build/Zigote.Fonts.targets): 66 MB of Iosevka +
+             Inter down to under 1 MB, the single largest item in this app's release bundle. Safe
+             here because every string the gallery draws is chrome it ships itself — the demo text, the
+             page names and the widget labels are all fixed — and the default ranges cover every glyph
+             the widget kit renders, shortcut symbols included. Text the USER types outside those ranges
+             still resolves through SystemFonts' fallbacks. Publish-only; build/run is untouched. -->
+        <EnableFontStripping>true</EnableFontStripping>
+        <!-- Drop deployed asset files this app's code cannot name, and derive the font ranges above
+             from its own string literals instead of the static default (build/Zigote.Shake.targets). -->
+        <EnableAssetShaking>true</EnableAssetShaking>
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
         <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
         <ProjectReference Include="..\Zigote.UI.Adwaita\Zigote.UI.Adwaita.csproj"/>
     </ItemGroup>
+
+    <!-- No <ZigoteAsset> items: this gallery draws everything from widgets and the bundled fonts. An
+         app that ships images/audio/data declares them here — see docs/assets.md. -->
+
+
+    <!-- NativeAOT publish opt-in (gated behind ZigoteAot; the AOT flag of build/publish.sh). Plain build/run stays
+         JIT. The shared roots in Zigote.Aot.targets already cover Zigote.UI.Adwaita, which this app's
+         window controls need for the App.IsInteractive reflection probe. -->
+    <Import Project="..\build\Zigote.Aot.targets"/>
 </Project>

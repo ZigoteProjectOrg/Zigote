@@ -8,4 +8,15 @@
       imports the same file explicitly.
     -->
     <Import Project="$(MSBuildThisFileDirectory)build/Zigote.Fonts.targets"/>
+    <!--
+      Same reasoning for the app-asset convention (ZigoteAsset → Assets/ next to the executable) and
+      for the publish-time asset shake that drops what the code cannot reach. Both are no-ops for a
+      project that declares no assets / leaves EnableAssetShaking off, so both belong here rather than
+      in the handful of csproj files that use them today.
+
+      Ordering note: the shake runs before StripBundledFonts (which takes a DependsOnTargets on it),
+      because it is what derives the Unicode ranges the subsetter is handed.
+    -->
+    <Import Project="$(MSBuildThisFileDirectory)build/Zigote.Assets.targets"/>
+    <Import Project="$(MSBuildThisFileDirectory)build/Zigote.Shake.targets"/>
 </Project>

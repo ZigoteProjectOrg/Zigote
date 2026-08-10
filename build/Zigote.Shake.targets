@@ -1,0 +1,75 @@
+<Project>
+  <!--
+    Publish-time asset tree shaking: drop the files under the deployed asset roots (Assets/, Fonts/)
+    that the app's compiled code cannot name, and derive the font subset ranges from the same scan.
+    The analysis lives in tools/AssetShake.cs — see its header for how reachability is decided and
+    what it cannot see.
+
+    OFF BY DEFAULT, per app, for the same reason font stripping is: an app that composes asset paths
+    at runtime ($"Assets/{name}.png") names no file the scan can find, and the damage would show up
+    only in a published build. Turn it on with <EnableAssetShaking>true</EnableAssetShaking> once the
+    app's asset access is known to be by literal path, and use ZigoteShakeKeep for the parts that
+    aren't. The editor must never enable it — it composes paths and loads user scripts at runtime.
+
+    Applied repo-wide via Directory.Build.targets. A project with no asset roots in its output is a
+    clean no-op, so importing it everywhere is safe.
+  -->
+  <PropertyGroup>
+    <EnableAssetShaking Condition="'$(EnableAssetShaking)' == ''">false</EnableAssetShaking>
+    <!-- Roots to shake, relative to the publish directory. Both are deployed by convention: Fonts/ by
+         Zigote.UI, Assets/ by build/Zigote.Assets.targets. -->
+    <ZigoteShakeRoots Condition="'$(ZigoteShakeRoots)' == ''">Assets;Fonts</ZigoteShakeRoots>
+    <!-- Glob patterns (matched on the publish-relative path) to keep regardless of reachability. This
+         is the escape hatch for runtime-composed paths: an app that opens Assets/Icons/<name>.png by
+         building the name at runtime sets ZigoteShakeKeep=Assets/Icons/*. -->
+    <ZigoteShakeKeep Condition="'$(ZigoteShakeKeep)' == ''"></ZigoteShakeKeep>
+    <!-- Extra Unicode ranges to union into the derived font-subset set, "U+0400-04FF" form. Needed
+         only for text the app renders but never names in code — a UI that expects users to TYPE a
+         script (rather than one the app draws itself) keeps that script's range here. Text outside the
+         set is not lost: SystemFonts' fallbacks serve anything above U+00FF. -->
+    <ZigoteShakeKeepUnicodes Condition="'$(ZigoteShakeKeepUnicodes)' == ''"></ZigoteShakeKeepUnicodes>
+    <!-- Report what would be dropped without deleting anything. Useful before enabling it for real. -->
+    <ZigoteShakeDryRun Condition="'$(ZigoteShakeDryRun)' == ''">false</ZigoteShakeDryRun>
+  </PropertyGroup>
+
+  <Target Name="ZigoteShakeAssets" AfterTargets="Publish" DependsOnTargets="ResolveReferences"
+          Condition="'$(EnableAssetShaking)' == 'true'">
+    <PropertyGroup>
+      <_ShakeUnicodesFile>$(IntermediateOutputPath)zigote.shake.unicodes</_ShakeUnicodesFile>
+      <_ShakeDryRunArg Condition="'$(ZigoteShakeDryRun)' == 'true'"> --dry-run</_ShakeDryRunArg>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <!-- The app's OWN assembly plus its Zigote.* reference closure, taken from the intermediate
+           outputs rather than the publish directory: a NativeAOT publish leaves no managed assemblies
+           in the bundle to read, and the whole point is that this behaves identically either way.
+           Framework assemblies are skipped — their literals name nothing in an app's asset roots.
+
+           The app's assembly is spelled out rather than taken from @(IntermediateAssembly), because
+           under PublishAot that item is NOT the managed assembly: Microsoft.NETCore.Native.Publish
+           .targets removes it and re-adds $(NativeBinary) in its place. Reading it then yields a
+           native executable with no metadata, the app's own literals go unseen, and its assets are
+           deleted as unreachable — which is exactly what happened before this was pinned. -->
+      <_ShakeAssembly Include="$(IntermediateOutputPath)$(TargetName)$(TargetExt)" />
+      <_ShakeAssembly Include="@(ReferencePath)"
+                      Condition="$([System.String]::Copy('%(Filename)').StartsWith('Zigote'))" />
+    </ItemGroup>
+
+    <!-- The 'file' flag is required, rather than passing the .cs path positionally: Exec runs with the
+         project directory as its working directory, where the SDK reads a bare .cs argument as an
+         argument to THAT project and runs the app itself instead of the script. Naming it as a
+         file-based app is unambiguous wherever it runs from. -->
+    <Exec Command="dotnet run --file &quot;$(MSBuildThisFileDirectory)../tools/AssetShake.cs&quot; -- &quot;$(PublishDir.TrimEnd('\/'))&quot; --assemblies &quot;@(_ShakeAssembly->'%(FullPath)', ';')&quot; --roots &quot;$(ZigoteShakeRoots)&quot; --keep &quot;$(ZigoteShakeKeep)&quot; --extra-unicodes &quot;$(ZigoteShakeKeepUnicodes)&quot; --unicodes-out &quot;$(_ShakeUnicodesFile)&quot;$(_ShakeDryRunArg)"
+          StandardOutputImportance="high" />
+
+    <!-- Hand the derived ranges to the font subsetter. StripBundledFonts depends on this target, so
+         the property is always set before it reads FontUnicodes. A dry run still writes the file (it
+         only suppresses deletion), which is what makes it useful for reviewing the ranges. -->
+    <ReadLinesFromFile File="$(_ShakeUnicodesFile)" Condition="Exists('$(_ShakeUnicodesFile)')">
+      <Output TaskParameter="Lines" PropertyName="_ShakeDerivedUnicodes" />
+    </ReadLinesFromFile>
+    <PropertyGroup Condition="'$(_ShakeDerivedUnicodes)' != ''">
+      <FontUnicodes>$(_ShakeDerivedUnicodes)</FontUnicodes>
+    </PropertyGroup>
+  </Target>
+</Project>
