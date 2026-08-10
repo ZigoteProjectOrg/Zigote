@@ -420,6 +420,21 @@ public sealed class Panel : Widget
         _dragDir = ResizeDir.None;
     }
 
+    /// <summary>The press was taken over (pinch, app background): stop moving/resizing.</summary>
+    public override void OnPointerCancel()
+    {
+        _dragDir = ResizeDir.None;
+    }
+
+    /// <summary>
+    ///     Moving or resizing the panel runs in both axes, so a grabbed title bar or edge owns the
+    ///     gesture; a press that grabbed neither still leaves it to whatever scrolls behind.
+    /// </summary>
+    public override bool CanTouchDrag(bool vertical)
+    {
+        return _dragDir != ResizeDir.None;
+    }
+
     public override void OnPointerExit()
     {
         _closeHovered = false;

@@ -526,6 +526,35 @@ public abstract class Widget : ITickerProvider
     }
 
     /// <summary>
+    ///     Is the press this widget is already handling a drag of its own — a slider being scrubbed,
+    ///     a split divider being moved, a chart being panned? Answering true keeps the surrounding
+    ///     scrollable from taking the gesture away: the App asks the pressed widget BEFORE it offers
+    ///     the drag to <see cref="CanTouchScroll" />, so the control the finger is on wins.
+    ///     <para>
+    ///         Both platforms do exactly this — iOS exempts <c>UIControl</c>s from a scroll view's
+    ///         touch cancellation, and Android's SeekBar calls
+    ///         <c>requestDisallowInterceptTouchEvent</c> the moment a finger takes the thumb.
+    ///         Without it a fader inside a scrolling page could never be moved (every drag on it is
+    ///         vertical, so the page always claimed it), and any slider lost the whole gesture when
+    ///         the finger settled downward before setting off sideways.
+    ///     </para>
+    ///     <para>
+    ///         A control that has committed to a scrub claims BOTH axes: the press already means "I
+    ///         am adjusting this", and letting the page steal the perpendicular direction is exactly
+    ///         what makes touch sliders feel broken. A large surface that merely pans (a chart)
+    ///         claims only the axes it can actually pan, so the page still scrolls where the surface
+    ///         has nothing to do with the finger. Answer false when the press started no drag at
+    ///         all — pressing a control's row and then scrolling the page must keep working.
+    ///         Gestures that begin with a long-press (drag-to-reorder, <c>Draggable</c>) need
+    ///         nothing here: the App already stops arbitrating once a long-press fires.
+    ///     </para>
+    /// </summary>
+    public virtual bool CanTouchDrag(bool vertical)
+    {
+        return false;
+    }
+
+    /// <summary>
     ///     Scroll by a finger-drag delta in logical pixels (positive = the finger moved
     ///     right/down; content follows the finger). Unconsumable remainder bubbles to
     ///     <see cref="ScrollParent" /> like wheel scrolling.

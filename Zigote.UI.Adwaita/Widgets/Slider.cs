@@ -248,6 +248,16 @@ public sealed class AdwSlider : Widget
         if (_dragging) UpdateValue(point);
     }
 
+    /// <summary>
+    ///     A finger on the scale is adjusting it, so the page it sits in cannot take the drag away
+    ///     in either direction — a fader is dragged along the very axis its scroll parent uses, and
+    ///     a horizontal scale must survive a finger that settles downward before setting off.
+    /// </summary>
+    public override bool CanTouchDrag(bool vertical)
+    {
+        return _dragging;
+    }
+
     public override void OnPointerUp(Offset point)
     {
         if (!_dragging) return;

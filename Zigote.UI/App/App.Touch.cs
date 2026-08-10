@@ -14,7 +14,11 @@ namespace Zigote.UI.Host;
 //     scrollable from the hit chain (Widget.CanTouchScroll); the pressed widget gets
 //     OnPointerCancel (its press must not commit) and further movement drives
 //     OnTouchScroll 1:1, with OnTouchFling inertia on lift. A drag whose axis no scrollable
-//     wants keeps flowing to the pressed widget (slider scrub, drag-select, Draggable).
+//     wants keeps flowing to the pressed widget (drag-select, Draggable).
+//     A widget already dragging on its own (Widget.CanTouchDrag — a slider being scrubbed, a
+//     divider being moved) is asked FIRST and outranks every scroller above it, the way iOS
+//     exempts UIControls from a scroll view's touch cancellation: without that, a fader in a
+//     scrolling page can never move and a slider loses any drag that sets off downward.
 //   • Long-press: held in place past the threshold → Widget.OnLongPress, whose default maps
 //     to OnRightClick so context menus work on touch without per-widget changes.
 //
@@ -358,12 +362,22 @@ public partial class App
     ///     the pressed widget itself if it scrolls that axis, else the nearest scroll ancestor
     ///     that does (following the same ScrollParent chain wheel bubbling uses). Null when
     ///     nothing scrollable wants the axis — the drag then belongs to the pressed widget.
+    ///     <para>
+    ///         A widget already dragging on this axis (<see cref="Widget.CanTouchDrag" />) is asked
+    ///         first and outranks every scroller above it — the control the finger is on keeps its
+    ///         own gesture. Otherwise a vertical fader inside a scrolling page could never move (the
+    ///         page took every drag on it) and a slider lost the gesture whenever the finger settled
+    ///         downward before setting off sideways.
+    ///     </para>
     /// </summary>
     private Widget? FindTouchScrollTarget(bool vertical)
     {
         for (var w = _capturedWidget; w is not null; w = w.ScrollParent)
-            if (w.CanTouchScroll(vertical))
-                return w;
+        {
+            if (w.CanTouchDrag(vertical)) return null;
+            if (w.CanTouchScroll(vertical)) return w;
+        }
+
         return null;
     }
 

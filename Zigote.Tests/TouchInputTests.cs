@@ -88,6 +88,83 @@ public class TouchInputTests
         Assert.False(fits.CanTouchScroll(true));
     }
 
+    // ── Scrub controls outrank the scroller they sit in ────────────────────────
+    //
+    // A touch drag is arbitrated once, when it passes the slop: the App walks the pressed widget's
+    // scroll chain and gives the gesture to the first widget that claims it. A control being
+    // scrubbed claims BOTH axes (Widget.CanTouchDrag) and is asked before any scroller, so the page
+    // cannot take the drag away — the bug this pins is a fader inside a scrolling page that could
+    // never be moved, and a horizontal slider that lost the gesture whenever the finger settled
+    // downward before setting off sideways.
+
+    private static Slider PressedSlider(float value = 0.5f)
+    {
+        var slider = new Slider(value);
+        slider.Measure(Constraints.Tight(200, 44));
+        slider.Layout(Offset.Zero);
+        slider.OnPointerDown(new Offset(100, 22));
+        return slider;
+    }
+
+    [Fact]
+    public void Slider_BeingScrubbed_ClaimsBothAxesFromTheScroller()
+    {
+        var slider = PressedSlider();
+
+        // Horizontal is the scrub axis; vertical is the one a page would otherwise steal.
+        Assert.True(slider.CanTouchDrag(false));
+        Assert.True(slider.CanTouchDrag(true));
+
+        // The lift ends the claim: the next drag over the control is the page's again.
+        slider.OnPointerUp(new Offset(100, 22));
+        Assert.False(slider.CanTouchDrag(false));
+        Assert.False(slider.CanTouchDrag(true));
+    }
+
+    [Fact]
+    public void Slider_NotPressed_ClaimsNothing()
+    {
+        var slider = new Slider(0.5f);
+        slider.Measure(Constraints.Tight(200, 44));
+        slider.Layout(Offset.Zero);
+
+        // No press, no claim — a finger that merely passes over the control while the page
+        // scrolls must not park the gesture on it.
+        Assert.False(slider.CanTouchDrag(true));
+        Assert.False(slider.CanTouchDrag(false));
+
+        // A disabled control starts no scrub either, so its row stays a scroll surface.
+        var off = new Slider(0.5f) { Enabled = false };
+        off.Measure(Constraints.Tight(200, 44));
+        off.Layout(Offset.Zero);
+        off.OnPointerDown(new Offset(100, 22));
+        Assert.False(off.CanTouchDrag(true));
+        Assert.False(off.CanTouchDrag(false));
+    }
+
+    [Fact]
+    public void Slider_CancelledByAnotherGesture_ReleasesItsClaim()
+    {
+        var slider = PressedSlider();
+        Assert.True(slider.CanTouchDrag(true));
+
+        // A pinch (or any app-level takeover) cancels the press; the claim must go with it,
+        // otherwise the control keeps the gesture pinned after it stopped tracking the finger.
+        slider.OnPointerCancel();
+        Assert.False(slider.CanTouchDrag(true));
+        Assert.False(slider.CanTouchDrag(false));
+    }
+
+    [Fact]
+    public void ScrollView_ClaimsNothingAsADrag_SoItStaysAScroller()
+    {
+        // The scroller answers CanTouchScroll, never CanTouchDrag: the two are asked in that
+        // order and a scroller claiming both would make the distinction meaningless.
+        var scroll = FreshScroll();
+        Assert.False(scroll.CanTouchDrag(true));
+        Assert.False(scroll.CanTouchDrag(false));
+    }
+
     [Fact]
     public void ScrollView_TouchFling_GlidesAndStopsWithinExtent()
     {

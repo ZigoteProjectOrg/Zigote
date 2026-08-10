@@ -435,6 +435,22 @@ public sealed class ColorPicker : Widget
         _drag = DragTarget.None;
     }
 
+    /// <summary>The press was taken over (pinch, app background): stop tracking the finger.</summary>
+    public override void OnPointerCancel()
+    {
+        _drag = DragTarget.None;
+    }
+
+    /// <summary>
+    ///     A finger on the saturation/value square or one of the strips is picking a colour, not
+    ///     scrolling the page: the square is a two-axis surface, and the strips would otherwise lose
+    ///     the drag to whichever axis the page happens to scroll.
+    /// </summary>
+    public override bool CanTouchDrag(bool vertical)
+    {
+        return _drag != DragTarget.None;
+    }
+
     private void ApplyDrag(Offset point)
     {
         switch (_drag)

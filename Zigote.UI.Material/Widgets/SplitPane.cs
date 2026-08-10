@@ -167,6 +167,22 @@ public sealed class SplitPane(ThemeData theme, Widget? first = null, Widget? sec
         _dragging = false;
     }
 
+    /// <summary>The press was taken over (pinch, app background): let go of the divider.</summary>
+    public override void OnPointerCancel()
+    {
+        _dragging = false;
+    }
+
+    /// <summary>
+    ///     A grabbed divider owns the gesture inside a scrolling container. The press only becomes a
+    ///     drag when it landed on the divider, so a press anywhere else still leaves the gesture to
+    ///     the scroller.
+    /// </summary>
+    public override bool CanTouchDrag(bool vertical)
+    {
+        return _dragging;
+    }
+
     public override MouseCursor? GetCursor(Offset point)
     {
         // Resize cursor while hovering the divider (so the drag affordance is discoverable) and for the

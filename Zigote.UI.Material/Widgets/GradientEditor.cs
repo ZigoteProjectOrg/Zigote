@@ -430,6 +430,22 @@ public sealed class GradientEditor : Widget
         MarkNeedsPaint();
     }
 
+    /// <summary>The press was taken over (pinch, app background): drop the held stop.</summary>
+    public override void OnPointerCancel()
+    {
+        OnPointerUp(Offset.Zero);
+    }
+
+    /// <summary>
+    ///     A held stop owns the gesture: the finger is moving it along the ramp, and a page that
+    ///     stole the vertical half would drop the stop mid-drag. A press that grabbed no stop
+    ///     claims nothing.
+    /// </summary>
+    public override bool CanTouchDrag(bool vertical)
+    {
+        return _draggingStop;
+    }
+
     public override void OnRightClick(Offset point)
     {
         // Right-click on the ramp adds a stop (mirrors the double-click affordance).

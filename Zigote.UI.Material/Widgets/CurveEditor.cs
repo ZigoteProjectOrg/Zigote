@@ -694,6 +694,21 @@ public sealed class CurveEditor : Widget
         }
     }
 
+    /// <summary>The press was taken over (pinch, app background): drop the grabbed handle.</summary>
+    public override void OnPointerCancel()
+    {
+        OnPointerUp(Offset.Zero);
+    }
+
+    /// <summary>
+    ///     Dragging a key or a tangent moves freely in both axes, so a grabbed handle owns the
+    ///     gesture outright — a press on empty graph space grabs nothing and still scrolls the page.
+    /// </summary>
+    public override bool CanTouchDrag(bool vertical)
+    {
+        return _drag != DragKind.None;
+    }
+
     public override void OnPointerExit()
     {
         if (_hoverKey != -1)

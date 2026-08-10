@@ -227,7 +227,28 @@ public class Slider : Widget
         if (_dragging) UpdateValue(point.X);
     }
 
+    /// <summary>
+    ///     A finger on the track is adjusting the value, so a scrolling page cannot take the drag
+    ///     away in either direction — the vertical half matters most, because that is the finger
+    ///     that settles downward a little before setting off sideways.
+    /// </summary>
+    public override bool CanTouchDrag(bool vertical)
+    {
+        return _dragging;
+    }
+
     public override void OnPointerUp(Offset point)
+    {
+        if (!_dragging) return;
+        _dragging = false;
+        MarkNeedsPaint();
+    }
+
+    /// <summary>
+    ///     A pinch or an app-level takeover ended the press: stop scrubbing (and stop claiming the
+    ///     gesture) rather than staying latched to a finger that is no longer being reported.
+    /// </summary>
+    public override void OnPointerCancel()
     {
         if (!_dragging) return;
         _dragging = false;

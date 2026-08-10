@@ -372,5 +372,20 @@ public sealed class NumberInput : Widget
             owner.OnScrubEnd?.Invoke();
             MarkNeedsPaint();
         }
+
+        /// <summary>The press was taken over (pinch, app background): end the scrub.</summary>
+        public override void OnPointerCancel()
+        {
+            if (!_dragging) return;
+            _dragging = false;
+            owner.OnScrubEnd?.Invoke();
+            MarkNeedsPaint();
+        }
+
+        /// <summary>A scrub in progress owns the gesture, the way a slider's does.</summary>
+        public override bool CanTouchDrag(bool vertical)
+        {
+            return _dragging;
+        }
     }
 }

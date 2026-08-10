@@ -211,6 +211,16 @@ public sealed class AdwPaned : Widget
         _dragging = false;
     }
 
+    /// <summary>
+    ///     A grabbed handle owns the gesture inside a scrolling container. The press only becomes a
+    ///     drag when it landed on the handle, so a press anywhere else still leaves the gesture to
+    ///     the scroller.
+    /// </summary>
+    public override bool CanTouchDrag(bool vertical)
+    {
+        return _dragging;
+    }
+
     public override MouseCursor? GetCursor(Offset point)
     {
         // Resize cursor while over the handle, and for the whole drag — a pointer that strays off

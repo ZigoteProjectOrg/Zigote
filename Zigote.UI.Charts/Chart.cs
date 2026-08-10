@@ -1722,6 +1722,31 @@ public class Chart : Widget
         return ZoomableX || ZoomableY;
     }
 
+    /// <summary>
+    ///     The press was taken over (pinch, app background): abandon the pan or the range selection
+    ///     rather than committing it — and stop claiming the gesture.
+    /// </summary>
+    public override void OnPointerCancel()
+    {
+        if (!_pressed && !_dragging && !_selecting) return;
+        _pressed = false;
+        _dragging = false;
+        _selecting = false;
+        MarkNeedsPaint();
+    }
+
+    /// <summary>
+    ///     While a press is panning a zoomed axis (or dragging out a range selection), the finger
+    ///     belongs to the chart on that axis — otherwise the page it sits in swallows the pan.
+    ///     A press on a chart with nothing to pan claims nothing and still scrolls the page.
+    /// </summary>
+    public override bool CanTouchDrag(bool vertical)
+    {
+        if (!_pressed) return false;
+        if (_selecting) return !vertical; // range selection runs along X only
+        return vertical ? _yWin.Active : _xWin.Active;
+    }
+
     public override void OnTouchScale(float scale, Offset focus)
     {
         ZoomBy(scale, focus);
