@@ -14,7 +14,7 @@ public class LocalizationJsonTests
                             }
                             """;
         var catalog = LocalizationJson.LoadCatalog(json, Locale.En);
-        Assert.Equal("Hello, Amir!", catalog.Translate("greeting", ("name", "Amir")));
+        Assert.Equal("Hello, Alex!", catalog.Translate("greeting", ("name", "Alex")));
         Assert.False(catalog.Contains("@greeting")); // metadata skipped
         Assert.False(catalog.Contains("count")); // non-string skipped
     }

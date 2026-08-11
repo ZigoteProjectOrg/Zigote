@@ -47,7 +47,7 @@
   "directionRtl": "من اليمين إلى اليسار",
   "sectionMessages": "الرسائل والمتغيّرات",
   "greeting": "مرحبًا {name}! أهلاً بك في زيجوت.",
-  "greetingName": "أمير",
+  "greetingName": "أليكس",
   "sectionPlural": "قواعد الجمع",
   "filesLabel": "عدد الملفات",
   "files": "{n, plural, zero {لا ملفات} one {ملف واحد} two {ملفان} few {# ملفات} many {# ملفًا} other {# ملف}}",

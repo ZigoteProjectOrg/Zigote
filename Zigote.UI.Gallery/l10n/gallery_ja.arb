@@ -47,7 +47,7 @@
   "directionRtl": "右から左",
   "sectionMessages": "メッセージとプレースホルダー",
   "greeting": "こんにちは、{name}さん！Zigote へようこそ。",
-  "greetingName": "アミール",
+  "greetingName": "アレックス",
   "sectionPlural": "複数形 (CLDR)",
   "filesLabel": "ファイル数",
   "files": "{n, plural, =0 {ファイルなし} other {# 個のファイル}}",

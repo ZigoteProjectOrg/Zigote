@@ -70,3 +70,17 @@ BenchmarkDotNet.Artifacts/
 
 # Local MCP server config — machine-specific.
 /.mcp.json
+
+# Secrets — never commit credentials.
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+secrets.json
+credentials.json
+.netrc
+.npmrc

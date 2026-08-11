@@ -4,6 +4,10 @@ name: Release
 # Windows-MSVC, which doesn't cross-compile cleanly from other hosts). Produces self-contained,
 # non-trimmed editor bundles with the native libzigote and subset fonts.
 
+# The job only builds and uploads artifacts; it never needs to write to the repo.
+permissions:
+  contents: read
+
 on:
   workflow_dispatch:
   push:

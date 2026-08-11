@@ -47,7 +47,7 @@
   "directionRtl": "从右到左",
   "sectionMessages": "消息与占位符",
   "greeting": "你好，{name}！欢迎使用 Zigote。",
-  "greetingName": "阿米尔",
+  "greetingName": "亚历克斯",
   "sectionPlural": "复数 (CLDR)",
   "filesLabel": "文件数",
   "files": "{n, plural, =0 {没有文件} other {# 个文件}}",

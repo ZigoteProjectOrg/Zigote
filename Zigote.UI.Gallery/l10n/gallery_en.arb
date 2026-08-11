@@ -49,7 +49,7 @@
   "directionRtl": "Right-to-left",
   "sectionMessages": "Messages & placeholders",
   "greeting": "Hello, {name}! Welcome to Zigote.",
-  "greetingName": "Amir",
+  "greetingName": "Alex",
   "sectionPlural": "Plurals (CLDR)",
   "filesLabel": "Files",
   "files": "{n, plural, =0 {No files} one {# file} other {# files}}",

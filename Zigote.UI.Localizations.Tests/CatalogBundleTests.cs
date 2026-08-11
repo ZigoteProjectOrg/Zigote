@@ -13,7 +13,7 @@ public class LocalizationCatalogTests
     [Fact]
     public void Translate_with_placeholder()
     {
-        Assert.Equal("Hello, Amir!", En().Translate("greeting", ("name", "Amir")));
+        Assert.Equal("Hello, Alex!", En().Translate("greeting", ("name", "Alex")));
     }
 
     [Theory]
@@ -34,9 +34,9 @@ public class LocalizationCatalogTests
     public void Indexer_set_replaces_and_invalidates_compiled_form()
     {
         var c = En();
-        Assert.Equal("Hello, Amir!", c.Translate("greeting", ("name", "Amir")));
+        Assert.Equal("Hello, Alex!", c.Translate("greeting", ("name", "Alex")));
         c["greeting"] = "Hi {name}";
-        Assert.Equal("Hi Amir", c.Translate("greeting", ("name", "Amir")));
+        Assert.Equal("Hi Alex", c.Translate("greeting", ("name", "Alex")));
     }
 
     [Fact]

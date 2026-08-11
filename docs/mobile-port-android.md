@@ -5,9 +5,9 @@
 **Constants used throughout:**
 
 ```
-NDK_SYSROOT = /Users/amir/Library/Android/sdk/ndk/26.2.11394342/toolchains/llvm/prebuilt/darwin-x86_64/sysroot
+NDK_SYSROOT = /Users/you/Library/Android/sdk/ndk/26.2.11394342/toolchains/llvm/prebuilt/darwin-x86_64/sysroot
               (dir is literally darwin-x86_64 even on this arm64 Mac — the only prebuilt)
-SDL_PKG     = /Users/amir/Projects/Zigote/Zigote.Engine/zig-pkg/sdl-0.4.0+3.4.0-SDL--u6yowGyvoiJ5qkFm_T1-MpmvnHShh2q2mTZf1fo
+SDL_PKG     = /Users/you/Projects/Zigote/Zigote.Engine/zig-pkg/sdl-0.4.0+3.4.0-SDL--u6yowGyvoiJ5qkFm_T1-MpmvnHShh2q2mTZf1fo
 API level   = 34 for bring-up (see Conflict C1 — provisional)
 Targets     = aarch64-linux-android.34 (bring-up; emulator is arm64), x86_64-linux-android.34 (optional, swap arch in target + both triple dirs)
 ```
@@ -30,9 +30,9 @@ Targets     = aarch64-linux-android.34 (bring-up; emulator is arm64), x86_64-lin
 Zig 0.16 does **not** bundle bionic headers (no `*-android` dir in `lib/zig/libc/include`); an NDK-backed `--libc` file is mandatory, same as iOS. The verified file was saved to the previous session's scratchpad (`.../scratchpad/zig-libc-android.txt`) which may be gone — recreate with these **exact contents** (verified: compiles `<android/log.h>` code AND links a shared object, i.e. crt objects resolve):
 
 ```
-include_dir=/Users/amir/Library/Android/sdk/ndk/26.2.11394342/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include
-sys_include_dir=/Users/amir/Library/Android/sdk/ndk/26.2.11394342/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/aarch64-linux-android
-crt_dir=/Users/amir/Library/Android/sdk/ndk/26.2.11394342/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/lib/aarch64-linux-android/34
+include_dir=/Users/you/Library/Android/sdk/ndk/26.2.11394342/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include
+sys_include_dir=/Users/you/Library/Android/sdk/ndk/26.2.11394342/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/aarch64-linux-android
+crt_dir=/Users/you/Library/Android/sdk/ndk/26.2.11394342/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/lib/aarch64-linux-android/34
 msvc_lib_dir=
 kernel32_lib_dir=
 gcc_dir=
@@ -249,7 +249,7 @@ zaudio links `-lpthread -lm -ldl` unconditionally on linux — this is the verif
 
 **Verify (the Step-1 probe, now expected fully green — previously 21/26 steps passed):**
 ```
-cd /Users/amir/Projects/Zigote/Zigote.Engine
+cd /Users/you/Projects/Zigote/Zigote.Engine
 zig build shared-lib -Dtarget=aarch64-linux-android.34 -Doptimize=ReleaseSafe \
   -Denable3d=false -Dphysics3d=false -Decs=false \
   --libc <libc-file> --sysroot $NDK_SYSROOT
@@ -285,7 +285,7 @@ file <out>/arm64-v8a/libzigote.so    # ELF 64-bit LSB shared object, ARM aarch64
 
 Files (place alongside the existing mobile scaffolding from commit a6c7bc8 / `docs/mobile-port.md` layout, e.g. `mobile/android/`):
 
-1. **Vendored Java** — NOT in the zig-pkg (castholm strips `android-project/`). Fetch `org/libsdl/app/*.java` from upstream `libsdl-org/SDL` tag **`release-3.4.0`** (version-match is mandatory: SDLActivity.java:62–64 checks `nativeGetVersion()` against hardcoded `3.4.0` and shows an error dialog on mismatch) into `mobile/android/JavaSources/org/libsdl/app/`. Vendor the **entire directory** (see Conflict C4 on file count). All five JNI-registered classes must reach the dex: `SDLActivity`, `SDLInputConnection` (lives in SDLActivity.java), `SDLAudioManager`, `SDLControllerManager`, `HIDDeviceManager` — a missing class leaves a pending `ClassNotFoundException` (crash). HIDDeviceManager's natives are satisfied by the hid.cpp stubs. Reference copies from the research session: `/private/tmp/claude-501/-Users-amir-Projects-Zigote/50a8e8f3-ef57-4d80-bd3d-6220c570b63f/scratchpad/SDLActivity.java` (+ SDL.java, SDLManifest.xml) — may not survive to the next session; re-fetch from the tag.
+1. **Vendored Java** — NOT in the zig-pkg (castholm strips `android-project/`). Fetch `org/libsdl/app/*.java` from upstream `libsdl-org/SDL` tag **`release-3.4.0`** (version-match is mandatory: SDLActivity.java:62–64 checks `nativeGetVersion()` against hardcoded `3.4.0` and shows an error dialog on mismatch) into `mobile/android/JavaSources/org/libsdl/app/`. Vendor the **entire directory** (see Conflict C4 on file count). All five JNI-registered classes must reach the dex: `SDLActivity`, `SDLInputConnection` (lives in SDLActivity.java), `SDLAudioManager`, `SDLControllerManager`, `HIDDeviceManager` — a missing class leaves a pending `ClassNotFoundException` (crash). HIDDeviceManager's natives are satisfied by the hid.cpp stubs. Reference copies from the research session: `/private/tmp/claude-501/-Users-you-Projects-Zigote/50a8e8f3-ef57-4d80-bd3d-6220c570b63f/scratchpad/SDLActivity.java` (+ SDL.java, SDLManifest.xml) — may not survive to the next session; re-fetch from the tag.
 2. **csproj** (`mobile/android/ZigoteApp.Android.csproj`):
    ```xml
    <PropertyGroup>

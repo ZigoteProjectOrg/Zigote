@@ -47,7 +47,7 @@
   "directionRtl": "Справа налево",
   "sectionMessages": "Сообщения и подстановки",
   "greeting": "Привет, {name}! Добро пожаловать в Zigote.",
-  "greetingName": "Амир",
+  "greetingName": "Алекс",
   "sectionPlural": "Множественное число (CLDR)",
   "filesLabel": "Файлы",
   "files": "{n, plural, =0 {Нет файлов} one {# файл} few {# файла} many {# файлов} other {# файла}}",
