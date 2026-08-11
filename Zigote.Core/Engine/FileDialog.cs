@@ -65,7 +65,8 @@ public sealed class FileDialogException(string message) : Exception(message);
 ///         UI-thread only: call the *Async methods from the UI thread; native completion is polled
 ///         by <see cref="Pump" /> once per frame (Zigote.UI's App does this automatically), so
 ///         await continuations also run inline on the UI thread and may touch widgets directly.
-///         The native layer shows one dialog at a time; concurrent requests are queued.
+///         The native layer shows one dialog at a time; concurrent requests are queued. The rule is
+///         enforced rather than merely documented — see <see cref="RequireUiThread" />.
 ///     </para>
 /// </summary>
 public static class FileDialog
@@ -77,6 +78,14 @@ public static class FileDialog
 
     private static readonly Queue<Request> Pending = new();
     private static Request? _active;
+
+    /// <summary>
+    ///     Which thread owns this queue: whoever last called <see cref="Pump" /> — Zigote.UI's App,
+    ///     once a frame, from the UI thread. Zero until the first pump, which is what lets a host
+    ///     that never pumps (unit tests, a managed backend driven on its own) go unchecked: there is
+    ///     no UI thread to name yet, so there is nothing to be wrong about.
+    /// </summary>
+    private static int _pumpThread;
 
     /// <summary>
     ///     App-level switch for native dialogs (default on). Off makes <see cref="IsSupported" />
@@ -225,6 +234,11 @@ public static class FileDialog
     /// </summary>
     public static void Pump()
     {
+        // Whoever pumps is the UI thread, by definition: this is where a completed dialog's task is
+        // finished and where the next one is started. Recorded rather than configured so the check
+        // below costs the host no wiring.
+        _pumpThread = Environment.CurrentManagedThreadId;
+
         if (_active is null)
         {
             StartNext();
@@ -259,8 +273,36 @@ public static class FileDialog
         StartNext();
     }
 
+    /// <summary>
+    ///     Refuse a request from anywhere but the pumping thread. Two reasons, and the second is the
+    ///     one that costs a bug report: the queue below is unsynchronized and <see cref="Pump" />
+    ///     walks it every frame, and the native backends build their dialog on the calling thread —
+    ///     on macOS <c>NSOpenPanel</c> is an <c>NSWindow</c>, so off the main thread AppKit aborts
+    ///     the process instead of throwing, and the crash names no managed frame. Better a stack
+    ///     trace pointing at the caller.
+    ///     <para>
+    ///         Thrown synchronously out of the *Async methods rather than handed back as a faulted
+    ///         task — deliberately, so the exception carries the offending call site's stack.
+    ///     </para>
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Called off the UI thread.</exception>
+    private static void RequireUiThread()
+    {
+        var ui = _pumpThread;
+        var current = Environment.CurrentManagedThreadId;
+        if (ui == 0 || ui == current) return;
+
+        throw new InvalidOperationException(
+            $"FileDialog is UI-thread only: this request came from thread {current}, but the pump " +
+            $"runs on {ui}. The native backend builds the dialog on whichever thread asks for it, " +
+            "and on macOS that means an NSWindow off the main thread — an abort, not an exception. " +
+            "Start the dialog on the UI thread; the task it returns can be awaited anywhere."
+        );
+    }
+
     private static Task<string[]> Enqueue(FileDialogRequest spec, uint parentWindow)
     {
+        RequireUiThread();
         if (!IsSupported) return RunManaged(spec);
 
         var request = new Request {
