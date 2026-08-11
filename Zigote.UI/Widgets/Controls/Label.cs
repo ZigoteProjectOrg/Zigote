@@ -201,7 +201,11 @@ public class Label : Widget
         _drawText = Text;
         _truncated = false;
 
-        if (full.Width > c.MaxWidth && c.MaxWidth > 0f && !string.IsNullOrEmpty(Text))
+        // Zero is a real width, not "unmeasured": a flex child squeezed to nothing by its siblings
+        // gets MaxWidth 0, and reporting the full intrinsic width there made the label paint straight
+        // over whatever took the space — the queue toolbar's summary line across its own buttons.
+        // Unbounded stays unbounded: MaxWidth is +∞ then, so the comparison is false either way.
+        if (full.Width > c.MaxWidth && !string.IsNullOrEmpty(Text))
         {
             _truncated = true;
             _drawText = Overflow == TextOverflow.Ellipsis ? Fit(Text, c.MaxWidth) : Text;

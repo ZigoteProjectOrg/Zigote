@@ -1,0 +1,38 @@
+<Project>
+  <!--
+    The one file an application outside the engine tree imports. Zigote's own projects get this from
+    Directory.Build.targets; an app living in its own repository does not, and every one of them was
+    re-deriving the same three things by hand:
+
+      * importing build/Zigote.Aot.targets, without which -p:ZigoteAot=true is a SILENT no-op — the
+        "AOT" artifact is then an ordinary framework-dependent build that only starts on a machine
+        with .NET installed, and nothing in the log says so;
+      * <TrimmerRootAssembly Remove="..."/> for each UI assembly the engine rooted but the app does
+        not reference (ilc fails hard on a root it cannot find). The roots now follow the app's own
+        resolved references, so there is nothing left to remove;
+      * a check that ZigoteRoot actually points at a checkout, so a wrong path fails with that
+        sentence instead of a hundred unresolved-reference errors.
+
+    Usage — resolve ZigoteRoot yourself, since this file cannot be found without it, and import
+    anywhere (the AOT roots are computed after reference resolution, not from document order):
+
+      <PropertyGroup>
+        <ZigoteRoot Condition="'$(ZigoteRoot)' == '' And '$(ZIGOTE_ROOT)' != ''">$(ZIGOTE_ROOT)</ZigoteRoot>
+        <ZigoteRoot Condition="'$(ZigoteRoot)' == ''">$(MSBuildThisFileDirectory)../../Zigote</ZigoteRoot>
+      </PropertyGroup>
+      ...
+      <Import Project="$(ZigoteRoot)/build/Zigote.App.targets"/>
+  -->
+
+  <Import Project="$(MSBuildThisFileDirectory)Zigote.Aot.targets"/>
+
+  <!-- Fonts are subset after publish. Engine-tree projects get this from Directory.Build.targets;
+       an app outside the tree would otherwise ship the full font files. -->
+  <Import Project="$(MSBuildThisFileDirectory)Zigote.Fonts.targets"
+          Condition="Exists('$(MSBuildThisFileDirectory)Zigote.Fonts.targets')"/>
+
+  <Target Name="CheckZigoteRoot" BeforeTargets="PrepareForBuild">
+    <Error Condition="!Exists('$(ZigoteRoot)/Zigote.UI/Zigote.UI.csproj')"
+           Text="Zigote engine not found at '$(ZigoteRoot)'. Set ZigoteRoot (or the ZIGOTE_ROOT environment variable) to your Zigote checkout."/>
+  </Target>
+</Project>

@@ -284,6 +284,14 @@ public partial class App
     public Func<string, bool>? OnShortcut { get; set; }
 
     /// <summary>
+    ///     Menu-bar accelerators: (chord, action) pairs fired for the initial press of a chord no
+    ///     <see cref="Keymap" /> action and no <see cref="OnShortcut" /> handler claimed. Owned by the
+    ///     menu model — <c>MenuAccelerators.Install</c> rewrites it wholesale — and only used where the
+    ///     OS does not dispatch key equivalents itself (everywhere but the macOS <c>NSMenu</c> bar).
+    /// </summary>
+    public List<(KeyChord Chord, Action Run)> Accelerators { get; } = [];
+
+    /// <summary>
     ///     Whether an app shortcut fires or yields to whatever holds focus: a Ctrl/Cmd/Alt chord is a
     ///     command and always fires; an unmodified one loses to a focused text editor, where it is
     ///     typing. Shift alone stays "typing" — Shift+Space is still a space.

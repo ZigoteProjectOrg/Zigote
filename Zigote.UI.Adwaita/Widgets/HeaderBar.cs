@@ -117,6 +117,16 @@ public sealed class AdwHeaderBar : ComposedWidget
         set => this.Set(ref _showEndWindowControls, value);
     }
 
+    private HeaderLayout? _layout;
+
+    /// <summary>
+    ///     Whether the last measure found more packed into the bar than it can hold. The overflow is
+    ///     clipped rather than drawn over its neighbours, so this is the difference between "tight"
+    ///     and "something is not visible" — worth asserting on at a phone width, where a bar that
+    ///     fits on a desktop stops fitting.
+    /// </summary>
+    public bool Overflowing => _layout?.Overflowing ?? false;
+
     protected override Widget Build(BuildContext context)
     {
         var theme = ThemeProvider.Of(context);
@@ -146,14 +156,16 @@ public sealed class AdwHeaderBar : ComposedWidget
         if (ShowEndWindowControls)
             endRow.Children.Add(new AdwWindowControls(AdwControlsSide.End));
 
+        _layout = new HeaderLayout(
+            startRow,
+            TitleWidget ?? new AdwWindowTitle(Title ?? ""),
+            endRow
+        );
+
         var bar = new DecoratedBox {
             Fill = Flat ? Color.Transparent : theme.TitleBar,
             Child = new Padding(EdgeInsets.Symmetric(AdwMetrics.HeaderBarPadding)) {
-                Child = new HeaderLayout(
-                    startRow,
-                    TitleWidget ?? new AdwWindowTitle(Title ?? ""),
-                    endRow
-                ),
+                Child = _layout,
             },
         };
 
@@ -193,15 +205,24 @@ public sealed class AdwHeaderBar : ComposedWidget
 
         public override Size Measure(Constraints c)
         {
-            var maxW = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 0f;
+            var bounded = float.IsFinite(c.MaxWidth);
+            var maxW = bounded ? c.MaxWidth : 0f;
             var slot = new Constraints(
                 0f,
-                float.IsFinite(c.MaxWidth) ? c.MaxWidth : float.PositiveInfinity,
+                bounded ? c.MaxWidth : float.PositiveInfinity,
                 0f,
                 c.MaxHeight
             );
             _startSize = start.Measure(slot);
-            _endSize = end.Measure(slot);
+            // Only what the start side left over: measuring both against the whole bar let a packed
+            // pair each claim the full width, and Layout then put one flush left and the other flush
+            // right — drawn on top of each other. A side that can shrink (anything with an
+            // ellipsizing label) now does; one that cannot overflows into the clip below instead.
+            _endSize = end.Measure(
+                bounded
+                    ? new Constraints(0f, MathF.Max(0f, maxW - _startSize.Width), 0f, c.MaxHeight)
+                    : slot
+            );
 
             var free = MathF.Max(0f, maxW - _startSize.Width - _endSize.Width - Gap * 2f);
             _titleSize = title.Measure(
@@ -233,9 +254,15 @@ public sealed class AdwHeaderBar : ComposedWidget
                 _size.Height
             );
             start.Layout(new Offset(origin.X, Center(origin.Y, _startSize.Height)));
+            // Right-aligned, but never back past where the start side ends: with more packed in than
+            // the bar can hold, the end side runs off the right edge (and is clipped) rather than
+            // sliding left over its neighbour.
             end.Layout(
                 new Offset(
-                    origin.X + _size.Width - _endSize.Width,
+                    MathF.Max(
+                        origin.X + _startSize.Width + Gap,
+                        origin.X + _size.Width - _endSize.Width
+                    ),
                     Center(origin.Y, _endSize.Height)
                 )
             );
@@ -256,11 +283,22 @@ public sealed class AdwHeaderBar : ComposedWidget
             return top + (_size.Height - childHeight) / 2f;
         }
 
+        /// <summary>
+        ///     More packed in than the bar can hold. Clipping is gated on it: a bar with room to
+        ///     spare must not have its focus rings and shadows shaved at the edges, and a too-full one
+        ///     must lose its tail rather than stack controls on top of each other.
+        /// </summary>
+        public bool Overflowing =>
+            _startSize.Width + _titleSize.Width + _endSize.Width + Gap * 2f > _size.Width + 0.5f;
+
         public override void Paint(PaintList paint)
         {
+            var overflowing = Overflowing;
+            if (overflowing) paint.AddClipStart(Bounds);
             title.Paint(paint);
             start.Paint(paint);
             end.Paint(paint);
+            if (overflowing) paint.AddClipEnd();
         }
 
         public override Widget? HitTest(Offset point)

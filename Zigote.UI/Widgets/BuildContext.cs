@@ -60,6 +60,44 @@ public sealed class BuildContext
             _inherited.Pop();
     }
 
+    // ── Detached scopes ───────────────────────────────────────────────────────
+    // The stack above only exists for the duration of the measure/layout walk: InheritedWidget
+    // pushes on the way down and pops on the way up, and Reset() empties it between frames. Code
+    // that measures a subtree OUTSIDE that walk (Watch, when a signal changes from a click handler)
+    // therefore builds with an EMPTY stack — every ThemeProvider.Of below it silently falls back to
+    // ThemeData.Dark, and because ComposedWidget clears NeedsBuild the wrong colours are then
+    // retained until something else invalidates that widget. That is a black titlebar after a page
+    // change, and a whole page in the wrong appearance after a settings toggle.
+    // The ancestors of a mounted widget do not move between frames, so the fix is to snapshot the
+    // scope during the walk and re-enter it for the detached measure.
+
+    /// <summary>
+    ///     Copy the current ancestor scope into <paramref name="buffer" /> (innermost first),
+    ///     growing it if needed, and return how many entries were written.
+    /// </summary>
+    internal int CaptureScope(ref InheritedWidget[] buffer)
+    {
+        if (buffer.Length < _inherited.Count)
+            buffer = new InheritedWidget[Math.Max(8, _inherited.Count)];
+
+        var n = 0;
+        // Stack<T> enumerates top-down and its enumerator is a struct, so this allocates nothing.
+        foreach (var w in _inherited) buffer[n++] = w;
+        return n;
+    }
+
+    /// <summary>Re-enter a scope captured by <see cref="CaptureScope" />. Pair with <see cref="ExitScope" />.</summary>
+    internal void EnterScope(InheritedWidget[] buffer, int count)
+    {
+        for (var i = count - 1; i >= 0; i--) _inherited.Push(buffer[i]);
+    }
+
+    /// <inheritdoc cref="EnterScope" />
+    internal void ExitScope(int count)
+    {
+        for (var i = 0; i < count && _inherited.Count > 0; i++) _inherited.Pop();
+    }
+
     // ── Lookup API ────────────────────────────────────────────────────────────
 
     /// <summary>

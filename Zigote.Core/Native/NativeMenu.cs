@@ -69,4 +69,36 @@ internal static partial class NativeEngine
         StringMarshalling = StringMarshalling.Utf8
     )]
     internal static partial int MacDragBegin(string text, string filesNl);
+
+    // ── Status-bar item (Zigote.Engine/src/platform/macos_tray.m). macOS only, main thread only;
+    //    the managed side is Zigote.Core.Engine.TrayIcon. ──
+
+    [LibraryImport(Lib, EntryPoint = "zigote_mactray_set_handler")]
+    internal static partial void MacTraySetHandler(nint callback);
+
+    [LibraryImport(
+        Lib,
+        EntryPoint = "zigote_mactray_show",
+        StringMarshalling = StringMarshalling.Utf8
+    )]
+    internal static partial void MacTrayShow(string tooltip);
+
+    [LibraryImport(
+        Lib,
+        EntryPoint = "zigote_mactray_set_tooltip",
+        StringMarshalling = StringMarshalling.Utf8
+    )]
+    internal static partial void MacTraySetTooltip(string tooltip);
+
+    /// <param name="spec">One item per line, <c>tag TAB label TAB enabled</c>; an empty line is a
+    ///     separator.</param>
+    [LibraryImport(
+        Lib,
+        EntryPoint = "zigote_mactray_set_menu",
+        StringMarshalling = StringMarshalling.Utf8
+    )]
+    internal static partial void MacTraySetMenu(string spec);
+
+    [LibraryImport(Lib, EntryPoint = "zigote_mactray_hide")]
+    internal static partial void MacTrayHide();
 }

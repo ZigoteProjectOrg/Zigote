@@ -145,6 +145,19 @@ public partial class App
         return true;
     }
 
+    /// <summary>Run the first menu accelerator matching this chord. See <see cref="Accelerators" />.</summary>
+    private bool RunAccelerator(KeyCode key, Modifiers modifiers)
+    {
+        foreach (var (chord, run) in Accelerators)
+            if (chord.Matches(key, modifiers))
+            {
+                run();
+                return true;
+            }
+
+        return false;
+    }
+
     /// <summary>
     ///     Esc: dismiss the top-most dismissable overlay; if none, clear focus. Returns true if
     ///     handled.

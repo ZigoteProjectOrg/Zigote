@@ -726,7 +726,7 @@ public sealed class EditorLayout : Widget
 
                 section.Add(
                     new AdwMenuItem(item.Label, item.OnSelect) {
-                        Accel = item.Shortcut,
+                        Accel = MenuAccelerators.Display(item.Shortcut),
                         Enabled = item.IsEnabled,
                         Role = item.Checked is null ? AdwMenuItemRole.Normal : AdwMenuItemRole.Check,
                         Checked = item.Checked ?? false,

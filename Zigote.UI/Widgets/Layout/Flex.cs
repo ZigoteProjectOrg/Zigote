@@ -186,25 +186,33 @@ internal static class FlexLayout
                 maxCross = MathF.Max(maxCross, axis == 0 ? sz.Height : sz.Width);
             }
 
-        // Pass 3 — compute cross-axis offsets for each child
-        for (var i = 0; i < children.Count; i++)
-        {
-            var childCross = axis == 0 ? metrics[i].Size.Height : metrics[i].Size.Width;
-            var crossOff = crossAlign switch {
-                CrossAxisAlignment.Center => (maxCross - childCross) / 2f,
-                CrossAxisAlignment.End => maxCross - childCross,
-                _ => 0f,
-            };
-            if (!float.IsFinite(crossOff))
-                crossOff = 0f; // ∞ − ∞ from an infinite child → no offset
-            metrics[i] = new ChildMetrics(metrics[i].Size, crossOff);
-        }
-
         var mainTotal = mainSize == MainAxisSize.Min ? totalFixed :
             float.IsFinite(mainMax) ? mainMax : totalFixed;
         var ownMain = axis == 0 ? mainTotal : maxCross;
         var ownCross = axis == 0 ? maxCross : mainTotal;
-        return c.Constrain(new Size(ownMain, ownCross));
+        var size = c.Constrain(new Size(ownMain, ownCross));
+
+        // Pass 3 — cross-axis offsets, against the extent this flex ACTUALLY got rather than the
+        // widest child. The two differ whenever an ancestor pins the cross axis: a Column inside a
+        // Stretch parent is constrained to the full width, but its children were only as wide as
+        // their content — centering against that content width left the whole thing hugging the
+        // leading edge. Which is what an album header centred "in the middle of the phone" did.
+        var finalCross = axis == 0 ? size.Height : size.Width;
+        for (var i = 0; i < children.Count; i++)
+        {
+            var childCross = axis == 0 ? metrics[i].Size.Height : metrics[i].Size.Width;
+            var crossOff = crossAlign switch {
+                CrossAxisAlignment.Center => (finalCross - childCross) / 2f,
+                CrossAxisAlignment.End => finalCross - childCross,
+                _ => 0f,
+            };
+            if (!float.IsFinite(crossOff))
+                crossOff = 0f; // ∞ − ∞ from an infinite child → no offset
+            // A child wider than the box (an overflow) must not be pushed off the leading edge too.
+            metrics[i] = new ChildMetrics(metrics[i].Size, MathF.Max(0f, crossOff));
+        }
+
+        return size;
     }
 
     internal static void Layout(

@@ -66,8 +66,11 @@ public static class NativeMenuBar
     /// </summary>
     public static bool TryInstall(IReadOnlyList<AppMenu> menus)
     {
-        if (!Enabled) return false;
-        return Backend?.TryInstall(menus) ?? false;
+        var native = Enabled && Backend?.TryInstall(menus) == true;
+        // A native bar dispatches its own key equivalents; every bar we draw ourselves needs the
+        // shortcuts bound as app accelerators, or they are painted text that does nothing.
+        MenuAccelerators.Install(Host.App.Active, native ? [] : menus);
+        return native;
     }
 
     /// <summary>Reset the native bar to the platform's minimal state (no-op without a backend).</summary>

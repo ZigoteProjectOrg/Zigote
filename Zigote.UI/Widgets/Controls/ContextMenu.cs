@@ -3,6 +3,7 @@ using Zigote.Core.Animation;
 using Zigote.Core.Paint;
 using Zigote.UI.TextShaping;
 using Zigote.UI.Theme;
+using Zigote.UI.Widgets.Menu;
 using Zigote.UI.Widgets.Overlays;
 using AppInstance = Zigote.UI.Host.App;
 
@@ -52,7 +53,6 @@ public sealed class ContextMenu : Widget
 
     private readonly AppInstance _app;
     private readonly AnimationController _enter;
-    private Ticker? _ticker;
     private int _hoveredIdx = -1;
     private float _menuW = ControlMetrics.MenuRowHeight * 8f; // sane fallback before first Measure
     private int _openSubmenuIdx = -1;
@@ -114,10 +114,26 @@ public sealed class ContextMenu : Widget
 
     public void Dismiss()
     {
-        _submenu?.Dismiss();
+        CloseSubmenu();
+        (_host ?? _app).PopOverlay(this);
+    }
+
+    /// <summary>Tear down the open submenu (and, through it, the rest of the chain).</summary>
+    private void CloseSubmenu()
+    {
+        if (_submenu is null) return;
+        _submenu.CloseSubmenu();
+        _submenu.Detach();
         _submenu = null;
         _openSubmenuIdx = -1;
-        (_host ?? _app).PopOverlay(this);
+    }
+
+    // Submenus are painted and routed by hand (they are not laid out as children), but they must
+    // still be attached: an unmounted widget's ticker is muted, so the entrance animation never
+    // advanced and the submenu painted at alpha 0 — open but invisible.
+    public override IEnumerable<Widget> GetChildren()
+    {
+        if (_submenu is not null) yield return _submenu;
     }
 
     /// <summary>Walk up to the root menu (the only one actually pushed as an overlay).</summary>
@@ -190,6 +206,15 @@ public sealed class ContextMenu : Widget
         return 0f;
     }
 
+    /// <summary>
+    ///     The shortcut as the local platform writes it — the model is authored once (⌘S) and read as
+    ///     "Ctrl+S" off macOS, where the same chord is also what <c>MenuAccelerators</c> binds.
+    /// </summary>
+    private static string? ShortcutLabel(ContextMenuItem item)
+    {
+        return MenuAccelerators.Display(item.Shortcut);
+    }
+
     /// <summary>Width = gutter + widest (label + gap + shortcut/arrow) across all items, plus insets.</summary>
     private float MeasureMenuWidth()
     {
@@ -206,7 +231,7 @@ public sealed class ContextMenu : Widget
             if (hasChildren)
                 // Submenu arrow ("▶") rendered at the trailing edge.
                 w += Spacing.Lg + TextMeasure.Width("▶", fs * 0.8f);
-            else if (item.Shortcut is { Length: > 0 } sc)
+            else if (ShortcutLabel(item) is { Length: > 0 } sc)
                 w += Spacing.Lg + TextMeasure.Width(sc, fs);
 
             if (w > widest) widest = w;
@@ -339,7 +364,7 @@ public sealed class ContextMenu : Widget
                     arrowFs
                 );
             }
-            else if (item.Shortcut is { Length: > 0 } sc)
+            else if (ShortcutLabel(item) is { Length: > 0 } sc)
             {
                 // Right-aligned shortcut, dimmed unless the row is the active selection.
                 var scW = TextMeasure.Width(sc, fs);
@@ -461,9 +486,7 @@ public sealed class ContextMenu : Widget
         }
         else if (!hasChildren && _openSubmenuIdx >= 0)
         {
-            _submenu?.Dismiss();
-            _submenu = null;
-            _openSubmenuIdx = -1;
+            CloseSubmenu();
             MarkNeedsPaint();
         }
     }
@@ -474,8 +497,7 @@ public sealed class ContextMenu : Widget
     /// </summary>
     private void OpenSubmenu(int idx, Rect mr)
     {
-        _submenu?.Dismiss();
-        _submenu = null;
+        CloseSubmenu();
         _openSubmenuIdx = idx;
 
         var rowTop = mr.Y;
@@ -508,6 +530,9 @@ public sealed class ContextMenu : Widget
             safe: _safe
         );
         _submenu._pos = new Offset(placed.X, placed.Y);
+        // Mount before animating: only the root menu is pushed as an overlay, so a submenu that is
+        // never attached stays unmounted — and an unmounted widget's ticker is muted.
+        if (Owner is not null) _submenu.Attach(Owner, this);
         _submenu.PlayEnter();
         MarkNeedsPaint();
     }

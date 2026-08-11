@@ -1052,6 +1052,13 @@ public partial class App : IDisposable
         // Long-press ripening + fling velocity tracking for an active touch.
         TickTouch(DeltaTime);
 
+        // Anything the platform sent since the last frame — a headset button, audio focus lost,
+        // a permission answer. It arrives on whatever thread the OS chose and is replayed here,
+        // alongside input, so a channel listener may touch widgets like any other handler.
+        // Deliberately before the IsPaused return: a backgrounded app still has to hear from its
+        // media session, which is the whole reason it is still running.
+        Core.Platform.PlatformChannel.Dispatch();
+
         // Backgrounded: drain events (the poll above must keep running so the foreground event
         // can arrive) but stop all layout/paint/present work — on iOS, GPU work while suspended
         // is a watchdog kill; on Android the surface may already be gone.
@@ -1619,6 +1626,12 @@ public partial class App : IDisposable
                         action is not (ActionFocusNext or ActionFocusPrev or ActionDismiss) &&
                         ShortcutOutranksFocus(k.Modifiers, FocusedWidget) &&
                         onShortcut(action))
+                        break;
+
+                    // Menu-bar accelerators, after the app's own handler so an explicit binding wins.
+                    if (!k.Repeat && Accelerators.Count > 0 &&
+                        ShortcutOutranksFocus(k.Modifiers, FocusedWidget) &&
+                        RunAccelerator(k.Key, k.Modifiers))
                         break;
 
                     // Focus-scoped shortcuts — skipped while a keyboard-trap widget (e.g. the devtools

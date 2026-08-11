@@ -35,6 +35,12 @@ public sealed class Watch : Widget
     private bool _measuredOnce;
     private int _uiThread;
 
+    // The inherited-widget scope (theme, media query, localisations) this Watch was last measured
+    // under. Captured during the walk and re-entered for the out-of-walk rebuild below, which would
+    // otherwise build its subtree against an empty scope — see BuildContext.CaptureScope.
+    private InheritedWidget[] _scope = [];
+    private int _scopeDepth;
+
     public Watch(Func<Widget> build)
     {
         _build = build;
@@ -127,8 +133,20 @@ public sealed class Watch : Widget
         // like the off-thread path; the swap lands in Measure next frame.
         if (Environment.CurrentManagedThreadId == _uiThread && Owner is not { InTreeWalk: true })
         {
-            // Safe to re-measure in place here precisely BECAUSE no walk is running (checked above).
-            Apply(true);
+            // Safe to re-measure in place here precisely BECAUSE no walk is running (checked above)
+            // — and for the same reason the ambient inherited scope is empty, so the subtree about
+            // to be built and measured has to be given the one this Watch actually sits under. Skip
+            // that when nothing was captured yet (never measured): there is nothing to restore.
+            var ctx = BuildContext.Current;
+            ctx.EnterScope(_scope, _scopeDepth);
+            try
+            {
+                Apply(true);
+            }
+            finally
+            {
+                ctx.ExitScope(_scopeDepth);
+            }
         }
         else
         {
@@ -159,6 +177,10 @@ public sealed class Watch : Widget
         _started = false;
         _dirty = false;
         _measuredOnce = false; // a re-attached Watch must not lay out against stale constraints
+        // Nor build against a stale scope — and holding the captured ancestors would keep a detached
+        // subtree's providers alive. Array.Clear rather than a fresh array: the buffer is reused.
+        Array.Clear(_scope, 0, _scopeDepth);
+        _scopeDepth = 0;
     }
 
     public override Size Measure(Constraints constraints)
@@ -171,6 +193,9 @@ public sealed class Watch : Widget
         }
 
         LastConstraints = constraints; // remembered for the in-place path — see TryRelayoutInPlace
+        // Same reason, for the ancestors rather than the constraints: this runs inside the walk, so
+        // the scope on the context right now is the one an out-of-walk rebuild has to reproduce.
+        _scopeDepth = BuildContext.Current.CaptureScope(ref _scope);
         _measuredOnce = true;
         _size = _child?.Measure(constraints) ?? constraints.Constrain(Size.Zero);
         MeasuredSize = _size;

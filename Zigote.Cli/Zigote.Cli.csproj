@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      `zigote` — the project scaffolder. Packed as a .NET tool so it installs the way every other
+      dotnet CLI does:
+
+        dotnet pack Zigote.Cli -c Release
+        dotnet tool install -g (add-source Zigote.Cli/nupkg) zigote
+
+      or run in place from a checkout:  dotnet run (project Zigote.Cli) create MyApp
+    -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <RootNamespace>Zigote.Cli</RootNamespace>
+        <AssemblyName>zigote</AssemblyName>
+
+        <PackAsTool>true</PackAsTool>
+        <ToolCommandName>zigote</ToolCommandName>
+        <PackageOutputPath>./nupkg</PackageOutputPath>
+        <PackageId>Zigote.Cli</PackageId>
+        <Version>0.1.0</Version>
+        <Description>Scaffolds Zigote apps and platform heads.</Description>
+    </PropertyGroup>
+
+    <!--
+      No project references on purpose. The CLI writes text files; it does not build, host or
+      link the engine, and referencing Zigote.UI would drag the native build into `dotnet tool
+      install`. Templates are string literals in Templates.cs for the same reason — an embedded
+      resource would still need the file to exist next to the tool.
+    -->
+
+</Project>

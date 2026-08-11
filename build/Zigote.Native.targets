@@ -254,9 +254,25 @@
   <Target Name="ZigAndroidSysroot" BeforeTargets="BuildZigEngine" Condition="'$(ZigTargetOS)' == 'android'">
     <PropertyGroup>
       <AndroidNdkRoot Condition="'$(AndroidNdkRoot)' == ''">$(ANDROID_NDK_ROOT)</AndroidNdkRoot>
-      <AndroidNdkRoot Condition="'$(AndroidNdkRoot)' == ''">$(HOME)/Library/Android/sdk/ndk/26.2.11394342</AndroidNdkRoot>
-      <!-- The prebuilt directory is named darwin-x86_64 even on Apple silicon (the only one shipped). -->
-      <_NdkSysroot>$(AndroidNdkRoot)/toolchains/llvm/prebuilt/darwin-x86_64/sysroot</_NdkSysroot>
+      <!-- The .NET Android workload resolves an NDK of its own and hands it down as this property,
+           which is the one the app is actually built against — prefer it over guessing a path. -->
+      <AndroidNdkRoot Condition="'$(AndroidNdkRoot)' == ''">$(AndroidNdkDirectory)</AndroidNdkRoot>
+      <!-- Last resort: the newest NDK under the standard SDK location for this host. -->
+      <_NdkSearchRoot Condition="'$(AndroidNdkRoot)' == '' And '$(_HostOS)' == 'macos'">$(HOME)/Library/Android/sdk/ndk</_NdkSearchRoot>
+      <_NdkSearchRoot Condition="'$(AndroidNdkRoot)' == '' And '$(_HostOS)' == 'linux'">$(HOME)/Android/Sdk/ndk</_NdkSearchRoot>
+    </PropertyGroup>
+    <ItemGroup Condition="'$(AndroidNdkRoot)' == '' And '$(_NdkSearchRoot)' != ''">
+      <_NdkCandidate Include="$([System.IO.Directory]::GetDirectories('$(_NdkSearchRoot)'))"
+                     Condition="Exists('$(_NdkSearchRoot)')" />
+    </ItemGroup>
+    <PropertyGroup>
+      <AndroidNdkRoot Condition="'$(AndroidNdkRoot)' == '' And '@(_NdkCandidate)' != ''">%(_NdkCandidate.Identity)</AndroidNdkRoot>
+      <!-- The prebuilt directory is named after the HOST, and on macOS it is literally
+           darwin-x86_64 even on Apple silicon (the only one Google ships). -->
+      <_NdkHostTag Condition="'$(_HostOS)' == 'macos'">darwin-x86_64</_NdkHostTag>
+      <_NdkHostTag Condition="'$(_HostOS)' == 'linux'">linux-x86_64</_NdkHostTag>
+      <_NdkHostTag Condition="'$(_HostOS)' == 'windows'">windows-x86_64</_NdkHostTag>
+      <_NdkSysroot>$(AndroidNdkRoot)/toolchains/llvm/prebuilt/$(_NdkHostTag)/sysroot</_NdkSysroot>
       <_ZigAndroidLibcFile>$(ZigEngineDir)/zig-out/.zig-libc-android-$(_RidArch).txt</_ZigAndroidLibcFile>
     </PropertyGroup>
     <Error Condition="!Exists('$(_NdkSysroot)')"
