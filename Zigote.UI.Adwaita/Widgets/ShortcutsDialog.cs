@@ -101,7 +101,10 @@ public sealed class AdwShortcutsDialog : AdwDialog
                     }
                 );
 
-            return new AdwToolbarView(new ScrollView(page)) {
+            // No ScrollView around the page: AdwPreferencesPage scrolls itself, and wrapping it
+            // measures it with unbounded height — both scrollers then compute a zero extent and
+            // nothing moves.
+            return new AdwToolbarView(page) {
                 TopBars = { new AdwHeaderBar { Title = owner.Title } },
             };
         }

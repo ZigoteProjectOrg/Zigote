@@ -136,7 +136,8 @@ public sealed class SettingsWindow : Widget
             Sidebar = new AdwToolbarView(_sidebar) {
                 TopBars = { new AdwHeaderBar { Title = "Settings", ShowEndWindowControls = false } },
             },
-            Content = new AdwToolbarView(new ScrollView(page)) {
+            // AdwPreferencesPage scrolls itself; wrapping it in a ScrollView kills both.
+            Content = new AdwToolbarView(page) {
                 TopBars = {
                     new AdwHeaderBar {
                         TitleWidget = new AdwClamp(_searchField, 360f),
