@@ -41,7 +41,6 @@ public sealed class Animate : Widget
 
     private readonly AnimationController _controller;
     private readonly List<AnimateEffect> _effects = [];
-    private Ticker? _ticker;
 
     private Size _natural;
     private float _alpha = 1f;

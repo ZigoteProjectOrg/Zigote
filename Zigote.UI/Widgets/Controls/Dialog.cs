@@ -21,7 +21,6 @@ public class Dialog : Widget, IDismissableOverlay
     private readonly AnimationController _enter;
     private Size _contentSize;
     private Size _size;
-    private Ticker? _ticker;
     private ThemeData _theme = ThemeData.Dark;
 
     public Dialog(Widget content, App? app = null)

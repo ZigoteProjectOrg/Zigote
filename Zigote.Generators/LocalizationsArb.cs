@@ -34,7 +34,10 @@ internal sealed class ArbCatalog
         string? locale = null, className = null, ns = null;
         var messages = new Dictionary<string, string>();
 
-        foreach (var (key, value) in root)
+        foreach (var pair in root)
+        {
+            var key = pair.Key;
+            var value = pair.Value;
             if (key == "@@locale")
             {
                 locale = value as string;
@@ -55,6 +58,7 @@ internal sealed class ArbCatalog
             {
                 messages[key] = s;
             }
+        }
 
         locale ??= LocaleFromFileName(path)
                    ?? throw new FormatException("no @@locale and no _xx filename suffix");

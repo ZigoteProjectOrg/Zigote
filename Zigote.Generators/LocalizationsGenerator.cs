@@ -439,7 +439,7 @@ public sealed class LocalizationsGenerator : IIncrementalGenerator
     private static string Truncate(string s, int max)
     {
         s = s.Replace('\n', ' ').Replace('\r', ' ');
-        return s.Length <= max ? s : string.Concat(s.AsSpan(0, max), "…");
+        return s.Length <= max ? s : s.Substring(0, max) + "…";
     }
 
     // ── model ─────────────────────────────────────────────────────────────────

@@ -13,7 +13,11 @@ namespace Zigote.Core.Native;
 /// </summary>
 internal static class MobileNativeResolver
 {
+    // CA2255: deliberate — the resolver must be installed before any generated P/Invoke runs,
+    // and there is no single entry point every host goes through.
+#pragma warning disable CA2255
     [ModuleInitializer]
+#pragma warning restore CA2255
     internal static void Install()
     {
         if (!OperatingSystem.IsIOS() && !OperatingSystem.IsTvOS() &&

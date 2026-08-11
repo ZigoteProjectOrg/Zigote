@@ -353,7 +353,7 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
             if (parts[i].Length > 0)
             {
                 sb.Append(char.ToUpperInvariant(parts[i][0]));
-                sb.Append(parts[i].AsSpan(1));
+                sb.Append(parts[i].Substring(1));
             }
 
         return sb.ToString();
@@ -374,7 +374,7 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
                 else
                 {
                     sb.Append(char.ToUpperInvariant(part[0]));
-                    sb.Append(part.AsSpan(1));
+                    sb.Append(part.Substring(1));
                 }
             }
 
