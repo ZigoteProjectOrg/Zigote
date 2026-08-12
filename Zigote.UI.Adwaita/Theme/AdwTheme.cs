@@ -22,9 +22,7 @@ public static class AdwTheme
     {
         var p = dark ? AdwPalette.Dark : AdwPalette.Light;
         var accentBg = AdwAccentColors.Bg(accent);
-        var accentStandalone = accent == AdwAccent.Blue
-            ? p.Accent
-            : AdwAccentColors.Standalone(accent, dark);
+        var accentStandalone = AdwAccentColors.Standalone(accentBg, dark);
 
         return new ThemeData {
             IsDark = dark,
@@ -46,21 +44,23 @@ public static class AdwTheme
             Card = p.CardBg,
             CardRaised = dark ? p.DialogBg : p.CardBg,
 
-            // Control fills — the Adwaita translucent button ladder.
+            // Control fills — the Adwaita translucent button ladder (currentColor 10/15/30%).
             Control = p.ButtonFill,
             ControlHover = p.ButtonFillHover,
             ControlPressed = p.ButtonFillActive,
-            ControlDisabled = p.ButtonFillDisabled,
+            // A disabled Adwaita control keeps its fill and dims as a whole
+            // (filter: Opacity(--disabled-opacity)), so this is the same fill, not a fainter one.
+            ControlDisabled = p.ButtonFill,
 
             // Accent / status.
             Primary = accentBg,
             PrimaryDark = accentStandalone,
             Accent = accentBg,
-            // Adwaita brightens on both states (the overlay is currentColor = white); see
-            // AdwStyle.Solid.
-            AccentHover = accentBg.Lighten(0.1f),
-            AccentPressed = accentBg.Lighten(0.3f),
-            Error = p.Destructive,
+            // %opaque_button overlays currentColor (= white) on hover and rgb(0 0 6 / 20%) on
+            // press: lighter, then darker. See AdwStyle.Solid.
+            AccentHover = AdwPalette.Mix(Color.White, accentBg, 0.10f),
+            AccentPressed = AdwPalette.Mix(AdwStyle.Ink, accentBg, 0.20f),
+            Error = p.Error,
             Danger = p.DestructiveBg,
             Success = p.SuccessBg,
             Warning = p.WarningBg,
@@ -76,19 +76,8 @@ public static class AdwTheme
             TextDisabled = dark ? p.WindowFg.WithAlpha(0.32f) : Color.Rgb(150, 150, 154),
             Hint = p.DimLabel,
             Disabled = p.WindowFg.WithAlpha(0.32f),
-            Separator = dark
-                ? Color.Rgba(
-                    255,
-                    255,
-                    255,
-                    0.1f
-                )
-                : Color.Rgba(
-                    0,
-                    0,
-                    6,
-                    0.12f
-                ),
+            // separator { background: $border_color } — the same currentColor 15% as every border.
+            Separator = p.Border,
             Border = p.Border,
             ViewportBackground = p.ViewBg,
             GraphBackground = p.WindowBg,
@@ -110,72 +99,14 @@ public static class AdwTheme
             // GNOME draws a 2px focus ring; ThemeData's default is the 3px macOS one.
             FocusRingWidth = 2f,
 
-            // Neutral fill / label ladders.
-            Fill1 = dark
-                ? Color.Rgba(
-                    255,
-                    255,
-                    255,
-                    0.10f
-                )
-                : Color.Rgba(
-                    0,
-                    0,
-                    6,
-                    0.08f
-                ),
-            Fill2 = dark
-                ? Color.Rgba(
-                    255,
-                    255,
-                    255,
-                    0.08f
-                )
-                : Color.Rgba(
-                    0,
-                    0,
-                    6,
-                    0.06f
-                ),
-            Fill3 = dark
-                ? Color.Rgba(
-                    255,
-                    255,
-                    255,
-                    0.05f
-                )
-                : Color.Rgba(
-                    0,
-                    0,
-                    6,
-                    0.045f
-                ),
-            Fill4 = dark
-                ? Color.Rgba(
-                    255,
-                    255,
-                    255,
-                    0.035f
-                )
-                : Color.Rgba(
-                    0,
-                    0,
-                    6,
-                    0.03f
-                ),
-            Fill5 = dark
-                ? Color.Rgba(
-                    255,
-                    255,
-                    255,
-                    0.025f
-                )
-                : Color.Rgba(
-                    0,
-                    0,
-                    6,
-                    0.02f
-                ),
+            // Neutral fill ladder, straight off the stylesheet's currentColor steps: raised
+            // button (10%), flat hover (7%), view hover (4%), boxed-list row hover (3%), and one
+            // step below that for anything wanting a hint of a surface.
+            Fill1 = p.ButtonFill,
+            Fill2 = p.HoverFill,
+            Fill3 = p.ViewHoverFill,
+            Fill4 = p.CardHoverFill,
+            Fill5 = AdwPalette.Fill(dark, 0.02f),
             // Light-mode label ramps are pre-composited like the palette's foregrounds (see
             // AdwPalette.Light.WindowFg): translucent dark text renders washed out.
             Label1 = dark ? Color.Rgb(255, 255, 255) : Color.Rgb(38, 38, 43),

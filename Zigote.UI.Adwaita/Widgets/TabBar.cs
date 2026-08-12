@@ -64,11 +64,15 @@ public sealed class AdwTabBar : ComposedWidget
                 for (var i = 0; i < _view.Pages.Count; i++)
                 {
                     if (i > 0)
+                        // `tabbox > separator { margin-top: 3px; margin-bottom: 3px }`, hidden
+                        // where it would fence in the selected tab's own rounded fill.
                         row.Children.Add(
                             new Container {
                                 Width = 1f,
-                                Height = 20f,
-                                Background = theme.Separator,
+                                Height = StripHeight - AdwMetrics.ToggleGroupPadding * 2f,
+                                Background = i == selected || i - 1 == selected
+                                    ? Color.Transparent
+                                    : theme.Separator,
                             }
                         );
                     row.Children.Add(
@@ -104,7 +108,10 @@ public sealed class AdwTabBar : ComposedWidget
                 }
             );
 
+        // `tab { border-radius: $button_radius }` — an Adwaita tab is a rounded chip on the strip,
+        // not a notebook page fused to the content below it.
         var body = new DecoratedBox {
+            Radius = AdwMetrics.ControlRadius,
             Child = new Center {
                 // Symmetric side padding keeps a centered title clear of the close button.
                 Child = new Padding(EdgeInsets.Symmetric(page.Pinned ? 0f : 22f), content),
@@ -112,31 +119,46 @@ public sealed class AdwTabBar : ComposedWidget
         };
         var select = new Pressable {
             Child = body,
+            FocusRadius = AdwMetrics.ControlRadius,
             SemanticsLabel = page.Title,
             SelectedState = selected,
             OnPressed = () => _view.SelectedIndex = index,
         };
 
-        // The selected tab is the window surface itself and never reacts to hover; the rest get
-        // the standard flat-button wash, faded rather than snapped.
-        if (selected) body.Fill = theme.Window;
-        else select.WireFill(body, theme);
+        // `tab:selected { background-color: $selected_color }`, climbing to 13/19% under the
+        // pointer; unselected tabs ride the 7/16% ladder.
+        var tabFill = new FillTransition(c =>
+            {
+                body.Fill = c;
+                body.MarkNeedsPaint();
+            }
+        );
+        tabFill.Snap(AdwStyle.SidebarRowFill(theme, false, false, selected));
+        select.OnStateChanged = () => tabFill.Target(
+            AdwStyle.SidebarRowFill(
+                theme,
+                select.Hovered,
+                select.Pressed,
+                selected
+            )
+        );
 
         if (page.Pinned) return new SizedBox(PinnedWidth, StripHeight, select);
 
         // Close button — overlaid (not nested: Pressable captures its whole rect) and revealed on
         // hover or selection via a retained Opacity.
+        // `tab button.image-button { min-width: 24px; border-radius: 99px }`.
         var closeBox = new DecoratedBox {
-            Radius = 8f,
+            Radius = AdwMetrics.Pill,
             Fill = Color.Transparent,
             Child = SizedBox.Square(
-                16f,
+                24f,
                 new Center { Child = new IconGlyph(Icons.Close, 12f, p.DimLabel) }
             ),
         };
         var close = new Pressable {
             Child = closeBox,
-            FocusRadius = 8f,
+            FocusRadius = AdwMetrics.Pill,
             SemanticsLabel = "Close tab",
             OnPressed = () => _view.Close(page),
         };
@@ -144,7 +166,7 @@ public sealed class AdwTabBar : ComposedWidget
         close.WireFill(closeBox, theme);
 
         // Hovering either pressable reveals the close button, so chain onto whatever handler
-        // WireFill installed rather than overwriting it.
+        // the tab fill / WireFill installed rather than overwriting it.
         Chain(select);
         Chain(close);
 

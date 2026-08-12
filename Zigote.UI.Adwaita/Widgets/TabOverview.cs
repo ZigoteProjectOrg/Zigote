@@ -99,10 +99,11 @@ public sealed class AdwTabOverview : ComposedWidget, IDismissableOverlay
                     }
                     : new ScrollView(new Padding(EdgeInsets.All(Spacing.Xl), grid));
 
-                // Opaque window-coloured sheet: the overview replaces the content rather than
-                // floating over a scrim, which is how libadwaita presents it.
+                // Opaque sheet on --overview-bg-color: the overview replaces the content rather
+                // than floating over a scrim, and it gets its OWN surface (a shade off the window)
+                // so the thumbnails sitting on it read as cards.
                 return new ColoredBox(
-                    theme.Window,
+                    AdwPalette.For(theme).OverviewBg,
                     new AdwToolbarView(body) { TopBars = { header } }
                 );
             }
@@ -133,9 +134,11 @@ public sealed class AdwTabOverview : ComposedWidget, IDismissableOverlay
         if (page.IconName is { } icon)
             titleRow.Children.Insert(0, new IconGlyph(icon, AdwMetrics.IconSize, p.DimLabel));
 
+        // `tabthumbnail { border-radius: $card_radius + 4px }` — a thumbnail is rounder than the
+        // card inside it, on the thumbnail surface rather than the card one.
         var card = new DecoratedBox {
-            Radius = AdwMetrics.CardRadius,
-            Fill = p.CardBg,
+            Radius = AdwMetrics.CardRadius + 4f,
+            Fill = p.ThumbnailBg,
             // The selected tab is ringed in the accent, the way the overview marks "you are here".
             BorderColor = selected ? theme.Accent : theme.Border,
             BorderWidth = selected ? 2f : 1f,
@@ -157,7 +160,7 @@ public sealed class AdwTabOverview : ComposedWidget, IDismissableOverlay
             CardH,
             new Pressable {
                 Child = card,
-                FocusRadius = AdwMetrics.CardRadius,
+                FocusRadius = AdwMetrics.CardRadius + 4f,
                 SemanticsLabel = page.Title,
                 SelectedState = selected,
                 OnPressed = () =>

@@ -27,9 +27,11 @@ public class AdwDialog : Widget, IDismissableOverlay
 
     public AdwDialog(Widget? child = null)
     {
-        _clip = new ClipRRect(AdwMetrics.WindowRadius, child);
+        // `floating-sheet > sheet { border-radius: $dialog_radius }`; an alert overrides it to the
+        // rounder $alert_radius, which is why this reads a virtual rather than the constant.
+        _clip = new ClipRRect(Radius, child);
         _card = new DecoratedBox {
-            Radius = AdwMetrics.WindowRadius,
+            Radius = Radius,
             Elevation = Elevation.Z3,
             Child = _clip,
         };
@@ -50,6 +52,9 @@ public class AdwDialog : Widget, IDismissableOverlay
         _anim.AttachTicker(this);
     }
 
+
+    /// <summary>The sheet's corner radius — <c>$dialog_radius</c> unless a subclass says otherwise.</summary>
+    protected virtual float Radius => AdwMetrics.DialogRadius;
 
     /// <summary>The dialog content, clipped to the card's rounded corners.</summary>
     public Widget? Child

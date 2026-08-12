@@ -48,16 +48,17 @@ public sealed class AdwButtonContent : ComposedWidget
 
     protected override Widget Build(BuildContext context)
     {
-        var row = new Row(spacing: 6f, mainAxisSize: MainAxisSize.Min);
+        // buttoncontent: border-spacing 6px, a bold label, and 2px of trailing padding so the
+        // label never sits flush against the button's own padding.
+        var row = new Row(spacing: AdwMetrics.ButtonContentSpacing, mainAxisSize: MainAxisSize.Min);
         if (IconName is not null)
             row.Children.Add(new IconGlyph(IconName, AdwMetrics.IconSize, _color));
         if (Label.Length > 0)
             row.Children.Add(
-                new LabelWidget(Label, 14f) {
-                    FontWeight = FontWeight.Bold,
-                    MaxLines = 1,
-                    Color = _color,
-                }
+                new Padding(
+                    EdgeInsets.Only(right: 2f),
+                    new LabelWidget(Label, AdwTypography.Heading, _color) { MaxLines = 1 }
+                )
             );
         return row;
     }

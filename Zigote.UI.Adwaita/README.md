@@ -1,8 +1,9 @@
 # Zigote.UI.Adwaita
 
-The **GNOME Adwaita** design system, implemented on Zigote's widget kernel: 83 `Adw*` types, both
-appearances, the nine GNOME 47 system accents, the boxed-list row vocabulary, adaptive navigation,
-and client-side decorations the app draws itself.
+The **GNOME Adwaita** design system, implemented on Zigote's widget kernel: 94 `Adw*` types, both
+appearances, the nine system accents, the boxed-list row vocabulary, adaptive navigation, and
+client-side decorations the app draws itself. Tokens and metrics track **libadwaita 1.10 (GNOME
+51)** — every colour, radius and state fill here has a line of `src/stylesheet/` behind it.
 
 ```csharp
 new AdwaitaApp(new Shell(), title: "My App").Run();
@@ -14,7 +15,7 @@ new AdwaitaApp(new Shell(), title: "My App").Run();
 > widgets are Zigote widgets, laid out and painted by Zigote's own renderer. An Adwaita app therefore
 > builds and runs unchanged on macOS and Windows; the screenshot above is macOS.
 
-**See it all:** from the repo root, `dotnet run --project Zigote.UI.Adwaita.Gallery` — 36 pages, one
+**See it all:** from the repo root, `dotnet run --project Zigote.UI.Adwaita.Gallery` — 37 pages, one
 per widget family ([gallery README](../Zigote.UI.Adwaita.Gallery/README.md)).
 
 ---
@@ -28,6 +29,7 @@ per widget family ([gallery README](../Zigote.UI.Adwaita.Gallery/README.md)).
 - [Navigation](#navigation)
 - [Adaptive layout](#adaptive-layout)
 - [Feedback: toasts, banners, dialogs](#feedback-toasts-banners-dialogs)
+- [A complete app](#a-complete-app)
 - [Style, type and metrics](#style-type-and-metrics)
 - [Differences from libadwaita](#differences-from-libadwaita)
 
@@ -73,13 +75,32 @@ AdwTheme.Dark
 AdwTheme.Create(AdwAccent.Purple, dark: true)   // cache the result — theme switching is by reference
 ```
 
-`AdwAccent` is the GNOME 47 set: `Blue`, `Teal`, `Green`, `Yellow`, `Orange`, `Red`, `Pink`,
-`Purple`, `Slate`. Because an accent produces a complete theme rather than a late tint, switching one
-repaints every open window in a frame.
+`AdwAccent` is the GNOME set: `Blue`, `Teal`, `Green`, `Yellow`, `Orange`, `Red`, `Pink`, `Purple`,
+`Slate`. Because an accent produces a complete theme rather than a late tint, switching one repaints
+every open window in a frame. The *standalone* form of each hue — links, alert responses, menu check
+marks — is derived exactly as the stylesheet derives it, `oklab(from @accent_bg_color min(l, 0.5) a
+b)` in light and `max(l, 0.85)` in dark, so all nine (and the destructive/success/warning trio) land
+on libadwaita's published values.
 
-Tokens with no `ThemeData` slot live in `AdwPalette` — the translucent button ladder, headerbar and
-sidebar backgrounds, dim labels, the scrim, and the status colours. `AdwPalette.For(theme)` picks the
-light or dark set from whatever theme is in scope.
+Tokens with no `ThemeData` slot live in `AdwPalette` — headerbar, sidebar, popover and thumbnail
+surfaces, dim labels, the scrim, the status colours, and the **state fills**.
+`AdwPalette.For(theme)` picks the light or dark set from whatever theme is in scope.
+
+Adwaita 1.10 states every neutral fill as `color-mix(in srgb, currentColor N%, transparent)`, so one
+ladder serves both appearances — only currentColor flips. `AdwPalette` resolves those percentages
+once per appearance, and `AdwStyle` picks the right rung:
+
+| Ladder | Rest / hover / active | Where |
+| --- | --- | --- |
+| `ButtonFill*` | 10 / 15 / 30 % (checked 30 / 35 / 40) | raised buttons, entries, spin buttons, window controls, toggle-group backgrounds |
+| `HoverFill` … `SelectedFill*` | 0 / 7 / 16 %, selected 10 / 13 / 19 | flat buttons, menu items, sidebar rows, tabs |
+| `ViewHoverFill` | 0 / 4 / 8 % | rows inside a list view |
+| `CardHoverFill` | 0 / 3 / 8 % | boxed-list rows, `.card.activatable` |
+| `TroughFill*` | 15 / 20 / 25 % | switch, scale, check and progress troughs |
+
+`AdwStyle.ButtonFill`, `RowFill`, `MenuRowFill`, `SidebarRowFill`, `ViewRowFill` and `TroughFill` are
+the entry points; use them instead of reaching for a fill directly, so a control lands on the ladder
+its stylesheet counterpart uses.
 
 **Following the desktop.** On GNOME, `GnomeDesktop` reads `color-scheme`, `accent-color` and
 `button-layout`, and keeps them fresh with `gsettings monitor` — or, inside a Flatpak or Snap sandbox
@@ -99,6 +120,15 @@ wherever a desktop can host them:
 | **Windows, KDE, other** | System decorations; Adwaita content inside them. |
 
 `WindowChrome.Preference` overrides the lot when you need to force a look for testing.
+
+Under CSD the window frame follows the stylesheet down to the pixel: a 15px corner
+(`--window-radius`, squared while maximized), a 1px `rgb(255 255 255 / 7%)` outline just inside the
+edge (`App.CsdOutlineColor`, without which a dark window bleeds into a dark desktop), a **46px**
+titlebar rather than the 47px of an inline header bar — the missing pixel is the outline's —
+`6px 7px 7px 7px` of bar padding, and frame buttons whose 24px circles sit in 34px hit targets
+3px apart, exactly as `windowcontrols > button { min-width: 24px; padding: 5px }` lays them out. The
+drag band matches the bar's own height, so the first row of content takes clicks instead of moving
+the window.
 
 ```csharp
 new AdwToolbarView(content) {
@@ -198,15 +228,58 @@ toasts.AddToast(new AdwToast("File deleted") { ButtonLabel = "Undo",
 - `AdwBottomSheet` — a sheet dragged up over the content.
 - `AdwSpinner` — the indeterminate Adwaita spinner.
 
+<img src="../docs/images/adwaita-bottom-sheet.png" alt="A draggable bottom sheet over the page content" width="820">
+
+## A complete app
+
+This compiles as written — an app, a header bar, a boxed list, and one signal on screen:
+
+```csharp
+using Zigote.Core.State;
+using Zigote.UI.Adwaita;
+using Zigote.UI.Widgets;
+using Zigote.UI.Widgets.Controls;
+
+new AdwaitaApp(new CounterPage(), title: "Counter").Run();
+
+sealed class CounterPage : ComposedWidget
+{
+    private readonly Signal<int> _count = new(0);
+    private readonly Signal<bool> _big = new(false);
+
+    protected override Widget Build(BuildContext context) =>
+        new AdwToolbarView(
+            new AdwClamp(
+                new AdwPreferencesGroup("Counter", "One signal, two rows and a header") {
+                    Rows = {
+                        new AdwActionRow("Count", "Activate the row to increment") {
+                            OnActivated = () => _count.Value += _big.Value ? 10 : 1,
+                            Suffixes    = { new Watch(() => new Label($"{_count.Value}")) },
+                            ShowChevron = true,
+                        },
+                        new AdwSwitchRow("Big steps", "Add ten at a time", false,
+                                         on => _big.Value = on),
+                    },
+                })) {
+            TopBars = {
+                new AdwHeaderBar {
+                    TitleWidget = new Watch(() =>
+                        new AdwWindowTitle("Counter", $"{_count.Value} so far")),
+                },
+            },
+        };
+}
+```
+
 ## Style, type and metrics
 
 | Type | Holds |
 | --- | --- |
-| `AdwTypography` | The libadwaita type scale converted pt → px: `Title1`…`Title4`, `Heading`, `Body`, `CaptionHeading`, `Caption`, `Monospace`. Use these inside Adwaita widgets instead of `Typography`. |
-| `AdwMetrics` | Every constant the kit lays out with — control radius 9, card radius 12, window radius 12, button height 34 (28 compact), header bar 47, row minimum 50, sidebar 260, clamp 600. |
-| `AdwStyle` | State → colour resolution: `ButtonFill`, `ButtonForeground`, `RowFill`, and the ~100 ms fill transitions every button-like control fades with. |
-| `AdwButtonStyle` | `Regular`, `Suggested`, `Destructive`, `Flat` — plus `Pill`, `Circular` and `Compact` as shape flags on `AdwButton`. |
-| `AdwPalette` | The tokens with no `ThemeData` slot. |
+| `AdwTypography` | The libadwaita type scale (`.title-1` 181 % … `.caption` 82 % of the 11pt document font, 140 % line height on the body classes): `Title1`…`Title4`, `Heading`, `Body`, `CaptionHeading`, `Caption`, `Monospace`. Use these inside Adwaita widgets instead of `Typography`. |
+| `AdwMetrics` | Every constant the kit lays out with — control radius 9, card 12, popover/dialog/window 15, alert 18, check 6; button height 34 (28 compact, 44 pill), header bar 47 (46 as a titlebar), row minimum 50 (36 sidebar, 40 button row, 32 menu), sidebar 260, clamp 600. |
+| `AdwStyle` | State → colour resolution: `ButtonFill`, `ButtonForeground`, the five row ladders, `TroughFill`, `SliderKnob`, the disabled/dim opacities, and the ~100 ms fill transitions every button-like control fades with. |
+| `AdwButtonStyle` | `Regular`, `Suggested`, `Destructive`, `Flat`, `Opaque` — plus `Pill`, `Circular` and `Compact` as shape flags on `AdwButton`. |
+| `AdwPalette` | The tokens with no `ThemeData` slot, plus `Fill(theme, percent)` / `Mix` for one-off `color-mix` values. |
 
 ## Differences from libadwaita
 
@@ -220,6 +293,18 @@ Stated up front so nothing surprises you:
   behaviours beyond the framework's own drag and double-click handling are outside this kit.
 - **GTK settings beyond appearance, accent and button layout are not consulted** — font scaling,
   cursor themes and animation preferences follow Zigote's own settings.
+- **Two colours are held deliberately off-spec, for this renderer.** The renderer composites in
+  linear space, so translucent values land lighter than CSS means them to; `AdwPalette` solves for
+  the alpha that reproduces the stylesheet's result, but the light-mode foreground is carried at
+  `alpha(#000006, .85)` against the stylesheet's `.8`, and `DimLabel` at `.65` against `.55`. At the
+  authored values the 12px captions this UI leans on sit at the AA floor or under it.
+- **Shadows are one soft layer each, not three.** `%card`, `popover > contents` and the window frame
+  each stack three shadows in CSS; `AdwMetrics.CardShadow` / `PopoverShadow` collapse them to the
+  single layer this renderer paints, with the hairline ring drawn separately as a border.
+- **Gradients are flattened.** An `AdwAvatar` uses libadwaita's fourteen avatar colours but fills
+  with the gradient's darker tone instead of interpolating between the two.
+- **High-contrast and backdrop variants are not implemented.** The stylesheet's
+  `prefers-contrast: more` block and its `:backdrop` fades have no counterpart here.
 - Properties on `ComposedWidget`-derived widgets use `AdwStyle.Set(ref field, value)`, which
   invalidates on real change. A plain auto-property would silently do nothing after the first build,
   because the `Build` result is retained.
@@ -235,6 +320,6 @@ libadwaita's API and should not grow extras.
 
 ## Related
 
-- [`../Zigote.UI.Adwaita.Gallery`](../Zigote.UI.Adwaita.Gallery/README.md) — the 36-page gallery.
+- [`../Zigote.UI.Adwaita.Gallery`](../Zigote.UI.Adwaita.Gallery/README.md) — the 37-page gallery.
 - [`../docs/migration/`](../docs/migration/README.md) — retained mode, and per-framework guides.
 - [`../docs/architecture.md`](../docs/architecture.md) — how the kernel underneath works.

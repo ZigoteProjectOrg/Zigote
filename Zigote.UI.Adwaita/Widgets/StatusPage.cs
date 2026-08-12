@@ -51,21 +51,30 @@ public sealed class AdwStatusPage : ComposedWidget
     {
         var theme = ThemeProvider.Of(context);
 
+        // `statuspage > … > clamp > box { border-spacing: 12px }` around a big dimmed icon:
+        // 128px normally, 96px compact, each with its own bottom margin.
         var col = new Column(
             mainAxisSize: MainAxisSize.Min,
-            crossAxisAlignment: CrossAxisAlignment.Center
+            crossAxisAlignment: CrossAxisAlignment.Center,
+            spacing: Spacing.Md
         );
 
         if (!string.IsNullOrEmpty(IconName))
         {
-            col.Children.Add(new IconGlyph(IconName!, Compact ? 48f : 96f, theme.Label3));
-            col.Children.Add(new SizedBox(height: Compact ? 8f : 12f));
+            col.Children.Add(
+                new IconGlyph(
+                    IconName!,
+                    Compact ? 96f : 128f,
+                    AdwPalette.Fill(theme, AdwStyle.DimOpacity)
+                )
+            );
+            col.Children.Add(new SizedBox(height: Compact ? Spacing.Md : Spacing.Xxl));
         }
 
         col.Children.Add(
             new Label(
                 Title,
-                Compact ? AdwTypography.Title4 : AdwTypography.Title1,
+                Compact ? AdwTypography.Title2 : AdwTypography.Title1,
                 theme.OnBackground
             ) {
                 Align = TextAlign.Center,
@@ -73,20 +82,13 @@ public sealed class AdwStatusPage : ComposedWidget
         );
 
         if (!string.IsNullOrEmpty(Description))
-        {
-            col.Children.Add(new SizedBox(height: Compact ? 4f : 6f));
             col.Children.Add(
                 new Label(Description!, AdwTypography.Body, theme.TextSecondary) {
                     Align = TextAlign.Center,
                 }
             );
-        }
 
-        if (Child is not null)
-        {
-            col.Children.Add(new SizedBox(height: Compact ? 16f : 24f));
-            col.Children.Add(Child);
-        }
+        if (Child is not null) col.Children.Add(Child);
 
         // AdwClamp top-aligns; use its ConstrainedBox core directly so the content is
         // vertically centered too, like the GNOME status page.
@@ -98,7 +100,14 @@ public sealed class AdwStatusPage : ComposedWidget
                     0f,
                     float.PositiveInfinity
                 ),
-                new Padding(EdgeInsets.All(Spacing.Md), col)
+                // `> box { margin: 36px 12px }`, 24px on the compact variant.
+                new Padding(
+                    EdgeInsets.Symmetric(
+                        AdwMetrics.PageMarginX,
+                        Compact ? Spacing.Xxl : 36f
+                    ),
+                    col
+                )
             ),
         };
     }

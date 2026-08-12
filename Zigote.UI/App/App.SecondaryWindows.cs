@@ -170,6 +170,7 @@ public partial class App
                 if (csdRounded) _paint.AddClipStart(windowRect, CsdCornerRadius);
                 PaintChromeBackdrop();
                 Root.Paint(_paint);
+                PaintCsdOutline(csdRounded);
                 if (csdRounded) _paint.AddClipEnd();
                 _repaint.RootPainted();
             }

@@ -389,10 +389,10 @@ public partial class App : IDisposable
     public float TitleBarDragHeight { get; set; } = 38f;
 
     /// <summary>Corner radius of the window frame under Adwaita CSD chrome. libadwaita's
-    ///     <c>$window_radius</c> is 12px; a rounder corner is the tell that gives away a
-    ///     not-quite-GNOME window sitting next to real ones. Only observed while the window is
-    ///     unmaximized, and — where the renderer draws the corner rather than the OS — on a
-    ///     compositor that granted an alpha channel.</summary>
+    ///     <c>--window-radius</c> is <c>$button_radius + 6</c> (15px as of GNOME 51); a rounder or
+    ///     squarer corner is the tell that gives away a not-quite-GNOME window sitting next to real
+    ///     ones. Only observed while the window is unmaximized, and — where the renderer draws the
+    ///     corner rather than the OS — on a compositor that granted an alpha channel.</summary>
     public float CsdCornerRadius
     {
         get => _csdCornerRadius;
@@ -405,7 +405,38 @@ public partial class App : IDisposable
         }
     }
 
-    private float _csdCornerRadius = 12f;
+    private float _csdCornerRadius = 15f;
+
+    /// <summary>
+    ///     Hairline drawn just inside the CSD window edge — libadwaita's
+    ///     <c>window.csd { outline: 1px solid rgb(255 255 255 / 7%); outline-offset: -1px }</c>.
+    ///     Transparent (the default) draws nothing, so only a design system that asks for one pays
+    ///     for it. It is what keeps a dark window from bleeding into a dark desktop behind it, and
+    ///     it follows the rounded corner rather than the window rect.
+    /// </summary>
+    public Color CsdOutlineColor
+    {
+        get => _csdOutlineColor;
+        set
+        {
+            if (_csdOutlineColor.Equals(value)) return;
+            _csdOutlineColor = value;
+            RequestPaint();
+        }
+    }
+
+    private Color _csdOutlineColor = Color.Transparent;
+
+    /// <summary>
+    ///     Paint <see cref="CsdOutlineColor" /> over the content, inside the same rounded clip. On
+    ///     top, not under: the outline's job is to bound the window, and a headerbar or sidebar
+    ///     painted to the edge would swallow it.
+    /// </summary>
+    private void PaintCsdOutline(bool rounded)
+    {
+        if (!rounded || _csdOutlineColor.A <= 0f) return;
+        _paint.AddBorder(WindowRect, _csdOutlineColor, CsdCornerRadius);
+    }
 
     /// <summary>
     ///     Whether the corner belongs to the renderer at all. macOS masks the CSD window's own
@@ -1319,6 +1350,7 @@ public partial class App : IDisposable
                     if (csdRounded) _paint.AddClipStart(windowRect, CsdCornerRadius);
                     PaintChromeBackdrop();
                     Root.Paint(_paint);
+                    PaintCsdOutline(csdRounded);
                     if (csdRounded) _paint.AddClipEnd();
                     _repaint.RootPainted();
                 }

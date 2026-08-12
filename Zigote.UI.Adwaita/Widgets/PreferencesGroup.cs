@@ -53,10 +53,11 @@ public sealed class AdwPreferencesGroup : ComposedWidget
         var hasDescription = !string.IsNullOrEmpty(Description);
         if (hasTitle || hasDescription || HeaderSuffix is not null)
         {
+            // `preferencesgroup > box, box.labels { border-spacing: 6px }`.
             var text = new Column(
                 crossAxisAlignment: CrossAxisAlignment.Start,
                 mainAxisSize: MainAxisSize.Min,
-                spacing: Spacing.Xxs
+                spacing: AdwMetrics.RowSpacing
             );
             if (hasTitle)
                 text.Children.Add(new Label(Title!, AdwTypography.Heading, theme.OnBackground));
@@ -70,7 +71,7 @@ public sealed class AdwPreferencesGroup : ComposedWidget
             };
             if (HeaderSuffix is not null)
             {
-                header.Children.Add(new SizedBox(Spacing.Sm));
+                header.Children.Add(new SizedBox(AdwMetrics.RowSpacing));
                 header.Children.Add(HeaderSuffix);
             }
 
@@ -96,9 +97,11 @@ public sealed class AdwPreferencesGroup : ComposedWidget
         outer.Children.Add(
             new DecoratedBox {
                 Fill = p.CardBg,
-                // Adwaita outlines the boxed list: without it a white card on the near-white light
-                // window background has no edge at all.
+                // `%card` is a 1px ring plus two soft shadow layers. The ring is the border here;
+                // the lift is CardShadow — without it a white card on the near-white light window
+                // background has no edge at all, and the list stops reading as a card.
                 BorderColor = p.CardShade,
+                Elevation = AdwMetrics.CardShadow,
                 Radius = AdwMetrics.CardRadius,
                 Child = new ClipRRect(AdwMetrics.CardRadius, list),
             }

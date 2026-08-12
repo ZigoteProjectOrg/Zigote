@@ -65,17 +65,22 @@ public sealed class AdwSplitButton : ComposedWidget
             ),
         };
         var arrowBox = new DecoratedBox {
+            // splitbutton > menubutton > button: padding 4px either side of a 16px arrow.
             Child = new SizedBox(
-                24f,
+                AdwMetrics.IconSize + 8f,
                 height,
                 new Center(new IconGlyph(Icons.DropDown, AdwMetrics.IconSize, fg))
             ),
         };
 
-        // On solid fills the theme separator hairline vanishes — use a darkened fill instead.
-        var separator = Style is AdwButtonStyle.Suggested or AdwButtonStyle.Destructive
-            ? AdwStyle.ButtonFill(theme, Style).Darken(0.25f)
-            : theme.Separator;
+        // The stylesheet only draws this hairline where the two halves would otherwise be
+        // indistinguishable: a raised split button has none (`> separator { background: none }`),
+        // a flat or solid one gets currentColor at $dimmer_opacity — the foreground of whatever
+        // fill it sits on, so white on an accent and near-black on a neutral.
+        var separator = Style switch {
+            AdwButtonStyle.Regular => Color.Transparent,
+            _ => fg.WithAlpha(AdwStyle.DimmerOpacity),
+        };
 
         var main = new Pressable {
             Child = mainBox,
@@ -109,16 +114,27 @@ public sealed class AdwSplitButton : ComposedWidget
         group.Child = new Row(mainAxisSize: MainAxisSize.Min) {
             Children = {
                 main,
+                // `> separator { margin-top: 6px; margin-bottom: 6px }` — the hairline is inset
+                // from both ends rather than running the full height of the button.
                 new Container {
                     Width = 1f,
-                    Height = height,
+                    Height = height - AdwMetrics.ToolbarPadding * 2f,
                     Background = separator,
                 },
                 arrow,
             },
         };
 
-        return Enabled ? group : new Opacity(AdwStyle.DisabledOpacity, group);
+        // A flat control has no fill to lose, so it dims further than a raised one
+        // ($strong_disabled_opacity).
+        return Enabled
+            ? group
+            : new Opacity(
+                Style is AdwButtonStyle.Flat
+                    ? AdwStyle.StrongDisabledOpacity
+                    : AdwStyle.DisabledOpacity,
+                group
+            );
     }
 
     private void OpenMenu(Rect anchor)

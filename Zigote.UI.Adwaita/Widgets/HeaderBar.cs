@@ -30,6 +30,8 @@ public sealed class AdwWindowTitle : ComposedWidget
     protected override Widget Build(BuildContext context)
     {
         var theme = ThemeProvider.Of(context);
+        // `headerbar .title, windowtitle .title { padding-left: 12px; padding-right: 12px }` — the
+        // title keeps its own breathing room from whatever is packed beside it.
         var col = new Column(
             mainAxisSize: MainAxisSize.Min,
             mainAxisAlignment: MainAxisAlignment.Center
@@ -47,7 +49,7 @@ public sealed class AdwWindowTitle : ComposedWidget
                     Overflow = TextOverflow.Ellipsis,
                 }
             );
-        return col;
+        return new Padding(EdgeInsets.Symmetric(AdwMetrics.RowPaddingX), col);
     }
 }
 
@@ -162,15 +164,28 @@ public sealed class AdwHeaderBar : ComposedWidget
             endRow
         );
 
+        // A headerbar that IS the window's titlebar loses a pixel to the window's own outline:
+        // 46px with 6px of bottom padding, against 47/7 for a bar packed inside the content.
+        var titlebar = AdwWindowControls.IsWindowChrome(this);
+        var height = titlebar ? AdwMetrics.TitleBarHeight : AdwMetrics.HeaderBarHeight;
+
         var bar = new DecoratedBox {
             Fill = Flat ? Color.Transparent : theme.TitleBar,
-            Child = new Padding(EdgeInsets.Symmetric(AdwMetrics.HeaderBarPadding)) {
+            // `> windowhandle > box { padding: 6px 7px 7px 7px }`.
+            Child = new Padding(
+                EdgeInsets.FromLtrb(
+                    AdwMetrics.HeaderBarPaddingX,
+                    AdwMetrics.HeaderBarPadding,
+                    AdwMetrics.HeaderBarPaddingX,
+                    titlebar ? AdwMetrics.HeaderBarPadding : AdwMetrics.HeaderBarPadding + 1f
+                )
+            ) {
                 Child = _layout,
             },
         };
 
         if (Flat)
-            return new AdwDragArea(new SizedBox(height: AdwMetrics.HeaderBarHeight, child: bar));
+            return new AdwDragArea(new SizedBox(height: height, child: bar));
 
         // The whole bar doubles as the window drag surface under CSD chrome (no-op otherwise).
         return new AdwDragArea(
@@ -179,7 +194,7 @@ public sealed class AdwHeaderBar : ComposedWidget
                 mainAxisSize: MainAxisSize.Min
             ) {
                 Children = {
-                    new SizedBox(height: AdwMetrics.HeaderBarHeight - 1f, child: bar),
+                    new SizedBox(height: height - 1f, child: bar),
                     new Container {
                         Height = 1f,
                         Background = p.HeaderbarShade,

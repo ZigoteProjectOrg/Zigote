@@ -243,9 +243,10 @@ public sealed class AdwOverlaySplitView : ComposedWidget
                 new Row(crossAxisAlignment: CrossAxisAlignment.Stretch) {
                     Children = {
                         _sidebarBox,
+                        // `.sidebar-pane { box-shadow: inset -1px 0 var(--sidebar-border-color) }`.
                         new Container {
                             Width = 1f,
-                            Background = p.SidebarShade,
+                            Background = p.SidebarBorder,
                         },
                     },
                 }

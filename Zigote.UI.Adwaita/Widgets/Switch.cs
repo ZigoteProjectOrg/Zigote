@@ -123,9 +123,10 @@ public sealed class AdwSwitch : Widget
     {
         if (!Enabled) paint.PushAlpha(AdwStyle.DisabledOpacity);
 
-        var p = AdwPalette.For(_theme);
         var r = Bounds.Height / 2f;
 
+        // Off, a switch is a TROUGH (currentColor 15/20/25%), the same ladder as a scale or a
+        // check — a switch is not a button and does not carry the button fill.
         var track = _value
             ? AdwStyle.Solid(
                 _theme.Accent,
@@ -133,15 +134,12 @@ public sealed class AdwSwitch : Widget
                 _pressed,
                 Enabled
             )
-            : _pressed && Enabled
-                ? p.ButtonFillActive
-                : _hovered && Enabled
-                    ? p.ButtonFillHover
-                    : p.ButtonFill;
+            : AdwStyle.TroughFill(_theme, _hovered && Enabled, _pressed && Enabled);
         paint.AddRect(Bounds, track, Radii.Capsule);
 
-        // White knob, slides across the travel distance.
-        var knobD = AdwMetrics.SwitchHeight - 6f;
+        // `> slider { min-width: 20px }` inside 3px of trough padding, on the knob colour every
+        // Adwaita slider shares (white 80% over the view background, going pure white when hot).
+        var knobD = AdwMetrics.SliderKnob;
         var knobR = knobD / 2f;
         var travel = Bounds.Width - Bounds.Height;
         var cx = Bounds.X + r + travel * _anim.Value;
@@ -153,7 +151,11 @@ public sealed class AdwSwitch : Widget
             knobD
         );
         paint.AddElevation(knob, Radii.Capsule, Elevation.Z1);
-        paint.AddRect(knob, Color.White, Radii.Capsule);
+        paint.AddRect(
+            knob,
+            AdwStyle.SliderKnob(_theme, (_hovered || _pressed || _value) && Enabled),
+            Radii.Capsule
+        );
 
         if (Focused && Enabled)
             paint.AddFocusRing(Bounds, Radii.Capsule, _theme);

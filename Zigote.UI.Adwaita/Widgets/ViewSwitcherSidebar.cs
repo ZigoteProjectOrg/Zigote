@@ -63,19 +63,33 @@ public sealed class AdwViewSwitcherSidebar : ComposedWidget
     /// </summary>
     private void SyncPages(ThemeData theme)
     {
-        var dim = AdwPalette.For(theme).DimLabel;
         _sidebar.Sections.Clear();
         var section = new AdwSidebarSection(null);
         foreach (var page in _stack.Pages)
             section.Items.Add(
                 new AdwSidebarItem(page.Title, page.IconName ?? "") {
-                    Suffix = page.Badge > 0
-                        ? new Label(page.Badge.ToString(), AdwTypography.Caption, dim)
-                        : null,
+                    Suffix = page.Badge > 0 ? Indicator(theme, page.Badge) : null,
                 }
             );
         _sidebar.Sections.Add(section);
         _sidebar.Invalidate();
+    }
+
+    /// <summary>
+    ///     `view-switcher-sidebar .indicator` — a rounded count chip in currentColor 40% with a
+    ///     white label, not a bare dim number: the badge has to read at a glance down a column of
+    ///     rows.
+    /// </summary>
+    private static Widget Indicator(ThemeData theme, int count)
+    {
+        return new DecoratedBox {
+            Radius = AdwMetrics.Pill,
+            Fill = AdwPalette.Fill(theme, 0.4f),
+            Child = new Padding(
+                EdgeInsets.Symmetric(AdwMetrics.RowSpacing, 1f),
+                new Label(count.ToString(), AdwTypography.CaptionHeading, Color.White)
+            ),
+        };
     }
 
     protected override Widget Build(BuildContext context)

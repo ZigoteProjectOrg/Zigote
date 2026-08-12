@@ -59,13 +59,9 @@ public sealed class AdwToggleButton : ComposedWidget
     protected override Widget Build(BuildContext context)
     {
         var theme = ThemeProvider.Of(context);
-        var p = AdwPalette.For(theme);
         const float radius = AdwMetrics.ControlRadius;
 
-        var label = new LabelWidget(Label, 14f) {
-            FontWeight = FontWeight.Bold,
-            MaxLines = 1,
-        };
+        var label = new LabelWidget(Label, AdwTypography.Heading) { MaxLines = 1 };
         var box = new DecoratedBox {
             Radius = radius,
             Child = AdwStyle.ButtonBody(label),
@@ -94,34 +90,32 @@ public sealed class AdwToggleButton : ComposedWidget
             // Also the accessible checked state: this runs on every Active write, so a
             // programmatic toggle (which never rebuilds) stays in sync for screen readers.
             pressable.Checked = Active;
-            Color target;
-            if (Active && Style == AdwButtonStyle.Suggested)
-            {
-                target = AdwStyle.Solid(theme.Accent, pressable.Hovered, pressable.Pressed);
-                label.Color = theme.OnPrimary;
-            }
-            else if (Active)
-            {
-                target = p.ButtonFillActive;
-                label.Color = theme.OnBackground;
-            }
-            else
-            {
-                target = AdwStyle.ButtonFill(
-                    theme,
-                    Style,
-                    pressable.Hovered,
-                    pressable.Pressed,
-                    Enabled
-                );
-                label.Color = theme.OnBackground;
-            }
+            // `:checked` is its own rung of every ladder in _buttons.scss — 30/35/40% for a raised
+            // button, the $selected_* steps for a flat one, a 15% ink overlay on a solid accent —
+            // not "the pressed fill, latched", which is what this used to paint.
+            label.Color = AdwStyle.ButtonForeground(theme, Style);
+            var target = AdwStyle.ButtonFill(
+                theme,
+                Style,
+                pressable.Hovered,
+                pressable.Pressed,
+                Enabled,
+                Active
+            );
 
             fill.Target(target); // first call (right below) snaps, later state changes fade
             box.MarkNeedsPaint();
         };
         _applyColors();
 
-        return Enabled ? pressable : new Opacity(AdwStyle.DisabledOpacity, pressable);
+        // `.flat:disabled:not(:checked)` fades further than a raised button does.
+        return Enabled
+            ? pressable
+            : new Opacity(
+                Style is AdwButtonStyle.Flat && !Active
+                    ? AdwStyle.StrongDisabledOpacity
+                    : AdwStyle.DisabledOpacity,
+                pressable
+            );
     }
 }

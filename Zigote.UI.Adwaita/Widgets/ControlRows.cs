@@ -249,17 +249,21 @@ public sealed class AdwButtonRow : ComposedWidget
     {
         var theme = ThemeProvider.Of(context);
         var p = AdwPalette.For(theme);
-        // PrimaryDark, not the palette Accent: only the former follows the chosen accent colour and
-        // stays legible as a foreground on the card.
-        var fg = Destructive ? p.Destructive : Suggested ? theme.PrimaryDark : theme.OnSurface;
+        // `.suggested-action` fills the whole row with the accent; `.destructive-action` only
+        // recolours the text (--accent-color remapped to --destructive-color) and keeps the
+        // ordinary row wash under it.
+        var fg = Suggested ? p.AccentFg
+            : Destructive ? p.Destructive
+            : theme.OnSurface;
 
         var content = new Row(
-            spacing: Spacing.Sm,
+            spacing: AdwMetrics.RowSpacing,
             mainAxisSize: MainAxisSize.Min,
             crossAxisAlignment: CrossAxisAlignment.Center
         );
-        // Invisible strut so the centered content still enforces the row min-height.
-        content.Children.Add(new SizedBox(0f, AdwMetrics.RowMinHeight));
+        // Invisible strut so the centered content still enforces the row min-height — a button row
+        // is 40px, shorter than the 50px of a titled action row.
+        content.Children.Add(new SizedBox(0f, AdwMetrics.ButtonRowHeight));
         if (IconName is { } icon)
             content.Children.Add(new IconGlyph(icon, AdwMetrics.IconSize, fg));
         content.Children.Add(new Label(Title, AdwTypography.Heading, fg));
@@ -267,7 +271,7 @@ public sealed class AdwButtonRow : ComposedWidget
             content.Children.Add(new IconGlyph(endIcon, AdwMetrics.IconSize, fg));
 
         var wash = new DecoratedBox {
-            Fill = Color.Transparent,
+            Fill = Suggested ? theme.Accent : Color.Transparent,
             Child = new Center { Child = content },
         };
         var pressable = new Pressable {
@@ -278,7 +282,9 @@ public sealed class AdwButtonRow : ComposedWidget
         };
         pressable.OnStateChanged = () =>
         {
-            wash.Fill = AdwStyle.RowFill(theme, pressable.Hovered, pressable.Pressed);
+            wash.Fill = Suggested
+                ? AdwStyle.Solid(theme.Accent, pressable.Hovered, pressable.Pressed)
+                : AdwStyle.RowFill(theme, pressable.Hovered, pressable.Pressed);
             wash.MarkNeedsPaint();
         };
         return Enabled ? pressable : new Opacity(AdwStyle.DisabledOpacity, pressable);

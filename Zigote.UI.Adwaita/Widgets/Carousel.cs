@@ -390,9 +390,14 @@ file static class CarouselIndicator
                             Child = new SizedBox(
                                 width,
                                 height,
+                                // The carousel's own indicators: currentColor for the current page,
+                                // 30% of it for the rest — the same relationship every Adwaita
+                                // indicator (tab bar, view switcher badge) uses.
                                 new DecoratedBox {
                                     Radius = radius,
-                                    Fill = index == pos ? theme.OnSurface : theme.Label4,
+                                    Fill = index == pos
+                                        ? theme.OnSurface
+                                        : AdwPalette.Fill(theme, AdwStyle.DimmerOpacity),
                                 }
                             ),
                         }

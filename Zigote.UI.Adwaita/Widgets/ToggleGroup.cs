@@ -80,31 +80,46 @@ public sealed class AdwToggleGroup : ComposedWidget
         // shrinks their radius by the same amount, so the active toggle reads as a card sitting IN
         // the group rather than a segment cut out of it. Flat groups have no box, so no inset.
         var pad = Flat ? 0f : AdwMetrics.ToggleGroupPadding;
-        var groupRadius = Round ? AdwMetrics.Pill : AdwMetrics.ControlRadius;
-        var radius = Round
-            ? MathF.Max(0f, AdwMetrics.RoundToggleRadius - pad)
-            : MathF.Max(0f, AdwMetrics.ControlRadius - pad);
+        var groupRadius = Round ? AdwMetrics.RoundToggleRadius : AdwMetrics.ControlRadius;
+        var radius = MathF.Max(0f, groupRadius - pad);
+        // `> toggle { min-height: calc(34px - var(---group-padding) * 2) }` — the toggles shrink so
+        // the GROUP still stands 34px tall, the height of every other control on the row.
+        var height = AdwMetrics.ButtonHeight - pad * 2f;
+        // .text-button padding is 11px minus the group padding; .round widens it to 15px.
+        var paddingX = MathF.Max(0f, (Round ? 15f : 11f) - pad);
 
         var boxes = new DecoratedBox[_toggles.Count];
+        var contents = new AdwButtonContent[_toggles.Count];
         var pressables = new Pressable[_toggles.Count];
+        var separators = new Container[_toggles.Count];
 
         var row = new Row(mainAxisSize: MainAxisSize.Min);
         for (var i = 0; i < _toggles.Count; i++)
         {
             if (i > 0)
-                row.Children.Add(
-                    new Container {
-                        Width = 1f,
-                        Height = AdwMetrics.ButtonHeight - pad * 2f,
-                        Background = theme.Separator,
-                    }
-                );
+            {
+                // `> separator { margin: calc(6px - var(---group-padding)) 1px }` — 9px on a round
+                // group. The separator either side of the checked toggle fades out (`.hidden`),
+                // which is what stops the raised segment from being visually fenced in.
+                separators[i] = new Container {
+                    Width = 1f,
+                    Height = MathF.Max(0f, height - ((Round ? 9f : 6f) - pad) * 2f),
+                    Background = Flat ? Color.Transparent : p.Border,
+                };
+                row.Children.Add(separators[i]);
+            }
 
             var index = i;
             var toggle = _toggles[i];
+            contents[i] = new AdwButtonContent(toggle.IconName, toggle.Label ?? "");
             boxes[i] = new DecoratedBox {
+                // The segment's OWN radius — the group box doesn't clip, so without this the
+                // active and hover fills paint as square blocks inside a rounded group.
+                Radius = radius,
                 Child = AdwStyle.ButtonBody(
-                    new AdwButtonContent(toggle.IconName, toggle.Label ?? "")
+                    contents[i],
+                    height,
+                    toggle.Label is { Length: > 0 } ? paddingX : AdwMetrics.ToolbarPadding
                 ),
             };
             pressables[i] = new Pressable {
@@ -143,16 +158,31 @@ public sealed class AdwToggleGroup : ComposedWidget
             {
                 // Selection lives here, not in OnPressed: this runs for a programmatic Active
                 // change too, which otherwise left the segments reporting the old selection.
-                pressables[i].SelectedState = i == Active;
+                var active = i == Active;
+                pressables[i].SelectedState = active;
+
+                // The checked segment of a non-flat group is --active-toggle-bg-color: a raised
+                // white (dark: white 20%) card with the card shadow under it, NOT a darker fill.
+                // A flat group has no card to raise, so it keeps the neutral $selected_* ladder.
+                boxes[i].Elevation = active && !Flat ? AdwMetrics.CardShadow : null;
+                contents[i].Color = active && !Flat ? p.ActiveToggleFg : theme.OnBackground;
+
                 fills[i].Target(
-                    i == Active
-                        ? p.ButtonFillActive
-                        : pressables[i].Pressed
-                            ? p.ButtonFillHover
-                            : pressables[i].Hovered
-                                ? p.ButtonFill
-                                : Color.Transparent
+                    active
+                        ? Flat
+                            ? pressables[i].Pressed ? p.SelectedFillActive
+                            : pressables[i].Hovered ? p.SelectedFillHover
+                            : p.SelectedFill
+                            : p.ActiveToggleBg
+                        : pressables[i].Pressed ? p.ActiveFill
+                        : pressables[i].Hovered ? p.HoverFill
+                        : Color.Transparent
                 );
+
+                if (separators[i] is { } sep)
+                    sep.Background = Flat || active || i - 1 == Active
+                        ? Color.Transparent
+                        : p.Border;
             }
         };
         _applyColors();

@@ -117,7 +117,8 @@ public sealed class AdwEntryRow : ComposedWidget
         row.Children.Add(new Expanded(new Padding(EdgeInsets.Symmetric(0f, Spacing.Xs), column)));
         if (Suffix is not null)
         {
-            row.Children.Add(new SizedBox(Spacing.Sm));
+            // `> .editable-area > .apply-button { margin-left: 6px }`.
+            row.Children.Add(new SizedBox(AdwMetrics.RowSpacing));
             row.Children.Add(Suffix);
         }
 

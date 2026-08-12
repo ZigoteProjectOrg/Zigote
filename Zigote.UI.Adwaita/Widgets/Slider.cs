@@ -188,7 +188,12 @@ public sealed class AdwSlider : Widget
                 );
         }
 
-        paint.AddRect(Along(_trackStart, _trackLength), _theme.Fill1, Radii.Capsule);
+        // %scale_trough — currentColor 15%, brightening to 20% while the whole scale is hot.
+        paint.AddRect(
+            Along(_trackStart, _trackLength),
+            AdwStyle.TroughFill(_theme, _hovered || _dragging),
+            Radii.Capsule
+        );
 
         // Horizontally the fill runs from the start to the knob; vertically from the knob down to
         // the end, so a fader fills from the bottom.
@@ -204,8 +209,10 @@ public sealed class AdwSlider : Widget
             KnobR * 2f
         );
         paint.AddElevation(knob, KnobR, Elevation.Z1);
-        paint.AddRect(knob, Color.White, KnobR);
-        paint.AddBorder(knob, p.Border, KnobR);
+        // `> slider { background-color: $slider_color }` with a 1px rgb(0 0 6 / 10%) ring — the
+        // knob is white-over-view-bg, not pure white, so it doesn't glare in dark mode.
+        paint.AddRect(knob, AdwStyle.SliderKnob(_theme, _hovered || _dragging), KnobR);
+        paint.AddBorder(knob, AdwStyle.Ink.WithAlpha(0.1f), KnobR);
 
         if (Focused && Enabled)
             paint.AddFocusRing(

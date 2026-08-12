@@ -69,6 +69,9 @@ public sealed class AdwAlertDialog : AdwDialog
     /// </summary>
     public string? DefaultResponse { get; init; }
 
+    /// <summary>`dialog.alert sheet { border-radius: $alert_radius }` — rounder than a plain dialog.</summary>
+    protected override float Radius => AdwMetrics.AlertRadius;
+
     /// <summary>Append a response button. Call before <see cref="AdwDialog.Show()" />.</summary>
     public void AddResponse(string id, string label,
         AdwResponseAppearance appearance = AdwResponseAppearance.Default)
@@ -120,20 +123,23 @@ public sealed class AdwAlertDialog : AdwDialog
             var theme = ThemeProvider.Of(context);
             var p = AdwPalette.For(theme);
 
+            var hasBody = !string.IsNullOrEmpty(owner.Body);
+            // `.message-area { border-spacing: 24px }`, tightening to 10px once there is both a
+            // heading and a body — they belong to each other and shouldn't drift apart.
             var head = new Column(
-                spacing: Spacing.Sm,
+                spacing: hasBody ? 10f : Spacing.Xxl,
                 crossAxisAlignment: CrossAxisAlignment.Stretch,
                 mainAxisSize: MainAxisSize.Min
             ) {
                 Children = {
-                    new Label(owner.Heading, AdwTypography.Title4, theme.OnBackground) {
+                    new Label(owner.Heading, AdwTypography.Title2, theme.OnBackground) {
                         Align = TextAlign.Center,
                     },
                 },
             };
-            if (!string.IsNullOrEmpty(owner.Body))
+            if (hasBody)
                 head.Children.Add(
-                    new Label(owner.Body!, AdwTypography.Body, p.DimLabel) {
+                    new Label(owner.Body!, AdwTypography.Body, theme.OnBackground) {
                         Align = TextAlign.Center,
                     }
                 );
@@ -145,12 +151,13 @@ public sealed class AdwAlertDialog : AdwDialog
                 mainAxisSize: MainAxisSize.Min
             ) {
                 Children = {
+                    // `.message-area { padding-top: 32px; padding-bottom: 9px }` with 24px sides.
                     new Padding(
                         EdgeInsets.FromLtrb(
                             Spacing.Xxl,
-                            Spacing.Xxl + Spacing.Xs,
+                            Spacing.Xxxl,
                             Spacing.Xxl,
-                            Spacing.Xl
+                            9f
                         ),
                         head
                     ),
@@ -159,63 +166,79 @@ public sealed class AdwAlertDialog : AdwDialog
 
             if (owner._responses.Count == 0) return col;
 
-            col.Children.Add(Hairline(theme, true));
-
-            // Two responses always sit side by side; more only when the caller asked for wide.
+            // `.response-area { padding: 24px; padding-top: 12px; border-spacing: 12px }` — the
+            // responses are real buttons in a padded tray, not full-bleed rows fenced off by
+            // hairlines. That was the GtkMessageDialog shape libadwaita left behind.
+            Widget tray;
             if (owner._responses.Count == 2 ||
                 (owner.PreferWideLayout && owner._responses.Count > 2))
             {
-                var row = new Row();
-                for (var i = 0; i < owner._responses.Count; i++)
-                {
-                    if (i > 0) row.Children.Add(Hairline(theme, false));
-                    row.Children.Add(new Expanded(ResponseButton(theme, p, owner._responses[i])));
-                }
-
-                col.Children.Add(row);
+                var row = new Row(spacing: Spacing.Md);
+                foreach (var response in owner._responses)
+                    row.Children.Add(new Expanded(ResponseButton(theme, response)));
+                tray = row;
             }
             else
-                for (var i = 0; i < owner._responses.Count; i++)
-                {
-                    if (i > 0) col.Children.Add(Hairline(theme, true));
-                    col.Children.Add(ResponseButton(theme, p, owner._responses[i]));
-                }
+            {
+                var stack = new Column(
+                    spacing: Spacing.Md,
+                    crossAxisAlignment: CrossAxisAlignment.Stretch,
+                    mainAxisSize: MainAxisSize.Min
+                );
+                foreach (var response in owner._responses)
+                    stack.Children.Add(ResponseButton(theme, response));
+                tray = stack;
+            }
 
+            col.Children.Add(
+                new Padding(
+                    EdgeInsets.FromLtrb(
+                        Spacing.Xxl,
+                        Spacing.Md,
+                        Spacing.Xxl,
+                        Spacing.Xxl
+                    ),
+                    tray
+                )
+            );
             return col;
         }
 
-        private static Widget Hairline(ThemeData theme, bool horizontal)
-        {
-            return new Container {
-                Width = horizontal ? null : (float?)1f,
-                Height = horizontal ? 1f : ResponseHeight,
-                Background = theme.Separator,
-            };
-        }
-
-        private Widget ResponseButton(ThemeData theme, AdwColors p,
+        private Widget ResponseButton(ThemeData theme,
             (string Id, string Label, AdwResponseAppearance Appearance) response)
         {
-            var fg = response.Appearance switch {
-                AdwResponseAppearance.Suggested => theme.PrimaryDark,
-                AdwResponseAppearance.Destructive => p.Destructive,
-                _ => theme.OnBackground,
+            // `> button { min-height: 24px; padding: 10px 20px; border-radius: 12px }` — taller and
+            // rounder than an ordinary button, and carrying the real .suggested-action /
+            // .destructive-action fills rather than just a coloured label.
+            var style = response.Appearance switch {
+                AdwResponseAppearance.Suggested => AdwButtonStyle.Suggested,
+                AdwResponseAppearance.Destructive => AdwButtonStyle.Destructive,
+                _ => AdwButtonStyle.Regular,
             };
             var box = new DecoratedBox {
+                Radius = AdwMetrics.CardRadius,
                 Fill = Color.Transparent,
                 Child = new SizedBox(
                     height: ResponseHeight,
                     child: new Center {
-                        Child = new Label(response.Label, AdwTypography.Heading, fg),
+                        Child = new Padding(
+                            EdgeInsets.Symmetric(Spacing.Xl),
+                            new Label(
+                                response.Label,
+                                AdwTypography.Heading,
+                                AdwStyle.ButtonForeground(theme, style)
+                            )
+                        ),
                     }
                 ),
             };
             var pressable = new Pressable {
                 Child = box,
+                FocusRadius = AdwMetrics.CardRadius,
                 OnPressed = () => owner.Respond(response.Id),
                 SemanticsLabel = response.Label,
             };
-            pressable.WireFill(box, theme);
+            pressable.WireFill(box, theme, style);
             if (response.Id == owner.DefaultResponse) owner._defaultButton = pressable;
             return pressable;
         }

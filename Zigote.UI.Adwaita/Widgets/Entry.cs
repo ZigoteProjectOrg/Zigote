@@ -160,17 +160,20 @@ public class AdwEntry : Widget
     {
         if (!Enabled) paint.PushAlpha(AdwStyle.DisabledOpacity);
 
-        paint.AddRect(Bounds, Theme.Fill3, Radius);
+        // `entry { background-color: $button_color }` — an entry carries the same currentColor 10%
+        // as a raised button, not a fainter view fill.
+        paint.AddRect(Bounds, AdwPalette.For(Theme).ButtonFill, Radius);
         PaintDecorations(paint);
         Field.Paint(paint);
 
-        // The Adwaita focus affordance: no ring, a 2px accent border on the box itself.
+        // The Adwaita focus affordance: `@include focus-ring($focus-state: ':focus-within')` — a
+        // 2px inset outline in the standalone accent at 50%, not a solid accent border.
         if (Field.Focused && Enabled)
             paint.AddBorder(
                 Bounds,
-                Theme.Accent,
+                Theme.FocusRing,
                 Radius,
-                2f
+                Theme.FocusRingWidth
             );
 
         if (!Enabled) paint.PopAlpha();

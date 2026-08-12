@@ -38,7 +38,9 @@ public class AdwCheckButton : ComposedWidget
                 _box.MarkNeedsPaint();
             }
         );
-        _row = new Row(spacing: 8f, mainAxisSize: MainAxisSize.Min);
+        // checkbutton { border-spacing: 4px } — the 20px indicator already carries 3px of its own
+        // padding, so a wider gap detaches the label from its check.
+        _row = new Row(spacing: 4f, mainAxisSize: MainAxisSize.Min);
         _fade = new Opacity(1f) { Child = _row };
         _root = new Pressable {
             Child = _fade,
@@ -90,7 +92,8 @@ public class AdwCheckButton : ComposedWidget
     {
         _theme = ThemeProvider.Of(context);
 
-        _box.Radius = IsRadio ? AdwMetrics.CheckSize / 2f : 5f;
+        // check { border-radius: $check_radius } / radio { border-radius: 100% }.
+        _box.Radius = IsRadio ? AdwMetrics.CheckSize / 2f : AdwMetrics.CheckRadius;
         _box.Child = SizedBox.Square(
             AdwMetrics.CheckSize,
             new Center(IsRadio ? _dot : _check)
@@ -132,8 +135,8 @@ public class AdwCheckButton : ComposedWidget
         var hovered = _root.Hovered && Enabled;
         var pressed = _root.Pressed && Enabled;
 
-        // Fill fades ~100ms; the hairline border flips instantly (a fading border reads as smear
-        // at 18px, and Adwaita's checks switch fast anyway).
+        // Fill fades ~100ms; the ring flips instantly (a fading border reads as smear at 20px,
+        // and Adwaita's checks switch fast anyway).
         if (Value)
         {
             _fill.Target(AdwStyle.Solid(_theme.Accent, hovered, pressed), _theme);
@@ -141,16 +144,18 @@ public class AdwCheckButton : ComposedWidget
         }
         else
         {
-            _fill.Target(
-                pressed ? _theme.Fill1 : hovered ? _theme.Fill2 : _theme.Fill3,
-                _theme
-            );
-            _box.BorderColor = p.Border;
+            // Unchecked is EMPTY with a 2px inset trough ring — `box-shadow: inset 0 0 0 2px
+            // $trough_color` — except while pressed, where the ring gives way to a filled trough.
+            _fill.Target(pressed ? p.TroughFillActive : Color.Transparent, _theme);
+            _box.BorderColor = pressed
+                ? Color.Transparent
+                : hovered ? p.TroughFillHover : p.TroughFill;
+            _box.BorderWidth = AdwMetrics.CheckBorder;
         }
 
-        _check.Color = Color.White;
+        _check.Color = p.AccentFg;
         _check.Visible = Value && !IsRadio;
-        _dot.Color = Color.White;
+        _dot.Color = p.AccentFg;
         _dot.Visible = Value && IsRadio;
         _text.Color = _theme.OnBackground;
         _box.MarkNeedsPaint();

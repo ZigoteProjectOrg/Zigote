@@ -68,11 +68,18 @@ public sealed class AdwToolbarView : ComposedWidget
             : bar;
     }
 
+    /// <summary>
+    ///     `> .top-bar.raised { box-shadow: 0 1px color-mix(headerbar-shade 50%), 0 2px 4px … }` —
+    ///     a raised bar casts a soft shadow, of which this renderer paints the crisp first layer.
+    ///     At full shade strength the line reads as a hard rule and the bar stops looking raised.
+    ///     ponytail: single hairline, not the two-layer shadow; add the soft layer if a bar ever
+    ///     needs to float over scrolled content rather than sit on it.
+    /// </summary>
     private static Widget Hairline(AdwColors p)
     {
         return new Container {
             Height = 1f,
-            Background = p.HeaderbarShade,
+            Background = p.HeaderbarShade.WithAlpha(p.HeaderbarShade.A * 0.5f),
         };
     }
 }

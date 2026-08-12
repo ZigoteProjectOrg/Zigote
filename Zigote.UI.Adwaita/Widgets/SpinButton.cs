@@ -6,7 +6,7 @@ using Zigote.UI.TextShaping;
 namespace Zigote.UI.Adwaita;
 
 /// <summary>
-///     AdwSpinButton — the GNOME horizontal spin button: one linked <see cref="ThemeData.Fill3" />
+///     AdwSpinButton — the GNOME horizontal spin button: one linked <see cref="AdwColors.ButtonFill" />
 ///     box (radius 9) with a flat minus button, the centred value, and a flat plus button,
 ///     separated by hairlines. Clamps to [Min, Max]; the unavailable side's glyph drops to half
 ///     opacity. Arrow keys step the value. While focused the value area is typeable, GNOME-style:
@@ -191,22 +191,25 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
     {
         if (!Enabled) paint.PushAlpha(AdwStyle.DisabledOpacity);
 
-        paint.AddRect(Bounds, _theme.Fill3, AdwMetrics.ControlRadius);
+        // `spinbutton @extend %entry` — the box is an entry, so it carries the entry/button fill.
+        var p = AdwPalette.For(_theme);
+        paint.AddRect(Bounds, p.ButtonFill, AdwMetrics.ControlRadius);
 
-        // Hover/press wash on the side buttons (clipped to the box; the wash's square corners are
-        // invisible under the faint fill at a 9px radius).
+        // The +/− are FLAT buttons over that fill (7% hover, 16% press), clipped to the box; the
+        // wash's square corners are invisible under the faint fill at a 9px radius.
         var zone = _pressZone != 0 ? _pressZone : _hoverZone;
         if (Enabled && zone != 0 && SideAvailable(zone))
         {
             paint.AddClipStart(Bounds);
             paint.AddRect(
                 zone < 0 ? MinusRect : PlusRect,
-                _pressZone != 0 ? _theme.Fill1 : _theme.Fill2
+                _pressZone != 0 ? p.ActiveFill : p.HoverFill
             );
             paint.AddClipEnd();
         }
 
-        // Hairline separators around the value.
+        // `> button { border-color: color-mix(in srgb, currentColor 10%, transparent) }` — the
+        // buttons are divided from the value by their own 1px border, not by the theme hairline.
         paint.AddRect(
             new Rect(
                 MinusRect.Right,
@@ -214,7 +217,7 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
                 1f,
                 Bounds.Height
             ),
-            _theme.Separator
+            p.ButtonFill
         );
         paint.AddRect(
             new Rect(
@@ -223,7 +226,7 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
                 1f,
                 Bounds.Height
             ),
-            _theme.Separator
+            p.ButtonFill
         );
 
         // Glyphs — the unavailable side at half opacity.

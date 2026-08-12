@@ -226,7 +226,7 @@ public class AdwButton : ComposedWidget
     {
         _theme = ThemeProvider.Of(context);
 
-        var radius = Circular ? 17f : Pill ? AdwMetrics.Pill : AdwMetrics.ControlRadius;
+        var radius = Circular || Pill ? AdwMetrics.Pill : AdwMetrics.ControlRadius;
         var height = Compact ? AdwMetrics.CompactControlHeight
             : Pill ? AdwMetrics.PillHeight
             : AdwMetrics.ButtonHeight;
@@ -245,8 +245,13 @@ public class AdwButton : ComposedWidget
         var content = Content ?? _defaultContent!;
 
         if (Circular || (Content is null && Label.Length == 0))
-            // Icon-only: a fixed square, capsule-round when Circular.
-            _box.Child = SizedBox.Square(Circular ? 34f : height, new Center(content));
+            // Icon-only: a fixed square, capsule-round when Circular. `.circular` pins 34×34
+            // regardless of density; `.image-button` is min-width 24 + 5px padding either side,
+            // which lands on the same square at the button's own height.
+            _box.Child = SizedBox.Square(
+                Circular ? AdwMetrics.CircularSize : height,
+                new Center(content)
+            );
         else
             _box.Child = AdwStyle.ButtonBody(content, height, paddingX);
 
@@ -254,7 +259,11 @@ public class AdwButton : ComposedWidget
         _root.Enabled = enabled;
         _root.FocusRadius = radius;
         _root.SemanticsLabel = Label.Length > 0 ? Label : null;
-        _fade.Value = enabled ? 1f : AdwStyle.DisabledOpacity;
+        // A disabled button keeps its fill and dims wholesale; a FLAT one has no fill to lose, so
+        // the stylesheet fades it further ($strong_disabled_opacity).
+        _fade.Value = enabled ? 1f
+            : Style is AdwButtonStyle.Flat ? AdwStyle.StrongDisabledOpacity
+            : AdwStyle.DisabledOpacity;
 
         ApplyColors();
         return _fade;

@@ -32,14 +32,30 @@ public sealed class AdwWindowControls : ComposedWidget
 
     public AdwControlsSide Side { get; }
 
+    /// <summary>
+    ///     Is <paramref name="widget" /> part of the WINDOW's chrome — i.e. under Adwaita CSD and
+    ///     not inside a floating sheet? Frame buttons belong to the window, never to a dialog
+    ///     (Preferences, About): such a headerbar must not grow its own button cluster, must not
+    ///     inset itself for traffic lights that are nowhere near it, and must not shed the pixel a
+    ///     real titlebar gives up to the window outline.
+    /// </summary>
+    internal static bool IsWindowChrome(Widget widget)
+    {
+        if (widget.Owner is not { } app ||
+            app.ChromeStyle != Core.Engine.WindowChromeStyle.AdwaitaCsd)
+            return false;
+
+        for (var w = widget.Parent; w is not null; w = w.Parent)
+            if (w is AdwDialog)
+                return false;
+        return true;
+    }
+
     protected override Widget Build(BuildContext context)
     {
         var app = Owner;
         if (app is null) return new SizedBox(0f, 0f);
 
-        // Frame buttons belong to the window, never to a floating sheet — a headerbar inside a
-        // dialog (Preferences, About) must not grow its own button cluster, nor inset itself for
-        // traffic lights that are nowhere near it.
         for (var w = Parent; w is not null; w = w.Parent)
             if (w is AdwDialog)
                 return new SizedBox(0f, 0f);
@@ -69,7 +85,9 @@ public sealed class AdwWindowControls : ComposedWidget
         if (buttons.Count == 0) return new SizedBox(0f, 0f);
 
         var theme = ThemeProvider.Of(context);
-        var row = new Row(spacing: AdwMetrics.HeaderBarPadding, mainAxisSize: MainAxisSize.Min);
+        // `windowcontrols { border-spacing: 3px }` — the frame buttons sit closer together than
+        // ordinary packed widgets do, which is what reads them as one cluster.
+        var row = new Row(spacing: AdwMetrics.ToggleGroupPadding, mainAxisSize: MainAxisSize.Min);
         foreach (var kind in buttons) row.Children.Add(new FrameButton(app, theme, kind));
         return row;
     }
@@ -81,8 +99,15 @@ public sealed class AdwWindowControls : ComposedWidget
     /// </summary>
     private static float TrafficLightReserve(App app)
     {
-        return MathF.Max(0f, app.TitleBarLeftInset - AdwMetrics.HeaderBarPadding * 2f);
+        return MathF.Max(0f, app.TitleBarLeftInset - LeadIn);
     }
+
+    /// <summary>
+    ///     What the headerbar itself already puts in front of its first packed widget: its own side
+    ///     padding, plus the row gap that follows this cluster. Both spacer widths below work
+    ///     backwards from it, so the first real widget lands exactly on the window's titlebar inset.
+    /// </summary>
+    private const float LeadIn = AdwMetrics.HeaderBarPaddingX + AdwMetrics.HeaderBarPadding;
 
     /// <summary>
     ///     The macOS window buttons, drawn by the app: close · minimize · zoom as the three system
@@ -122,7 +147,7 @@ public sealed class AdwWindowControls : ComposedWidget
             _size = new Size(
                 MathF.Max(
                     Lead + Diameter * 3f + Gap * 2f,
-                    App.MacTrafficLightInset - AdwMetrics.HeaderBarPadding * 2f
+                    App.MacTrafficLightInset - LeadIn
                 ),
                 Diameter
             );
@@ -226,19 +251,24 @@ public sealed class AdwWindowControls : ComposedWidget
     }
 
     /// <summary>
-    ///     One GNOME frame button: 24px circle with a drawn ✕ / low-bar / square glyph. A raw
-    ///     widget rather than a Pressable so it stays OUT of the keyboard focus order — window
+    ///     One GNOME frame button: a 24px circle with a drawn ✕ / low-bar / square glyph, inside a
+    ///     34px hit target — <c>windowcontrols > button { min-width: 24px; padding: 5px }</c> around
+    ///     a <c>> image { padding: 4px }</c> circle. The padding is the target, not decoration: at
+    ///     24px the close button is a small square in a 34px bar, and the 3px gaps between the
+    ///     circles become dead pixels between them.
+    ///     A raw widget rather than a Pressable so it stays OUT of the keyboard focus order — window
     ///     buttons never show a focus ring or steal the initial focus in GNOME.
     /// </summary>
     private sealed class FrameButton(App app, ThemeData theme, AdwWindowButton kind) : Widget
     {
-        private const float Diameter = 24f;
+        private const float Target = AdwMetrics.FrameButtonSize;
+        private const float Diameter = AdwMetrics.FrameButtonCircle;
         private bool _hovered;
         private bool _pressed;
 
         public override Size Measure(Constraints c)
         {
-            return new Size(Diameter, Diameter);
+            return new Size(Target, Target);
         }
 
         public override void Layout(Offset origin)
@@ -246,15 +276,24 @@ public sealed class AdwWindowControls : ComposedWidget
             Bounds = new Rect(
                 origin.X,
                 origin.Y,
-                Diameter,
-                Diameter
+                Target,
+                Target
             );
         }
 
+        /// <summary>The drawn circle, centred in the (larger) hit target.</summary>
+        private Rect Circle => new(
+            Bounds.X + (Bounds.Width - Diameter) / 2f,
+            Bounds.Y + (Bounds.Height - Diameter) / 2f,
+            Diameter,
+            Diameter
+        );
+
         public override void Paint(PaintList paint)
         {
+            var circle = Circle;
             paint.AddRect(
-                Bounds,
+                circle,
                 _pressed ? theme.ControlPressed : _hovered ? theme.ControlHover : theme.Control,
                 Diameter / 2f
             );
@@ -268,7 +307,7 @@ public sealed class AdwWindowControls : ComposedWidget
                     Icons.Draw(
                         paint,
                         Icons.Close,
-                        Bounds,
+                        circle,
                         fg,
                         13f
                     );

@@ -60,9 +60,10 @@ public sealed class AdwAboutDialog : AdwDialog
             );
 
             // ── Hero: icon, name, developer, version pill ────────────────────────
+            // `dialog.about image.large-icons { -gtk-icon-size: 128px }`.
             if (owner.IconName is { } icon)
                 col.Children.Add(
-                    new Center { Child = new IconGlyph(icon, 96f, theme.OnBackground) }
+                    new Center { Child = new IconGlyph(icon, 128f, theme.OnBackground) }
                 );
             col.Children.Add(
                 new Label(owner.AppName, AdwTypography.Title2, theme.OnBackground) {
@@ -79,8 +80,9 @@ public sealed class AdwAboutDialog : AdwDialog
                         Child = new DecoratedBox {
                             Fill = theme.SelectionTint,
                             Radius = AdwMetrics.Pill,
+                            // `.app-version { padding: 3px 18px; border-radius: 999px }`.
                             Child = new Padding(
-                                EdgeInsets.Symmetric(Spacing.Md, Spacing.Xs),
+                                EdgeInsets.Symmetric(18f, 3f),
                                 new Label(version, AdwTypography.CaptionHeading, theme.PrimaryDark)
                             ),
                         },

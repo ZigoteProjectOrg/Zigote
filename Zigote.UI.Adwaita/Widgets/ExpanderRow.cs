@@ -113,10 +113,12 @@ public sealed class AdwExpanderRow : ComposedWidget
         header.Suffixes.Add(
             new Watch(() =>
                 {
+                    // `image.expander-row-arrow` is .dimmed, and `&:checked` takes it to opacity 1
+                    // in --accent-color — the expanded state is accent-marked, not just rotated.
                     chevron.Child = new IconGlyph(
                         _expanded.Value ? MaterialIcons.ExpandLess : Icons.ChevronDown,
                         AdwMetrics.IconSize,
-                        p.DimLabel
+                        _expanded.Value ? theme.PrimaryDark : p.DimLabel
                     );
                     return chevron;
                 }
@@ -139,7 +141,16 @@ public sealed class AdwExpanderRow : ComposedWidget
             revealed.Children.Add(row);
         }
 
-        var reveal = new RevealBox(revealed, _expanded.Value);
+        // `list.nested { background-color: color-mix(in srgb, var(--card-shade-color) 50%,
+        // transparent) }` — the nested rows sit in a recess, which is what separates them from the
+        // header row once the separator scrolls out of view.
+        var reveal = new RevealBox(
+            new DecoratedBox {
+                Fill = p.CardShade.WithAlpha(p.CardShade.A * 0.5f),
+                Child = revealed,
+            },
+            _expanded.Value
+        );
 
         Widget column = new Column(
             crossAxisAlignment: CrossAxisAlignment.Stretch,

@@ -156,9 +156,10 @@ public sealed class AdwSuggestionEntry : AdwEntry
         {
             if (Items.Count == 0) return;
             var card = CardRect();
-            paint.AddElevation(card, AdwMetrics.CardRadius, AdwMetrics.PopoverShadow);
-            paint.AddRect(card, AdwPalette.For(_theme).PopoverBg, AdwMetrics.CardRadius);
-            paint.AddBorder(card, _theme.Border, AdwMetrics.CardRadius);
+            // The suggestion list is a popover, so it takes the popover radius, not the card one.
+            paint.AddElevation(card, AdwMetrics.PopoverRadius, AdwMetrics.PopoverShadow);
+            paint.AddRect(card, AdwPalette.For(_theme).PopoverBg, AdwMetrics.PopoverRadius);
+            paint.AddBorder(card, _theme.Border, AdwMetrics.PopoverRadius);
 
             var fs = _theme.FontSizeBody;
             var dim = AdwPalette.For(_theme).DimLabel;
@@ -173,8 +174,8 @@ public sealed class AdwSuggestionEntry : AdwEntry
                 );
                 // GNOME rounds the row highlight and insets it from the card edge; the row keeps
                 // the normal label colour under it rather than inverting, as menus do.
-                var wash = AdwStyle.RowFill(_theme, i == _hover, false);
-                if (wash.A > 0f) paint.AddRect(row, wash, 6f);
+                var wash = AdwStyle.MenuRowFill(_theme, i == _hover, false);
+                if (wash.A > 0f) paint.AddRect(row, wash, AdwMetrics.MenuRadius);
 
                 var (val, disp) = Items[i];
                 var baseline = row.Y + (_rowH - fs) / 2f + fs * 0.8f;

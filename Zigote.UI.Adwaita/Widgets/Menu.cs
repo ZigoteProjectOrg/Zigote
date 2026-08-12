@@ -256,8 +256,9 @@ internal sealed class AdwMenuPopover : AdwPopoverBase
 
             if (item.Enabled)
             {
-                // GNOME menus round their item highlight: 6px radius, inset from the card edge.
-                var wash = AdwStyle.RowFill(Theme, i == Hovered, i == PressedRow);
+                // `modelbutton { border-radius: $menu_radius }` with the $selected_* ladder —
+                // a menu item highlights harder than a boxed-list row does, and rounds to 9px.
+                var wash = AdwStyle.MenuRowFill(Theme, i == Hovered, i == PressedRow);
                 if (wash.A > 0f)
                     paint.AddRect(
                         new Rect(
@@ -267,7 +268,7 @@ internal sealed class AdwMenuPopover : AdwPopoverBase
                             rowH
                         ),
                         wash,
-                        6f
+                        AdwMetrics.MenuRadius
                     );
             }
 

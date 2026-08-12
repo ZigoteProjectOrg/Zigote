@@ -17,22 +17,18 @@ public sealed class AdwPreferencesPage : ComposedWidget
 
     protected override Widget Build(BuildContext context)
     {
+        // `preferencespage > … > box { margin: 24px 12px; border-spacing: 24px }`.
         var column = new Column(
             crossAxisAlignment: CrossAxisAlignment.Stretch,
             mainAxisSize: MainAxisSize.Min,
-            spacing: Spacing.Xxl
+            spacing: AdwMetrics.PageSpacing
         );
         foreach (var group in Groups) column.Children.Add(group);
 
         return new SingleChildScrollView {
             Child = new AdwClamp(
                 new Padding(
-                    EdgeInsets.Only(
-                        Spacing.Lg,
-                        Spacing.Xxl,
-                        Spacing.Lg,
-                        Spacing.Xxl
-                    ),
+                    EdgeInsets.Symmetric(AdwMetrics.PageMarginX, AdwMetrics.PageMarginY),
                     column
                 ),
                 AdwMetrics.ClampWidth

@@ -234,13 +234,15 @@ public sealed class AdwBottomSheet : ComposedWidget
     {
         _sheetHost.Child = Sheet ?? SizedBox.Shrink();
 
+        // `bottom-sheet > sheet` is a window-bg surface at $dialog_radius; its dimming layer is the
+        // shade colour at double alpha, and the drag handle is currentColor 25%.
         var style = new BottomSheetStyle {
-            Background = p.DialogBg,
+            Background = p.WindowBg,
             BarrierColor = p.Scrim,
-            CornerRadius = AdwMetrics.WindowRadius,
+            CornerRadius = AdwMetrics.DialogRadius,
             Shadow = Elevation.Z3,
             ShowDragHandle = ShowDragHandle,
-            DragHandleColor = theme.Label3,
+            DragHandleColor = AdwPalette.Fill(theme, 0.25f),
         };
 
         if (_flex is null || _flexHasHandle != ShowDragHandle)

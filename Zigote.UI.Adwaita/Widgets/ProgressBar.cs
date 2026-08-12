@@ -95,7 +95,9 @@ public sealed class AdwProgressBar : Widget
     public override void Paint(PaintList paint)
     {
         var radius = Bounds.Height / 2f;
-        paint.AddRect(Bounds, _theme.Fill2, radius);
+        // progressbar > trough @extends %scale_trough — the same currentColor 15% every trough in
+        // the stylesheet uses, not a lighter fill of its own.
+        paint.AddRect(Bounds, AdwStyle.TroughFill(_theme), radius);
 
         if (!Indeterminate)
         {
@@ -193,7 +195,7 @@ public sealed class AdwLevelBar : LeafWidget
     public override void Paint(PaintList paint)
     {
         var radius = Bounds.Height / 2f;
-        paint.AddRect(Bounds, _theme.Fill2, radius);
+        paint.AddRect(Bounds, AdwStyle.TroughFill(_theme), radius);
 
         var fillW = Value * Bounds.Width;
         if (fillW <= 0f) return;

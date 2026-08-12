@@ -69,15 +69,18 @@ public sealed class AdwTabButton : ComposedWidget
 
             // Past two digits the number stops fitting the 20px box; GNOME shows ∞ rather than
             // letting the glyph shrink into illegibility or the button grow.
+            // `tabbutton label { font-weight: 800; font-size: 10.5px }` — the count is part of the
+            // icon, so the stylesheet pins it in pixels rather than letting the type ramp move it.
             var text = count > 99 ? "∞" : count.ToString();
-            const float fs = 11f;
+            const float fs = 10.5f;
             var w = TextShaping.TextMeasure.Width(text, fs);
             paint.AddText(
                 text,
                 Bounds.X + (GlyphBox - w) / 2f,
                 Bounds.Y + (GlyphBox - fs) / 2f + fs * 0.82f,
                 fg,
-                fs
+                fs,
+                fontWeight: FontWeight.ExtraBold
             );
         }
     }

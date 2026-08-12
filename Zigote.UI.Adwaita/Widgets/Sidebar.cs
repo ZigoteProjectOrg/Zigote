@@ -185,12 +185,14 @@ public sealed class AdwSidebar : ComposedWidget, IFocusGroup
         // Bottom is SidebarRowGap shy of the top: the last row's own gap already supplies it, and
         // padding both edges equally leaves the end of the list visibly looser than its start.
         // This is what libadwaita 1.10 corrected in the navigation-sidebar stylesheet.
+        // `.navigation-sidebar { padding-top: $menu_margin; padding-bottom: $menu_margin - 2px }`
+        // with `> row { margin: 0 $menu_margin 2px }`.
         return new Padding(
             EdgeInsets.FromLtrb(
-                Spacing.Sm,
-                Spacing.Sm,
-                Spacing.Sm,
-                MathF.Max(0f, Spacing.Sm - AdwMetrics.SidebarRowGap)
+                AdwMetrics.MenuMargin,
+                AdwMetrics.MenuMargin,
+                AdwMetrics.MenuMargin,
+                MathF.Max(0f, AdwMetrics.MenuMargin - AdwMetrics.SidebarRowGap)
             ),
             column
         );
@@ -266,17 +268,20 @@ public sealed class AdwSidebar : ComposedWidget, IFocusGroup
             );
         if (item.Prefix is { } prefix) content.Children.Insert(0, prefix);
 
+        // `.navigation-sidebar > row { border-radius: $menu_radius }` on the $selected_* ladder —
+        // a selected sidebar row is currentColor 10%, the same weight as a hovered menu item.
+        var selectedFill = AdwStyle.SidebarRowFill(theme, false, false, true);
         var box = new Container {
             Height = RowHeight,
-            CornerRadius = Radii.Md,
-            Background = selected ? theme.Fill2 : Color.Transparent,
+            CornerRadius = AdwMetrics.MenuRadius,
+            Background = selected ? selectedFill : Color.Transparent,
             Padding = EdgeInsets.Symmetric(AdwMetrics.SidebarRowPaddingX),
             // Container lays its child at the top-left, so center the row content via Align.
             Child = new Align(Alignment.CenterLeft, content),
         };
         var press = new Pressable {
             Child = box,
-            FocusRadius = Radii.Md,
+            FocusRadius = AdwMetrics.MenuRadius,
             SemanticsLabel = item.Title,
             SelectedState = selected,
             // Activation fires even when the row is already selected: a collapsed split view leaves
@@ -295,12 +300,20 @@ public sealed class AdwSidebar : ComposedWidget, IFocusGroup
                 box.MarkNeedsPaint();
             }
         );
-        fill.Snap(selected ? theme.Fill2 : Color.Transparent);
+        fill.Snap(selected ? selectedFill : Color.Transparent);
         if (selected) _selectedRow = press;
         press.OnStateChanged = () =>
         {
-            // Selected keeps its Fill2 wash; unselected rows get the activatable-row hover wash.
-            if (!selected) fill.Target(AdwStyle.RowFill(theme, press.Hovered, press.Pressed));
+            // A selected row keeps climbing its own ladder (13% hovered, 19% pressed) rather than
+            // freezing — a click on the current row still has to feel like a click.
+            fill.Target(
+                AdwStyle.SidebarRowFill(
+                    theme,
+                    press.Hovered,
+                    press.Pressed,
+                    selected
+                )
+            );
         };
         return press;
     }

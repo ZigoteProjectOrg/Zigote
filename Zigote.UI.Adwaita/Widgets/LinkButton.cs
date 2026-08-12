@@ -41,14 +41,14 @@ public sealed class AdwLinkButton : ComposedWidget
         // this tracks whichever of the nine GNOME system accents is selected.
         var accent = theme.PrimaryDark;
 
-        var label = new LabelWidget(Label, 14f) {
-            MaxLines = 1,
-            Color = accent,
-        };
-        // Cheap hover underline: a 1px bar under the label toggled between accent and transparent.
+        // `link { text-decoration: underline }` is unconditional in Adwaita — the underline is
+        // the affordance, and hover only brightens the hue
+        // (`HSL(from $link_color h calc(s * 1.1) calc(l * 1.1))`).
+        var hover = accent.Lighten(0.1f);
+        var label = new LabelWidget(Label, AdwTypography.Body, accent) { MaxLines = 1 };
         var underline = new Container {
             Height = 1f,
-            Background = Color.Transparent,
+            Background = accent,
         };
 
         var pressable = new Pressable {
@@ -85,15 +85,19 @@ public sealed class AdwLinkButton : ComposedWidget
             ),
         };
         // Container.Background self-invalidates, so the apply is a bare setter.
-        var fill = new FillTransition(c => underline.Background = c);
-        fill.Snap(Color.Transparent); // seed so the first hover fades instead of snapping
+        var fill = new FillTransition(c =>
+            {
+                underline.Background = c;
+                label.Color = c;
+                label.MarkNeedsPaint();
+            }
+        );
+        fill.Snap(accent);
         pressable.OnStateChanged = () =>
         {
-            fill.Target(
-                pressable.Hovered || pressable.Pressed
-                    ? accent
-                    : Color.Transparent
-            );
+            // Only :hover brightens — `&:active { color: $link_color }` puts the pressed state
+            // back on the base hue.
+            fill.Target(pressable.Hovered && !pressable.Pressed ? hover : accent);
         };
 
         return Enabled ? pressable : new Opacity(AdwStyle.DisabledOpacity, pressable);

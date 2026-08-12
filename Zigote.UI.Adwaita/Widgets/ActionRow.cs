@@ -133,9 +133,12 @@ public sealed class AdwActionRow : ComposedWidget
         var theme = ThemeProvider.Of(context);
         var p = AdwPalette.For(theme);
 
+        // `> box.title { border-spacing: 3px }` — title and subtitle sit tight together; the air
+        // in the row comes from the 50px minimum height around them, not from this gap.
         var titles = new Column(
             crossAxisAlignment: CrossAxisAlignment.Start,
-            mainAxisSize: MainAxisSize.Min
+            mainAxisSize: MainAxisSize.Min,
+            spacing: AdwMetrics.RowTitleSpacing
         );
         titles.Children.Add(
             new Label(Title, AdwTypography.Body, theme.OnSurface) {
@@ -164,14 +167,18 @@ public sealed class AdwActionRow : ComposedWidget
         if (prefix is not null)
         {
             row.Children.Add(prefix);
-            row.Children.Add(new SizedBox(Spacing.Md));
+            // border-spacing 6px + the prefix's own `margin-right: 6px`.
+            row.Children.Add(new SizedBox(AdwMetrics.RowSpacing * 2f));
         }
 
         row.Children.Add(
-            new Expanded(new Padding(EdgeInsets.Symmetric(0f, AdwMetrics.RowPaddingY), titles))
+            new Expanded(
+                // `> box.title { margin-top: 6px; margin-bottom: 6px }`.
+                new Padding(EdgeInsets.Symmetric(0f, AdwMetrics.RowSpacing), titles)
+            )
         );
         var suffixRow = new Row(
-            spacing: Spacing.Sm,
+            spacing: AdwMetrics.RowSpacing,
             mainAxisSize: MainAxisSize.Min,
             crossAxisAlignment: CrossAxisAlignment.Center
         );
@@ -182,7 +189,7 @@ public sealed class AdwActionRow : ComposedWidget
             );
         if (suffixRow.Children.Count > 0)
         {
-            row.Children.Add(new SizedBox(Spacing.Sm));
+            row.Children.Add(new SizedBox(AdwMetrics.RowSpacing));
             row.Children.Add(suffixRow);
         }
 

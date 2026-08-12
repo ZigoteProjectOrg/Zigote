@@ -21,7 +21,11 @@ public sealed class AdwViewSwitcher : ComposedWidget
         return new Watch(() =>
             {
                 var visible = _stack.Visible.Value;
-                var row = new Row(spacing: Spacing.Xs, mainAxisSize: MainAxisSize.Min);
+                // `viewswitcher { border-spacing: 3px }`.
+                var row = new Row(
+                    spacing: AdwMetrics.ToggleGroupPadding,
+                    mainAxisSize: MainAxisSize.Min
+                );
                 foreach (var page in _stack.Pages)
                     row.Children.Add(
                         Toggle(
@@ -46,15 +50,22 @@ public sealed class AdwViewSwitcher : ComposedWidget
         if (page.Badge > 0)
             content.Children.Add(Badge(theme, page.Badge));
 
+        // A header-bar view switcher is made of FLAT toggles: checked is $selected_color (10%),
+        // not the 30% a raised button latches to — the switcher has to sit quietly in the chrome.
         var box = new DecoratedBox {
             Radius = AdwMetrics.ControlRadius,
-            Fill = active ? p.ButtonFillActive : Color.Transparent,
+            Fill = AdwStyle.ButtonFill(
+                theme,
+                AdwButtonStyle.Flat,
+                @checked: active
+            ),
             // Zero-width strut fixes the height at 34 and cross-centers the content without
             // expanding to the available width (a Center here would).
             Child = new Row(mainAxisSize: MainAxisSize.Min) {
                 Children = {
                     new SizedBox(height: AdwMetrics.ButtonHeight),
-                    new Padding(EdgeInsets.Symmetric(10f), content),
+                    // `> stack > box.wide { padding: 2px 12px }`.
+                    new Padding(EdgeInsets.Symmetric(AdwMetrics.RowPaddingX, 2f), content),
                 },
             },
         };
@@ -65,8 +76,12 @@ public sealed class AdwViewSwitcher : ComposedWidget
             SelectedState = active,
             OnPressed = () => _stack.VisibleName = page.Name,
         };
-        // The visible page keeps the steady active fill; only the others fade in on hover.
-        if (!active) pressable.WireFill(box, theme);
+        pressable.WireFill(
+            box,
+            theme,
+            AdwButtonStyle.Flat,
+            @checked: () => active
+        );
         return pressable;
     }
 

@@ -109,9 +109,12 @@ public sealed class AdwNavigationSplitView : ComposedWidget
                             Background = p.SidebarBg,
                             Child = Sidebar,
                         },
+                        // `.sidebar-pane { box-shadow: inset -1px 0 var(--sidebar-border-color) }`
+                        // — the pane's edge is the BORDER token, which is heavier in dark mode than
+                        // the shade the pane casts over scrolled content.
                         new Container {
                             Width = 1f,
-                            Background = p.SidebarShade,
+                            Background = p.SidebarBorder,
                         },
                         new Expanded(
                             new Container {

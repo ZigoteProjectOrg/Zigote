@@ -83,10 +83,16 @@ public class AdwaitaApp : ZigoteApp
         // One source of truth for the corner: the window's clip and everything Adwaita rounds
         // (dialogs, sheets) come from the same metric, so they can never drift apart.
         app.CsdCornerRadius = AdwMetrics.WindowRadius;
+        // `window.csd { outline: 1px solid $window_outline_color; outline-offset: -1px }` — the
+        // hairline that separates a dark Adwaita window from a dark desktop behind it. Same value
+        // in both appearances, so it is set once here rather than tracked with the theme.
+        app.CsdOutlineColor = AdwPalette.Light.WindowOutline;
         // Unified chrome (the editor's setting can still force it) drags by band rather than by
         // registered surface: an Adwaita window leads with a headerbar, so the band is that bar —
-        // the default 38px would leave its bottom strip inert.
-        app.TitleBarDragHeight = AdwMetrics.HeaderBarHeight;
+        // the default 38px would leave its bottom strip inert. 46, not 47: a headerbar that IS the
+        // titlebar is a pixel shorter, and a band deeper than the bar makes the first row of
+        // content drag the window instead of taking the click.
+        app.TitleBarDragHeight = AdwMetrics.TitleBarHeight;
         app.ApplyWindowChrome(ResolveChrome());
 
         if (!_followSystem) return;
@@ -117,6 +123,11 @@ public class AdwaitaApp : ZigoteApp
             height == 0 ? Height : height
         );
         var scope = new ThemeProvider(Theme) { Child = content };
+        // A second window is a peer, not a satellite: same corner, same outline, same drag band —
+        // ApplyWindowChrome cascades the STYLE, but these are per-window properties.
+        win.CsdCornerRadius = AdwMetrics.WindowRadius;
+        win.CsdOutlineColor = AdwPalette.Light.WindowOutline;
+        win.TitleBarDragHeight = AdwMetrics.TitleBarHeight;
         win.Theme = Theme;
         win.Root = scope;
         _windows.Add((win, scope));

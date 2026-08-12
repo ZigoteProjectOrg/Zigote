@@ -24,19 +24,18 @@ public class AdwaitaThemeTests
         return MathF.Pow(l, 1f / 2.2f);
     }
 
+    // libadwaita 1.10 states every neutral fill as color-mix(currentColor N%, transparent), so the
+    // ladder is the same in both appearances — only currentColor flips.
     [Theory]
-    [InlineData(false, 0.08f)] // light button fill
-    [InlineData(false, 0.16f)] // light button :active
+    [InlineData(false, 0.10f)] // light button fill
+    [InlineData(false, 0.30f)] // light button :active
     [InlineData(true, 0.10f)] // dark button fill
-    [InlineData(true, 0.20f)] // dark button :active
+    [InlineData(true, 0.30f)] // dark button :active
     public void OverlayAlphasReproduceTheStylesheetColour(bool dark, float cssAlpha)
     {
         var p = dark ? AdwPalette.Dark : AdwPalette.Light;
-        var surface = dark ? p.WindowBg : p.WindowBg;
-        var fill = cssAlpha switch {
-            0.08f or 0.10f => p.ButtonFill,
-            _ => p.ButtonFillActive,
-        };
+        var surface = p.WindowBg;
+        var fill = cssAlpha == 0.10f ? p.ButtonFill : p.ButtonFillActive;
 
         // What GNOME's CSS means: blend in sRGB space.
         var tint = dark ? 1f : 6f / 255f;
@@ -53,6 +52,37 @@ public class AdwaitaThemeTests
         // The pre-fix value (a literal .10 white) composited to ~#5e5e60 instead of ~#383839.
         var rendered = Composite(AdwPalette.Dark.ButtonFill, AdwPalette.Dark.WindowBg) * 255f;
         Assert.InRange(rendered, 50f, 62f);
+    }
+
+    /// <summary>
+    ///     The standalone colours are <c>oklab(from @x min(l, 0.5) a b)</c> in light and
+    ///     <c>max(l, 0.85)</c> in dark. Pinned against the values libadwaita publishes for them: if
+    ///     the Oklab conversion drifts (a transfer function swapped for the renderer's 2.2 gamma,
+    ///     say), every link, alert response and status label drifts with it.
+    /// </summary>
+    [Theory]
+    [InlineData(false, "accent", 0x04, 0x61, 0xbe)]
+    [InlineData(true, "accent", 0x81, 0xd0, 0xff)]
+    [InlineData(false, "destructive", 0xc3, 0x00, 0x00)]
+    [InlineData(true, "destructive", 0xff, 0x93, 0x8c)]
+    [InlineData(false, "success", 0x00, 0x7c, 0x3d)]
+    [InlineData(true, "success", 0x78, 0xe9, 0xab)]
+    [InlineData(false, "warning", 0x90, 0x54, 0x00)]
+    [InlineData(true, "warning", 0xff, 0xc2, 0x52)]
+    public void StandaloneColoursMatchLibadwaita(bool dark, string which, int r, int g, int b)
+    {
+        var p = dark ? AdwPalette.Dark : AdwPalette.Light;
+        var actual = which switch {
+            "accent" => p.Accent,
+            "destructive" => p.Destructive,
+            "success" => p.Success,
+            _ => p.Warning,
+        };
+
+        // One 8-bit level of slack: the published hex is itself a rounding of the same maths.
+        Assert.InRange(actual.R * 255f, r - 1.5f, r + 1.5f);
+        Assert.InRange(actual.G * 255f, g - 1.5f, g + 1.5f);
+        Assert.InRange(actual.B * 255f, b - 1.5f, b + 1.5f);
     }
 
     [Fact]

@@ -99,8 +99,25 @@ public sealed class AdwColorButton : Widget
 
     public override void Paint(PaintList paint)
     {
-        paint.AddRect(Bounds, _value.WithAlpha(1f), AdwMetrics.ControlRadius);
-        paint.AddBorder(Bounds, _theme.Separator, AdwMetrics.ControlRadius);
+        // `button.color { padding: 5px }` with `> colorswatch { border-radius: $button_radius -
+        // 4.5px }`: the swatch is a chip INSIDE a normal button, not a button-sized slab of colour.
+        // Without the surrounding fill the control loses its button reading entirely when the
+        // chosen colour happens to match the page.
+        const float pad = 5f;
+        var p = AdwPalette.For(_theme);
+        var swatch = new Rect(
+            Bounds.X + pad,
+            Bounds.Y + pad,
+            MathF.Max(0f, Bounds.Width - pad * 2f),
+            MathF.Max(0f, Bounds.Height - pad * 2f)
+        );
+        var swatchRadius = AdwMetrics.ControlRadius - 4.5f;
+
+        paint.AddRect(Bounds, p.ButtonFill, AdwMetrics.ControlRadius);
+        paint.AddRect(swatch, _value.WithAlpha(1f), swatchRadius);
+        // `.light > overlay { border-color: view-fg 10% }` — a hairline so a white swatch still
+        // reads as a swatch.
+        paint.AddBorder(swatch, p.ViewFg.WithAlpha(0.1f), swatchRadius);
         if (Focused) paint.AddFocusRing(Bounds, AdwMetrics.ControlRadius, _theme);
     }
 

@@ -115,11 +115,18 @@ public sealed class AdwBanner : ComposedWidget
             content = row;
         }
 
+        // `--banner-color: #7d7d83` mixed 30% into the window background: an Adwaita banner is a
+        // NEUTRAL grey band that says "read me", not an accent-tinted one — the accent is reserved
+        // for the button inside it.
         return new HeightReveal(
             _anim,
             new Container {
-                Background = theme.SelectionTint,
-                Padding = EdgeInsets.Symmetric(AdwMetrics.RowPaddingX, 8f),
+                Background = AdwPalette.Mix(
+                    Color.Rgb(125, 125, 131),
+                    AdwPalette.For(theme).WindowBg,
+                    0.30f
+                ),
+                Padding = EdgeInsets.Symmetric(AdwMetrics.RowPaddingX, AdwMetrics.RowSpacing),
                 Child = content,
             }
         );

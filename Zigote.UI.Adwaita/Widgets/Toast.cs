@@ -41,12 +41,9 @@ public sealed class AdwToast
 public sealed class AdwToastOverlay : ComposedWidget
 {
     // The toast surface is always dark, whatever the appearance — fixed colors, not theme reads.
-    private static readonly Color Surface = Color.Rgba(
-        0,
-        0,
-        6,
-        0.85f
-    );
+    // `$toast_bg_color: #505053` — an opaque mid-grey, not a black wash: a translucent toast picks
+    // up whatever it happens to be floating over, which is exactly what a notification must not do.
+    private static readonly Color Surface = Color.Rgb(80, 80, 83);
 
     private static readonly Color Fg = Color.Rgb(255, 255, 255);
 
@@ -226,19 +223,21 @@ public sealed class AdwToastOverlay : ComposedWidget
             Fill = Surface,
             Radius = AdwMetrics.Pill,
             Elevation = Elevation.Z3,
+            // `toast { padding: 6px; &:dir(ltr) { padding-left: 12px } }`.
             Child = new Padding(
                 EdgeInsets.Only(
-                    18f,
-                    6f,
-                    6f,
-                    6f
+                    AdwMetrics.RowPaddingX,
+                    AdwMetrics.RowSpacing,
+                    AdwMetrics.RowSpacing,
+                    AdwMetrics.RowSpacing
                 ),
                 row
             ),
         };
 
+        // `toast { margin: 12px; margin-bottom: 24px }`.
         return new Padding(
-            EdgeInsets.Only(bottom: 24f),
+            EdgeInsets.Only(bottom: Spacing.Xxl),
             new ConstrainedBox(
                 new Constraints(
                     0f,

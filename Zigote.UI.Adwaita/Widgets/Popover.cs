@@ -7,7 +7,7 @@ namespace Zigote.UI.Adwaita;
 
 /// <summary>
 ///     The overlay skeleton every Adwaita popover shares: an <see cref="AdwColors.PopoverBg" />
-///     card at radius 12 (hairline border, Z2 lift) anchored below/above its trigger, entering
+///     card at radius 15 (hairline border, Z2 lift) anchored below/above its trigger, entering
 ///     with a ~150ms ease-out fade + 6px rise and leaving by reversing the same motion. It
 ///     captures all input while shown — click-outside or Esc dismisses — and takes focus, the way
 ///     a GTK popover grabs it, so Up/Down/Enter reach the list and Tab cannot walk into the page
@@ -117,9 +117,11 @@ internal abstract class AdwPopoverBase : Widget, IDismissableOverlay
         if (rise > 0.01f) paint.PushTranslate(0f, -rise);
 
         var mr = PopupRect();
-        paint.AddElevation(mr, AdwMetrics.CardRadius, AdwMetrics.PopoverShadow);
-        paint.AddRect(mr, AdwPalette.For(Theme).PopoverBg, AdwMetrics.CardRadius);
-        paint.AddBorder(mr, Theme.Border, AdwMetrics.CardRadius);
+        // `popover > contents { border-radius: $popover_radius }` — 15px, six more than a control
+        // and three more than a card, which is what tells a floating surface from an inline one.
+        paint.AddElevation(mr, AdwMetrics.PopoverRadius, AdwMetrics.PopoverShadow);
+        paint.AddRect(mr, AdwPalette.For(Theme).PopoverBg, AdwMetrics.PopoverRadius);
+        paint.AddBorder(mr, Theme.Border, AdwMetrics.PopoverRadius);
         PaintRows(paint, mr);
 
         if (rise > 0.01f) paint.PopTranslate();
@@ -283,8 +285,9 @@ internal sealed class AdwPopover : AdwPopoverBase
                 PopupW - Pad * 2f,
                 RowH
             );
-            var wash = AdwStyle.RowFill(Theme, i == Hovered, i == PressedRow);
-            if (wash.A > 0f) paint.AddRect(row, wash, 6f);
+            // `popover.menu list > row { border-radius: $menu_radius }` on the $selected ladder.
+            var wash = AdwStyle.MenuRowFill(Theme, i == Hovered, i == PressedRow);
+            if (wash.A > 0f) paint.AddRect(row, wash, AdwMetrics.MenuRadius);
 
             var baseline = row.Y + (RowH - fs) / 2f + fs * 0.8f;
             if (_showCheck && i == _selected)

@@ -17,10 +17,12 @@ namespace Zigote.UI.Adwaita;
 /// </summary>
 public sealed class AdwShortcutLabel : Widget
 {
-    private const float CapH = 22f;
-    private const float CapPadX = 7f;
-    private const float CapGap = 4f;
-    private const float SepGap = 8f;
+    // `.keycap { padding: 6px; min-width: 20px }` inside a `border-spacing: 6px` box.
+    private const float CapH = 26f;
+    private const float CapMinW = 20f;
+    private const float CapPadX = 6f;
+    private const float CapGap = 6f;
+    private const float SepGap = 6f;
     private const float FontSize = 12.5f;
 
     private string _accelerator;
@@ -76,7 +78,7 @@ public sealed class AdwShortcutLabel : Widget
             foreach (var key in Parse(accel))
             {
                 var textW = TextMeasure.Width(key, FontSize);
-                var w = MathF.Max(CapH, textW + CapPadX * 2f);
+                var w = MathF.Max(CapMinW, textW + CapPadX * 2f);
                 _caps.Add((key, x, w, textW, false));
                 x += w + CapGap;
             }
@@ -118,8 +120,20 @@ public sealed class AdwShortcutLabel : Widget
             );
             if (!separator)
             {
-                paint.AddRect(cap, p.ButtonFill, 6f);
-                paint.AddBorder(cap, _theme.Separator, 6f);
+                // `.keycap { background: currentColor 10%; box-shadow: inset 0 -2px
+                // var(--card-shade-color); border-radius: 6px }` — a key cap has a shaded FOOT,
+                // not an outline: that bottom bevel is what makes it read as a physical key.
+                paint.AddRect(cap, p.ButtonFill, AdwMetrics.CheckRadius);
+                paint.AddRect(
+                    new Rect(
+                        cap.X,
+                        cap.Bottom - 2f,
+                        cap.Width,
+                        2f
+                    ),
+                    p.CardShade,
+                    AdwMetrics.CheckRadius
+                );
             }
 
             paint.AddText(
