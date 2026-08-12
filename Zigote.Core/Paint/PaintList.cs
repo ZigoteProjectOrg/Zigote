@@ -715,6 +715,22 @@ public sealed unsafe class PaintList
         }
     }
 
+    /// <summary>
+    ///     Append every command from <paramref name="other" />, re-basing its sparse blob entries onto
+    ///     this list's indices. Blob arrays are shared, not copied, so the composite is only valid while
+    ///     <paramref name="other" /> is unchanged — which is exactly the capture path's lifetime: it
+    ///     composites the root and overlay layers into one list, submits, and is done.
+    /// </summary>
+    public void AppendFrom(PaintList other)
+    {
+        var offset = _commands.Count;
+        _commands.AddRange(other._commands);
+        // Offsetting preserves the ascending order FindTextBlob/FindPixelBlob binary-search over.
+        foreach (var (index, blob) in other._textBlobs) _textBlobs.Add((index + offset, blob));
+        foreach (var (index, blob, pinned) in other._pixelBlobs)
+            _pixelBlobs.Add((index + offset, blob, pinned));
+    }
+
     private void FreeQuadHandles()
     {
         foreach (var h in _quadHandles) h.Free();
