@@ -126,6 +126,16 @@ fi
 # Default artifact name from the project filename (Zigote.Editor.csproj → zigote-editor, Signals → signals).
 [ -z "$NAME" ] && NAME="$(basename "$PROJECT" .csproj | tr '[:upper:].' '[:lower:]-')"
 
+# zip($1) a directory($2). Windows has no `zip` — neither Git Bash nor the GitHub windows runner ship
+# it — but 7z is there and on PATH, so fall back to it rather than making the whole win-x64 leg
+# depend on a tool that isn't part of the toolchain.
+archive() {
+  if command -v zip >/dev/null 2>&1; then zip -qr "$1" "$2"
+  elif command -v 7z >/dev/null 2>&1; then 7z a -tzip -bso0 -bsp0 "$1" "$2"
+  else echo "no archiver: install zip or 7z" >&2; return 1
+  fi
+}
+
 host_rids() {
   case "$(uname -s)" in
     Darwin) echo "osx-arm64 osx-x64" ;;
@@ -197,8 +207,12 @@ for rid in "${RIDS[@]}"; do
        ${ZIG_CPU:+-p:ZigCpu=$ZIG_CPU} \
        ${FONT_SUBSET_TOOL:+-p:FontSubsetTool=$FONT_SUBSET_TOOL} \
        -o "$dest"; then
-    ( cd "$OUT" && rm -f "$NAME-$rid.zip" && zip -qr "$NAME-$rid.zip" "$(basename "$dest")" )
-    echo "  ✅ $rid → $OUT/$NAME-$rid.zip"
+    if ( cd "$OUT" && rm -f "$NAME-$rid.zip" && archive "$NAME-$rid.zip" "$(basename "$dest")" ); then
+      echo "  ✅ $rid → $OUT/$NAME-$rid.zip"
+    else
+      echo "  ❌ $rid published but could not be archived."
+      fail=1
+    fi
   else
     echo "  ❌ $rid failed (see log above)."
     fail=1

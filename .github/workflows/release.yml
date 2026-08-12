@@ -2,9 +2,14 @@ name: Release
 
 # Per-OS matrix: each runner natively builds + publishes its own RID (the only reliable way to cover
 # Windows-MSVC, which doesn't cross-compile cleanly from other hosts). Produces self-contained,
-# non-trimmed editor bundles with the native libzigote and subset fonts.
+# non-trimmed editor bundles with the native libzigote and the app's fonts.
+#
+# Fonts ship at full coverage: EnableFontStripping is off by default (build/Zigote.Fonts.targets) and
+# stays off here on purpose — the editor renders arbitrary filenames and file contents, so subsetting
+# to the fixed Latin+Cyrillic ranges would turn any other script into tofu. That costs ~66 MB of
+# Iosevka per artifact, which is the cheaper of the two mistakes.
 
-# The job only builds and uploads artifacts; it never needs to write to the repo.
+# Building needs no write access; only the release job below gets contents: write.
 permissions:
   contents: read
 
@@ -38,17 +43,12 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Set up Zig
-        uses: mlugg/setup-zig@v1
+        uses: mlugg/setup-zig@v2
         with:
           version: 0.16.0
 
-      - name: Install font subsetter (pyftsubset)
-        run: python -m pip install --upgrade fonttools
-
       - name: Publish
         shell: bash
-        env:
-          FONT_SUBSET_TOOL: pyftsubset
         run: build/publish.sh ${{ matrix.rid }}
 
       - name: Upload artifact
@@ -57,3 +57,33 @@ jobs:
           name: zigote-editor-${{ matrix.rid }}
           path: artifacts/zigote-editor-${{ matrix.rid }}.zip
           if-no-files-found: error
+
+  # Workflow artifacts expire after 90 days and need a GitHub login to download, so a tag build that
+  # stops there ships nothing anyone can actually get. Attach the same zips to the tag's release.
+  # Not gated on the whole matrix succeeding (fail-fast is off): a tag that only builds on two of the
+  # three OSes should still publish those two.
+  release:
+    needs: publish
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      # create-then-upload rather than a one-shot create, so re-running the workflow on an existing
+      # tag replaces the assets instead of failing on "release already exists".
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shopt -s nullglob
+          zips=(dist/*.zip)
+          # Every leg failed. Fail here rather than creating an empty release for the tag.
+          [ ${#zips[@]} -gt 0 ] || { echo "::error::no bundles were built for $GITHUB_REF_NAME"; exit 1; }
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes ||
+            echo "release $GITHUB_REF_NAME already exists — updating its assets"
+          gh release upload "$GITHUB_REF_NAME" "${zips[@]}" --clobber
