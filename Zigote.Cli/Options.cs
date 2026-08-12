@@ -8,11 +8,19 @@ public sealed class Options
     public string? AppId { get; private init; }
     public bool Force { get; private init; }
 
+    /// <summary>preview: print the previewable widgets instead of showing one.</summary>
+    public bool ListTargets { get; private init; }
+
+    /// <summary>preview: plain <c>dotnet run</c>, giving up reload-on-save.</summary>
+    public bool NoWatch { get; private init; }
+
     public static Options Parse(string[] args, out List<string> positional)
     {
         positional = [];
         string? dir = null, engine = null, id = null;
         var force = false;
+        var list = false;
+        var noWatch = false;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -30,6 +38,12 @@ public sealed class Options
                 case "--force":
                     force = true;
                     break;
+                case "--list":
+                    list = true;
+                    break;
+                case "--no-watch":
+                    noWatch = true;
+                    break;
                 default:
                     if (args[i].StartsWith('-')) throw new CliError($"unknown option '{args[i]}'");
                     positional.Add(args[i]);
@@ -42,7 +56,9 @@ public sealed class Options
             Directory = Path.GetFullPath(dir ?? System.IO.Directory.GetCurrentDirectory()),
             Engine = engine,
             AppId = id,
-            Force = force
+            Force = force,
+            ListTargets = list,
+            NoWatch = noWatch
         };
     }
 

@@ -29,6 +29,7 @@ public static class Program
             {
                 "create" => Create(args[1..]),
                 "add" => Add(args[1..]),
+                "preview" => RunPreview(args[1..]),
                 "--version" or "-v" => Version(),
                 _ => Fail($"unknown command '{args[0]}'")
             };
@@ -63,6 +64,7 @@ public static class Program
             USAGE
               zigote create <Name> [options]     create an app (shared sources + desktop head)
               zigote add android [options]       add an Android head to an existing app
+              zigote preview <Type> [options]    run one widget on its own, reloading on save
               zigote --version
 
             OPTIONS
@@ -71,10 +73,14 @@ public static class Program
                                     Default: found by walking up from --dir, else $ZIGOTE_ROOT.
               --id <app.id>         application id for a platform head. Default: dev.zigote.<name>.
               --force               overwrite files that already exist.
+              --list                preview: print the previewable widgets and exit.
+              --no-watch            preview: do not reload on save.
 
             EXAMPLES
               zigote create Metronome
               cd Metronome && zigote add android --id dev.zigote.Metronome
+              zigote preview --list
+              zigote preview Metronome.SettingsPage
 
             After `add android`, build with the RID that selects BOTH halves of the build:
               dotnet build <Name>.Android -p:ZigTargetRid=android-arm64   # device
@@ -137,6 +143,12 @@ public static class Program
         Console.WriteLine("The RID is mandatory: it selects the managed RID AND the native");
         Console.WriteLine("cross-compile, and the generated project refuses to build without it.");
         return 0;
+    }
+
+    private static int RunPreview(string[] args)
+    {
+        var options = Options.Parse(args, out var positional);
+        return Preview.Run(options, positional, FindAppProject(options.Directory));
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
