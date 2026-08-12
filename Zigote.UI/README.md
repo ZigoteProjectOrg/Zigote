@@ -149,12 +149,20 @@ Cross-platform fonts are bundled here (`Fonts/`) and flattened into `Fonts/` nex
 `Zigote.UI` — no system-font dependency. **Inter** (default UI), **Iosevka** (code / monospace), **Material Icons**
 (glyphs), **Noto Emoji**.
 
-## Design language variants
+## Design systems on top
 
-`Zigote.UI` is the flat-macOS base. Two full alternate design languages layer on top of it (pick one per app): **
-`Zigote.UI.Cupertino`** (Cupertino iOS set) and **`Zigote.UI.AppKit`** (AppKit macOS-desktop set + window shell). **
-`Zigote.UI.Charts`** adds a composable, declarative charting library, and **`Zigote.UI.Localizations`** adds declarative
-i18n.
+`Zigote.UI` is the flat-macOS base. Two full design languages layer on top of it, as surfaces over this same kernel
+rather than forks — they share the theme, focus, semantics and hot-reload machinery, and mixing them in one app is
+supported:
+
+- **[`Zigote.UI.Adwaita`](../Zigote.UI.Adwaita/README.md)** — the GNOME Adwaita design system, with live system theming
+  and client-side decorations.
+- **[`Zigote.UI.Material`](../Zigote.UI.Material/README.md)** — the Material vocabulary with the Flutter names.
+
+Alongside them: **[`Zigote.UI.Charts`](../Zigote.UI.Charts/README.md)** (declarative charting),
+**[`Zigote.UI.Localizations`](../Zigote.UI.Localizations/README.md)** (i18n),
+**[`Zigote.UI.BottomSheet`](../Zigote.UI.BottomSheet/README.md)**, and
+**[`Zigote.UI.DevTools`](../Zigote.UI.DevTools/README.md)**.
 
 ## Testing
 

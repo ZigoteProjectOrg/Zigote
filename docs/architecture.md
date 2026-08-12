@@ -1,25 +1,67 @@
-# Zigote Architecture
+# Architecture
 
-**v1.1 — refactored against the code as it exists.** Sections marked *(not built)* are proposals with
-no implementation; everything else names a type that ships today.
+How the pieces fit together and why they are arranged this way. Everything named here **ships
+today**; the few places where something was deliberately *not* built say so and give the reason.
 
----
+New to the framework? Read [`migration/concepts.md`](migration/concepts.md) first — it covers
+retained mode, which is the decision the rest of this document follows from.
 
-## Vision
-
-Zigote is a retained-mode UI framework for .NET focused on native applications, built on a Zig/wgpu
-backend (`Zigote.Engine`) through `Zigote.Core`.
-
-Goals: Native AOT friendly, high performance, deterministic behaviour, low allocations, clear
-ownership, cross-platform, modular by default.
-
-**Retained mode is the load-bearing choice.** Widgets are long-lived objects; you build the tree once
-and mutate properties. There is no per-frame diff — hover, press, focus and scroll live on the widget
-instances themselves. This shapes every rule below.
+**Contents:** [The stack](#the-stack) · [Principles](#principles) ·
+[The reactive core](#the-reactive-core) · [Threading](#threading) ·
+[Background work](#background-work) · [Data flow](#data-flow) · [Packages](#packages) ·
+[The engine seam](#the-engine-seam) · [Diagnostics](#diagnostics) · [Non-goals](#non-goals)
 
 ---
 
-## Core Principles
+## The stack
+
+Zigote is a **retained-mode UI framework for .NET**, drawn by a Zig + wgpu backend it ships with.
+Each layer depends only on the one below it:
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│  Your app                                                              │
+├────────────────────────────────────────────────────────────────────────┤
+│  Design systems   Zigote.UI.Adwaita (GNOME) · Zigote.UI.Material       │
+│  and add-ons      Charts · Localizations · DevTools · BottomSheet      │
+├────────────────────────────────────────────────────────────────────────┤
+│  Kernel           Zigote.UI — widgets, layout, paint, input, focus,    │
+│                   navigation, animation, semantics  (headless-testable)│
+├────────────────────────────────────────────────────────────────────────┤
+│  Core             Zigote.Core — Signal/Computed/Effect, Background,    │
+│                   math, assets, diagnostics, the paint & event ABI     │
+├────────────────────────────────────────────────────────────────────────┤
+│  Native           libzigote (Zig) — wgpu · SDL3 · HarfBuzz+FreeType ·  │
+│                   Jolt · flecs · miniaudio · Assimp   [C ABI, submodule]│
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+Two things follow from that shape:
+
+- **Design systems are surfaces over one kernel, not forks.** Adwaita and Material compose the same
+  primitives and share the theme, focus, semantics and hot-reload machinery, so mixing them in one
+  app is normal and supported.
+- **`Zigote.UI` depends on nothing above the GPU.** The whole widget layer is headlessly testable —
+  build a tree, lay it out, dispatch synthetic input, assert on the emitted paint commands. Every
+  test in `Zigote.Tests` runs without a window.
+
+**Retained mode is the load-bearing choice.** Widgets are long-lived objects: you build the tree once
+and mutate properties. There is no per-frame diff, because hover, press, focus and scroll live on the
+widget instances themselves.
+
+Goals throughout: Native AOT friendly, low allocations on the steady path, deterministic behaviour,
+clear ownership, cross-platform, modular by default.
+
+### The separate stack
+
+The 3D renderer, gameplay layer and visual editor also live in this repository, *beside* the UI
+framework rather than under it. They are built with `Zigote.UI` — the editor is an ordinary Zigote
+app — but nothing in `Zigote.UI` or `Zigote.Core` depends on them, and an app that only draws widgets
+links none of it. See [`games-and-3d.md`](games-and-3d.md).
+
+---
+
+## Principles
 
 **1. Application state is explicit.** It lives in `Signal<T>`, one source of truth. *Interaction*
 state (hover, caret, scroll offset) lives on widgets — that is what retained mode buys.
@@ -28,20 +70,21 @@ state (hover, caret, scroll offset) lives on widgets — that is what retained m
 `bloc.State.Value`.
 
 **3. Dependencies are explicit.** Constructor injection at the composition root. No reflection, no
-service locator, no container. (`record AppEnv(...)` is a convention you may adopt — there is no `Env`
-type and nothing needs one.)
+service locator, no container. (`record AppEnv(...)` is a convention you may adopt; the framework has
+no type for it and needs none.)
 
 **4. Concurrency is owned by the bloc.** A `Bloc` holds a `Lifetime` token, `Restart()` for
-latest-wins work, and `Track()` for subscriptions; `Dispose` cancels the lot. There is no `Scope` type.
+latest-wins work, and `Track()` for subscriptions; `Dispose` cancels the lot.
 
-**5. Heavy work never blocks the frame.** Async handlers, `Task.Run` at the few real call sites
-(font enumeration, image decode, asset load). Signal writes from the resulting thread are legal.
+**5. Heavy work never blocks the frame.** Async handlers, and `Task.Run` at the few real call sites
+(font enumeration, image decode, asset load). Signal writes from the resulting thread are legal — see
+[Threading](#threading).
 
 ---
 
-## Core Primitives
+## The reactive core
 
-What actually ships in `Zigote.Core/State/`:
+Six primitives, in `Zigote.Core/State/` unless noted:
 
 | Primitive | Question it answers | Type |
 |---|---|---|
@@ -52,9 +95,6 @@ What actually ships in `Zigote.Core/State/`:
 | `Effect` | What imperative work reacts to state? | `new Effect(body, affinity)` |
 | `Bloc<TEvent, TState>` | How does the app behave? | `Zigote.Bloc` |
 | `Watch` | How does a signal reach the tree? | `Zigote.UI.Widgets.Watch` |
-
-`Env` and `Scope` from the original proposal do not exist and are not planned — principles 3 and 4
-cover their jobs with plain C#.
 
 ### Signal
 
@@ -102,28 +142,30 @@ public sealed class CounterBloc(ICounters counters) : Bloc<CounterEvent, Counter
 ```
 
 Three bases: `Bloc<TEvent, TState>` (one immutable record — the default), `SyncBloc<TEvent, TState>`
-(no handler awaits), `Bloc<TEvent>` (several independent signals). Guarantees: ordered and never
-nested, synchronous when the handler is, allocation-free on that synchronous path, one throwing event
-does not take the screen down (`BlocErrors.OnError`), one unit of work in flight (`Restart()`),
-dispose is the off switch. `Emit` writes state under the graph lock via `Reactive.Sync`.
-`BlocObserver.OnEvent`/`OnChange` put every event and every real transition on one ordered timeline
-when an app assigns them, and cost a null check when it does not. There is no `droppable` transformer:
-`Add` is `virtual` and `Current` is in scope, so "ignore the second tap while busy" is a guard at the
-top of an override rather than a policy the base has to model.
+(no handler awaits), `Bloc<TEvent>` (several independent signals).
+
+Guarantees: events are ordered and never nested, synchronous when the handler is, allocation-free on
+that synchronous path; one throwing event does not take the screen down (`BlocErrors.OnError`); one
+unit of work in flight (`Restart()`); dispose is the off switch. `Emit` writes state under the graph
+lock via `Reactive.Sync`. `BlocObserver.OnEvent`/`OnChange` put every event and every real transition
+on one ordered timeline when an app assigns them, and cost a null check when it does not.
+
+There is no `droppable` transformer: `Add` is `virtual` and `Current` is in scope, so "ignore the
+second tap while busy" is a guard at the top of an override rather than a policy the base models.
 
 ### Watch — the bridge to the tree
 
 ```csharp
-new Watch(() => new Text($"{bloc.State.Value.Count}"))
+new Watch(() => new Label($"{bloc.State.Value.Count}"))
 ```
 
 Wraps the builder in a `Computed<Widget>` and swaps the subtree when a signal it read changes. On the
-UI thread it swaps in place; an off-thread change (or one arriving mid-walk) is flagged and applied in
-the next `Measure`. Replaces the old `BlocBuilder`/`Cubit` pattern. F# apps use the same widget through `watch`.
+UI thread it swaps in place; an off-thread change (or one arriving mid-walk) is flagged and applied
+in the next `Measure`. F# apps use the same widget through `watch`.
 
 ---
 
-## Threading Model
+## Threading
 
 **Signals are not thread-affine.** Every graph mutation runs under one re-entrant global lock
 (`Reactive.Gate`), so a signal may be written from any thread — a timer, an async completion, an
@@ -155,19 +197,20 @@ Reactive.Batch(() =>
 ```
 
 `Reactive.Batch(Action)` / `Batch<T>(Func<T>)`, nestable, composing with the implicit per-write batch.
-Also: `Reactive.Untracked(fn)` to read without subscribing, `Reactive.Sync(fn)` for a composed
+Also `Reactive.Untracked(fn)` to read without subscribing, and `Reactive.Sync(fn)` for a composed
 multi-step write.
 
-*(not built)* — the `using Signal.Batch()` disposable form from the proposal. `Reactive.Batch` covers
-it; a disposable scope would need to own the lock across arbitrary user code, which is exactly the
-shape that deadlocks.
+There is no `using`-scoped batch disposable: a disposable scope would have to hold the lock across
+arbitrary user code, which is the shape that deadlocks.
 
-### Background work — `Zigote.Core.Threading.Background`
+---
 
-Built, once an app had enough call sites to make the policy worth centralising (Timbre had nineteen).
-It is **not** a scheduler and not a concurrency model: work goes to the thread pool, in order, with no
-priorities. `async`/`await` in a bloc handler remains correct for work the handler awaits. This is for
-work nobody is waiting on — which is where the failures were silent.
+## Background work
+
+`Zigote.Core.Threading.Background` centralises the policy for work nobody is awaiting — which is
+where failures were silently swallowed. It is **not** a scheduler and not a concurrency model: work
+goes to the thread pool, in order, with no priorities. `async`/`await` in a bloc handler remains
+correct for work the handler awaits.
 
 ```csharp
 var background = new Background(app.Post, app.RequestLayout);   // root, at the composition root
@@ -197,100 +240,97 @@ search.Run(ct => Filter(query, ct), Emit, delay: 120.ms);       // debounced, la
   budget: the host calls `RunFrame(budget)` once per frame before layout, each queue makes at least
   one unit of progress, and whatever does not fit asks for another frame and continues there, in
   order. Four hundred results landing at once become several frames of filling in rather than one
-  dropped frame. `Dispatchers.Main` posts to a looper and runs the lot; a Dart isolate cannot touch
-  the UI at all. Neither *can* offer this — a general-purpose runtime does not know what a frame is.
-  This is what a UI framework has that a language runtime does not, and it deletes the per-app
-  hand-rolled chunkers that grow in its absence.
+  dropped frame. A general-purpose runtime cannot offer this, because it does not know what a frame
+  is — this is what a UI framework has that a language runtime does not.
 - **Supervised by default.** A child scope dies with its parent, and a child's failure is reported
-  without cancelling its parent or its siblings. Kotlin's default is the opposite — a failing child
+  without cancelling its parent or its siblings. (Kotlin's default is the opposite — a failing child
   cancels the scope unless you ask for `SupervisorJob` — which for a UI means one bad thumbnail stops
-  the library scan. Cascade is the special case here, not the default.
+  the library scan.)
 - **Deterministic under test.** `Background.Manual()` plus `Drain(timeout)` give a test the frame
   loop's side of this with no window, so "the result landed" is an assertion rather than a sleep.
 - **Payload-checked in DEBUG.** Handing a `List<T>` across the boundary and continuing to hold it is
-  the race isolates make unrepresentable by copying. Copying is the wrong trade here — the point of
-  immutable state records is handing 50k of them over by reference — so instead the known-mutable
-  shapes are named in `DebugLog` at the delivery, and compiled out of release.
+  a race. Copying everything is the wrong trade — the point of immutable state records is handing 50k
+  of them over by reference — so the known-mutable shapes are named in `DebugLog` at delivery, and
+  compiled out of release.
 
 `Latest` replaces the cancel-the-old-CTS-make-a-new-one dance: a search box, a regroup, a debounced
 save. `Bloc.Restart()` still covers the bloc-wide "one unit of work in flight"; hold a `Latest` per
-unit when a bloc has more than one (a library that scans *and* filters needs two).
+unit when a bloc has more than one.
 
-The editor owns one on `EditorState` (`EditorState.Background`), drained once per frame from
-`Zigote.Editor/Program.cs`. The project panel's tree walk hangs off a `Child("assets")` scope — it
-used to run inside `Measure`, which meant a recursive enumeration of the whole project during layout
-on every keystroke in the search box and on every filesystem event.
-
-What is deliberately **not** here: no `Deferred<T>`/`awaitAll` composition (nothing has needed to join
-two background results yet), no priorities, and no cancel-my-parent cascade. Each is a day's work the
-day something needs it.
+Deliberately absent: no `Deferred<T>`/`awaitAll` composition, no priorities, no cancel-my-parent
+cascade. Each is a day's work the day something needs it.
 
 ---
 
-## Data Flow
+## Data flow
 
 ```
-User Input → Widget → bloc.Add(event) → Repository → result → Emit → Signal → Watch rebuild
+User input → Widget → bloc.Add(event) → Repository → result → Emit → Signal → Watch rebuild
 ```
 
 One direction. The only way state changes is an event through the pump.
 
-### Widget rules
-
-Widgets render state and send commands. Widgets never mutate application signals directly, contain
+**Widgets** render state and send commands. They never mutate application signals directly, contain
 business logic, touch a database, or do networking. They *do* own their own interaction state — that
 is retained mode, not a violation.
 
-### State rules
+**State** is an immutable record, updated by replacement:
 
 ```csharp
 record PlayerState(Song? CurrentSong, bool IsPlaying, double Position);
 Emit(Current with { IsPlaying = true });
 ```
 
-Immutable record, updated by replacement.
-
-### Domain layer
-
-Repositories, services, validation, business rules. No dependency on signals, widgets, or UI —
-`Zigote.Persistence` is the model: BCL only, opaque `string → string`, no reactive graph.
+**The domain layer** — repositories, services, validation, business rules — has no dependency on
+signals, widgets or UI. `Zigote.Persistence` is the model: BCL only, opaque `string → string`, no
+reactive graph.
 
 ---
 
-## Package Layout
+## Packages
 
-The real one:
+**The UI framework**
 
 | Package | Contents |
 |---|---|
 | `Zigote.Core` | `Signal`/`Computed`/`Effect`/`LinkedSignal`/`Trigger`/`Reactive`, `Threading.Background`, plus the native seam: paint & event ABI, math, animation, assets, diagnostics registries |
-| `Zigote.UI` | Widgets, layout, theming, navigation (`Widgets/Navigation` — Navigator 2.0), focus, semantics, `Watch` |
+| `Zigote.UI` | Widgets, layout, theming, navigation (Navigator 2.0), focus, semantics, `Watch` |
+| `Zigote.UI.Adwaita` | The GNOME Adwaita design system on the kernel — 94 `Adw*` types, live system theming, client-side decorations ([README](../Zigote.UI.Adwaita/README.md)) |
+| `Zigote.UI.Material` | The Material vocabulary with the Flutter names ([README](../Zigote.UI.Material/README.md)) |
+| `Zigote.UI.Charts`, `.Localizations`, `.BottomSheet` | Charting, i18n, draggable sheets |
 | `Zigote.UI.FSharp` | F# reactive ergonomics (`signal`/`computed`/`effect`/`watch`) + `Host.run` |
-| `Zigote.UI.Adwaita` | The GNOME Adwaita design system on the kernel — 83 `Adw*` types, live system theming, client-side decorations ([README](../Zigote.UI.Adwaita/README.md)) |
-| `Zigote.UI.Material`, `.Charts`, `.Localizations` | The other design language, and the add-ons |
 | `Zigote.UI.DevTools` | Debug overlay: panels, charts, diagnostics |
-| `Zigote.Bloc` | The event pump and its three bases. `Zigote.Core` only, no other dependencies |
+
+**App services**
+
+| Package | Contents |
+|---|---|
+| `Zigote.Bloc` | The event pump and its three bases. Depends on `Zigote.Core` only |
 | `Zigote.Persistence` (+ `.SQLite`) | `IKeyValueStore` — "where do strings live" |
 | `Zigote.Preferences` | `Preference<T> : IReadableSignal<T>` — persisted signals |
-| `Zigote.Network` | Transport, replication, prediction, sync |
-| `Zigote.Audioplayer` | Media playback over `IAudioApi`: queue, transport, gapless, equalizer. just_audio's API shape, signals instead of streams |
-| `Zigote.Reactive.R3` | Optional R3 bridge |
 | `Zigote.Logging` | Serilog wiring (`AppLog`) |
-| `Zigote.Render2D`, `Zigote.Physics2D`, `Zigote.ECS`, `Zigote.World`, `Zigote.Vfx`, `Zigote.Cinematics`, `Zigote.Scripting`, `Zigote.Graphs.*` | The game-side stack |
-| `Zigote.Editor`, `Zigote.Player`, `Zigote.Runtime`, `Zigote.Game` | Hosts |
+| `Zigote.Audioplayer` | Media playback over `IAudioApi`: queue, transport, gapless, equalizer |
+| `Zigote.Videoplayer` | Playback and controls, decoded by driving `ffmpeg`/`ffprobe` |
+| `Zigote.Network` | Transport, replication, prediction, sync |
+| `Zigote.Reactive.R3` | Optional R3 bridge |
+| `Zigote.Cli` | `zigote create` / `zigote add android` — project scaffolding, no framework dependency |
 
-Renamed from the proposal: `Zigote.R3` → `Zigote.Reactive.R3`, `Zigote.Storage` →
-`Zigote.Persistence` + `Zigote.Preferences`. Never built: `Zigote.Navigation` (it lives inside
-`Zigote.UI`), `Zigote.Graphics` (2D paint is in `Zigote.Core`, rendering in `Zigote.Render2D` and the
-native engine), `Zigote.Markdown` (nothing in tree). The proposal's `Zigote.Audio` split in two: the
-device surface is `engine.Audio` → `IAudioApi` (see below), and the player built on it is
-`Zigote.Audioplayer`.
+**Games, 3D and hosts** — the separate stack, documented in [`games-and-3d.md`](games-and-3d.md):
+`Zigote.Runtime`, `Zigote.Scripting`, `Zigote.ECS`, `Zigote.World`, `Zigote.Save`,
+`Zigote.Physics2D`, `Zigote.Render2D`, `Zigote.Vfx`, `Zigote.Cinematics`, `Zigote.Graphs.*`,
+`Zigote.Game`, `Zigote.Editor`, `Zigote.Player`.
 
-### Engine domains
+Navigation lives inside `Zigote.UI` rather than in a package of its own; 2D paint is in `Zigote.Core`,
+with rendering in `Zigote.Render2D` and the native engine. Applications reference only what they
+need.
+
+---
+
+## The engine seam
 
 `ZigoteEngine` is one class because there is one native handle behind all of it, but it covers four
-unrelated jobs. Rather than split the package — every method would move and every caller would break,
-to gain a project reference — the domains are named on the class:
+unrelated jobs. Splitting the package would move every method and break every caller to gain a
+project reference, so the domains are named on the class instead:
 
 | Domain | Reached through | Shape |
 |---|---|---|
@@ -299,19 +339,13 @@ to gain a project reference — the domains are named on the class:
 | **3D** | `engine.Scene` → `Scene3D` | A zero-allocation `readonly struct`. Nodes, transforms, materials, lights, cameras |
 | **Background** | `Background` / `Latest` | Above, and the only one that is not a facade — it has policy of its own |
 
-Audio is the interface because the device is the one part of a media app that **cannot exist in CI**:
-behind that seam a queue, a transport and an equalizer are pure state machines a fake can drive.
-`Zigote.Audioplayer` is what collects that: it takes an `IAudioApi` and nothing else, so its whole
-surface — playlist, gapless advance, clipping, buffering — is tested against an in-memory fake in
-`AudioPlayerTests`. Nothing tests a scene without a GPU, so `Scene3D` is a struct — a vtable and a second implementation
-nobody writes would be the cost of symmetry for its own sake.
+Audio is an interface because the device is the one part of a media app that **cannot exist in CI**:
+behind that seam a queue, a transport and an equalizer are pure state machines a fake can drive, which
+is how `Zigote.Audioplayer` is tested end to end without a sound card. Nothing tests a scene without a
+GPU, so `Scene3D` is a struct — a vtable and a second implementation nobody writes would be the cost
+of symmetry for its own sake.
 
-Applications reference only what they need — `Zigote.UI` depends on nothing above the GPU and is
-headless-testable.
-
----
-
-## R3 Integration
+### R3 integration
 
 Optional, one bridge package. Streams where streams naturally exist: timers, sockets, file watchers,
 progress.
@@ -328,21 +362,18 @@ Writes into the graph go through `Reactive.Sync`. The signal stays the single so
 
 ## Diagnostics
 
-Shipping today:
-
-- `Zigote.Core/Diagnostics` — `DebugLog`, `DebugCommands`, `DebugVariables`, `DebugProfiler`,
+- **`Zigote.Core/Diagnostics`** — `DebugLog`, `DebugCommands`, `DebugVariables`, `DebugProfiler`,
   `Profiler`. Engine-neutral registries.
-- `Zigote.UI.DevTools` — one-line install over an `App`: overlay with panels and charts. The
-  proposal's **layout inspector** is `UiInspectorPanel` (select-on-screen, live tree, box model,
-  constraints, property dump) and its **performance timeline** is `PerformancePanel` (rolling frame
-  chart + hottest scopes).
-- **Rebuild counters** — the **Reactive** panel (General tab), plus the same numbers as read-only
-  variables under `reactive` in the Variables panel and the console (`get reactive.runs`):
+- **`Zigote.UI.DevTools`** — one line installs an overlay over an `App` (<kbd>Shift</kbd>+<kbd>D</kbd>):
+  `UiInspectorPanel` (select-on-screen, live tree, box model, constraints, property dump) and
+  `PerformancePanel` (rolling frame chart + hottest scopes).
+- **Rebuild counters** — the Reactive panel, also readable as variables and from the console
+  (`get reactive.runs`):
 
   | Variable | Counts |
   |---|---|
   | `reactive.writes` | Signal writes + trigger fires that passed their equality check |
-  | `reactive.runs` | Computed recomputes + effect runs (`Reactive.Runs`) |
+  | `reactive.runs` | Computed recomputes + effect runs |
   | `reactive.deferred` | Deferred effects parked at the last frame's drain |
   | `ui.watch_rebuilds` | `Watch` subtree swaps, excluding first build |
 
@@ -352,60 +383,50 @@ Shipping today:
   reaction body, under a lock already held — kept in release builds because the number is worth more
   than the increment costs.
 
-- **Texture residency** — `gpu.textures`, `gpu.texture_bytes`, `gpu.texture_cpu_bytes` under `gpu`
-  in the Variables panel and the console (`get gpu.textures`), read from the engine's own image
-  cache.
-
-  Texture handles are **caller-owned**: `LoadTexture*` hands one out and nothing but
-  `ReleaseTexture` frees it, so a widget or panel that loads one and forgets is a leak for the
-  process's lifetime — at 2000×3000 that is 24 MB a click. Nothing surfaced that number outside the
-  smoke test, which is exactly how three of them accumulated in the editor (the asset preview's
-  widget, its dimensions probe, and the tile palette's sheet). Watch the count while browsing an
-  asset folder or scrolling a gallery: it should come back down. A number that only climbs names a
-  missing release.
-
 - **Attribution** — `Reactive.TrackReactions` (the panel's toggle) aggregates runs by the body's
-  declaring `Type.Method`, unwrapping the compiler's closure classes, so `Reactive.HottestReactions()`
-  names *which* computed or effect is churning. Opt-in: it costs a dictionary lookup per body run.
-  Toggling it on resets the counts, so the table answers "what churned while I did that".
-
-- **Per-`Watch` counts** — a `Watch` swap bumps the inherited `Widget.RebuildCount`, so the inspector
-  shows `12 rebuilds` inline on the row and in its `R:` counter. Global counter says *something* is
-  churning; the tree row says which subtree.
-- `Zigote.Logging` — `AppLog.Bootstrap()`, file sink, `CaptureFailures()` routes `Reactive.OnError`
-  and `BlocErrors.OnError` into Serilog.
-- `Reactive.OnError` / `BlocErrors.OnError` — failure isolation seams; unset, failures land in
-  `DebugLog`.
-- `BlocObserver.OnEvent` / `BlocObserver.OnChange` — the bloc timeline: every event as it comes off
-  the pump and every transition it caused, interleaved in order, deduplicated emits omitted. Unset by
-  default (one null check per event), so an app can turn the timeline on in a release build by
-  assigning a hook rather than rebuilding. This is the input a replay or a time-travel panel needs;
-  neither is built.
+  declaring `Type.Method`, unwrapping compiler closure classes, so `Reactive.HottestReactions()` names
+  *which* computed or effect is churning. Opt-in: it costs a dictionary lookup per body run. Toggling
+  it on resets the counts, so the table answers "what churned while I did that".
+- **Per-`Watch` counts** — a swap bumps `Widget.RebuildCount`, so the inspector shows `12 rebuilds`
+  inline on the row. The global counter says *something* is churning; the tree row says which subtree.
+- **Texture residency** — `gpu.textures`, `gpu.texture_bytes`, `gpu.texture_cpu_bytes`, read from the
+  engine's image cache. Texture handles are **caller-owned**: `LoadTexture*` hands one out and nothing
+  but `ReleaseTexture` frees it, so a widget that loads one and forgets is a leak for the process's
+  lifetime — at 2000×3000 that is 24 MB a click. Watch the count while browsing an asset folder: it
+  should come back down. A number that only climbs names a missing release.
+- **Failure seams** — `Reactive.OnError`, `BlocErrors.OnError`, `Background.OnError`; unset, failures
+  land in `DebugLog`. `Zigote.Logging`'s `AppLog.Bootstrap()` + `CaptureFailures()` routes them into
+  Serilog.
+- **The bloc timeline** — `BlocObserver.OnEvent`/`OnChange`: every event as it comes off the pump and
+  every transition it caused, in order, deduplicated emits omitted. Unset by default (one null check
+  per event), so an app can turn it on in a release build by assigning a hook. This is the input a
+  replay or time-travel panel would need; neither is built.
 - `Reactive.LockTimeoutMs`, the DEBUG boxing-equality assert, the DEBUG slow-cross-thread-effect
   warning.
 
-*(not built)*: the node-and-edge **signal-graph visualiser**. Deliberately: drawing the graph needs
-every live node discoverable (a registry of weak references, maintained on the hot path) to answer a
-question the hottest-bodies table already answers from a dictionary. Build it only if a real debugging
-session gets stuck on graph *shape* rather than graph *volume*.
+Deliberately not built: a node-and-edge **signal-graph visualiser**. Drawing the graph needs every
+live node discoverable (a registry of weak references, maintained on the hot path) to answer a
+question the hottest-bodies table already answers from a dictionary. Worth building only if a real
+debugging session gets stuck on graph *shape* rather than graph *volume*.
 
 ---
 
-## Non-Goals
+## Non-goals
 
 Reflection-based DI. Stream-based UI state. Global mutable state. Widget-centric business logic.
 Mandatory MVVM.
 
-Amended: **"no hidden thread switching"** is *declared* thread switching, not none. `Watch` marshals
-off-thread rebuilds to the UI thread and `EffectAffinity.Deferred` parks bodies for the frame loop —
-both visible at the call site, and both the reason a background write is safe at all.
+One qualification on **"no hidden thread switching"**: it means *declared* thread switching, not none.
+`Watch` marshals off-thread rebuilds to the UI thread and `EffectAffinity.Deferred` parks bodies for
+the frame loop — both visible at the call site, and both the reason a background write is safe at all.
 
 ---
 
-## Summary
+## In one paragraph
 
 Six primitives ship — `Signal`, `Computed`, `Effect`, `Bloc`, `Watch`, and the reactive runtime that
 batches them — plus `Trigger` and `LinkedSignal` for the two shapes a plain signal handles badly.
-`Env` and `Scope` were designed out: constructor injection and the bloc's own lifetime cover them
-without a framework type. The threading rule is not "signals belong to the UI thread" but "the graph
-takes a lock; effect bodies declare where they run".
+There is no DI container and no scope type: constructor injection and the bloc's own lifetime cover
+both without a framework type. The threading rule is not "signals belong to the UI thread" but "the
+graph takes a lock; effect bodies declare where they run". And the tree is retained, which is why
+none of this needs a diff.

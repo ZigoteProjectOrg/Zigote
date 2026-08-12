@@ -89,6 +89,7 @@ rather than a bare `Text`.
 
 ## Relationship to the other UI packages
 
-`Zigote.UI.Material` is one of several design-language layers over the same `Zigote.UI` kernel — alongside
-`Zigote.UI.Cupertino` (iOS) and `Zigote.UI.AppKit` (macOS desktop). Pick one per app; they don't mix in a single tree.
-The default flat-macOS `ThemeData` controls live in `Zigote.UI` itself.
+`Zigote.UI.Material` is one of two design-language layers over the same `Zigote.UI` kernel — the other is
+[`Zigote.UI.Adwaita`](../Zigote.UI.Adwaita/README.md) (GNOME). Both are surfaces over the kernel rather than forks, so
+they share the theme, focus, semantics and hot-reload machinery and can be mixed in one app; usually you pick one per
+app for consistency. The default flat-macOS `ThemeData` controls live in [`Zigote.UI`](../Zigote.UI/README.md) itself.

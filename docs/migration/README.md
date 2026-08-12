@@ -67,17 +67,31 @@ Three things to notice, because they all differ from where you came from:
 |---|---|
 | `Zigote.UI` | Always. The kernel: layout, controls, focus, navigation, animation, semantics. Terse, positional constructors, Zigote-native names. |
 | `Zigote.UI.Material` | You are porting Material or Flutter code. Material names (`Scaffold`, `AppBar`, `ElevatedButton`, `ListTile`, `TextField`) with named-argument constructors, over the same kernel. Also the home of `TextField`, `Dropdown`, `Slider`, `Switch`, `TabBar` — the kernel does not duplicate them. |
-| `Zigote.UI.Adwaita` | You want the GNOME look — on any OS. 83 `Adw*` types: `AdwHeaderBar`, `AdwNavigationSplitView`, the boxed-list rows, `AdwPreferencesDialog`, adaptive breakpoints, and client-side decorations the app draws itself. On GNOME it follows the system light/dark and accent live; on macOS it hosts the traffic lights in its own header bar. See [`Zigote.UI.Adwaita/README.md`](../../Zigote.UI.Adwaita/README.md). |
+| `Zigote.UI.Adwaita` | You want the GNOME look — on any OS. 94 `Adw*` types: `AdwHeaderBar`, `AdwNavigationSplitView`, the boxed-list rows, `AdwPreferencesDialog`, adaptive breakpoints, and client-side decorations the app draws itself. On GNOME it follows the system light/dark and accent live; on macOS it hosts the traffic lights in its own header bar. See [`Zigote.UI.Adwaita/README.md`](../../Zigote.UI.Adwaita/README.md). |
 | `Zigote.Bloc` | Any app with more than trivial state. Events in, ordered; state out as signals. |
 | `Zigote.UI.Charts` | Declarative charts. |
 | `Zigote.UI.Localizations` | Locales, plural rules, typed message codegen. |
 
-Mixing is normal and supported — they are surfaces over one kernel, not forks. Timbre uses
-`Zigote.UI` + `Zigote.UI.Material` + `Zigote.UI.Adwaita` + `Zigote.Bloc` together.
+Mixing is normal and supported — they are surfaces over one kernel, not forks. An app commonly
+references `Zigote.UI` + one design system + `Zigote.Bloc` together.
+
+The 3D renderer, gameplay layer and editor are a **separate stack** that none of the above depends
+on; if you are here for apps rather than games, you can ignore them entirely
+([`games-and-3d.md`](../games-and-3d.md)).
 
 ---
 
 ## Project setup
+
+The short way — the scaffolder writes the project, the entry point and a `.gitignore`, wired to your
+Zigote checkout:
+
+```sh
+dotnet run --project Zigote.Cli -- create MyApp   # or `zigote create MyApp` if installed as a tool
+cd MyApp && dotnet run --project MyApp
+```
+
+By hand, if you would rather see every line:
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
@@ -145,4 +159,5 @@ manual — most of them explain *why*, not just *what*.
 | What does the frame loop do? | `Zigote.UI/App/App.cs` |
 | What controls exist? | `Zigote.UI/Widgets/Controls/`, `Zigote.UI.Material/Widgets/` |
 | How do I test this? | `Zigote.Tests/` — every test is headless |
-| A real app end to end | [Timbre](https://github.com/zigote) — music player, ~30k lines |
+| An app end to end | `Zigote.UI.Gallery/` — navigation, theming, charts, i18n, a BLoC-driven shell |
+| The smallest possible app | [`Zigote.UI.HelloWorld/`](../../Zigote.UI.HelloWorld/README.md) — one annotated file |
