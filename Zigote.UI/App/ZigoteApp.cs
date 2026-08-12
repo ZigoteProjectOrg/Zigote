@@ -124,6 +124,9 @@ public class ZigoteApp
     // suspend→foreground pair and not for plain desktop focus regains.
     private bool _wasPaused;
 
+    // The previewed widget's name, or null in a normal run — also the switch for the frame-loop guard.
+    private string? _preview;
+
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -208,6 +211,20 @@ public class ZigoteApp
     /// </summary>
     public void Run()
     {
+        // Preview mode (see WidgetPreview): an editor asked for one widget rather than the app. Done
+        // here, in the one path every app already goes through, so no app opts in and no Program.cs
+        // grows an argument parser.
+        if (WidgetPreview.HandleListRequest()) return;
+        if (WidgetPreview.Target is { } previewTarget)
+        {
+            _preview = previewTarget;
+            Home = WidgetPreview.Resolve(previewTarget);
+            Pages = null;
+            Routes = null;
+            OnGenerateRoute = null;
+            Title = $"Preview — {previewTarget}";
+        }
+
         // iOS owns the process entry: UIApplicationMain must run before any window exists,
         // and SDL's wrapper calls the app body back on the main thread after launch (with the
         // UIKit runloop serviced from inside the event pump, so the frame loop below works
@@ -267,6 +284,29 @@ public class ZigoteApp
 
         TryAutoInstallDevTools(uiApp);
 
+        // Opt-in, off by default: serves the widget/semantics trees to the IDE panels (and to anything
+        // else that opens the socket). The callback is the live preview swap — same resolution as the
+        // ZIGOTE_PREVIEW startup path, minus the restart.
+        InspectServer.Start(
+            uiApp,
+            target =>
+            {
+                _preview = target;
+                uiApp.Root = new ThemeProvider(Theme) { Child = WidgetPreview.Resolve(target) };
+            },
+            SetThemeByName
+        );
+
+        // A preview is watched in the IDE, so the app's own window is a duplicate — and once a device
+        // size is in play it is a duplicate showing a different layout. Hidden, not skipped: the engine
+        // still renders, which is what the frame capture reads.
+        // ZIGOTE_PREVIEW_HEADLESS covers the case with no widget chosen yet: a previewer starts the app
+        // before you have picked anything, and a window flashing up then is just as distracting.
+        var headless = Environment.GetEnvironmentVariable("ZIGOTE_PREVIEW_HEADLESS") is "1" or "true";
+        if ((_preview is not null || headless) &&
+            Environment.GetEnvironmentVariable("ZIGOTE_PREVIEW_WINDOW") is not "show")
+            uiApp.Engine.MainWindowSetVisible(false);
+
         while (!uiApp.ShouldQuit)
         {
             // Sync theme if the subclass changed it at runtime (e.g., dark/light toggle)
@@ -276,13 +316,48 @@ public class ZigoteApp
                 uiApp.Theme = Theme;
             }
 
-            OnUpdate(uiApp.DeltaTime);
-            uiApp.Frame();
+            try
+            {
+                OnUpdate(uiApp.DeltaTime);
+                uiApp.Frame();
+            }
+            catch (Exception e) when (_preview is not null)
+            {
+                // Preview only, and only here: Resolve() can guard the constructor, but Build(), layout
+                // and paint run inside the frame, and that is where a widget lifted out of its app
+                // actually fails — a missing ancestor provider, most often. A preview that dies takes
+                // the watch session with it, so the tree is replaced with the reason and the loop
+                // continues; the next save gets a fresh attempt.
+                uiApp.Root = new ThemeProvider(Theme) { Child = WidgetPreview.Failure(_preview, e) };
+            }
         }
 
         OnQuit();
         App = null;
         RootNavigator = null;
+    }
+
+    /// <summary>
+    ///     Swap the theme by name for the inspect socket's <c>theme</c> command.
+    ///     <para>
+    ///         Virtual because <see cref="Theme" /> is only the base framework's notion of one: a design
+    ///         system that carries its own palette (Adwaita, Material) overrides this to switch that
+    ///         instead, and the panel's dark/light toggle then means what the app means by it.
+    ///     </para>
+    /// </summary>
+    protected internal virtual bool SetThemeByName(string name)
+    {
+        switch (name.Trim().ToLowerInvariant())
+        {
+            case "dark":
+                Theme = ThemeData.Dark;
+                return true;
+            case "light":
+                Theme = ThemeData.Light;
+                return true;
+            default:
+                return false;
+        }
     }
 
     /// <summary>

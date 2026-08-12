@@ -34,6 +34,7 @@ public sealed class LocalizationsScope : Widget
     private bool _built;
     private Directionality? _directionality;
     private Localizations? _provider;
+    private Func<string, bool>? _setLocale;
 
     /// <summary>Typed resource delegates. Composed with <see cref="Bundle" />.</summary>
     public List<LocalizationsDelegate> Delegates { get; init; } = [];
@@ -142,6 +143,17 @@ public sealed class LocalizationsScope : Widget
     {
         EnsureBuilt();
         base.Attach(owner, parent);
+
+        // Register as the app's locale seam (App.SetLocale/LocaleInfo), which is what the inspect
+        // socket's `locale`/`locales` commands drive. A resolve to an unsupported tag is still true —
+        // the controller resolved it, which is the behaviour the app itself would have.
+        // ponytail: last-attached scope wins; per-window registries if nested scopes ever need it.
+        _setLocale = tag => Locale.TryParse(tag, out var l) && (Controller!.SetLocale(l) || true);
+        owner.SetLocale = _setLocale;
+        owner.LocaleInfo = () => (
+            Controller!.Locale.ToString(),
+            Controller.SupportedLocales.Select(l => l.ToString()).ToArray()
+        );
     }
 
     public override Size Measure(Constraints constraints)
@@ -177,6 +189,14 @@ public sealed class LocalizationsScope : Widget
     public override void Detach()
     {
         if (Controller != null) Controller.LocaleChanged -= RaiseLocaleChanged;
+        // Only unhook if the hooks are still ours — a preview swap may have attached the next tree's
+        // scope before this one detaches, and its registration must survive.
+        if (Owner is { } owner && ReferenceEquals(owner.SetLocale, _setLocale))
+        {
+            owner.SetLocale = null;
+            owner.LocaleInfo = null;
+        }
+
         base.Detach();
     }
 }

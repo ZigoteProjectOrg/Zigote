@@ -296,13 +296,13 @@ public partial class App
         }
 
         BuildContext.Current.MediaQuery = new MediaQueryData(
-            HostLogicalWidth,
-            HostLogicalHeight,
+            LayoutWidth,
+            LayoutHeight,
             HostScale,
             _safeArea
         );
 
-        var c = Constraints.Tight(HostLogicalWidth, HostLogicalHeight);
+        var c = Constraints.Tight(LayoutWidth, LayoutHeight);
 
         // The app theme scope wraps the WHOLE pass — root and overlays — so ThemeProvider.Of
         // resolves the live App.Theme everywhere (see _appThemeScope). The scope instance is reused

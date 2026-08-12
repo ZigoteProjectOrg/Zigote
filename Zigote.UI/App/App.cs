@@ -65,6 +65,9 @@ public partial class App : IDisposable
 
     private readonly PaintList _overlayPaint = new();
 
+    // Scratch list for CaptureUi: root + overlay composited into the single list the capture renders.
+    private readonly PaintList _capturePaint = new();
+
     // Last-submitted paint lists, diffed against re-walked lists on partial frames so unmarked
     // visual changes widen the damage instead of tearing (see PaintAndPresent).
     private readonly PaintSnapshot _rootSnapshot = new();
@@ -424,11 +427,14 @@ public partial class App : IDisposable
                                Engine.WindowIsTransparent(WindowId) &&
                                !Engine.WindowIsMaximized(WindowId);
 
+    // The surface being painted, which under a device preview is the device, not the window: the CSD
+    // rounded-corner clip is taken from this, and clipping a 852pt-tall phone to a 760pt window is how
+    // the bottom of every tall preview went black.
     private Rect WindowRect => new(
         0f,
         0f,
-        HostLogicalWidth,
-        HostLogicalHeight
+        LayoutWidth,
+        LayoutHeight
     );
 
     public Widget? Root
@@ -549,6 +555,18 @@ public partial class App : IDisposable
 
     /// <summary>Invoked by <see cref="ToggleCompactStats" /> to open/close the compact stats block.</summary>
     public Action? OnToggleDevCompact { get; set; }
+
+    // ── Locale seam ───────────────────────────────────────────────────────────
+    // A locale in Zigote is a LocalizationsScope in the widget tree, not a global switch — so the
+    // scope registers itself here when it attaches, and Zigote.UI never depends on the
+    // Localizations package. Same shape as the DevTools seams above. Null → the app has no
+    // localization and the inspect socket's `locale`/`locales` commands say so.
+
+    /// <summary>Switch the app's locale by BCP-47 tag. False when the tag does not parse.</summary>
+    public Func<string, bool>? SetLocale { get; set; }
+
+    /// <summary>The active locale tag and the tags the app supports.</summary>
+    public Func<(string Current, IReadOnlyList<string> Supported)>? LocaleInfo { get; set; }
 
     public void Dispose()
     {
@@ -790,6 +808,111 @@ public partial class App : IDisposable
         RequestPaint(); // wakes the idle gate; WaitEvents' 16 ms timeout picks it up regardless
     }
 
+    // Like _posted, but drained at the END of the frame — after event dispatch, layout and paint.
+    private readonly System.Collections.Concurrent.ConcurrentQueue<Action> _postedAfterFrame = new();
+
+    /// <summary>
+    ///     Thread-safe: run <paramref name="action" /> on the UI thread at the <b>end</b> of the next
+    ///     frame, after event dispatch, layout and paint. The capture seam for the inspect socket: a
+    ///     shot requested after a click must show the click's frame, and a plain <see cref="Post" />
+    ///     drains before dispatch, so it captures the previous one.
+    /// </summary>
+    internal void PostAfterFrame(Action action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        _postedAfterFrame.Enqueue(action);
+        // No RequestPaint: the drain runs on every frame exit, and WaitEvents' frame-budget timeout
+        // bounds the wait. Marking dirty here would make a 30 fps stream full-repaint an idle app
+        // continuously — the capture wants to observe frames, not manufacture them.
+    }
+
+    // Runs on every exit path of Frame (including the idle early-returns) so a posted capture can
+    // never wedge its waiter.
+    private void DrainPostedAfterFrame()
+    {
+        while (_postedAfterFrame.TryDequeue(out var action))
+            try
+            {
+                action();
+            }
+            catch (Exception ex)
+            {
+                DebugLog.Error($"App.PostAfterFrame action threw: {ex}");
+            }
+    }
+
+    // Synthetic input from the inspect socket, joined to the real event batch each frame. A list,
+    // not a queue: only ever touched on the UI thread (InspectServer injects via Post).
+    private readonly List<InputEvent> _injected = [];
+
+    /// <summary>
+    ///     Queue a synthetic input event for the current frame's dispatch. UI thread only (use
+    ///     <see cref="Post" /> from elsewhere). Injected events run through the exact pipeline OS
+    ///     input does — hit-testing, capture, focus, shortcuts — so a remote click is a click.
+    /// </summary>
+    internal void InjectEvent(InputEvent evt)
+    {
+        _injected.Add(evt);
+    }
+
+    /// <summary>
+    ///     Lay the tree out at this size rather than the window's, or null for the window's.
+    ///     <para>
+    ///         This is what a device preview is: the live tree — with its state, its animations and its
+    ///         hot-reloaded <c>Build()</c> bodies — measured at an iPhone's logical size, so everything
+    ///         that reads <see cref="Widgets.MediaQuery" /> or a breakpoint behaves as it would on that
+    ///         device. Rendering a fixed-size box inside a desktop window would look similar and adapt
+    ///         to the wrong size, which is the one thing a device preview must not do.
+    ///     </para>
+    ///     <para>
+    ///         Input hit-testing still works in window coordinates, so a preview at a size other than
+    ///         the window's is meant to be viewed with the window hidden.
+    ///     </para>
+    /// </summary>
+    internal Size? PreviewSize { get; set; }
+
+    internal float LayoutWidth => PreviewSize?.Width ?? HostLogicalWidth;
+    internal float LayoutHeight => PreviewSize?.Height ?? HostLogicalHeight;
+
+    /// <summary>
+    ///     Render the current UI to a 24-bit BMP at <paramref name="path" /> without disturbing the
+    ///     window. Used by <see cref="Host.InspectServer" /> to hand a frame to an out-of-process viewer.
+    ///     <para>
+    ///         The re-submit is the whole trick, and it is not optional:
+    ///         <see cref="ZigoteEngine.CaptureUiBmp" /> renders whatever was submitted <b>last</b>, and a
+    ///         submitted list does not survive the frame that consumed it — capture a frame later and the
+    ///         result is a black texture. So the last painted list goes back in immediately before the
+    ///         capture, which is the same order the smoke-test golden-image path uses.
+    ///     </para>
+    ///     <para>
+    ///         Call between frames (from <see cref="Post" />), never inside one: this submits outside the
+    ///         live <c>BeginFrame</c>/<c>EndFrame</c> pair on purpose. The overlay layer (dialogs,
+    ///         popovers, menus, snackbars) is composited in, because the capture renders only the main
+    ///         submit — what the window shows is what the BMP shows.
+    ///     </para>
+    /// </summary>
+    internal bool CaptureUi(string path, float scale = 1f)
+    {
+        if (_paint.Count == 0) return false;
+        if (_overlayPaint.Count == 0)
+        {
+            Engine.SubmitPaintCommands(_paint);
+        }
+        else
+        {
+            _capturePaint.Clear();
+            _capturePaint.AppendFrom(_paint);
+            _capturePaint.AppendFrom(_overlayPaint);
+            Engine.SubmitPaintCommands(_capturePaint);
+        }
+        return Engine.CaptureUiBmp(
+            path,
+            (uint)MathF.Max(1f, LayoutWidth),
+            (uint)MathF.Max(1f, LayoutHeight),
+            scale
+        );
+    }
+
     private void DrainPosted()
     {
         while (_posted.TryDequeue(out var action))
@@ -882,6 +1005,18 @@ public partial class App : IDisposable
     // ── Frame loop ────────────────────────────────────────────────────────────
 
     public void Frame()
+    {
+        try
+        {
+            FrameCore();
+        }
+        finally
+        {
+            DrainPostedAfterFrame();
+        }
+    }
+
+    private void FrameCore()
     {
         // Compute dt
         var now = _clock.ElapsedTicks;
@@ -1038,6 +1173,15 @@ public partial class App : IDisposable
         // (size/structure). Plain pointer-moves are cheap: they relayout nothing and only
         // repaint on hover transitions or while a widget is captured (drag) — see the
         // MouseMove branch of DispatchEvent.
+        // Synthetic events (InjectEvent) join the real batch here — after DrainPosted, so a command
+        // posted this frame dispatches this frame, and inside the same loop as OS input so the
+        // discrete/repaint bookkeeping below treats them identically.
+        if (_injected.Count > 0)
+        {
+            events.AddRange(_injected);
+            _injected.Clear();
+        }
+
         _pendingRelayout = false;
         var discrete = false;
         foreach (var evt in events)
@@ -1144,6 +1288,13 @@ public partial class App : IDisposable
     ///     receives the full frame while a clean layer's paint walk is skipped. Root and overlays stay
     ///     in separate lists so they composite correctly (overlays above the 3D viewport in Pass 2).
     /// </summary>
+    /// <summary>
+    ///     Bumped whenever a paint walk actually ran. The inspect stream compares it to skip the
+    ///     whole capture (offscreen render, BMP round-trip, byte compare) on frames where nothing
+    ///     painted — an idle app with a stream attached does no capture work at all.
+    /// </summary>
+    internal int PaintVersion { get; private set; }
+
     private void PaintAndPresent()
     {
         // Hidden: there is no surface to present to, and the GPU work would be thrown away. The
@@ -1152,6 +1303,7 @@ public partial class App : IDisposable
 
         var rootWalked = _repaint.RootDirty;
         var overlayWalked = _repaint.OverlayDirty;
+        if (rootWalked || overlayWalked) PaintVersion++;
 
         var csdRounded = CsdRounded;
         var windowRect = WindowRect;
