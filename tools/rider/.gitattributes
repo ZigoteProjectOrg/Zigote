@@ -1,0 +1,5 @@
+# The Gradle wrapper ships both scripts; each needs the line endings of the shell that runs it.
+# Without this, git normalises gradlew.bat to LF and cmd.exe mis-parses it.
+/gradlew    text eol=lf
+/gradlew.bat text eol=crlf
+/gradle/wrapper/gradle-wrapper.jar binary

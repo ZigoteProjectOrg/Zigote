@@ -5,7 +5,6 @@ looks like, run one widget on its own, and show you the widget tree behind what 
 
 ```sh
 cd tools/rider
-gradle wrapper             # once — the wrapper jar is a binary, so it is not committed
 ./gradlew buildPlugin      # → build/distributions/zigote-rider-0.1.0.zip
 ./gradlew runIde           # a sandbox Rider with the plugin loaded
 ./gradlew test             # the parsing, without an IDE
@@ -14,9 +13,12 @@ gradle wrapper             # once — the wrapper jar is a binary, so it is not 
 Install the zip through **Settings → Plugins → ⚙ → Install Plugin from Disk**. Set `riderVersion` in
 `gradle.properties` to the Rider you actually run — the first build downloads that Rider (~2 GB).
 
-**Gradle 8.14 or newer.** Older Gradle fails on a JDK 24+ with `Type T not present`, which reads like a
-plugin bug and is not one. The Java 21 toolchain the platform wants is downloaded by the foojay
-resolver in `settings.gradle.kts`, so no particular JDK has to be installed first.
+**No JDK or Gradle has to be installed first.** The wrapper is committed and pinned to Gradle 8.14.3 —
+not 9.x, where the IntelliJ Platform plugin's `instrumentCode` dies in ASM — and 8.14 in turn does not
+run on a JDK 25, which it reports as a bare `* What went wrong: 25.0.4`. So the daemon JVM is pinned
+to 21 in `gradle/gradle-daemon-jvm.properties` and downloaded if it is missing, whatever the JDK on
+PATH happens to be. The Java 21 *toolchain* the platform compiles against is downloaded by the foojay
+resolver in `settings.gradle.kts`, which is a separate thing wanting the same version.
 
 ---
 
