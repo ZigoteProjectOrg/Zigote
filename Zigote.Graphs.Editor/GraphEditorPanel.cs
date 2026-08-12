@@ -37,7 +37,7 @@ public sealed class GraphEditorPanel : Widget
     public GraphEditorPanel(GraphDocument graph, GraphDomainRegistry registry, ThemeData theme,
         AppInstance app,
         float inspectorWidth = 220f, Action<object?>? onCompiled = null,
-        Widget? inspectorHeader = null)
+        Widget? inspectorHeader = null, bool showToolbar = true)
     {
         _theme = theme;
         _app = app;
@@ -58,7 +58,6 @@ public sealed class GraphEditorPanel : Widget
             onCompiled(State.LastCompileResult?.CompiledArtifact); // initial value
         }
 
-        var toolbar = BuildToolbar();
 
         // Feature 6: use SplitPane instead of a fixed-width SizedBox for the inspector
         Widget inspectorSide = new ScrollView(new Padding(EdgeInsets.All(8f), _inspector));
@@ -77,14 +76,18 @@ public sealed class GraphEditorPanel : Widget
             DividerW = 4f,
         };
 
-        _root = new Column {
-            MainAxisAlignment = MainAxisAlignment.Start,
-            CrossAxisAlignment = CrossAxisAlignment.Stretch,
-            Children = {
-                new SizedBox(height: ToolbarH, child: toolbar),
-                new Expanded(_split),
-            },
-        };
+        // A host that already has its own chrome (an app header bar, a docked panel) can drop the
+        // editor's toolbar and keep only the canvas + inspector.
+        _root = showToolbar
+            ? new Column {
+                MainAxisAlignment = MainAxisAlignment.Start,
+                CrossAxisAlignment = CrossAxisAlignment.Stretch,
+                Children = {
+                    new SizedBox(height: ToolbarH, child: BuildToolbar()),
+                    new Expanded(_split),
+                },
+            }
+            : _split;
 
         _canvas.SearchRequested += (wx, wy) => _search.Show(wx, wy);
         _search.NodeChosen += (defId, wx, wy) => _canvas.AddNode(defId, wx, wy);
