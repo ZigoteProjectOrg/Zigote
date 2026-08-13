@@ -117,10 +117,11 @@ public sealed class AdwWindowControls : ComposedWidget
 
     /// <summary>
     ///     The macOS window buttons, drawn by the app: close · minimize · zoom as the three system
-    ///     hues, dimmed to one grey while the window is not the key window. One widget rather than
-    ///     three, because the cluster lights up and dims as a unit — and because
-    ///     <see cref="HitTest" /> can then claim only the circles, leaving the space around them to
-    ///     the headerbar's drag surface.
+    ///     hues, dimmed to one grey while the window is not the key window, revealing their ✕ / ─ /
+    ///     fullscreen glyphs while the pointer is over the cluster. One widget rather than three,
+    ///     because the cluster lights up, dims and shows its glyphs as a unit — and because
+    ///     <see cref="HitTest" /> can then claim exactly the band the three circles span, leaving
+    ///     the lead-in and trailing reserve to the headerbar's drag surface.
     ///     <para>
     ///         The whole cluster is <see cref="App.MacTrafficLightInset" /> wide once the
     ///         headerbar's own padding and the row gap after it are counted in, so the first packed
@@ -141,6 +142,14 @@ public sealed class AdwWindowControls : ComposedWidget
             Color.Rgb(r: 40, g: 200, b: 64), // zoom
         ];
 
+        /// <summary>Hover-glyph inks: each the system's darker shade of its light's hue.</summary>
+        private static readonly Color[] GlyphHues = [
+            Color.Rgb(r: 77, g: 0, b: 0), // close ✕
+            Color.Rgb(r: 153, g: 87, b: 0), // minimize ─
+            Color.Rgb(r: 0, g: 101, b: 0), // zoom triangles
+        ];
+
+        private bool _hovered;
         private int _pressed = -1;
         private Size _size;
         private ThemeData _theme = ThemeData.Dark;
@@ -173,13 +182,76 @@ public sealed class AdwWindowControls : ComposedWidget
         public override void Paint(PaintList paint)
         {
             // Inactive windows grey their lights out — the strongest signal macOS gives that a
-            // window is not the one taking keystrokes.
-            bool inactive = !app.WindowFocused;
+            // window is not the one taking keystrokes. Hover overrides the grey: macOS restores
+            // the hues and reveals the glyphs, so a background window's buttons can still be
+            // aimed at without focusing it first.
+            bool showGlyphs = _hovered || _pressed >= 0;
+            bool inactive = !app.WindowFocused && !showGlyphs;
             for (int i = 0; i < 3; i++)
             {
                 var color = inactive ? _theme.Control : Hues[i];
                 if (i == _pressed) color = Darken(color);
-                paint.AddRect(bounds: LightRect(i), color: color, radius: Diameter / 2f);
+                var circle = LightRect(i);
+                paint.AddRect(bounds: circle, color: color, radius: Diameter / 2f);
+                if (showGlyphs) PaintGlyph(paint: paint, index: i, circle: circle);
+            }
+        }
+
+        /// <summary>
+        ///     One hover glyph, centred in its light: ✕ / ─ / the fullscreen triangle pair, sized
+        ///     to the same ~55% of the circle the native lights use.
+        /// </summary>
+        private static void PaintGlyph(PaintList paint, int index, Rect circle)
+        {
+            float cx = circle.X + (circle.Width / 2f);
+            float cy = circle.Y + (circle.Height / 2f);
+            var ink = GlyphHues[index];
+            switch (index)
+            {
+                case 0: // ✕ — two diagonal strokes, each a fan-safe quad
+                {
+                    const float arm = 2.6f; // centre → stroke end, per axis
+                    const float o = 0.57f; // half stroke thickness, per axis (0.8 / √2)
+                    Span<Offset> quad = stackalloc Offset[4];
+                    quad[0] = new Offset(x: cx - arm - o, y: cy - arm + o);
+                    quad[1] = new Offset(x: cx + arm - o, y: cy + arm + o);
+                    quad[2] = new Offset(x: cx + arm + o, y: cy + arm - o);
+                    quad[3] = new Offset(x: cx - arm + o, y: cy - arm - o);
+                    paint.AddPolygon(points: quad, color: ink);
+                    quad[0] = new Offset(x: cx - arm + o, y: cy + arm + o);
+                    quad[1] = new Offset(x: cx + arm + o, y: cy - arm + o);
+                    quad[2] = new Offset(x: cx + arm - o, y: cy - arm - o);
+                    quad[3] = new Offset(x: cx - arm - o, y: cy + arm - o);
+                    paint.AddPolygon(points: quad, color: ink);
+                    break;
+                }
+                case 1: // ─
+                    paint.AddRect(
+                        bounds: new Rect(
+                            x: cx - 4f,
+                            y: cy - 0.8f,
+                            width: 8f,
+                            height: 1.6f
+                        ),
+                        color: ink,
+                        radius: 0.8f
+                    );
+                    break;
+                default: // zoom: two triangles split along the ↗ diagonal, pointing apart
+                {
+                    const float h = 3f; // half of the glyph box
+                    const float g = 1.1f; // hypotenuse pull-back that opens the split
+                    Span<Offset> tri = stackalloc Offset[3];
+                    tri[0] = new Offset(x: cx - h, y: cy - h);
+                    tri[1] = new Offset(x: cx + h - g, y: cy - h);
+                    tri[2] = new Offset(x: cx - h, y: cy + h - g);
+                    paint.AddPolygon(points: tri, color: ink);
+                    tri[0] = new Offset(x: cx + h, y: cy + h);
+                    tri[1] = new Offset(x: cx - h + g, y: cy + h);
+                    tri[2] = new Offset(x: cx + h, y: cy - h + g);
+                    paint.AddPolygon(points: tri, color: ink);
+                    break;
+                }
             }
         }
 
@@ -211,8 +283,28 @@ public sealed class AdwWindowControls : ComposedWidget
             return -1;
         }
 
-        /// <summary>Only the circles are ours; the gaps stay part of the titlebar drag surface.</summary>
-        public override Widget? HitTest(Offset point) => LightAt(point) >= 0 ? this : null;
+        /// <summary>The tight band the three circles span, gaps included.</summary>
+        private Rect ClusterRect => new(
+            x: Bounds.X + Lead,
+            y: Bounds.Y + ((Bounds.Height - Diameter) / 2f),
+            width: (Diameter * 3f) + (Gap * 2f),
+            height: Diameter
+        );
+
+        /// <summary>
+        ///     The whole cluster — circles AND the gaps between them — is ours, so the hover
+        ///     glyphs come on and stay on while the pointer crosses the group, the way the
+        ///     native lights track as one unit. The lead-in and the trailing reserve stay part
+        ///     of the titlebar drag surface.
+        /// </summary>
+        public override Widget? HitTest(Offset point) =>
+            ClusterRect.Contains(px: point.X, py: point.Y) ? this : null;
+
+        public override void OnPointerEnter()
+        {
+            _hovered = true;
+            MarkNeedsPaint();
+        }
 
         public override void OnPointerDown(Offset point)
         {
@@ -222,7 +314,8 @@ public sealed class AdwWindowControls : ComposedWidget
 
         public override void OnPointerExit()
         {
-            if (_pressed < 0) return;
+            if (!_hovered && _pressed < 0) return;
+            _hovered = false;
             _pressed = -1;
             MarkNeedsPaint();
         }
@@ -247,11 +340,14 @@ public sealed class AdwWindowControls : ComposedWidget
             }
         }
 
-        public override MouseCursor? GetCursor(Offset point) => MouseCursor.Pointer;
+        /// <summary>Pointer over the circles themselves; the gaps keep the default arrow.</summary>
+        public override MouseCursor? GetCursor(Offset point) =>
+            LightAt(point) >= 0 ? MouseCursor.Pointer : null;
 
         public override int DebugStateHash() => HashCode.Combine(
             value1: _pressed,
-            value2: app.WindowFocused
+            value2: _hovered,
+            value3: app.WindowFocused
         );
     }
 
