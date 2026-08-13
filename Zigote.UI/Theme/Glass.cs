@@ -24,38 +24,44 @@ public static class Glass
     {
         // Floating drop shadow — glass planes hover above whatever is behind them.
         if (elevation > 0f)
+        {
             paint.AddShadow(
-                bounds,
-                new Color(
-                    0f,
-                    0f,
-                    0f,
-                    0.22f
+                bounds: bounds,
+                color: new Color(
+                    r: 0f,
+                    g: 0f,
+                    b: 0f,
+                    a: 0.22f
                 ),
-                radius,
-                elevation * 2.2f,
-                elevation * 0.12f
+                borderRadius: radius,
+                blurRadius: elevation * 2.2f,
+                spread: elevation * 0.12f
             );
+        }
 
         // Gel response: press compresses the glass (thinner core, stronger lensing); hover lifts
         // the rim and tint slightly so controls feel alive under the pointer.
-        var thickness = theme.GlassThickness * (pressed ? 0.72f : hovered ? 1.12f : 1f);
-        var pinch = theme.GlassPinch * (pressed ? 1.5f : 1f);
-        var a = Math.Clamp(tintStrength * (pressed ? 1.3f : hovered ? 1.1f : 1f), 0f, 1f);
+        float thickness = theme.GlassThickness * (pressed ? 0.72f : hovered ? 1.12f : 1f);
+        float pinch = theme.GlassPinch * (pressed ? 1.5f : 1f);
+        float a = Math.Clamp(
+            value: tintStrength * (pressed ? 1.3f : hovered ? 1.1f : 1f),
+            min: 0f,
+            max: 1f
+        );
 
         paint.AddLiquidGlass(
-            bounds,
-            tint.WithAlpha(a),
-            radius,
-            thickness,
-            theme.GlassGlowX,
-            theme.GlassGlowY,
-            pinch
+            bounds: bounds,
+            color: tint.WithAlpha(a),
+            radius: radius,
+            thickness: thickness,
+            glowX: theme.GlassGlowX,
+            glowY: theme.GlassGlowY,
+            pinch: pinch
         );
 
         // Rim: a hairline that reads as the glass edge catching light, brighter when interactive.
         var rim = theme.OnSurface.WithAlpha(hovered || pressed ? 0.30f : 0.16f);
-        paint.AddBorder(bounds, rim, radius);
+        paint.AddBorder(bounds: bounds, color: rim, radius: radius);
     }
 
     /// <summary>Clear glass surface using the theme's default tint/strength.</summary>
@@ -64,15 +70,15 @@ public static class Glass
         bool hovered = false, bool pressed = false, float elevation = 6f)
     {
         Surface(
-            paint,
-            bounds,
-            theme,
-            radius,
-            theme.GlassTint,
-            theme.GlassTintStrength,
-            hovered,
-            pressed,
-            elevation
+            paint: paint,
+            bounds: bounds,
+            theme: theme,
+            radius: radius,
+            tint: theme.GlassTint,
+            tintStrength: theme.GlassTintStrength,
+            hovered: hovered,
+            pressed: pressed,
+            elevation: elevation
         );
     }
 
@@ -82,15 +88,15 @@ public static class Glass
         bool hovered = false, bool pressed = false, float elevation = 7f)
     {
         Surface(
-            paint,
-            bounds,
-            theme,
-            radius,
-            accent,
-            0.55f,
-            hovered,
-            pressed,
-            elevation
+            paint: paint,
+            bounds: bounds,
+            theme: theme,
+            radius: radius,
+            tint: accent,
+            tintStrength: 0.55f,
+            hovered: hovered,
+            pressed: pressed,
+            elevation: elevation
         );
     }
 
@@ -102,44 +108,51 @@ public static class Glass
         PaintList paint, Rect bounds, ThemeData theme, Material material, float radius,
         bool hovered = false, bool pressed = false, float elevation = 6f)
     {
-        var (strength, thickScale) = material switch {
+        (float strength, float thickScale) = material switch {
             Material.UltraThin => (0.04f, 0.6f),
             Material.Thin => (0.06f, 0.8f),
             Material.Regular => (0.10f, 1.0f),
             Material.Thick => (0.18f, 1.3f),
             _ => (0.30f, 1.6f), // UltraThick
         };
-        var saved = theme.GlassThickness;
+        float saved = theme.GlassThickness;
         // Reuse Surface's gel logic with a material-scaled thickness via a tweaked tint/strength.
         if (elevation > 0f)
+        {
             paint.AddShadow(
-                bounds,
-                new Color(
-                    0f,
-                    0f,
-                    0f,
-                    0.22f
+                bounds: bounds,
+                color: new Color(
+                    r: 0f,
+                    g: 0f,
+                    b: 0f,
+                    a: 0.22f
                 ),
-                radius,
-                elevation * 2.2f,
-                elevation * 0.12f
+                borderRadius: radius,
+                blurRadius: elevation * 2.2f,
+                spread: elevation * 0.12f
             );
-        var thickness = saved * thickScale * (pressed ? 0.72f : hovered ? 1.12f : 1f);
-        var pinch = theme.GlassPinch * (pressed ? 1.5f : 1f);
-        var a = Math.Clamp(strength * (pressed ? 1.3f : hovered ? 1.1f : 1f), 0f, 1f);
+        }
+
+        float thickness = saved * thickScale * (pressed ? 0.72f : hovered ? 1.12f : 1f);
+        float pinch = theme.GlassPinch * (pressed ? 1.5f : 1f);
+        float a = Math.Clamp(
+            value: strength * (pressed ? 1.3f : hovered ? 1.1f : 1f),
+            min: 0f,
+            max: 1f
+        );
         paint.AddLiquidGlass(
-            bounds,
-            theme.GlassTint.WithAlpha(a),
-            radius,
-            thickness,
-            theme.GlassGlowX,
-            theme.GlassGlowY,
-            pinch
+            bounds: bounds,
+            color: theme.GlassTint.WithAlpha(a),
+            radius: radius,
+            thickness: thickness,
+            glowX: theme.GlassGlowX,
+            glowY: theme.GlassGlowY,
+            pinch: pinch
         );
         paint.AddBorder(
-            bounds,
-            theme.OnSurface.WithAlpha(hovered || pressed ? 0.30f : 0.16f),
-            radius
+            bounds: bounds,
+            color: theme.OnSurface.WithAlpha(hovered || pressed ? 0.30f : 0.16f),
+            radius: radius
         );
     }
 }

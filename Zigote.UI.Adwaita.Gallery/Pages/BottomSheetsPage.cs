@@ -7,13 +7,10 @@ namespace AdwaitaGallery.Pages;
 /// </summary>
 public sealed class BottomSheetsPage : ComposedWidget
 {
-    private readonly AdwBottomSheet _sheet = new();
     private readonly Signal<bool> _open = new(false);
+    private readonly AdwBottomSheet _sheet = new();
 
-    public BottomSheetsPage()
-    {
-        _sheet.OnOpenChanged = open => _open.Value = open;
-    }
+    public BottomSheetsPage() => _sheet.OnOpenChanged = open => _open.Value = open;
 
     protected override Widget Build(BuildContext context)
     {
@@ -26,7 +23,7 @@ public sealed class BottomSheetsPage : ComposedWidget
             Description = "Pull the bar up, or drag the handle back down",
             Child = new Column(spacing: Spacing.Md, mainAxisSize: MainAxisSize.Min) {
                 Children = {
-                    new AdwButton("Open the Sheet", () => _sheet.Open = true) {
+                    new AdwButton(label: "Open the Sheet", onPressed: () => _sheet.Open = true) {
                         Style = AdwButtonStyle.Suggested,
                         Pill = true,
                     },
@@ -34,20 +31,21 @@ public sealed class BottomSheetsPage : ComposedWidget
                     // The sheet's two knobs, live: both are read when the sheet tree is built, so
                     // flipping either one and pulling the sheet up again shows the difference.
                     new SizedBox(
-                        360f,
+                        width: 360f,
                         child: new AdwPreferencesGroup {
                             Rows = {
                                 new AdwSwitchRow(
-                                    "Modal",
+                                    title: "Modal",
+                                    subtitle:
                                     "Scrim behind the sheet, and Escape or back closes it",
-                                    _sheet.Modal,
-                                    v => _sheet.Modal = v
+                                    value: _sheet.Modal,
+                                    onChanged: v => _sheet.Modal = v
                                 ),
                                 new AdwSwitchRow(
-                                    "Show Drag Handle",
-                                    "The tap-to-close pill at the top of the sheet",
-                                    _sheet.ShowDragHandle,
-                                    v => _sheet.ShowDragHandle = v
+                                    title: "Show Drag Handle",
+                                    subtitle: "The tap-to-close pill at the top of the sheet",
+                                    value: _sheet.ShowDragHandle,
+                                    onChanged: v => _sheet.ShowDragHandle = v
                                 ),
                             },
                         }
@@ -56,7 +54,7 @@ public sealed class BottomSheetsPage : ComposedWidget
             },
         };
         _sheet.Sheet = Sheet(theme);
-        _sheet.BottomBar = BottomBar(theme, p);
+        _sheet.BottomBar = BottomBar(theme: theme, p: p);
         return _sheet;
     }
 
@@ -64,21 +62,23 @@ public sealed class BottomSheetsPage : ComposedWidget
     {
         var header = new AdwHeaderBar {
             Flat = true,
-            TitleWidget = new AdwWindowTitle("Aurora Drift", "Northbound"),
+            TitleWidget = new AdwWindowTitle(title: "Aurora Drift", subtitle: "Northbound"),
             ShowStartWindowControls = false,
             ShowEndWindowControls = false,
         };
-        header.End.Add(Demo.IconButton(MaterialIcons.Close, () => _sheet.Open = false));
+        header.End.Add(
+            Demo.IconButton(icon: MaterialIcons.Close, onPressed: () => _sheet.Open = false)
+        );
 
         var controls = new Row(spacing: Spacing.Xl, mainAxisSize: MainAxisSize.Min) {
             Children = {
-                Demo.IconButton(MaterialIcons.SkipPrevious, () => { }),
+                Demo.IconButton(icon: MaterialIcons.SkipPrevious, onPressed: () => { }),
                 new AdwButton(onPressed: () => { }) {
                     IconName = MaterialIcons.PlayArrow,
                     Style = AdwButtonStyle.Suggested,
                     Circular = true,
                 },
-                Demo.IconButton(MaterialIcons.SkipNext, () => { }),
+                Demo.IconButton(icon: MaterialIcons.SkipNext, onPressed: () => { }),
             },
         };
 
@@ -86,11 +86,15 @@ public sealed class BottomSheetsPage : ComposedWidget
             new Center {
                 Child = new Column(spacing: Spacing.Xl, mainAxisSize: MainAxisSize.Min) {
                     Children = {
-                        new AdwAvatar(96f, iconName: MaterialIcons.MusicNote),
-                        new Label("Aurora Drift", AdwTypography.Title2, theme.OnBackground) {
+                        new AdwAvatar(size: 96f, iconName: MaterialIcons.MusicNote),
+                        new Label(
+                            text: "Aurora Drift",
+                            style: AdwTypography.Title2,
+                            color: theme.OnBackground
+                        ) {
                             Align = TextAlign.Center,
                         },
-                        new SizedBox(260f, child: new AdwSlider(0.35f)),
+                        new SizedBox(width: 260f, child: new AdwSlider(0.35f)),
                         controls,
                     },
                 },
@@ -115,7 +119,7 @@ public sealed class BottomSheetsPage : ComposedWidget
                     Padding = EdgeInsets.Symmetric(Spacing.Md),
                     Child = new Row(spacing: Spacing.Md) {
                         Children = {
-                            new AdwAvatar(32f, iconName: MaterialIcons.MusicNote),
+                            new AdwAvatar(size: 32f, iconName: MaterialIcons.MusicNote),
                             new Expanded(
                                 new Column(
                                     mainAxisSize: MainAxisSize.Min,
@@ -123,25 +127,25 @@ public sealed class BottomSheetsPage : ComposedWidget
                                 ) {
                                     Children = {
                                         new Label(
-                                            "Aurora Drift",
-                                            AdwTypography.Heading,
-                                            theme.OnBackground
+                                            text: "Aurora Drift",
+                                            style: AdwTypography.Heading,
+                                            color: theme.OnBackground
                                         ) {
                                             MaxLines = 1,
                                             Overflow = TextOverflow.Ellipsis,
                                         },
                                         new Label(
-                                            "Pull up for the player",
-                                            AdwTypography.Caption,
-                                            theme.TextSecondary
+                                            text: "Pull up for the player",
+                                            style: AdwTypography.Caption,
+                                            color: theme.TextSecondary
                                         ) { MaxLines = 1 },
                                     },
                                 }
                             ),
                             new IconGlyph(
-                                MaterialIcons.ExpandLess,
-                                AdwMetrics.IconSize,
-                                theme.TextSecondary
+                                glyph: MaterialIcons.ExpandLess,
+                                size: AdwMetrics.IconSize,
+                                color: theme.TextSecondary
                             ),
                         },
                     },

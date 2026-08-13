@@ -50,10 +50,7 @@ public class Label : Widget
     private FontWeight _wrapWeight = FontWeight.Normal;
     private float _wrapWidth = -1f;
 
-    public Label(string text)
-    {
-        _text = text;
-    }
+    public Label(string text) => _text = text;
 
     public Label(string text, float fontSize, Color color)
     {
@@ -88,7 +85,7 @@ public class Label : Widget
     public string Text
     {
         get => _text;
-        set => SetLayout(ref _text, value);
+        set => SetLayout(field: ref _text, value: value);
     }
 
     public LabelStyle Style { get; set; } = LabelStyle.Body;
@@ -127,20 +124,11 @@ public class Label : Widget
         config.Label = Text;
     }
 
-    public static Label Body(string text)
-    {
-        return new Label(text) { Style = LabelStyle.Body };
-    }
+    public static Label Body(string text) => new(text) { Style = LabelStyle.Body };
 
-    public static Label Caption(string text)
-    {
-        return new Label(text) { Style = LabelStyle.Caption };
-    }
+    public static Label Caption(string text) => new(text) { Style = LabelStyle.Caption };
 
-    public static Label Title(string text)
-    {
-        return new Label(text) { Style = LabelStyle.Title };
-    }
+    public static Label Title(string text) => new(text) { Style = LabelStyle.Title };
 
     private float ResolveFontSize()
     {
@@ -155,9 +143,9 @@ public class Label : Widget
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
         _fontSize = ResolveFontSize();
-        var lh = LineHeight ?? _theme.LineHeight;
+        float lh = LineHeight ?? _theme.LineHeight;
 
-        var singleLine = MaxLines == 1;
+        bool singleLine = MaxLines == 1;
 
         // Multi-line (the default when MaxLines != 1) with a bounded width: word-wrap here and paint each
         // line separately. AddText draws ONE unwrapped line, so without this a Text wider than its box runs
@@ -169,19 +157,22 @@ public class Label : Widget
             if (_lines.Count > 1)
             {
                 _multiline = true;
-                var widest = 0f;
-                foreach (var line in _lines)
+                float widest = 0f;
+                foreach (string line in _lines)
+                {
                     widest = MathF.Max(
-                        widest,
-                        TextMeasure.Width(
-                            line,
-                            _fontSize,
-                            FontWeight,
-                            FontStyle,
-                            FontFamily
+                        x: widest,
+                        y: TextMeasure.Width(
+                            text: line,
+                            fontSize: _fontSize,
+                            weight: FontWeight,
+                            style: FontStyle,
+                            fontFamily: FontFamily
                         )
                     );
-                _size = c.Constrain(new Size(widest, _lines.Count * _fontSize * lh));
+                }
+
+                _size = c.Constrain(new Size(width: widest, height: _lines.Count * _fontSize * lh));
                 return _size;
             }
         }
@@ -190,13 +181,13 @@ public class Label : Widget
 
         // Single-line: measure intrinsically, then resolve overflow against MaxWidth.
         var full = TextMeasure.Measure(
-            Text,
-            _fontSize,
-            FontWeight,
-            FontStyle,
-            FontFamily
+            text: Text,
+            fontSize: _fontSize,
+            weight: FontWeight,
+            style: FontStyle,
+            fontFamily: FontFamily
         );
-        var lineH = full.Height > 0f ? full.Height : _fontSize * lh;
+        float lineH = full.Height > 0f ? full.Height : _fontSize * lh;
 
         _drawText = Text;
         _truncated = false;
@@ -208,12 +199,14 @@ public class Label : Widget
         if (full.Width > c.MaxWidth && !string.IsNullOrEmpty(Text))
         {
             _truncated = true;
-            _drawText = Overflow == TextOverflow.Ellipsis ? Fit(Text, c.MaxWidth) : Text;
-            _size = c.Constrain(new Size(c.MaxWidth, lineH));
+            _drawText = Overflow == TextOverflow.Ellipsis
+                ? Fit(text: Text, maxWidth: c.MaxWidth)
+                : Text;
+            _size = c.Constrain(new Size(width: c.MaxWidth, height: lineH));
             return _size;
         }
 
-        _size = c.Constrain(new Size(full.Width, lineH));
+        _size = c.Constrain(new Size(width: full.Width, height: lineH));
         return _size;
     }
 
@@ -241,16 +234,16 @@ public class Label : Widget
         // Line widths are per-word advances summed with the space advance — one TextMeasure entry
         // per word instead of one per growing line prefix (kerning drift vs the shaped whole line
         // is acceptable, as in the selection advance cache).
-        var spaceW = TextMeasure.Width(
-            " ",
-            _fontSize,
-            FontWeight,
-            FontStyle,
-            FontFamily
+        float spaceW = TextMeasure.Width(
+            text: " ",
+            fontSize: _fontSize,
+            weight: FontWeight,
+            style: FontStyle,
+            fontFamily: FontFamily
         );
 
         _lines.Clear();
-        foreach (var hardLine in Text.Split('\n'))
+        foreach (string hardLine in Text.Split('\n'))
         {
             if (hardLine.Length == 0)
             {
@@ -258,16 +251,16 @@ public class Label : Widget
                 continue;
             }
 
-            var cur = string.Empty;
-            var curW = 0f;
-            foreach (var word in hardLine.Split(' '))
+            string cur = string.Empty;
+            float curW = 0f;
+            foreach (string word in hardLine.Split(' '))
             {
-                var wordW = TextMeasure.Width(
-                    word,
-                    _fontSize,
-                    FontWeight,
-                    FontStyle,
-                    FontFamily
+                float wordW = TextMeasure.Width(
+                    text: word,
+                    fontSize: _fontSize,
+                    weight: FontWeight,
+                    style: FontStyle,
+                    fontFamily: FontFamily
                 );
                 if (cur.Length == 0)
                 {
@@ -294,9 +287,16 @@ public class Label : Widget
 
         if (MaxLines is { } ml && ml > 0 && _lines.Count > ml)
         {
-            var remainder = string.Join(' ', _lines.GetRange(ml - 1, _lines.Count - (ml - 1)));
-            _lines.RemoveRange(ml - 1, _lines.Count - (ml - 1));
-            _lines.Add(Overflow == TextOverflow.Ellipsis ? Fit(remainder, maxWidth) : remainder);
+            string remainder = string.Join(
+                separator: ' ',
+                values: _lines.GetRange(index: ml - 1, count: _lines.Count - (ml - 1))
+            );
+            _lines.RemoveRange(index: ml - 1, count: _lines.Count - (ml - 1));
+            _lines.Add(
+                Overflow == TextOverflow.Ellipsis
+                    ? Fit(text: remainder, maxWidth: maxWidth)
+                    : remainder
+            );
         }
     }
 
@@ -307,28 +307,28 @@ public class Label : Widget
     /// </summary>
     private string Fit(string text, float maxWidth)
     {
-        var ellipsisW = TextMeasure.Width(
-            Ellipsis,
-            _fontSize,
-            FontWeight,
-            FontStyle,
-            FontFamily
+        float ellipsisW = TextMeasure.Width(
+            text: Ellipsis,
+            fontSize: _fontSize,
+            weight: FontWeight,
+            style: FontStyle,
+            fontFamily: FontFamily
         );
         if (ellipsisW >= maxWidth) return Ellipsis;
 
-        var budget = maxWidth - ellipsisW;
+        float budget = maxWidth - ellipsisW;
 
         // Binary search the longest prefix whose width fits the budget.
         int lo = 0, hi = text.Length;
         while (lo < hi)
         {
-            var mid = (lo + hi + 1) / 2;
-            var w = TextMeasure.Width(
-                text[..mid],
-                _fontSize,
-                FontWeight,
-                FontStyle,
-                FontFamily
+            int mid = (lo + hi + 1) / 2;
+            float w = TextMeasure.Width(
+                text: text[..mid],
+                fontSize: _fontSize,
+                weight: FontWeight,
+                style: FontStyle,
+                fontFamily: FontFamily
             );
             if (w <= budget) lo = mid;
             else hi = mid - 1;
@@ -340,22 +340,22 @@ public class Label : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
     public override int DebugStateHash()
     {
         return HashCode.Combine(
-            Text,
-            Color?.R,
-            Color?.G,
-            Color?.B,
-            FontWeight,
-            _truncated
+            value1: Text,
+            value2: Color?.R,
+            value3: Color?.G,
+            value4: Color?.B,
+            value5: FontWeight,
+            value6: _truncated
         );
     }
 
@@ -377,39 +377,39 @@ public class Label : Widget
             _ => _theme.Label1,
         };
 
-        var lh = LineHeight ?? _theme.LineHeight;
+        float lh = LineHeight ?? _theme.LineHeight;
 
         // Multi-line: draw each wrapped line at its own baseline, clipped to the box.
         if (_multiline)
         {
-            var lineH = _fontSize * lh;
+            float lineH = _fontSize * lh;
             paint.AddClipStart(Bounds);
-            for (var i = 0; i < _lines.Count; i++)
+            for (int i = 0; i < _lines.Count; i++)
             {
-                var line = _lines[i];
+                string line = _lines[i];
                 if (line.Length == 0) continue;
-                var lineW = TextMeasure.Width(
-                    line,
-                    _fontSize,
-                    FontWeight,
-                    FontStyle,
-                    FontFamily
+                float lineW = TextMeasure.Width(
+                    text: line,
+                    fontSize: _fontSize,
+                    weight: FontWeight,
+                    style: FontStyle,
+                    fontFamily: FontFamily
                 );
-                var lineX = Align switch {
-                    TextAlign.Center => Bounds.X + (Bounds.Width - lineW) / 2f,
+                float lineX = Align switch {
+                    TextAlign.Center => Bounds.X + ((Bounds.Width - lineW) / 2f),
                     TextAlign.Right => Bounds.Right - lineW,
                     _ => Bounds.X,
                 };
                 paint.AddText(
-                    line,
-                    lineX,
-                    Bounds.Y + _fontSize * 0.8f + i * lineH,
-                    color,
-                    _fontSize,
-                    lh,
-                    FontWeight,
-                    FontStyle,
-                    LetterSpacing,
+                    text: line,
+                    baselineX: lineX,
+                    baselineY: Bounds.Y + (_fontSize * 0.8f) + (i * lineH),
+                    color: color,
+                    fontSize: _fontSize,
+                    lineHeight: lh,
+                    fontWeight: FontWeight,
+                    fontStyle: FontStyle,
+                    letterSpacing: LetterSpacing,
                     fontFamily: FontFamily
                 );
             }
@@ -418,41 +418,41 @@ public class Label : Widget
             return;
         }
 
-        var draw = _drawText.Length == 0 && !string.IsNullOrEmpty(Text) ? Text : _drawText;
+        string draw = _drawText.Length == 0 && !string.IsNullOrEmpty(Text) ? Text : _drawText;
         if (string.IsNullOrEmpty(draw)) return;
 
-        var drawW = TextMeasure.Width(
-            draw,
-            _fontSize,
-            FontWeight,
-            FontStyle,
-            FontFamily
+        float drawW = TextMeasure.Width(
+            text: draw,
+            fontSize: _fontSize,
+            weight: FontWeight,
+            style: FontStyle,
+            fontFamily: FontFamily
         );
 
-        var drawX = Align switch {
-            TextAlign.Center => Bounds.X + (Bounds.Width - drawW) / 2f,
+        float drawX = Align switch {
+            TextAlign.Center => Bounds.X + ((Bounds.Width - drawW) / 2f),
             TextAlign.Right => Bounds.Right - drawW,
             _ => Bounds.X,
         };
         // baseline ≈ top + font_size * 0.8
-        var baseline = Bounds.Y + _fontSize * 0.8f;
+        float baseline = Bounds.Y + (_fontSize * 0.8f);
 
         // Clip only when the text genuinely overflows its box. A bare MaxLines cap on text that
         // fits must NOT clip: glyph ink (side bearings, AA fringe) can extend a pixel or two past
         // the summed advances, and hard-clipping at the measured width shaves the last glyph.
-        var needsClip = _truncated;
+        bool needsClip = _truncated;
         if (needsClip) paint.AddClipStart(Bounds);
 
         paint.AddText(
-            draw,
-            drawX,
-            baseline,
-            color,
-            _fontSize,
-            lh,
-            FontWeight,
-            FontStyle,
-            LetterSpacing,
+            text: draw,
+            baselineX: drawX,
+            baselineY: baseline,
+            color: color,
+            fontSize: _fontSize,
+            lineHeight: lh,
+            fontWeight: FontWeight,
+            fontStyle: FontStyle,
+            letterSpacing: LetterSpacing,
             fontFamily: FontFamily
         );
 

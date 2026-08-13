@@ -103,8 +103,10 @@ public static class FileDialog
     public static bool PlatformSupported =>
         ZigoteEngine.Instance is not null && NativeEngine.FileDialogSupported();
 
-    /// <summary>The native path is available AND the app hasn't opted out via
-    ///     <see cref="Enabled" />.</summary>
+    /// <summary>
+    ///     The native path is available AND the app hasn't opted out via
+    ///     <see cref="Enabled" />.
+    /// </summary>
     public static bool IsSupported => Enabled && PlatformSupported;
 
     /// <summary>
@@ -114,8 +116,10 @@ public static class FileDialog
     /// </summary>
     public static Func<FileDialogRequest, Task<string[]>>? ManagedBackend { get; set; }
 
-    /// <summary>True when some dialog implementation exists (native or in-app) — what call sites
-    ///     gate Browse-style affordances on.</summary>
+    /// <summary>
+    ///     True when some dialog implementation exists (native or in-app) — what call sites
+    ///     gate Browse-style affordances on.
+    /// </summary>
     public static bool CanShowDialogs => IsSupported || ManagedBackend is not null;
 
     /// <summary>
@@ -143,7 +147,7 @@ public static class FileDialog
     {
         return FirstOrNull(
             Enqueue(
-                new FileDialogRequest {
+                spec: new FileDialogRequest {
                     Kind = FileDialogKind.OpenFile,
                     Title = title,
                     Directory = startDirectory,
@@ -151,7 +155,7 @@ public static class FileDialog
                     AcceptLabel = acceptLabel,
                     ShowHidden = showHidden,
                 },
-                parentWindow
+                parentWindow: parentWindow
             )
         );
     }
@@ -164,7 +168,7 @@ public static class FileDialog
         bool showHidden = false)
     {
         return Enqueue(
-            new FileDialogRequest {
+            spec: new FileDialogRequest {
                 Kind = FileDialogKind.OpenFile,
                 Title = title,
                 Directory = startDirectory,
@@ -173,12 +177,14 @@ public static class FileDialog
                 AllowMany = true,
                 ShowHidden = showHidden,
             },
-            parentWindow
+            parentWindow: parentWindow
         );
     }
 
-    /// <summary>Pick an existing folder ("Choose" prompt + New Folder button). Null result =
-    ///     user cancelled.</summary>
+    /// <summary>
+    ///     Pick an existing folder ("Choose" prompt + New Folder button). Null result =
+    ///     user cancelled.
+    /// </summary>
     /// <param name="acceptLabel">OK-button text; null = "Choose" where the backend supports it.</param>
     /// <param name="canCreateDirectories">Offer a New Folder button.</param>
     public static Task<string?> PickFolderAsync(string? title = null, string? startDirectory = null,
@@ -187,7 +193,7 @@ public static class FileDialog
     {
         return FirstOrNull(
             Enqueue(
-                new FileDialogRequest {
+                spec: new FileDialogRequest {
                     Kind = FileDialogKind.PickFolder,
                     Title = title,
                     Directory = startDirectory,
@@ -195,7 +201,7 @@ public static class FileDialog
                     ShowHidden = showHidden,
                     CanCreateDirectories = canCreateDirectories,
                 },
-                parentWindow
+                parentWindow: parentWindow
             )
         );
     }
@@ -213,7 +219,7 @@ public static class FileDialog
     {
         return FirstOrNull(
             Enqueue(
-                new FileDialogRequest {
+                spec: new FileDialogRequest {
                     Kind = FileDialogKind.SaveFile,
                     Title = title,
                     Directory = startDirectory,
@@ -222,7 +228,7 @@ public static class FileDialog
                     AcceptLabel = acceptLabel,
                     CanCreateDirectories = canCreateDirectories,
                 },
-                parentWindow
+                parentWindow: parentWindow
             )
         );
     }
@@ -245,12 +251,12 @@ public static class FileDialog
             return;
         }
 
-        var status = NativeEngine.FileDialogStatus();
+        int status = NativeEngine.FileDialogStatus();
         if (status < 2) return; // 0 idle (shouldn't happen while active) / 1 pending
 
         var done = _active;
         _active = null;
-        var paths = Array.Empty<string>();
+        string[] paths = Array.Empty<string>();
         if (status == 2)
         {
             string? joined;
@@ -267,9 +273,15 @@ public static class FileDialog
         // Completing the task runs await continuations inline (still the UI thread) — they may
         // enqueue follow-up dialogs, which StartNext below then picks up.
         if (status == 4)
-            FailOrFallBack(done, "The native file dialog failed — see the engine log.");
+        {
+            FailOrFallBack(
+                request: done,
+                reason: "The native file dialog failed — see the engine log."
+            );
+        }
         else
             done.Tcs.TrySetResult(paths);
+
         StartNext();
     }
 
@@ -288,8 +300,8 @@ public static class FileDialog
     /// <exception cref="InvalidOperationException">Called off the UI thread.</exception>
     private static void RequireUiThread()
     {
-        var ui = _pumpThread;
-        var current = Environment.CurrentManagedThreadId;
+        int ui = _pumpThread;
+        int current = Environment.CurrentManagedThreadId;
         if (ui == 0 || ui == current) return;
 
         throw new InvalidOperationException(
@@ -318,10 +330,13 @@ public static class FileDialog
     private static async Task<string[]> RunManaged(FileDialogRequest spec)
     {
         if (ManagedBackend is not { } backend)
+        {
             throw new FileDialogException(
                 "No file dialog available: the native backend is disabled or unsupported and no " +
                 "in-app fallback is registered."
             );
+        }
+
         return await backend(spec);
     }
 
@@ -358,26 +373,26 @@ public static class FileDialog
                 return;
             }
 
-            FailOrFallBack(next, "The native file dialog could not be shown.");
+            FailOrFallBack(request: next, reason: "The native file dialog could not be shown.");
         }
     }
 
     private static unsafe bool Begin(Request request)
     {
-        var parent = request.ParentWindow;
+        uint parent = request.ParentWindow;
         if (parent == 0) parent = ParentWindowProvider?.Invoke() ?? 0;
         if (parent == 0) parent = DefaultParentWindow;
 
         var spec = request.Spec;
-        var flags = (spec.AllowMany ? FlagMany : 0) |
-                    (spec.ShowHidden ? FlagShowHidden : 0) |
-                    (spec.CanCreateDirectories ? 0 : FlagNoCreateDirs);
+        uint flags = (spec.AllowMany ? FlagMany : 0) |
+                     (spec.ShowHidden ? FlagShowHidden : 0) |
+                     (spec.CanCreateDirectories ? 0 : FlagNoCreateDirs);
 
-        var title = Utf8z(spec.Title);
-        var directory = Utf8z(spec.Directory);
-        var fileName = Utf8z(spec.FileName);
-        var filters = Utf8z(BuildFilterSpec(spec.Filters));
-        var accept = Utf8z(spec.AcceptLabel);
+        byte[]? title = Utf8z(spec.Title);
+        byte[]? directory = Utf8z(spec.Directory);
+        byte[]? fileName = Utf8z(spec.FileName);
+        byte[]? filters = Utf8z(BuildFilterSpec(spec.Filters));
+        byte[]? accept = Utf8z(spec.AcceptLabel);
         fixed (byte* titlePtr = title)
         fixed (byte* directoryPtr = directory)
         fixed (byte* fileNamePtr = fileName)
@@ -385,14 +400,14 @@ public static class FileDialog
         fixed (byte* acceptPtr = accept)
         {
             return NativeEngine.FileDialogBegin(
-                (uint)spec.Kind,
-                titlePtr,
-                directoryPtr,
-                fileNamePtr,
-                filtersPtr,
-                acceptPtr,
-                flags,
-                parent
+                kind: (uint)spec.Kind,
+                title: titlePtr,
+                directory: directoryPtr,
+                fileName: fileNamePtr,
+                filters: filtersPtr,
+                acceptLabel: acceptPtr,
+                flags: flags,
+                parentWindowId: parent
             );
         }
     }
@@ -409,12 +424,13 @@ public static class FileDialog
         foreach (var filter in filters)
         {
             if (filter.Extensions is not { Count: > 0 }) continue;
-            var exts = filter.Extensions
+            string[] exts = filter.Extensions
                 .Select(e => e.TrimStart('*', '.'))
                 .Select(e => e.Length == 0 ? "*" : e) // "*" / "*.*" → all files
                 .ToArray();
-            var pattern = exts.Contains("*") ? "*" : string.Join(';', exts);
-            var name = filter.Name.Replace('\n', ' ').Replace('|', ' ').Trim();
+            string pattern = exts.Contains("*") ? "*" : string.Join(separator: ';', value: exts);
+            string name = filter.Name.Replace(oldChar: '\n', newChar: ' ')
+                .Replace(oldChar: '|', newChar: ' ').Trim();
             if (sb.Length > 0) sb.Append('\n');
             sb.Append(name.Length == 0 ? "Files" : name).Append('|').Append(pattern);
         }
@@ -422,21 +438,18 @@ public static class FileDialog
         return sb.Length == 0 ? null : sb.ToString();
     }
 
-    private static byte[]? Utf8z(string? s)
-    {
-        return s is null ? null : Encoding.UTF8.GetBytes(s + "\0");
-    }
+    private static byte[]? Utf8z(string? s) => s is null ? null : Encoding.UTF8.GetBytes(s + "\0");
 
     private static async Task<string?> FirstOrNull(Task<string[]> task)
     {
-        var paths = await task;
+        string[] paths = await task;
         return paths.Length > 0 ? paths[0] : null;
     }
 
     private sealed class Request
     {
-        public required FileDialogRequest Spec;
         public uint ParentWindow;
+        public required FileDialogRequest Spec;
         public TaskCompletionSource<string[]> Tcs { get; } = new();
     }
 }

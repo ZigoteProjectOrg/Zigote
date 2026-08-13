@@ -16,22 +16,20 @@ public sealed class AnimatedSwitcher : ImplicitlyAnimatedWidget
 
     public AnimatedSwitcher(Widget? child = null, float duration = 0.25f,
         Func<float, float>? curve = null)
-        : base(duration, curve)
-    {
+        : base(durationSeconds: duration, curve: curve) =>
         _current = child;
-    }
 
     public Widget? Child
     {
         get => _current;
         set
         {
-            if (SameChild(_current, value))
+            if (SameChild(a: _current, b: value))
             {
                 // Same key+type but a freshly-built instance: update the retained child's config in
                 // place (no cross-fade), per the framework's keyed-reconcile contract, instead of
                 // silently dropping the new config.
-                if (!ReferenceEquals(_current, value))
+                if (!ReferenceEquals(objA: _current, objB: value))
                 {
                     _current?.UpdateFrom(value!);
                     MarkNeedsLayout();
@@ -46,14 +44,14 @@ public sealed class AnimatedSwitcher : ImplicitlyAnimatedWidget
             var dropped = _outgoing;
             _outgoing = _current;
             _current = value;
-            SwapChild(dropped, _current);
+            SwapChild(previous: dropped, next: _current);
             Animate();
         }
     }
 
     private static bool SameChild(Widget? a, Widget? b)
     {
-        if (ReferenceEquals(a, b)) return true;
+        if (ReferenceEquals(objA: a, objB: b)) return true;
         if (a is null || b is null) return false;
         return a.Key is not null && a.Key.Equals(b.Key) && a.GetType() == b.GetType();
     }
@@ -74,18 +72,16 @@ public sealed class AnimatedSwitcher : ImplicitlyAnimatedWidget
             // child's, so a switch between different-sized subtrees reflows smoothly instead of
             // snapping the surrounding layout on frame one.
             var old = _outgoing.Measure(c);
-            var t = Progress;
+            float t = Progress;
             _size = c.Constrain(
                 new Size(
-                    old.Width + (cur.Width - old.Width) * t,
-                    old.Height + (cur.Height - old.Height) * t
+                    width: old.Width + ((cur.Width - old.Width) * t),
+                    height: old.Height + ((cur.Height - old.Height) * t)
                 )
             );
         }
         else
-        {
             _size = cur;
-        }
 
         return _size;
     }
@@ -93,10 +89,10 @@ public sealed class AnimatedSwitcher : ImplicitlyAnimatedWidget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         _current?.Layout(origin);
         _outgoing?.Layout(origin);
@@ -106,7 +102,7 @@ public sealed class AnimatedSwitcher : ImplicitlyAnimatedWidget
     {
         if (_outgoing is not null && Progress < 0.999f)
         {
-            var outAlpha = 1f - Progress;
+            float outAlpha = 1f - Progress;
             if (outAlpha > 0.001f)
             {
                 paint.PushAlpha(outAlpha);
@@ -127,10 +123,9 @@ public sealed class AnimatedSwitcher : ImplicitlyAnimatedWidget
         _current?.Paint(paint);
     }
 
-    public override Widget? HitTest(Offset point)
-    {
-        return Bounds.Contains(point.X, point.Y) ? _current?.HitTest(point) : null;
-    }
+    public override Widget? HitTest(Offset point) => Bounds.Contains(px: point.X, py: point.Y)
+        ? _current?.HitTest(point)
+        : null;
 
     public override IEnumerable<Widget> GetChildren()
     {

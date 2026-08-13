@@ -20,29 +20,43 @@ public class PaintCommandMixTests(ITestOutputHelper output)
         // Approximate a real editor/settings panel: a header, then many rows each with a label and a
         // couple of coloured surfaces (proxying controls), grouped into cards.
         var rows = new List<Widget>();
-        for (var section = 0; section < 4; section++)
+        for (int section = 0; section < 4; section++)
         {
             rows.Add(new Label($"Section {section}") { FontSize = 15f });
-            for (var i = 0; i < 8; i++)
+            for (int i = 0; i < 8; i++)
+            {
                 rows.Add(
                     new Padding(
-                        EdgeInsets.All(6f),
-                        new Row(
+                        padding: EdgeInsets.All(6f),
+                        child: new Row(
                             [
-                                new SizedBox(140f, 20f, new Label($"Property {i}")),
-                                new SizedBox(8f, 0f),
-                                new SizedBox(60f, 20f, new ColoredBox(new Color(0.3f, 0.5f, 0.8f))),
-                                new SizedBox(8f, 0f),
-                                new SizedBox(24f, 20f, new ColoredBox(new Color(0.8f, 0.3f, 0.3f))),
+                                new SizedBox(
+                                    width: 140f,
+                                    height: 20f,
+                                    child: new Label($"Property {i}")
+                                ),
+                                new SizedBox(width: 8f, height: 0f),
+                                new SizedBox(
+                                    width: 60f,
+                                    height: 20f,
+                                    child: new ColoredBox(new Color(r: 0.3f, g: 0.5f, b: 0.8f))
+                                ),
+                                new SizedBox(width: 8f, height: 0f),
+                                new SizedBox(
+                                    width: 24f,
+                                    height: 20f,
+                                    child: new ColoredBox(new Color(r: 0.8f, g: 0.3f, b: 0.3f))
+                                ),
                             ]
                         )
                     )
                 );
+            }
         }
 
         return new ColoredBox(
-            new Color(0.1f, 0.1f, 0.12f),
-            new Padding(EdgeInsets.All(12f), new Column(rows))
+            color: new Color(r: 0.1f, g: 0.1f, b: 0.12f),
+            child: new Padding(padding: EdgeInsets.All(12f), child: new Column(rows))
         );
     }
 
@@ -51,7 +65,7 @@ public class PaintCommandMixTests(ITestOutputHelper output)
     {
         var root = Panel();
         var paint = new PaintList();
-        root.Measure(Constraints.Tight(420f, 700f));
+        root.Measure(Constraints.Tight(width: 420f, height: 700f));
         root.Layout(Offset.Zero);
         root.Paint(paint);
 
@@ -62,14 +76,14 @@ public class PaintCommandMixTests(ITestOutputHelper output)
             counts[k] = counts.GetValueOrDefault(k) + 1;
         }
 
-        var total = paint.Count;
+        int total = paint.Count;
         output.WriteLine($"total commands: {total}");
-        foreach (var (kind, n) in counts.OrderByDescending(kv => kv.Value))
+        foreach ((var kind, int n) in counts.OrderByDescending(kv => kv.Value))
             output.WriteLine($"  {kind,-12} {n,4}  {100.0 * n / total,5:F1}%");
 
         // Fields that a side-table split would move off the common command are used by Text/Image/
         // GlyphRun/TextLayout/Polygon. Report how many commands would still need the "heavy" extension.
-        var heavy = counts.GetValueOrDefault(PaintCommandKind.Text)
+        int heavy = counts.GetValueOrDefault(PaintCommandKind.Text)
                     + counts.GetValueOrDefault(PaintCommandKind.Image)
                     + counts.GetValueOrDefault(PaintCommandKind.GlyphRun)
                     + counts.GetValueOrDefault(PaintCommandKind.TextLayout)

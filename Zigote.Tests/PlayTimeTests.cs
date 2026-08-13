@@ -16,7 +16,7 @@ public class PlayTimeTests
 
         Time.Reset();
 
-        Assert.Equal(0f, Time.DeltaTime);
-        Assert.Equal(0f, Time.Elapsed);
+        Assert.Equal(expected: 0f, actual: Time.DeltaTime);
+        Assert.Equal(expected: 0f, actual: Time.Elapsed);
     }
 }

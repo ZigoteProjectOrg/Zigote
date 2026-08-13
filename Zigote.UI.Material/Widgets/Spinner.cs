@@ -1,5 +1,4 @@
 using Zigote.Core.Animation;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.Material;
 
@@ -25,7 +24,7 @@ public class Spinner : Widget
         Size = size;
         _color = color;
         // One full revolution per second; the head steps spoke-by-spoke as it loops.
-        _anim = new AnimationController(1f, this) { Curve = Curves.Linear };
+        _anim = new AnimationController(durationSeconds: 1f, vsync: this) { Curve = Curves.Linear };
         _anim.OnTick += MarkNeedsPaint;
         _anim.Repeat();
     }
@@ -43,61 +42,58 @@ public class Spinner : Widget
     }
 
 
-    public override int DebugStateHash()
-    {
-        return HashCode.Combine(Size, _anim.Progress);
-    }
+    public override int DebugStateHash() => HashCode.Combine(value1: Size, value2: _anim.Progress);
 
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        _size = c.Constrain(new Size(Size, Size));
+        _size = c.Constrain(new Size(width: Size, height: Size));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
     public override void Paint(PaintList paint)
     {
-        var cx = Bounds.X + Bounds.Width / 2f;
-        var cy = Bounds.Y + Bounds.Height / 2f;
-        var radius = MathF.Min(Bounds.Width, Bounds.Height) / 2f;
+        float cx = Bounds.X + (Bounds.Width / 2f);
+        float cy = Bounds.Y + (Bounds.Height / 2f);
+        float radius = MathF.Min(x: Bounds.Width, y: Bounds.Height) / 2f;
 
         // A ring of round dots — each dot is a circle (a square with a full corner radius), so unlike
         // axis-aligned spoke bars the silhouette stays perfectly circular at every angle (the previous
         // spokes pointed horizontally/vertically at the diagonals, giving a blocky, non-circular shape).
-        var dotRadius = MathF.Max(1f, radius * 0.16f);
-        var ringRadius = radius - dotRadius; // keep the dots fully inside the box
+        float dotRadius = MathF.Max(x: 1f, y: radius * 0.16f);
+        float ringRadius = radius - dotRadius; // keep the dots fully inside the box
         var color = _color ?? _theme.Primary;
 
         // Discrete head position so the indicator "ticks" like the AppKit original.
-        var head = (int)(_anim.Value * SpokeCount) % SpokeCount;
+        int head = (int)(_anim.Value * SpokeCount) % SpokeCount;
 
-        for (var i = 0; i < SpokeCount; i++)
+        for (int i = 0; i < SpokeCount; i++)
         {
             // Opacity decreases going backwards from the head around the ring.
-            var trail = (head - i + SpokeCount) % SpokeCount;
-            var alpha = 0.15f + 0.85f * (1f - trail / (float)SpokeCount);
+            int trail = (head - i + SpokeCount) % SpokeCount;
+            float alpha = 0.15f + (0.85f * (1f - (trail / (float)SpokeCount)));
 
-            var angle = i / (float)SpokeCount * MathF.Tau - MathF.PI / 2f;
-            var dotX = cx + MathF.Cos(angle) * ringRadius;
-            var dotY = cy + MathF.Sin(angle) * ringRadius;
+            float angle = (i / (float)SpokeCount * MathF.Tau) - (MathF.PI / 2f);
+            float dotX = cx + (MathF.Cos(angle) * ringRadius);
+            float dotY = cy + (MathF.Sin(angle) * ringRadius);
 
             var rect = new Rect(
-                dotX - dotRadius,
-                dotY - dotRadius,
-                dotRadius * 2f,
-                dotRadius * 2f
+                x: dotX - dotRadius,
+                y: dotY - dotRadius,
+                width: dotRadius * 2f,
+                height: dotRadius * 2f
             );
-            paint.AddRect(rect, color.WithAlpha(color.A * alpha), dotRadius);
+            paint.AddRect(bounds: rect, color: color.WithAlpha(color.A * alpha), radius: dotRadius);
         }
     }
 }

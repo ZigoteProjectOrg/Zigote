@@ -4,10 +4,10 @@ using Zigote.Core.Paint;
 namespace Zigote.UI.Widgets.DragDrop;
 
 /// <summary>
-///     A drop target for in-app <see cref="Draggable{T}" /> payloads of type <typeparamref name="T" />.
+///     A drop target for in-app <see cref="Draggable{T}" /> payloads of type <typeparamref name="T" />
+///     .
 ///     Highlights while a compatible drag hovers (queried via <see cref="Builder" /> with the current
 ///     hover state) and calls <see cref="OnAccept" /> when such a payload is released over it.
-///
 ///     <para>
 ///         For external OS file drops, set <typeparamref name="T" /> to <see cref="string" /> and
 ///         <see cref="AcceptExternalFiles" /> — each dropped file path is delivered to
@@ -17,7 +17,11 @@ namespace Zigote.UI.Widgets.DragDrop;
 /// </summary>
 public class DragTarget<T> : Widget
 {
+    private Widget _child;
     private bool _hovering;
+
+    // Outgoing subtree kept alive until the incoming one has been built — see Rebuild.
+    private Widget? _retiring;
     private Size _size;
 
     public DragTarget(Func<bool, Widget> builder)
@@ -25,8 +29,6 @@ public class DragTarget<T> : Widget
         Builder = builder;
         _child = builder(false);
     }
-
-    private Widget _child;
 
     /// <summary>Builds the child; the argument is true while a compatible drag hovers (for highlight).</summary>
     public Func<bool, Widget> Builder { get; set; }
@@ -37,12 +39,11 @@ public class DragTarget<T> : Widget
     /// <summary>Extra acceptance predicate (beyond the type match). Return false to reject a payload.</summary>
     public Func<T, bool>? WillAccept { get; set; }
 
-    /// <summary>When <typeparamref name="T" /> is <see cref="string" />, also accept external OS file
-    /// drops — each dropped path is delivered to <see cref="OnAccept" />.</summary>
+    /// <summary>
+    ///     When <typeparamref name="T" /> is <see cref="string" />, also accept external OS file
+    ///     drops — each dropped path is delivered to <see cref="OnAccept" />.
+    /// </summary>
     public bool AcceptExternalFiles { get; set; }
-
-    // Outgoing subtree kept alive until the incoming one has been built — see Rebuild.
-    private Widget? _retiring;
 
     /// <summary>
     ///     Swap in the child for the current hover state. This runs mid-drag, on every enter/leave,
@@ -64,7 +65,7 @@ public class DragTarget<T> : Widget
     private void Rebuild()
     {
         var next = Builder(_hovering);
-        if (ReferenceEquals(next, _child))
+        if (ReferenceEquals(objA: next, objB: _child))
         {
             MarkNeedsPaint();
             return;
@@ -74,12 +75,10 @@ public class DragTarget<T> : Widget
         {
             _retiring ??= _child;
             _child = next;
-            _child.Attach(Owner, this);
+            _child.Attach(owner: Owner, parent: this);
         }
         else
-        {
             _child = next;
-        }
 
         MarkNeedsLayout();
     }
@@ -92,7 +91,7 @@ public class DragTarget<T> : Widget
         if (_retiring is { } old)
         {
             _retiring = null;
-            if (!ReferenceEquals(old, _child)) old.Detach();
+            if (!ReferenceEquals(objA: old, objB: _child)) old.Detach();
         }
 
         return _size;
@@ -101,24 +100,21 @@ public class DragTarget<T> : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         _child.Layout(origin);
     }
 
-    public override void Paint(PaintList paint)
-    {
-        _child.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => _child.Paint(paint);
 
     public override Widget? HitTest(Offset point)
     {
         // Normal single-child delegation: the child stays interactive. The App's drop search walks up
         // the Parent chain from whatever it hits, so it still reaches this target via CanAcceptDrop.
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return _child.HitTest(point) ?? this;
     }
 
@@ -159,13 +155,14 @@ public class DragTarget<T> : Widget
         }
 
         if (AcceptExternalFiles && data.IsExternal && OnAccept is not null)
-            foreach (var file in data.Files)
+        {
+            foreach (string file in data.Files)
+            {
                 if (file is T typed)
                     OnAccept(typed);
+            }
+        }
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(_child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(_child);
 }

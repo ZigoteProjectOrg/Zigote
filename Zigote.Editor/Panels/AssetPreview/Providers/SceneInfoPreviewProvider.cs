@@ -10,15 +10,12 @@ namespace Zigote.Editor.Panels.AssetPreview.Providers;
 /// </summary>
 public sealed class SceneInfoPreviewProvider : IAssetPreviewProvider
 {
-    public bool CanHandle(string ext)
-    {
-        return ext == ".scene";
-    }
+    public bool CanHandle(string ext) => ext == ".scene";
 
     public Widget BuildPreview(string path, ThemeData theme)
     {
         // Reuse the monospace JSON view for the body.
-        return new CodeTextPreviewProvider().BuildPreview(path, theme);
+        return new CodeTextPreviewProvider().BuildPreview(path: path, theme: theme);
     }
 
     public IEnumerable<(string Key, string Value)> ExtraMetadata(string path)
@@ -29,16 +26,16 @@ public sealed class SceneInfoPreviewProvider : IAssetPreviewProvider
             using var doc = JsonDocument.Parse(File.ReadAllText(path));
             var root = doc.RootElement;
 
-            var name = FindRootName(root);
+            string? name = FindRootName(root);
             if (name is not null) rows.Add(("Root", name));
 
-            var count = CountNodes(root);
+            int count = CountNodes(root);
             rows.Add(("Nodes", count.ToString()));
 
-            if (root.TryGetProperty("EnvironmentPath", out var env) &&
+            if (root.TryGetProperty(propertyName: "EnvironmentPath", value: out var env) &&
                 env.ValueKind == JsonValueKind.String)
             {
-                var ev = env.GetString();
+                string? ev = env.GetString();
                 if (!string.IsNullOrEmpty(ev)) rows.Add(("Environment", ev!));
             }
         }
@@ -52,12 +49,12 @@ public sealed class SceneInfoPreviewProvider : IAssetPreviewProvider
 
     private static string? FindRootName(JsonElement root)
     {
-        if (root.TryGetProperty("Root", out var r) &&
+        if (root.TryGetProperty(propertyName: "Root", value: out var r) &&
             r.ValueKind == JsonValueKind.Object &&
-            r.TryGetProperty("Name", out var n) &&
+            r.TryGetProperty(propertyName: "Name", value: out var n) &&
             n.ValueKind == JsonValueKind.String)
             return n.GetString();
-        if (root.TryGetProperty("Name", out var topName) &&
+        if (root.TryGetProperty(propertyName: "Name", value: out var topName) &&
             topName.ValueKind == JsonValueKind.String)
             return topName.GetString();
         return null;
@@ -66,7 +63,7 @@ public sealed class SceneInfoPreviewProvider : IAssetPreviewProvider
     /// <summary>Count every object that exposes a "Children" array, recursively (node-like shape).</summary>
     private static int CountNodes(JsonElement element)
     {
-        var count = 0;
+        int count = 0;
         Walk(element);
         return count;
 
@@ -75,7 +72,7 @@ public sealed class SceneInfoPreviewProvider : IAssetPreviewProvider
             switch (e.ValueKind)
             {
                 case JsonValueKind.Object:
-                    if (e.TryGetProperty("Children", out var children) &&
+                    if (e.TryGetProperty(propertyName: "Children", value: out var children) &&
                         children.ValueKind == JsonValueKind.Array)
                     {
                         count++; // this is a node

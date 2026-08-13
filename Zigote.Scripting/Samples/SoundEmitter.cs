@@ -18,43 +18,46 @@ public sealed class SoundEmitter : Component
     private SoundHandle _sound;
 
     [Export]
-    [EditorRange(20, 4000)]
+    [EditorRange(min: 20, max: 4000)]
     [EditorTooltip("Tone frequency in Hz")]
     public float Frequency { get; set; } = 220f;
 
     [Export]
-    [EditorRange(0, 4)]
+    [EditorRange(min: 0, max: 4)]
     [EditorTooltip("Waveform: 0 sine, 1 square, 2 triangle, 3 saw, 4 noise")]
     public int Wave { get; set; }
 
-    [Export] [EditorRange(0, 1)] public float Volume { get; set; } = 0.6f;
+    [Export] [EditorRange(min: 0, max: 1)] public float Volume { get; set; } = 0.6f;
 
     [Export]
-    [EditorRange(1, 200)]
+    [EditorRange(min: 1, max: 200)]
     [EditorTooltip("Distance (m) beyond which the sound is silent")]
     public float MaxDistance { get; set; } = 40f;
 
     protected override void OnCreate()
     {
-        _sound = Audio.CreateTone(Frequency, (SoundWave)Math.Clamp(Wave, 0, 4));
+        _sound = Audio.CreateTone(
+            frequencyHz: Frequency,
+            wave: (SoundWave)Math.Clamp(value: Wave, min: 0, max: 4)
+        );
         if (!_sound.IsValid) return;
 
-        Audio.SetSpatial(_sound, true);
-        Audio.SetLooping(_sound, true);
-        Audio.SetVolume(_sound, Volume);
+        Audio.SetSpatial(sound: _sound, enabled: true);
+        Audio.SetLooping(sound: _sound, looping: true);
+        Audio.SetVolume(sound: _sound, volume: Volume);
         Audio.SetAttenuation(
-            _sound,
-            1f,
-            MaxDistance,
-            1f
+            sound: _sound,
+            minDistance: 1f,
+            maxDistance: MaxDistance,
+            rolloff: 1f
         );
-        Audio.SetPosition(_sound, Position);
+        Audio.SetPosition(sound: _sound, position: Position);
         Audio.Play(_sound);
     }
 
     protected override void OnUpdate(float deltaTime)
     {
-        if (_sound.IsValid) Audio.SetPosition(_sound, Position);
+        if (_sound.IsValid) Audio.SetPosition(sound: _sound, position: Position);
     }
 
     protected override void OnDestroy()

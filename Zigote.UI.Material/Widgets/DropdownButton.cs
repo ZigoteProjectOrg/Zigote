@@ -43,29 +43,33 @@ public sealed class DropdownButton<T> : Dropdown<T>
         Action<T?>? onChanged = null,
         Widget? hint = null)
         : base(
-            items.ConvertAll(i => i.Value),
-            IndexOf(items, value),
-            v => LabelFor(items, v),
-            (_, val) => onChanged?.Invoke(val)
-        )
-    {
+            items: items.ConvertAll(i => i.Value),
+            selectedIndex: IndexOf(items: items, value: value),
+            displayText: v => LabelFor(items: items, v: v),
+            onChanged: (_, val) => onChanged?.Invoke(val)
+        ) =>
         _ = hint;
-    }
 
     private static int IndexOf(List<DropdownMenuItem<T>> items, T? value)
     {
         if (value is null) return 0;
-        for (var i = 0; i < items.Count; i++)
-            if (EqualityComparer<T>.Default.Equals(items[i].Value, value))
+        for (int i = 0; i < items.Count; i++)
+        {
+            if (EqualityComparer<T>.Default.Equals(x: items[i].Value, y: value))
                 return i;
+        }
+
         return 0;
     }
 
     private static string LabelFor(List<DropdownMenuItem<T>> items, T v)
     {
         foreach (var it in items)
-            if (EqualityComparer<T>.Default.Equals(it.Value, v))
+        {
+            if (EqualityComparer<T>.Default.Equals(x: it.Value, y: v))
                 return it.Label;
+        }
+
         return v?.ToString() ?? "";
     }
 }

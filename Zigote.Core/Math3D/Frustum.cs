@@ -31,58 +31,56 @@ public readonly struct Frustum
     {
         // Rows of the matrix (row r = the r-th component of clip = M * worldPos).
         var r0 = new Vec4(
-            vp.Get(0, 0),
-            vp.Get(1, 0),
-            vp.Get(2, 0),
-            vp.Get(3, 0)
+            x: vp.Get(col: 0, row: 0),
+            y: vp.Get(col: 1, row: 0),
+            z: vp.Get(col: 2, row: 0),
+            w: vp.Get(col: 3, row: 0)
         );
         var r1 = new Vec4(
-            vp.Get(0, 1),
-            vp.Get(1, 1),
-            vp.Get(2, 1),
-            vp.Get(3, 1)
+            x: vp.Get(col: 0, row: 1),
+            y: vp.Get(col: 1, row: 1),
+            z: vp.Get(col: 2, row: 1),
+            w: vp.Get(col: 3, row: 1)
         );
         var r2 = new Vec4(
-            vp.Get(0, 2),
-            vp.Get(1, 2),
-            vp.Get(2, 2),
-            vp.Get(3, 2)
+            x: vp.Get(col: 0, row: 2),
+            y: vp.Get(col: 1, row: 2),
+            z: vp.Get(col: 2, row: 2),
+            w: vp.Get(col: 3, row: 2)
         );
         var r3 = new Vec4(
-            vp.Get(0, 3),
-            vp.Get(1, 3),
-            vp.Get(2, 3),
-            vp.Get(3, 3)
+            x: vp.Get(col: 0, row: 3),
+            y: vp.Get(col: 1, row: 3),
+            z: vp.Get(col: 2, row: 3),
+            w: vp.Get(col: 3, row: 3)
         );
 
         // Gribb–Hartmann for [0,1] clip-z: side planes from w±axis, near = z, far = w − z.
         return new Frustum(
-            Normalize(r3 + r0), // left
-            Normalize(r3 - r0), // right
-            Normalize(r3 + r1), // bottom
-            Normalize(r3 - r1), // top
-            Normalize(r2), // near
-            Normalize(r3 - r2)
+            left: Normalize(r3 + r0), // left
+            right: Normalize(r3 - r0), // right
+            bottom: Normalize(r3 + r1), // bottom
+            top: Normalize(r3 - r1), // top
+            near: Normalize(r2), // near
+            far: Normalize(r3 - r2)
         ); // far
     }
 
     private static Vec4 Normalize(Vec4 p)
     {
-        var len = MathF.Sqrt(p.X * p.X + p.Y * p.Y + p.Z * p.Z);
+        float len = MathF.Sqrt((p.X * p.X) + (p.Y * p.Y) + (p.Z * p.Z));
         if (len < 1e-20f) return p;
-        var inv = 1f / len;
+        float inv = 1f / len;
         return new Vec4(
-            p.X * inv,
-            p.Y * inv,
-            p.Z * inv,
-            p.W * inv
+            x: p.X * inv,
+            y: p.Y * inv,
+            z: p.Z * inv,
+            w: p.W * inv
         );
     }
 
-    private static bool Outside(Vec4 plane, Vec3 c, float r)
-    {
-        return plane.X * c.X + plane.Y * c.Y + plane.Z * c.Z + plane.W < -r;
-    }
+    private static bool Outside(Vec4 plane, Vec3 c, float r) =>
+        (plane.X * c.X) + (plane.Y * c.Y) + (plane.Z * c.Z) + plane.W < -r;
 
     /// <summary>
     ///     True if the sphere (<paramref name="center" />, <paramref name="radius" />) is at least
@@ -90,12 +88,12 @@ public readonly struct Frustum
     /// </summary>
     public bool IntersectsSphere(Vec3 center, float radius)
     {
-        if (Outside(_left, center, radius)) return false;
-        if (Outside(_right, center, radius)) return false;
-        if (Outside(_bottom, center, radius)) return false;
-        if (Outside(_top, center, radius)) return false;
-        if (Outside(_near, center, radius)) return false;
-        if (Outside(_far, center, radius)) return false;
+        if (Outside(plane: _left, c: center, r: radius)) return false;
+        if (Outside(plane: _right, c: center, r: radius)) return false;
+        if (Outside(plane: _bottom, c: center, r: radius)) return false;
+        if (Outside(plane: _top, c: center, r: radius)) return false;
+        if (Outside(plane: _near, c: center, r: radius)) return false;
+        if (Outside(plane: _far, c: center, r: radius)) return false;
         return true;
     }
 }

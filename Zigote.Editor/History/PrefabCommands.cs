@@ -32,10 +32,7 @@ public sealed class CreatePrefabCommand(EditorState state, SceneNode source) : I
         state.NotifySceneChanged();
     }
 
-    public bool TryMergeWith(ICommand other)
-    {
-        return false;
-    }
+    public bool TryMergeWith(ICommand other) => false;
 }
 
 /// <summary>
@@ -66,8 +63,5 @@ public sealed class InstantiatePrefabCommand(EditorState state, AssetId prefab, 
         state.NotifySceneChanged();
     }
 
-    public bool TryMergeWith(ICommand other)
-    {
-        return false;
-    }
+    public bool TryMergeWith(ICommand other) => false;
 }

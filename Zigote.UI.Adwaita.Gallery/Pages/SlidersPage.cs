@@ -8,12 +8,11 @@ namespace AdwaitaGallery.Pages;
 /// </summary>
 public sealed class SlidersPage : ComposedWidget
 {
-    private readonly Signal<float> _volume = new(0.65f);
+    private readonly AdwProgressBar _bar = new();
     private readonly Signal<double> _copies = new(2);
     private readonly Signal<float> _progress = new(0f);
     private readonly Signal<bool> _running = new(false);
-
-    private readonly AdwProgressBar _bar = new();
+    private readonly Signal<float> _volume = new(0.65f);
     private Ticker? _ticker;
 
     public SlidersPage()
@@ -34,25 +33,23 @@ public sealed class SlidersPage : ComposedWidget
         if (_running.Peek()) _ticker.Start();
     }
 
-    protected override void OnUnmount()
-    {
-        _ticker = null; // the Ticker itself is disposed for us
-    }
+    protected override void OnUnmount() => _ticker = null; // the Ticker itself is disposed for us
 
     protected override Widget Build(BuildContext context)
     {
         _bar.Value = _progress.Value;
 
         return new GalleryPage(
-            "Sliders & Progress",
+            title: "Sliders & Progress",
+            description:
             "Pick a value in a range, step one exactly, or show how far along something is.",
-            MaterialIcons.Tune
+            iconName: MaterialIcons.Tune
         ) {
             Children = {
                 Demo.Titled(
-                    "Slider",
-                    "Drag it, or focus it and use the arrow keys.",
-                    Demo.Stage(
+                    title: "Slider",
+                    description: "Drag it, or focus it and use the arrow keys.",
+                    child: Demo.Stage(
                         new Column(
                             spacing: Spacing.Lg,
                             mainAxisSize: MainAxisSize.Min,
@@ -60,16 +57,16 @@ public sealed class SlidersPage : ComposedWidget
                         ) {
                             Children = {
                                 new AdwSlider(
-                                    _volume.Peek(),
-                                    0f,
-                                    1f,
-                                    v => _volume.Value = v
+                                    value: _volume.Peek(),
+                                    min: 0f,
+                                    max: 1f,
+                                    onChanged: v => _volume.Value = v
                                 ) {
                                     SemanticsLabel = "Volume",
                                 },
                                 new Watch(() => new Align(
-                                        Alignment.Center,
-                                        Demo.Value($"volume = {_volume.Value:P0}")
+                                        alignment: Alignment.Center,
+                                        child: Demo.Value($"volume = {_volume.Value:P0}")
                                     ) { HeightFactor = 1f }
                                 ),
                             },
@@ -77,42 +74,56 @@ public sealed class SlidersPage : ComposedWidget
                     )
                 ),
                 Demo.Titled(
-                    "Faders",
+                    title: "Faders",
+                    description:
                     "Vertical = true: the same control bottom-to-top, for a mixer or an equalizer.",
-                    Demo.Stage(
+                    child: Demo.Stage(
                         new Row(
                             spacing: Spacing.Lg,
                             mainAxisSize: MainAxisSize.Min,
                             crossAxisAlignment: CrossAxisAlignment.Center
                         ) {
                             Children = {
-                                new SizedBox(40f, 160f, new AdwSlider(0.8f) { Vertical = true }),
-                                new SizedBox(40f, 160f, new AdwSlider(0.5f) { Vertical = true }),
-                                new SizedBox(40f, 160f, new AdwSlider(0.2f) { Vertical = true }),
+                                new SizedBox(
+                                    width: 40f,
+                                    height: 160f,
+                                    child: new AdwSlider(0.8f) { Vertical = true }
+                                ),
+                                new SizedBox(
+                                    width: 40f,
+                                    height: 160f,
+                                    child: new AdwSlider(0.5f) { Vertical = true }
+                                ),
+                                new SizedBox(
+                                    width: 40f,
+                                    height: 160f,
+                                    child: new AdwSlider(0.2f) { Vertical = true }
+                                ),
                             },
                         }
                     )
                 ),
                 Demo.Titled(
-                    "Spin Button",
-                    "For a value that has to be exact, typed or stepped.",
-                    Demo.Stage(
+                    title: "Spin Button",
+                    description: "For a value that has to be exact, typed or stepped.",
+                    child: Demo.Stage(
                         Demo.Bar(
                             new AdwSpinButton(
-                                _copies.Peek(),
-                                1,
-                                99,
-                                1,
-                                v => _copies.Value = v
+                                value: _copies.Peek(),
+                                min: 1,
+                                max: 99,
+                                step: 1,
+                                onChanged: v => _copies.Value = v
                             ),
                             new Watch(() => Demo.Value($"copies = {_copies.Value:0}"))
                         )
                     )
                 ),
                 Demo.Titled(
-                    "Progress",
+                    title: "Progress",
+                    description:
                     "Determinate while there is a total to divide by; indeterminate when there is not.",
-                    Demo.Stage(
+                    child: Demo.Stage(
                         new Column(
                             spacing: Spacing.Lg,
                             mainAxisSize: MainAxisSize.Min,
@@ -121,8 +132,8 @@ public sealed class SlidersPage : ComposedWidget
                             Children = {
                                 _bar,
                                 new Watch(() => new Align(
-                                        Alignment.Center,
-                                        Demo.Value(
+                                        alignment: Alignment.Center,
+                                        child: Demo.Value(
                                             _running.Value
                                                 ? $"copying… {_progress.Value:P0}"
                                                 : $"idle at {_progress.Value:P0}"
@@ -131,13 +142,13 @@ public sealed class SlidersPage : ComposedWidget
                                 ),
                                 Demo.Bar(
                                     new Watch(() => new AdwButton(
-                                            _running.Value ? "Pause" : "Start",
-                                            () => _running.Value = !_running.Value
+                                            label: _running.Value ? "Pause" : "Start",
+                                            onPressed: () => _running.Value = !_running.Value
                                         ) { Style = AdwButtonStyle.Suggested }
                                     ),
                                     new AdwButton(
-                                        "Reset",
-                                        () =>
+                                        label: "Reset",
+                                        onPressed: () =>
                                         {
                                             _running.Value = false;
                                             _progress.Value = 0f;
@@ -151,9 +162,9 @@ public sealed class SlidersPage : ComposedWidget
                     )
                 ),
                 Demo.Titled(
-                    "Level Bar",
-                    "A reading rather than a task — battery, signal, disk.",
-                    Demo.Stage(
+                    title: "Level Bar",
+                    description: "A reading rather than a task — battery, signal, disk.",
+                    child: Demo.Stage(
                         new Column(
                             spacing: Spacing.Md,
                             mainAxisSize: MainAxisSize.Min,
@@ -168,17 +179,17 @@ public sealed class SlidersPage : ComposedWidget
                     )
                 ),
                 Demo.Group(
-                    "In Rows",
-                    null,
+                    title: "In Rows",
+                    description: null,
                     new AdwSpinRow(
-                        "Copies",
-                        "How many to print",
-                        2,
-                        1,
-                        99
+                        title: "Copies",
+                        subtitle: "How many to print",
+                        value: 2,
+                        min: 1,
+                        max: 99
                     ),
                     new AdwActionRow("Volume") {
-                        Suffixes = { new SizedBox(180f, child: new AdwSlider(0.65f)) },
+                        Suffixes = { new SizedBox(width: 180f, child: new AdwSlider(0.65f)) },
                     }
                 ),
             },
@@ -188,7 +199,7 @@ public sealed class SlidersPage : ComposedWidget
     private void Advance(float dt)
     {
         if (!_running.Value) return;
-        var next = _progress.Value + dt * 0.25f;
+        float next = _progress.Value + (dt * 0.25f);
         if (next >= 1f)
         {
             next = 1f;

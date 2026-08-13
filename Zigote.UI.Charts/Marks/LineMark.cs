@@ -18,19 +18,16 @@ public enum ChartInterpolation : byte
 public static class LineMark
 {
     public static LineMark<T> Of<T>(IReadOnlyList<T> data, Func<T, ChartValue> x,
-        Func<T, ChartValue> y,
-        Func<T, string>? series = null)
-    {
-        return new LineMark<T>(data, x, y) { SeriesBy = series };
-    }
+        Func<T, ChartValue> y, Func<T, string>? series = null) =>
+        new(data: data, x: x, y: y) { SeriesBy = series };
 
     /// <summary>Vectorized: plot ys against their indices (0, 1, 2, …) — no row type needed.</summary>
     public static LineMark<ChartSample> Of(ReadOnlySpan<double> ys)
     {
         return new LineMark<ChartSample>(
-            ChartSamples.Pair(default, ys),
-            ChartSamples.X,
-            ChartSamples.Y
+            data: ChartSamples.Pair(xs: default, ys: ys),
+            x: ChartSamples.X,
+            y: ChartSamples.Y
         );
     }
 
@@ -38,9 +35,9 @@ public static class LineMark
     public static LineMark<ChartSample> Of(ReadOnlySpan<double> xs, ReadOnlySpan<double> ys)
     {
         return new LineMark<ChartSample>(
-            ChartSamples.Pair(xs, ys),
-            ChartSamples.X,
-            ChartSamples.Y
+            data: ChartSamples.Pair(xs: xs, ys: ys),
+            x: ChartSamples.X,
+            y: ChartSamples.Y
         );
     }
 }
@@ -50,7 +47,7 @@ public static class LineMark
 ///     <see cref="ShowSymbols" /> for the built-in dots.
 /// </summary>
 public class LineMark<T>(IReadOnlyList<T> data, Func<T, ChartValue> x, Func<T, ChartValue> y)
-    : SeriesMark<T>(data, x, y)
+    : SeriesMark<T>(data: data, x: x, y: y)
 {
     // Per-series x-sorted (and LTTB-decimated) index arrays into the series point list, rebuilt only
     // when the data resolve version or the cap changes — never per paint.
@@ -90,7 +87,7 @@ public class LineMark<T>(IReadOnlyList<T> data, Func<T, ChartValue> x, Func<T, C
         ResolveData(EpochChanged(domain));
         if (Resolved.Count == 0) return;
         var xs = domain.X(Resolved[0].X);
-        var ys = domain.Y(Resolved[0].Y, UseSecondaryYAxis);
+        var ys = domain.Y(sample: Resolved[0].Y, secondary: UseSecondaryYAxis);
         foreach (var p in Resolved)
         {
             xs.Include(p.X);
@@ -102,23 +99,23 @@ public class LineMark<T>(IReadOnlyList<T> data, Func<T, ChartValue> x, Func<T, C
     {
         // Register the drawn (decimated) points only — hover resolution matches the stroke and
         // ResolveHover stays O(rendered), not O(raw), for million-point series.
-        foreach (var (series, points) in GroupBySeries())
+        foreach ((string series, var points) in GroupBySeries())
         {
             if (points.Count == 0) continue;
-            var order = RenderOrder(series, points);
-            var color = ctx.ColorFor(series, Color, MarkIndex);
-            foreach (var i in order)
+            int[] order = RenderOrder(series: series, pts: points);
+            var color = ctx.ColorFor(series: series, markOverride: Color, markIndex: MarkIndex);
+            foreach (int i in order)
             {
                 var p = points[i];
                 ctx.HoverPoints.Add(
                     new ChartDataPoint(
-                        ctx.MapX(p.X),
-                        ctx.MapY(p.Y),
-                        p.X,
-                        p.Y,
-                        p.Series,
-                        FormatValue(p.Y),
-                        color
+                        screenX: ctx.MapX(p.X),
+                        screenY: ctx.MapY(p.Y),
+                        x: p.X,
+                        y: p.Y,
+                        series: p.Series,
+                        valueLabel: FormatValue(p.Y),
+                        color: color
                     )
                 );
             }
@@ -137,36 +134,42 @@ public class LineMark<T>(IReadOnlyList<T> data, Func<T, ChartValue> x, Func<T, C
 
         // The build lives in its own method: its pts-capturing sort lambda would otherwise hoist a
         // closure allocation into THIS method's entry — paid on every cache-hit paint.
-        return _renderOrder.TryGetValue(series, out var cached)
+        return _renderOrder.TryGetValue(key: series, value: out int[]? cached)
             ? cached
-            : BuildRenderOrder(series, pts);
+            : BuildRenderOrder(series: series, pts: pts);
     }
 
     private int[] BuildRenderOrder(string series, List<ResolvedPoint> pts)
     {
-        var n = pts.Count;
-        var idx = new int[n];
-        for (var i = 0; i < n; i++) idx[i] = i;
-        if (SortByX) Array.Sort(idx, (a, b) => pts[a].X.Numeric.CompareTo(pts[b].X.Numeric));
+        int n = pts.Count;
+        int[] idx = new int[n];
+        for (int i = 0; i < n; i++) idx[i] = i;
+        if (SortByX)
+        {
+            Array.Sort(
+                array: idx,
+                comparison: (a, b) => pts[a].X.Numeric.CompareTo(pts[b].X.Numeric)
+            );
+        }
 
         if (MaxRenderPoints > 2 && n > MaxRenderPoints)
         {
             // Decimate on the data values (x normalized so a large time-axis base keeps float precision).
-            var xs = new float[n];
-            var ys = new float[n];
-            var x0 = pts[idx[0]].X.Numeric;
-            for (var i = 0; i < n; i++)
+            float[] xs = new float[n];
+            float[] ys = new float[n];
+            double x0 = pts[idx[0]].X.Numeric;
+            for (int i = 0; i < n; i++)
             {
                 var p = pts[idx[i]];
                 xs[i] = (float)(p.X.Numeric - x0);
                 ys[i] = (float)p.Y.Numeric;
             }
 
-            var keep = ChartGeometry.LttbIndices(xs, ys, MaxRenderPoints);
+            int[]? keep = ChartGeometry.LttbIndices(xs: xs, ys: ys, threshold: MaxRenderPoints);
             if (keep is not null)
             {
-                var survivors = new int[keep.Length];
-                for (var k = 0; k < keep.Length; k++) survivors[k] = idx[keep[k]];
+                int[] survivors = new int[keep.Length];
+                for (int k = 0; k < keep.Length; k++) survivors[k] = idx[keep[k]];
                 idx = survivors;
             }
         }
@@ -181,49 +184,57 @@ public class LineMark<T>(IReadOnlyList<T> data, Func<T, ChartValue> x, Func<T, C
         if (paint is null) return;
 
         // Entrance animation: reveal the plot left→right.
-        var reveal = ctx.Progress < 1f;
+        bool reveal = ctx.Progress < 1f;
         if (reveal)
+        {
             paint.AddClipStart(
                 new Rect(
-                    ctx.PlotRect.X,
-                    ctx.PlotRect.Y - StrokeWidth,
-                    MathF.Max(0.01f, ctx.PlotRect.Width * ctx.Progress),
-                    ctx.PlotRect.Height + StrokeWidth * 2
+                    x: ctx.PlotRect.X,
+                    y: ctx.PlotRect.Y - StrokeWidth,
+                    width: MathF.Max(x: 0.01f, y: ctx.PlotRect.Width * ctx.Progress),
+                    height: ctx.PlotRect.Height + (StrokeWidth * 2)
                 )
             );
+        }
 
-        foreach (var (series, points) in GroupBySeries())
+        foreach ((string series, var points) in GroupBySeries())
         {
             if (points.Count == 0) continue;
-            var color = ctx.ColorFor(series, Color, MarkIndex);
-            var count = ProjectOrder(ctx, points, RenderOrder(series, points));
-            var sx = _sx.AsSpan(0, count);
-            var sy = _sy.AsSpan(0, count);
+            var color = ctx.ColorFor(series: series, markOverride: Color, markIndex: MarkIndex);
+            int count = ProjectOrder(
+                ctx: ctx,
+                points: points,
+                order: RenderOrder(series: series, pts: points)
+            );
+            var sx = _sx.AsSpan(start: 0, length: count);
+            var sy = _sy.AsSpan(start: 0, length: count);
             StrokePolyline(
-                ctx,
-                sx,
-                sy,
-                color,
-                StrokeWidth,
-                Interpolation,
-                Dash,
-                DashGap
+                ctx: ctx,
+                sx: sx,
+                sy: sy,
+                color: color,
+                width: StrokeWidth,
+                interpolation: Interpolation,
+                dash: Dash,
+                dashGap: DashGap
             );
 
             if (ShowSymbols)
             {
-                var r = SymbolSize / 2f;
-                for (var i = 0; i < count; i++)
+                float r = SymbolSize / 2f;
+                for (int i = 0; i < count; i++)
+                {
                     paint.AddRect(
-                        new Rect(
-                            sx[i] - r,
-                            sy[i] - r,
-                            SymbolSize,
-                            SymbolSize
+                        bounds: new Rect(
+                            x: sx[i] - r,
+                            y: sy[i] - r,
+                            width: SymbolSize,
+                            height: SymbolSize
                         ),
-                        color,
-                        r
+                        color: color,
+                        radius: r
                     );
+                }
             }
         }
 
@@ -233,20 +244,20 @@ public class LineMark<T>(IReadOnlyList<T> data, Func<T, ChartValue> x, Func<T, C
     /// <summary>Project a series' render-order points into the reused scratch; returns the count.</summary>
     private int ProjectOrder(ChartRenderContext ctx, List<ResolvedPoint> points, int[] order)
     {
-        var count = order.Length;
+        int count = order.Length;
         if (_sx.Length < count)
         {
             _sx = new float[count];
             _sy = new float[count];
         }
 
-        for (var k = 0; k < count; k++)
+        for (int k = 0; k < count; k++)
         {
             var p = points[order[k]];
             _sx[k] = ctx.MapX(p.X);
             _sy[k] = p.Y.Kind == ChartValueKind.Category
                 ? ctx.MapY(p.Y)
-                : ctx.MapYNumeric(MorphedY(ctx, p));
+                : ctx.MapYNumeric(MorphedY(ctx: ctx, p: p));
         }
 
         return count;
@@ -264,46 +275,46 @@ public class LineMark<T>(IReadOnlyList<T> data, Func<T, ChartValue> x, Func<T, C
         {
             case ChartInterpolation.Monotone when dash <= 0f:
             {
-                var slopes = ChartGeometry.MonotoneSlopesScratch(sx, sy);
+                var slopes = ChartGeometry.MonotoneSlopesScratch(xs: sx, ys: sy);
                 // Stroke each cubic directly — no per-frame List of segments.
-                for (var i = 0; i < sx.Length - 1; i++)
+                for (int i = 0; i < sx.Length - 1; i++)
                 {
                     var seg = ChartGeometry.HermiteToCubic(
-                        sx[i],
-                        sy[i],
-                        slopes[i],
-                        sx[i + 1],
-                        sy[i + 1],
-                        slopes[i + 1]
+                        x0: sx[i],
+                        y0: sy[i],
+                        m0: slopes[i],
+                        x1: sx[i + 1],
+                        y1: sy[i + 1],
+                        m1: slopes[i + 1]
                     );
-                    ctx.StrokeCubic(seg, color, width);
+                    ctx.StrokeCubic(s: seg, color: color, width: width);
                 }
 
                 break;
             }
             case ChartInterpolation.Step:
             {
-                for (var i = 0; i < sx.Length - 1; i++)
+                for (int i = 0; i < sx.Length - 1; i++)
                 {
                     ctx.StrokeLine(
-                        sx[i],
-                        sy[i],
-                        sx[i + 1],
-                        sy[i],
-                        color,
-                        width,
-                        dash,
-                        dashGap
+                        x0: sx[i],
+                        y0: sy[i],
+                        x1: sx[i + 1],
+                        y1: sy[i],
+                        color: color,
+                        width: width,
+                        dash: dash,
+                        gap: dashGap
                     );
                     ctx.StrokeLine(
-                        sx[i + 1],
-                        sy[i],
-                        sx[i + 1],
-                        sy[i + 1],
-                        color,
-                        width,
-                        dash,
-                        dashGap
+                        x0: sx[i + 1],
+                        y0: sy[i],
+                        x1: sx[i + 1],
+                        y1: sy[i + 1],
+                        color: color,
+                        width: width,
+                        dash: dash,
+                        gap: dashGap
                     );
                 }
 
@@ -312,17 +323,20 @@ public class LineMark<T>(IReadOnlyList<T> data, Func<T, ChartValue> x, Func<T, C
             default:
             {
                 // Linear — and the dashed fallback for Monotone (dashes need straight spans).
-                for (var i = 0; i < sx.Length - 1; i++)
+                for (int i = 0; i < sx.Length - 1; i++)
+                {
                     ctx.StrokeLine(
-                        sx[i],
-                        sy[i],
-                        sx[i + 1],
-                        sy[i + 1],
-                        color,
-                        width,
-                        dash,
-                        dashGap
+                        x0: sx[i],
+                        y0: sy[i],
+                        x1: sx[i + 1],
+                        y1: sy[i + 1],
+                        color: color,
+                        width: width,
+                        dash: dash,
+                        gap: dashGap
                     );
+                }
+
                 break;
             }
         }

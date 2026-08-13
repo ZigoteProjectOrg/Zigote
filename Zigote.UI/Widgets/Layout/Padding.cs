@@ -7,6 +7,12 @@ public class Padding(EdgeInsets padding, Widget? child = null) : Widget
 {
     private Size _size;
 
+    public Padding(EdgeInsetsDirectional padding, Widget? child = null) : this(
+        padding: default(EdgeInsets),
+        child: child
+    ) =>
+        DirectionalInsets = padding;
+
     /// <summary>
     ///     The insets applied around <see cref="Child" /> — the constructor's <c>padding:</c>
     ///     argument (a property cannot share the enclosing type's name, hence <c>Insets</c>).
@@ -23,23 +29,13 @@ public class Padding(EdgeInsets padding, Widget? child = null) : Widget
 
     public Widget? Child { get; set; } = child;
 
-    public Padding(EdgeInsetsDirectional padding, Widget? child = null) : this(
-        default(EdgeInsets),
-        child
-    )
-    {
-        DirectionalInsets = padding;
-    }
+    public static Padding All(float v, Widget? child = null) =>
+        new(padding: EdgeInsets.All(v), child: child);
 
-    public static Padding All(float v, Widget? child = null)
-    {
-        return new Padding(EdgeInsets.All(v), child);
-    }
-
-    public static Padding Sym(float h, float v, Widget? child = null)
-    {
-        return new Padding(EdgeInsets.Symmetric(h, v), child);
-    }
+    public static Padding Sym(float h, float v, Widget? child = null) => new(
+        padding: EdgeInsets.Symmetric(horizontal: h, vertical: v),
+        child: child
+    );
 
     public override Size Measure(Constraints c)
     {
@@ -50,8 +46,8 @@ public class Padding(EdgeInsets padding, Widget? child = null) : Widget
         var childSize = Child?.Measure(inner) ?? Size.Zero;
         _size = c.Constrain(
             new Size(
-                childSize.Width + Insets.Horizontal,
-                childSize.Height + Insets.Vertical
+                width: childSize.Width + Insets.Horizontal,
+                height: childSize.Height + Insets.Vertical
             )
         );
         return _size;
@@ -60,27 +56,21 @@ public class Padding(EdgeInsets padding, Widget? child = null) : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
-        Child?.Layout(new Offset(origin.X + Insets.Left, origin.Y + Insets.Top));
+        Child?.Layout(new Offset(x: origin.X + Insets.Left, y: origin.Y + Insets.Top));
     }
 
-    public override void Paint(PaintList paint)
-    {
-        Child?.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => Child?.Paint(paint);
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return Child?.HitTest(point) ?? null;
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(Child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Child);
 }

@@ -18,11 +18,11 @@ public class ScriptExportsTests
     {
         var defaults = ScriptMetadata.From(typeof(Tunable)).DefaultExports;
 
-        Assert.Equal("90", defaults["Speed"]);
-        Assert.Equal("true", defaults["Clockwise"]);
-        Assert.Equal("\"hi\"", defaults["Label"]);
-        Assert.Equal("7", defaults["Count"]);
-        Assert.Contains("\"x\":1", defaults["Offset"]);
+        Assert.Equal(expected: "90", actual: defaults["Speed"]);
+        Assert.Equal(expected: "true", actual: defaults["Clockwise"]);
+        Assert.Equal(expected: "\"hi\"", actual: defaults["Label"]);
+        Assert.Equal(expected: "7", actual: defaults["Count"]);
+        Assert.Contains(expectedSubstring: "\"x\":1", actualString: defaults["Offset"]);
     }
 
     [Fact]
@@ -39,15 +39,15 @@ public class ScriptExportsTests
             Offset = Vec3.Zero,
         };
 
-        ScriptSerializer.Deserialize(inst, meta, meta.DefaultExports);
+        ScriptSerializer.Deserialize(instance: inst, meta: meta, stored: meta.DefaultExports);
 
-        Assert.Equal(90f, inst.Speed);
+        Assert.Equal(expected: 90f, actual: inst.Speed);
         Assert.True(inst.Clockwise);
-        Assert.Equal("hi", inst.Label);
-        Assert.Equal(7, inst.Count);
-        Assert.Equal(1f, inst.Offset.X);
-        Assert.Equal(2f, inst.Offset.Y);
-        Assert.Equal(3f, inst.Offset.Z);
+        Assert.Equal(expected: "hi", actual: inst.Label);
+        Assert.Equal(expected: 7, actual: inst.Count);
+        Assert.Equal(expected: 1f, actual: inst.Offset.X);
+        Assert.Equal(expected: 2f, actual: inst.Offset.Y);
+        Assert.Equal(expected: 3f, actual: inst.Offset.Z);
     }
 
     [Fact]
@@ -56,29 +56,32 @@ public class ScriptExportsTests
         // The play-mode live-tune path: ScriptWorld pushes a single changed export to the running
         // instance. It must update just that field, not reset the others.
         var meta = ScriptMetadata.From(typeof(Tunable));
-        var speed = Array.Find(meta.ExportedFields, f => f.Name == "Speed")!;
+        var speed = Array.Find(array: meta.ExportedFields, match: f => f.Name == "Speed")!;
         var inst = new Tunable();
 
-        ScriptSerializer.DeserializeField(inst, speed, "150");
+        ScriptSerializer.DeserializeField(instance: inst, field: speed, json: "150");
 
-        Assert.Equal(150f, inst.Speed);
+        Assert.Equal(expected: 150f, actual: inst.Speed);
         Assert.True(inst.Clockwise); // unchanged
-        Assert.Equal("hi", inst.Label); // unchanged
+        Assert.Equal(expected: "hi", actual: inst.Label); // unchanged
     }
 
     [Fact]
     public void DefaultExports_AreCached()
     {
         var meta = ScriptMetadata.From(typeof(Tunable));
-        Assert.Same(meta.DefaultExports, meta.DefaultExports);
+        Assert.Same(expected: meta.DefaultExports, actual: meta.DefaultExports);
     }
 
     private sealed class Tunable : Component
     {
-        [Export] [EditorRange(0, 720)] public float Speed { get; set; } = 90f;
+        [Export]
+        [EditorRange(min: 0, max: 720)]
+        public float Speed { get; set; } = 90f;
+
         [Export] public bool Clockwise { get; set; } = true;
         [Export] public string Label { get; set; } = "hi";
         [Export] public int Count { get; set; } = 7;
-        [Export] public Vec3 Offset { get; set; } = new(1f, 2f, 3f);
+        [Export] public Vec3 Offset { get; set; } = new(x: 1f, y: 2f, z: 3f);
     }
 }

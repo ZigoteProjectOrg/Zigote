@@ -13,8 +13,6 @@ internal static class JsonInit
     ///     (PrefabDocument moved to the runtime context so exported games can spawn prefabs.)
     /// </summary>
     [ModuleInitializer]
-    internal static void InstallReflectionJsonFallback()
-    {
+    internal static void InstallReflectionJsonFallback() =>
         MathJson.ExtraResolver = new DefaultJsonTypeInfoResolver();
-    }
 }

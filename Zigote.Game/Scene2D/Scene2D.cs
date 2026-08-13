@@ -8,13 +8,13 @@ public sealed class SpriteOptions
 {
     public string Name { get; set; } = "sprite";
     public Vec2 Position { get; set; }
-    public Vec2 Size { get; set; } = new(1, 1);
+    public Vec2 Size { get; set; } = new(x: 1, y: 1);
 
     public Vec4 Color { get; set; } = new(
-        1,
-        1,
-        1,
-        1
+        x: 1,
+        y: 1,
+        z: 1,
+        w: 1
     );
 
     public float Z { get; set; }
@@ -42,23 +42,23 @@ public static class Scene2D
     {
         var node = world.CreateNode(opts.Name);
         node.LocalTransform = new Transform3D(
-            new Vec3(opts.Position.X, opts.Position.Y, opts.Z),
-            Quat.Identity,
-            new Vec3(opts.Size.X, opts.Size.Y, 1f)
+            position: new Vec3(x: opts.Position.X, y: opts.Position.Y, z: opts.Z),
+            rotation: Quat.Identity,
+            scale: new Vec3(x: opts.Size.X, y: opts.Size.Y, z: 1f)
         );
 
         var mesh = Mesh3D.CreateQuad();
         mesh.Name = opts.Name;
-        var meshHandle = world.AddMesh(mesh);
+        int meshHandle = world.AddMesh(mesh);
 
         Material3D material;
         if (opts.ImagePixels is { } pixels)
         {
             material = Material3D.FromPixels(
-                opts.Name,
-                pixels,
-                opts.ImageWidth,
-                opts.ImageHeight
+                name: opts.Name,
+                pixels: pixels,
+                width: opts.ImageWidth,
+                height: opts.ImageHeight
             );
             material.EmissiveFactor = Vec3.One;
             material.RoughnessFactor = 1f;
@@ -71,7 +71,7 @@ public static class Scene2D
 
         material.Effect = opts.Effect;
         material.Name = opts.Name;
-        var matHandle = world.AddMaterial(material);
+        int matHandle = world.AddMaterial(material);
 
         node.MeshRenderer = new MeshRenderer3D {
             MeshHandle = meshHandle,

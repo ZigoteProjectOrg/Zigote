@@ -40,46 +40,38 @@ public class Align : Widget
     {
         _childSize = Child?.Measure(
             new Constraints(
-                0,
-                c.MaxWidth,
-                0,
-                c.MaxHeight
+                minWidth: 0,
+                maxWidth: c.MaxWidth,
+                minHeight: 0,
+                maxHeight: c.MaxHeight
             )
         ) ?? Size.Zero;
 
-        var w = WidthFactor.HasValue ? _childSize.Width * WidthFactor.Value
+        float w = WidthFactor.HasValue ? _childSize.Width * WidthFactor.Value
             : float.IsFinite(c.MaxWidth) ? c.MaxWidth : _childSize.Width;
-        var h = HeightFactor.HasValue ? _childSize.Height * HeightFactor.Value
+        float h = HeightFactor.HasValue ? _childSize.Height * HeightFactor.Value
             : float.IsFinite(c.MaxHeight) ? c.MaxHeight : _childSize.Height;
 
-        _size = c.Constrain(new Size(w, h));
+        _size = c.Constrain(new Size(width: w, height: h));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
-        var o = Alignment.Within(_size, _childSize);
-        Child?.Layout(new Offset(origin.X + o.X, origin.Y + o.Y));
+        var o = Alignment.Within(outer: _size, child: _childSize);
+        Child?.Layout(new Offset(x: origin.X + o.X, y: origin.Y + o.Y));
     }
 
-    public override void Paint(PaintList paint)
-    {
-        Child?.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => Child?.Paint(paint);
 
-    public override Widget? HitTest(Offset point)
-    {
-        return Bounds.Contains(point.X, point.Y) ? Child?.HitTest(point) : null;
-    }
+    public override Widget? HitTest(Offset point) =>
+        Bounds.Contains(px: point.X, py: point.Y) ? Child?.HitTest(point) : null;
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(Child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Child);
 }

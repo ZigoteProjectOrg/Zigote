@@ -12,30 +12,15 @@ public readonly struct RigidBodyHandle(uint bodyId) : IEquatable<RigidBodyHandle
     public uint BodyId { get; } = bodyId;
     public bool IsValid => BodyId != Invalid;
 
-    public bool Equals(RigidBodyHandle other)
-    {
-        return BodyId == other.BodyId;
-    }
+    public bool Equals(RigidBodyHandle other) => BodyId == other.BodyId;
 
-    public override bool Equals(object? obj)
-    {
-        return obj is RigidBodyHandle h && Equals(h);
-    }
+    public override bool Equals(object? obj) => obj is RigidBodyHandle h && Equals(h);
 
-    public override int GetHashCode()
-    {
-        return (int)BodyId;
-    }
+    public override int GetHashCode() => (int)BodyId;
 
-    public static bool operator ==(RigidBodyHandle a, RigidBodyHandle b)
-    {
-        return a.BodyId == b.BodyId;
-    }
+    public static bool operator ==(RigidBodyHandle a, RigidBodyHandle b) => a.BodyId == b.BodyId;
 
-    public static bool operator !=(RigidBodyHandle a, RigidBodyHandle b)
-    {
-        return a.BodyId != b.BodyId;
-    }
+    public static bool operator !=(RigidBodyHandle a, RigidBodyHandle b) => a.BodyId != b.BodyId;
 }
 
 /// <summary>Result of a successful <see cref="Physics.Raycast" />.</summary>
@@ -117,90 +102,62 @@ public static class Physics
         Vec3 eulerRotation, float mass, bool dynamic = true)
     {
         return Backend?.CreateBody(
-            shape,
-            halfExtents,
-            position,
-            eulerRotation,
-            mass,
-            dynamic
+            shape: shape,
+            halfExtents: halfExtents,
+            position: position,
+            eulerRotation: eulerRotation,
+            mass: mass,
+            dynamic: dynamic
         ) ?? RigidBodyHandle.None;
     }
 
-    public static void DestroyBody(RigidBodyHandle body)
-    {
-        Backend?.DestroyBody(body);
-    }
+    public static void DestroyBody(RigidBodyHandle body) => Backend?.DestroyBody(body);
 
-    public static Vec3 GetPosition(RigidBodyHandle body)
-    {
-        return Backend?.GetPosition(body) ?? Vec3.Zero;
-    }
+    public static Vec3 GetPosition(RigidBodyHandle body) => Backend?.GetPosition(body) ?? Vec3.Zero;
 
-    public static void SetPosition(RigidBodyHandle body, Vec3 position)
-    {
-        Backend?.SetPosition(body, position);
-    }
+    public static void SetPosition(RigidBodyHandle body, Vec3 position) =>
+        Backend?.SetPosition(body: body, position: position);
 
-    public static Quat GetRotation(RigidBodyHandle body)
-    {
-        return Backend?.GetRotation(body) ?? Quat.Identity;
-    }
+    public static Quat GetRotation(RigidBodyHandle body) =>
+        Backend?.GetRotation(body) ?? Quat.Identity;
 
-    public static void SetRotation(RigidBodyHandle body, Quat rotation)
-    {
-        Backend?.SetRotation(body, rotation);
-    }
+    public static void SetRotation(RigidBodyHandle body, Quat rotation) =>
+        Backend?.SetRotation(body: body, rotation: rotation);
 
-    public static Vec3 GetLinearVelocity(RigidBodyHandle body)
-    {
-        return Backend?.GetLinearVelocity(body) ?? Vec3.Zero;
-    }
+    public static Vec3 GetLinearVelocity(RigidBodyHandle body) =>
+        Backend?.GetLinearVelocity(body) ?? Vec3.Zero;
 
-    public static void SetLinearVelocity(RigidBodyHandle body, Vec3 v)
-    {
-        Backend?.SetLinearVelocity(body, v);
-    }
+    public static void SetLinearVelocity(RigidBodyHandle body, Vec3 v) =>
+        Backend?.SetLinearVelocity(body: body, velocity: v);
 
-    public static Vec3 GetAngularVelocity(RigidBodyHandle body)
-    {
-        return Backend?.GetAngularVelocity(body) ?? Vec3.Zero;
-    }
+    public static Vec3 GetAngularVelocity(RigidBodyHandle body) =>
+        Backend?.GetAngularVelocity(body) ?? Vec3.Zero;
 
-    public static void SetAngularVelocity(RigidBodyHandle body, Vec3 v)
-    {
-        Backend?.SetAngularVelocity(body, v);
-    }
+    public static void SetAngularVelocity(RigidBodyHandle body, Vec3 v) =>
+        Backend?.SetAngularVelocity(body: body, velocity: v);
 
-    public static void AddForce(RigidBodyHandle body, Vec3 force)
-    {
-        Backend?.AddForce(body, force);
-    }
+    public static void AddForce(RigidBodyHandle body, Vec3 force) =>
+        Backend?.AddForce(body: body, force: force);
 
-    public static void AddForceAtPoint(RigidBodyHandle body, Vec3 force, Vec3 worldPoint)
-    {
-        Backend?.AddForceAtPoint(body, force, worldPoint);
-    }
+    public static void AddForceAtPoint(RigidBodyHandle body, Vec3 force, Vec3 worldPoint) =>
+        Backend?.AddForceAtPoint(body: body, force: force, worldPoint: worldPoint);
 
-    public static void AddTorque(RigidBodyHandle body, Vec3 torque)
-    {
-        Backend?.AddTorque(body, torque);
-    }
+    public static void AddTorque(RigidBodyHandle body, Vec3 torque) =>
+        Backend?.AddTorque(body: body, torque: torque);
 
-    public static void AddImpulse(RigidBodyHandle body, Vec3 impulse)
-    {
-        Backend?.AddImpulse(body, impulse);
-    }
+    public static void AddImpulse(RigidBodyHandle body, Vec3 impulse) =>
+        Backend?.AddImpulse(body: body, impulse: impulse);
 
     /// <summary>Allocation-free closest-hit ray cast: true on hit, filling <paramref name="hit" />.</summary>
     public static bool TryRaycast(Vec3 origin, Vec3 direction, float maxDistance,
         out RaycastHit3D hit)
     {
         return TryRaycast(
-            origin,
-            direction,
-            maxDistance,
-            RigidBodyHandle.None,
-            out hit
+            origin: origin,
+            direction: direction,
+            maxDistance: maxDistance,
+            ignore: RigidBodyHandle.None,
+            hit: out hit
         );
     }
 
@@ -213,13 +170,16 @@ public static class Physics
         RigidBodyHandle ignore, out RaycastHit3D hit)
     {
         if (Backend is { } backend)
+        {
             return backend.TryRaycast(
-                origin,
-                direction,
-                maxDistance,
-                ignore,
-                out hit
+                origin: origin,
+                direction: direction,
+                maxDistance: maxDistance,
+                ignore: ignore,
+                hit: out hit
             );
+        }
+
         hit = default;
         return false;
     }
@@ -227,10 +187,10 @@ public static class Physics
     public static RaycastHit? Raycast(Vec3 origin, Vec3 direction, float maxDistance)
     {
         return Raycast(
-            origin,
-            direction,
-            maxDistance,
-            RigidBodyHandle.None
+            origin: origin,
+            direction: direction,
+            maxDistance: maxDistance,
+            ignore: RigidBodyHandle.None
         );
     }
 
@@ -238,11 +198,11 @@ public static class Physics
         RigidBodyHandle ignore)
     {
         return TryRaycast(
-            origin,
-            direction,
-            maxDistance,
-            ignore,
-            out var hit
+            origin: origin,
+            direction: direction,
+            maxDistance: maxDistance,
+            ignore: ignore,
+            hit: out var hit
         )
             ? new RaycastHit {
                 Body = hit.Body,

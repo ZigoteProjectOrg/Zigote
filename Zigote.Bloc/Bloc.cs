@@ -89,7 +89,6 @@ public abstract class Bloc<TEvent> : IDisposable
 {
     private readonly Queue<TEvent> _events = new();
     private readonly CancellationTokenSource _lifetime = new();
-    private readonly List<IDisposable> _subscriptions = [];
 
     /// <summary>
     ///     Taken while the source is alive, because <see cref="Dispose" /> disposes it and
@@ -100,14 +99,13 @@ public abstract class Bloc<TEvent> : IDisposable
     /// </summary>
     private readonly CancellationToken _lifetimeToken;
 
+    private readonly List<IDisposable> _subscriptions = [];
+
     private bool _disposed;
     private bool _pumping;
     private CancellationTokenSource? _work;
 
-    protected Bloc()
-    {
-        _lifetimeToken = _lifetime.Token;
-    }
+    protected Bloc() => _lifetimeToken = _lifetime.Token;
 
     /// <summary>
     ///     Cancelled when the bloc is disposed. Handed to every handler, and safe to read at any
@@ -160,7 +158,8 @@ public abstract class Bloc<TEvent> : IDisposable
 
     /// <summary>
     ///     Handle one event. Runs on the pump, one at a time, and may await. Throwing is allowed:
-    ///     the pump reports it through <see cref="BlocErrors.OnError" /> and carries on with the next event
+    ///     the pump reports it through <see cref="BlocErrors.OnError" /> and carries on with the next
+    ///     event
     ///     rather than tearing the bloc down.
     /// </summary>
     protected abstract ValueTask OnEventAsync(TEvent @event, CancellationToken ct);
@@ -214,7 +213,7 @@ public abstract class Bloc<TEvent> : IDisposable
         // working — reading a captured token never throws, whatever happened to its source.
         var token = next.Token;
 
-        var previous = Interlocked.Exchange(ref _work, next);
+        var previous = Interlocked.Exchange(location1: ref _work, value: next);
 
         previous?.Cancel();
         previous?.Dispose();
@@ -222,6 +221,7 @@ public abstract class Bloc<TEvent> : IDisposable
         // Disposed between the exchange and here: cancel the source we just published rather than
         // leaving work running against a dead bloc.
         if (_disposed)
+        {
             try
             {
                 next.Cancel();
@@ -231,6 +231,7 @@ public abstract class Bloc<TEvent> : IDisposable
                 // Dispose got to it first, and it cancels before it disposes — so the token this
                 // returns is already cancelled and there is nothing left to do.
             }
+        }
 
         return token;
     }
@@ -238,15 +239,13 @@ public abstract class Bloc<TEvent> : IDisposable
     /// <summary>Cancel the in-flight unit of work without starting a replacement.</summary>
     protected void Cancel()
     {
-        var work = Interlocked.Exchange(ref _work, null);
+        var work = Interlocked.Exchange(location1: ref _work, value: null);
         work?.Cancel();
         work?.Dispose();
     }
 
     /// <summary>Release anything the subclass owns beyond its tracked subscriptions.</summary>
-    protected virtual void OnDispose()
-    {
-    }
+    protected virtual void OnDispose() { }
 
     /// <summary>
     ///     Drain the queue on this thread, for as long as the handlers let us.
@@ -281,25 +280,31 @@ public abstract class Bloc<TEvent> : IDisposable
             // Before the handler, so the log reads "event, then what it did" — and so an event whose
             // handler hangs or throws is still on the timeline that has to explain it.
             if (BlocObserver.OnEvent is { } observer)
+            {
                 try
                 {
-                    observer(this, next);
+                    observer(arg1: this, arg2: next);
                 }
                 catch (Exception ex)
                 {
-                    Report(ex, $"{GetType().Name} observer failed on {next?.GetType().Name ?? "null"}");
+                    Report(
+                        ex: ex,
+                        context:
+                        $"{GetType().Name} observer failed on {next?.GetType().Name ?? "null"}"
+                    );
                 }
+            }
 
             ValueTask handling;
 
             try
             {
-                handling = OnEventAsync(next, _lifetimeToken);
+                handling = OnEventAsync(@event: next, ct: _lifetimeToken);
             }
             catch (Exception ex)
             {
                 // Thrown before the first await, so there is no task to observe it.
-                ReportFailure(ex, next);
+                ReportFailure(ex: ex, @event: next);
                 continue;
             }
 
@@ -307,7 +312,7 @@ public abstract class Bloc<TEvent> : IDisposable
 
             // Faulted-but-synchronous lands here too, which is fine: DrainAsync awaits an already
             // completed task and reports, at the cost of one state machine on a path that is a bug.
-            _ = DrainAsync(handling, next);
+            _ = DrainAsync(handling: handling, current: next);
             return;
         }
     }
@@ -325,32 +330,36 @@ public abstract class Bloc<TEvent> : IDisposable
         }
         catch (OperationCanceledException) when (_lifetimeToken.IsCancellationRequested)
         {
-            lock (_events)
-            {
-                _pumping = false;
-            }
+            lock (_events) _pumping = false;
 
             return;
         }
         catch (Exception ex)
         {
-            ReportFailure(ex, current);
+            ReportFailure(ex: ex, @event: current);
         }
 
         Pump();
     }
 
-    private void ReportFailure(Exception ex, TEvent @event)
-    {
-        Report(ex, $"{GetType().Name} failed handling {@event?.GetType().Name ?? "null"}");
-    }
+    private void ReportFailure(Exception ex, TEvent @event) => Report(
+        ex: ex,
+        context: $"{GetType().Name} failed handling {@event?.GetType().Name ?? "null"}"
+    );
 
     private protected static void Report(Exception ex, string context)
     {
         try
         {
-            if (BlocErrors.OnError is { } hook) hook(ex, context);
-            else DebugLog.Add(DebugLogLevel.Error, $"{context} — {ex}", "bloc");
+            if (BlocErrors.OnError is { } hook) hook(arg1: ex, arg2: context);
+            else
+            {
+                DebugLog.Add(
+                    level: DebugLogLevel.Error,
+                    message: $"{context} — {ex}",
+                    category: "bloc"
+                );
+            }
         }
         catch
         {
@@ -370,15 +379,15 @@ public abstract class Bloc<TEvent> : IDisposable
 ///     </para>
 /// </summary>
 /// <typeparam name="TEvent">The closed event hierarchy this bloc accepts.</typeparam>
-/// <typeparam name="TState">Immutable state. A record, so <see cref="Emit(Func{TState,TState})" /> is a <c>with</c>.</typeparam>
+/// <typeparam name="TState">
+///     Immutable state. A record, so <see cref="Emit(Func{TState,TState})" /> is
+///     a <c>with</c>.
+/// </typeparam>
 public abstract class Bloc<TEvent, TState> : Bloc<TEvent>
 {
     private readonly Signal<TState> _state;
 
-    protected Bloc(TState initial)
-    {
-        _state = new Signal<TState>(initial);
-    }
+    protected Bloc(TState initial) => _state = new Signal<TState>(initial);
 
     /// <summary>
     ///     The state the widget tree watches. Written only by <see cref="Emit(TState)" />.
@@ -392,6 +401,9 @@ public abstract class Bloc<TEvent, TState> : Bloc<TEvent>
     ///     </para>
     /// </summary>
     public IReadableSignal<TState> State => _state;
+
+    /// <summary>The current state without subscribing — for a handler deciding what to do next.</summary>
+    public TState Current => _state.Peek();
 
     /// <summary>
     ///     One fact from the state, as something a <c>Watch</c> can read without inheriting the rest
@@ -420,13 +432,8 @@ public abstract class Bloc<TEvent, TState> : Bloc<TEvent>
     ///  var playing = _playing.Value;
     ///     </code>
     /// </example>
-    public Computed<T> Select<T>(Func<TState, T> project)
-    {
-        return Computed.From(() => project(_state.Value));
-    }
-
-    /// <summary>The current state without subscribing — for a handler deciding what to do next.</summary>
-    public TState Current => _state.Peek();
+    public Computed<T> Select<T>(Func<TState, T> project) =>
+        Computed.From(() => project(_state.Value));
 
     /// <summary>
     ///     Run <paramref name="listener" /> with the state now, and again whenever it changes.
@@ -438,10 +445,7 @@ public abstract class Bloc<TEvent, TState> : Bloc<TEvent>
     ///         code, which is the usual place these two drift apart.
     ///     </para>
     /// </summary>
-    public IDisposable Subscribe(Action<TState> listener)
-    {
-        return _state.Subscribe(listener);
-    }
+    public IDisposable Subscribe(Action<TState> listener) => _state.Subscribe(listener);
 
     /// <summary>
     ///     Publish a new state under the graph lock — a handler may resume on any thread, and every
@@ -451,23 +455,23 @@ public abstract class Bloc<TEvent, TState> : Bloc<TEvent>
     {
         // The read is only worth its trip through the graph lock when somebody is listening; with no
         // observer attached this is the same two lines it always was.
-        var observed = BlocObserver.OnChange is not null;
+        bool observed = BlocObserver.OnChange is not null;
         var previous = observed ? _state.Peek() : default!;
 
         Reactive.Sync(() => _state.Value = next);
 
-        if (observed) Notify(previous, next);
+        if (observed) Notify(previous: previous, next: next);
     }
 
     /// <inheritdoc cref="Emit(TState)" />
     protected void Emit(Func<TState, TState> next)
     {
-        var observed = BlocObserver.OnChange is not null;
+        bool observed = BlocObserver.OnChange is not null;
         var previous = observed ? _state.Peek() : default!;
 
         Reactive.Sync(() => _state.Update(next));
 
-        if (observed) Notify(previous, _state.Peek());
+        if (observed) Notify(previous: previous, next: _state.Peek());
     }
 
     /// <summary>
@@ -479,15 +483,15 @@ public abstract class Bloc<TEvent, TState> : Bloc<TEvent>
     private void Notify(TState previous, TState next)
     {
         if (BlocObserver.OnChange is not { } hook) return;
-        if (EqualityComparer<TState>.Default.Equals(previous, next)) return;
+        if (EqualityComparer<TState>.Default.Equals(x: previous, y: next)) return;
 
         try
         {
-            hook(this, previous, next);
+            hook(arg1: this, arg2: previous, arg3: next);
         }
         catch (Exception ex)
         {
-            Report(ex, $"{GetType().Name} observer failed on change");
+            Report(ex: ex, context: $"{GetType().Name} observer failed on change");
         }
     }
 }

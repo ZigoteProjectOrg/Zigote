@@ -17,9 +17,11 @@ public class AdwSuggestionEntryTests
     private static AdwSuggestionEntry Entry(Action<string>? onCommit = null, int suggestions = 3)
     {
         return new AdwSuggestionEntry(
-            "initial",
-            _ => Enumerable.Range(0, suggestions).Select(i => ($"value{i}", $"display{i}")).ToList(),
-            onCommit ?? (_ => { })
+            value: "initial",
+            suggest: _ =>
+                Enumerable.Range(start: 0, count: suggestions)
+                    .Select(i => ($"value{i}", $"display{i}")).ToList(),
+            onCommit: onCommit ?? (_ => { })
         );
     }
 
@@ -27,7 +29,7 @@ public class AdwSuggestionEntryTests
     public void ConstructingWithATextValueDoesNotTouchAnOverlay()
     {
         var entry = Entry();
-        Assert.Equal("initial", entry.Text);
+        Assert.Equal(expected: "initial", actual: entry.Text);
     }
 
     [Fact]
@@ -35,7 +37,7 @@ public class AdwSuggestionEntryTests
     {
         var entry = Entry();
         entry.Text = "changed";
-        Assert.Equal("changed", entry.Text);
+        Assert.Equal(expected: "changed", actual: entry.Text);
 
         // Detach is the teardown path; it hides a popup that was never shown.
         entry.Detach();
@@ -45,13 +47,13 @@ public class AdwSuggestionEntryTests
     public void SubmittingCommitsTheTypedValueEvenWhenNothingWasSuggested()
     {
         string? committed = null;
-        var entry = Entry(v => committed = v, 0);
+        var entry = Entry(onCommit: v => committed = v, suggestions: 0);
         entry.Text = "hand/typed/path.png";
 
         // What Enter reaches: the entry's own submit handler.
         entry.OnSubmitted!("hand/typed/path.png");
 
-        Assert.Equal("hand/typed/path.png", committed);
+        Assert.Equal(expected: "hand/typed/path.png", actual: committed);
     }
 
     [Fact]
@@ -59,10 +61,21 @@ public class AdwSuggestionEntryTests
     {
         var entry = Entry();
         entry.Compact = true;
-        var wrapper = new ThemeProvider(ThemeData.Dark, entry);
-        wrapper.Measure(new Constraints(0f, 240f, 0f, 200f));
-        wrapper.Layout(new Offset(0f, 0f));
+        var wrapper = new ThemeProvider(data: ThemeData.Dark, child: entry);
+        wrapper.Measure(
+            new Constraints(
+                minWidth: 0f,
+                maxWidth: 240f,
+                minHeight: 0f,
+                maxHeight: 200f
+            )
+        );
+        wrapper.Layout(new Offset(x: 0f, y: 0f));
 
-        Assert.Equal(AdwMetrics.CompactControlHeight, entry.Bounds.Height, 3);
+        Assert.Equal(
+            expected: AdwMetrics.CompactControlHeight,
+            actual: entry.Bounds.Height,
+            precision: 3
+        );
     }
 }

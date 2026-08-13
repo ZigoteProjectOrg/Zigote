@@ -18,10 +18,7 @@ namespace HelloWorld;
 /// </summary>
 public static class Program
 {
-    public static void Main()
-    {
-        new HelloWorldApp().Run();
-    }
+    public static void Main() => new HelloWorldApp().Run();
 }
 
 internal sealed class HelloWorldApp : MaterialApp
@@ -48,7 +45,7 @@ internal sealed class HelloWorldApp : MaterialApp
         // The devtools overlay: press Shift+D. TwoD is the profile for a pure UI app — General and
         // 2D·UI tabs, no 3D renderer tab. (Merely referencing Zigote.UI.DevTools would auto-install
         // it with the Auto profile; this line is the explicit form, and it picks the profile.)
-        DevTools.Install(app, DevToolsProfile.TwoD);
+        DevTools.Install(app: app, profile: DevToolsProfile.TwoD);
     }
 }
 
@@ -78,38 +75,38 @@ internal sealed class CounterPage : ComposedWidget
         var theme = ThemeProvider.Of(context);
 
         return new Scaffold(
-            new AppBar(new Text("Hello World"), centerTitle: true),
-            new Center(
+            appBar: new AppBar(title: new Text("Hello World"), centerTitle: true),
+            body: new Center(
                 new Column(
                     mainAxisAlignment: MainAxisAlignment.Center,
                     children: [
                         new Text(
-                            "Hello, World!",
-                            new TextStyle(28, fontWeight: FontWeight.Bold)
+                            data: "Hello, World!",
+                            style: new TextStyle(fontSize: 28, fontWeight: FontWeight.Bold)
                         ),
                         new SizedBox(height: 8),
                         new Text(
-                            "You have pushed the button this many times:",
-                            new TextStyle(color: theme.TextSecondary)
+                            data: "You have pushed the button this many times:",
+                            style: new TextStyle(color: theme.TextSecondary)
                         ),
                         new SizedBox(height: 8),
                         // Only this subtree re-runs when _count changes.
                         new Watch(() => new Text(
-                                _count.Value.ToString(),
-                                new TextStyle(34, fontWeight: FontWeight.SemiBold)
+                                data: _count.Value.ToString(),
+                                style: new TextStyle(fontSize: 34, fontWeight: FontWeight.SemiBold)
                             )
                         ),
                         new SizedBox(height: 24),
                         new Text(
-                            "Press Shift+D for devtools",
-                            new TextStyle(12, color: theme.TextMuted)
+                            data: "Press Shift+D for devtools",
+                            style: new TextStyle(fontSize: 12, color: theme.TextMuted)
                         ),
                     ]
                 )
             ),
-            new FloatingActionButton(
-                () => _count.Value++,
-                new Icon(MaterialIcons.Add),
+            floatingActionButton: new FloatingActionButton(
+                onPressed: () => _count.Value++,
+                child: new Icon(MaterialIcons.Add),
                 tooltip: "Increment"
             )
         );

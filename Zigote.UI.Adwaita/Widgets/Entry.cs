@@ -70,7 +70,7 @@ public class AdwEntry : Widget
     public float? Width
     {
         get => _width;
-        set => SetLayout(ref _width, value);
+        set => SetLayout(field: ref _width, value: value);
     }
 
     /// <summary>
@@ -81,22 +81,12 @@ public class AdwEntry : Widget
     public bool Compact
     {
         get => _compact;
-        set => SetLayout(ref _compact, value);
+        set => SetLayout(field: ref _compact, value: value);
     }
 
     /// <summary>The entry's resolved outer height; decorations inset by it to stay square.</summary>
     protected float BoxHeight =>
         Compact ? AdwMetrics.CompactControlHeight : AdwMetrics.EntryHeight;
-
-    /// <summary>
-    ///     Put the caret in this entry — the target of a Ctrl+F, a search bar revealing itself, or a
-    ///     form focusing its first field. The editable widget is the inner field, so focusing the
-    ///     entry itself would leave the caret nowhere. No-op while unmounted.
-    /// </summary>
-    public void Focus()
-    {
-        Owner?.RequestFocus(Field);
-    }
 
     /// <summary>Corner radius — subclasses restyle (the search entry is a pill).</summary>
     protected virtual float Radius => AdwMetrics.ControlRadius;
@@ -107,39 +97,39 @@ public class AdwEntry : Widget
     /// <summary>Horizontal space reserved after the text (trailing button area).</summary>
     protected virtual float TrailingInset => 0f;
 
+    /// <summary>
+    ///     Put the caret in this entry — the target of a Ctrl+F, a search bar revealing itself, or a
+    ///     form focusing its first field. The editable widget is the inner field, so focusing the
+    ///     entry itself would leave the caret nowhere. No-op while unmounted.
+    /// </summary>
+    public void Focus() => Owner?.RequestFocus(Field);
+
     /// <summary>Called whenever the text changes (edit, external set, clear).</summary>
-    protected virtual void OnTextChanged()
-    {
-    }
+    protected virtual void OnTextChanged() { }
 
     /// <summary>Paint leading/trailing decorations (icons, buttons) over the box fill.</summary>
-    protected virtual void PaintDecorations(PaintList paint)
-    {
-    }
+    protected virtual void PaintDecorations(PaintList paint) { }
 
     /// <summary>Does <paramref name="point" /> hit a decoration this widget handles itself?</summary>
-    protected virtual bool HitsDecoration(Offset point)
-    {
-        return false;
-    }
+    protected virtual bool HitsDecoration(Offset point) => false;
 
     // ── Widget protocol ───────────────────────────────────────────────────────
 
     public override Size Measure(Constraints c)
     {
         Theme = ThemeProvider.Of(BuildContext.Current);
-        var w = Width ?? (float.IsFinite(c.MaxWidth) ? c.MaxWidth : 240f);
-        _size = c.Constrain(new Size(w, BoxHeight));
+        float w = Width ?? (float.IsFinite(c.MaxWidth) ? c.MaxWidth : 240f);
+        _size = c.Constrain(new Size(width: w, height: BoxHeight));
 
-        var inner = MathF.Max(0f, _size.Width - LeadingInset - TrailingInset);
+        float inner = MathF.Max(x: 0f, y: _size.Width - LeadingInset - TrailingInset);
         Field.Height = _size.Height;
         Field.MinWidth = inner;
         Field.Measure(
             new Constraints(
-                inner,
-                inner,
-                _size.Height,
-                _size.Height
+                minWidth: inner,
+                maxWidth: inner,
+                minHeight: _size.Height,
+                maxHeight: _size.Height
             )
         );
         return _size;
@@ -148,12 +138,12 @@ public class AdwEntry : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
-        Field.Layout(new Offset(origin.X + LeadingInset, origin.Y));
+        Field.Layout(new Offset(x: origin.X + LeadingInset, y: origin.Y));
     }
 
     public override void Paint(PaintList paint)
@@ -162,26 +152,28 @@ public class AdwEntry : Widget
 
         // `entry { background-color: $button_color }` — an entry carries the same currentColor 10%
         // as a raised button, not a fainter view fill.
-        paint.AddRect(Bounds, AdwPalette.For(Theme).ButtonFill, Radius);
+        paint.AddRect(bounds: Bounds, color: AdwPalette.For(Theme).ButtonFill, radius: Radius);
         PaintDecorations(paint);
         Field.Paint(paint);
 
         // The Adwaita focus affordance: `@include focus-ring($focus-state: ':focus-within')` — a
         // 2px inset outline in the standalone accent at 50%, not a solid accent border.
         if (Field.Focused && Enabled)
+        {
             paint.AddBorder(
-                Bounds,
-                Theme.FocusRing,
-                Radius,
-                Theme.FocusRingWidth
+                bounds: Bounds,
+                color: Theme.FocusRing,
+                radius: Radius,
+                width: Theme.FocusRingWidth
             );
+        }
 
         if (!Enabled) paint.PopAlpha();
     }
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Enabled || !Bounds.Contains(point.X, point.Y)) return null;
+        if (!Enabled || !Bounds.Contains(px: point.X, py: point.Y)) return null;
         // Every hit in the box — the text, the gaps, and the decorations outside the field's own
         // bounds — resolves to the field. App blurs whatever it hits unless the hit IS the focused
         // widget, so returning `this` for the reveal/clear buttons used to drop the caret and, on
@@ -190,21 +182,17 @@ public class AdwEntry : Widget
         return Field.HitTest(point) ?? Field;
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(Field);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Field);
 
     // Keep Tab traversal off the inner field while disabled.
-    public override IEnumerable<Widget> GetVisibleChildren()
-    {
-        return Enabled ? GetChildren() : Array.Empty<Widget>();
-    }
+    public override IEnumerable<Widget> GetVisibleChildren() =>
+        Enabled ? GetChildren() : Array.Empty<Widget>();
 
-    public override int DebugStateHash()
-    {
-        return HashCode.Combine(Field.Text, Field.Focused, Enabled);
-    }
+    public override int DebugStateHash() => HashCode.Combine(
+        value1: Field.Text,
+        value2: Field.Focused,
+        value3: Enabled
+    );
 
     /// <summary>
     ///     The inner editor, with one addition: a press that landed on one of the entry's own
@@ -230,35 +218,30 @@ public sealed class AdwPasswordEntry : AdwEntry
 {
     private bool _revealed;
 
-    public AdwPasswordEntry()
-    {
-        Field.Obscure = true;
-    }
+    public AdwPasswordEntry() => Field.Obscure = true;
 
     protected override float TrailingInset => BoxHeight;
 
     private Rect RevealBox => new(
-        Bounds.Right - BoxHeight,
-        Bounds.Y,
-        AdwMetrics.EntryHeight,
-        Bounds.Height
+        x: Bounds.Right - BoxHeight,
+        y: Bounds.Y,
+        width: AdwMetrics.EntryHeight,
+        height: Bounds.Height
     );
 
     protected override void PaintDecorations(PaintList paint)
     {
         Icons.Draw(
-            paint,
-            _revealed ? Icons.VisibilityOff : Icons.Visibility,
-            RevealBox,
-            Theme.Hint,
-            AdwMetrics.IconSize
+            paint: paint,
+            glyph: _revealed ? Icons.VisibilityOff : Icons.Visibility,
+            box: RevealBox,
+            color: Theme.Hint,
+            size: AdwMetrics.IconSize
         );
     }
 
-    protected override bool HitsDecoration(Offset point)
-    {
-        return RevealBox.Contains(point.X, point.Y);
-    }
+    protected override bool HitsDecoration(Offset point) =>
+        RevealBox.Contains(px: point.X, py: point.Y);
 
     public override void OnPointerDown(Offset point)
     {
@@ -275,10 +258,7 @@ public sealed class AdwPasswordEntry : AdwEntry
 /// </summary>
 public sealed class AdwSearchEntry : AdwEntry
 {
-    public AdwSearchEntry()
-    {
-        Placeholder = "Search";
-    }
+    public AdwSearchEntry() => Placeholder = "Search";
 
     protected override float Radius => AdwMetrics.Pill;
     protected override float LeadingInset => 28f;
@@ -287,45 +267,42 @@ public sealed class AdwSearchEntry : AdwEntry
     private bool ShowClear => Field.Text.Length > 0;
 
     private Rect ClearBox => new(
-        Bounds.Right - BoxHeight,
-        Bounds.Y,
-        AdwMetrics.EntryHeight,
-        Bounds.Height
+        x: Bounds.Right - BoxHeight,
+        y: Bounds.Y,
+        width: AdwMetrics.EntryHeight,
+        height: Bounds.Height
     );
 
-    protected override void OnTextChanged()
-    {
-        MarkNeedsPaint(); // show/hide the clear button
-    }
+    protected override void OnTextChanged() => MarkNeedsPaint(); // show/hide the clear button
 
     protected override void PaintDecorations(PaintList paint)
     {
         Icons.Draw(
-            paint,
-            Icons.Search,
-            new Rect(
-                Bounds.X,
-                Bounds.Y,
-                LeadingInset,
-                Bounds.Height
+            paint: paint,
+            glyph: Icons.Search,
+            box: new Rect(
+                x: Bounds.X,
+                y: Bounds.Y,
+                width: LeadingInset,
+                height: Bounds.Height
             ),
-            Theme.Hint,
-            AdwMetrics.IconSize
+            color: Theme.Hint,
+            size: AdwMetrics.IconSize
         );
         if (ShowClear)
+        {
             Icons.Draw(
-                paint,
-                Icons.Close,
-                ClearBox,
-                Theme.Hint,
-                AdwMetrics.IconSize
+                paint: paint,
+                glyph: Icons.Close,
+                box: ClearBox,
+                color: Theme.Hint,
+                size: AdwMetrics.IconSize
             );
+        }
     }
 
-    protected override bool HitsDecoration(Offset point)
-    {
-        return ShowClear && ClearBox.Contains(point.X, point.Y);
-    }
+    protected override bool HitsDecoration(Offset point) =>
+        ShowClear && ClearBox.Contains(px: point.X, py: point.Y);
 
     public override void OnPointerDown(Offset point)
     {

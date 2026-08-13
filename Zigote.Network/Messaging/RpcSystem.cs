@@ -28,9 +28,9 @@ public sealed class RpcSystem(MessageRegistry registry, float defaultTimeout = 5
         where TReq : INetMessage, new()
         where TResp : INetMessage, new()
     {
-        var reqId = registry.Register<TReq>();
+        ushort reqId = registry.Register<TReq>();
         registry.Register<TResp>();
-        _handlers[reqId] = (conn, msg) => handler(conn, (TReq)msg);
+        _handlers[reqId] = (conn, msg) => handler(arg1: conn, arg2: (TReq)msg);
     }
 
     /// <summary>
@@ -41,17 +41,18 @@ public sealed class RpcSystem(MessageRegistry registry, float defaultTimeout = 5
         where TReq : INetMessage, new()
         where TResp : INetMessage, new()
     {
-        var reqTypeId = registry.Register<TReq>();
+        ushort reqTypeId = registry.Register<TReq>();
         registry.Register<TResp>();
 
-        var requestId = _nextRequestId++;
+        uint requestId = _nextRequestId++;
         var tcs = new TaskCompletionSource<TResp>(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
         _pending[requestId] = new Pending(
-            timeout ?? defaultTimeout,
-            response => tcs.TrySetResult((TResp)response),
-            () => tcs.TrySetException(new TimeoutException($"RPC {typeof(TReq).Name} timed out."))
+            remaining: timeout ?? defaultTimeout,
+            onResponse: response => tcs.TrySetResult((TResp)response),
+            onTimeout: () =>
+                tcs.TrySetException(new TimeoutException($"RPC {typeof(TReq).Name} timed out."))
         );
 
         var writer = conn.BeginSend(NetChannel.RpcRequest);
@@ -68,30 +69,32 @@ public sealed class RpcSystem(MessageRegistry registry, float defaultTimeout = 5
         if (_pending.Count == 0) return;
 
         _expired.Clear();
-        foreach (var (id, pending) in _pending)
+        foreach ((uint id, var pending) in _pending)
         {
             pending.Remaining -= dt;
             if (pending.Remaining <= 0f) _expired.Add(id);
         }
 
-        foreach (var id in _expired)
-            if (_pending.Remove(id, out var pending))
+        foreach (uint id in _expired)
+        {
+            if (_pending.Remove(key: id, value: out var pending))
                 pending.OnTimeout();
+        }
     }
 
     internal void HandleRequest(NetConnection conn, NetReader reader)
     {
-        var requestId = reader.ReadUInt32();
-        var reqTypeId = reader.ReadUInt16();
+        uint requestId = reader.ReadUInt32();
+        ushort reqTypeId = reader.ReadUInt16();
         var request = registry.Create(reqTypeId);
         if (request is null) return;
 
         request.Deserialize(reader);
         if (reader.Overflow) return;
-        if (!_handlers.TryGetValue(reqTypeId, out var handler)) return;
+        if (!_handlers.TryGetValue(key: reqTypeId, value: out var handler)) return;
 
-        var response = handler(conn, request);
-        var respTypeId = registry.GetId(response.GetType());
+        var response = handler(arg1: conn, arg2: request);
+        ushort respTypeId = registry.GetId(response.GetType());
 
         var writer = conn.BeginSend(NetChannel.RpcResponse);
         writer.WriteUInt32(requestId);
@@ -102,14 +105,14 @@ public sealed class RpcSystem(MessageRegistry registry, float defaultTimeout = 5
 
     internal void HandleResponse(NetConnection conn, NetReader reader)
     {
-        var requestId = reader.ReadUInt32();
-        var respTypeId = reader.ReadUInt16();
+        uint requestId = reader.ReadUInt32();
+        ushort respTypeId = reader.ReadUInt16();
         var response = registry.Create(respTypeId);
         if (response is null) return;
 
         response.Deserialize(reader);
         if (reader.Overflow) return;
-        if (_pending.Remove(requestId, out var pending)) pending.OnResponse(response);
+        if (_pending.Remove(key: requestId, value: out var pending)) pending.OnResponse(response);
     }
 
     private sealed class Pending(float remaining, Action<INetMessage> onResponse, Action onTimeout)

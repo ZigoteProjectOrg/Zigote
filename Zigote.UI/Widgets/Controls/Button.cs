@@ -28,14 +28,14 @@ public enum ButtonStyle
 public class Button : ComposedWidget
 {
     private readonly DecoratedBox _box = new();
-    private readonly Label _text = new("") { MaxLines = 1 };
     private readonly LayoutPadding _padding = new(EdgeInsets.Zero);
     private readonly Pressable _root;
-    private ThemeData _theme = ThemeData.Dark;
+    private readonly Label _text = new("") { MaxLines = 1 };
 
     private bool _enabled = true;
     private string _label;
     private ButtonStyle _style = ButtonStyle.Elevated;
+    private ThemeData _theme = ThemeData.Dark;
 
     public Button(string label, Action? onPressed)
     {
@@ -44,8 +44,8 @@ public class Button : ComposedWidget
 
         _padding.Child = _text;
         _box.Child = new ConstrainedBox(
-            new Constraints(minHeight: ControlMetrics.RegularHeight),
-            new Align(Alignment.Center, _padding) {
+            constraints: new Constraints(minHeight: ControlMetrics.RegularHeight),
+            child: new Align(alignment: Alignment.Center, child: _padding) {
                 WidthFactor = 1f,
                 HeightFactor = 1f,
             }
@@ -60,7 +60,7 @@ public class Button : ComposedWidget
     public string Label
     {
         get => _label;
-        set => SetBuild(ref _label, value);
+        set => SetBuild(field: ref _label, value: value);
     }
 
     // Read live by the Pressable on each press, so changing it needs no rebuild. Enablement is
@@ -77,7 +77,7 @@ public class Button : ComposedWidget
     public ButtonStyle Style
     {
         get => _style;
-        set => SetBuild(ref _style, value);
+        set => SetBuild(field: ref _style, value: value);
     }
 
     public Color? BackgroundColor { get; set; }
@@ -90,7 +90,7 @@ public class Button : ComposedWidget
     public bool Enabled
     {
         get => _enabled;
-        set => SetBuild(ref _enabled, value);
+        set => SetBuild(field: ref _enabled, value: value);
     }
 
     /// <summary>Opt-in Liquid Glass treatment for buttons that live on translucent chrome.</summary>
@@ -110,10 +110,10 @@ public class Button : ComposedWidget
     public override int DebugStateHash()
     {
         return HashCode.Combine(
-            Label,
-            Enabled,
-            Style,
-            base.DebugStateHash()
+            value1: Label,
+            value2: Enabled,
+            value3: Style,
+            value4: base.DebugStateHash()
         );
     }
 
@@ -126,9 +126,12 @@ public class Button : ComposedWidget
         _text.Text = Label;
         _text.FontSize = FontSize ?? _theme.FontSizeBody;
         _text.FontWeight = Style == ButtonStyle.Elevated ? FontWeight.Medium : FontWeight.Normal;
-        _padding.Insets = Padding ?? EdgeInsets.Symmetric(Spacing.Md, Spacing.Xs);
+        _padding.Insets = Padding ?? EdgeInsets.Symmetric(
+            horizontal: Spacing.Md,
+            vertical: Spacing.Xs
+        );
 
-        var radius = Radius ?? _theme.ButtonRadius;
+        float radius = Radius ?? _theme.ButtonRadius;
         _box.Radius = radius;
         _root.Enabled = Enabled && OnPressed is not null;
         _root.FocusRadius = radius;
@@ -140,8 +143,8 @@ public class Button : ComposedWidget
 
     private void ApplyColors()
     {
-        var hovered = _root.Hovered;
-        var pressed = _root.Pressed;
+        bool hovered = _root.Hovered;
+        bool pressed = _root.Pressed;
         var fg = TextColor ??
                  (Style == ButtonStyle.Elevated ? _theme.OnPrimary : _theme.OnSurface);
 
@@ -161,7 +164,11 @@ public class Button : ComposedWidget
         switch (Style)
         {
             case ButtonStyle.Elevated:
-                _box.Fill = StateStyle.Fill(BackgroundColor ?? _theme.Primary, hovered, pressed);
+                _box.Fill = StateStyle.Fill(
+                    baseColor: BackgroundColor ?? _theme.Primary,
+                    hovered: hovered,
+                    pressed: pressed
+                );
                 _box.BorderColor = Color.Transparent;
                 break;
             case ButtonStyle.Outlined:
@@ -189,7 +196,7 @@ public class Button : ComposedWidget
     /// </summary>
     private void TintContent(Color fg)
     {
-        if (Content is { } content) ApplyForeground(content, fg);
+        if (Content is { } content) ApplyForeground(w: content, fg: fg);
     }
 
     private static void ApplyForeground(Widget w, Color fg)
@@ -204,6 +211,6 @@ public class Button : ComposedWidget
                 break;
         }
 
-        foreach (var child in w.GetChildren()) ApplyForeground(child, fg);
+        foreach (var child in w.GetChildren()) ApplyForeground(w: child, fg: fg);
     }
 }

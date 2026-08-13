@@ -23,7 +23,7 @@ public sealed class AdwLinkButton : ComposedWidget
     public string Label
     {
         get => _label;
-        set => this.Set(ref _label, value);
+        set => this.Set(field: ref _label, value: value);
     }
 
     public Action? OnPressed { get; set; }
@@ -31,7 +31,7 @@ public sealed class AdwLinkButton : ComposedWidget
     public bool Enabled
     {
         get => _enabled;
-        set => this.Set(ref _enabled, value);
+        set => this.Set(field: ref _enabled, value: value);
     }
 
     protected override Widget Build(BuildContext context)
@@ -45,7 +45,8 @@ public sealed class AdwLinkButton : ComposedWidget
         // the affordance, and hover only brightens the hue
         // (`HSL(from $link_color h calc(s * 1.1) calc(l * 1.1))`).
         var hover = accent.Lighten(0.1f);
-        var label = new LabelWidget(Label, AdwTypography.Body, accent) { MaxLines = 1 };
+        var label =
+            new LabelWidget(text: Label, style: AdwTypography.Body, color: accent) { MaxLines = 1 };
         var underline = new Container {
             Height = 1f,
             Background = accent,
@@ -57,20 +58,20 @@ public sealed class AdwLinkButton : ComposedWidget
             SemanticsLabel = Label,
             OnPressed = () => OnPressed?.Invoke(),
             Child = new ConstrainedBox(
-                new Constraints(minHeight: AdwMetrics.ButtonHeight),
-                new Align(
-                    Alignment.Center,
-                    new Padding(
-                        EdgeInsets.Symmetric(Spacing.Sm),
+                constraints: new Constraints(minHeight: AdwMetrics.ButtonHeight),
+                child: new Align(
+                    alignment: Alignment.Center,
+                    child: new Padding(
+                        padding: EdgeInsets.Symmetric(Spacing.Sm),
                         // Stack sizes to the label; the positioned underline spans exactly the
                         // label's width. (A Stretch Column here inflated the label to the full
                         // row width, collapsing sibling links onto each other.)
-                        new Stack {
+                        child: new Stack {
                             Children = {
                                 label,
                                 new Positioned(
-                                    underline,
-                                    0,
+                                    child: underline,
+                                    left: 0,
                                     right: 0,
                                     bottom: 0,
                                     height: 1
@@ -100,6 +101,8 @@ public sealed class AdwLinkButton : ComposedWidget
             fill.Target(pressable.Hovered && !pressable.Pressed ? hover : accent);
         };
 
-        return Enabled ? pressable : new Opacity(AdwStyle.DisabledOpacity, pressable);
+        return Enabled
+            ? pressable
+            : new Opacity(opacity: AdwStyle.DisabledOpacity, child: pressable);
     }
 }

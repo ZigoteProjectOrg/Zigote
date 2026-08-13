@@ -54,15 +54,23 @@ let private nextId = signal 4
 
 let private todos =
     signal
-        [ { Id = 1
-            Text = "Write the F# layer"
-            Done = true }
-          { Id = 2
-            Text = "Dogfood it in a gallery"
-            Done = false }
-          { Id = 3
-            Text = "Ship it"
-            Done = false } ]
+        [
+            {
+                Id = 1
+                Text = "Write the F# layer"
+                Done = true
+            }
+            {
+                Id = 2
+                Text = "Dogfood it in a gallery"
+                Done = false
+            }
+            {
+                Id = 3
+                Text = "Ship it"
+                Done = false
+            }
+        ]
 
 let private timerOn = signal false
 let private seconds = signal 0
@@ -84,19 +92,20 @@ let private remaining =
 /// `Signal.map` — a derived value auto-tracks its single source. These react in lock-step with `count`.
 let private doubled = count |> Signal.map (fun c -> c * 2)
 
-let private parity =
-    count |> Signal.map (fun c -> if c % 2 = 0 then "even" else "odd")
+let private parity = count |> Signal.map (fun c -> if c % 2 = 0 then "even" else "odd")
 
 // ── effects + commands (just set signals) ────────────────────────────────────
 
 let private rng = Random()
 
 let private quotes =
-    [| "Simplicity is the soul of efficiency."
-       "Make illegal states unrepresentable."
-       "First, solve the problem. Then, write the code."
-       "Functional core, imperative shell."
-       "There is no silver bullet." |]
+    [|
+        "Simplicity is the soul of efficiency."
+        "Make illegal states unrepresentable."
+        "First, solve the problem. Then, write the code."
+        "Functional core, imperative shell."
+        "There is no silver bullet."
+    |]
 
 /// A model-driven Effect: while `timerOn` is true a background timer ticks `seconds` once a second;
 /// the effect's cleanup disposes it, so toggling off (or app teardown) stops it — no reschedule races.
@@ -131,9 +140,13 @@ let private addTodo () =
         batch (fun () ->
             todos.Update(fun ts ->
                 ts
-                @ [ { Id = nextId.Value
-                      Text = txt
-                      Done = false } ])
+                @ [
+                    {
+                        Id = nextId.Value
+                        Text = txt
+                        Done = false
+                    }
+                ])
 
             nextId.Update((+) 1)
             newTodo.Value <- "")
@@ -155,15 +168,13 @@ let private rb = signal 4f
 let private rsum = Signal.map2 (fun a b -> a + b) ra rb // two sources → one derived
 let private rproduct = Signal.map2 (fun a b -> a * b) ra rb
 
-let private rformula =
-    rsum |> Signal.map (fun s -> $"chained: (a + b) doubled = %.0f{s * 2f}") // computed-of-computed
+let private rformula = rsum |> Signal.map (fun s -> $"chained: (a + b) doubled = %.0f{s * 2f}") // computed-of-computed
 
 let private opChoice = signal 0 // 0 = Sum, 1 = Product
 
 /// `Signal.bind` — `tracked` follows ONLY the currently-selected derived (dynamic dependency): moving
 /// the sliders updates it via whichever source `opChoice` picks; the other source is not a dependency.
-let private tracked =
-    opChoice |> Signal.bind (fun i -> if i = 0 then rsum else rproduct)
+let private tracked = opChoice |> Signal.bind (fun i -> if i = 0 then rsum else rproduct)
 
 // Demo 2 — glitch-free fan-out (a diamond): base → {left, right} → one watcher.
 let private baseN = signal 0
@@ -219,36 +230,42 @@ type SortKey =
 /// An instrument owns its live signals AND the derivations off them — a computed per instrument
 /// beats one keyed table, because a price tick then wakes exactly that symbol's cells.
 type Instrument =
-    { Symbol: string
-      Name: string
-      Price: Signal<float>
-      Prev: Signal<float>
-      Shares: Signal<int>
-      Value: Computed<float>
-      ChangePct: Computed<float> }
+    {
+        Symbol: string
+        Name: string
+        Price: Signal<float>
+        Prev: Signal<float>
+        Shares: Signal<int>
+        Value: Computed<float>
+        ChangePct: Computed<float>
+    }
 
 let private mkInstr sym nm px sh =
     let price, prev, shares = signal px, signal px, signal sh
 
-    { Symbol = sym
-      Name = nm
-      Price = price
-      Prev = prev
-      Shares = shares
-      Value = computed (fun () -> price.Value * float shares.Value)
-      ChangePct =
-        computed (fun () ->
-            let p = prev.Value
-            if p = 0.0 then 0.0 else (price.Value - p) / p * 100.0) }
+    {
+        Symbol = sym
+        Name = nm
+        Price = price
+        Prev = prev
+        Shares = shares
+        Value = computed (fun () -> price.Value * float shares.Value)
+        ChangePct =
+            computed (fun () ->
+                let p = prev.Value
+                if p = 0.0 then 0.0 else (price.Value - p) / p * 100.0)
+    }
 
 let private instruments =
-    [ mkInstr "AAPL" "Apple" 189.0 40
-      mkInstr "MSFT" "Microsoft" 421.0 15
-      mkInstr "NVDA" "Nvidia" 121.0 120
-      mkInstr "TSLA" "Tesla" 248.0 0
-      mkInstr "AMZN" "Amazon" 178.0 10
-      mkInstr "GOOG" "Alphabet" 174.0 0
-      mkInstr "META" "Meta" 503.0 8 ]
+    [
+        mkInstr "AAPL" "Apple" 189.0 40
+        mkInstr "MSFT" "Microsoft" 421.0 15
+        mkInstr "NVDA" "Nvidia" 121.0 120
+        mkInstr "TSLA" "Tesla" 248.0 0
+        mkInstr "AMZN" "Amazon" 178.0 10
+        mkInstr "GOOG" "Alphabet" 174.0 0
+        mkInstr "META" "Meta" 503.0 8
+    ]
 
 // UI state signals.
 let private query = signal ""
@@ -257,8 +274,7 @@ let private heldOnly = signal false
 let private selected = signal (Set.empty: Set<string>)
 
 // DIAMOND fan-in: reads every instrument's value → one batched tick settles it ONCE.
-let private portfolioValue =
-    computed (fun () -> instruments |> List.sumBy (fun i -> i.Value.Value))
+let private portfolioValue = computed (fun () -> instruments |> List.sumBy (fun i -> i.Value.Value))
 
 let private dayPL =
     computed (fun () ->
@@ -354,13 +370,15 @@ let private startTicker () =
 
 /// Distinct series colours for the per-stock lines (cycled if stocks outnumber colours).
 let private seriesColors =
-    [| Color(0.36f, 0.72f, 1.00f)
-       Color(0.35f, 0.80f, 0.50f)
-       Color(0.98f, 0.62f, 0.30f)
-       Color(0.93f, 0.45f, 0.58f)
-       Color(0.68f, 0.56f, 0.98f)
-       Color(0.95f, 0.82f, 0.35f)
-       Color(0.42f, 0.85f, 0.85f) |]
+    [|
+        Color(0.36f, 0.72f, 1.00f)
+        Color(0.35f, 0.80f, 0.50f)
+        Color(0.98f, 0.62f, 0.30f)
+        Color(0.93f, 0.45f, 0.58f)
+        Color(0.68f, 0.56f, 0.98f)
+        Color(0.95f, 0.82f, 0.35f)
+        Color(0.42f, 0.85f, 0.85f)
+    |]
 
 /// A live multi-series price chart — ONE line per stock, all in one plot. It subclasses the
 /// retained `Chart` and, each Measure (UI thread), pulls any new history snapshot into every line
@@ -400,7 +418,9 @@ type private PricesChart() as this =
                 let b = rows.[0].[s]
                 let baseP = if b = 0.0 then 1.0 else b
 
-                marks.[s].Data <- Array.init rows.Length (fun t -> ChartSample(float t, rows.[t].[s] / baseP * 100.0))
+                marks.[s].Data <-
+                    Array.init rows.Length (fun t ->
+                        ChartSample(float t, rows.[t].[s] / baseP * 100.0))
 
             this.InvalidateData(false) // mark layout dirty → re-resolve the domain from new data
         | _ -> ()
@@ -490,7 +510,13 @@ type private CubeWidget() =
         let tex = e.Render3D(w, h)
 
         if tex <> 0UL then
-            paint.AddImage(this.Bounds, int w, int h, Unchecked.defaultof<byte[]>, System.Nullable<uint64> tex)
+            paint.AddImage(
+                this.Bounds,
+                int w,
+                int h,
+                Unchecked.defaultof<byte[]>,
+                System.Nullable<uint64> tex
+            )
 
 
 // ── view: plain C# widgets, with `watch` wherever a value is live ─────────────
@@ -578,71 +604,109 @@ let private tabButton (t: Tab) (label: string) =
         ))
 
 let private counterTab () =
-    [ section
-          "Counter"
-          [ watch (fun () -> Text(string count.Value, hero))
-            // Derived readouts via `Signal.map` — they update in lock-step with the counter.
-            watch (fun () -> Text($"doubled {doubled.Value}  ·  {parity.Value}", muted))
-            Row(
-                mainAxisSize = MainAxisSize.Min,
-                spacing = 8f,
-                children =
-                    [ w (Button("-", addBy -1))
-                      Button("+", addBy 1)
-                      Button("Reset", (fun () -> count.Value <- 0), Style = ButtonStyle.Flat) ]
-            )
-            watch (fun () -> Text($"Step: {int step.Value}", muted))
-            // Uncontrolled slider: seeds from `step` with an UNTRACKED read (rule 1) and writes it on
-            // drag; the "Step" label above reacts. A tracked `step.Value` here would make the whole tab
-            // a dependency, so every drag frame would rebuild it — and the drag would drop.
-            sized 240f (Slider(step.Peek(), min = 1f, max = 10f, onChanged = (fun v -> step.Value <- v))) ] ]
+    [
+        section
+            "Counter"
+            [
+                watch (fun () -> Text(string count.Value, hero))
+                // Derived readouts via `Signal.map` — they update in lock-step with the counter.
+                watch (fun () -> Text($"doubled {doubled.Value}  ·  {parity.Value}", muted))
+                Row(
+                    mainAxisSize = MainAxisSize.Min,
+                    spacing = 8f,
+                    children =
+                        [
+                            w (Button("-", addBy -1))
+                            Button("+", addBy 1)
+                            Button("Reset", (fun () -> count.Value <- 0), Style = ButtonStyle.Flat)
+                        ]
+                )
+                watch (fun () -> Text($"Step: {int step.Value}", muted))
+                // Uncontrolled slider: seeds from `step` with an UNTRACKED read (rule 1) and writes it on
+                // drag; the "Step" label above reacts. A tracked `step.Value` here would make the whole tab
+                // a dependency, so every drag frame would rebuild it — and the drag would drop.
+                sized
+                    240f
+                    (Slider(
+                        step.Peek(),
+                        min = 1f,
+                        max = 10f,
+                        onChanged = (fun v -> step.Value <- v)
+                    ))
+            ]
+    ]
 
 let private controlsTab () =
-    [ section
-          "Text input"
-          // Uncontrolled (rules 1 + 2): the field owns the text — and therefore the caret and focus —
-          // and mirrors each keystroke into `name`. The greeting below is what reacts.
-          [ TextField(onChanged = (fun v -> name.Value <- v), Text = name.Peek(), Hint = "Your name")
-            watch (fun () -> Text(greeting.Value, muted)) ]
-      section
-          "Toggles"
-          // Also uncontrolled: a toggle animates from its own state, so rebuilding it on every change
-          // (a `watch` around it) would replace the widget mid-animation and make it snap instead.
-          [ Row(
-                mainAxisSize = MainAxisSize.Min,
-                spacing = 8f,
-                children =
-                    [ w (Checkbox(agree.Peek(), fun v -> agree.Value <- v))
-                      Text "Accept the functional style" ]
-            )
-            Row(
-                mainAxisSize = MainAxisSize.Min,
-                spacing = 8f,
-                children =
-                    [ w (Switch(notify.Peek(), fun v -> notify.Value <- v))
-                      watch (fun () ->
-                          Text(
-                              if notify.Value then
-                                  "Notifications on"
-                              else
-                                  "Notifications off"
-                          )) ]
-            ) ]
-      section
-          "Volume"
-          [ sized 280f (Slider(volume.Peek(), min = 0f, max = 100f, onChanged = (fun v -> volume.Value <- v)))
-            watch (fun () -> sized 280f (ProgressBar(volume.Value / 100f)))
-            watch (fun () -> Text($"%.0f{volume.Value} / 100", muted)) ]
-      section
-          "Dropdown"
-          [ sized
-                200f
-                (Dropdown<string>(
-                    [| "Apple"; "Banana"; "Cherry"; "Durian" |],
-                    fruit.Peek(),
-                    fun i _ -> fruit.Value <- i
-                ))
-            watch (fun () -> Text($"Picked index {fruit.Value}", muted)) ] ]
+    [
+        section
+            "Text input"
+            // Uncontrolled (rules 1 + 2): the field owns the text — and therefore the caret and focus —
+            // and mirrors each keystroke into `name`. The greeting below is what reacts.
+            [
+                TextField(
+                    onChanged = (fun v -> name.Value <- v),
+                    Text = name.Peek(),
+                    Hint = "Your name"
+                )
+                watch (fun () -> Text(greeting.Value, muted))
+            ]
+        section
+            "Toggles"
+            // Also uncontrolled: a toggle animates from its own state, so rebuilding it on every change
+            // (a `watch` around it) would replace the widget mid-animation and make it snap instead.
+            [
+                Row(
+                    mainAxisSize = MainAxisSize.Min,
+                    spacing = 8f,
+                    children =
+                        [
+                            w (Checkbox(agree.Peek(), fun v -> agree.Value <- v))
+                            Text "Accept the functional style"
+                        ]
+                )
+                Row(
+                    mainAxisSize = MainAxisSize.Min,
+                    spacing = 8f,
+                    children =
+                        [
+                            w (Switch(notify.Peek(), fun v -> notify.Value <- v))
+                            watch (fun () ->
+                                Text(
+                                    if notify.Value then
+                                        "Notifications on"
+                                    else
+                                        "Notifications off"
+                                ))
+                        ]
+                )
+            ]
+        section
+            "Volume"
+            [
+                sized
+                    280f
+                    (Slider(
+                        volume.Peek(),
+                        min = 0f,
+                        max = 100f,
+                        onChanged = (fun v -> volume.Value <- v)
+                    ))
+                watch (fun () -> sized 280f (ProgressBar(volume.Value / 100f)))
+                watch (fun () -> Text($"%.0f{volume.Value} / 100", muted))
+            ]
+        section
+            "Dropdown"
+            [
+                sized
+                    200f
+                    (Dropdown<string>(
+                        [| "Apple"; "Banana"; "Cherry"; "Durian" |],
+                        fruit.Peek(),
+                        fun i _ -> fruit.Value <- i
+                    ))
+                watch (fun () -> Text($"Picked index {fruit.Value}", muted))
+            ]
+    ]
 
 // ── todo rows: retained instances, reused across list rebuilds ───────────────
 //
@@ -686,89 +750,115 @@ let private todoRow (id: int) : Widget =
             children =
                 // The checkbox is uncontrolled (it is the only writer of this item's Done flag),
                 // so it animates from its own state; the label below is what follows the model.
-                [ w (Checkbox(isDone, setDone id))
-                  Expanded(
-                      watch (fun () ->
-                          match item () with
-                          | Some t when t.Done -> Text(t.Text, doneStyle)
-                          | Some t -> Text(t.Text)
-                          | None -> Text "")
-                  )
-                  Button(label = "×", onPressed = (fun () -> removeTodo id), Style = ButtonStyle.Flat) ]
+                [
+                    w (Checkbox(isDone, setDone id))
+                    Expanded(
+                        watch (fun () ->
+                            match item () with
+                            | Some t when t.Done -> Text(t.Text, doneStyle)
+                            | Some t -> Text(t.Text)
+                            | None -> Text "")
+                    )
+                    Button(
+                        label = "×",
+                        onPressed = (fun () -> removeTodo id),
+                        Style = ButtonStyle.Flat
+                    )
+                ]
         ))
 
 let private todosTab () =
-    [ section
-          "Todos (retained rows)"
-          [ Row(
-                crossAxisAlignment = CrossAxisAlignment.Center,
-                spacing = 8f,
-                children =
-                    [ w (Expanded newTodoField)
-                      watch (fun () -> Button("Add", submitTodo, Enabled = canAdd.Value)) ]
-            )
-            // The list STRUCTURE re-runs when `todos` changes; the row instances are reused.
-            watch (fun () ->
-                let live = todos.Value
-                // A cache keyed off a list needs eviction, or deleted rows leak for the app's lifetime.
-                let gone =
-                    todoRows.Keys
-                    |> Seq.filter (fun k -> live |> List.forall (fun t -> t.Id <> k))
-                    |> Seq.toArray
+    [
+        section
+            "Todos (retained rows)"
+            [
+                Row(
+                    crossAxisAlignment = CrossAxisAlignment.Center,
+                    spacing = 8f,
+                    children =
+                        [
+                            w (Expanded newTodoField)
+                            watch (fun () -> Button("Add", submitTodo, Enabled = canAdd.Value))
+                        ]
+                )
+                // The list STRUCTURE re-runs when `todos` changes; the row instances are reused.
+                watch (fun () ->
+                    let live = todos.Value
+                    // A cache keyed off a list needs eviction, or deleted rows leak for the app's lifetime.
+                    let gone =
+                        todoRows.Keys
+                        |> Seq.filter (fun k -> live |> List.forall (fun t -> t.Id <> k))
+                        |> Seq.toArray
 
-                for id in gone do
-                    todoRows.Remove id |> ignore
+                    for id in gone do
+                        todoRows.Remove id |> ignore
 
-                Column(
-                    crossAxisAlignment = CrossAxisAlignment.Stretch,
+                    Column(
+                        crossAxisAlignment = CrossAxisAlignment.Stretch,
+                        mainAxisSize = MainAxisSize.Min,
+                        spacing = 6f,
+                        children = [ for item in live -> todoRow item.Id ]
+                    ))
+                Row(
                     mainAxisSize = MainAxisSize.Min,
-                    spacing = 6f,
-                    children = [ for item in live -> todoRow item.Id ]
-                ))
-            Row(
-                mainAxisSize = MainAxisSize.Min,
-                spacing = 8f,
-                children =
-                    [ w (
-                          Button(
-                              "Shuffle",
-                              (fun () -> todos.Update(List.sortBy (fun _ -> rng.Next()))),
-                              Style = ButtonStyle.Outlined
-                          )
-                      )
-                      Button(
-                          "Clear done",
-                          (fun () -> todos.Update(List.filter (fun t -> not t.Done))),
-                          Style = ButtonStyle.Outlined
-                      ) ]
-            )
-            watch (fun () -> Text($"{remaining.Value} remaining", muted)) ] ]
+                    spacing = 8f,
+                    children =
+                        [
+                            w (
+                                Button(
+                                    "Shuffle",
+                                    (fun () -> todos.Update(List.sortBy (fun _ -> rng.Next()))),
+                                    Style = ButtonStyle.Outlined
+                                )
+                            )
+                            Button(
+                                "Clear done",
+                                (fun () -> todos.Update(List.filter (fun t -> not t.Done))),
+                                Style = ButtonStyle.Outlined
+                            )
+                        ]
+                )
+                watch (fun () -> Text($"{remaining.Value} remaining", muted))
+            ]
+    ]
 
 let private effectsTab () =
-    [ section
-          "Timer (Effect + Signal)"
-          [ watch (fun () -> Text($"{seconds.Value} s", display))
-            watch (fun () -> Button((if timerOn.Value then "Stop" else "Start"), fun () -> timerOn.Update not)) ]
-      section
-          "Async fetch"
-          [ watch (fun () ->
-                if loading.Value then
-                    sized 240f (ProgressBar(Nullable())) // indeterminate
-                else
-                    w (Button("Fetch a quote", fetch)))
-            watch (fun () ->
-                Text(
-                    (match quote.Value with
-                     | Some q -> $"\"{q}\""
-                     | None -> "No quote yet."),
-                    italic
-                )) ] ]
+    [
+        section
+            "Timer (Effect + Signal)"
+            [
+                watch (fun () -> Text($"{seconds.Value} s", display))
+                watch (fun () ->
+                    Button(
+                        (if timerOn.Value then "Stop" else "Start"),
+                        fun () -> timerOn.Update not
+                    ))
+            ]
+        section
+            "Async fetch"
+            [
+                watch (fun () ->
+                    if loading.Value then
+                        sized 240f (ProgressBar(Nullable())) // indeterminate
+                    else
+                        w (Button("Fetch a quote", fetch)))
+                watch (fun () ->
+                    Text(
+                        (match quote.Value with
+                         | Some q -> $"\"{q}\""
+                         | None -> "No quote yet."),
+                        italic
+                    ))
+            ]
+    ]
 
 /// A labelled slider over a float signal: the label tracks the value, the slider is uncontrolled
 /// (seeded with an untracked `Peek`, per rule 1).
 let private sliderRow label (s: Signal<float32>) hi : Widget list =
-    [ watch (fun () -> Text($"{label} = %.0f{s.Value}", muted))
-      sized 220f (Slider(s.Peek(), min = 0f, max = hi, onChanged = (fun v -> s.Value <- v))) ]
+    [
+        watch (fun () -> Text($"{label} = %.0f{s.Value}", muted))
+        sized 220f (Slider(s.Peek(), min = 0f, max = hi, onChanged = (fun v -> s.Value <- v)))
+    ]
 
 /// Zero a demo's signals in one batch, so the reset itself settles the graph once.
 let private resetButton (zero: unit -> unit) : Widget =
@@ -776,65 +866,100 @@ let private resetButton (zero: unit -> unit) : Widget =
 
 /// The showcase: every section proves one property of the reactive graph, live.
 let private reactiveTab () =
-    [ section
-          "Combine & chain  (map2 → map → bind)"
-          ([ note
-                 "Two source signals feed derived values. `map2` combines them; a chained `map` derives off that result; `bind` tracks only whichever source the selector picks." ]
-           @ sliderRow "a" ra 10f
-           @ sliderRow "b" rb 10f
-           @ [ readout (fun () -> $"sum %.0f{rsum.Value}    ·    product %.0f{rproduct.Value}")
-               watch (fun () -> Text(rformula.Value, muted))
-               Row(
-                   crossAxisAlignment = CrossAxisAlignment.Center,
-                   mainAxisSize = MainAxisSize.Min,
-                   spacing = 8f,
-                   children =
-                       [ w (Text "track: ")
-                         sized
-                             150f
-                             (Dropdown<string>([| "Sum"; "Product" |], opChoice.Peek(), fun i _ -> opChoice.Value <- i)) ]
-               )
-               watch (fun () -> Text($"tracked = %.0f{tracked.Value}  (follows only the selected source)", italic)) ])
-      section
-          "Glitch-free fan-out  (a diamond)"
-          [ note
-                "base → left & right → one watcher. A single write settles BOTH branches before the watcher runs, so it fires exactly once per change — never once-per-branch."
-            watch (fun () -> Text($"base {baseN.Value}   →   left {dLeft.Value}   ·   right {dRight.Value}"))
-            readout (fun () -> $"watcher ran {watcherRuns.Value}×")
-            Row(
-                mainAxisSize = MainAxisSize.Min,
-                spacing = 8f,
-                children =
-                    [ w (Button("base + 1", fun () -> baseN.Update((+) 1)))
-                      resetButton (fun () ->
-                          baseN.Value <- 0
-                          watcherRuns.Value <- 0) ]
-            ) ]
-      section
-          "Batch vs. unbatched"
-          [ note
-                "Three signals feed one total. Batched writes collapse into a single downstream recompute; unbatched writes each trigger their own — watch the counter."
-            watch (fun () -> Text($"x {bx.Value} · y {by.Value} · z {bz.Value}   →   total {btotal.Value}"))
-            readout (fun () -> $"total recomputed {totalRuns.Value}×")
-            Row(
-                mainAxisSize = MainAxisSize.Min,
-                spacing = 8f,
-                children =
-                    [ w (Button("bump all (batched: +1)", fun () -> batch bumpAll))
-                      Button("bump all (unbatched: +3)", bumpAll, Style = ButtonStyle.Outlined)
-                      resetButton (fun () ->
-                          bx.Value <- 0
-                          by.Value <- 0
-                          bz.Value <- 0
-                          totalRuns.Value <- 0) ]
-            ) ]
-      section
-          "Untracked reads  (Peek)"
-          ([ note
-                 "combined = tracked + peek(other). Moving 'tracked' recomputes and picks up the other's current value; moving 'other' alone does NOT — combined stays put until 'tracked' moves again." ]
-           @ sliderRow "tracked" tSig 20f
-           @ sliderRow "other (peeked)" pSig 20f
-           @ [ readout (fun () -> $"combined %.0f{combined.Value}    ·    recomputed {combinedRuns.Value}×") ]) ]
+    [
+        section
+            "Combine & chain  (map2 → map → bind)"
+            ([
+                note
+                    "Two source signals feed derived values. `map2` combines them; a chained `map` derives off that result; `bind` tracks only whichever source the selector picks."
+             ]
+             @ sliderRow "a" ra 10f
+             @ sliderRow "b" rb 10f
+             @ [
+                 readout (fun () -> $"sum %.0f{rsum.Value}    ·    product %.0f{rproduct.Value}")
+                 watch (fun () -> Text(rformula.Value, muted))
+                 Row(
+                     crossAxisAlignment = CrossAxisAlignment.Center,
+                     mainAxisSize = MainAxisSize.Min,
+                     spacing = 8f,
+                     children =
+                         [
+                             w (Text "track: ")
+                             sized
+                                 150f
+                                 (Dropdown<string>(
+                                     [| "Sum"; "Product" |],
+                                     opChoice.Peek(),
+                                     fun i _ -> opChoice.Value <- i
+                                 ))
+                         ]
+                 )
+                 watch (fun () ->
+                     Text(
+                         $"tracked = %.0f{tracked.Value}  (follows only the selected source)",
+                         italic
+                     ))
+             ])
+        section
+            "Glitch-free fan-out  (a diamond)"
+            [
+                note
+                    "base → left & right → one watcher. A single write settles BOTH branches before the watcher runs, so it fires exactly once per change — never once-per-branch."
+                watch (fun () ->
+                    Text($"base {baseN.Value}   →   left {dLeft.Value}   ·   right {dRight.Value}"))
+                readout (fun () -> $"watcher ran {watcherRuns.Value}×")
+                Row(
+                    mainAxisSize = MainAxisSize.Min,
+                    spacing = 8f,
+                    children =
+                        [
+                            w (Button("base + 1", fun () -> baseN.Update((+) 1)))
+                            resetButton (fun () ->
+                                baseN.Value <- 0
+                                watcherRuns.Value <- 0)
+                        ]
+                )
+            ]
+        section
+            "Batch vs. unbatched"
+            [
+                note
+                    "Three signals feed one total. Batched writes collapse into a single downstream recompute; unbatched writes each trigger their own — watch the counter."
+                watch (fun () ->
+                    Text($"x {bx.Value} · y {by.Value} · z {bz.Value}   →   total {btotal.Value}"))
+                readout (fun () -> $"total recomputed {totalRuns.Value}×")
+                Row(
+                    mainAxisSize = MainAxisSize.Min,
+                    spacing = 8f,
+                    children =
+                        [
+                            w (Button("bump all (batched: +1)", fun () -> batch bumpAll))
+                            Button(
+                                "bump all (unbatched: +3)",
+                                bumpAll,
+                                Style = ButtonStyle.Outlined
+                            )
+                            resetButton (fun () ->
+                                bx.Value <- 0
+                                by.Value <- 0
+                                bz.Value <- 0
+                                totalRuns.Value <- 0)
+                        ]
+                )
+            ]
+        section
+            "Untracked reads  (Peek)"
+            ([
+                note
+                    "combined = tracked + peek(other). Moving 'tracked' recomputes and picks up the other's current value; moving 'other' alone does NOT — combined stays put until 'tracked' moves again."
+             ]
+             @ sliderRow "tracked" tSig 20f
+             @ sliderRow "other (peeked)" pSig 20f
+             @ [
+                 readout (fun () ->
+                     $"combined %.0f{combined.Value}    ·    recomputed {combinedRuns.Value}×")
+             ])
+    ]
 
 // ── desk rows: retained per symbol (same reuse rule as the todo rows) ────────
 //
@@ -854,32 +979,39 @@ let private deskRow (i: Instrument) : Widget =
                 crossAxisAlignment = CrossAxisAlignment.Center,
                 spacing = 8f,
                 children =
-                    [ watch (fun () -> Checkbox(Set.contains i.Symbol selected.Value, setSelected i.Symbol))
-                      sized 64f (Text(i.Symbol, heading))
-                      w (Expanded(Text(i.Name, muted, maxLines = 1)))
-                      // fine-grained: price cell binds ONLY i.Price
-                      sized 84f (watch (fun () -> Text($"%.2f{i.Price.Value}")))
-                      // fine-grained: % change binds i.Price + i.Prev (via i.ChangePct)
-                      sized
-                          80f
-                          (watch (fun () ->
-                              let p = i.ChangePct.Value
-                              Text($"%+.2f{p}%%", TextStyle(color = (if p >= 0.0 then up else down)))))
-                      // editable position → i.Shares (drives value + portfolio, not filter/sort
-                      // order). Seeded UNTRACKED and never rebuilt, so an edit in progress keeps
-                      // its focus and caret while the table re-sorts around it.
-                      sized
-                          52f
-                          (TextField(
-                              onChanged =
-                                  (fun s ->
-                                      match Int32.TryParse s with
-                                      | true, n -> i.Shares.Value <- max 0 n
-                                      | _ -> ()),
-                              Text = string (i.Shares.Peek())
-                          ))
-                      // fine-grained: market value binds i.Value (price × shares)
-                      sized 96f (watch (fun () -> Text(money i.Value.Value, heading))) ]
+                    [
+                        watch (fun () ->
+                            Checkbox(Set.contains i.Symbol selected.Value, setSelected i.Symbol))
+                        sized 64f (Text(i.Symbol, heading))
+                        w (Expanded(Text(i.Name, muted, maxLines = 1)))
+                        // fine-grained: price cell binds ONLY i.Price
+                        sized 84f (watch (fun () -> Text($"%.2f{i.Price.Value}")))
+                        // fine-grained: % change binds i.Price + i.Prev (via i.ChangePct)
+                        sized
+                            80f
+                            (watch (fun () ->
+                                let p = i.ChangePct.Value
+
+                                Text(
+                                    $"%+.2f{p}%%",
+                                    TextStyle(color = (if p >= 0.0 then up else down))
+                                )))
+                        // editable position → i.Shares (drives value + portfolio, not filter/sort
+                        // order). Seeded UNTRACKED and never rebuilt, so an edit in progress keeps
+                        // its focus and caret while the table re-sorts around it.
+                        sized
+                            52f
+                            (TextField(
+                                onChanged =
+                                    (fun s ->
+                                        match Int32.TryParse s with
+                                        | true, n -> i.Shares.Value <- max 0 n
+                                        | _ -> ()),
+                                Text = string (i.Shares.Peek())
+                            ))
+                        // fine-grained: market value binds i.Value (price × shares)
+                        sized 96f (watch (fun () -> Text(money i.Value.Value, heading)))
+                    ]
             ),
             onTap = fun () -> setSelected i.Symbol (not (Set.contains i.Symbol (selected.Peek())))
         ))
@@ -897,84 +1029,108 @@ let private sortOptions =
     [| "Sort: Value", ByValue; "Sort: Change", ByChange; "Sort: Symbol", BySymbol |]
 
 let private deskTab () =
-    [ section
-          "Portfolio"
-          [ Row(
-                crossAxisAlignment = CrossAxisAlignment.Start,
-                spacing = 28f,
-                children =
-                    [ w (stat "VALUE" (fun () -> Text(money portfolioValue.Value, display)))
-                      stat "DAY P/L" (fun () ->
-                          let pl = dayPL.Value
+    [
+        section
+            "Portfolio"
+            [
+                Row(
+                    crossAxisAlignment = CrossAxisAlignment.Start,
+                    spacing = 28f,
+                    children =
+                        [
+                            w (stat "VALUE" (fun () -> Text(money portfolioValue.Value, display)))
+                            stat "DAY P/L" (fun () ->
+                                let pl = dayPL.Value
 
-                          Text(
-                              (if pl >= 0.0 then "+" else "-") + money (abs pl),
-                              TextStyle(
-                                  fontSize = 30.0,
-                                  fontWeight = FontWeight.Bold,
-                                  color = (if pl >= 0.0 then up else down)
-                              )
-                          ))
-                      Spacer()
-                      stat "GRAPH SETTLED" (fun () -> Text($"{deskSettles.Value}×", display)) ]
-            )
-            // Real-time chart: a retained C# Chart subclass, fed on the UI thread from the history
-            // ring. One line per stock; hover for the tooltip.
-            SizedBox(height = 220f, child = PricesChart())
-            note
-                "Every price is its own signal; a background timer rewrites all seven inside one `batch`, so the diamond (portfolio value) and its watcher settle EXACTLY ONCE per heartbeat — the counter climbs by 1, not by 7. The chart streams every stock live, indexed to 100 (relative performance); edit a Shares field and the value + P/L react without re-sorting." ]
-      section
-          "Positions  (fine-grained cells · retained rows · live re-sort)"
-          [ Row(
-                crossAxisAlignment = CrossAxisAlignment.Center,
-                spacing = 12f,
-                children =
-                    [ w (Expanded(TextField(onChanged = (fun v -> query.Value <- v), Hint = "Filter symbol / name")))
-                      Checkbox(heldOnly.Peek(), fun b -> heldOnly.Value <- b)
-                      Text "Held"
-                      sized
-                          160f
-                          (Dropdown<string>(
-                              sortOptions |> Array.map fst,
-                              sortOptions |> Array.findIndex (fun (_, k) -> k = sortKey.Peek()),
-                              fun i _ -> sortKey.Value <- snd sortOptions[i]
-                          )) ]
-            )
-            // The list STRUCTURE re-runs when `sorted` changes; rows are retained instances, so each
-            // row widget (and any in-flight Shares edit) survives a live re-sort as prices move.
-            watch (fun () ->
-                Column(
-                    crossAxisAlignment = CrossAxisAlignment.Stretch,
-                    mainAxisSize = MainAxisSize.Min,
-                    spacing = 6f,
-                    children = [ for i in sorted.Value -> deskRow i ]
-                ))
-            Divider()
-            // selection footer — depends on `selected` + selected values only; price ticks on
-            // unselected symbols never wake it.
-            watch (fun () ->
-                Text(
-                    $"{Set.count selected.Value} selected  ·  {money selectionValue.Value}   (click a row to toggle)",
-                    muted
-                )) ] ]
+                                Text(
+                                    (if pl >= 0.0 then "+" else "-") + money (abs pl),
+                                    TextStyle(
+                                        fontSize = 30.0,
+                                        fontWeight = FontWeight.Bold,
+                                        color = (if pl >= 0.0 then up else down)
+                                    )
+                                ))
+                            Spacer()
+                            stat "GRAPH SETTLED" (fun () -> Text($"{deskSettles.Value}×", display))
+                        ]
+                )
+                // Real-time chart: a retained C# Chart subclass, fed on the UI thread from the history
+                // ring. One line per stock; hover for the tooltip.
+                SizedBox(height = 220f, child = PricesChart())
+                note
+                    "Every price is its own signal; a background timer rewrites all seven inside one `batch`, so the diamond (portfolio value) and its watcher settle EXACTLY ONCE per heartbeat — the counter climbs by 1, not by 7. The chart streams every stock live, indexed to 100 (relative performance); edit a Shares field and the value + P/L react without re-sorting."
+            ]
+        section
+            "Positions  (fine-grained cells · retained rows · live re-sort)"
+            [
+                Row(
+                    crossAxisAlignment = CrossAxisAlignment.Center,
+                    spacing = 12f,
+                    children =
+                        [
+                            w (
+                                Expanded(
+                                    TextField(
+                                        onChanged = (fun v -> query.Value <- v),
+                                        Hint = "Filter symbol / name"
+                                    )
+                                )
+                            )
+                            Checkbox(heldOnly.Peek(), fun b -> heldOnly.Value <- b)
+                            Text "Held"
+                            sized
+                                160f
+                                (Dropdown<string>(
+                                    sortOptions |> Array.map fst,
+                                    sortOptions
+                                    |> Array.findIndex (fun (_, k) -> k = sortKey.Peek()),
+                                    fun i _ -> sortKey.Value <- snd sortOptions[i]
+                                ))
+                        ]
+                )
+                // The list STRUCTURE re-runs when `sorted` changes; rows are retained instances, so each
+                // row widget (and any in-flight Shares edit) survives a live re-sort as prices move.
+                watch (fun () ->
+                    Column(
+                        crossAxisAlignment = CrossAxisAlignment.Stretch,
+                        mainAxisSize = MainAxisSize.Min,
+                        spacing = 6f,
+                        children = [ for i in sorted.Value -> deskRow i ]
+                    ))
+                Divider()
+                // selection footer — depends on `selected` + selected values only; price ticks on
+                // unselected symbols never wake it.
+                watch (fun () ->
+                    Text(
+                        $"{Set.count selected.Value} selected  ·  {money selectionValue.Value}   (click a row to toggle)",
+                        muted
+                    ))
+            ]
+    ]
 
 let private cubeTab () =
-    [ section
-          "3D  (native wgpu render → widget)"
-          [ note
-                "A real cube from the engine's forward+ 3D pipeline: the scene (cube + key/fill lights + camera) is built via the Scene FFI, spun each frame, rendered off-screen with Render3D into a GPU texture, and composited into this widget with AddImage — full native 3D inside the 2D F# UI."
-            SizedBox(height = 360f, child = CubeWidget()) ] ]
+    [
+        section
+            "3D  (native wgpu render → widget)"
+            [
+                note
+                    "A real cube from the engine's forward+ 3D pipeline: the scene (cube + key/fill lights + camera) is built via the Scene FFI, spun each frame, rendered off-screen with Render3D into a GPU texture, and composited into this widget with AddImage — full native 3D inside the 2D F# UI."
+                SizedBox(height = 360f, child = CubeWidget())
+            ]
+    ]
 
 /// The one place a tab is declared: its label and its content builder. The bar and the router both
 /// read this list, so adding a tab is one line.
 let private tabs: (Tab * string * (unit -> Widget list)) list =
-    [ Counter, "Counter", counterTab
-      Controls, "Controls", controlsTab
-      Todos, "Todos", todosTab
-      Effects, "Effects", effectsTab
-      Reactive, "Reactive", reactiveTab
-      Desk, "Desk", deskTab
-      Cube, "3D", cubeTab ]
+    [
+        Counter, "Counter", counterTab
+        Controls, "Controls", controlsTab
+        Todos, "Todos", todosTab
+        Effects, "Effects", effectsTab
+        Reactive, "Reactive", reactiveTab
+        Desk, "Desk", deskTab
+        Cube, "3D", cubeTab
+    ]
 
 let private appView () : Widget =
     ColoredBox(
@@ -982,37 +1138,40 @@ let private appView () : Widget =
         Column(
             crossAxisAlignment = CrossAxisAlignment.Stretch,
             children =
-                [ w (
-                      Padding.All(
-                          16f,
-                          Row(
-                              crossAxisAlignment = CrossAxisAlignment.Center,
-                              spacing = 6f,
-                              children =
-                                  [ w (Text("Zigote.UI.FSharp", bold 20.0)); Spacer() ]
-                                  @ [ for t, label, _ in tabs -> tabButton t label ]
-                          )
-                      )
-                  )
-                  Divider()
-                  Expanded(
-                      ScrollView(
-                          Padding.All(
-                              16f,
-                              // The tab content re-runs only when `tab` changes; each inner watch
-                              // reacts to just its own signals.
-                              watch (fun () ->
-                                  let _, _, content = tabs |> List.find (fun (t, _, _) -> t = tab.Value)
+                [
+                    w (
+                        Padding.All(
+                            16f,
+                            Row(
+                                crossAxisAlignment = CrossAxisAlignment.Center,
+                                spacing = 6f,
+                                children =
+                                    [ w (Text("Zigote.UI.FSharp", bold 20.0)); Spacer() ]
+                                    @ [ for t, label, _ in tabs -> tabButton t label ]
+                            )
+                        )
+                    )
+                    Divider()
+                    Expanded(
+                        ScrollView(
+                            Padding.All(
+                                16f,
+                                // The tab content re-runs only when `tab` changes; each inner watch
+                                // reacts to just its own signals.
+                                watch (fun () ->
+                                    let _, _, content =
+                                        tabs |> List.find (fun (t, _, _) -> t = tab.Value)
 
-                                  Column(
-                                      mainAxisSize = MainAxisSize.Min,
-                                      crossAxisAlignment = CrossAxisAlignment.Stretch,
-                                      spacing = 12f,
-                                      children = content ()
-                                  ))
-                          )
-                      )
-                  ) ]
+                                    Column(
+                                        mainAxisSize = MainAxisSize.Min,
+                                        crossAxisAlignment = CrossAxisAlignment.Stretch,
+                                        spacing = 12f,
+                                        children = content ()
+                                    ))
+                            )
+                        )
+                    )
+                ]
         )
     )
 
@@ -1036,6 +1195,7 @@ let main _ =
     |> Host.run
         { AppConfig.create "Zigote F# Gallery (reactive)" ThemeData.Dark with
             // Enable the Shift+D debug menu (the app opts in; the F# layer stays DevTools-agnostic).
-            OnReady = fun app -> DevTools.Install(app, DevToolsProfile.TwoD) |> ignore }
+            OnReady = fun app -> DevTools.Install(app, DevToolsProfile.TwoD) |> ignore
+        }
 
     0

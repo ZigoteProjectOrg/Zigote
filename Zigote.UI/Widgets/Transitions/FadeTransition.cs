@@ -22,24 +22,24 @@ public sealed class FadeTransition(AnimationController controller, Widget? child
 
     public override Size Measure(Constraints c)
     {
-        _size = Child?.Measure(c) ?? new Size(0f, 0f);
+        _size = Child?.Measure(c) ?? new Size(width: 0f, height: 0f);
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         Child?.Layout(origin);
     }
 
     public override void Paint(PaintList paint)
     {
-        var alpha = Controller.Value;
+        float alpha = Controller.Value;
         if (alpha < 0.01f) return;
 
         if (alpha >= 0.999f)
@@ -56,7 +56,7 @@ public sealed class FadeTransition(AnimationController controller, Widget? child
     public override Widget? HitTest(Offset point)
     {
         if (Controller.Progress < 0.01f) return null;
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return Child?.HitTest(point) ?? this;
     }
 

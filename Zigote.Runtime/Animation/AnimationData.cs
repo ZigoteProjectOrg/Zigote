@@ -48,11 +48,11 @@ public sealed class AnimationChannel
         if (time >= Keys[^1].Time) return Keys[^1].Value;
 
         // Binary-search the surrounding key pair.
-        var lo = 0;
-        var hi = Keys.Count - 1;
+        int lo = 0;
+        int hi = Keys.Count - 1;
         while (hi - lo > 1)
         {
-            var mid = (lo + hi) >> 1;
+            int mid = (lo + hi) >> 1;
             if (Keys[mid].Time <= time) lo = mid;
             else hi = mid;
         }
@@ -61,32 +61,35 @@ public sealed class AnimationChannel
         var b = Keys[hi];
         if (Interpolation == AnimationInterp.Step) return a.Value;
 
-        var span = b.Time - a.Time;
-        var t = span > 1e-6f ? (time - a.Time) / span : 0f;
+        float span = b.Time - a.Time;
+        float t = span > 1e-6f ? (time - a.Time) / span : 0f;
         // CubicSpline is approximated as linear in this foundation (see ROADMAP.md → Animation).
         return Path == AnimationPath.Rotation
-            ? Nlerp(a.Value, b.Value, t)
-            : Lerp(a.Value, b.Value, t);
+            ? Nlerp(a: a.Value, b: b.Value, t: t)
+            : Lerp(a: a.Value, b: b.Value, t: t);
     }
 
     private static float[] Lerp(float[] a, float[] b, float t)
     {
-        var r = new float[a.Length];
-        for (var i = 0; i < a.Length; i++) r[i] = a[i] + (b[i] - a[i]) * t;
+        float[] r = new float[a.Length];
+        for (int i = 0; i < a.Length; i++) r[i] = a[i] + ((b[i] - a[i]) * t);
         return r;
     }
 
     private static float[] Nlerp(float[] a, float[] b, float t)
     {
         // Shortest-path normalized lerp of two quaternions [x,y,z,w].
-        var dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
-        var sign = dot < 0f ? -1f : 1f;
-        var r = new float[4];
-        for (var i = 0; i < 4; i++) r[i] = a[i] + (b[i] * sign - a[i]) * t;
-        var len = MathF.Sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2] + r[3] * r[3]);
+        float dot = (a[0] * b[0]) + (a[1] * b[1]) + (a[2] * b[2]) + (a[3] * b[3]);
+        float sign = dot < 0f ? -1f : 1f;
+        float[] r = new float[4];
+        for (int i = 0; i < 4; i++) r[i] = a[i] + (((b[i] * sign) - a[i]) * t);
+        float len = MathF.Sqrt((r[0] * r[0]) + (r[1] * r[1]) + (r[2] * r[2]) + (r[3] * r[3]));
         if (len > 1e-6f)
-            for (var i = 0; i < 4; i++)
+        {
+            for (int i = 0; i < 4; i++)
                 r[i] /= len;
+        }
+
         return r;
     }
 }
@@ -105,20 +108,22 @@ public sealed class AnimationClip
         var result = new Dictionary<string, TargetPose>();
         foreach (var ch in Channels)
         {
-            var v = ch.Sample(time);
+            float[] v = ch.Sample(time);
             if (v.Length == 0) continue;
-            result.TryGetValue(ch.TargetNodeName, out var pose);
+            result.TryGetValue(key: ch.TargetNodeName, value: out var pose);
             pose = ch.Path switch {
-                AnimationPath.Translation => pose with { Translation = new Vec3(v[0], v[1], v[2]) },
+                AnimationPath.Translation => pose with {
+                    Translation = new Vec3(x: v[0], y: v[1], z: v[2]),
+                },
                 AnimationPath.Rotation => pose with {
                     Rotation = new Quat(
-                        v[0],
-                        v[1],
-                        v[2],
-                        v[3]
+                        x: v[0],
+                        y: v[1],
+                        z: v[2],
+                        w: v[3]
                     ),
                 },
-                AnimationPath.Scale => pose with { Scale = new Vec3(v[0], v[1], v[2]) },
+                AnimationPath.Scale => pose with { Scale = new Vec3(x: v[0], y: v[1], z: v[2]) },
                 _ => pose,
             };
             result[ch.TargetNodeName] = pose;
@@ -143,15 +148,9 @@ public sealed class AnimationPlayer
     public bool Loop { get; set; } = true;
     public float Speed { get; set; } = 1f;
 
-    public void Play()
-    {
-        Playing = true;
-    }
+    public void Play() => Playing = true;
 
-    public void Pause()
-    {
-        Playing = false;
-    }
+    public void Pause() => Playing = false;
 
     public void Stop()
     {
@@ -159,15 +158,12 @@ public sealed class AnimationPlayer
         Time = 0f;
     }
 
-    public void Seek(float t)
-    {
-        Time = MathF.Max(0f, t);
-    }
+    public void Seek(float t) => Time = MathF.Max(x: 0f, y: t);
 
     public void Tick(float dt)
     {
         if (!Playing || Clip is null) return;
-        var dur = Clip.Duration;
+        float dur = Clip.Duration;
         Time += dt * Speed;
         if (dur > 0f && Time > dur) Time = Loop ? Time % dur : dur;
     }
@@ -178,19 +174,19 @@ public sealed class AnimationPlayer
         if (Clip is null) return;
         var poses = Clip.Sample(Time);
         if (poses.Count == 0) return;
-        ApplyRecursive(root, poses);
+        ApplyRecursive(node: root, poses: poses);
     }
 
     private static void ApplyRecursive(SceneNode node,
         Dictionary<string, AnimationClip.TargetPose> poses)
     {
-        if (poses.TryGetValue(node.Name, out var pose))
+        if (poses.TryGetValue(key: node.Name, value: out var pose))
         {
             if (pose.Translation is { } t) node.Position = t;
             if (pose.Rotation is { } r) node.Rotation = r;
             if (pose.Scale is { } s) node.Scale = s;
         }
 
-        foreach (var child in node.Children) ApplyRecursive(child, poses);
+        foreach (var child in node.Children) ApplyRecursive(node: child, poses: poses);
     }
 }

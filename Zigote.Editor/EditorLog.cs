@@ -34,30 +34,26 @@ public static class EditorLog
         DebugLog.CopyInto(Scratch);
         dest.Clear();
         if (dest.Capacity < Scratch.Count) dest.Capacity = Scratch.Count;
-        foreach (var e in Scratch) dest.Add(new LogEntry(ToSeverity(e.Level), e.Message));
+        foreach (var e in Scratch)
+            dest.Add(new LogEntry(Severity: ToSeverity(e.Level), Message: e.Message));
     }
 
     public static (int Error, int Warning, int Info) Counts()
     {
-        var (trace, debug, info, warning, error, fatal) = DebugLog.Counts();
+        (int trace, int debug, int info, int warning, int error, int fatal) = DebugLog.Counts();
         return (error + fatal, warning, info + debug + trace);
     }
 
-    public static void Add(LogSeverity severity, string message)
-    {
-        DebugLog.Add(ToLevel(severity), message, "editor");
-    }
+    public static void Add(LogSeverity severity, string message) => DebugLog.Add(
+        level: ToLevel(severity),
+        message: message,
+        category: "editor"
+    );
 
-    public static void Clear()
-    {
-        DebugLog.Clear();
-    }
+    public static void Clear() => DebugLog.Clear();
 
     /// <summary>Tee stdout + stderr into the shared log (call once at startup).</summary>
-    public static void CaptureConsole()
-    {
-        DebugLog.CaptureConsole();
-    }
+    public static void CaptureConsole() => DebugLog.CaptureConsole();
 
     private static DebugLogLevel ToLevel(LogSeverity s)
     {

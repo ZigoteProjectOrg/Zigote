@@ -27,13 +27,13 @@ public static class OverlayPositioning
     /// </summary>
     public static Rect Clamp(Rect rect, Size screen, float margin = 8f, EdgeInsets safe = default)
     {
-        var x = rect.X;
-        var y = rect.Y;
+        float x = rect.X;
+        float y = rect.Y;
 
-        var left = safe.Left + margin;
-        var top = safe.Top + margin;
-        var right = screen.Width - safe.Right - margin;
-        var bottom = screen.Height - safe.Bottom - margin;
+        float left = safe.Left + margin;
+        float top = safe.Top + margin;
+        float right = screen.Width - safe.Right - margin;
+        float bottom = screen.Height - safe.Bottom - margin;
 
         if (x + rect.Width > right) x = right - rect.Width;
         if (y + rect.Height > bottom) y = bottom - rect.Height;
@@ -41,10 +41,10 @@ public static class OverlayPositioning
         if (y < top) y = top;
 
         return new Rect(
-            x,
-            y,
-            rect.Width,
-            rect.Height
+            x: x,
+            y: y,
+            width: rect.Width,
+            height: rect.Height
         );
     }
 
@@ -59,10 +59,10 @@ public static class OverlayPositioning
     {
         // Flip against the same usable box Clamp enforces, so a surface never "fits" on a side
         // that clamping would then drag back over its anchor.
-        var left = safe.Left + margin;
-        var top = safe.Top + margin;
-        var right = screen.Width - safe.Right - margin;
-        var bottom = screen.Height - safe.Bottom - margin;
+        float left = safe.Left + margin;
+        float top = safe.Top + margin;
+        float right = screen.Width - safe.Right - margin;
+        float bottom = screen.Height - safe.Bottom - margin;
 
         var resolved = side switch {
             OverlaySide.Below when anchor.Bottom + gap + size.Height > bottom
@@ -78,7 +78,7 @@ public static class OverlayPositioning
             _ => side,
         };
 
-        var (x, y) = resolved switch {
+        (float x, float y) = resolved switch {
             OverlaySide.Below => (anchor.X, anchor.Bottom + gap),
             OverlaySide.Above => (anchor.X, anchor.Y - gap - size.Height),
             OverlaySide.Right => (anchor.Right + gap, anchor.Y),
@@ -87,15 +87,15 @@ public static class OverlayPositioning
         };
 
         return Clamp(
-            new Rect(
-                x,
-                y,
-                size.Width,
-                size.Height
+            rect: new Rect(
+                x: x,
+                y: y,
+                width: size.Width,
+                height: size.Height
             ),
-            screen,
-            margin,
-            safe
+            screen: screen,
+            margin: margin,
+            safe: safe
         );
     }
 }

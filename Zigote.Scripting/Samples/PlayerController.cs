@@ -8,7 +8,9 @@ namespace Samples.Scripting;
 /// <summary>Moves the attached node based on input axes.</summary>
 public sealed class PlayerController : Component
 {
-    [Export] [EditorRange(0, 1000)] public float Speed { get; set; } = 320f;
+    [Export]
+    [EditorRange(min: 0, max: 1000)]
+    public float Speed { get; set; } = 320f;
 
     [Export] public bool AllowVerticalMovement { get; set; }
 
@@ -17,9 +19,9 @@ public sealed class PlayerController : Component
         var axes = Input.Axis2D("Move"); // horizontal = X, vertical = Z
         if (axes.LengthSq() < 0.001f) return;
 
-        var dir = new Vec3(axes.X, 0f, -axes.Y);
-        if (!AllowVerticalMovement) dir = new Vec3(dir.X, 0f, dir.Z);
+        var dir = new Vec3(x: axes.X, y: 0f, z: -axes.Y);
+        if (!AllowVerticalMovement) dir = new Vec3(x: dir.X, y: 0f, z: dir.Z);
 
-        Position = Position + dir.Normalize() * (Speed * deltaTime);
+        Position = Position + (dir.Normalize() * (Speed * deltaTime));
     }
 }

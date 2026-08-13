@@ -32,10 +32,12 @@ public sealed class PrefabService
     /// </summary>
     public AssetId CreatePrefab(SceneNode source, string? name = null)
     {
-        var dir = _projectDir();
-        var prefabName = string.IsNullOrWhiteSpace(name) ? source.Name : name!;
-        var rel = $"{PrefabDir}/{MakeFileSafe(prefabName)}{PrefabDocument.Extension}";
-        var abs = dir is null ? Path.GetFullPath(rel) : Path.GetFullPath(Path.Combine(dir, rel));
+        string? dir = _projectDir();
+        string prefabName = string.IsNullOrWhiteSpace(name) ? source.Name : name!;
+        string rel = $"{PrefabDir}/{MakeFileSafe(prefabName)}{PrefabDocument.Extension}";
+        string abs = dir is null
+            ? Path.GetFullPath(rel)
+            : Path.GetFullPath(Path.Combine(path1: dir, path2: rel));
         Directory.CreateDirectory(Path.GetDirectoryName(abs)!);
 
         var template = source.DeepClone();
@@ -45,14 +47,16 @@ public sealed class PrefabService
             Template = template,
         }.Save(abs);
 
-        return _assets().Register(AssetPath.ToRelative(abs, dir));
+        return _assets().Register(AssetPath.ToRelative(path: abs, contentRoot: dir));
     }
 
     /// <summary>Load the <c>.prefab</c> document behind an asset id (null if unresolved/missing).</summary>
     public PrefabDocument? Load(AssetId id)
     {
         if (_assets().Resolve(id) is not { } rel) return null;
-        return PrefabDocument.Load(AssetPath.ToAbsolute(rel, _projectDir()));
+        return PrefabDocument.Load(
+            AssetPath.ToAbsolute(relativePath: rel, contentRoot: _projectDir())
+        );
     }
 
     /// <summary>
@@ -70,9 +74,11 @@ public sealed class PrefabService
 
     private static string MakeFileSafe(string name)
     {
-        var chars = name
-            .Select(c => Array.IndexOf(Path.GetInvalidFileNameChars(), c) >= 0 ? '_' : c).ToArray();
-        var safe = new string(chars).Trim();
+        char[] chars = name
+            .Select(c =>
+                Array.IndexOf(array: Path.GetInvalidFileNameChars(), value: c) >= 0 ? '_' : c
+            ).ToArray();
+        string safe = new string(chars).Trim();
         return string.IsNullOrEmpty(safe) ? "Prefab" : safe;
     }
 }

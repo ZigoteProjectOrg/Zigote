@@ -26,7 +26,7 @@ public readonly struct SensorFormat : IEquatable<SensorFormat>
     /// <summary>35 mm-equivalent crop factor (43.27 mm diagonal / this sensor's diagonal).</summary>
     public float CropFactor => DiagonalMm > 0f ? 43.2666f / DiagonalMm : 1f;
 
-    public float DiagonalMm => MathF.Sqrt(WidthMm * WidthMm + HeightMm * HeightMm);
+    public float DiagonalMm => MathF.Sqrt((WidthMm * WidthMm) + (HeightMm * HeightMm));
 
     public static SensorFormat Of(SensorPreset preset)
     {
@@ -58,18 +58,10 @@ public readonly struct SensorFormat : IEquatable<SensorFormat>
         };
     }
 
-    public bool Equals(SensorFormat other)
-    {
-        return WidthMm.Equals(other.WidthMm) && HeightMm.Equals(other.HeightMm);
-    }
+    public bool Equals(SensorFormat other) =>
+        WidthMm.Equals(other.WidthMm) && HeightMm.Equals(other.HeightMm);
 
-    public override bool Equals(object? obj)
-    {
-        return obj is SensorFormat o && Equals(o);
-    }
+    public override bool Equals(object? obj) => obj is SensorFormat o && Equals(o);
 
-    public override int GetHashCode()
-    {
-        return HashCode.Combine(WidthMm, HeightMm);
-    }
+    public override int GetHashCode() => HashCode.Combine(value1: WidthMm, value2: HeightMm);
 }

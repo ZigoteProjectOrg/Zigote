@@ -28,26 +28,17 @@ public static class LicenseRegistry
     private static readonly List<LicenseEntry> Entries = [];
     private static readonly List<Func<IEnumerable<LicenseEntry>>> Collectors = [];
 
-    static LicenseRegistry()
-    {
-        Collectors.Add(ZigoteLicenses.Create);
-    }
+    static LicenseRegistry() => Collectors.Add(ZigoteLicenses.Create);
 
     public static void Add(LicenseEntry entry)
     {
-        lock (Gate)
-        {
-            Entries.Add(entry);
-        }
+        lock (Gate) Entries.Add(entry);
     }
 
     /// <summary>Register entries lazily — the collector runs once, on the first enumeration.</summary>
     public static void AddCollector(Func<IEnumerable<LicenseEntry>> collector)
     {
-        lock (Gate)
-        {
-            Collectors.Add(collector);
-        }
+        lock (Gate) Collectors.Add(collector);
     }
 
     /// <summary>Resolve pending collectors and return a snapshot in registration order.</summary>
@@ -80,7 +71,7 @@ public static class LicenseRegistry
             sb.AppendLine();
         }
 
-        for (var i = 0; i < entries.Count; i++)
+        for (int i = 0; i < entries.Count; i++)
         {
             var e = entries[i];
             if (i > 0) sb.AppendLine();

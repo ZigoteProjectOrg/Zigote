@@ -25,10 +25,7 @@ public sealed class KeyedText<TKey>
     private bool _hasKey;
     private TKey _key = default!;
 
-    public KeyedText(int capacity = 64)
-    {
-        _text = new CachedText(capacity);
-    }
+    public KeyedText(int capacity = 64) => _text = new CachedText(capacity);
 
     /// <summary>The last rendered text.</summary>
     public string Value => _text.Value;
@@ -55,7 +52,7 @@ public sealed class KeyedText<TKey>
     /// </summary>
     public string Update(TKey key, Func<TKey, string> format)
     {
-        if (_hasKey && EqualityComparer<TKey>.Default.Equals(_key, key)) return _text.Value;
+        if (_hasKey && EqualityComparer<TKey>.Default.Equals(x: _key, y: key)) return _text.Value;
         _hasKey = true;
         _key = key;
         return _text.Update(format(key));
@@ -67,23 +64,17 @@ public sealed class KeyedText<TKey>
     /// </summary>
     public bool Changed(TKey key)
     {
-        if (_hasKey && EqualityComparer<TKey>.Default.Equals(_key, key)) return false;
+        if (_hasKey && EqualityComparer<TKey>.Default.Equals(x: _key, y: key)) return false;
         _hasKey = true;
         _key = key;
         return true;
     }
 
     /// <summary>Stores externally produced text (after a true <see cref="Changed" />).</summary>
-    public string Set(ReadOnlySpan<char> text)
-    {
-        return _text.Update(text);
-    }
+    public string Set(ReadOnlySpan<char> text) => _text.Update(text);
 
     /// <summary>Forces the next Update to reformat.</summary>
-    public void Invalidate()
-    {
-        _hasKey = false;
-    }
+    public void Invalidate() => _hasKey = false;
 
     /// <summary>
     ///     Conditional handler: reports <c>shouldAppend = false</c> to the compiler when the key is
@@ -100,74 +91,47 @@ public sealed class KeyedText<TKey>
             out bool shouldAppend)
         {
             shouldAppend = ShouldFormat =
-                !(owner._hasKey && EqualityComparer<TKey>.Default.Equals(owner._key, key));
-            Inner = new CachedText.Handler(literalLength, formattedCount, owner._text);
+                !(owner._hasKey && EqualityComparer<TKey>.Default.Equals(x: owner._key, y: key));
+            Inner = new CachedText.Handler(
+                literalLength: literalLength,
+                formattedCount: formattedCount,
+                owner: owner._text
+            );
         }
 
-        public void AppendLiteral(string s)
-        {
-            Inner.AppendLiteral(s);
-        }
+        public void AppendLiteral(string s) => Inner.AppendLiteral(s);
 
-        public void AppendFormatted(string? s)
-        {
-            Inner.AppendFormatted(s);
-        }
+        public void AppendFormatted(string? s) => Inner.AppendFormatted(s);
 
-        public void AppendFormatted(ReadOnlySpan<char> s)
-        {
-            Inner.AppendFormatted(s);
-        }
+        public void AppendFormatted(ReadOnlySpan<char> s) => Inner.AppendFormatted(s);
 
-        public void AppendFormatted(char c)
-        {
-            Inner.AppendFormatted(c);
-        }
+        public void AppendFormatted(char c) => Inner.AppendFormatted(c);
 
-        public void AppendFormatted(bool b)
-        {
-            Inner.AppendFormatted(b);
-        }
+        public void AppendFormatted(bool b) => Inner.AppendFormatted(b);
 
-        public void AppendFormatted(int value, string? format = null)
-        {
-            Inner.AppendFormatted(value, format);
-        }
+        public void AppendFormatted(int value, string? format = null) =>
+            Inner.AppendFormatted(value: value, format: format);
 
-        public void AppendFormatted(uint value, string? format = null)
-        {
-            Inner.AppendFormatted(value, format);
-        }
+        public void AppendFormatted(uint value, string? format = null) =>
+            Inner.AppendFormatted(value: value, format: format);
 
-        public void AppendFormatted(long value, string? format = null)
-        {
-            Inner.AppendFormatted(value, format);
-        }
+        public void AppendFormatted(long value, string? format = null) =>
+            Inner.AppendFormatted(value: value, format: format);
 
-        public void AppendFormatted(ulong value, string? format = null)
-        {
-            Inner.AppendFormatted(value, format);
-        }
+        public void AppendFormatted(ulong value, string? format = null) =>
+            Inner.AppendFormatted(value: value, format: format);
 
-        public void AppendFormatted(float value, string? format = null)
-        {
-            Inner.AppendFormatted(value, format);
-        }
+        public void AppendFormatted(float value, string? format = null) =>
+            Inner.AppendFormatted(value: value, format: format);
 
-        public void AppendFormatted(double value, string? format = null)
-        {
-            Inner.AppendFormatted(value, format);
-        }
+        public void AppendFormatted(double value, string? format = null) =>
+            Inner.AppendFormatted(value: value, format: format);
 
-        public void AppendFormatted(TimeSpan value, string? format = null)
-        {
-            Inner.AppendFormatted(value, format);
-        }
+        public void AppendFormatted(TimeSpan value, string? format = null) =>
+            Inner.AppendFormatted(value: value, format: format);
 
         /// <summary>Fallback for exotic types — may box a struct; avoid on hot paths.</summary>
-        public void AppendFormatted<T>(T value, string? format = null)
-        {
-            Inner.AppendFormatted(value, format);
-        }
+        public void AppendFormatted<T>(T value, string? format = null) =>
+            Inner.AppendFormatted(value: value, format: format);
     }
 }

@@ -134,7 +134,7 @@ public sealed class AnimationController
     public void Seek(float progress)
     {
         _repeats = false;
-        Progress = Math.Clamp(progress, 0f, 1f);
+        Progress = Math.Clamp(value: progress, min: 0f, max: 1f);
         Status = AnimationStatus.Idle;
         _ticker?.Stop();
         OnTick?.Invoke();
@@ -157,10 +157,10 @@ public sealed class AnimationController
 
         // Delta-time driven so a given animation runs at the same wall-clock speed on any frame rate;
         // clamped to MaxFrameDelta so a stalled frame can't jump/finish it (see MaxFrameDelta).
-        dt = Math.Clamp(dt, 0f, MaxFrameDelta);
+        dt = Math.Clamp(value: dt, min: 0f, max: MaxFrameDelta);
 
-        var step = (Duration > 0f ? dt / Duration : 1f) * _direction;
-        Progress = Math.Clamp(Progress + step, 0f, 1f);
+        float step = (Duration > 0f ? dt / Duration : 1f) * _direction;
+        Progress = Math.Clamp(value: Progress + step, min: 0f, max: 1f);
 
         if (_repeats)
         {
@@ -169,10 +169,7 @@ public sealed class AnimationController
                 if (_reverseRepeat) _direction = -1f;
                 else Progress = 0f;
             }
-            else if (Progress <= 0f && _direction < 0f)
-            {
-                _direction = 1f;
-            }
+            else if (Progress <= 0f && _direction < 0f) _direction = 1f;
 
             Status = _direction > 0f ? AnimationStatus.Forward : AnimationStatus.Reverse;
         }
@@ -196,8 +193,5 @@ public sealed class AnimationController
         RequestFrameAction?.Invoke();
     }
 
-    public static implicit operator float(AnimationController c)
-    {
-        return c.Value;
-    }
+    public static implicit operator float(AnimationController c) => c.Value;
 }

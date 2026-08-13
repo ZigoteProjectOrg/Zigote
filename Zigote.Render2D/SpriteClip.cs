@@ -23,24 +23,25 @@ public sealed class SpriteClip
     public SpriteClip(string name, IReadOnlyList<SpriteFrame> frames, float fps,
         SpriteLoopMode loop = SpriteLoopMode.Loop, string? nextClip = null)
         : this(
-            name,
-            frames,
-            UniformDurations(frames.Count, fps),
-            loop,
-            nextClip
-        )
-    {
-    }
+            name: name,
+            frames: frames,
+            durations: UniformDurations(count: frames.Count, fps: fps),
+            loop: loop,
+            nextClip: nextClip
+        ) { }
 
     public SpriteClip(string name, IReadOnlyList<SpriteFrame> frames,
         IReadOnlyList<float> durations,
         SpriteLoopMode loop = SpriteLoopMode.Loop, string? nextClip = null)
     {
         if (durations.Count != frames.Count)
+        {
             throw new ArgumentException(
+                message:
                 $"Clip '{name}' has {frames.Count} frames but {durations.Count} durations.",
-                nameof(durations)
+                paramName: nameof(durations)
             );
+        }
 
         Name = name;
         Loop = loop;
@@ -52,14 +53,17 @@ public sealed class SpriteClip
 
         // A zero-duration frame would stall the animator's frame-advance loop, so reject at build
         // time — clips come from import tooling, not the hot path.
-        var total = 0f;
-        for (var i = 0; i < _durations.Length; i++)
+        float total = 0f;
+        for (int i = 0; i < _durations.Length; i++)
         {
             if (_durations[i] <= 0f)
+            {
                 throw new ArgumentException(
-                    $"Clip '{name}' frame {i} has non-positive duration {_durations[i]}.",
-                    nameof(durations)
+                    message: $"Clip '{name}' frame {i} has non-positive duration {_durations[i]}.",
+                    paramName: nameof(durations)
                 );
+            }
+
             _starts[i] = total;
             total += _durations[i];
         }
@@ -80,21 +84,12 @@ public sealed class SpriteClip
     /// <summary>Total clip length in seconds (one forward pass).</summary>
     public float Duration { get; }
 
-    public SpriteFrame FrameAt(int index)
-    {
-        return _frames[index];
-    }
+    public SpriteFrame FrameAt(int index) => _frames[index];
 
-    public float DurationAt(int index)
-    {
-        return _durations[index];
-    }
+    public float DurationAt(int index) => _durations[index];
 
     /// <summary>Start time of a frame on the clip's forward timeline.</summary>
-    internal float FrameStart(int index)
-    {
-        return _starts[index];
-    }
+    internal float FrameStart(int index) => _starts[index];
 
     public void AddEvent(int frameIndex, string eventName)
     {
@@ -114,9 +109,16 @@ public sealed class SpriteClip
     private static float[] UniformDurations(int count, float fps)
     {
         if (fps <= 0f)
-            throw new ArgumentOutOfRangeException(nameof(fps), fps, "fps must be positive.");
-        var durations = new float[count];
-        Array.Fill(durations, 1f / fps);
+        {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(fps),
+                actualValue: fps,
+                message: "fps must be positive."
+            );
+        }
+
+        float[] durations = new float[count];
+        Array.Fill(array: durations, value: 1f / fps);
         return durations;
     }
 }

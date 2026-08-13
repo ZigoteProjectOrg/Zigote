@@ -50,9 +50,7 @@ public sealed class AdwViewStack : ComposedWidget
     private AnimatedSwitcher? _switcher;
 
     public AdwViewStack(params AdwViewStackPage[] pages)
-        : this((IEnumerable<AdwViewStackPage>)pages)
-    {
-    }
+        : this((IEnumerable<AdwViewStackPage>)pages) { }
 
     public AdwViewStack(IEnumerable<AdwViewStackPage> pages)
     {
@@ -86,6 +84,6 @@ public sealed class AdwViewStack : ComposedWidget
     protected override Widget Build(BuildContext context)
     {
         // Retained AnimatedSwitcher does the two-layer crossfade; the VisibleName setter feeds it.
-        return _switcher = new AnimatedSwitcher(Resolve(Visible.Peek()), 0.2f);
+        return _switcher = new AnimatedSwitcher(child: Resolve(Visible.Peek()), duration: 0.2f);
     }
 }

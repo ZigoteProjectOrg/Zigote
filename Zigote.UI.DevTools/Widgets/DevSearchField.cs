@@ -1,12 +1,12 @@
 using Zigote.Core;
-using Zigote.UI.Adwaita;
 using Zigote.Core.Events;
 using Zigote.Core.Paint;
+using Zigote.UI.Adwaita;
+using Zigote.UI.Host;
 using Zigote.UI.TextShaping;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Focus;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.DevTools.Widgets;
 
@@ -44,101 +44,105 @@ public sealed class DevSearchField : Widget, ITextInputClient, IKeyboardTrap
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
         _height = DevKit.Compact ? ControlMetrics.MinTouchTarget : AdwMetrics.EntryHeight;
-        var w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : c.MinWidth;
-        _size = new Size(w, _height);
+        float w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : c.MinWidth;
+        _size = new Size(width: w, height: _height);
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
     public override void Paint(PaintList paint)
     {
-        var focused = Owner?.FocusedWidget == this;
+        bool focused = Owner?.FocusedWidget == this;
         var p = AdwPalette.For(_theme);
-        paint.AddRect(Bounds, p.ViewBg, AdwMetrics.ControlRadius);
+        paint.AddRect(bounds: Bounds, color: p.ViewBg, radius: AdwMetrics.ControlRadius);
         paint.AddBorder(
-            Bounds,
-            focused ? _theme.Accent : p.Border,
-            AdwMetrics.ControlRadius,
-            focused ? _theme.FocusRingWidth : 1f
+            bounds: Bounds,
+            color: focused ? _theme.Accent : p.Border,
+            radius: AdwMetrics.ControlRadius,
+            width: focused ? _theme.FocusRingWidth : 1f
         );
 
-        var textY = Bounds.Y + _height * 0.64f;
+        float textY = Bounds.Y + (_height * 0.64f);
         Icons.DrawAt(
-            paint,
-            Icons.Search,
-            Bounds.X + 8f,
-            textY,
-            p.DimLabel,
-            AdwMetrics.IconSize
+            paint: paint,
+            glyph: Icons.Search,
+            x: Bounds.X + 8f,
+            baselineY: textY,
+            color: p.DimLabel,
+            size: AdwMetrics.IconSize
         );
 
-        var tx = Bounds.X + 8f + AdwMetrics.IconSize + Spacing.Sm;
+        float tx = Bounds.X + 8f + AdwMetrics.IconSize + Spacing.Sm;
         if (_text.Length == 0)
         {
             if (!focused)
+            {
                 paint.AddText(
-                    Placeholder,
-                    tx,
-                    textY,
-                    _theme.Hint.WithAlpha(0.7f),
-                    DevKit.CaptionSize
+                    text: Placeholder,
+                    baselineX: tx,
+                    baselineY: textY,
+                    color: _theme.Hint.WithAlpha(0.7f),
+                    fontSize: DevKit.CaptionSize
                 );
+            }
         }
         else
         {
             paint.AddText(
-                _text,
-                tx,
-                textY,
-                _theme.OnSurface,
-                DevKit.CaptionSize,
+                text: _text,
+                baselineX: tx,
+                baselineY: textY,
+                color: _theme.OnSurface,
+                fontSize: DevKit.CaptionSize,
                 fontFamily: "code"
             );
             // Clear affordance.
             Icons.DrawAt(
-                paint,
-                Icons.Close,
-                Bounds.Right - AdwMetrics.IconSize - 8f,
-                textY,
-                p.DimLabel,
-                AdwMetrics.IconSize
+                paint: paint,
+                glyph: Icons.Close,
+                x: Bounds.Right - AdwMetrics.IconSize - 8f,
+                baselineY: textY,
+                color: p.DimLabel,
+                size: AdwMetrics.IconSize
             );
         }
 
         if (focused && BlinkOn())
         {
-            var caretX = tx + TextMeasure.Width(_text, DevKit.CaptionSize, fontFamily: "code") + 1f;
+            float caretX = tx + TextMeasure.Width(
+                text: _text,
+                fontSize: DevKit.CaptionSize,
+                fontFamily: "code"
+            ) + 1f;
             paint.AddRect(
-                new Rect(
-                    caretX,
-                    Bounds.Y + _height * 0.25f,
-                    1.5f,
-                    _height * 0.5f
+                bounds: new Rect(
+                    x: caretX,
+                    y: Bounds.Y + (_height * 0.25f),
+                    width: 1.5f,
+                    height: _height * 0.5f
                 ),
-                _theme.Primary
+                color: _theme.Primary
             );
         }
     }
 
     private static bool BlinkOn()
     {
-        var time = App.Active?.Time ?? 0f;
+        float time = App.Active?.Time ?? 0f;
         return (int)(time * 2f) % 2 == 0;
     }
 
-    public override Widget? HitTest(Offset point)
-    {
-        return Bounds.Contains(point.X, point.Y) ? this : null;
-    }
+    public override Widget? HitTest(Offset point) =>
+        Bounds.Contains(px: point.X, py: point.Y) ? this : null;
 
     public override MouseCursor? GetCursor(Offset point)
     {
@@ -160,10 +164,13 @@ public sealed class DevSearchField : Widget, ITextInputClient, IKeyboardTrap
 
     public override void OnTextInput(string text)
     {
-        var next = _text;
-        foreach (var ch in text)
+        string next = _text;
+        foreach (char ch in text)
+        {
             if (!char.IsControl(ch))
                 next += ch;
+        }
+
         Text = next;
     }
 
@@ -182,8 +189,8 @@ public sealed class DevSearchField : Widget, ITextInputClient, IKeyboardTrap
         }
     }
 
-    public override int DebugStateHash()
-    {
-        return HashCode.Combine(_text, Owner?.FocusedWidget == this);
-    }
+    public override int DebugStateHash() => HashCode.Combine(
+        value1: _text,
+        value2: Owner?.FocusedWidget == this
+    );
 }

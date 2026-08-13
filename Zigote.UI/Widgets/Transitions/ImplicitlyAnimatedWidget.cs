@@ -63,7 +63,7 @@ public abstract class ImplicitlyAnimatedWidget : Widget
 
     public override void Attach(App owner, Widget? parent)
     {
-        base.Attach(owner, parent);
+        base.Attach(owner: owner, parent: parent);
         // Detach unsubscribed the tick handler as well as disposing the ticker — restore BOTH, or a
         // re-attached widget animates without ever asking for a frame: the controller advances, the
         // painted progress never changes, and the subtree only appears once something else (a

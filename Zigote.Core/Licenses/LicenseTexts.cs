@@ -76,18 +76,9 @@ public static class LicenseTexts
         3. This notice may not be removed or altered from any source distribution.
         """;
 
-    public static string Mit(string copyright)
-    {
-        return $"{copyright}\n\n" + MitBody;
-    }
+    public static string Mit(string copyright) => $"{copyright}\n\n" + MitBody;
 
-    public static string Bsd3(string copyright)
-    {
-        return $"{copyright}\n\n" + Bsd3Body;
-    }
+    public static string Bsd3(string copyright) => $"{copyright}\n\n" + Bsd3Body;
 
-    public static string Zlib(string copyright)
-    {
-        return $"{copyright}\n\n" + ZlibBody;
-    }
+    public static string Zlib(string copyright) => $"{copyright}\n\n" + ZlibBody;
 }

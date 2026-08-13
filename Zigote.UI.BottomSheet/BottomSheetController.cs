@@ -9,7 +9,8 @@ namespace Zigote.UI.BottomSheets;
 ///     <see cref="MaxExtent" /> — the same model as <c>bottom_sheet</c>'s
 ///     <c>minHeight</c>/<c>initHeight</c>/<c>maxHeight</c>.
 ///     <para>
-///         <see cref="Extent" /> is a <see cref="Signal{T}" />, so content that must react to the sheet
+///         <see cref="Extent" /> is a <see cref="Signal{T}" />, so content that must react to the
+///         sheet
 ///         growing (a title that fades in, a header that swaps layout) wraps itself in a
 ///         <c>Watch</c> and reads it — there is no rebuild-per-frame builder callback in a retained
 ///         tree:
@@ -20,6 +21,9 @@ namespace Zigote.UI.BottomSheets;
 /// </summary>
 public sealed class BottomSheetController : ITickerProvider, IDisposable
 {
+    /// <summary>A flick beyond this many sheet-heights per second decides direction outright.</summary>
+    private const float FlickVelocity = 1.5f;
+
     private readonly AnimationController _snap;
     private bool _dragging;
     private float _snapFrom, _snapTo;
@@ -40,15 +44,17 @@ public sealed class BottomSheetController : ITickerProvider, IDisposable
         IReadOnlyList<float>? anchors = null,
         bool isCollapsible = true)
     {
-        MinExtent = Math.Clamp(minExtent, 0f, 1f);
-        MaxExtent = Math.Clamp(maxExtent, MinExtent, 1f);
+        MinExtent = Math.Clamp(value: minExtent, min: 0f, max: 1f);
+        MaxExtent = Math.Clamp(value: maxExtent, min: MinExtent, max: 1f);
         Anchors = anchors;
         IsCollapsible = isCollapsible;
-        Extent = new Signal<float>(Math.Clamp(initExtent, MinExtent, MaxExtent));
+        Extent = new Signal<float>(Math.Clamp(value: initExtent, min: MinExtent, max: MaxExtent));
 
-        _snap = new AnimationController(0.22f, this) { Curve = Curves.EaseOut };
+        _snap = new AnimationController(durationSeconds: 0.22f, vsync: this) {
+            Curve = Curves.EaseOut,
+        };
         _snap.OnTick += () =>
-            SetExtent(_snapFrom + (_snapTo - _snapFrom) * _snap.Value);
+            SetExtent(_snapFrom + ((_snapTo - _snapFrom) * _snap.Value));
     }
 
     /// <summary>Seconds a snap to an anchor (or an <see cref="AnimateTo" />) takes.</summary>
@@ -82,6 +88,26 @@ public sealed class BottomSheetController : ITickerProvider, IDisposable
     /// <summary>Set by the route: closes the sheet, carrying <c>result</c> back to the caller.</summary>
     public Action<object?>? OnClose { get; set; }
 
+    // ── Drag ──────────────────────────────────────────────────────────────────
+
+    /// <summary>Can the sheet still grow / shrink? Used to arbitrate against content scrolling.</summary>
+    internal bool CanGrow => Value < MaxExtent - 0.0005f;
+
+    internal bool CanShrink => Value > MinExtent + 0.0005f || IsCollapsible;
+
+    public void Dispose()
+    {
+        _ticker?.Dispose();
+        _ticker = null;
+    }
+
+    public Ticker CreateTicker(Action<float> onTick)
+    {
+        _ticker?.Dispose();
+        _ticker = new Ticker(onTick);
+        return _ticker;
+    }
+
     /// <summary>
     ///     Raised after every extent change, with the new value — the imperative counterpart of
     ///     watching <see cref="Extent" />. The sheet widget uses it to re-lay-out; a host that mirrors
@@ -97,35 +123,16 @@ public sealed class BottomSheetController : ITickerProvider, IDisposable
     /// </summary>
     public event Action<float>? Settling;
 
-    public void Dispose()
-    {
-        _ticker?.Dispose();
-        _ticker = null;
-    }
-
-    public Ticker CreateTicker(Action<float> onTick)
-    {
-        _ticker?.Dispose();
-        _ticker = new Ticker(onTick);
-        return _ticker;
-    }
-
     /// <summary>Rebind the driving ticker after a detach disposed the previous one.</summary>
-    internal void AttachTicker()
-    {
-        _snap.AttachTicker(this);
-    }
+    internal void AttachTicker() => _snap.AttachTicker(this);
 
     /// <summary>Dismiss the sheet, completing the <c>Show…</c> task with <paramref name="result" />.</summary>
-    public void Close(object? result = null)
-    {
-        OnClose?.Invoke(result);
-    }
+    public void Close(object? result = null) => OnClose?.Invoke(result);
 
     /// <summary>Animate to <paramref name="extent" /> (clamped to the sheet's range).</summary>
     public void AnimateTo(float extent)
     {
-        _snapTo = Math.Clamp(extent, MinExtent, MaxExtent);
+        _snapTo = Math.Clamp(value: extent, min: MinExtent, max: MaxExtent);
         _snapFrom = Value;
         Settling?.Invoke(_snapTo);
         if (MathF.Abs(_snapTo - _snapFrom) < 0.001f)
@@ -142,17 +149,10 @@ public sealed class BottomSheetController : ITickerProvider, IDisposable
     public void JumpTo(float extent)
     {
         StopSnap();
-        var target = Math.Clamp(extent, MinExtent, MaxExtent);
+        float target = Math.Clamp(value: extent, min: MinExtent, max: MaxExtent);
         Settling?.Invoke(target);
         SetExtent(target);
     }
-
-    // ── Drag ──────────────────────────────────────────────────────────────────
-
-    /// <summary>Can the sheet still grow / shrink? Used to arbitrate against content scrolling.</summary>
-    internal bool CanGrow => Value < MaxExtent - 0.0005f;
-
-    internal bool CanShrink => Value > MinExtent + 0.0005f || IsCollapsible;
 
     /// <summary>
     ///     Move by a finger delta in logical pixels (positive = downwards = smaller sheet).
@@ -165,8 +165,10 @@ public sealed class BottomSheetController : ITickerProvider, IDisposable
         if (AvailableHeight <= 0f) return;
         StopSnap();
         _dragging = true;
-        var floor = allowCollapse && IsCollapsible ? 0f : MinExtent;
-        SetExtent(Math.Clamp(Value - dyPixels / AvailableHeight, floor, MaxExtent));
+        float floor = allowCollapse && IsCollapsible ? 0f : MinExtent;
+        SetExtent(
+            Math.Clamp(value: Value - (dyPixels / AvailableHeight), min: floor, max: MaxExtent)
+        );
     }
 
     /// <summary>
@@ -179,7 +181,8 @@ public sealed class BottomSheetController : ITickerProvider, IDisposable
         if (!_dragging) return;
         _dragging = false;
 
-        var velocity = AvailableHeight > 0f ? velocityPixels / AvailableHeight : 0f; // fractions/s
+        float velocity =
+            AvailableHeight > 0f ? velocityPixels / AvailableHeight : 0f; // fractions/s
         if (IsCollapsible &&
             (Value < MinExtent - 0.001f ||
              (velocity > FlickVelocity && Value <= MinExtent + 0.05f)))
@@ -190,9 +193,11 @@ public sealed class BottomSheetController : ITickerProvider, IDisposable
 
         if (NearestAnchor(velocity) is { } target) AnimateTo(target);
         else
+        {
             JumpTo(
                 Value
             ); // clamp back into range after a collapse-eligible drag that didn't dismiss
+        }
     }
 
     /// <summary>
@@ -207,9 +212,6 @@ public sealed class BottomSheetController : ITickerProvider, IDisposable
         return true;
     }
 
-    /// <summary>A flick beyond this many sheet-heights per second decides direction outright.</summary>
-    private const float FlickVelocity = 1.5f;
-
     private float? NearestAnchor(float velocity)
     {
         if (Anchors is not { Count: > 0 } anchors) return null;
@@ -219,17 +221,25 @@ public sealed class BottomSheetController : ITickerProvider, IDisposable
         if (MathF.Abs(velocity) > FlickVelocity)
         {
             float? best = null;
-            foreach (var a in anchors)
+            foreach (float a in anchors)
+            {
                 if (velocity < 0f ? a > Value + 0.01f : a < Value - 0.01f)
+                {
                     if (best is null || MathF.Abs(a - Value) < MathF.Abs(best.Value - Value))
                         best = a;
+                }
+            }
+
             if (best is not null) return best;
         }
 
-        var nearest = anchors[0];
-        foreach (var a in anchors)
+        float nearest = anchors[0];
+        foreach (float a in anchors)
+        {
             if (MathF.Abs(a - Value) < MathF.Abs(nearest - Value))
                 nearest = a;
+        }
+
         return nearest;
     }
 

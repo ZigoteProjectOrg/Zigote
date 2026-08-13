@@ -14,26 +14,24 @@ public sealed class AnimatedSize : ImplicitlyAnimatedWidget
 {
     private Widget? _child;
     private Size _from;
-    private Size _to;
-    private Size _size;
     private bool _hasSize;
+    private Size _size;
+    private Size _to;
 
     public AnimatedSize(Widget? child = null, float duration = 0.2f,
         Func<float, float>? curve = null)
-        : base(duration, curve)
-    {
+        : base(durationSeconds: duration, curve: curve) =>
         _child = child;
-    }
 
     public Widget? Child
     {
         get => _child;
         set
         {
-            if (ReferenceEquals(_child, value)) return;
+            if (ReferenceEquals(objA: _child, objB: value)) return;
             var previous = _child;
             _child = value;
-            SwapChild(previous, _child); // attach-then-detach; see Widget.SwapChild
+            SwapChild(previous: previous, next: _child); // attach-then-detach; see Widget.SwapChild
             MarkNeedsLayout();
         }
     }
@@ -58,11 +56,11 @@ public sealed class AnimatedSize : ImplicitlyAnimatedWidget
             Animate();
         }
 
-        var t = Progress;
+        float t = Progress;
         _size = c.Constrain(
             new Size(
-                _from.Width + (_to.Width - _from.Width) * t,
-                _from.Height + (_to.Height - _from.Height) * t
+                width: _from.Width + ((_to.Width - _from.Width) * t),
+                height: _from.Height + ((_to.Height - _from.Height) * t)
             )
         );
         return _size;
@@ -71,10 +69,10 @@ public sealed class AnimatedSize : ImplicitlyAnimatedWidget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         _child?.Layout(origin);
     }
@@ -85,8 +83,8 @@ public sealed class AnimatedSize : ImplicitlyAnimatedWidget
 
         // Clip only while animating — a settled box matches the child exactly, and an always-on
         // clip would cost a clip op per frame on every instance.
-        var settled = MathF.Abs(_size.Width - _to.Width) <= 0.5f &&
-                      MathF.Abs(_size.Height - _to.Height) <= 0.5f;
+        bool settled = MathF.Abs(_size.Width - _to.Width) <= 0.5f &&
+                       MathF.Abs(_size.Height - _to.Height) <= 0.5f;
         if (settled)
         {
             _child.Paint(paint);
@@ -98,13 +96,8 @@ public sealed class AnimatedSize : ImplicitlyAnimatedWidget
         paint.AddClipEnd();
     }
 
-    public override Widget? HitTest(Offset point)
-    {
-        return Bounds.Contains(point.X, point.Y) ? _child?.HitTest(point) : null;
-    }
+    public override Widget? HitTest(Offset point) =>
+        Bounds.Contains(px: point.X, py: point.Y) ? _child?.HitTest(point) : null;
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(_child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(_child);
 }

@@ -34,7 +34,7 @@ public sealed class AdwDropDown : Widget
         get => _items;
         set
         {
-            if (ReferenceEquals(_items, value)) return;
+            if (ReferenceEquals(objA: _items, objB: value)) return;
             _items = value;
             MarkNeedsLayout();
         }
@@ -43,7 +43,7 @@ public sealed class AdwDropDown : Widget
     public int SelectedIndex
     {
         get => _selectedIndex;
-        set => SetPaint(ref _selectedIndex, value);
+        set => SetPaint(field: ref _selectedIndex, value: value);
     }
 
     public Action<int>? OnSelected { get; set; }
@@ -57,14 +57,14 @@ public sealed class AdwDropDown : Widget
     public bool Enabled
     {
         get => _enabled;
-        set => SetPaint(ref _enabled, value);
+        set => SetPaint(field: ref _enabled, value: value);
     }
 
     /// <inheritdoc cref="AdwEntry.Compact" />
     public bool Compact
     {
         get => _compact;
-        set => SetLayout(ref _compact, value);
+        set => SetLayout(field: ref _compact, value: value);
     }
 
     public override bool Focusable => Enabled;
@@ -79,32 +79,35 @@ public sealed class AdwDropDown : Widget
         config.Role = SemanticsRole.Button;
         config.Label = SelectedLabel;
         config.Actions = SemanticsAction.Tap | SemanticsAction.Focus;
-        config.AddFlag(SemanticsFlags.Focusable, Enabled)
-            .AddFlag(SemanticsFlags.Focused, Focused)
-            .AddFlag(SemanticsFlags.Disabled, !Enabled);
+        config.AddFlag(flag: SemanticsFlags.Focusable, on: Enabled)
+            .AddFlag(flag: SemanticsFlags.Focused, on: Focused)
+            .AddFlag(flag: SemanticsFlags.Disabled, on: !Enabled);
     }
 
     public override int DebugStateHash()
     {
         return HashCode.Combine(
-            SelectedIndex,
-            _hovered,
-            _pressed,
-            Focused
+            value1: SelectedIndex,
+            value2: _hovered,
+            value3: _pressed,
+            value4: Focused
         );
     }
 
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        var fs = _theme.FontSizeBody;
-        var widest = 0f;
-        for (var i = 0; i < Items.Count; i++)
-            widest = MathF.Max(widest, TextMeasure.Width(Items[i], fs));
+        float fs = _theme.FontSizeBody;
+        float widest = 0f;
+        for (int i = 0; i < Items.Count; i++)
+            widest = MathF.Max(x: widest, y: TextMeasure.Width(text: Items[i], fontSize: fs));
         // label padding + arrow gutter, natural width.
-        var w = MathF.Max(80f, widest + Spacing.Md * 2f + 22f);
+        float w = MathF.Max(x: 80f, y: widest + (Spacing.Md * 2f) + 22f);
         _size = c.Constrain(
-            new Size(w, Compact ? AdwMetrics.CompactControlHeight : AdwMetrics.ButtonHeight)
+            new Size(
+                width: w,
+                height: Compact ? AdwMetrics.CompactControlHeight : AdwMetrics.ButtonHeight
+            )
         );
         return _size;
     }
@@ -112,10 +115,10 @@ public sealed class AdwDropDown : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
@@ -125,41 +128,41 @@ public sealed class AdwDropDown : Widget
         // composed control is applied here instead.
         if (!Enabled) paint.PushAlpha(AdwStyle.DisabledOpacity);
         var fill = AdwStyle.ButtonFill(
-            _theme,
-            AdwButtonStyle.Regular,
-            _hovered,
-            _pressed,
-            Enabled
+            theme: _theme,
+            style: AdwButtonStyle.Regular,
+            hovered: _hovered,
+            pressed: _pressed,
+            enabled: Enabled
         );
-        paint.AddRect(Bounds, fill, AdwMetrics.ControlRadius);
+        paint.AddRect(bounds: Bounds, color: fill, radius: AdwMetrics.ControlRadius);
 
-        var fs = _theme.FontSizeBody;
-        var baseline = Bounds.Y + (Bounds.Height - fs) / 2f + fs * 0.8f;
+        float fs = _theme.FontSizeBody;
+        float baseline = Bounds.Y + ((Bounds.Height - fs) / 2f) + (fs * 0.8f);
         paint.AddClipStart(Bounds);
         paint.AddText(
-            SelectedLabel,
-            Bounds.X + Spacing.Md,
-            baseline,
-            _theme.OnBackground,
-            fs
+            text: SelectedLabel,
+            baselineX: Bounds.X + Spacing.Md,
+            baselineY: baseline,
+            color: _theme.OnBackground,
+            fontSize: fs
         );
         paint.AddClipEnd();
 
         Icons.Draw(
-            paint,
-            Icons.DropDown,
-            new Rect(
-                Bounds.Right - 24f,
-                Bounds.Y,
-                20f,
-                Bounds.Height
+            paint: paint,
+            glyph: Icons.DropDown,
+            box: new Rect(
+                x: Bounds.Right - 24f,
+                y: Bounds.Y,
+                width: 20f,
+                height: Bounds.Height
             ),
-            _theme.OnBackground,
-            18f
+            color: _theme.OnBackground,
+            size: 18f
         );
 
         if (Focused)
-            paint.AddFocusRing(Bounds, AdwMetrics.ControlRadius, _theme);
+            paint.AddFocusRing(bounds: Bounds, radius: AdwMetrics.ControlRadius, theme: _theme);
         if (!Enabled) paint.PopAlpha();
     }
 
@@ -207,19 +210,19 @@ public sealed class AdwDropDown : Widget
         if (!Enabled || app is null || Items.Count == 0) return;
 
         new AdwPopover(
-            app,
-            Items,
-            Bounds,
-            i =>
+            app: app,
+            items: Items,
+            anchor: Bounds,
+            onPick: i =>
             {
                 if (i < 0 || i >= Items.Count) return;
                 SelectedIndex = i;
                 OnSelected?.Invoke(i);
                 MarkNeedsPaint();
             },
-            SelectedIndex,
-            true,
-            Bounds.Width
+            selected: SelectedIndex,
+            showCheck: true,
+            minWidth: Bounds.Width
         ).Show();
     }
 }

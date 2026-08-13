@@ -57,19 +57,19 @@ public readonly struct FilmStock : IEquatable<FilmStock>
     /// </summary>
     public static FilmStock Of(FilmStockKind kind, float strength)
     {
-        var t = Math.Clamp(strength, 0f, 1f);
+        float t = Math.Clamp(value: strength, min: 0f, max: 1f);
         var target = Target(kind);
         var n = Neutral;
         return new FilmStock {
             Kind = kind,
             Strength = t,
-            Look = (int)MathF.Round(Lerp(n.Look, target.Look, t)),
-            Contrast = Lerp(n.Contrast, target.Contrast, t),
-            Saturation = Lerp(n.Saturation, target.Saturation, t),
-            WbTemperature = Lerp(n.WbTemperature, target.WbTemperature, t),
-            WbTint = Lerp(n.WbTint, target.WbTint, t),
-            Grain = Lerp(n.Grain, target.Grain, t),
-            Vignette = Lerp(n.Vignette, target.Vignette, t),
+            Look = (int)MathF.Round(Lerp(a: n.Look, b: target.Look, t: t)),
+            Contrast = Lerp(a: n.Contrast, b: target.Contrast, t: t),
+            Saturation = Lerp(a: n.Saturation, b: target.Saturation, t: t),
+            WbTemperature = Lerp(a: n.WbTemperature, b: target.WbTemperature, t: t),
+            WbTint = Lerp(a: n.WbTint, b: target.WbTint, t: t),
+            Grain = Lerp(a: n.Grain, b: target.Grain, t: t),
+            Vignette = Lerp(a: n.Vignette, b: target.Vignette, t: t),
             LutId = target.LutId,
         };
     }
@@ -148,10 +148,7 @@ public readonly struct FilmStock : IEquatable<FilmStock>
         };
     }
 
-    private static float Lerp(float a, float b, float t)
-    {
-        return a + (b - a) * t;
-    }
+    private static float Lerp(float a, float b, float t) => a + ((b - a) * t);
 
     public bool Equals(FilmStock other)
     {
@@ -161,25 +158,22 @@ public readonly struct FilmStock : IEquatable<FilmStock>
                Grain.Equals(other.Grain) && Vignette.Equals(other.Vignette) && LutId == other.LutId;
     }
 
-    public override bool Equals(object? obj)
-    {
-        return obj is FilmStock o && Equals(o);
-    }
+    public override bool Equals(object? obj) => obj is FilmStock o && Equals(o);
 
     public override int GetHashCode()
     {
         return HashCode.Combine(
-            Kind,
-            Strength,
-            Look,
-            Contrast,
-            Saturation,
-            WbTemperature,
-            HashCode.Combine(
-                WbTint,
-                Grain,
-                Vignette,
-                LutId
+            value1: Kind,
+            value2: Strength,
+            value3: Look,
+            value4: Contrast,
+            value5: Saturation,
+            value6: WbTemperature,
+            value7: HashCode.Combine(
+                value1: WbTint,
+                value2: Grain,
+                value3: Vignette,
+                value4: LutId
             )
         );
     }

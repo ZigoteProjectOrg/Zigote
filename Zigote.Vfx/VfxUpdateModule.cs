@@ -33,10 +33,8 @@ public sealed class GravityModule(Vec3 gravity) : VfxUpdateModule
     public Vec3 Gravity = gravity;
     public override VfxModuleKind Kind => VfxModuleKind.Gravity;
 
-    public override void Apply(ref Particle p, in VfxUpdateContext ctx)
-    {
+    public override void Apply(ref Particle p, in VfxUpdateContext ctx) =>
         p.Velocity += Gravity * ctx.Dt;
-    }
 }
 
 public sealed class DragModule(float drag) : VfxUpdateModule
@@ -46,10 +44,8 @@ public sealed class DragModule(float drag) : VfxUpdateModule
 
     public override VfxModuleKind Kind => VfxModuleKind.Drag;
 
-    public override void Apply(ref Particle p, in VfxUpdateContext ctx)
-    {
-        p.Velocity *= MathF.Max(0f, 1f - Drag * ctx.Dt);
-    }
+    public override void Apply(ref Particle p, in VfxUpdateContext ctx) =>
+        p.Velocity *= MathF.Max(x: 0f, y: 1f - (Drag * ctx.Dt));
 }
 
 public sealed class TurbulenceModule(float strength, float frequency) : VfxUpdateModule
@@ -62,12 +58,12 @@ public sealed class TurbulenceModule(float strength, float frequency) : VfxUpdat
     // the particle seed. Pure function of (position, time, seed), so it ports verbatim to the GPU kernel.
     public override void Apply(ref Particle p, in VfxUpdateContext ctx)
     {
-        var phase = (p.Seed & 0xFFFFu) * (MathF.Tau / 65536f);
-        var t = ctx.Time;
-        var fx = MathF.Sin(p.Position.Y * Frequency + t + phase);
-        var fy = MathF.Sin(p.Position.Z * Frequency + t * 1.3f + phase);
-        var fz = MathF.Sin(p.Position.X * Frequency + t * 0.7f + phase);
-        p.Velocity += new Vec3(fx, fy, fz) * (Strength * ctx.Dt);
+        float phase = (p.Seed & 0xFFFFu) * (MathF.Tau / 65536f);
+        float t = ctx.Time;
+        float fx = MathF.Sin((p.Position.Y * Frequency) + t + phase);
+        float fy = MathF.Sin((p.Position.Z * Frequency) + (t * 1.3f) + phase);
+        float fz = MathF.Sin((p.Position.X * Frequency) + (t * 0.7f) + phase);
+        p.Velocity += new Vec3(x: fx, y: fy, z: fz) * (Strength * ctx.Dt);
     }
 }
 
@@ -89,10 +85,8 @@ public sealed class ColorOverLifeModule(ColorRamp ramp) : VfxUpdateModule
     public ColorRamp Ramp = ramp;
     public override VfxModuleKind Kind => VfxModuleKind.ColorOverLife;
 
-    public override void Apply(ref Particle p, in VfxUpdateContext ctx)
-    {
+    public override void Apply(ref Particle p, in VfxUpdateContext ctx) =>
         p.Color = Ramp.Evaluate(p.NormalizedAge);
-    }
 }
 
 public sealed class SizeOverLifeModule(FloatCurve curve) : VfxUpdateModule
@@ -100,10 +94,8 @@ public sealed class SizeOverLifeModule(FloatCurve curve) : VfxUpdateModule
     public FloatCurve Curve = curve;
     public override VfxModuleKind Kind => VfxModuleKind.SizeOverLife;
 
-    public override void Apply(ref Particle p, in VfxUpdateContext ctx)
-    {
+    public override void Apply(ref Particle p, in VfxUpdateContext ctx) =>
         p.Size = p.StartSize * Curve.Evaluate(p.NormalizedAge);
-    }
 }
 
 public sealed class AlphaOverLifeModule(FloatCurve curve) : VfxUpdateModule
@@ -111,8 +103,6 @@ public sealed class AlphaOverLifeModule(FloatCurve curve) : VfxUpdateModule
     public FloatCurve Curve = curve;
     public override VfxModuleKind Kind => VfxModuleKind.AlphaOverLife;
 
-    public override void Apply(ref Particle p, in VfxUpdateContext ctx)
-    {
+    public override void Apply(ref Particle p, in VfxUpdateContext ctx) =>
         p.Color = p.Color.WithAlpha(Curve.Evaluate(p.NormalizedAge));
-    }
 }

@@ -36,7 +36,5 @@ public interface IDevPanel
     ///     live labels, push nothing (the rings sample themselves), and invalidate charts whose data
     ///     revision changed. Default no-op for static panels.
     /// </summary>
-    void Refresh(float dt)
-    {
-    }
+    void Refresh(float dt) { }
 }

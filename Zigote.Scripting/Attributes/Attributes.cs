@@ -2,9 +2,7 @@ namespace Zigote.Scripting;
 
 /// <summary>Marks a property or field as editable in the inspector.</summary>
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
-public sealed class ExportAttribute : Attribute
-{
-}
+public sealed class ExportAttribute : Attribute { }
 
 /// <summary>Overrides the display name shown in the inspector.</summary>
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
@@ -30,6 +28,4 @@ public sealed class EditorTooltipAttribute(string tooltip) : Attribute
 
 /// <summary>Renders a Vec3 field as an RGB color picker in the inspector.</summary>
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
-public sealed class EditorColorAttribute : Attribute
-{
-}
+public sealed class EditorColorAttribute : Attribute { }

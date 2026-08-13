@@ -20,8 +20,8 @@ new FloatingActionButton(() => _count.Value++, new Icon(MaterialIcons.Add))
 - **`Scaffold` / `AppBar` / `FloatingActionButton`** are the Material shell, same names and roles as in Flutter.
 - **`Signal<T>`** is the state. **`Watch`** is the bridge to the widget tree: it runs its builder under dependency
   tracking and rebuilds only the subtree that read the signal — so the button re-runs one `Text`, not the page.
-- The state lives in the signal, so the page just composes. There is no stateless/stateful split: a
-  widget's fields are its state, and `OwnEffect`/`Watch` connect signals to them.
+- The state lives in the signal, so the page just composes. There is no stateless/stateful split: a widget's fields are
+  its state, and `OwnEffect`/`Watch` connect signals to them.
 
 ## DevTools
 
@@ -36,13 +36,11 @@ protected override void OnInit()
 }
 ```
 
-Referencing the `Zigote.UI.DevTools` project is by itself enough — the host auto-installs the
-overlay with the `Auto` profile. The explicit call is only to pin the profile (`TwoD` drops the 3D
-renderer tab a UI app has nothing to put in).
+Referencing the `Zigote.UI.DevTools` project is by itself enough — the host auto-installs the overlay with the `Auto`
+profile. The explicit call is only to pin the profile (`TwoD` drops the 3D renderer tab a UI app has nothing to put in).
 
 Worth doing once with this app open: increment the counter and watch **2D·UI → `ui.watch_rebuilds`**
-go up by exactly one per press. That is the reactive claim made measurable — the page is not
-rebuilding, one `Text` is.
+go up by exactly one per press. That is the reactive claim made measurable — the page is not rebuilding, one `Text` is.
 
 ## Next
 

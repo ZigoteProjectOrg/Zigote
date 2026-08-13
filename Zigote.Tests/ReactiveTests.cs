@@ -10,7 +10,8 @@ namespace Zigote.Tests;
 
 /// <summary>
 ///     The C#-first fine-grained reactive core (<see cref="Signal{T}" />/<see cref="Computed{T}" />/
-///     <see cref="Effect" />): auto-tracking, dynamic dependencies, cleanup, batching, disposal, and the
+///     <see cref="Effect" />): auto-tracking, dynamic dependencies, cleanup, batching, disposal, and
+///     the
 ///     push-notify/pull-recompute properties — lazy (unobserved computeds don't recompute), leak-free
 ///     (they detach from sources), glitch-free, and minimal-recompute. The F# layer (Zigote.UI.FSharp)
 ///     and the Watch widget are thin wrappers over exactly these types.
@@ -24,15 +25,15 @@ public class ReactiveTests
     public void Signal_holds_updates_and_notifies_gated_by_equality()
     {
         var s = new Signal<int>(0);
-        Assert.Equal(0, s.Value);
+        Assert.Equal(expected: 0, actual: s.Value);
 
-        var fires = 0;
+        int fires = 0;
         using var _ = s.Observe(() => fires++);
         s.Value = 0; // equal → no notification
-        Assert.Equal(0, fires);
+        Assert.Equal(expected: 0, actual: fires);
         s.Value = 5;
-        Assert.Equal(5, s.Value);
-        Assert.Equal(1, fires);
+        Assert.Equal(expected: 5, actual: s.Value);
+        Assert.Equal(expected: 1, actual: fires);
     }
 
     [Fact]
@@ -40,7 +41,7 @@ public class ReactiveTests
     {
         var s = new Signal<int>(10);
         s.Update(v => v + 5);
-        Assert.Equal(15, s.Value);
+        Assert.Equal(expected: 15, actual: s.Value);
     }
 
     [Fact]
@@ -48,7 +49,7 @@ public class ReactiveTests
     {
         var a = new Signal<int>(2);
         var b = new Signal<int>(3);
-        var runs = 0;
+        int runs = 0;
         using var sum = Computed.From(() =>
             {
                 runs++;
@@ -57,13 +58,16 @@ public class ReactiveTests
         );
         using var _ = sum.Observe(() => { }); // observe → live, recomputes eagerly on change
 
-        Assert.Equal(5, sum.Value);
-        Assert.Equal(1, runs); // computed once (observing a current value does not recompute)
+        Assert.Equal(expected: 5, actual: sum.Value);
+        Assert.Equal(
+            expected: 1,
+            actual: runs
+        ); // computed once (observing a current value does not recompute)
         a.Value = 10;
-        Assert.Equal(13, sum.Value);
+        Assert.Equal(expected: 13, actual: sum.Value);
         b.Value = 100;
-        Assert.Equal(110, sum.Value);
-        Assert.Equal(3, runs); // once per dependency change
+        Assert.Equal(expected: 110, actual: sum.Value);
+        Assert.Equal(expected: 3, actual: runs); // once per dependency change
     }
 
     [Fact]
@@ -74,15 +78,15 @@ public class ReactiveTests
         var b = new Signal<int>(2);
         using var chosen = Computed.From(() => toggle.Value ? a.Value : b.Value);
 
-        Assert.Equal(1, chosen.Value);
-        var fires = 0;
+        Assert.Equal(expected: 1, actual: chosen.Value);
+        int fires = 0;
         using var _ = chosen.Observe(() => fires++);
         b.Value = 99; // b isn't a dependency while toggle=true
-        Assert.Equal(0, fires);
+        Assert.Equal(expected: 0, actual: fires);
         a.Value = 5;
-        Assert.Equal(1, fires);
+        Assert.Equal(expected: 1, actual: fires);
         toggle.Value = false; // now b becomes the dependency
-        Assert.Equal(99, chosen.Value);
+        Assert.Equal(expected: 99, actual: chosen.Value);
     }
 
     [Fact]
@@ -91,9 +95,9 @@ public class ReactiveTests
         var n = new Signal<int>(4);
         using var doubled = Computed.From(() => n.Value * 2);
         using var plusOne = Computed.From(() => doubled.Value + 1);
-        Assert.Equal(9, plusOne.Value);
+        Assert.Equal(expected: 9, actual: plusOne.Value);
         n.Value = 10;
-        Assert.Equal(21, plusOne.Value);
+        Assert.Equal(expected: 21, actual: plusOne.Value);
     }
 
     [Fact]
@@ -105,37 +109,40 @@ public class ReactiveTests
 
         var e = new Effect(() =>
             {
-                var v = s.Value;
+                int v = s.Value;
                 seen.Add(v);
                 return () => cleaned.Add(v);
             }
         );
 
-        Assert.Equal(new[] { 0 }, seen);
+        Assert.Equal(expected: new[] { 0 }, actual: seen);
         s.Value = 1;
         Assert.Equal(
-            new[] {
+            expected: new[] {
                 0,
                 1,
             },
-            seen
+            actual: seen
         );
-        Assert.Equal(new[] { 0 }, cleaned); // cleanup for 0 ran before the re-run
+        Assert.Equal(
+            expected: new[] { 0 },
+            actual: cleaned
+        ); // cleanup for 0 ran before the re-run
         e.Dispose();
         Assert.Equal(
-            new[] {
+            expected: new[] {
                 0,
                 1,
             },
-            cleaned
+            actual: cleaned
         ); // final cleanup for 1
         s.Value = 2;
         Assert.Equal(
-            new[] {
+            expected: new[] {
                 0,
                 1,
             },
-            seen
+            actual: seen
         ); // disposed → no more runs
     }
 
@@ -144,7 +151,7 @@ public class ReactiveTests
     {
         var a = new Signal<int>(1);
         var b = new Signal<int>(1);
-        var runs = 0;
+        int runs = 0;
         using var sum = Computed.From(() =>
             {
                 runs++;
@@ -152,7 +159,7 @@ public class ReactiveTests
             }
         );
         using var _ = sum.Observe(() => { }); // live, so it reacts eagerly
-        Assert.Equal(1, runs);
+        Assert.Equal(expected: 1, actual: runs);
 
         Reactive.Batch(() =>
             {
@@ -161,8 +168,8 @@ public class ReactiveTests
             }
         );
 
-        Assert.Equal(30, sum.Value);
-        Assert.Equal(2, runs); // one recompute for the whole batch, not two
+        Assert.Equal(expected: 30, actual: sum.Value);
+        Assert.Equal(expected: 2, actual: runs); // one recompute for the whole batch, not two
     }
 
     [Fact]
@@ -173,7 +180,7 @@ public class ReactiveTests
         var a = new Signal<int>(0);
         var b = new Signal<int>(0);
         var c = new Signal<int>(0);
-        var runs = 0;
+        int runs = 0;
         using var total = Computed.From(() =>
             {
                 runs++;
@@ -181,12 +188,12 @@ public class ReactiveTests
             }
         );
         using var _ = total.Observe(() => { });
-        Assert.Equal(1, runs); // construction
+        Assert.Equal(expected: 1, actual: runs); // construction
 
         a.Value = 1;
         b.Value = 1;
         c.Value = 1;
-        Assert.Equal(4, runs); // three separate writes → three recomputes
+        Assert.Equal(expected: 4, actual: runs); // three separate writes → three recomputes
     }
 
     [Fact]
@@ -194,21 +201,24 @@ public class ReactiveTests
     {
         // An unobserved computed does not recompute when its sources change — only on read.
         var s = new Signal<int>(1);
-        var runs = 0;
+        int runs = 0;
         using var c = Computed.From(() =>
             {
                 runs++;
                 return s.Value * 2;
             }
         );
-        Assert.Equal(1, runs); // eager first compute
+        Assert.Equal(expected: 1, actual: runs); // eager first compute
 
         s.Value = 2;
         s.Value = 3;
-        Assert.Equal(1, runs); // still lazy — nobody read it
+        Assert.Equal(expected: 1, actual: runs); // still lazy — nobody read it
 
-        Assert.Equal(6, c.Value); // read → recompute once, to the current value
-        Assert.Equal(2, runs);
+        Assert.Equal(
+            expected: 6,
+            actual: c.Value
+        ); // read → recompute once, to the current value
+        Assert.Equal(expected: 2, actual: runs);
     }
 
     [Fact]
@@ -216,25 +226,25 @@ public class ReactiveTests
     {
         var a = new Signal<int>(1);
         var unrelated = new Signal<int>(0);
-        var runs = 0;
+        int runs = 0;
         using var c = Computed.From(() =>
             {
                 runs++;
                 return a.Value * 2;
             }
         );
-        Assert.Equal(1, runs);
+        Assert.Equal(expected: 1, actual: runs);
 
         unrelated.Value = 99; // global version moves, but it is not a source of c
         Assert.Equal(
-            2,
-            c.Value
+            expected: 2,
+            actual: c.Value
         ); // read → verifies via source version: a unchanged → no recompute
-        Assert.Equal(1, runs);
+        Assert.Equal(expected: 1, actual: runs);
 
         a.Value = 5; // c's actual source changed
-        Assert.Equal(10, c.Value);
-        Assert.Equal(2, runs);
+        Assert.Equal(expected: 10, actual: c.Value);
+        Assert.Equal(expected: 2, actual: runs);
     }
 
     [Fact]
@@ -243,33 +253,33 @@ public class ReactiveTests
         // Leak-free / refcount: while observed a computed reacts; once its last observer leaves it
         // unsubscribes from its sources (stops recomputing) — the source no longer retains it.
         var s = new Signal<int>(0);
-        var runs = 0;
+        int runs = 0;
         using var c = Computed.From(() =>
             {
                 runs++;
                 return s.Value;
             }
         );
-        Assert.Equal(1, runs);
+        Assert.Equal(expected: 1, actual: runs);
 
         var sub = c.Observe(() => { }); // became watched — no recompute (value current)
-        Assert.Equal(1, runs);
+        Assert.Equal(expected: 1, actual: runs);
         s.Value = 1; // watched → recomputes eagerly
-        Assert.Equal(2, runs);
+        Assert.Equal(expected: 2, actual: runs);
 
         sub.Dispose(); // last observer gone → detach from s
         s.Value = 2; // no longer watched → does NOT recompute
-        Assert.Equal(2, runs);
+        Assert.Equal(expected: 2, actual: runs);
 
-        Assert.Equal(2, c.Value); // lazy read picks up the current value
-        Assert.Equal(3, runs);
+        Assert.Equal(expected: 2, actual: c.Value); // lazy read picks up the current value
+        Assert.Equal(expected: 3, actual: runs);
     }
 
     [Fact]
     public void Disposing_a_computed_detaches_it()
     {
         var s = new Signal<int>(0);
-        var runs = 0;
+        int runs = 0;
         var c = Computed.From(() =>
             {
                 runs++;
@@ -277,12 +287,12 @@ public class ReactiveTests
             }
         );
         using var _ = c.Observe(() => { });
-        Assert.Equal(1, runs);
+        Assert.Equal(expected: 1, actual: runs);
         s.Value = 1;
-        Assert.Equal(2, runs);
+        Assert.Equal(expected: 2, actual: runs);
         c.Dispose();
         s.Value = 2;
-        Assert.Equal(2, runs); // no longer reacting
+        Assert.Equal(expected: 2, actual: runs); // no longer reacting
     }
 
     [Fact]
@@ -293,8 +303,8 @@ public class ReactiveTests
         var a = new Signal<int>(0);
         using var b = Computed.From(() => a.Value + 1);
         using var c = Computed.From(() => a.Value + 2);
-        var effectRuns = 0;
-        var lastSum = -1;
+        int effectRuns = 0;
+        int lastSum = -1;
         using var e = new Effect(() =>
             {
                 effectRuns++;
@@ -302,10 +312,10 @@ public class ReactiveTests
             }
         );
 
-        Assert.Equal(1, effectRuns); // initial
+        Assert.Equal(expected: 1, actual: effectRuns); // initial
         a.Value = 10;
-        Assert.Equal(2, effectRuns); // one run for the whole fan-out, not two
-        Assert.Equal(23, lastSum); // b=11, c=12 — both settled
+        Assert.Equal(expected: 2, actual: effectRuns); // one run for the whole fan-out, not two
+        Assert.Equal(expected: 23, actual: lastSum); // b=11, c=12 — both settled
     }
 
     [Fact]
@@ -315,7 +325,7 @@ public class ReactiveTests
         // so the effect must NOT run — the equality gate stops the propagation at the intermediate.
         var x = new Signal<int>(0);
         using var isEven = Computed.From(() => x.Value % 2 == 0);
-        var effectRuns = 0;
+        int effectRuns = 0;
         using var e = new Effect(() =>
             {
                 _ = isEven.Value;
@@ -323,11 +333,11 @@ public class ReactiveTests
             }
         );
 
-        Assert.Equal(1, effectRuns);
+        Assert.Equal(expected: 1, actual: effectRuns);
         x.Value = 2; // even → even: isEven unchanged → effect does not run
-        Assert.Equal(1, effectRuns);
+        Assert.Equal(expected: 1, actual: effectRuns);
         x.Value = 3; // even → odd: isEven flips → effect runs
-        Assert.Equal(2, effectRuns);
+        Assert.Equal(expected: 2, actual: effectRuns);
     }
 
     [Fact]
@@ -335,14 +345,17 @@ public class ReactiveTests
     {
         // A comparer that treats values within a tolerance as equal → sub-threshold changes don't fire.
         var s = new Signal<double>(0.0);
-        using var rounded = Computed.From(() => s.Value, new ToleranceComparer(0.5));
-        var fires = 0;
+        using var rounded = Computed.From(
+            compute: () => s.Value,
+            equals: new ToleranceComparer(0.5)
+        );
+        int fires = 0;
         using var _ = rounded.Observe(() => fires++);
 
         s.Value = 0.3; // within tolerance of the last accepted value → no change
-        Assert.Equal(0, fires);
+        Assert.Equal(expected: 0, actual: fires);
         s.Value = 1.0; // beyond tolerance → change
-        Assert.Equal(1, fires);
+        Assert.Equal(expected: 1, actual: fires);
     }
 
     [Fact]
@@ -350,7 +363,7 @@ public class ReactiveTests
     {
         var a = new Signal<int>(1);
         var b = new Signal<int>(10);
-        var runs = 0;
+        int runs = 0;
         using var c = Computed.From(() =>
             {
                 runs++;
@@ -358,13 +371,13 @@ public class ReactiveTests
             }
         );
         using var _ = c.Observe(() => { }); // live
-        Assert.Equal(11, c.Value);
+        Assert.Equal(expected: 11, actual: c.Value);
 
         b.Value = 99; // not a dependency → no recompute
-        Assert.Equal(1, runs);
+        Assert.Equal(expected: 1, actual: runs);
         a.Value = 5; // dependency → recompute; picks up b's current (peeked) value
-        Assert.Equal(2, runs);
-        Assert.Equal(104, c.Value);
+        Assert.Equal(expected: 2, actual: runs);
+        Assert.Equal(expected: 104, actual: c.Value);
     }
 
     [Fact]
@@ -372,7 +385,7 @@ public class ReactiveTests
     {
         var a = new Signal<int>(1);
         var b = new Signal<int>(10);
-        var runs = 0;
+        int runs = 0;
         using var c = Computed.From(() =>
             {
                 runs++;
@@ -382,9 +395,9 @@ public class ReactiveTests
         using var _ = c.Observe(() => { }); // live
 
         b.Value = 99; // b read untracked → not a dependency → no recompute
-        Assert.Equal(1, runs);
+        Assert.Equal(expected: 1, actual: runs);
         a.Value = 5; // a is a dependency → recompute
-        Assert.Equal(2, runs);
+        Assert.Equal(expected: 2, actual: runs);
     }
 
     [Fact]
@@ -409,13 +422,13 @@ public class ReactiveTests
 
         var t = Task.Run(() =>
             {
-                for (var i = 1; i <= 200; i++) s.Value = i;
+                for (int i = 1; i <= 200; i++) s.Value = i;
             }
         );
         t.Wait();
 
-        Assert.Equal(200, s.Value);
-        Assert.Equal(400, doubled.Value);
+        Assert.Equal(expected: 200, actual: s.Value);
+        Assert.Equal(expected: 400, actual: doubled.Value);
     }
 
     [Fact]
@@ -425,7 +438,7 @@ public class ReactiveTests
         // stamp the computed's validated-version while it was still stale, permanently losing the update.
         var a = new Signal<int>(1);
         using var doubled = Computed.From(() => a.Value * 2);
-        var seen = -1;
+        int seen = -1;
         using var eff = new Effect(() => seen = doubled.Value); // makes `doubled` watched
         using var sub = a.Subscribe(_ =>
             {
@@ -434,8 +447,8 @@ public class ReactiveTests
         ); // reads it in the change window
 
         a.Value = 5;
-        Assert.Equal(10, seen);
-        Assert.Equal(10, doubled.Value);
+        Assert.Equal(expected: 10, actual: seen);
+        Assert.Equal(expected: 10, actual: doubled.Value);
     }
 
     [Fact]
@@ -450,7 +463,7 @@ public class ReactiveTests
         s.Value = 1; // must not throw
         s.Value = 2;
         created?.Dispose();
-        Assert.Equal(2, s.Value);
+        Assert.Equal(expected: 2, actual: s.Value);
     }
 
     [Fact]
@@ -462,14 +475,14 @@ public class ReactiveTests
         using var eff = new Effect(() =>
             {
                 _ = trigger.Value;
-                var v = s.Value;
+                int v = s.Value;
                 if (v < 3) s.Value = v + 1;
             }
         );
 
-        Assert.Equal(1, s.Value); // initial (unsubscribed) run stepped once
+        Assert.Equal(expected: 1, actual: s.Value); // initial (unsubscribed) run stepped once
         trigger.Value = 1; // re-trigger → must settle, not stall
-        Assert.Equal(3, s.Value);
+        Assert.Equal(expected: 3, actual: s.Value);
     }
 
     [Fact]
@@ -490,8 +503,8 @@ public class ReactiveTests
         // Regression (MED): a throwing effect body used to abort the drain, dropping the effects queued
         // after it. With an OnError handler installed, every effect still runs and the error is reported.
         var s = new Signal<int>(0);
-        var ranBad = 0;
-        var ranGood = 0;
+        int ranBad = 0;
+        int ranGood = 0;
         using var bad = new Effect(() =>
             {
                 ranBad++;
@@ -505,7 +518,7 @@ public class ReactiveTests
             }
         );
 
-        var errors = 0;
+        int errors = 0;
         Reactive.OnError = _ => errors++;
         try
         {
@@ -516,9 +529,9 @@ public class ReactiveTests
             Reactive.OnError = null;
         }
 
-        Assert.Equal(2, ranBad); // bad ran (and threw)
-        Assert.Equal(2, ranGood); // good STILL ran despite bad throwing
-        Assert.Equal(1, errors);
+        Assert.Equal(expected: 2, actual: ranBad); // bad ran (and threw)
+        Assert.Equal(expected: 2, actual: ranGood); // good STILL ran despite bad throwing
+        Assert.Equal(expected: 1, actual: errors);
     }
 
     [Fact]
@@ -526,36 +539,30 @@ public class ReactiveTests
     {
         // Regression (HIGH): self-dispose during Execute left Update re-subscribing the dead node.
         var s = new Signal<int>(0);
-        var runs = 0;
+        int runs = 0;
         Computed<int>? c = null;
         c = Computed.From(() =>
             {
                 runs++;
-                var v = s.Value;
+                int v = s.Value;
                 // ReSharper disable once AccessToModifiedClosure
                 c?.Dispose(); // c is null during the ctor's eager compute; assigned by the time it reacts
                 return v;
             }
         );
-        using var _ = ((ISignal)c).Observe(() => { });
+        using var _ = c.Observe(() => { });
 
         s.Value = 1; // c recomputes once, then disposes itself mid-compute
-        var afterDispose = runs;
+        int afterDispose = runs;
         s.Value = 2; // c is now dead → must not react (no resurrection) and must not crash
-        Assert.Equal(afterDispose, runs);
+        Assert.Equal(expected: afterDispose, actual: runs);
     }
 
     private sealed class ToleranceComparer(double tolerance) : IEqualityComparer<double>
     {
-        public bool Equals(double a, double b)
-        {
-            return Math.Abs(a - b) <= tolerance;
-        }
+        public bool Equals(double a, double b) => Math.Abs(a - b) <= tolerance;
 
-        public int GetHashCode(double v)
-        {
-            return 0;
-        }
+        public int GetHashCode(double v) => 0;
     }
 }
 

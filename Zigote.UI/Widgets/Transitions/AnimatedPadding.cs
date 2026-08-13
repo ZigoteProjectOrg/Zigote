@@ -14,7 +14,7 @@ public sealed class AnimatedPadding : ImplicitlyAnimatedWidget
     private EdgeInsets _to;
 
     public AnimatedPadding(EdgeInsets insets, Widget? child = null, float duration = 0.25f,
-        Func<float, float>? curve = null) : base(duration, curve)
+        Func<float, float>? curve = null) : base(durationSeconds: duration, curve: curve)
     {
         _from = _to = insets;
         Child = child;
@@ -38,12 +38,12 @@ public sealed class AnimatedPadding : ImplicitlyAnimatedWidget
     {
         get
         {
-            var t = Progress;
+            float t = Progress;
             return new EdgeInsets(
-                _from.Left + (_to.Left - _from.Left) * t,
-                _from.Top + (_to.Top - _from.Top) * t,
-                _from.Right + (_to.Right - _from.Right) * t,
-                _from.Bottom + (_to.Bottom - _from.Bottom) * t
+                left: _from.Left + ((_to.Left - _from.Left) * t),
+                top: _from.Top + ((_to.Top - _from.Top) * t),
+                right: _from.Right + ((_to.Right - _from.Right) * t),
+                bottom: _from.Bottom + ((_to.Bottom - _from.Bottom) * t)
             );
         }
     }
@@ -54,8 +54,8 @@ public sealed class AnimatedPadding : ImplicitlyAnimatedWidget
         var childSize = Child?.Measure(c.Deflate(insets)) ?? Size.Zero;
         _size = c.Constrain(
             new Size(
-                childSize.Width + insets.Horizontal,
-                childSize.Height + insets.Vertical
+                width: childSize.Width + insets.Horizontal,
+                height: childSize.Height + insets.Vertical
             )
         );
         return _size;
@@ -64,27 +64,19 @@ public sealed class AnimatedPadding : ImplicitlyAnimatedWidget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         var insets = Current;
-        Child?.Layout(new Offset(origin.X + insets.Left, origin.Y + insets.Top));
+        Child?.Layout(new Offset(x: origin.X + insets.Left, y: origin.Y + insets.Top));
     }
 
-    public override void Paint(PaintList paint)
-    {
-        Child?.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => Child?.Paint(paint);
 
-    public override Widget? HitTest(Offset point)
-    {
-        return Bounds.Contains(point.X, point.Y) ? Child?.HitTest(point) : null;
-    }
+    public override Widget? HitTest(Offset point) =>
+        Bounds.Contains(px: point.X, py: point.Y) ? Child?.HitTest(point) : null;
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(Child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Child);
 }

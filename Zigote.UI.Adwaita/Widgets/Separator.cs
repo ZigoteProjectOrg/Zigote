@@ -24,21 +24,21 @@ public sealed class AdwSeparator : ComposedWidget
     public bool Vertical
     {
         get => _vertical;
-        set => this.Set(ref _vertical, value);
+        set => this.Set(field: ref _vertical, value: value);
     }
 
     /// <summary>Inset at both ends, along the line's own direction.</summary>
     public float Margin
     {
         get => _margin;
-        set => this.Set(ref _margin, value);
+        set => this.Set(field: ref _margin, value: value);
     }
 
     /// <summary>Overrides the theme's border colour.</summary>
     public Color? Color
     {
         get => _color;
-        set => this.Set(ref _color, value);
+        set => this.Set(field: ref _color, value: value);
     }
 
     /// <summary>
@@ -49,7 +49,7 @@ public sealed class AdwSeparator : ComposedWidget
     public float? Length
     {
         get => _length;
-        set => this.Set(ref _length, value);
+        set => this.Set(field: ref _length, value: value);
     }
 
     protected override Widget Build(BuildContext context)
@@ -62,10 +62,10 @@ public sealed class AdwSeparator : ComposedWidget
         };
         return Margin > 0f
             ? new Padding(
-                Vertical
-                    ? EdgeInsets.Symmetric(0f, Margin)
-                    : EdgeInsets.Symmetric(Margin, 0f),
-                line
+                padding: Vertical
+                    ? EdgeInsets.Symmetric(horizontal: 0f, vertical: Margin)
+                    : EdgeInsets.Symmetric(horizontal: Margin, vertical: 0f),
+                child: line
             )
             : line;
     }

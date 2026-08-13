@@ -15,15 +15,12 @@ namespace Zigote.Physics2D;
 public sealed class CharacterController2D(CollisionWorld2D world, Vec2 halfExtents)
 {
     private const float MinMoveSq = 1e-12f;
+    private readonly List<ColliderHandle> _dropScratch = [];
 
     private readonly HashSet<ColliderHandle> _droppedOneWay = [];
-    private readonly List<ColliderHandle> _dropScratch = [];
     private readonly List<ColliderHandle> _entered = [];
     private readonly List<ColliderHandle> _exited = [];
     private readonly List<ColliderHandle> _scratch = [];
-    private Func<ColliderHandle, bool>? _sweepIgnore;
-    private HashSet<ColliderHandle> _triggersNow = [];
-    private HashSet<ColliderHandle> _triggersPrev = [];
 
     public uint CollisionMask = 0xFFFFFFFF;
     public float GroundSnapDistance = 0.2f;
@@ -33,6 +30,9 @@ public sealed class CharacterController2D(CollisionWorld2D world, Vec2 halfExten
     public Vec2 Position;
     public float SkinWidth = 0.01f;
     public Vec2 Velocity;
+    private Func<ColliderHandle, bool>? _sweepIgnore;
+    private HashSet<ColliderHandle> _triggersNow = [];
+    private HashSet<ColliderHandle> _triggersPrev = [];
 
     public Vec2 HalfExtents => halfExtents;
     public bool IsGrounded { get; private set; }
@@ -55,28 +55,30 @@ public sealed class CharacterController2D(CollisionWorld2D world, Vec2 halfExten
 
         // Also catch platforms the box merely rests near (skin gap) — probe a slightly grown box.
         var margin = Vec2.Splat(SkinWidth * 2f);
-        var count = world.OverlapBox(
-            Position,
-            halfExtents + margin,
-            CollisionMask,
-            _scratch,
-            false
+        int count = world.OverlapBox(
+            center: Position,
+            halfExtents: halfExtents + margin,
+            mask: CollisionMask,
+            results: _scratch,
+            includeTriggers: false
         );
-        for (var i = 0; i < count; i++)
+        for (int i = 0; i < count; i++)
+        {
             if (world.IsOneWay(_scratch[i]))
                 _droppedOneWay.Add(_scratch[i]);
+        }
     }
 
     public void Move(float dt)
     {
         _sweepIgnore ??= IsDropIgnored;
-        var startedGrounded = IsGrounded;
+        bool startedGrounded = IsGrounded;
         // A jump must not be snapped back, but every WALK case must snap: ascending a slope carries +Y
         // velocity (slide projection) with ~zero along-normal; descending carries positive along-normal
         // (horizontal input on a tilted normal) with -Y. Only a jump has BOTH: velocity along the old
         // ground normal AND upward. Gate the snap on that conjunction of the pre-move velocity.
-        var jumpedOffGround = Velocity.Dot(GroundNormal) > 0.01f && Velocity.Y > 0.01f;
-        var cosMax = MathF.Cos(MaxSlopeDegrees * (MathF.PI / 180f));
+        bool jumpedOffGround = Velocity.Dot(GroundNormal) > 0.01f && Velocity.Y > 0.01f;
+        float cosMax = MathF.Cos(MaxSlopeDegrees * (MathF.PI / 180f));
 
         // (a) Platform carry: ride whatever we were grounded on, both axes, before our own motion.
         if (startedGrounded && GroundCollider.IsValid && world.IsAlive(GroundCollider))
@@ -96,39 +98,40 @@ public sealed class CharacterController2D(CollisionWorld2D world, Vec2 halfExten
 
         // (b) Sweep-and-slide.
         var remaining = Velocity * dt;
-        for (var iter = 0; iter < MaxSlideIterations && remaining.LengthSq() > MinMoveSq; iter++)
+        for (int iter = 0; iter < MaxSlideIterations && remaining.LengthSq() > MinMoveSq; iter++)
         {
             if (!world.SweepBox(
-                    Position,
-                    halfExtents,
-                    remaining,
-                    CollisionMask,
-                    out var hit,
-                    default,
-                    false,
-                    _sweepIgnore
+                    center: Position,
+                    halfExtents: halfExtents,
+                    displacement: remaining,
+                    mask: CollisionMask,
+                    hit: out var hit,
+                    ignore: default,
+                    includeTriggers: false,
+                    ignoreWhere: _sweepIgnore
                 ))
             {
                 Position += remaining;
                 break;
             }
 
-            var dist = remaining.Length();
+            float dist = remaining.Length();
             var dir = remaining * (1f / dist);
-            var travel = hit.Time * dist;
+            float travel = hit.Time * dist;
             var n = hit.Normal;
 
             // (e) Internal-edge (tile seam) fix: a wall-like hit whose contact sits within a couple of
             // skin widths of a box collider's top corner, while we were grounded and moving horizontally,
             // is really a corner contact — the up normal is equally valid there, so prefer it and
             // micro-lift back to a clean skin gap instead of killing horizontal motion on a ghost wall.
-            var seamLift = float.NegativeInfinity;
+            float seamLift = float.NegativeInfinity;
             if (startedGrounded && MathF.Abs(n.Y) < cosMax && MathF.Abs(remaining.X) > 1e-6f
                 && world.GetShape(hit.Collider) == ColliderShape2D.Box)
             {
-                var top = world.GetPosition(hit.Collider).Y + world.GetHalfExtents(hit.Collider).Y;
-                var bottomAtImpact = Position.Y + dir.Y * travel - halfExtents.Y;
-                if (bottomAtImpact >= top - SkinWidth * 2f)
+                float top = world.GetPosition(hit.Collider).Y +
+                            world.GetHalfExtents(hit.Collider).Y;
+                float bottomAtImpact = Position.Y + (dir.Y * travel) - halfExtents.Y;
+                if (bottomAtImpact >= top - (SkinWidth * 2f))
                 {
                     n = Vec2.Up;
                     seamLift = top + halfExtents.Y + SkinWidth;
@@ -139,39 +142,41 @@ public sealed class CharacterController2D(CollisionWorld2D world, Vec2 halfExten
             // direction — a shallow grazing hit would otherwise leave no gap and re-hit at t=0 forever).
             Position += dir * travel;
             if (seamLift > float.NegativeInfinity)
-                Position = new Vec2(Position.X, MathF.Max(Position.Y, seamLift));
+                Position = new Vec2(x: Position.X, y: MathF.Max(x: Position.Y, y: seamLift));
             else
                 Position += n * SkinWidth;
 
-            ApplyContact(n, hit.Collider, cosMax);
+            ApplyContact(normal: n, collider: hit.Collider, cosMax: cosMax);
 
             remaining *= 1f - hit.Time;
-            var into = remaining.Dot(n);
+            float into = remaining.Dot(n);
             if (into < 0f) remaining -= n * into;
-            var vin = Velocity.Dot(n);
+            float vin = Velocity.Dot(n);
             if (vin < 0f) Velocity -= n * vin;
         }
 
         // (c) Ground snap: keep ascending/descending characters glued (slopes, convex curves, small
         // drops) — but never yank a jump back down (see jumpedOffGround above).
         if (startedGrounded && !IsGrounded && !jumpedOffGround && GroundSnapDistance > 0f)
+        {
             if (world.SweepBox(
-                    Position,
-                    halfExtents,
-                    new Vec2(0f, -GroundSnapDistance),
-                    CollisionMask,
-                    out var snap,
-                    default,
-                    false,
-                    _sweepIgnore
+                    center: Position,
+                    halfExtents: halfExtents,
+                    displacement: new Vec2(x: 0f, y: -GroundSnapDistance),
+                    mask: CollisionMask,
+                    hit: out var snap,
+                    ignore: default,
+                    includeTriggers: false,
+                    ignoreWhere: _sweepIgnore
                 ) && snap.Normal.Y >= cosMax)
             {
-                Position += new Vec2(0f, -GroundSnapDistance * snap.Time);
+                Position += new Vec2(x: 0f, y: -GroundSnapDistance * snap.Time);
                 Position += snap.Normal * SkinWidth;
-                ApplyContact(snap.Normal, snap.Collider, cosMax);
-                var vin = Velocity.Dot(snap.Normal);
+                ApplyContact(normal: snap.Normal, collider: snap.Collider, cosMax: cosMax);
+                float vin = Velocity.Dot(snap.Normal);
                 if (vin < 0f) Velocity -= snap.Normal * vin;
             }
+        }
 
         UpdateDropIgnores();
         UpdateTriggers();
@@ -189,13 +194,9 @@ public sealed class CharacterController2D(CollisionWorld2D world, Vec2 halfExten
             GroundCollider = collider;
         }
         else if (normal.Y <= -cosMax)
-        {
             IsOnCeiling = true;
-        }
         else
-        {
             IsOnWall = true;
-        }
     }
 
     /// <summary>
@@ -204,17 +205,17 @@ public sealed class CharacterController2D(CollisionWorld2D world, Vec2 halfExten
     /// </summary>
     private void ResolvePenetration()
     {
-        for (var pass = 0; pass < 3; pass++)
+        for (int pass = 0; pass < 3; pass++)
         {
-            var count = world.OverlapBox(
-                Position,
-                halfExtents,
-                CollisionMask,
-                _scratch,
-                false
+            int count = world.OverlapBox(
+                center: Position,
+                halfExtents: halfExtents,
+                mask: CollisionMask,
+                results: _scratch,
+                includeTriggers: false
             );
-            var pushed = false;
-            for (var i = 0; i < count; i++)
+            bool pushed = false;
+            for (int i = 0; i < count; i++)
             {
                 var h = _scratch[i];
                 if (world.IsOneWay(h)) continue;
@@ -222,31 +223,31 @@ public sealed class CharacterController2D(CollisionWorld2D world, Vec2 halfExten
                 if (world.GetShape(h) == ColliderShape2D.Box)
                 {
                     var ch = world.GetHalfExtents(h);
-                    var dx = Position.X - c.X;
-                    var dy = Position.Y - c.Y;
-                    var px = halfExtents.X + ch.X - MathF.Abs(dx);
-                    var py = halfExtents.Y + ch.Y - MathF.Abs(dy);
+                    float dx = Position.X - c.X;
+                    float dy = Position.Y - c.Y;
+                    float px = halfExtents.X + ch.X - MathF.Abs(dx);
+                    float py = halfExtents.Y + ch.Y - MathF.Abs(dy);
                     if (px <= 0f || py <= 0f) continue;
                     if (px < py)
-                        Position += new Vec2((dx >= 0f ? 1f : -1f) * (px + SkinWidth), 0f);
+                        Position += new Vec2(x: (dx >= 0f ? 1f : -1f) * (px + SkinWidth), y: 0f);
                     else
-                        Position += new Vec2(0f, (dy >= 0f ? 1f : -1f) * (py + SkinWidth));
+                        Position += new Vec2(x: 0f, y: (dy >= 0f ? 1f : -1f) * (py + SkinWidth));
                 }
                 else
                 {
-                    var r = world.GetRadius(h);
+                    float r = world.GetRadius(h);
                     var q = new Vec2(
-                        MathF.Max(
-                            Position.X - halfExtents.X,
-                            MathF.Min(c.X, Position.X + halfExtents.X)
+                        x: MathF.Max(
+                            x: Position.X - halfExtents.X,
+                            y: MathF.Min(x: c.X, y: Position.X + halfExtents.X)
                         ),
-                        MathF.Max(
-                            Position.Y - halfExtents.Y,
-                            MathF.Min(c.Y, Position.Y + halfExtents.Y)
+                        y: MathF.Max(
+                            x: Position.Y - halfExtents.Y,
+                            y: MathF.Min(x: c.Y, y: Position.Y + halfExtents.Y)
                         )
                     );
                     var d = q - c;
-                    var len = d.Length();
+                    float len = d.Length();
                     if (len >= r || len < 1e-6f) continue;
                     Position += d * (1f / len) * (r - len + SkinWidth);
                 }
@@ -258,60 +259,67 @@ public sealed class CharacterController2D(CollisionWorld2D world, Vec2 halfExten
         }
     }
 
-    private bool IsDropIgnored(ColliderHandle h)
-    {
-        return _droppedOneWay.Count > 0 && _droppedOneWay.Contains(h);
-    }
+    private bool IsDropIgnored(ColliderHandle h) =>
+        _droppedOneWay.Count > 0 && _droppedOneWay.Contains(h);
 
     private void UpdateDropIgnores()
     {
         if (_droppedOneWay.Count == 0) return;
         var margin = Vec2.Splat(SkinWidth * 2f);
-        var count = world.OverlapBox(
-            Position,
-            halfExtents + margin,
-            CollisionMask,
-            _scratch,
-            false
+        int count = world.OverlapBox(
+            center: Position,
+            halfExtents: halfExtents + margin,
+            mask: CollisionMask,
+            results: _scratch,
+            includeTriggers: false
         );
         _dropScratch.Clear();
         foreach (var h in _droppedOneWay)
         {
-            var still = false;
-            for (var i = 0; i < count; i++)
+            bool still = false;
+            for (int i = 0; i < count; i++)
+            {
                 if (_scratch[i] == h)
                 {
                     still = true;
                     break;
                 }
+            }
 
             if (!still) _dropScratch.Add(h);
         }
 
-        for (var i = 0; i < _dropScratch.Count; i++) _droppedOneWay.Remove(_dropScratch[i]);
+        for (int i = 0; i < _dropScratch.Count; i++) _droppedOneWay.Remove(_dropScratch[i]);
     }
 
     private void UpdateTriggers()
     {
         _triggersNow.Clear();
-        var count = world.OverlapBox(
-            Position,
-            halfExtents,
-            CollisionMask,
-            _scratch
+        int count = world.OverlapBox(
+            center: Position,
+            halfExtents: halfExtents,
+            mask: CollisionMask,
+            results: _scratch
         );
-        for (var i = 0; i < count; i++)
+        for (int i = 0; i < count; i++)
+        {
             if (world.IsTrigger(_scratch[i]))
                 _triggersNow.Add(_scratch[i]);
+        }
 
         _entered.Clear();
         _exited.Clear();
         foreach (var h in _triggersNow)
+        {
             if (!_triggersPrev.Contains(h))
                 _entered.Add(h);
+        }
+
         foreach (var h in _triggersPrev)
+        {
             if (!_triggersNow.Contains(h))
                 _exited.Add(h);
+        }
 
         (_triggersPrev, _triggersNow) = (_triggersNow, _triggersPrev);
     }

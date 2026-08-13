@@ -3,6 +3,7 @@ using Serilog.Core;
 using Serilog.Events;
 using Zigote.Bloc;
 using Zigote.Core.Diagnostics;
+using Zigote.Core.State;
 
 namespace Zigote.Logging;
 
@@ -32,17 +33,18 @@ public static class AppLog
     ///     Console and the in-app ring — everything the app can log before it knows where it is
     ///     allowed to write. Safe to call more than once; the last configuration wins.
     /// </summary>
-    public static void Bootstrap(LogEventLevel consoleLevel = LogEventLevel.Warning)
-    {
+    public static void Bootstrap(LogEventLevel consoleLevel = LogEventLevel.Warning) =>
         Log.Logger = Build(consoleLevel).CreateLogger();
-    }
 
     /// <summary>
     ///     Add the rolling file sink, once the sandbox has told us where the app may write. A logger
     ///     that cannot open its file still logs to the console rather than failing the run.
     /// </summary>
     /// <param name="path">The file to roll. Its directory is created if missing.</param>
-    /// <param name="consoleLevel">Unchanged from <see cref="Bootstrap" />; passed again because the whole logger is rebuilt.</param>
+    /// <param name="consoleLevel">
+    ///     Unchanged from <see cref="Bootstrap" />; passed again because the whole
+    ///     logger is rebuilt.
+    /// </param>
     /// <param name="fileLevel">How much reaches the file. Debug is what makes a bug report worth reading.</param>
     public static void AddFile(
         string path,
@@ -56,9 +58,9 @@ public static class AppLog
 
             Log.Logger = Build(consoleLevel)
                 .WriteTo.File(
-                    path,
-                    fileLevel,
-                    FileTemplate,
+                    path: path,
+                    restrictedToMinimumLevel: fileLevel,
+                    outputTemplate: FileTemplate,
                     rollingInterval: RollingInterval.Day,
                     retainedFileCountLimit: 5,
                     // Capped on purpose: a chatty loop on a slow night must not be able to fill a
@@ -71,7 +73,11 @@ public static class AppLog
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Log file {Path} unavailable; logging to the console only", path);
+            Log.Warning(
+                exception: ex,
+                messageTemplate: "Log file {Path} unavailable; logging to the console only",
+                propertyValue: path
+            );
         }
     }
 
@@ -86,45 +92,49 @@ public static class AppLog
     /// </summary>
     public static void CaptureFailures()
     {
-        Core.State.Reactive.OnError = ex =>
-            Log.ForContext("SourceContext", "Reactive").Error(
-                ex,
-                "Unhandled failure in a reactive effect"
+        Reactive.OnError = ex =>
+            Log.ForContext(propertyName: "SourceContext", value: "Reactive").Error(
+                exception: ex,
+                messageTemplate: "Unhandled failure in a reactive effect"
             );
 
         BlocErrors.OnError = (ex, context) =>
-            Log.ForContext("SourceContext", "Bloc").Error(ex, "{Context}", context);
+            Log.ForContext(propertyName: "SourceContext", value: "Bloc").Error(
+                exception: ex,
+                messageTemplate: "{Context}",
+                propertyValue: context
+            );
 
         TaskScheduler.UnobservedTaskException += (_, e) =>
         {
-            Log.Error(e.Exception, "Unobserved task exception");
+            Log.Error(exception: e.Exception, messageTemplate: "Unobserved task exception");
             e.SetObserved();
         };
 
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
         {
             Log.Fatal(
-                e.ExceptionObject as Exception,
-                "Unhandled exception, terminating: {Terminating}",
-                e.IsTerminating
+                exception: e.ExceptionObject as Exception,
+                messageTemplate: "Unhandled exception, terminating: {Terminating}",
+                propertyValue: e.IsTerminating
             );
             Log.CloseAndFlush(); // the process is going down; the file must have the line
         };
     }
 
     /// <summary>Flush the file sink. The last thing <c>Main</c> does, or a crash loses its own report.</summary>
-    public static void Shutdown()
-    {
-        Log.CloseAndFlush();
-    }
+    public static void Shutdown() => Log.CloseAndFlush();
 
     private static LoggerConfiguration Build(LogEventLevel consoleLevel)
     {
         return new LoggerConfiguration()
             .MinimumLevel.Debug()
-            .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+            .MinimumLevel.Override(source: "Microsoft", minimumLevel: LogEventLevel.Warning)
             .Enrich.FromLogContext()
-            .WriteTo.Console(consoleLevel, ConsoleTemplate)
+            .WriteTo.Console(
+                restrictedToMinimumLevel: consoleLevel,
+                outputTemplate: ConsoleTemplate
+            )
             .WriteTo.Sink(new DebugLogSink());
     }
 
@@ -138,11 +148,15 @@ public static class AppLog
     {
         public void Emit(LogEvent logEvent)
         {
-            var message = logEvent.RenderMessage();
+            string message = logEvent.RenderMessage();
             if (logEvent.Exception is { } e)
                 message = $"{message} — {e.GetType().Name}: {e.Message}";
 
-            DebugLog.Add(MapLevel(logEvent.Level), message, Category(logEvent));
+            DebugLog.Add(
+                level: MapLevel(logEvent.Level),
+                message: message,
+                category: Category(logEvent)
+            );
         }
 
         private static DebugLogLevel MapLevel(LogEventLevel level)
@@ -159,7 +173,10 @@ public static class AppLog
 
         private static string Category(LogEvent logEvent)
         {
-            if (logEvent.Properties.TryGetValue(Constants.SourceContextPropertyName, out var value)
+            if (logEvent.Properties.TryGetValue(
+                    key: Constants.SourceContextPropertyName,
+                    value: out var value
+                )
                 && value is ScalarValue { Value: string context })
                 return context[(context.LastIndexOf('.') + 1)..];
 
@@ -180,10 +197,14 @@ public static class TaskLogging
     public static void Forget(this Task task)
     {
         task.ContinueWith(
-            static t => Log.Error(t.Exception, "Fire-and-forget task faulted"),
-            CancellationToken.None,
-            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-            TaskScheduler.Default
+            continuationAction: static t => Log.Error(
+                exception: t.Exception,
+                messageTemplate: "Fire-and-forget task faulted"
+            ),
+            cancellationToken: CancellationToken.None,
+            continuationOptions: TaskContinuationOptions.OnlyOnFaulted |
+                                 TaskContinuationOptions.ExecuteSynchronously,
+            scheduler: TaskScheduler.Default
         );
     }
 }

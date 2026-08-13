@@ -16,27 +16,24 @@ public sealed class RuntimeInstancingBackend : IInstancingBackend
     private readonly Dictionary<int, SceneNode> _byId = new();
     private readonly Dictionary<string, SceneNode> _byName = new();
 
-    public RuntimeInstancingBackend(SceneNode root)
-    {
-        Index(root);
-    }
+    public RuntimeInstancingBackend(SceneNode root) => Index(root);
 
     public void SetInstances(uint entityId, ReadOnlySpan<float> matrices, int count)
     {
-        if (!_byId.TryGetValue((int)entityId, out var node)) return;
-        Submit(node, matrices, count);
+        if (!_byId.TryGetValue(key: (int)entityId, value: out var node)) return;
+        Submit(node: node, matrices: matrices, count: count);
     }
 
     public void SetInstances(string nodeName, ReadOnlySpan<float> matrices, int count)
     {
-        if (!_byName.TryGetValue(nodeName, out var node)) return;
-        Submit(node, matrices, count);
+        if (!_byName.TryGetValue(key: nodeName, value: out var node)) return;
+        Submit(node: node, matrices: matrices, count: count);
     }
 
     private void Index(SceneNode node)
     {
         _byId[node.Id] = node;
-        _byName.TryAdd(node.Name, node); // first node wins on a name clash
+        _byName.TryAdd(key: node.Name, value: node); // first node wins on a name clash
         foreach (var c in node.Children) Index(c);
     }
 
@@ -48,22 +45,31 @@ public sealed class RuntimeInstancingBackend : IInstancingBackend
         // Clamp to what the span actually holds (16 floats/instance) so a buggy script can't make
         // native read out of bounds.
         if (count > matrices.Length / 16) count = matrices.Length / 16;
-        var n = count < 0 ? 0 : (uint)count;
+        uint n = count < 0 ? 0 : (uint)count;
         if (n > 0) _active.Add(node.Id);
         else _active.Remove(node.Id);
-        ZigoteEngine.Instance?.SceneSetMeshInstances(node.Handle, matrices, n);
+        ZigoteEngine.Instance?.SceneSetMeshInstances(
+            nodeHandle: node.Handle,
+            matrices: matrices,
+            count: n
+        );
     }
 
     /// <summary>Clear every node that was drawing instanced, so edit mode reverts to single draws.</summary>
     public void ClearAll()
     {
-        foreach (var id in _active)
-            if (_byId.TryGetValue(id, out var node) && node.Handle != 0)
+        foreach (int id in _active)
+        {
+            if (_byId.TryGetValue(key: id, value: out var node) && node.Handle != 0)
+            {
                 ZigoteEngine.Instance?.SceneSetMeshInstances(
-                    node.Handle,
-                    ReadOnlySpan<float>.Empty,
-                    0
+                    nodeHandle: node.Handle,
+                    matrices: ReadOnlySpan<float>.Empty,
+                    count: 0
                 );
+            }
+        }
+
         _active.Clear();
     }
 }

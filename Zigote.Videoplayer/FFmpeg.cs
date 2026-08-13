@@ -53,8 +53,7 @@ public static class FFmpeg
         try
         {
             using var p = Process.Start(
-                new ProcessStartInfo(FfprobePath, "-version")
-                {
+                new ProcessStartInfo(fileName: FfprobePath, arguments: "-version") {
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
@@ -81,35 +80,41 @@ public static class FFmpeg
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(source);
 
-        var psi = new ProcessStartInfo(FfprobePath)
-        {
+        var psi = new ProcessStartInfo(FfprobePath) {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
-        foreach (var a in ProbeArgs(source)) psi.ArgumentList.Add(a);
+        foreach (string a in ProbeArgs(source)) psi.ArgumentList.Add(a);
 
         using var proc = Process.Start(psi)
-                         ?? throw new InvalidOperationException($"Could not start '{FfprobePath}'.");
+                         ?? throw new InvalidOperationException(
+                             $"Could not start '{FfprobePath}'."
+                         );
 
         var stdout = proc.StandardOutput.ReadToEndAsync(ct);
         var stderr = proc.StandardError.ReadToEndAsync(ct);
         await proc.WaitForExitAsync(ct).ConfigureAwait(false);
 
-        var json = await stdout.ConfigureAwait(false);
+        string json = await stdout.ConfigureAwait(false);
         if (proc.ExitCode != 0)
+        {
             throw new InvalidOperationException(
                 $"ffprobe failed for '{source}': {Tail(await stderr.ConfigureAwait(false))}"
             );
+        }
 
-        return ParseProbe(source, json);
+        return ParseProbe(source: source, json: json);
     }
 
     internal static IEnumerable<string> ProbeArgs(string source)
     {
-        var args = new List<string> { "-v", "error" };
-        AddNetworkOptions(args, source);
+        var args = new List<string> {
+            "-v",
+            "error",
+        };
+        AddNetworkOptions(args: args, source: source);
         args.Add("-print_format");
         args.Add("json");
         args.Add("-show_format");
@@ -129,48 +134,57 @@ public static class FFmpeg
 
         VideoTrackInfo? video = null;
         AudioTrackInfo? audio = null;
-        var streamDuration = 0.0;
+        double streamDuration = 0.0;
 
-        if (root.TryGetProperty("streams", out var streams))
+        if (root.TryGetProperty(propertyName: "streams", value: out var streams))
+        {
             foreach (var s in streams.EnumerateArray())
             {
-                var kind = Str(s, "codec_type");
-                streamDuration = Math.Max(streamDuration, Num(Str(s, "duration")));
+                string kind = Str(obj: s, name: "codec_type");
+                streamDuration = Math.Max(
+                    val1: streamDuration,
+                    val2: Num(Str(obj: s, name: "duration"))
+                );
 
                 // Cover art is an "attached_pic" video stream of one frame. Treating it as the video
                 // track would show an mp3's album cover as a 1-frame film and hang the clock on it.
                 if (kind == "video" && video is null && !IsAttachedPicture(s))
+                {
                     video = new VideoTrackInfo(
-                        Int(s, "width"),
-                        Int(s, "height"),
-                        FrameRate(s),
-                        Str(s, "codec_name")
+                        Width: Int(obj: s, name: "width"),
+                        Height: Int(obj: s, name: "height"),
+                        FrameRate: FrameRate(s),
+                        Codec: Str(obj: s, name: "codec_name")
                     );
+                }
                 else if (kind == "audio" && audio is null)
+                {
                     audio = new AudioTrackInfo(
-                        Int(s, "channels"),
-                        Int(s, "sample_rate"),
-                        Str(s, "codec_name"),
-                        Language(s)
+                        Channels: Int(obj: s, name: "channels"),
+                        SampleRate: Int(obj: s, name: "sample_rate"),
+                        Codec: Str(obj: s, name: "codec_name"),
+                        Language: Language(s)
                     );
+                }
             }
+        }
 
-        var duration = 0.0;
-        if (root.TryGetProperty("format", out var format))
-            duration = Num(Str(format, "duration"));
+        double duration = 0.0;
+        if (root.TryGetProperty(propertyName: "format", value: out var format))
+            duration = Num(Str(obj: format, name: "duration"));
         if (duration <= 0) duration = streamDuration;
 
         if (video is null && audio is null)
             throw new InvalidOperationException($"No audio or video stream in '{source}'.");
 
         return new MediaInfo(
-            source,
-            TimeSpan.FromSeconds(Math.Max(0, duration)),
-            video,
-            audio,
+            Source: source,
+            Duration: TimeSpan.FromSeconds(Math.Max(val1: 0, val2: duration)),
+            Video: video,
+            Audio: audio,
             // A network source ffprobe could not measure is a live one: no end to seek to, and the
             // transport must not offer a scrubber over a length it invented.
-            IsNetwork(source) && duration <= 0
+            IsLive: IsNetwork(source) && duration <= 0
         );
     }
 
@@ -188,8 +202,13 @@ public static class FFmpeg
         double speed,
         int maxHeight)
     {
-        var args = new List<string> { "-hide_banner", "-loglevel", "error", "-nostdin" };
-        AddNetworkOptions(args, source);
+        var args = new List<string> {
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-nostdin",
+        };
+        AddNetworkOptions(args: args, source: source);
         if (startSeconds > 0)
         {
             args.Add("-ss");
@@ -221,7 +240,7 @@ public static class FFmpeg
         if (filters.Count > 0)
         {
             args.Add("-vf");
-            args.Add(string.Join(',', filters));
+            args.Add(string.Join(separator: ',', values: filters));
         }
 
         args.Add("-f");
@@ -244,8 +263,13 @@ public static class FFmpeg
     /// </summary>
     internal static IEnumerable<string> AudioArgs(string source, double startSeconds, double speed)
     {
-        var args = new List<string> { "-hide_banner", "-loglevel", "error", "-nostdin" };
-        AddNetworkOptions(args, source);
+        var args = new List<string> {
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-nostdin",
+        };
+        AddNetworkOptions(args: args, source: source);
         if (startSeconds > 0)
         {
             args.Add("-ss");
@@ -287,7 +311,7 @@ public static class FFmpeg
     internal static string ATempo(double speed)
     {
         var stages = new List<string>();
-        var remaining = speed;
+        double remaining = speed;
         while (remaining > 2.0)
         {
             stages.Add("atempo=2.0");
@@ -301,7 +325,7 @@ public static class FFmpeg
         }
 
         stages.Add($"atempo={Fmt(remaining)}");
-        return string.Join(',', stages);
+        return string.Join(separator: ',', values: stages);
     }
 
     /// <summary>
@@ -313,22 +337,25 @@ public static class FFmpeg
     internal static byte[] WavHeader()
     {
         const uint dataSize = 0x7FFFFFFF & ~(uint)(AudioBytesPerFrame - 1);
-        var h = new byte[44];
+        byte[] h = new byte[44];
         var span = h.AsSpan();
 
         "RIFF"u8.CopyTo(span);
-        BitConverter.TryWriteBytes(span[4..], 36u + dataSize);
+        BitConverter.TryWriteBytes(destination: span[4..], value: 36u + dataSize);
         "WAVE"u8.CopyTo(span[8..]);
         "fmt "u8.CopyTo(span[12..]);
-        BitConverter.TryWriteBytes(span[16..], 16u); // PCM fmt chunk size
-        BitConverter.TryWriteBytes(span[20..], (ushort)1); // PCM
-        BitConverter.TryWriteBytes(span[22..], (ushort)AudioChannels);
-        BitConverter.TryWriteBytes(span[24..], (uint)AudioSampleRate);
-        BitConverter.TryWriteBytes(span[28..], (uint)(AudioSampleRate * AudioBytesPerFrame));
-        BitConverter.TryWriteBytes(span[32..], (ushort)AudioBytesPerFrame);
-        BitConverter.TryWriteBytes(span[34..], (ushort)16); // bits per sample
+        BitConverter.TryWriteBytes(destination: span[16..], value: 16u); // PCM fmt chunk size
+        BitConverter.TryWriteBytes(destination: span[20..], value: (ushort)1); // PCM
+        BitConverter.TryWriteBytes(destination: span[22..], value: (ushort)AudioChannels);
+        BitConverter.TryWriteBytes(destination: span[24..], value: (uint)AudioSampleRate);
+        BitConverter.TryWriteBytes(
+            destination: span[28..],
+            value: (uint)(AudioSampleRate * AudioBytesPerFrame)
+        );
+        BitConverter.TryWriteBytes(destination: span[32..], value: (ushort)AudioBytesPerFrame);
+        BitConverter.TryWriteBytes(destination: span[34..], value: (ushort)16); // bits per sample
         "data"u8.CopyTo(span[36..]);
-        BitConverter.TryWriteBytes(span[40..], dataSize);
+        BitConverter.TryWriteBytes(destination: span[40..], value: dataSize);
         return h;
     }
 
@@ -338,7 +365,7 @@ public static class FFmpeg
     /// </summary>
     public static bool IsNetwork(string source)
     {
-        return Uri.TryCreate(source, UriKind.Absolute, out var uri)
+        return Uri.TryCreate(uriString: source, uriKind: UriKind.Absolute, result: out var uri)
                && uri.Scheme is "http" or "https" or "rtmp" or "rtmps" or "rtsp" or "udp" or "tcp"
                    or "srt";
     }
@@ -355,7 +382,11 @@ public static class FFmpeg
     /// </summary>
     internal static void AddNetworkOptions(List<string> args, string source)
     {
-        if (!Uri.TryCreate(source, UriKind.Absolute, out var uri)) return;
+        if (!Uri.TryCreate(
+                uriString: source,
+                uriKind: UriKind.Absolute,
+                result: out var uri
+            )) return;
         if (uri.Scheme is not ("http" or "https")) return;
 
         args.Add("-reconnect");
@@ -371,10 +402,9 @@ public static class FFmpeg
     }
 
     /// <summary>Clamp a probed frame rate into something a decode loop can survive.</summary>
-    internal static double SaneFrameRate(double fps)
-    {
-        return !double.IsFinite(fps) || fps <= 0 ? 25.0 : Math.Min(fps, MaxFrameRate);
-    }
+    internal static double SaneFrameRate(double fps) => !double.IsFinite(fps) || fps <= 0
+        ? 25.0
+        : Math.Min(val1: fps, val2: MaxFrameRate);
 
     /// <summary>Keep the tail of an ffmpeg stderr dump — the last lines are the ones that say why.</summary>
     internal static string Tail(string text, int max = 400)
@@ -385,47 +415,47 @@ public static class FFmpeg
 
     private static bool IsAttachedPicture(JsonElement stream)
     {
-        return stream.TryGetProperty("disposition", out var d)
-               && d.TryGetProperty("attached_pic", out var v)
-               && v.TryGetInt32(out var i)
+        return stream.TryGetProperty(propertyName: "disposition", value: out var d)
+               && d.TryGetProperty(propertyName: "attached_pic", value: out var v)
+               && v.TryGetInt32(out int i)
                && i != 0;
     }
 
     private static double FrameRate(JsonElement stream)
     {
-        var fps = Fraction(Str(stream, "r_frame_rate"));
-        if (fps <= 0) fps = Fraction(Str(stream, "avg_frame_rate"));
+        double fps = Fraction(Str(obj: stream, name: "r_frame_rate"));
+        if (fps <= 0) fps = Fraction(Str(obj: stream, name: "avg_frame_rate"));
         return SaneFrameRate(fps);
     }
 
     /// <summary>ffprobe reports rates as exact rationals ("30000/1001"); 0/0 means "it would not say".</summary>
     internal static double Fraction(string value)
     {
-        var slash = value.IndexOf('/');
+        int slash = value.IndexOf('/');
         if (slash < 0) return Num(value);
-        var num = Num(value[..slash]);
-        var den = Num(value[(slash + 1)..]);
+        double num = Num(value[..slash]);
+        double den = Num(value[(slash + 1)..]);
         return den > 0 ? num / den : 0;
     }
 
-    private static string Language(JsonElement stream)
-    {
-        return stream.TryGetProperty("tags", out var tags) ? Str(tags, "language") : "";
-    }
+    private static string Language(JsonElement stream) =>
+        stream.TryGetProperty(propertyName: "tags", value: out var tags)
+            ? Str(obj: tags, name: "language")
+            : "";
 
     private static string Str(JsonElement obj, string name)
     {
-        return obj.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String
+        return obj.TryGetProperty(propertyName: name, value: out var v) &&
+               v.ValueKind == JsonValueKind.String
             ? v.GetString() ?? ""
             : "";
     }
 
     private static int Int(JsonElement obj, string name)
     {
-        if (!obj.TryGetProperty(name, out var v)) return 0;
-        return v.ValueKind switch
-        {
-            JsonValueKind.Number => v.TryGetInt32(out var i) ? i : 0,
+        if (!obj.TryGetProperty(propertyName: name, value: out var v)) return 0;
+        return v.ValueKind switch {
+            JsonValueKind.Number => v.TryGetInt32(out int i) ? i : 0,
             JsonValueKind.String => (int)Num(v.GetString() ?? ""),
             _ => 0,
         };
@@ -433,15 +463,20 @@ public static class FFmpeg
 
     private static double Num(string value)
     {
-        return double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var d)
+        return double.TryParse(
+                   s: value,
+                   style: NumberStyles.Float,
+                   provider: CultureInfo.InvariantCulture,
+                   result: out double d
+               )
                && double.IsFinite(d)
             ? d
             : 0;
     }
 
     /// <summary>Invariant formatting: ffmpeg parses "1.5", never the "1,5" a German locale would emit.</summary>
-    private static string Fmt(double value)
-    {
-        return value.ToString("0.######", CultureInfo.InvariantCulture);
-    }
+    private static string Fmt(double value) => value.ToString(
+        format: "0.######",
+        provider: CultureInfo.InvariantCulture
+    );
 }

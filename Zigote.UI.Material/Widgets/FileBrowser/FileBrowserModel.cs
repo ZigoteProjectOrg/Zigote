@@ -80,9 +80,9 @@ public sealed class FileBrowserModel
     /// <summary>Enter a directory, recording history (no-op outside <see cref="LockRoot" />).</summary>
     public void NavigateTo(string directory)
     {
-        var full = SafeFullPath(directory);
+        string full = SafeFullPath(directory);
         if (!IsWithinRoot(full)) return;
-        if (CurrentDirectory.Length > 0 && !PathComparer.Equals(CurrentDirectory, full))
+        if (CurrentDirectory.Length > 0 && !PathComparer.Equals(x: CurrentDirectory, y: full))
         {
             _back.Add(CurrentDirectory);
             _forward.Clear();
@@ -94,7 +94,7 @@ public sealed class FileBrowserModel
     public void GoBack()
     {
         if (_back.Count == 0) return;
-        var target = _back[^1];
+        string target = _back[^1];
         _back.RemoveAt(_back.Count - 1);
         _forward.Add(CurrentDirectory);
         Load(target);
@@ -103,7 +103,7 @@ public sealed class FileBrowserModel
     public void GoForward()
     {
         if (_forward.Count == 0) return;
-        var target = _forward[^1];
+        string target = _forward[^1];
         _forward.RemoveAt(_forward.Count - 1);
         _back.Add(CurrentDirectory);
         Load(target);
@@ -125,9 +125,7 @@ public sealed class FileBrowserModel
     public void SortBy(FileSortColumn column)
     {
         if (SortColumn == column)
-        {
             SortAscending = !SortAscending;
-        }
         else
         {
             SortColumn = column;
@@ -137,8 +135,10 @@ public sealed class FileBrowserModel
         ApplyView();
     }
 
-    /// <summary>Rebuild <see cref="Visible" /> from the raw entries (call after mutating any
-    ///     filter property). Selection survives when the paths remain visible.</summary>
+    /// <summary>
+    ///     Rebuild <see cref="Visible" /> from the raw entries (call after mutating any
+    ///     filter property). Selection survives when the paths remain visible.
+    /// </summary>
     public void ApplyView()
     {
         _visible.Clear();
@@ -148,7 +148,10 @@ public sealed class FileBrowserModel
             if (DirectoriesOnly && !e.IsDirectory) continue;
             if (!e.IsDirectory && !MatchesExtensionFilter(e.Name)) continue;
             if (SearchText.Length > 0 &&
-                !e.Name.Contains(SearchText, StringComparison.OrdinalIgnoreCase)) continue;
+                !e.Name.Contains(
+                    value: SearchText,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                )) continue;
             _visible.Add(e);
         }
 
@@ -156,7 +159,10 @@ public sealed class FileBrowserModel
 
         if (_selected.Count > 0)
         {
-            var visiblePaths = new HashSet<string>(_visible.Select(v => v.FullPath), PathComparer);
+            var visiblePaths = new HashSet<string>(
+                collection: _visible.Select(v => v.FullPath),
+                comparer: PathComparer
+            );
             _selected.RemoveWhere(p => !visiblePaths.Contains(p));
         }
 
@@ -165,16 +171,11 @@ public sealed class FileBrowserModel
 
     // ── Selection ─────────────────────────────────────────────────────────────
 
-    public bool IsSelected(in FileBrowserEntry entry)
-    {
-        return _selected.Contains(entry.FullPath);
-    }
+    public bool IsSelected(in FileBrowserEntry entry) => _selected.Contains(entry.FullPath);
 
     /// <summary>Entries of <see cref="Visible" /> currently selected, in view order.</summary>
-    public List<FileBrowserEntry> SelectedEntries()
-    {
-        return _visible.Where(e => _selected.Contains(e.FullPath)).ToList();
-    }
+    public List<FileBrowserEntry> SelectedEntries() =>
+        _visible.Where(e => _selected.Contains(e.FullPath)).ToList();
 
     public void ClearSelection()
     {
@@ -190,14 +191,14 @@ public sealed class FileBrowserModel
     public void SelectIndex(int index, bool toggle = false, bool range = false)
     {
         if ((uint)index >= (uint)_visible.Count) return;
-        var path = _visible[index].FullPath;
+        string path = _visible[index].FullPath;
 
         if (range && AllowMultiSelect && _anchor >= 0 && _anchor < _visible.Count)
         {
             _selected.Clear();
-            var lo = Math.Min(_anchor, index);
-            var hi = Math.Max(_anchor, index);
-            for (var i = lo; i <= hi; i++) _selected.Add(_visible[i].FullPath);
+            int lo = Math.Min(val1: _anchor, val2: index);
+            int hi = Math.Max(val1: _anchor, val2: index);
+            for (int i = lo; i <= hi; i++) _selected.Add(_visible[i].FullPath);
             return; // the anchor stays put so a further shift-click re-ranges from it
         }
 
@@ -220,10 +221,13 @@ public sealed class FileBrowserModel
     public int TypeAheadIndex(string prefix, int from)
     {
         if (prefix.Length == 0 || _visible.Count == 0) return -1;
-        for (var step = 1; step <= _visible.Count; step++)
+        for (int step = 1; step <= _visible.Count; step++)
         {
-            var i = ((from + step) % _visible.Count + _visible.Count) % _visible.Count;
-            if (_visible[i].Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return i;
+            int i = (((from + step) % _visible.Count) + _visible.Count) % _visible.Count;
+            if (_visible[i].Name.StartsWith(
+                    value: prefix,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                )) return i;
         }
 
         return -1;
@@ -231,8 +235,10 @@ public sealed class FileBrowserModel
 
     // ── Listing ───────────────────────────────────────────────────────────────
 
-    /// <summary>List <paramref name="directory" /> from disk. Failures land in
-    ///     <see cref="LastError" /> with an empty listing rather than throwing.</summary>
+    /// <summary>
+    ///     List <paramref name="directory" /> from disk. Failures land in
+    ///     <see cref="LastError" /> with an empty listing rather than throwing.
+    /// </summary>
     public void Load(string directory)
     {
         LastError = null;
@@ -240,19 +246,20 @@ public sealed class FileBrowserModel
         try
         {
             foreach (var info in new DirectoryInfo(directory).EnumerateFileSystemInfos())
+            {
                 try
                 {
-                    var isDir = (info.Attributes & FileAttributes.Directory) != 0;
-                    var hidden = info.Name.StartsWith('.') ||
-                                 (info.Attributes & FileAttributes.Hidden) != 0;
+                    bool isDir = (info.Attributes & FileAttributes.Directory) != 0;
+                    bool hidden = info.Name.StartsWith('.') ||
+                                  (info.Attributes & FileAttributes.Hidden) != 0;
                     list.Add(
                         new FileBrowserEntry(
-                            info.Name,
-                            info.FullName,
-                            isDir,
-                            isDir ? -1L : (info as FileInfo)?.Length ?? 0L,
-                            info.LastWriteTime,
-                            hidden
+                            Name: info.Name,
+                            FullPath: info.FullName,
+                            IsDirectory: isDir,
+                            Size: isDir ? -1L : (info as FileInfo)?.Length ?? 0L,
+                            Modified: info.LastWriteTime,
+                            IsHidden: hidden
                         )
                     );
                 }
@@ -261,13 +268,14 @@ public sealed class FileBrowserModel
                     // A single unreadable entry (dangling symlink, permission hole) must not
                     // take down the whole listing.
                 }
+            }
         }
         catch (Exception ex)
         {
             LastError = ex.Message;
         }
 
-        SetEntries(directory, list);
+        SetEntries(directory: directory, entries: list);
     }
 
     /// <summary>Replace the raw listing (the seam <see cref="Load" /> and tests feed).</summary>
@@ -283,11 +291,15 @@ public sealed class FileBrowserModel
     private bool MatchesExtensionFilter(string name)
     {
         if (ExtensionFilter is not { Length: > 0 } exts) return true;
-        var ext = Path.GetExtension(name).TrimStart('.');
-        foreach (var e in exts)
+        string ext = Path.GetExtension(name).TrimStart('.');
+        foreach (string e in exts)
         {
             if (e == "*") return true;
-            if (string.Equals(e, ext, StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(
+                    a: e,
+                    b: ext,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                )) return true;
         }
 
         return false;
@@ -297,12 +309,12 @@ public sealed class FileBrowserModel
     {
         // Folders group before files regardless of column or direction (every OS browser does).
         if (a.IsDirectory != b.IsDirectory) return a.IsDirectory ? -1 : 1;
-        var c = SortColumn switch {
+        int c = SortColumn switch {
             FileSortColumn.Size => a.Size.CompareTo(b.Size),
             FileSortColumn.Modified => a.Modified.CompareTo(b.Modified),
             _ => 0,
         };
-        if (c == 0) c = NaturalCompare(a.Name, b.Name);
+        if (c == 0) c = NaturalCompare(a: a.Name, b: b.Name);
         return SortAscending ? c : -c;
     }
 
@@ -318,32 +330,32 @@ public sealed class FileBrowserModel
         {
             if (char.IsAsciiDigit(a[i]) && char.IsAsciiDigit(b[j]))
             {
-                var startA = i;
+                int startA = i;
                 while (i < a.Length && char.IsAsciiDigit(a[i])) i++;
-                var startB = j;
+                int startB = j;
                 while (j < b.Length && char.IsAsciiDigit(b[j])) j++;
 
-                var trimA = startA;
+                int trimA = startA;
                 while (trimA < i - 1 && a[trimA] == '0') trimA++;
-                var trimB = startB;
+                int trimB = startB;
                 while (trimB < j - 1 && b[trimB] == '0') trimB++;
 
-                var lenA = i - trimA;
-                var lenB = j - trimB;
+                int lenA = i - trimA;
+                int lenB = j - trimB;
                 if (lenA != lenB) return lenA - lenB; // more significant digits = bigger number
-                for (var k = 0; k < lenA; k++)
+                for (int k = 0; k < lenA; k++)
                 {
-                    var d = a[trimA + k].CompareTo(b[trimB + k]);
+                    int d = a[trimA + k].CompareTo(b[trimB + k]);
                     if (d != 0) return d;
                 }
 
                 // Equal magnitude — fewer leading zeros first, then keep scanning.
-                var zeros = (trimA - startA).CompareTo(trimB - startB);
+                int zeros = (trimA - startA).CompareTo(trimB - startB);
                 if (zeros != 0) return zeros;
                 continue;
             }
 
-            var ci = char.ToUpperInvariant(a[i]).CompareTo(char.ToUpperInvariant(b[j]));
+            int ci = char.ToUpperInvariant(a[i]).CompareTo(char.ToUpperInvariant(b[j]));
             if (ci != 0) return ci;
             i++;
             j++;
@@ -355,9 +367,9 @@ public sealed class FileBrowserModel
     private bool IsWithinRoot(string directory)
     {
         if (LockRoot is null) return true;
-        var root = Path.TrimEndingDirectorySeparator(SafeFullPath(LockRoot));
-        var dir = Path.TrimEndingDirectorySeparator(SafeFullPath(directory));
-        if (!dir.StartsWith(root, PathComparison)) return false;
+        string root = Path.TrimEndingDirectorySeparator(SafeFullPath(LockRoot));
+        string dir = Path.TrimEndingDirectorySeparator(SafeFullPath(directory));
+        if (!dir.StartsWith(value: root, comparisonType: PathComparison)) return false;
         return dir.Length == root.Length || dir[root.Length] is '/' or '\\';
     }
 

@@ -13,25 +13,20 @@ namespace Zigote.Tests;
 public class WidgetPreviewTests
 {
     [Fact]
-    public void ResolvesAWidgetTypeByFullName()
-    {
+    public void ResolvesAWidgetTypeByFullName() =>
         Assert.IsType<PreviewSample>(WidgetPreview.Resolve(typeof(PreviewSample).FullName!));
-    }
 
     [Fact]
-    public void ResolvesAStaticFactoryMethod()
-    {
-        Assert.IsType<Center>(WidgetPreview.Resolve($"{typeof(PreviewSample).FullName}.Factory"));
-    }
+    public void ResolvesAStaticFactoryMethod() => Assert.IsType<Center>(
+        WidgetPreview.Resolve($"{typeof(PreviewSample).FullName}.Factory")
+    );
 
     [Theory]
     [InlineData("Nope.NotAType")]
     [InlineData("Zigote.Tests.WidgetPreviewTests")] // exists, but is not a Widget
     [InlineData("Zigote.UI.Widgets.Widget")] // a Widget, but abstract
-    public void ReportsFailuresAsAWidgetInsteadOfThrowing(string target)
-    {
+    public void ReportsFailuresAsAWidgetInsteadOfThrowing(string target) =>
         Assert.NotNull(WidgetPreview.Resolve(target));
-    }
 
     [Fact]
     public void AConstructorThatThrowsBecomesAMessage()
@@ -43,30 +38,30 @@ public class WidgetPreviewTests
     [Fact]
     public void CandidatesListsTheAssemblyItIsPointedAt()
     {
-        Environment.SetEnvironmentVariable("ZIGOTE_PREVIEW_ASSEMBLY", "Zigote.Tests");
+        Environment.SetEnvironmentVariable(
+            variable: "ZIGOTE_PREVIEW_ASSEMBLY",
+            value: "Zigote.Tests"
+        );
         try
         {
-            Assert.Contains(typeof(PreviewSample).FullName, WidgetPreview.Candidates());
+            Assert.Contains(
+                expected: typeof(PreviewSample).FullName,
+                collection: WidgetPreview.Candidates()
+            );
         }
         finally
         {
-            Environment.SetEnvironmentVariable("ZIGOTE_PREVIEW_ASSEMBLY", null);
+            Environment.SetEnvironmentVariable(variable: "ZIGOTE_PREVIEW_ASSEMBLY", value: null);
         }
     }
 }
 
 internal sealed class PreviewSample : Center
 {
-    public static Widget Factory()
-    {
-        return new Center();
-    }
+    public static Widget Factory() => new Center();
 }
 
 internal sealed class PreviewExploding : Center
 {
-    public PreviewExploding()
-    {
-        throw new InvalidOperationException("boom");
-    }
+    public PreviewExploding() => throw new InvalidOperationException("boom");
 }

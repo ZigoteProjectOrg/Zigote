@@ -41,14 +41,23 @@ namespace Zigote.Core.Platform;
 public static class PlatformChannel
 {
     /// <summary>
+    ///     Most replies are a word or a short JSON object, so the first attempt uses a buffer that
+    ///     covers them without a second call into native code. A handler that needs more says so by
+    ///     returning the length it wanted, and the call is retried once at that size.
+    /// </summary>
+    private const int InitialReplyBuffer = 1024;
+
+    /// <summary>
     ///     Managed channel implementations. Read far more often than written (a handler is
     ///     registered once at startup and invoked for the app's lifetime), and written from the
     ///     head's startup while the UI thread may already be invoking — hence a concurrent map
     ///     rather than a lock.
     /// </summary>
-    private static readonly ConcurrentDictionary<string, Func<string, string?>> Handlers = new(StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<string, Func<string, string?>> Handlers =
+        new(StringComparer.Ordinal);
 
-    private static readonly ConcurrentDictionary<string, Action<string>> Listeners = new(StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<string, Action<string>> Listeners =
+        new(StringComparer.Ordinal);
 
     /// <summary>
     ///     Messages from the platform, waiting for the app thread. Unbounded on purpose: the
@@ -56,13 +65,6 @@ public static class PlatformChannel
     ///     and dropping one because a frame ran long would lose a headset click.
     /// </summary>
     private static readonly ConcurrentQueue<(string Name, string Payload)> Inbox = new();
-
-    /// <summary>
-    ///     Most replies are a word or a short JSON object, so the first attempt uses a buffer that
-    ///     covers them without a second call into native code. A handler that needs more says so by
-    ///     returning the length it wanted, and the call is retried once at that size.
-    /// </summary>
-    private const int InitialReplyBuffer = 1024;
 
     private static bool _receiverInstalled;
 
@@ -79,10 +81,7 @@ public static class PlatformChannel
     }
 
     /// <summary>Withdraw a managed implementation. Native code keeps whatever it registered.</summary>
-    public static void Unhandle(string channel)
-    {
-        Handlers.TryRemove(channel, out _);
-    }
+    public static void Unhandle(string channel) => Handlers.TryRemove(key: channel, value: out _);
 
     /// <summary>
     ///     Subscribe to messages the platform sends on a channel. Handlers run on the app thread
@@ -97,10 +96,7 @@ public static class PlatformChannel
     }
 
     /// <summary>Stop listening. Queued messages for the channel are discarded as they drain.</summary>
-    public static void Unlisten(string channel)
-    {
-        Listeners.TryRemove(channel, out _);
-    }
+    public static void Unlisten(string channel) => Listeners.TryRemove(key: channel, value: out _);
 
     /// <summary>
     ///     Whether anything implements this channel here. The honest answer to "can this platform
@@ -109,11 +105,8 @@ public static class PlatformChannel
     public static unsafe bool Supports(string channel)
     {
         if (Handlers.ContainsKey(channel)) return true;
-        var name = Utf8(channel);
-        fixed (byte* n = name)
-        {
-            return NativeEngine.ChannelHas(n);
-        }
+        byte[] name = Utf8(channel);
+        fixed (byte* n = name) return NativeEngine.ChannelHas(n);
     }
 
     /// <summary>
@@ -134,17 +127,17 @@ public static class PlatformChannel
 
         // Managed first: a head written in C# can override a native default this way, and the call
         // never leaves the runtime.
-        if (Handlers.TryGetValue(channel, out var handler)) return handler(payload);
+        if (Handlers.TryGetValue(key: channel, value: out var handler)) return handler(payload);
 
-        var name = Utf8(channel);
-        var body = Utf8(payload);
-        var buffer = ArrayPool<byte>.Shared.Rent(InitialReplyBuffer);
+        byte[] name = Utf8(channel);
+        byte[] body = Utf8(payload);
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(InitialReplyBuffer);
         try
         {
             fixed (byte* n = name)
             fixed (byte* p = body)
             {
-                var written = Call(n, p, buffer);
+                int written = Call(name: n, payload: p, buffer: buffer);
                 // Negative means no native implementation either — nobody handles this channel.
                 if (written < 0) return null;
                 if (written > buffer.Length)
@@ -154,11 +147,13 @@ public static class PlatformChannel
                     // handler, not something to loop over.
                     ArrayPool<byte>.Shared.Return(buffer);
                     buffer = ArrayPool<byte>.Shared.Rent(written);
-                    written = Call(n, p, buffer);
+                    written = Call(name: n, payload: p, buffer: buffer);
                     if (written < 0 || written > buffer.Length) return null;
                 }
 
-                return written == 0 ? string.Empty : Encoding.UTF8.GetString(buffer, 0, written);
+                return written == 0
+                    ? string.Empty
+                    : Encoding.UTF8.GetString(bytes: buffer, index: 0, count: written);
             }
         }
         finally
@@ -170,7 +165,12 @@ public static class PlatformChannel
         {
             fixed (byte* b = buffer)
             {
-                return NativeEngine.ChannelInvoke(name, payload, b, (nuint)buffer.Length);
+                return NativeEngine.ChannelInvoke(
+                    name: name,
+                    payload: payload,
+                    reply: b,
+                    replyCap: (nuint)buffer.Length
+                );
             }
         }
     }
@@ -180,10 +180,8 @@ public static class PlatformChannel
     ///     the listener runs later on the app thread. Used by a managed platform head directly, and
     ///     reached from native code through <c>zigote_channel_send</c>.
     /// </summary>
-    public static void Send(string channel, string payload = "")
-    {
+    public static void Send(string channel, string payload = "") =>
         Inbox.Enqueue((channel, payload));
-    }
 
     /// <summary>
     ///     Deliver everything the platform sent since the last call, on the calling thread. The app
@@ -196,10 +194,10 @@ public static class PlatformChannel
     /// </remarks>
     public static void Dispatch()
     {
-        var pending = Inbox.Count;
+        int pending = Inbox.Count;
         while (pending-- > 0 && Inbox.TryDequeue(out var message))
         {
-            if (!Listeners.TryGetValue(message.Name, out var listener)) continue;
+            if (!Listeners.TryGetValue(key: message.Name, value: out var listener)) continue;
             listener(message.Payload);
         }
     }
@@ -238,7 +236,7 @@ public static class PlatformChannel
     {
         try
         {
-            var channel = Marshal.PtrToStringUTF8((IntPtr)name);
+            string? channel = Marshal.PtrToStringUTF8((IntPtr)name);
             if (string.IsNullOrEmpty(channel)) return;
             Inbox.Enqueue((channel, Marshal.PtrToStringUTF8((IntPtr)payload) ?? string.Empty));
         }
@@ -253,8 +251,8 @@ public static class PlatformChannel
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static byte[] Utf8(string value)
     {
-        var bytes = new byte[Encoding.UTF8.GetByteCount(value) + 1];
-        Encoding.UTF8.GetBytes(value, bytes);
+        byte[] bytes = new byte[Encoding.UTF8.GetByteCount(value) + 1];
+        Encoding.UTF8.GetBytes(chars: value, bytes: bytes);
         return bytes;
     }
 }

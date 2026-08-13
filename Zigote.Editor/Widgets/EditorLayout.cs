@@ -11,15 +11,15 @@ using Zigote.Graphs.Editor;
 using Zigote.Graphs.Registry;
 using Zigote.Modules.UI.CodeEditor;
 using Zigote.Runtime.Scene;
-// CodeEditor: Adwaita has no source view (GtkSourceView has no libadwaita counterpart either),
-// so the editor keeps this one Material widget. The rest of the shell is Adwaita.
-using Zigote.UI.Material;
 using Zigote.UI.Host;
+using Zigote.UI.Material;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
 using Zigote.UI.Widgets.Menu;
+// CodeEditor: Adwaita has no source view (GtkSourceView has no libadwaita counterpart either),
+// so the editor keeps this one Material widget. The rest of the shell is Adwaita.
 
 namespace Zigote.Editor.Widgets;
 
@@ -66,7 +66,7 @@ public sealed class EditorLayout : Widget
     // route too — these are wired both to the menu and (via CodeEditor.OnSubmit) to the editor's own keys.
 
     private bool CodeEditorFocused =>
-        _codeEditor != null && ReferenceEquals(_app.FocusedWidget, _codeEditor);
+        _codeEditor != null && ReferenceEquals(objA: _app.FocusedWidget, objB: _codeEditor);
 
     /// <summary>
     ///     Push the persisted editor-font preferences onto the docked code editor + console: font
@@ -77,7 +77,7 @@ public sealed class EditorLayout : Widget
     {
         if (_codeEditor is { } ce)
         {
-            var size = settings.EditorFontSize.Value;
+            float size = settings.EditorFontSize.Value;
             ce.FontSize = Math.Abs(size - 13f) < 0.01f ? null : size;
             ce.InvalidateTextLayouts();
         }
@@ -109,75 +109,78 @@ public sealed class EditorLayout : Widget
     {
         var recent = _actions.History.Recent.Value
             .Select(p => new ContextMenuItem(
-                    Path.GetFileNameWithoutExtension(p),
-                    () => _actions.OpenProject(p)
+                    Label: Path.GetFileNameWithoutExtension(p),
+                    OnSelect: () => _actions.OpenProject(p)
                 )
             )
             .ToList();
         if (recent.Count == 0)
-            recent.Add(new ContextMenuItem("(none)", null));
+            recent.Add(new ContextMenuItem(Label: "(none)", OnSelect: null));
 
         var file = new AppMenu(
-            "File",
-            [
+            Title: "File",
+            Items: [
                 new ContextMenuItem(
-                    "New Project",
-                    () => ProjectDialogs.ShowNew(_app, _actions.OpenProject)
+                    Label: "New Project",
+                    OnSelect: () => ProjectDialogs.ShowNew(app: _app, onOpen: _actions.OpenProject)
                 ),
                 new ContextMenuItem(
-                    "Open Project…",
-                    () => ProjectDialogs.ShowOpen(_app, _actions.OpenProject)
+                    Label: "Open Project…",
+                    OnSelect: () => ProjectDialogs.ShowOpen(app: _app, onOpen: _actions.OpenProject)
                 ),
-                new ContextMenuItem("Open Recent", null, Children: recent),
-                new ContextMenuItem("", null, true),
-                new ContextMenuItem("Save", DoSave, Shortcut: "⌘S"),
-                new ContextMenuItem("Save Scene As…", SaveSceneAs),
-                new ContextMenuItem("", null, true),
-                new ContextMenuItem("Export Game…", () => ExportDialog.Show(_app, _theme, State)),
-                new ContextMenuItem("", null, true),
-                new ContextMenuItem("Close Project", _actions.CloseProject),
-                new ContextMenuItem("Quit", _actions.Quit, Shortcut: "⌘Q"),
+                new ContextMenuItem(Label: "Open Recent", OnSelect: null, Children: recent),
+                new ContextMenuItem(Label: "", OnSelect: null, Separator: true),
+                new ContextMenuItem(Label: "Save", OnSelect: DoSave, Shortcut: "⌘S"),
+                new ContextMenuItem(Label: "Save Scene As…", OnSelect: SaveSceneAs),
+                new ContextMenuItem(Label: "", OnSelect: null, Separator: true),
+                new ContextMenuItem(
+                    Label: "Export Game…",
+                    OnSelect: () => ExportDialog.Show(app: _app, theme: _theme, state: State)
+                ),
+                new ContextMenuItem(Label: "", OnSelect: null, Separator: true),
+                new ContextMenuItem(Label: "Close Project", OnSelect: _actions.CloseProject),
+                new ContextMenuItem(Label: "Quit", OnSelect: _actions.Quit, Shortcut: "⌘Q"),
             ]
         );
 
         var edit = new AppMenu(
-            "Edit",
-            [
-                new ContextMenuItem("Undo", DoUndo, Shortcut: "⌘Z"),
-                new ContextMenuItem("Redo", DoRedo, Shortcut: "⌘⇧Z"),
-                new ContextMenuItem("", null, true),
+            Title: "Edit",
+            Items: [
+                new ContextMenuItem(Label: "Undo", OnSelect: DoUndo, Shortcut: "⌘Z"),
+                new ContextMenuItem(Label: "Redo", OnSelect: DoRedo, Shortcut: "⌘⇧Z"),
+                new ContextMenuItem(Label: "", OnSelect: null, Separator: true),
                 // A running game can capture the pointer for mouselook, which hides the cursor and
                 // makes every other panel unreachable. Esc in the viewport is the per-session way out
                 // (this menu is not clickable while the cursor is captured); this toggle is the
                 // standing veto, so a game that re-takes capture every frame can still be stopped.
                 new ContextMenuItem(
-                    "Allow Mouse Capture in Play",
-                    ToggleMouseCapture,
+                    Label: "Allow Mouse Capture in Play",
+                    OnSelect: ToggleMouseCapture,
                     Checked: _app.Engine.AllowRelativeMouseMode
                 ),
-                new ContextMenuItem("", null, true),
-                new ContextMenuItem("Reset Layout", ResetLayout),
+                new ContextMenuItem(Label: "", OnSelect: null, Separator: true),
+                new ContextMenuItem(Label: "Reset Layout", OnSelect: ResetLayout),
             ]
         );
 
-        var nativeBar = NativeMenuBar.Backend is not null && NativeMenuBar.Enabled;
+        bool nativeBar = NativeMenuBar.Backend is not null && NativeMenuBar.Enabled;
 
         // Native bar only: a Window menu with the AppKit role — the OS appends Minimize/Zoom and
         // the live window list. The in-window bar has nothing useful to render there.
         if (nativeBar)
         {
-            var window = new AppMenu("Window", [], AppMenuRole.Window);
+            var window = new AppMenu(Title: "Window", Items: [], Role: AppMenuRole.Window);
             return [file, edit, window];
         }
 
         // On macOS "About Zigote Editor" lives in the native app menu (NativeMenuBar.AboutRequested);
         // the in-window bar needs its own Help menu to reach the about screen.
         var help = new AppMenu(
-            "Help",
-            [
+            Title: "Help",
+            Items: [
                 new ContextMenuItem(
-                    "About Zigote Editor",
-                    () => NativeMenuBar.AboutRequested?.Invoke()
+                    Label: "About Zigote Editor",
+                    OnSelect: () => NativeMenuBar.AboutRequested?.Invoke()
                 ),
             ]
         );
@@ -187,7 +190,7 @@ public sealed class EditorLayout : Widget
     /// <summary>Forbid or re-allow capture entirely. Releases immediately when turning it off.</summary>
     private void ToggleMouseCapture()
     {
-        var allowed = _app.Engine.AllowRelativeMouseMode = !_app.Engine.AllowRelativeMouseMode;
+        bool allowed = _app.Engine.AllowRelativeMouseMode = !_app.Engine.AllowRelativeMouseMode;
         _app.ShowSnackbar(
             allowed
                 ? "Mouse capture allowed — play mode can use free mouselook (Esc releases)."
@@ -206,9 +209,9 @@ public sealed class EditorLayout : Widget
     private void SaveSceneAs()
     {
         ProjectDialogs.ShowSaveSceneAs(
-            _app,
-            State.ScenePath,
-            p =>
+            app: _app,
+            currentPath: State.ScenePath,
+            onSave: p =>
             {
                 State.ScenePath = p;
                 State.Scene.Save(p);
@@ -229,8 +232,8 @@ public sealed class EditorLayout : Widget
 
         try
         {
-            File.WriteAllText(_openFilePath, _codeEditor.Text);
-            Dock?.SetPanelDirty("codeeditor", false);
+            File.WriteAllText(path: _openFilePath, contents: _codeEditor.Text);
+            Dock?.SetPanelDirty(panelId: "codeeditor", dirty: false);
             _app.ShowSnackbar($"Saved {Path.GetFileName(_openFilePath)}");
         }
         catch (Exception e)
@@ -272,17 +275,19 @@ public sealed class EditorLayout : Widget
     private DockLayout BuildDock()
     {
         // ── Panel content widgets (retained) ──────────────────────────────────
-        var hierarchy = new HierarchyPanel(State, _theme);
+        var hierarchy = new HierarchyPanel(state: State, theme: _theme);
         // Wrap the tree in a scroller and let the panel reveal the selected row into view (the +4 matches
         // the Padding below). A selection made in the viewport now scrolls the hierarchy to it.
-        var hierarchyScroll = new ScrollView(new Padding(EdgeInsets.All(4f), hierarchy));
-        hierarchy.OnRevealRequested = (top, h) => hierarchyScroll.EnsureVisible(top + 4f, h);
-        var viewport = new ViewportPanel(State, _theme);
-        var inspector = new InspectorPanel(State, _theme, _app);
-        var browser = new AssetBrowserPanel(State, _theme);
-        var settings = new SettingsPanel(State, _theme);
+        var hierarchyScroll =
+            new ScrollView(new Padding(padding: EdgeInsets.All(4f), child: hierarchy));
+        hierarchy.OnRevealRequested =
+            (top, h) => hierarchyScroll.EnsureVisible(top: top + 4f, height: h);
+        var viewport = new ViewportPanel(state: State, theme: _theme);
+        var inspector = new InspectorPanel(state: State, theme: _theme, app: _app);
+        var browser = new AssetBrowserPanel(state: State, theme: _theme);
+        var settings = new SettingsPanel(state: State, theme: _theme);
         var info = new InfoPanel(_theme);
-        var assetPreview = new AssetPreviewPanel(State, _theme);
+        var assetPreview = new AssetPreviewPanel(state: State, theme: _theme);
 
         // Code editor: opened from the asset browser via OpenFileRequested (double-click a text/code file).
         // Editable, with ⌘S save + ⌘Z/⌘⇧Z undo/redo; edits mark the tab dirty until saved.
@@ -291,7 +296,7 @@ public sealed class EditorLayout : Widget
         // Any edit marks the tab unsaved; ⌘S (when the editor is focused) writes it back to disk.
         codeEditor.OnChanged += _ =>
         {
-            if (_openFilePath != null) Dock?.SetPanelDirty("codeeditor", true);
+            if (_openFilePath != null) Dock?.SetPanelDirty(panelId: "codeeditor", dirty: true);
         };
         codeEditor.OnSubmit = SaveOpenFile;
         State.OpenFileRequested += path =>
@@ -303,7 +308,7 @@ public sealed class EditorLayout : Widget
                     File.ReadAllText(path); // setter resets text + undo history (no OnChanged)
                 _openFilePath = path;
                 if (_codePanel != null) _codePanel.Title = Path.GetFileName(path);
-                Dock?.SetPanelDirty("codeeditor", false);
+                Dock?.SetPanelDirty(panelId: "codeeditor", dirty: false);
                 Dock?.ShowPanel(
                     "codeeditor"
                 ); // surface the tab (un-collapse / select / un-maximize)
@@ -328,10 +333,10 @@ public sealed class EditorLayout : Widget
             SchemaId = "shader.material",
         };
         var graphPanel = new GraphEditorPanel(
-            demoGraph,
-            demoRegistry,
-            _theme,
-            _app
+            graph: demoGraph,
+            registry: demoRegistry,
+            theme: _theme,
+            app: _app
         );
 
         // ── Panel descriptors ─────────────────────────────────────────────────
@@ -344,45 +349,51 @@ public sealed class EditorLayout : Widget
             new() {
                 PanelId = "viewport",
                 Title = "Viewport",
-                Content = new ColoredBox(_theme.ViewportBackground, viewport),
+                Content = new ColoredBox(color: _theme.ViewportBackground, child: viewport),
             },
             new() {
                 PanelId = "inspector",
                 Title = "Inspector",
-                Content = new ScrollView(new Padding(EdgeInsets.All(8f), inspector)),
+                Content =
+                    new ScrollView(new Padding(padding: EdgeInsets.All(8f), child: inspector)),
             },
             new() {
                 PanelId = "settings",
                 Title = "Settings",
-                Content = new ScrollView(new Padding(EdgeInsets.All(8f), settings)),
+                Content = new ScrollView(new Padding(padding: EdgeInsets.All(8f), child: settings)),
             },
             new() {
                 PanelId = "info",
                 Title = "Info",
-                Content = new ScrollView(new Padding(EdgeInsets.All(10f), info)),
+                Content = new ScrollView(new Padding(padding: EdgeInsets.All(10f), child: info)),
             },
             new() {
                 // Project = file tree (top) + asset preview (bottom) in one tab, split vertically.
                 PanelId = "browser",
                 Title = "Project",
                 Content = new AdwPaned(
-                    new ScrollView(new Padding(EdgeInsets.Symmetric(6f, 4f), browser)),
-                    assetPreview,
-                    true
+                    first: new ScrollView(
+                        new Padding(
+                            padding: EdgeInsets.Symmetric(horizontal: 6f, vertical: 4f),
+                            child: browser
+                        )
+                    ),
+                    second: assetPreview,
+                    vertical: true
                 ) { Position = 0.6f },
             },
             new() {
                 PanelId = "timeline",
                 Title = "Timeline",
-                Content = new TimelinePanel(State, _theme),
+                Content = new TimelinePanel(state: State, theme: _theme),
             },
             new() {
                 PanelId = "tiles",
                 Title = "Tiles",
                 Content = new ScrollView(
                     new Padding(
-                        EdgeInsets.All(6f),
-                        new TilePalettePanel(State, _theme, viewport)
+                        padding: EdgeInsets.All(6f),
+                        child: new TilePalettePanel(state: State, theme: _theme, viewport: viewport)
                     )
                 ),
             },
@@ -410,23 +421,23 @@ public sealed class EditorLayout : Widget
         // Restore the saved per-project layout if present and valid; otherwise default.
         var known = panels.Select(p => p.PanelId).ToHashSet();
         var tree = (State.Preferences?.Layout.Dock.Value is { } saved
-                       ? DockLayoutStore.FromData(saved, known)
+                       ? DockLayoutStore.FromData(data: saved, knownPanels: known)
                        : null) ??
                    DefaultDockTree();
         // Projects saved before a panel existed won't reference it — add it as a tab so newly
         // introduced panels (e.g. Settings, Info) are reachable without a manual layout reset.
-        EnsurePanel(tree, "settings", "inspector");
-        EnsurePanel(tree, "info", "settings");
-        EnsurePanel(tree, "graph", "inspector");
-        EnsurePanel(tree, "console", "browser");
-        EnsurePanel(tree, "timeline", "console");
-        EnsurePanel(tree, "codeeditor", "viewport");
+        EnsurePanel(tree: tree, panelId: "settings", nextTo: "inspector");
+        EnsurePanel(tree: tree, panelId: "info", nextTo: "settings");
+        EnsurePanel(tree: tree, panelId: "graph", nextTo: "inspector");
+        EnsurePanel(tree: tree, panelId: "console", nextTo: "browser");
+        EnsurePanel(tree: tree, panelId: "timeline", nextTo: "console");
+        EnsurePanel(tree: tree, panelId: "codeeditor", nextTo: "viewport");
 
         Dock = new DockLayout(
-            _app,
-            _theme,
-            tree,
-            panels
+            app: _app,
+            theme: _theme,
+            root: tree,
+            panels: panels
         );
         if (State.Preferences is { } prefs)
             Dock.LayoutChanged = () => prefs.Layout.Dock.Value = DockLayoutStore.ToData(Dock!.Root);
@@ -442,7 +453,7 @@ public sealed class EditorLayout : Widget
     private static void EnsurePanel(DockNode tree, string panelId, string nextTo)
     {
         if (tree.LeafIds().Contains(panelId)) return;
-        var leaf = FindLeafWith(tree, nextTo) ?? FirstLeaf(tree);
+        var leaf = FindLeafWith(node: tree, panelId: nextTo) ?? FirstLeaf(tree);
         leaf?.PanelIds.Add(panelId);
     }
 
@@ -450,7 +461,8 @@ public sealed class EditorLayout : Widget
     {
         return node switch {
             DockLeaf l => l.PanelIds.Contains(panelId) ? l : null,
-            DockSplit s => FindLeafWith(s.First, panelId) ?? FindLeafWith(s.Second, panelId),
+            DockSplit s => FindLeafWith(node: s.First, panelId: panelId) ??
+                           FindLeafWith(node: s.Second, panelId: panelId),
             _ => null,
         };
     }
@@ -480,33 +492,33 @@ public sealed class EditorLayout : Widget
     {
         return new DockSplit(
             // Left column — hierarchy over project browser.
-            new DockSplit(
-                new DockLeaf("hierarchy"),
-                new DockLeaf("browser"),
-                true,
-                0.55f
+            first: new DockSplit(
+                first: new DockLeaf("hierarchy"),
+                second: new DockLeaf("browser"),
+                vertical: true,
+                ratio: 0.55f
             ),
             // Center + right.
-            new DockSplit(
+            second: new DockSplit(
                 // Center — viewport over the console/timeline strip.
-                new DockSplit(
-                    new DockLeaf(["viewport", "codeeditor"]),
-                    new DockLeaf(["console", "timeline"]),
-                    true,
-                    0.72f
+                first: new DockSplit(
+                    first: new DockLeaf(["viewport", "codeeditor"]),
+                    second: new DockLeaf(["console", "timeline"]),
+                    vertical: true,
+                    ratio: 0.72f
                 ),
                 // Right — inspector over settings/info/graph tabs.
-                new DockSplit(
-                    new DockLeaf("inspector"),
-                    new DockLeaf(["settings", "info", "graph"]),
-                    true,
-                    0.55f
+                second: new DockSplit(
+                    first: new DockLeaf("inspector"),
+                    second: new DockLeaf(["settings", "info", "graph"]),
+                    vertical: true,
+                    ratio: 0.55f
                 ),
-                false,
-                0.76f
+                vertical: false,
+                ratio: 0.76f
             ),
-            false,
-            0.18f
+            vertical: false,
+            ratio: 0.18f
         );
     }
 
@@ -533,8 +545,8 @@ public sealed class EditorLayout : Widget
         Widget Icon(string icon, Action onPressed, string tooltip)
         {
             return new Tooltip(
-                tooltip,
-                new AdwButton(tooltip, onPressed) {
+                message: tooltip,
+                child: new AdwButton(label: tooltip, onPressed: onPressed) {
                     IconName = icon,
                     Style = AdwButtonStyle.Flat,
                     Circular = true,
@@ -554,9 +566,9 @@ public sealed class EditorLayout : Widget
         // self-schedules settle frames); only a running play session renders continuously.
         void SyncTransport()
         {
-            var playing = State.IsPlaying;
-            var paused = State.IsPaused;
-            var building = State.IsScriptBuilding;
+            bool playing = State.IsPlaying;
+            bool paused = State.IsPaused;
+            bool building = State.IsScriptBuilding;
             // Paused = frozen simulation: drop continuous rendering so a paused session idles like a
             // static edit scene (the viewport keeps showing its cached frame); resume flips it back.
             _app.ContinuousUpdate = playing && !paused;
@@ -583,9 +595,7 @@ public sealed class EditorLayout : Widget
                 State.StartPlay();
             }
             else
-            {
                 State.StopPlay();
-            }
 
             SyncTransport();
         };
@@ -604,33 +614,33 @@ public sealed class EditorLayout : Widget
 
         // Add Node — a split button: pressing it drops an empty node, the arrow picks a kind.
         (string Label, Action Add)[] nodeKinds = [
-            ("Empty Node", () => State.AddNode("Node", NodeKind.Empty)),
-            ("Mesh Node", () => State.AddNode("Mesh", NodeKind.Mesh)),
+            ("Empty Node", () => State.AddNode(name: "Node", kind: NodeKind.Empty)),
+            ("Mesh Node", () => State.AddNode(name: "Mesh", kind: NodeKind.Mesh)),
             ("Cube", () =>
                 {
-                    var n = State.AddNode("Cube", NodeKind.Mesh);
+                    var n = State.AddNode(name: "Cube", kind: NodeKind.Mesh);
                     n.MeshPath = "#cube";
                     State.NotifySceneChanged();
                 }
             ),
             ("Sphere", () =>
                 {
-                    var n = State.AddNode("Sphere", NodeKind.Mesh);
+                    var n = State.AddNode(name: "Sphere", kind: NodeKind.Mesh);
                     n.MeshPath = "#sphere";
                     State.NotifySceneChanged();
                 }
             ),
-            ("Light", () => State.AddNode("Light", NodeKind.Light)),
+            ("Light", () => State.AddNode(name: "Light", kind: NodeKind.Light)),
             ("Camera", () =>
                 {
-                    var n = State.AddNode("Camera", NodeKind.Camera);
-                    n.Position = new Vec3(0, 0, -3f);
+                    var n = State.AddNode(name: "Camera", kind: NodeKind.Camera);
+                    n.Position = new Vec3(x: 0, y: 0, z: -3f);
                     State.NotifySceneChanged();
                 }
             ),
-            ("Script Node", () => State.AddNode("Script", NodeKind.Script)),
+            ("Script Node", () => State.AddNode(name: "Script", kind: NodeKind.Script)),
         ];
-        var addBtn = new AdwSplitButton("Add", nodeKinds[0].Add) {
+        var addBtn = new AdwSplitButton(label: "Add", onPressed: nodeKinds[0].Add) {
             IconName = Icons.Add,
             MenuItems = nodeKinds.Select(k => k.Label).ToArray(),
             OnMenuSelected = i => nodeKinds[i].Add(),
@@ -641,9 +651,12 @@ public sealed class EditorLayout : Widget
         string[] snapLabels = ["Grid: Off", "0.25 m", "0.5 m", "1.0 m"];
         float[] snapValues = [0f, 0.25f, 0.5f, 1.0f];
         var snapDd = new AdwDropDown(
-            snapLabels,
-            Math.Max(0, Array.IndexOf(snapValues, State.SnapGrid)),
-            i =>
+            items: snapLabels,
+            selectedIndex: Math.Max(
+                val1: 0,
+                val2: Array.IndexOf(array: snapValues, value: State.SnapGrid)
+            ),
+            onSelected: i =>
             {
                 if (State.Preferences is { } p) p.Viewport.SnapGrid.Value = snapValues[i];
                 else State.SnapGrid = snapValues[i];
@@ -652,27 +665,35 @@ public sealed class EditorLayout : Widget
 
         var bar = new AdwHeaderBar {
             TitleWidget = new AdwWindowTitle(
-                Path.GetFileNameWithoutExtension(State.ScenePath) is { Length: > 0 } scene
+                title: Path.GetFileNameWithoutExtension(State.ScenePath) is { Length: > 0 } scene
                     ? scene
                     : "Untitled Scene",
-                State.ProjectPath is { } pp ? Path.GetFileNameWithoutExtension(pp) : null
+                subtitle: State.ProjectPath is { } pp ? Path.GetFileNameWithoutExtension(pp) : null
             ),
             Start = {
                 playBtn,
                 pauseBtn,
-                new AdwSeparator(true, 8f) { Length = AdwMetrics.ButtonHeight },
+                new AdwSeparator(vertical: true, margin: 8f) { Length = AdwMetrics.ButtonHeight },
                 addBtn,
-                Icon(Icons.Delete, () => State.DeleteSelected(), "Delete Node"),
+                Icon(
+                    icon: Icons.Delete,
+                    onPressed: () => State.DeleteSelected(),
+                    tooltip: "Delete Node"
+                ),
             },
             End = {
-                Icon(Icons.Undo, () => State.History.Undo(), "Undo"),
-                Icon(Icons.Redo, () => State.History.Redo(), "Redo"),
-                Icon(Icons.Save, SaveScene, "Save Scene"),
-                Icon(Icons.FolderOpen, ReloadScene, "Reload Scene"),
+                Icon(icon: Icons.Undo, onPressed: () => State.History.Undo(), tooltip: "Undo"),
+                Icon(icon: Icons.Redo, onPressed: () => State.History.Redo(), tooltip: "Redo"),
+                Icon(icon: Icons.Save, onPressed: SaveScene, tooltip: "Save Scene"),
+                Icon(icon: Icons.FolderOpen, onPressed: ReloadScene, tooltip: "Reload Scene"),
                 snapDd,
-                new AdwSeparator(true, 8f) { Length = AdwMetrics.ButtonHeight },
+                new AdwSeparator(vertical: true, margin: 8f) { Length = AdwMetrics.ButtonHeight },
                 new FpsChip(),
-                Icon(Icons.Settings, () => _actions.OpenSettings?.Invoke(), "Settings"),
+                Icon(
+                    icon: Icons.Settings,
+                    onPressed: () => _actions.OpenSettings?.Invoke(),
+                    tooltip: "Settings"
+                ),
             },
         };
         // GNOME's primary menu is the last thing in the bar before the window buttons.
@@ -714,21 +735,25 @@ public sealed class EditorLayout : Widget
                     if (section.Count > 0) sections.Add(section);
                     section = [AdwMenuItem.Header(item.Label)];
                     foreach (var child in children)
+                    {
                         section.Add(
-                            new AdwMenuItem(child.Label, child.OnSelect) {
+                            new AdwMenuItem(label: child.Label, onActivated: child.OnSelect) {
                                 Enabled = child.IsEnabled,
                             }
                         );
+                    }
+
                     sections.Add(section);
                     section = [];
                     continue;
                 }
 
                 section.Add(
-                    new AdwMenuItem(item.Label, item.OnSelect) {
+                    new AdwMenuItem(label: item.Label, onActivated: item.OnSelect) {
                         Accel = MenuAccelerators.Display(item.Shortcut),
                         Enabled = item.IsEnabled,
-                        Role = item.Checked is null ? AdwMenuItemRole.Normal : AdwMenuItemRole.Check,
+                        Role =
+                            item.Checked is null ? AdwMenuItemRole.Normal : AdwMenuItemRole.Check,
                         Checked = item.Checked ?? false,
                     }
                 );
@@ -744,36 +769,33 @@ public sealed class EditorLayout : Widget
 
     public override Size Measure(Constraints c)
     {
-        _size = c.Constrain(new Size(c.MaxWidth, c.MaxHeight));
-        _root.Measure(Constraints.Tight(_size.Width, _size.Height));
+        _size = c.Constrain(new Size(width: c.MaxWidth, height: c.MaxHeight));
+        _root.Measure(Constraints.Tight(width: _size.Width, height: _size.Height));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         _root.Layout(origin);
     }
 
     public override void Paint(PaintList paint)
     {
-        paint.AddRect(Bounds, _theme.Background);
+        paint.AddRect(bounds: Bounds, color: _theme.Background);
         _root.Paint(paint);
     }
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return _root.HitTest(point);
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return [_root];
-    }
+    public override IEnumerable<Widget> GetChildren() => [_root];
 }

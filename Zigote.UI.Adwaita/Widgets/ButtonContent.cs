@@ -25,13 +25,13 @@ public sealed class AdwButtonContent : ComposedWidget
     public string? IconName
     {
         get => _iconName;
-        set => this.Set(ref _iconName, value);
+        set => this.Set(field: ref _iconName, value: value);
     }
 
     public string Label
     {
         get => _label;
-        set => this.Set(ref _label, value);
+        set => this.Set(field: ref _label, value: value);
     }
 
     /// <summary>
@@ -43,7 +43,7 @@ public sealed class AdwButtonContent : ComposedWidget
     public Color? Color
     {
         get => _color;
-        set => this.Set(ref _color, value);
+        set => this.Set(field: ref _color, value: value);
     }
 
     protected override Widget Build(BuildContext context)
@@ -52,14 +52,26 @@ public sealed class AdwButtonContent : ComposedWidget
         // label never sits flush against the button's own padding.
         var row = new Row(spacing: AdwMetrics.ButtonContentSpacing, mainAxisSize: MainAxisSize.Min);
         if (IconName is not null)
-            row.Children.Add(new IconGlyph(IconName, AdwMetrics.IconSize, _color));
+        {
+            row.Children.Add(
+                new IconGlyph(glyph: IconName, size: AdwMetrics.IconSize, color: _color)
+            );
+        }
+
         if (Label.Length > 0)
+        {
             row.Children.Add(
                 new Padding(
-                    EdgeInsets.Only(right: 2f),
-                    new LabelWidget(Label, AdwTypography.Heading, _color) { MaxLines = 1 }
+                    padding: EdgeInsets.Only(right: 2f),
+                    child: new LabelWidget(
+                        text: Label,
+                        style: AdwTypography.Heading,
+                        color: _color
+                    ) { MaxLines = 1 }
                 )
             );
+        }
+
         return row;
     }
 }

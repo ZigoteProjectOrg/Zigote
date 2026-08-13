@@ -66,7 +66,9 @@ module private P =
             <|> attempt (skipString "0b" >>. skipMany1 (anyOf "01_" >>% ()))
             <|> (skipMany1 ((digit <|> pchar '_') >>% ())
                  >>. (opt (skipChar '.' >>. skipMany ((digit <|> pchar '_') >>% ())) |>> ignore)
-                 >>. (opt (anyOf "eE" >>. (opt (anyOf "+-") |>> ignore) >>. skipMany1 (digit >>% ()))
+                 >>. (opt (
+                          anyOf "eE" >>. (opt (anyOf "+-") |>> ignore) >>. skipMany1 (digit >>% ())
+                      )
                       |>> ignore)
                  >>. skipMany (anyOf "fFdDmMuUlL" >>% ()))
 
@@ -96,8 +98,7 @@ module private P =
     let operatorP: Parser<Token, S> =
         span TokenKind.Operator (skipMany1 (satisfy (fun c -> "+-*/%=<>!&|^~?".Contains c) >>% ()))
 
-    let punctP: Parser<Token, S> =
-        span TokenKind.Punctuation (anyOf "()[]{},:;." >>% ())
+    let punctP: Parser<Token, S> = span TokenKind.Punctuation (anyOf "()[]{},:;." >>% ())
 
     let wsP: Parser<Token option, S> = skipMany1 (anyOf " \t" >>% ()) >>% None
 
@@ -126,291 +127,303 @@ module private Grammar =
 
     let csKw =
         Set.ofList
-            [ "abstract"
-              "as"
-              "base"
-              "break"
-              "case"
-              "catch"
-              "checked"
-              "class"
-              "const"
-              "continue"
-              "default"
-              "delegate"
-              "do"
-              "else"
-              "enum"
-              "event"
-              "explicit"
-              "extern"
-              "false"
-              "finally"
-              "fixed"
-              "for"
-              "foreach"
-              "goto"
-              "if"
-              "implicit"
-              "in"
-              "interface"
-              "internal"
-              "is"
-              "lock"
-              "namespace"
-              "new"
-              "null"
-              "operator"
-              "out"
-              "override"
-              "params"
-              "private"
-              "protected"
-              "public"
-              "readonly"
-              "ref"
-              "return"
-              "sealed"
-              "sizeof"
-              "stackalloc"
-              "static"
-              "struct"
-              "switch"
-              "this"
-              "throw"
-              "true"
-              "try"
-              "typeof"
-              "unchecked"
-              "unsafe"
-              "using"
-              "virtual"
-              "volatile"
-              "while"
-              "async"
-              "await"
-              "var"
-              "yield"
-              "get"
-              "set"
-              "value"
-              "when"
-              "where"
-              "nameof"
-              "partial"
-              "record"
-              "init"
-              "with"
-              "global"
-              "and"
-              "or"
-              "not"
-              "required"
-              "file" ]
+            [
+                "abstract"
+                "as"
+                "base"
+                "break"
+                "case"
+                "catch"
+                "checked"
+                "class"
+                "const"
+                "continue"
+                "default"
+                "delegate"
+                "do"
+                "else"
+                "enum"
+                "event"
+                "explicit"
+                "extern"
+                "false"
+                "finally"
+                "fixed"
+                "for"
+                "foreach"
+                "goto"
+                "if"
+                "implicit"
+                "in"
+                "interface"
+                "internal"
+                "is"
+                "lock"
+                "namespace"
+                "new"
+                "null"
+                "operator"
+                "out"
+                "override"
+                "params"
+                "private"
+                "protected"
+                "public"
+                "readonly"
+                "ref"
+                "return"
+                "sealed"
+                "sizeof"
+                "stackalloc"
+                "static"
+                "struct"
+                "switch"
+                "this"
+                "throw"
+                "true"
+                "try"
+                "typeof"
+                "unchecked"
+                "unsafe"
+                "using"
+                "virtual"
+                "volatile"
+                "while"
+                "async"
+                "await"
+                "var"
+                "yield"
+                "get"
+                "set"
+                "value"
+                "when"
+                "where"
+                "nameof"
+                "partial"
+                "record"
+                "init"
+                "with"
+                "global"
+                "and"
+                "or"
+                "not"
+                "required"
+                "file"
+            ]
 
     let csTy =
         Set.ofList
-            [ "bool"
-              "byte"
-              "sbyte"
-              "char"
-              "decimal"
-              "double"
-              "float"
-              "int"
-              "uint"
-              "long"
-              "ulong"
-              "short"
-              "ushort"
-              "object"
-              "string"
-              "void"
-              "nint"
-              "nuint"
-              "dynamic"
-              "Span"
-              "List"
-              "Dictionary"
-              "Action"
-              "Func"
-              "Task"
-              "Color"
-              "Vec2"
-              "Vec3"
-              "Vec4"
-              "Mat4"
-              "Quat"
-              "Rect"
-              "Size"
-              "Offset" ]
+            [
+                "bool"
+                "byte"
+                "sbyte"
+                "char"
+                "decimal"
+                "double"
+                "float"
+                "int"
+                "uint"
+                "long"
+                "ulong"
+                "short"
+                "ushort"
+                "object"
+                "string"
+                "void"
+                "nint"
+                "nuint"
+                "dynamic"
+                "Span"
+                "List"
+                "Dictionary"
+                "Action"
+                "Func"
+                "Task"
+                "Color"
+                "Vec2"
+                "Vec3"
+                "Vec4"
+                "Mat4"
+                "Quat"
+                "Rect"
+                "Size"
+                "Offset"
+            ]
 
     let wgslKw =
         Set.ofList
-            [ "alias"
-              "break"
-              "case"
-              "const"
-              "continue"
-              "continuing"
-              "default"
-              "discard"
-              "else"
-              "enable"
-              "false"
-              "fn"
-              "for"
-              "if"
-              "let"
-              "loop"
-              "override"
-              "return"
-              "struct"
-              "switch"
-              "true"
-              "var"
-              "while"
-              "private"
-              "function"
-              "workgroup"
-              "uniform"
-              "storage"
-              "read"
-              "write"
-              "read_write"
-              "fragment"
-              "vertex"
-              "compute"
-              "ptr"
-              "requires" ]
+            [
+                "alias"
+                "break"
+                "case"
+                "const"
+                "continue"
+                "continuing"
+                "default"
+                "discard"
+                "else"
+                "enable"
+                "false"
+                "fn"
+                "for"
+                "if"
+                "let"
+                "loop"
+                "override"
+                "return"
+                "struct"
+                "switch"
+                "true"
+                "var"
+                "while"
+                "private"
+                "function"
+                "workgroup"
+                "uniform"
+                "storage"
+                "read"
+                "write"
+                "read_write"
+                "fragment"
+                "vertex"
+                "compute"
+                "ptr"
+                "requires"
+            ]
 
     let wgslTy =
         Set.ofList
-            [ "bool"
-              "i32"
-              "u32"
-              "f32"
-              "f16"
-              "vec2"
-              "vec3"
-              "vec4"
-              "vec2f"
-              "vec3f"
-              "vec4f"
-              "vec2i"
-              "vec3i"
-              "vec4i"
-              "vec2u"
-              "vec3u"
-              "vec4u"
-              "mat2x2"
-              "mat3x3"
-              "mat4x4"
-              "mat2x2f"
-              "mat3x3f"
-              "mat4x4f"
-              "array"
-              "atomic"
-              "sampler"
-              "sampler_comparison"
-              "texture_2d"
-              "texture_2d_array"
-              "texture_cube"
-              "texture_cube_array"
-              "texture_3d"
-              "texture_depth_2d"
-              "texture_storage_2d"
-              "texture_multisampled_2d" ]
+            [
+                "bool"
+                "i32"
+                "u32"
+                "f32"
+                "f16"
+                "vec2"
+                "vec3"
+                "vec4"
+                "vec2f"
+                "vec3f"
+                "vec4f"
+                "vec2i"
+                "vec3i"
+                "vec4i"
+                "vec2u"
+                "vec3u"
+                "vec4u"
+                "mat2x2"
+                "mat3x3"
+                "mat4x4"
+                "mat2x2f"
+                "mat3x3f"
+                "mat4x4f"
+                "array"
+                "atomic"
+                "sampler"
+                "sampler_comparison"
+                "texture_2d"
+                "texture_2d_array"
+                "texture_cube"
+                "texture_cube_array"
+                "texture_3d"
+                "texture_depth_2d"
+                "texture_storage_2d"
+                "texture_multisampled_2d"
+            ]
 
     let zigKw =
         Set.ofList
-            [ "addrspace"
-              "align"
-              "allowzero"
-              "and"
-              "anyframe"
-              "anytype"
-              "asm"
-              "async"
-              "await"
-              "break"
-              "callconv"
-              "catch"
-              "comptime"
-              "const"
-              "continue"
-              "defer"
-              "else"
-              "enum"
-              "errdefer"
-              "error"
-              "export"
-              "extern"
-              "false"
-              "fn"
-              "for"
-              "if"
-              "inline"
-              "noalias"
-              "nosuspend"
-              "noinline"
-              "opaque"
-              "or"
-              "orelse"
-              "packed"
-              "pub"
-              "resume"
-              "return"
-              "linksection"
-              "struct"
-              "suspend"
-              "switch"
-              "test"
-              "threadlocal"
-              "true"
-              "try"
-              "undefined"
-              "union"
-              "unreachable"
-              "usingnamespace"
-              "var"
-              "volatile"
-              "while"
-              "null" ]
+            [
+                "addrspace"
+                "align"
+                "allowzero"
+                "and"
+                "anyframe"
+                "anytype"
+                "asm"
+                "async"
+                "await"
+                "break"
+                "callconv"
+                "catch"
+                "comptime"
+                "const"
+                "continue"
+                "defer"
+                "else"
+                "enum"
+                "errdefer"
+                "error"
+                "export"
+                "extern"
+                "false"
+                "fn"
+                "for"
+                "if"
+                "inline"
+                "noalias"
+                "nosuspend"
+                "noinline"
+                "opaque"
+                "or"
+                "orelse"
+                "packed"
+                "pub"
+                "resume"
+                "return"
+                "linksection"
+                "struct"
+                "suspend"
+                "switch"
+                "test"
+                "threadlocal"
+                "true"
+                "try"
+                "undefined"
+                "union"
+                "unreachable"
+                "usingnamespace"
+                "var"
+                "volatile"
+                "while"
+                "null"
+            ]
 
     let zigTy =
         Set.ofList
-            [ "bool"
-              "void"
-              "type"
-              "anyerror"
-              "anyopaque"
-              "c_int"
-              "c_uint"
-              "c_long"
-              "c_ulong"
-              "c_short"
-              "c_ushort"
-              "c_char"
-              "isize"
-              "usize"
-              "comptime_int"
-              "comptime_float"
-              "i8"
-              "i16"
-              "i32"
-              "i64"
-              "i128"
-              "u8"
-              "u16"
-              "u32"
-              "u64"
-              "u128"
-              "f16"
-              "f32"
-              "f64"
-              "f80"
-              "f128" ]
+            [
+                "bool"
+                "void"
+                "type"
+                "anyerror"
+                "anyopaque"
+                "c_int"
+                "c_uint"
+                "c_long"
+                "c_ulong"
+                "c_short"
+                "c_ushort"
+                "c_char"
+                "isize"
+                "usize"
+                "comptime_int"
+                "comptime_float"
+                "i8"
+                "i16"
+                "i32"
+                "i64"
+                "i128"
+                "u8"
+                "u16"
+                "u32"
+                "u64"
+                "u128"
+                "f16"
+                "f32"
+                "f64"
+                "f80"
+                "f128"
+            ]
 
     let jsonKw = Set.ofList [ "true"; "false"; "null" ]
     let empty: Set<string> = Set.empty
@@ -420,44 +433,50 @@ module private Grammar =
         P.buildLine
             true
             (choice
-                [ P.wsP
-                  attempt P.lineCommentP |>> Some
-                  attempt P.blockCommentOpenP |>> Some
-                  attempt P.verbatimStringP |>> Some
-                  attempt (P.stringP '"') |>> Some
-                  attempt (P.stringP '\'') |>> Some
-                  attempt P.numberP |>> Some
-                  attempt (P.identP csKw csTy) |>> Some
-                  attempt P.operatorP |>> Some
-                  attempt P.punctP |>> Some
-                  P.catchAllP |>> Some ])
+                [
+                    P.wsP
+                    attempt P.lineCommentP |>> Some
+                    attempt P.blockCommentOpenP |>> Some
+                    attempt P.verbatimStringP |>> Some
+                    attempt (P.stringP '"') |>> Some
+                    attempt (P.stringP '\'') |>> Some
+                    attempt P.numberP |>> Some
+                    attempt (P.identP csKw csTy) |>> Some
+                    attempt P.operatorP |>> Some
+                    attempt P.punctP |>> Some
+                    P.catchAllP |>> Some
+                ])
 
     // WGSL — line comments only (shader code, no string literals worth lexing).
     let wgslLine =
         P.buildLine
             false
             (choice
-                [ P.wsP
-                  attempt P.lineCommentP |>> Some
-                  attempt P.numberP |>> Some
-                  attempt (P.identP wgslKw wgslTy) |>> Some
-                  attempt P.operatorP |>> Some
-                  attempt P.punctP |>> Some
-                  P.catchAllP |>> Some ])
+                [
+                    P.wsP
+                    attempt P.lineCommentP |>> Some
+                    attempt P.numberP |>> Some
+                    attempt (P.identP wgslKw wgslTy) |>> Some
+                    attempt P.operatorP |>> Some
+                    attempt P.punctP |>> Some
+                    P.catchAllP |>> Some
+                ])
 
     // Zig — line comments, string literals.
     let zigLine =
         P.buildLine
             false
             (choice
-                [ P.wsP
-                  attempt P.lineCommentP |>> Some
-                  attempt (P.stringP '"') |>> Some
-                  attempt P.numberP |>> Some
-                  attempt (P.identP zigKw zigTy) |>> Some
-                  attempt P.operatorP |>> Some
-                  attempt P.punctP |>> Some
-                  P.catchAllP |>> Some ])
+                [
+                    P.wsP
+                    attempt P.lineCommentP |>> Some
+                    attempt (P.stringP '"') |>> Some
+                    attempt P.numberP |>> Some
+                    attempt (P.identP zigKw zigTy) |>> Some
+                    attempt P.operatorP |>> Some
+                    attempt P.punctP |>> Some
+                    P.catchAllP |>> Some
+                ])
 
     // JSON — a string immediately followed by «:» is an object key (rendered as a Type).
     let private jsonStringP: Parser<Token, S> =
@@ -465,7 +484,10 @@ module private Grammar =
             P.span
                 TokenKind.String
                 (skipChar '"'
-                 >>. skipMany (attempt (skipChar '\\' >>. skipAnyChar) <|> (satisfy (fun c -> c <> '"') >>% ()))
+                 >>. skipMany (
+                     attempt (skipChar '\\' >>. skipAnyChar)
+                     <|> (satisfy (fun c -> c <> '"') >>% ())
+                 )
                  >>. (skipChar '"' <|> eof))
 
         strSpan
@@ -478,13 +500,15 @@ module private Grammar =
         P.buildLine
             false
             (choice
-                [ P.wsP
-                  attempt jsonStringP |>> Some
-                  attempt P.numberP |>> Some
-                  attempt (P.identP jsonKw empty) |>> Some
-                  attempt P.punctP |>> Some
-                  attempt P.operatorP |>> Some
-                  P.catchAllP |>> Some ])
+                [
+                    P.wsP
+                    attempt jsonStringP |>> Some
+                    attempt P.numberP |>> Some
+                    attempt (P.identP jsonKw empty) |>> Some
+                    attempt P.punctP |>> Some
+                    attempt P.operatorP |>> Some
+                    P.catchAllP |>> Some
+                ])
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ILineTokenizer adapter — bridges an FParsec line parser to the C# widget contract.

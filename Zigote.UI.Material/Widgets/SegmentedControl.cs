@@ -1,7 +1,6 @@
 using Zigote.Core.Animation;
 using Zigote.Core.Events;
 using Zigote.UI.TextShaping;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.Material;
 
@@ -17,14 +16,14 @@ public sealed class SegmentedControl : Widget
 {
     private readonly AnimationController _slide;
     private int _hovered = -1;
-    private bool _pillInit;
     private float _pillFrom;
+    private bool _pillInit;
     private float _pillTo;
     private int _pressed = -1;
+    private int _selected;
     private Size _size;
     private float _textWidth; // widest segment label, drives equal-width sizing
     private ThemeData _theme = ThemeData.Dark;
-    private int _selected;
 
     public SegmentedControl(IEnumerable<string> segments, int selected = 0,
         Action<int>? onChanged = null)
@@ -32,21 +31,16 @@ public sealed class SegmentedControl : Widget
         Segments = new List<string>(segments);
         _selected = selected;
         OnChanged = onChanged;
-        _slide = new AnimationController(Motion.Standard, this) { Curve = Curves.EaseOut };
+        _slide = new AnimationController(durationSeconds: Motion.Standard, vsync: this) {
+            Curve = Curves.EaseOut,
+        };
         _slide.OnTick += MarkNeedsPaint;
     }
 
 
     /// <summary>The animated (possibly fractional) index the selection pill is drawn at.</summary>
     private float PillPos =>
-        _pillInit ? _pillFrom + (_pillTo - _pillFrom) * _slide.Value : SelectedIndex;
-
-    // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
-    // re-attach rebinds instead of leaking one per attach cascade.
-    protected override void OnMount()
-    {
-        _slide.AttachTicker(this);
-    }
+        _pillInit ? _pillFrom + ((_pillTo - _pillFrom) * _slide.Value) : SelectedIndex;
 
 
     public List<string> Segments { get; set; }
@@ -54,7 +48,7 @@ public sealed class SegmentedControl : Widget
     public int SelectedIndex
     {
         get => _selected;
-        set => SetPaint(ref _selected, value);
+        set => SetPaint(field: ref _selected, value: value);
     }
 
     [Obsolete("Renamed — use SelectedIndex.")]
@@ -75,6 +69,10 @@ public sealed class SegmentedControl : Widget
     /// </summary>
     public override bool HandlesDirectionalKeys => true;
 
+    // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
+    // re-attach rebinds instead of leaking one per attach cascade.
+    protected override void OnMount() => _slide.AttachTicker(this);
+
     public override void UpdateFrom(Widget newWidget)
     {
         if (newWidget is SegmentedControl s)
@@ -89,56 +87,63 @@ public sealed class SegmentedControl : Widget
     public override int DebugStateHash()
     {
         return HashCode.Combine(
-            SelectedIndex,
-            _hovered,
-            _pressed,
-            Enabled,
-            Focused,
-            Segments.Count
+            value1: SelectedIndex,
+            value2: _hovered,
+            value3: _pressed,
+            value4: Enabled,
+            value5: Focused,
+            value6: Segments.Count
         );
     }
 
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        var fs = _theme.FontSizeBody;
+        float fs = _theme.FontSizeBody;
 
         // Equal-width segments: size every segment to the widest label.
         _textWidth = 0f;
-        foreach (var seg in Segments)
-            _textWidth = MathF.Max(_textWidth, TextMeasure.Width(seg, fs, FontWeight.Medium));
+        foreach (string seg in Segments)
+        {
+            _textWidth = MathF.Max(
+                x: _textWidth,
+                y: TextMeasure.Width(text: seg, fontSize: fs, weight: FontWeight.Medium)
+            );
+        }
 
-        var segW = _textWidth + Spacing.Md * 2f;
-        var totalW = segW * Math.Max(Segments.Count, 1);
-        _size = c.Constrain(new Size(totalW, TouchMetrics.Pick(ControlMetrics.RegularHeight)));
+        float segW = _textWidth + (Spacing.Md * 2f);
+        float totalW = segW * Math.Max(val1: Segments.Count, val2: 1);
+        _size = c.Constrain(
+            new Size(width: totalW, height: TouchMetrics.Pick(ControlMetrics.RegularHeight))
+        );
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
     public override void Paint(PaintList paint)
     {
-        var count = Segments.Count;
+        int count = Segments.Count;
         if (count == 0) return;
 
-        var radius = Radii.Md;
-        var fs = _theme.FontSizeBody;
-        var th = TextMeasure.Measure("Mg", fs, FontWeight.Medium).Height;
+        float radius = Radii.Md;
+        float fs = _theme.FontSizeBody;
+        float th = TextMeasure.Measure(text: "Mg", fontSize: fs, weight: FontWeight.Medium).Height;
 
         // Track: translucent group background.
         var track = Enabled ? _theme.Fill1 : StateStyle.Disabled(_theme.Fill1);
-        paint.AddRect(Bounds, track, radius);
+        paint.AddRect(bounds: Bounds, color: track, radius: radius);
 
-        var segW = Bounds.Width / count;
-        var inset = Spacing.Xxs;
+        float segW = Bounds.Width / count;
+        float inset = Spacing.Xxs;
 
         // Retarget the sliding pill whenever the selection changed since the last paint.
         if (!_pillInit)
@@ -155,89 +160,89 @@ public sealed class SegmentedControl : Widget
         }
 
         // Raised selection pill, drawn once at its (possibly fractional) animated position.
-        var pillX = Bounds.X + segW * PillPos;
+        float pillX = Bounds.X + (segW * PillPos);
         var pillRect = new Rect(
-            pillX + inset,
-            Bounds.Y + inset,
-            segW - inset * 2f,
-            Bounds.Height - inset * 2f
+            x: pillX + inset,
+            y: Bounds.Y + inset,
+            width: segW - (inset * 2f),
+            height: Bounds.Height - (inset * 2f)
         );
         var pillColor = Enabled ? _theme.SurfaceAlt : StateStyle.Disabled(_theme.SurfaceAlt);
-        if (Enabled) paint.AddElevation(pillRect, Radii.Sm, Elevation.Z1);
-        paint.AddRect(pillRect, pillColor, Radii.Sm);
+        if (Enabled) paint.AddElevation(bounds: pillRect, radius: Radii.Sm, style: Elevation.Z1);
+        paint.AddRect(bounds: pillRect, color: pillColor, radius: Radii.Sm);
 
-        for (var i = 0; i < count; i++)
+        for (int i = 0; i < count; i++)
         {
-            var segX = Bounds.X + segW * i;
+            float segX = Bounds.X + (segW * i);
             var segRect = new Rect(
-                segX,
-                Bounds.Y,
-                segW,
-                Bounds.Height
+                x: segX,
+                y: Bounds.Y,
+                width: segW,
+                height: Bounds.Height
             );
-            var isSelected = i == SelectedIndex;
+            bool isSelected = i == SelectedIndex;
 
             if (!isSelected && Enabled && (_pressed == i || _hovered == i))
             {
                 // Unselected segment: subtle fill on hover/press.
                 var fill = _pressed == i ? _theme.Fill2 : _theme.Fill3;
                 var pad = new Rect(
-                    segRect.X + inset,
-                    segRect.Y + inset,
-                    segRect.Width - inset * 2f,
-                    segRect.Height - inset * 2f
+                    x: segRect.X + inset,
+                    y: segRect.Y + inset,
+                    width: segRect.Width - (inset * 2f),
+                    height: segRect.Height - (inset * 2f)
                 );
-                paint.AddRect(pad, fill, Radii.Sm);
+                paint.AddRect(bounds: pad, color: fill, radius: Radii.Sm);
             }
 
             // Hairline separator between adjacent unselected segments.
             if (i > 0 && !isSelected && i != SelectedIndex + 1 && Enabled)
             {
-                var sepX = segX;
-                var sepInset = Spacing.Sm;
+                float sepX = segX;
+                float sepInset = Spacing.Sm;
                 paint.AddRect(
-                    new Rect(
-                        sepX,
-                        Bounds.Y + sepInset,
-                        1f,
-                        Bounds.Height - sepInset * 2f
+                    bounds: new Rect(
+                        x: sepX,
+                        y: Bounds.Y + sepInset,
+                        width: 1f,
+                        height: Bounds.Height - (sepInset * 2f)
                     ),
-                    _theme.Separator
+                    color: _theme.Separator
                 );
             }
 
             // Label: selected uses OnSurface, unselected uses Hint.
-            var label = Segments[i];
+            string label = Segments[i];
             var fg = isSelected ? _theme.OnSurface : _theme.Hint;
             if (!Enabled) fg = StateStyle.Disabled(fg);
-            var lw = TextMeasure.Width(label, fs, FontWeight.Medium);
-            var bx = segX + (segW - lw) / 2f;
-            var by = Bounds.Y + (Bounds.Height - th) / 2f + fs * 0.8f;
+            float lw = TextMeasure.Width(text: label, fontSize: fs, weight: FontWeight.Medium);
+            float bx = segX + ((segW - lw) / 2f);
+            float by = Bounds.Y + ((Bounds.Height - th) / 2f) + (fs * 0.8f);
             // The group shrinks to the width it is given, but the labels don't: without a clip
             // long translations bleed into the neighbouring segment and past the control.
             paint.AddClipStart(segRect);
             paint.AddText(
-                label,
-                bx,
-                by,
-                fg,
-                fs,
+                text: label,
+                baselineX: bx,
+                baselineY: by,
+                color: fg,
+                fontSize: fs,
                 fontWeight: FontWeight.Medium
             );
             paint.AddClipEnd();
         }
 
         if (Focused && Enabled)
-            paint.AddFocusRing(Bounds, radius, _theme);
+            paint.AddFocusRing(bounds: Bounds, radius: radius, theme: _theme);
     }
 
     private int SegmentAt(Offset point)
     {
-        var count = Segments.Count;
+        int count = Segments.Count;
         if (count == 0 || Bounds.Width <= 0f) return -1;
-        var rel = point.X - Bounds.X;
-        var idx = (int)(rel / (Bounds.Width / count));
-        return Math.Clamp(idx, 0, count - 1);
+        float rel = point.X - Bounds.X;
+        int idx = (int)(rel / (Bounds.Width / count));
+        return Math.Clamp(value: idx, min: 0, max: count - 1);
     }
 
     private void Select(int index)
@@ -264,7 +269,7 @@ public sealed class SegmentedControl : Widget
     public override void OnPointerMove(Offset point)
     {
         if (!Enabled) return;
-        var idx = SegmentAt(point);
+        int idx = SegmentAt(point);
         if (idx == _hovered) return;
         _hovered = idx;
         MarkNeedsPaint();
@@ -279,7 +284,7 @@ public sealed class SegmentedControl : Widget
 
     public override void OnPointerUp(Offset point)
     {
-        if (_pressed != -1 && Enabled && Bounds.Contains(point.X, point.Y) &&
+        if (_pressed != -1 && Enabled && Bounds.Contains(px: point.X, py: point.Y) &&
             SegmentAt(point) == _pressed)
             Select(_pressed);
         if (_pressed != -1)
@@ -295,10 +300,10 @@ public sealed class SegmentedControl : Widget
         switch (scancode)
         {
             case 80: // Left
-                Select(Math.Max(0, SelectedIndex - 1));
+                Select(Math.Max(val1: 0, val2: SelectedIndex - 1));
                 break;
             case 79: // Right
-                Select(Math.Min(Segments.Count - 1, SelectedIndex + 1));
+                Select(Math.Min(val1: Segments.Count - 1, val2: SelectedIndex + 1));
                 break;
         }
     }

@@ -1,5 +1,4 @@
 using Zigote.Core.State;
-using Zigote.UI.Widgets.Focus;
 
 namespace Zigote.UI.Adwaita;
 
@@ -73,18 +72,16 @@ public sealed class AdwSidebarSection
 /// </summary>
 public sealed class AdwSidebar : ComposedWidget, IFocusGroup
 {
-    /// <summary>The selected row's Pressable, captured while building — see <see cref="TabTarget" />.</summary>
-    private Widget? _selectedRow;
+    private readonly Signal<string> _filter = new("");
 
     private readonly Signal<int> _selected = new(0);
-    private readonly Signal<string> _filter = new("");
     private Widget? _placeholder;
     private float _rowHeight = 36f;
 
-    public AdwSidebar(params AdwSidebarSection[] sections)
-    {
-        Sections = [.. sections];
-    }
+    /// <summary>The selected row's Pressable, captured while building — see <see cref="TabTarget" />.</summary>
+    private Widget? _selectedRow;
+
+    public AdwSidebar(params AdwSidebarSection[] sections) => Sections = [.. sections];
 
     public List<AdwSidebarSection> Sections { get; }
 
@@ -117,7 +114,14 @@ public sealed class AdwSidebar : ComposedWidget, IFocusGroup
     public Widget? Placeholder
     {
         get => _placeholder;
-        set => this.Set(ref _placeholder, value);
+        set => this.Set(field: ref _placeholder, value: value);
+    }
+
+    /// <summary>Row height — the 36px navigation row by default, taller for two-line rows.</summary>
+    public float RowHeight
+    {
+        get => _rowHeight;
+        set => this.Set(field: ref _rowHeight, value: value);
     }
 
     /// <summary>
@@ -125,13 +129,6 @@ public sealed class AdwSidebar : ComposedWidget, IFocusGroup
     ///     arrows costs one Tab press to step past instead of one per row.
     /// </summary>
     public Widget? TabTarget => _selectedRow;
-
-    /// <summary>Row height — the 36px navigation row by default, taller for two-line rows.</summary>
-    public float RowHeight
-    {
-        get => _rowHeight;
-        set => this.Set(ref _rowHeight, value);
-    }
 
     protected override Widget Build(BuildContext context)
     {
@@ -141,46 +138,54 @@ public sealed class AdwSidebar : ComposedWidget, IFocusGroup
 
     private Widget BuildList(ThemeData theme)
     {
-        var query = _filter.Value.Trim();
+        string query = _filter.Value.Trim();
         _selectedRow = null; // rebuilt below; a filtered-out selection leaves it null
         var column = new Column(
             spacing: AdwMetrics.SidebarRowGap,
             crossAxisAlignment: CrossAxisAlignment.Stretch
         );
-        var index = 0;
+        int index = 0;
         foreach (var section in Sections)
         {
             var rows = new List<Widget>();
             foreach (var item in section.Items)
             {
-                var i = index++;
+                int i = index++;
                 if (query.Length > 0 &&
-                    !item.Title.Contains(query, StringComparison.OrdinalIgnoreCase))
+                    !item.Title.Contains(
+                        value: query,
+                        comparisonType: StringComparison.OrdinalIgnoreCase
+                    ))
                     continue;
-                rows.Add(BuildRow(theme, item, i));
+                rows.Add(BuildRow(theme: theme, item: item, index: i));
             }
 
             if (rows.Count == 0) continue;
             if (section.Title is not null || section.Suffix is not null)
+            {
                 column.Children.Add(
                     Heading(
-                        theme,
-                        section.Title,
-                        section.Suffix,
-                        column.Children.Count == 0
+                        theme: theme,
+                        title: section.Title,
+                        suffix: section.Suffix,
+                        first: column.Children.Count == 0
                     )
                 );
+            }
+
             foreach (var row in rows)
                 column.Children.Add(row);
         }
 
         if (column.Children.Count == 0)
+        {
             return Placeholder ?? new AdwStatusPage {
                 IconName = MaterialIcons.SearchOff,
                 Title = "No Results Found",
                 Description = "Try a different search",
                 Compact = true,
             };
+        }
 
         // Bottom is SidebarRowGap shy of the top: the last row's own gap already supplies it, and
         // padding both edges equally leaves the end of the list visibly looser than its start.
@@ -188,50 +193,58 @@ public sealed class AdwSidebar : ComposedWidget, IFocusGroup
         // `.navigation-sidebar { padding-top: $menu_margin; padding-bottom: $menu_margin - 2px }`
         // with `> row { margin: 0 $menu_margin 2px }`.
         return new Padding(
-            EdgeInsets.FromLtrb(
-                AdwMetrics.MenuMargin,
-                AdwMetrics.MenuMargin,
-                AdwMetrics.MenuMargin,
-                MathF.Max(0f, AdwMetrics.MenuMargin - AdwMetrics.SidebarRowGap)
+            padding: EdgeInsets.FromLtrb(
+                left: AdwMetrics.MenuMargin,
+                top: AdwMetrics.MenuMargin,
+                right: AdwMetrics.MenuMargin,
+                bottom: MathF.Max(x: 0f, y: AdwMetrics.MenuMargin - AdwMetrics.SidebarRowGap)
             ),
-            column
+            child: column
         );
     }
 
     private static Widget Heading(ThemeData theme, string? title, Widget? suffix, bool first)
     {
-        Widget content = new Label(title ?? "", AdwTypography.CaptionHeading, theme.TextSecondary) {
+        Widget content = new Label(
+            text: title ?? "",
+            style: AdwTypography.CaptionHeading,
+            color: theme.TextSecondary
+        ) {
             MaxLines = 1,
         };
         if (suffix is not null)
+        {
             content = new Row(spacing: Spacing.Sm) {
                 Children = {
                     new Expanded(content),
                     suffix,
                 },
             };
+        }
 
         return new Padding(
-            EdgeInsets.Only(
-                Spacing.Md,
-                first ? Spacing.Xs : Spacing.Md,
+            padding: EdgeInsets.Only(
+                left: Spacing.Md,
+                top: first ? Spacing.Xs : Spacing.Md,
                 // A suffix needs breathing room from the list's right edge; a bare caption does not.
-                suffix is null ? 0f : Spacing.Md,
-                Spacing.Xs
+                right: suffix is null ? 0f : Spacing.Md,
+                bottom: Spacing.Xs
             ),
-            content
+            child: content
         );
     }
 
     private Widget BuildRow(ThemeData theme, AdwSidebarItem item, int index)
     {
-        var selected = _selected.Value == index;
+        bool selected = _selected.Value == index;
 
-        Widget text = new Label(item.Title, AdwTypography.Body, theme.OnBackground) {
-            FontWeight = selected ? FontWeight.Medium : FontWeight.Normal,
-            MaxLines = 1,
-        };
+        Widget text =
+            new Label(text: item.Title, style: AdwTypography.Body, color: theme.OnBackground) {
+                FontWeight = selected ? FontWeight.Medium : FontWeight.Normal,
+                MaxLines = 1,
+            };
         if (item.Subtitle is { } subtitle)
+        {
             text = new Column(
                 spacing: Spacing.Xxs,
                 mainAxisSize: MainAxisSize.Min,
@@ -240,12 +253,13 @@ public sealed class AdwSidebar : ComposedWidget, IFocusGroup
                 Children = {
                     text,
                     new Label(
-                        subtitle,
-                        AdwTypography.Caption,
-                        theme.TextSecondary
+                        text: subtitle,
+                        style: AdwTypography.Caption,
+                        color: theme.TextSecondary
                     ) { MaxLines = 1 },
                 },
             };
+        }
 
         // A suffix has to be pinned to the end, which needs a full-width row; without one the row
         // stays intrinsic so the focus ring hugs the label.
@@ -258,26 +272,34 @@ public sealed class AdwSidebar : ComposedWidget, IFocusGroup
             }
             : new Row(spacing: Spacing.Sm, mainAxisSize: MainAxisSize.Min) { Children = { text } };
         if (item.IconName.Length > 0)
+        {
             content.Children.Insert(
-                0,
-                new IconGlyph(
-                    item.IconName,
-                    AdwMetrics.IconSize,
-                    selected ? theme.OnBackground : theme.TextSecondary
+                index: 0,
+                item: new IconGlyph(
+                    glyph: item.IconName,
+                    size: AdwMetrics.IconSize,
+                    color: selected ? theme.OnBackground : theme.TextSecondary
                 )
             );
-        if (item.Prefix is { } prefix) content.Children.Insert(0, prefix);
+        }
+
+        if (item.Prefix is { } prefix) content.Children.Insert(index: 0, item: prefix);
 
         // `.navigation-sidebar > row { border-radius: $menu_radius }` on the $selected_* ladder —
         // a selected sidebar row is currentColor 10%, the same weight as a hovered menu item.
-        var selectedFill = AdwStyle.SidebarRowFill(theme, false, false, true);
+        var selectedFill = AdwStyle.SidebarRowFill(
+            theme: theme,
+            hovered: false,
+            pressed: false,
+            selected: true
+        );
         var box = new Container {
             Height = RowHeight,
             CornerRadius = AdwMetrics.MenuRadius,
             Background = selected ? selectedFill : Color.Transparent,
             Padding = EdgeInsets.Symmetric(AdwMetrics.SidebarRowPaddingX),
             // Container lays its child at the top-left, so center the row content via Align.
-            Child = new Align(Alignment.CenterLeft, content),
+            Child = new Align(alignment: Alignment.CenterLeft, child: content),
         };
         var press = new Pressable {
             Child = box,
@@ -308,10 +330,10 @@ public sealed class AdwSidebar : ComposedWidget, IFocusGroup
             // freezing — a click on the current row still has to feel like a click.
             fill.Target(
                 AdwStyle.SidebarRowFill(
-                    theme,
-                    press.Hovered,
-                    press.Pressed,
-                    selected
+                    theme: theme,
+                    hovered: press.Hovered,
+                    pressed: press.Pressed,
+                    selected: selected
                 )
             );
         };

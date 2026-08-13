@@ -11,7 +11,8 @@ namespace Zigote.Persistence;
 ///     destroyed.
 ///     <para>
 ///         With <paramref name="autoFlush" /> (the default) every mutation rewrites the file; fine for
-///         preference-sized stores. Pass <c>false</c> to buffer mutations until <see cref="Flush" /> or
+///         preference-sized stores. Pass <c>false</c> to buffer mutations until <see cref="Flush" />
+///         or
 ///         disposal.
 ///     </para>
 /// </summary>
@@ -23,10 +24,7 @@ public sealed class JsonFileKeyValueStore(string path, bool autoFlush = true) : 
     public bool TryGet(string key, out string value)
     {
         ArgumentException.ThrowIfNullOrEmpty(key);
-        lock (_values)
-        {
-            return _values.TryGetValue(key, out value!);
-        }
+        lock (_values) return _values.TryGetValue(key: key, value: out value!);
     }
 
     public void Set(string key, string value)
@@ -35,8 +33,8 @@ public sealed class JsonFileKeyValueStore(string path, bool autoFlush = true) : 
         ArgumentNullException.ThrowIfNull(value);
         lock (_values)
         {
-            if (_values.TryGetValue(key, out var existing) &&
-                string.Equals(existing, value, StringComparison.Ordinal))
+            if (_values.TryGetValue(key: key, value: out string? existing) &&
+                string.Equals(a: existing, b: value, comparisonType: StringComparison.Ordinal))
                 return;
             _values[key] = value;
             MarkDirtyLocked();
@@ -57,18 +55,15 @@ public sealed class JsonFileKeyValueStore(string path, bool autoFlush = true) : 
     public bool Contains(string key)
     {
         ArgumentException.ThrowIfNullOrEmpty(key);
-        lock (_values)
-        {
-            return _values.ContainsKey(key);
-        }
+        lock (_values) return _values.ContainsKey(key);
     }
 
     public IReadOnlyList<string> Keys()
     {
         lock (_values)
         {
-            var keys = new string[_values.Count];
-            _values.Keys.CopyTo(keys, 0);
+            string[] keys = new string[_values.Count];
+            _values.Keys.CopyTo(array: keys, index: 0);
             return keys;
         }
     }
@@ -87,14 +82,12 @@ public sealed class JsonFileKeyValueStore(string path, bool autoFlush = true) : 
     {
         lock (_values)
         {
-            if (_dirty) SaveLocked();
+            if (_dirty)
+                SaveLocked();
         }
     }
 
-    public void Dispose()
-    {
-        Flush();
-    }
+    public void Dispose() => Flush();
 
     private void MarkDirtyLocked()
     {
@@ -104,16 +97,16 @@ public sealed class JsonFileKeyValueStore(string path, bool autoFlush = true) : 
 
     private void SaveLocked()
     {
-        var directory = Path.GetDirectoryName(path);
+        string? directory = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
 
-        var json = JsonSerializer.Serialize(
-            _values,
-            PersistenceJsonContext.Default.SortedDictionaryStringString
+        string json = JsonSerializer.Serialize(
+            value: _values,
+            jsonTypeInfo: PersistenceJsonContext.Default.SortedDictionaryStringString
         );
-        var tmp = path + ".tmp";
-        File.WriteAllText(tmp, json);
-        File.Move(tmp, path, true);
+        string tmp = path + ".tmp";
+        File.WriteAllText(path: tmp, contents: json);
+        File.Move(sourceFileName: tmp, destFileName: path, overwrite: true);
         _dirty = false;
     }
 
@@ -123,14 +116,17 @@ public sealed class JsonFileKeyValueStore(string path, bool autoFlush = true) : 
         if (!File.Exists(path)) return new SortedDictionary<string, string>(StringComparer.Ordinal);
         try
         {
-            var json = File.ReadAllText(path);
+            string json = File.ReadAllText(path);
             var loaded = JsonSerializer.Deserialize(
-                json,
-                PersistenceJsonContext.Default.SortedDictionaryStringString
+                json: json,
+                jsonTypeInfo: PersistenceJsonContext.Default.SortedDictionaryStringString
             );
             return loaded is null
                 ? new SortedDictionary<string, string>(StringComparer.Ordinal)
-                : new SortedDictionary<string, string>(loaded, StringComparer.Ordinal);
+                : new SortedDictionary<string, string>(
+                    dictionary: loaded,
+                    comparer: StringComparer.Ordinal
+                );
         }
         catch (Exception e) when (e is JsonException or IOException or UnauthorizedAccessException)
         {
@@ -143,7 +139,7 @@ public sealed class JsonFileKeyValueStore(string path, bool autoFlush = true) : 
     {
         try
         {
-            File.Copy(path, path + ".corrupt", true);
+            File.Copy(sourceFileName: path, destFileName: path + ".corrupt", overwrite: true);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {

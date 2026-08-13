@@ -1,9 +1,9 @@
 using Zigote.Core;
 using Zigote.Core.Paint;
+using Zigote.UI.Host;
 using Zigote.UI.TextShaping;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets.Overlays;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.Widgets.Controls;
 
@@ -48,19 +48,16 @@ public sealed class Snackbar(
     public bool IsDone => Remaining <= 0f;
 
     /// <summary>Near-black flat toast fill, distinct from any surface tint so it reads on both themes.</summary>
-    private static Color ToastSurface => new(0.12f, 0.12f, 0.13f);
+    private static Color ToastSurface => new(r: 0.12f, g: 0.12f, b: 0.13f);
 
-    private Color ToastOnSurface => new(0.96f, 0.96f, 0.97f);
+    private Color ToastOnSurface => new(r: 0.96f, g: 0.96f, b: 0.97f);
 
-    public void Tick(float dt)
-    {
-        Remaining = MathF.Max(0f, Remaining - dt);
-    }
+    public void Tick(float dt) => Remaining = MathF.Max(x: 0f, y: Remaining - dt);
 
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        _screen = new Size(c.MaxWidth, c.MaxHeight);
+        _screen = new Size(width: c.MaxWidth, height: c.MaxHeight);
         // The toast is an app-level overlay, outside the root SafeArea — without the device insets
         // it sits on top of the home indicator.
         _safe = MediaQuery.Of(BuildContext.Current).Padding;
@@ -70,10 +67,10 @@ public sealed class Snackbar(
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _screen.Width,
-            _screen.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _screen.Width,
+            height: _screen.Height
         );
 
         var (surface, _, action) = Geometry();
@@ -84,53 +81,55 @@ public sealed class Snackbar(
 
     public override void Paint(PaintList paint)
     {
-        var (surface, messageX, action) = Geometry();
+        (var surface, float messageX, var action) = Geometry();
 
         // Slide-up on appear, fade-out near the end.
-        var appearT = MathF.Min(1f, (Duration - Remaining) / AppearSeconds);
-        var dismissT = Remaining < DismissSeconds ? Remaining / DismissSeconds : 1f;
-        var alpha = appearT * dismissT;
-        var yOff = (1f - appearT) * 24f;
+        float appearT = MathF.Min(x: 1f, y: (Duration - Remaining) / AppearSeconds);
+        float dismissT = Remaining < DismissSeconds ? Remaining / DismissSeconds : 1f;
+        float alpha = appearT * dismissT;
+        float yOff = (1f - appearT) * 24f;
 
         var sRect = new Rect(
-            surface.X,
-            surface.Y + yOff,
-            surface.Width,
-            surface.Height
+            x: surface.X,
+            y: surface.Y + yOff,
+            width: surface.Width,
+            height: surface.Height
         );
 
         paint.PushAlpha(alpha);
 
         // Flat opaque near-black surface on a soft Z2 shadow, in the theme's toast shape.
-        var radius = MathF.Min(_theme.ToastRadius, sRect.Height / 2f);
-        paint.AddElevation(sRect, radius, Elevation.Z2);
-        paint.AddRect(sRect, ToastSurface, radius);
+        float radius = MathF.Min(x: _theme.ToastRadius, y: sRect.Height / 2f);
+        paint.AddElevation(bounds: sRect, radius: radius, style: Elevation.Z2);
+        paint.AddRect(bounds: sRect, color: ToastSurface, radius: radius);
 
         // The surface is capped at the screen width but the message is drawn at its measured
         // width — clip so a long message ends at the toast instead of running off-screen.
-        paint.AddClipStart(sRect, radius);
+        paint.AddClipStart(bounds: sRect, radius: radius);
 
-        var fs = _theme.FontSizeBody;
-        var baselineY = sRect.Y + (Height - fs) / 2f + fs * 0.8f;
+        float fs = _theme.FontSizeBody;
+        float baselineY = sRect.Y + ((Height - fs) / 2f) + (fs * 0.8f);
 
         if (!string.IsNullOrEmpty(message))
+        {
             paint.AddText(
-                message,
-                sRect.X + messageX,
-                baselineY,
-                ToastOnSurface,
-                fs
+                text: message,
+                baselineX: sRect.X + messageX,
+                baselineY: baselineY,
+                color: ToastOnSurface,
+                fontSize: fs
             );
+        }
 
         if (!string.IsNullOrEmpty(actionLabel))
         {
             var ac = _actionHovered ? _theme.Primary : _theme.Primary.WithAlpha(0.85f);
             paint.AddText(
-                actionLabel,
-                action.X + ActionPadH,
-                baselineY,
-                ac,
-                fs,
+                text: actionLabel,
+                baselineX: action.X + ActionPadH,
+                baselineY: baselineY,
+                color: ac,
+                fontSize: fs,
                 fontWeight: FontWeight.Bold
             );
         }
@@ -142,7 +141,7 @@ public sealed class Snackbar(
     public override Widget? HitTest(Offset point)
     {
         // Only intercept clicks on the action button; let everything else through.
-        if (!string.IsNullOrEmpty(actionLabel) && _actionRect.Contains(point.X, point.Y))
+        if (!string.IsNullOrEmpty(actionLabel) && _actionRect.Contains(px: point.X, py: point.Y))
             return this;
         return null;
     }
@@ -172,43 +171,53 @@ public sealed class Snackbar(
     /// </summary>
     private (Rect Surface, float MessageX, Rect Action) Geometry()
     {
-        var fs = _theme.FontSizeBody;
+        float fs = _theme.FontSizeBody;
 
-        var msgW = string.IsNullOrEmpty(message) ? 0f : TextMeasure.Width(message, fs);
+        float msgW = string.IsNullOrEmpty(message)
+            ? 0f
+            : TextMeasure.Width(text: message, fontSize: fs);
 
-        var actionW = 0f;
+        float actionW = 0f;
         if (!string.IsNullOrEmpty(actionLabel))
-            actionW = TextMeasure.Width(actionLabel, fs, FontWeight.Bold) + ActionPadH * 2f;
+        {
+            actionW = TextMeasure.Width(text: actionLabel, fontSize: fs, weight: FontWeight.Bold) +
+                      (ActionPadH * 2f);
+        }
 
-        var innerW = msgW + (actionW > 0f ? Gap + actionW : 0f);
-        var usableW = _screen.Width - _safe.Horizontal;
-        var surfaceW = MathF.Min(innerW + PadH * 2f, MathF.Max(120f, usableW - 32f));
-
-        var surfaceX = _safe.Left + (usableW - surfaceW) / 2f;
-        var surfaceY = _screen.Height - _safe.Bottom - Height - BottomMargin;
-
-        var surface = OverlayPositioning.Clamp(
-            new Rect(
-                surfaceX,
-                surfaceY,
-                surfaceW,
-                Height
-            ),
-            _screen,
-            BottomMargin,
-            _safe
+        float innerW = msgW + (actionW > 0f ? Gap + actionW : 0f);
+        float usableW = _screen.Width - _safe.Horizontal;
+        float surfaceW = MathF.Min(
+            x: innerW + (PadH * 2f),
+            y: MathF.Max(x: 120f, y: usableW - 32f)
         );
 
-        var messageX = PadH;
+        float surfaceX = _safe.Left + ((usableW - surfaceW) / 2f);
+        float surfaceY = _screen.Height - _safe.Bottom - Height - BottomMargin;
+
+        var surface = OverlayPositioning.Clamp(
+            rect: new Rect(
+                x: surfaceX,
+                y: surfaceY,
+                width: surfaceW,
+                height: Height
+            ),
+            screen: _screen,
+            margin: BottomMargin,
+            safe: _safe
+        );
+
+        float messageX = PadH;
 
         var action = Rect.Zero;
         if (actionW > 0f)
+        {
             action = new Rect(
-                surface.X + surface.Width - PadH - actionW,
-                surface.Y,
-                actionW,
-                Height
+                x: surface.X + surface.Width - PadH - actionW,
+                y: surface.Y,
+                width: actionW,
+                height: Height
             );
+        }
 
         return (surface, messageX, action);
     }

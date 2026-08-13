@@ -3,7 +3,6 @@ using Zigote.Core;
 using Zigote.Core.Native;
 using Zigote.Core.Paint;
 using Zigote.UI.Adwaita;
-using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Layout;
 
@@ -22,24 +21,33 @@ public class AdwThemeSwapTests
     private static List<Color> Fills(Widget root, ThemeProvider provider, float w = 300f,
         float h = 120f)
     {
-        provider.Measure(new Constraints(0f, w, 0f, h));
-        provider.Layout(new Offset(0f, 0f));
+        provider.Measure(
+            new Constraints(
+                minWidth: 0f,
+                maxWidth: w,
+                minHeight: 0f,
+                maxHeight: h
+            )
+        );
+        provider.Layout(new Offset(x: 0f, y: 0f));
         var paint = new PaintList();
         provider.Paint(paint);
-        return [.. paint.DebugCommands
-            .Where(c => c.Kind == (byte)PaintCommandKind.Rect)
-            .Select(c => new Color(
-                    c.ColorR,
-                    c.ColorG,
-                    c.ColorB,
-                    c.ColorA
-                )
-            )];
+        return [
+            .. paint.DebugCommands
+                .Where(c => c.Kind == (byte)PaintCommandKind.Rect)
+                .Select(c => new Color(
+                        r: c.ColorR,
+                        g: c.ColorG,
+                        b: c.ColorB,
+                        a: c.ColorA
+                    )
+                ),
+        ];
     }
 
     private static (ThemeProvider Provider, Widget Subject) Tree(Widget subject)
     {
-        var provider = new ThemeProvider(AdwTheme.Light, subject);
+        var provider = new ThemeProvider(data: AdwTheme.Light, child: subject);
         return (provider, subject);
     }
 
@@ -60,30 +68,33 @@ public class AdwThemeSwapTests
             "progress" => new AdwProgressBar(0.5f),
             "shortcut" => new AdwShortcutLabel("<Primary>s"),
             "separator" => new AdwSeparator(),
-            _ => new AdwPaned(new SizedBox(10f, 10f), new SizedBox(10f, 10f)),
+            _ => new AdwPaned(
+                first: new SizedBox(width: 10f, height: 10f),
+                second: new SizedBox(width: 10f, height: 10f)
+            ),
         };
         var (provider, _) = Tree(subject);
 
-        var light = Fills(subject, provider);
+        var light = Fills(root: subject, provider: provider);
         provider.Data = AdwTheme.Dark;
-        var dark = Fills(subject, provider);
+        var dark = Fills(root: subject, provider: provider);
 
         Assert.NotEmpty(light);
-        Assert.NotEqual(light, dark);
+        Assert.NotEqual(expected: light, actual: dark);
     }
 
     [Fact]
     public void ComposedWidgetsRepaintInTheNewTheme()
     {
-        var button = new AdwButton("Go", () => { });
+        var button = new AdwButton(label: "Go", onPressed: () => { });
         var (provider, _) = Tree(button);
 
-        var light = Fills(button, provider);
+        var light = Fills(root: button, provider: provider);
         provider.Data = AdwTheme.Dark;
-        var dark = Fills(button, provider);
+        var dark = Fills(root: button, provider: provider);
 
         Assert.NotEmpty(light);
-        Assert.NotEqual(light, dark);
+        Assert.NotEqual(expected: light, actual: dark);
     }
 
     /// <summary>
@@ -95,13 +106,16 @@ public class AdwThemeSwapTests
     public void AnAccentOnlyChangeStillRepaints()
     {
         var slider = new AdwSlider(0.5f);
-        var provider = new ThemeProvider(AdwTheme.Create(AdwAccent.Blue, true), slider);
+        var provider = new ThemeProvider(
+            data: AdwTheme.Create(accent: AdwAccent.Blue, dark: true),
+            child: slider
+        );
 
-        var blue = Fills(slider, provider);
-        provider.Data = AdwTheme.Create(AdwAccent.Red, true);
-        var red = Fills(slider, provider);
+        var blue = Fills(root: slider, provider: provider);
+        provider.Data = AdwTheme.Create(accent: AdwAccent.Red, dark: true);
+        var red = Fills(root: slider, provider: provider);
 
-        Assert.NotEqual(blue, red);
+        Assert.NotEqual(expected: blue, actual: red);
     }
 
     /// <summary>
@@ -114,11 +128,11 @@ public class AdwThemeSwapTests
         var group = new AdwToggleGroup(["One", "Two"]);
         var (provider, _) = Tree(group);
 
-        var light = Fills(group, provider);
+        var light = Fills(root: group, provider: provider);
         provider.Data = AdwTheme.Dark;
-        var dark = Fills(group, provider);
+        var dark = Fills(root: group, provider: provider);
 
         Assert.NotEmpty(light);
-        Assert.NotEqual(light, dark);
+        Assert.NotEqual(expected: light, actual: dark);
     }
 }

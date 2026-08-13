@@ -50,37 +50,37 @@ public sealed class Toolbar : Widget
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
 
-        var h = Height;
-        var childMaxW = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 0f;
-        var child = Constraints.Loose(childMaxW, h);
+        float h = Height;
+        float childMaxW = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 0f;
+        var child = Constraints.Loose(width: childMaxW, height: h);
 
         if (_leadSizes.Length != Leading.Count) _leadSizes = new Size[Leading.Count];
         if (_trailSizes.Length != Trailing.Count) _trailSizes = new Size[Trailing.Count];
 
-        for (var i = 0; i < Leading.Count; i++) _leadSizes[i] = Leading[i].Measure(child);
-        for (var i = 0; i < Trailing.Count; i++) _trailSizes[i] = Trailing[i].Measure(child);
+        for (int i = 0; i < Leading.Count; i++) _leadSizes[i] = Leading[i].Measure(child);
+        for (int i = 0; i < Trailing.Count; i++) _trailSizes[i] = Trailing[i].Measure(child);
 
-        var width = float.IsFinite(c.MaxWidth) ? c.MaxWidth : MeasureIntrinsicWidth();
-        _size = c.Constrain(new Size(width, h));
+        float width = float.IsFinite(c.MaxWidth) ? c.MaxWidth : MeasureIntrinsicWidth();
+        _size = c.Constrain(new Size(width: width, height: h));
 
         // Leading packs left and trailing packs right with nothing arbitrating the middle, so on a
         // narrow bar the two groups used to overlap and paint past the edges. Treat the bar as one
         // horizontally scrollable strip instead: everything stays reachable, nothing bleeds out.
-        _overflow = MathF.Max(0f, MeasureIntrinsicWidth() - _size.Width);
-        _scrollX = Math.Clamp(_scrollX, 0f, _overflow);
+        _overflow = MathF.Max(x: 0f, y: MeasureIntrinsicWidth() - _size.Width);
+        _scrollX = Math.Clamp(value: _scrollX, min: 0f, max: _overflow);
         return _size;
     }
 
     private float MeasureIntrinsicWidth()
     {
-        var w = HPad * 2f;
-        for (var i = 0; i < _leadSizes.Length; i++)
+        float w = HPad * 2f;
+        for (int i = 0; i < _leadSizes.Length; i++)
         {
             if (i > 0) w += Gap;
             w += _leadSizes[i].Width;
         }
 
-        for (var i = 0; i < _trailSizes.Length; i++)
+        for (int i = 0; i < _trailSizes.Length; i++)
         {
             if (i > 0 || _leadSizes.Length > 0) w += Gap;
             w += _trailSizes[i].Width;
@@ -92,47 +92,47 @@ public sealed class Toolbar : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
 
-        var x = origin.X + HPad - _scrollX;
-        for (var i = 0; i < Leading.Count; i++)
+        float x = origin.X + HPad - _scrollX;
+        for (int i = 0; i < Leading.Count; i++)
         {
             var sz = i < _leadSizes.Length ? _leadSizes[i] : Size.Zero;
-            var cy = origin.Y + (_size.Height - sz.Height) / 2f;
-            Leading[i].Layout(new Offset(x, cy));
+            float cy = origin.Y + ((_size.Height - sz.Height) / 2f);
+            Leading[i].Layout(new Offset(x: x, y: cy));
             x += sz.Width + Gap;
         }
 
-        var rx = origin.X + _size.Width - HPad + _overflow - _scrollX;
-        for (var i = Trailing.Count - 1; i >= 0; i--)
+        float rx = origin.X + _size.Width - HPad + _overflow - _scrollX;
+        for (int i = Trailing.Count - 1; i >= 0; i--)
         {
             var sz = i < _trailSizes.Length ? _trailSizes[i] : Size.Zero;
             rx -= sz.Width;
-            var cy = origin.Y + (_size.Height - sz.Height) / 2f;
-            Trailing[i].Layout(new Offset(rx, cy));
+            float cy = origin.Y + ((_size.Height - sz.Height) / 2f);
+            Trailing[i].Layout(new Offset(x: rx, y: cy));
             rx -= Gap;
         }
     }
 
     public override void Paint(PaintList paint)
     {
-        var glass = Translucent;
+        bool glass = Translucent;
         if (!glass)
-            paint.AddRect(Bounds, _theme.Surface);
+            paint.AddRect(bounds: Bounds, color: _theme.Surface);
 
         // 1px hairline along the bottom edge.
         paint.AddRect(
-            new Rect(
-                Bounds.X,
-                Bounds.Y + Bounds.Height - 1f,
-                Bounds.Width,
-                1f
+            bounds: new Rect(
+                x: Bounds.X,
+                y: Bounds.Y + Bounds.Height - 1f,
+                width: Bounds.Width,
+                height: 1f
             ),
-            _theme.Separator
+            color: _theme.Separator
         );
 
         paint.AddClipStart(Bounds);
@@ -141,20 +141,17 @@ public sealed class Toolbar : Widget
         paint.AddClipEnd();
     }
 
-    public override bool CanTouchScroll(bool vertical)
-    {
-        return !vertical && _overflow > 0f;
-    }
+    public override bool CanTouchScroll(bool vertical) => !vertical && _overflow > 0f;
 
     public override void OnTouchScroll(float dx, float dy)
     {
         if (_overflow <= 0f)
         {
-            base.OnTouchScroll(dx, dy);
+            base.OnTouchScroll(dx: dx, dy: dy);
             return;
         }
 
-        _scrollX = Math.Clamp(_scrollX - dx, 0f, _overflow);
+        _scrollX = Math.Clamp(value: _scrollX - dx, min: 0f, max: _overflow);
         MarkNeedsLayout();
     }
 
@@ -162,25 +159,25 @@ public sealed class Toolbar : Widget
     {
         if (_overflow <= 0f || MathF.Abs(dx) <= MathF.Abs(dy))
         {
-            base.OnScroll(dx, dy);
+            base.OnScroll(dx: dx, dy: dy);
             return;
         }
 
-        _scrollX = Math.Clamp(_scrollX - dx * Gap * 2f, 0f, _overflow);
+        _scrollX = Math.Clamp(value: _scrollX - (dx * Gap * 2f), min: 0f, max: _overflow);
         MarkNeedsLayout();
     }
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
 
-        for (var i = Trailing.Count - 1; i >= 0; i--)
+        for (int i = Trailing.Count - 1; i >= 0; i--)
         {
             var hit = Trailing[i].HitTest(point);
             if (hit != null) return hit;
         }
 
-        for (var i = Leading.Count - 1; i >= 0; i--)
+        for (int i = Leading.Count - 1; i >= 0; i--)
         {
             var hit = Leading[i].HitTest(point);
             if (hit != null) return hit;

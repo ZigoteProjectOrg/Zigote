@@ -19,11 +19,12 @@ internal static class ArtViewer
     public static void Show(ArtPiece piece)
     {
         var zoom = new Signal<float>(1f);
-        var viewer = new InteractiveViewer(new ArtImage(piece, FullMaxDim, false)) {
-            MaxScale = 10f,
-            DoubleTapScale = 3f,
-            OnScaleChanged = scale => zoom.Value = scale,
-        };
+        var viewer =
+            new InteractiveViewer(new ArtImage(piece: piece, maxDim: FullMaxDim, chrome: false)) {
+                MaxScale = 10f,
+                DoubleTapScale = 3f,
+                OnScaleChanged = scale => zoom.Value = scale,
+            };
 
         // The hint sits below the viewer rather than floating over it: an overlay would answer the
         // pointer where it lay, and a strip of dead surface in the middle of a pannable picture is
@@ -32,8 +33,13 @@ internal static class ArtViewer
             Children = {
                 new Expanded(viewer),
                 new Padding(
-                    EdgeInsets.Only(Spacing.Lg, 0f, Spacing.Lg, Spacing.Md),
-                    Demo.Bar(
+                    padding: EdgeInsets.Only(
+                        left: Spacing.Lg,
+                        top: 0f,
+                        right: Spacing.Lg,
+                        bottom: Spacing.Md
+                    ),
+                    child: Demo.Bar(
                         new Watch(() => Demo.Value($"{zoom.Value:0.0}×")),
                         Demo.Caption(
                             "Drag to pan · Pinch or ⌘-scroll to zoom · Double-click to toggle"
@@ -44,11 +50,14 @@ internal static class ArtViewer
         };
 
         Demo.ShowDialog(
-            $"Art by {piece.Artist}",
-            content,
-            920f,
-            720f,
-            headerStart: Demo.IconButton(MaterialIcons.ZoomOutMap, () => viewer.Reset())
+            title: $"Art by {piece.Artist}",
+            content: content,
+            width: 920f,
+            height: 720f,
+            headerStart: Demo.IconButton(
+                icon: MaterialIcons.ZoomOutMap,
+                onPressed: () => viewer.Reset()
+            )
         );
     }
 }

@@ -19,7 +19,7 @@ public sealed class VerticalDivider : ComposedWidget
 
     protected override Widget Build(BuildContext context)
     {
-        return new Divider(Thickness, Indent) {
+        return new Divider(thickness: Thickness, indent: Indent) {
             Vertical = true,
             EndIndent = EndIndent,
             Color = Color,
@@ -49,8 +49,8 @@ public sealed class ReorderableListView : ComposedWidget
         // ReorderableList reports the final destination (already decremented); re-expand it to the
         // insertion-slot convention so handlers compute the right index.
         return new ReorderableList(
-            _children,
-            (from, to) => _onReorder?.Invoke(from, to > from ? to + 1 : to)
+            items: _children,
+            onReorder: (from, to) => _onReorder?.Invoke(arg1: from, arg2: to > from ? to + 1 : to)
         );
     }
 }
@@ -72,8 +72,12 @@ public sealed class FilterChip : ComposedWidget
 
     protected override Widget Build(BuildContext context)
     {
-        var text = _label is Label l ? l.Text : "";
-        return new Chip(text, Selected, OnSelected is null ? null : () => OnSelected(!Selected));
+        string text = _label is Label l ? l.Text : "";
+        return new Chip(
+            label: text,
+            selected: Selected,
+            onPressed: OnSelected is null ? null : () => OnSelected(!Selected)
+        );
     }
 }
 
@@ -94,8 +98,12 @@ public sealed class ChoiceChip : ComposedWidget
 
     protected override Widget Build(BuildContext context)
     {
-        var text = _label is Label l ? l.Text : "";
-        return new Chip(text, Selected, OnSelected is null ? null : () => OnSelected(!Selected));
+        string text = _label is Label l ? l.Text : "";
+        return new Chip(
+            label: text,
+            selected: Selected,
+            onPressed: OnSelected is null ? null : () => OnSelected(!Selected)
+        );
     }
 }
 
@@ -124,7 +132,7 @@ public sealed class CircleAvatar : ComposedWidget
     protected override Widget Build(BuildContext context)
     {
         var theme = ThemeProvider.Of(context);
-        var d = Radius * 2f;
+        float d = Radius * 2f;
 
         if (_child is Label l && l.Color is null)
             l.Color = ForegroundColor ?? theme.OnPrimary;
@@ -132,7 +140,7 @@ public sealed class CircleAvatar : ComposedWidget
         return new DecoratedBox {
             Fill = BackgroundColor ?? theme.Fill3,
             Radius = Radius,
-            Child = new SizedBox(d, d, new Center(_child)),
+            Child = new SizedBox(width: d, height: d, child: new Center(_child)),
         };
     }
 }

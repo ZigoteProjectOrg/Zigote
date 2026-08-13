@@ -15,19 +15,14 @@ public sealed class ImagePreviewProvider : IAssetPreviewProvider
     private static readonly string[] Exts =
         [".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".hdr", ".tga"];
 
-    public bool CanHandle(string ext)
-    {
-        return Array.IndexOf(Exts, ext) >= 0;
-    }
+    public bool CanHandle(string ext) => Array.IndexOf(array: Exts, value: ext) >= 0;
 
-    public Widget BuildPreview(string path, ThemeData theme)
-    {
-        return new ImagePreviewWidget(path, theme);
-    }
+    public Widget BuildPreview(string path, ThemeData theme) =>
+        new ImagePreviewWidget(path: path, theme: theme);
 
     public IEnumerable<(string Key, string Value)> ExtraMetadata(string path)
     {
-        var (w, h) = TryDimensions(path);
+        (uint w, uint h) = TryDimensions(path);
         if (w > 0 && h > 0)
             yield return ("Dimensions", $"{w} × {h}");
     }
@@ -43,11 +38,11 @@ public sealed class ImagePreviewProvider : IAssetPreviewProvider
     /// </summary>
     internal static (uint W, uint H) TryDimensions(string path)
     {
-        var handle = 0UL;
+        ulong handle = 0UL;
         try
         {
             if (ZigoteEngine.Instance is null) return (0, 0);
-            handle = ZigoteEngine.LoadTexture(path, out var w, out var h);
+            handle = ZigoteEngine.LoadTexture(path: path, outW: out uint w, outH: out uint h);
             return handle != 0 ? (w, h) : (0, 0);
         }
         catch
@@ -102,7 +97,7 @@ internal sealed class ImagePreviewWidget : Widget, IDisposable
         try
         {
             if (ZigoteEngine.Instance is not null)
-                _handle = ZigoteEngine.LoadTexture(_path, out _texW, out _texH);
+                _handle = ZigoteEngine.LoadTexture(path: _path, outW: out _texW, outH: out _texH);
         }
         catch
         {
@@ -114,19 +109,19 @@ internal sealed class ImagePreviewWidget : Widget, IDisposable
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
         EnsureLoaded();
-        var w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 240f;
-        var h = float.IsFinite(c.MaxHeight) ? MathF.Max(120f, c.MaxHeight) : 220f;
-        _size = c.Constrain(new Size(w, h));
+        float w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 240f;
+        float h = float.IsFinite(c.MaxHeight) ? MathF.Max(x: 120f, y: c.MaxHeight) : 220f;
+        _size = c.Constrain(new Size(width: w, height: h));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
@@ -135,69 +130,69 @@ internal sealed class ImagePreviewWidget : Widget, IDisposable
         if (!paint.IsVisible(Bounds)) return;
 
         // Surface + checkerboard so transparent regions read as transparent.
-        paint.AddRect(Bounds, _theme.SurfaceAlt, 6f);
+        paint.AddRect(bounds: Bounds, color: _theme.SurfaceAlt, radius: 6f);
         paint.AddClipStart(Bounds);
         var dark = _theme.Background;
         var light = _theme.Surface.Lighten(0.04f);
-        var cols = (int)MathF.Ceiling(Bounds.Width / CheckerSize);
-        var rows = (int)MathF.Ceiling(Bounds.Height / CheckerSize);
-        for (var ry = 0; ry < rows; ry++)
-        for (var cx = 0; cx < cols; cx++)
+        int cols = (int)MathF.Ceiling(Bounds.Width / CheckerSize);
+        int rows = (int)MathF.Ceiling(Bounds.Height / CheckerSize);
+        for (int ry = 0; ry < rows; ry++)
+        for (int cx = 0; cx < cols; cx++)
         {
             var col = (cx + ry) % 2 == 0 ? dark : light;
             var cell = new Rect(
-                Bounds.X + cx * CheckerSize,
-                Bounds.Y + ry * CheckerSize,
-                CheckerSize,
-                CheckerSize
+                x: Bounds.X + (cx * CheckerSize),
+                y: Bounds.Y + (ry * CheckerSize),
+                width: CheckerSize,
+                height: CheckerSize
             );
-            paint.AddRect(cell, col);
+            paint.AddRect(bounds: cell, color: col);
         }
 
         if (_handle != 0 && _texW > 0 && _texH > 0)
         {
-            var fit = FitContain(Bounds, _texW, _texH);
+            var fit = FitContain(box: Bounds, texW: _texW, texH: _texH);
             paint.AddImage(
-                fit,
-                (int)_texW,
-                (int)_texH,
-                null,
-                _handle
+                bounds: fit,
+                pixelWidth: (int)_texW,
+                pixelHeight: (int)_texH,
+                pixels: null,
+                cacheKey: _handle
             );
         }
         else
         {
             const string msg = "preview unavailable";
-            var tx = Bounds.X + (Bounds.Width - msg.Length * 5.5f) * 0.5f;
-            var ty = Bounds.Y + Bounds.Height * 0.5f;
+            float tx = Bounds.X + ((Bounds.Width - (msg.Length * 5.5f)) * 0.5f);
+            float ty = Bounds.Y + (Bounds.Height * 0.5f);
             paint.AddText(
-                msg,
-                tx,
-                ty,
-                _theme.TextMuted,
-                _theme.FontSizeCaption
+                text: msg,
+                baselineX: tx,
+                baselineY: ty,
+                color: _theme.TextMuted,
+                fontSize: _theme.FontSizeCaption
             );
         }
 
         paint.AddClipEnd();
-        paint.AddBorder(Bounds, _theme.Separator, 6f);
+        paint.AddBorder(bounds: Bounds, color: _theme.Separator, radius: 6f);
     }
 
     private static Rect FitContain(Rect box, uint texW, uint texH)
     {
         const float pad = 8f;
-        var availW = MathF.Max(1f, box.Width - pad * 2f);
-        var availH = MathF.Max(1f, box.Height - pad * 2f);
-        var scale = MathF.Min(availW / texW, availH / texH);
-        var w = texW * scale;
-        var h = texH * scale;
-        var x = box.X + (box.Width - w) * 0.5f;
-        var y = box.Y + (box.Height - h) * 0.5f;
+        float availW = MathF.Max(x: 1f, y: box.Width - (pad * 2f));
+        float availH = MathF.Max(x: 1f, y: box.Height - (pad * 2f));
+        float scale = MathF.Min(x: availW / texW, y: availH / texH);
+        float w = texW * scale;
+        float h = texH * scale;
+        float x = box.X + ((box.Width - w) * 0.5f);
+        float y = box.Y + ((box.Height - h) * 0.5f);
         return new Rect(
-            x,
-            y,
-            w,
-            h
+            x: x,
+            y: y,
+            width: w,
+            height: h
         );
     }
 }

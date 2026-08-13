@@ -26,29 +26,29 @@ public sealed class SceneFlowTests : IDisposable
 
         _root = new SceneNode("Scene");
         _root.AddChild(new SceneNode("Player") { Tag = "Player" });
-        _root.AddChild(new SceneNode("Camera", NodeKind.Camera));
+        _root.AddChild(new SceneNode(name: "Camera", kind: NodeKind.Camera));
 
         var scripts = new ScriptWorld(new ScriptRegistry());
         _ecs = new EcsSceneBridge();
         _ecs.BuildFrom(_root);
         _world = new RuntimeWorldBackend(
-            _root,
-            scripts,
-            _ecs,
-            null
+            root: _root,
+            scripts: scripts,
+            ecs: _ecs,
+            hooks: null
         );
-        _scenes = new RuntimeScenesBackend(_world, "assets/start.scene");
+        _scenes = new RuntimeScenesBackend(world: _world, initialScenePath: "assets/start.scene");
 
         // A second level on disk: two nodes, one tagged.
         var level = new SceneGraph();
         level.Root.AddChild(
             new SceneNode("Boss") {
                 Tag = "Enemy",
-                Position = new Vec3(3f, 0f, 0f),
+                Position = new Vec3(x: 3f, y: 0f, z: 0f),
             }
         );
         level.Root.AddChild(new SceneNode("Exit"));
-        _levelPath = Path.Combine(_dir, "level2.scene");
+        _levelPath = Path.Combine(path1: _dir, path2: "level2.scene");
         level.Save(_levelPath);
     }
 
@@ -57,11 +57,9 @@ public sealed class SceneFlowTests : IDisposable
         _ecs.Dispose();
         try
         {
-            Directory.Delete(_dir, true);
+            Directory.Delete(path: _dir, recursive: true);
         }
-        catch (IOException)
-        {
-        }
+        catch (IOException) { }
     }
 
     [Fact]
@@ -70,21 +68,24 @@ public sealed class SceneFlowTests : IDisposable
         var container = _scenes.LoadAdditive(_levelPath);
 
         Assert.True(container.IsValid);
-        Assert.Equal("level2", _world.GetName(container));
+        Assert.Equal(expected: "level2", actual: _world.GetName(container));
         Assert.True(_world.Find("Boss").IsValid);
-        Assert.Equal(1, _world.CountByTag("Enemy"));
-        Assert.Equal("assets/start.scene", _scenes.Current); // additive does not change Current
+        Assert.Equal(expected: 1, actual: _world.CountByTag("Enemy"));
+        Assert.Equal(
+            expected: "assets/start.scene",
+            actual: _scenes.Current
+        ); // additive does not change Current
 
         _world.DestroyNow(container);
         Assert.False(_world.Find("Boss").IsValid);
-        Assert.Equal(0, _world.CountByTag("Enemy"));
+        Assert.Equal(expected: 0, actual: _world.CountByTag("Enemy"));
     }
 
     [Fact]
     public void Load_IsDeferred_ThenSwapsEverything()
     {
         var player = _world.Find("Player");
-        _scenes.Load(_levelPath, 0f);
+        _scenes.Load(scenePath: _levelPath, fadeSeconds: 0f);
 
         Assert.True(_world.IsAlive(player)); // not yet — applies at the tick's safe point
 
@@ -92,59 +93,59 @@ public sealed class SceneFlowTests : IDisposable
 
         Assert.False(_world.IsAlive(player));
         Assert.True(_world.Find("Boss").IsValid);
-        Assert.Equal(_levelPath, _scenes.Current);
-        Assert.Equal(1, _world.CountByTag("Enemy"));
-        Assert.Equal(0, _world.CountByTag("Player"));
+        Assert.Equal(expected: _levelPath, actual: _scenes.Current);
+        Assert.Equal(expected: 1, actual: _world.CountByTag("Enemy"));
+        Assert.Equal(expected: 0, actual: _world.CountByTag("Player"));
     }
 
     [Fact]
     public void Load_ThenRestoreSceneEdits_BringsTheAuthoredSceneBack()
     {
-        _scenes.Load(_levelPath, 0f);
+        _scenes.Load(scenePath: _levelPath, fadeSeconds: 0f);
         _scenes.ApplyPending();
-        Assert.DoesNotContain(_root.Children, c => c.Name == "Player");
+        Assert.DoesNotContain(collection: _root.Children, filter: c => c.Name == "Player");
 
         _world.RestoreSceneEdits();
 
-        Assert.Equal("Player", _root.Children[0].Name); // authored order restored
-        Assert.Equal("Camera", _root.Children[1].Name);
-        Assert.DoesNotContain(_root.Children, c => c.Name == "level2");
+        Assert.Equal(expected: "Player", actual: _root.Children[0].Name); // authored order restored
+        Assert.Equal(expected: "Camera", actual: _root.Children[1].Name);
+        Assert.DoesNotContain(collection: _root.Children, filter: c => c.Name == "level2");
     }
 
     [Fact]
     public void Load_WithFade_SwapsOnlyAtFullBlack()
     {
-        _scenes.Load(_levelPath, 0.2f);
+        _scenes.Load(scenePath: _levelPath, fadeSeconds: 0.2f);
 
         _scenes.ApplyPending();
         Assert.True(_world.Find("Player").IsValid); // still fading out
 
         _scenes.TickFade(0.1f);
-        Assert.InRange(_scenes.FadeAlpha, 0.4f, 0.6f);
+        Assert.InRange(actual: _scenes.FadeAlpha, low: 0.4f, high: 0.6f);
         _scenes.ApplyPending();
         Assert.True(_world.Find("Player").IsValid);
 
         _scenes.TickFade(0.15f); // past full black
-        Assert.Equal(1f, _scenes.FadeAlpha);
+        Assert.Equal(expected: 1f, actual: _scenes.FadeAlpha);
         _scenes.ApplyPending();
         Assert.False(_world.Find("Player").IsValid);
         Assert.True(_world.Find("Boss").IsValid);
 
         // Fade back in after the swap
         _scenes.TickFade(0.1f);
-        Assert.InRange(_scenes.FadeAlpha, 0.4f, 0.6f);
+        Assert.InRange(actual: _scenes.FadeAlpha, low: 0.4f, high: 0.6f);
         _scenes.TickFade(0.2f);
-        Assert.Equal(0f, _scenes.FadeAlpha);
+        Assert.Equal(expected: 0f, actual: _scenes.FadeAlpha);
     }
 
     [Fact]
     public void Load_MissingScene_KeepsPlayingTheCurrentOne()
     {
-        _scenes.Load(Path.Combine(_dir, "nope.scene"), 0f);
+        _scenes.Load(scenePath: Path.Combine(path1: _dir, path2: "nope.scene"), fadeSeconds: 0f);
         _scenes.ApplyPending();
 
         Assert.True(_world.Find("Player").IsValid);
-        Assert.Equal("assets/start.scene", _scenes.Current);
+        Assert.Equal(expected: "assets/start.scene", actual: _scenes.Current);
     }
 
     [Fact]
@@ -154,12 +155,12 @@ public sealed class SceneFlowTests : IDisposable
         Assert.False(Scenes.IsAvailable);
         Assert.Null(Scenes.Current);
         Scenes.Load("x.scene"); // no-throw
-        Assert.Equal(EntityHandle.None, Scenes.LoadAdditive("x.scene"));
+        Assert.Equal(expected: EntityHandle.None, actual: Scenes.LoadAdditive("x.scene"));
 
         Scenes.Backend = _scenes;
         try
         {
-            Assert.Equal("assets/start.scene", Scenes.Current);
+            Assert.Equal(expected: "assets/start.scene", actual: Scenes.Current);
             var h = Scenes.LoadAdditive(_levelPath);
             Assert.True(h.IsValid);
         }

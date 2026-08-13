@@ -60,19 +60,19 @@ public sealed class ToolbarButton : Widget
     public override int DebugStateHash()
     {
         return HashCode.Combine(
-            Icon,
-            Label,
-            _hovered,
-            _pressed,
-            Enabled,
-            Tone
+            value1: Icon,
+            value2: Label,
+            value3: _hovered,
+            value4: _pressed,
+            value5: Enabled,
+            value6: Tone
         );
     }
 
     private float ContentWidth()
     {
-        var w = 0f;
-        var has = false;
+        float w = 0f;
+        bool has = false;
         if (Icon != null)
         {
             w += IconSize;
@@ -99,37 +99,39 @@ public sealed class ToolbarButton : Widget
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
         _compact = TouchMetrics.IsCompact;
-        var fs = _theme.FontSizeCaption;
+        float fs = _theme.FontSizeCaption;
         _labelW = string.IsNullOrEmpty(Label)
             ? 0f
-            : TextMeasure.Width(Label, fs, FontWeight.Medium);
+            : TextMeasure.Width(text: Label, fontSize: fs, weight: FontWeight.Medium);
         // The bar itself is already 44 tall; its buttons were a fixed 28, so on a phone nothing in
         // a touch-sized toolbar was actually touch-sized.
-        var h = TouchMetrics.Pick(ControlMetrics.RegularHeight);
-        _size = c.Constrain(new Size(MathF.Max(ContentWidth() + PadX * 2f, h), h));
+        float h = TouchMetrics.Pick(ControlMetrics.RegularHeight);
+        _size = c.Constrain(
+            new Size(width: MathF.Max(x: ContentWidth() + (PadX * 2f), y: h), height: h)
+        );
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
     public override void Paint(PaintList paint)
     {
-        var radius = Radii.Sm;
-        var state = StateStyle.StateOf(_hovered, _pressed, !Enabled);
+        float radius = Radii.Sm;
+        var state = StateStyle.StateOf(hovered: _hovered, pressed: _pressed, disabled: !Enabled);
 
         // Fill: accent tones are always filled; the quiet default only fills on hover/press.
         Color? fill = Tone switch {
-            ToolbarTone.Primary => StateStyle.Tint(_theme.Accent, state),
-            ToolbarTone.Danger => StateStyle.Tint(_theme.Danger, state),
-            ToolbarTone.Success => StateStyle.Tint(_theme.Success, state),
+            ToolbarTone.Primary => StateStyle.Tint(baseColor: _theme.Accent, state: state),
+            ToolbarTone.Danger => StateStyle.Tint(baseColor: _theme.Danger, state: state),
+            ToolbarTone.Success => StateStyle.Tint(baseColor: _theme.Success, state: state),
             // The quiet tone is transparent at rest and only reveals itself on hover — which never
             // happens on a phone, leaving a borderless glyph with no affordance. Give it a resting fill.
             _ => state switch {
@@ -138,41 +140,41 @@ public sealed class ToolbarButton : Widget
                 _ => _compact ? _theme.ControlHover : null,
             },
         };
-        if (fill.HasValue) paint.AddRect(Bounds, fill.Value, radius);
+        if (fill.HasValue) paint.AddRect(bounds: Bounds, color: fill.Value, radius: radius);
 
-        var filled = Tone != ToolbarTone.Default;
+        bool filled = Tone != ToolbarTone.Default;
         var fg = filled ? _theme.OnPrimary : _theme.OnSurface;
         if (!Enabled) fg = StateStyle.Disabled(fg);
 
-        var x = Bounds.X + (Bounds.Width - ContentWidth()) * 0.5f;
-        var midY = Bounds.Y + Bounds.Height * 0.5f;
+        float x = Bounds.X + ((Bounds.Width - ContentWidth()) * 0.5f);
+        float midY = Bounds.Y + (Bounds.Height * 0.5f);
 
         if (Icon != null)
         {
             Icons.Draw(
-                paint,
-                Icon,
-                new Rect(
-                    x,
-                    Bounds.Y,
-                    IconSize,
-                    Bounds.Height
+                paint: paint,
+                glyph: Icon,
+                box: new Rect(
+                    x: x,
+                    y: Bounds.Y,
+                    width: IconSize,
+                    height: Bounds.Height
                 ),
-                fg,
-                IconSize
+                color: fg,
+                size: IconSize
             );
             x += IconSize + (_labelW > 0f ? Gap : 0f);
         }
 
         if (_labelW > 0f)
         {
-            var fs = _theme.FontSizeCaption;
+            float fs = _theme.FontSizeCaption;
             paint.AddText(
-                Label!,
-                x,
-                midY + fs * 0.35f,
-                fg,
-                fs,
+                text: Label!,
+                baselineX: x,
+                baselineY: midY + (fs * 0.35f),
+                color: fg,
+                fontSize: fs,
                 fontWeight: FontWeight.Medium
             );
             x += _labelW;
@@ -182,20 +184,20 @@ public sealed class ToolbarButton : Widget
         {
             x += 2f;
             Icons.Draw(
-                paint,
-                Icons.DropDown,
-                new Rect(
-                    x,
-                    Bounds.Y,
-                    ChevW,
-                    Bounds.Height
+                paint: paint,
+                glyph: Icons.DropDown,
+                box: new Rect(
+                    x: x,
+                    y: Bounds.Y,
+                    width: ChevW,
+                    height: Bounds.Height
                 ),
-                filled ? fg : _theme.TextMuted,
-                ChevW + 3f
+                color: filled ? fg : _theme.TextMuted,
+                size: ChevW + 3f
             );
         }
 
-        if (Focused && Enabled) paint.AddFocusRing(Bounds, radius, _theme);
+        if (Focused && Enabled) paint.AddFocusRing(bounds: Bounds, radius: radius, theme: _theme);
     }
 
     public override void OnPointerEnter()
@@ -222,7 +224,7 @@ public sealed class ToolbarButton : Widget
 
     public override void OnPointerUp(Offset point)
     {
-        if (_pressed && Enabled && Bounds.Contains(point.X, point.Y))
+        if (_pressed && Enabled && Bounds.Contains(px: point.X, py: point.Y))
             OnPressed?.Invoke();
         if (_pressed)
         {

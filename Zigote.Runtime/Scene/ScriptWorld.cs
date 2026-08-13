@@ -17,10 +17,7 @@ public sealed class ScriptWorld : IDisposable
     private readonly ScriptRegistry _registry;
     private bool _disposed;
 
-    public ScriptWorld(ScriptRegistry registry)
-    {
-        _registry = registry;
-    }
+    public ScriptWorld(ScriptRegistry registry) => _registry = registry;
 
     public void Dispose()
     {
@@ -32,19 +29,13 @@ public sealed class ScriptWorld : IDisposable
     // ── Setup / teardown ──────────────────────────────────────────────────────
 
     /// <summary>Walk the tree, create component instances, and call OnCreate/OnEnable.</summary>
-    public void Attach(SceneNode root)
-    {
-        AttachNode(root);
-    }
+    public void Attach(SceneNode root) => AttachNode(root);
 
     /// <summary>
     ///     Attach a subtree spawned mid-play (World.Spawn): create its script instances and run
     ///     OnCreate/OnEnable, exactly like the play-start walk.
     /// </summary>
-    public void AttachSubtree(SceneNode node)
-    {
-        AttachNode(node);
-    }
+    public void AttachSubtree(SceneNode node) => AttachNode(node);
 
     private void AttachNode(SceneNode node)
     {
@@ -54,17 +45,23 @@ public sealed class ScriptWorld : IDisposable
             if (instance != null)
             {
                 instance.EntityId = (uint)node.Id;
-                SyncToComponent(node, instance);
+                SyncToComponent(node: node, comp: instance);
 
                 // Restore serialized field values if present
                 if (node.ScriptExports.Count > 0)
                 {
                     var meta = _registry.Find(node.ScriptClass);
                     if (meta != null)
-                        ScriptSerializer.Deserialize(instance, meta, node.ScriptExports);
+                    {
+                        ScriptSerializer.Deserialize(
+                            instance: instance,
+                            meta: meta,
+                            stored: node.ScriptExports
+                        );
+                    }
                 }
 
-                Register(node.Id, instance);
+                Register(nodeId: node.Id, instance: instance);
 
                 instance.CallCreate();
                 if (instance.Enabled) instance.CallEnable();
@@ -77,7 +74,7 @@ public sealed class ScriptWorld : IDisposable
             }
         }
 
-        for (var i = 0; i < node.Children.Count; i++) AttachNode(node.Children[i]);
+        for (int i = 0; i < node.Children.Count; i++) AttachNode(node.Children[i]);
     }
 
     /// <summary>
@@ -91,8 +88,8 @@ public sealed class ScriptWorld : IDisposable
         if (instance == null) return null;
 
         instance.EntityId = (uint)node.Id;
-        SyncToComponent(node, instance);
-        Register(node.Id, instance);
+        SyncToComponent(node: node, comp: instance);
+        Register(nodeId: node.Id, instance: instance);
 
         instance.CallCreate();
         if (instance.Enabled) instance.CallEnable();
@@ -105,14 +102,16 @@ public sealed class ScriptWorld : IDisposable
     /// </summary>
     public void DetachSubtree(SceneNode node)
     {
-        if (_instances.Remove(node.Id, out var list))
+        if (_instances.Remove(key: node.Id, value: out var list))
+        {
             foreach (var comp in list)
             {
                 if (comp.Enabled) comp.CallDisable();
                 comp.CallDestroy();
             }
+        }
 
-        for (var i = 0; i < node.Children.Count; i++) DetachSubtree(node.Children[i]);
+        for (int i = 0; i < node.Children.Count; i++) DetachSubtree(node.Children[i]);
     }
 
     /// <summary>Call OnDisable/OnDestroy on all instances. Called when play stops.</summary>
@@ -130,7 +129,7 @@ public sealed class ScriptWorld : IDisposable
 
     private void Register(int nodeId, Component instance)
     {
-        if (!_instances.TryGetValue(nodeId, out var list))
+        if (!_instances.TryGetValue(key: nodeId, value: out var list))
             _instances[nodeId] = list = [];
         list.Add(instance);
     }
@@ -141,7 +140,7 @@ public sealed class ScriptWorld : IDisposable
     {
         Time._deltaTime = dt;
         Time._elapsed += dt;
-        UpdateNode(root, dt);
+        UpdateNode(node: root, dt: dt);
     }
 
     private void UpdateNode(SceneNode node, float dt)
@@ -149,24 +148,26 @@ public sealed class ScriptWorld : IDisposable
         // Index-based iteration: a script may World.Spawn (appends children) or World.AddComponent
         // (appends to a component list) mid-walk. Appends are safe under indexing; removals never
         // happen here — World.Destroy/SetParent are deferred to the end of the tick.
-        if (_instances.TryGetValue(node.Id, out var list))
-            for (var i = 0; i < list.Count; i++)
+        if (_instances.TryGetValue(key: node.Id, value: out var list))
+        {
+            for (int i = 0; i < list.Count; i++)
             {
                 var comp = list[i];
                 if (!comp.Enabled) continue;
-                SyncToComponent(node, comp);
+                SyncToComponent(node: node, comp: comp);
                 comp.CallUpdate(dt);
-                SyncFromComponent(node, comp);
+                SyncFromComponent(node: node, comp: comp);
             }
+        }
 
-        for (var i = 0; i < node.Children.Count; i++) UpdateNode(node.Children[i], dt);
+        for (int i = 0; i < node.Children.Count; i++) UpdateNode(node: node.Children[i], dt: dt);
     }
 
     // ── Component list query ──────────────────────────────────────────────────
 
     public IReadOnlyList<Component> GetComponents(int nodeId)
     {
-        return _instances.TryGetValue(nodeId, out var list)
+        return _instances.TryGetValue(key: nodeId, value: out var list)
             ? list
             : Array.Empty<Component>();
     }
@@ -178,9 +179,9 @@ public sealed class ScriptWorld : IDisposable
     /// </summary>
     public void ApplyExportedField(int nodeId, ExportedField field, string json)
     {
-        if (!_instances.TryGetValue(nodeId, out var list)) return;
+        if (!_instances.TryGetValue(key: nodeId, value: out var list)) return;
         foreach (var comp in list)
-            ScriptSerializer.DeserializeField(comp, field, json);
+            ScriptSerializer.DeserializeField(instance: comp, field: field, json: json);
     }
 
     // ── Sync helpers ──────────────────────────────────────────────────────────

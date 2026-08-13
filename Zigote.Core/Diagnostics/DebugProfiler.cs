@@ -40,8 +40,8 @@ public static class DebugProfiler
     {
         dest.Clear();
         if (dest.Capacity < FrameCount) dest.Capacity = FrameCount;
-        var start = (_head - FrameCount + HistoryCapacity) % HistoryCapacity;
-        for (var i = 0; i < FrameCount; i++)
+        int start = (_head - FrameCount + HistoryCapacity) % HistoryCapacity;
+        for (int i = 0; i < FrameCount; i++)
             dest.Add(FrameMs[(start + i) % HistoryCapacity]);
     }
 
@@ -50,12 +50,12 @@ public static class DebugProfiler
     {
         if (FrameCount == 0) return (0f, 0f, 0f);
         float min = float.MaxValue, max = 0f, sum = 0f;
-        var start = (_head - FrameCount + HistoryCapacity) % HistoryCapacity;
-        for (var i = 0; i < FrameCount; i++)
+        int start = (_head - FrameCount + HistoryCapacity) % HistoryCapacity;
+        for (int i = 0; i < FrameCount; i++)
         {
-            var v = FrameMs[(start + i) % HistoryCapacity];
-            min = MathF.Min(min, v);
-            max = MathF.Max(max, v);
+            float v = FrameMs[(start + i) % HistoryCapacity];
+            min = MathF.Min(x: min, y: v);
+            max = MathF.Max(x: max, y: v);
             sum += v;
         }
 
@@ -69,22 +69,26 @@ public static class DebugProfiler
     /// </summary>
     public static List<ScopeAggregate> Aggregate(IReadOnlyList<Profiler.Event> frame)
     {
-        var n = frame.Count;
+        int n = frame.Count;
         if (n == 0) return [];
 
         // Each Event is a completed [start,end] interval at a known depth. Self time = duration minus the
         // durations of its direct children. Sort by start and walk a containment stack: pop siblings that
         // closed before this one opened, add this scope's duration to the new top-of-stack (its parent),
         // then push it. Correct regardless of the LIFO record order or depth-field drift.
-        var idx = new int[n];
-        for (var i = 0; i < n; i++) idx[i] = i;
-        Array.Sort(idx, (a, b) => frame[a].StartTicks.CompareTo(frame[b].StartTicks));
+        int[] idx = new int[n];
+        for (int i = 0; i < n; i++) idx[i] = i;
+        Array.Sort(
+            array: idx,
+            comparison: (a, b) => frame[a].StartTicks.CompareTo(frame[b].StartTicks)
+        );
 
-        var childTicks = new long[n]; // child time accumulated per event while it sits on the stack
-        var stack = new int[n];
-        var sp = 0;
+        long[]
+            childTicks = new long[n]; // child time accumulated per event while it sits on the stack
+        int[] stack = new int[n];
+        int sp = 0;
 
-        foreach (var i in idx)
+        foreach (int i in idx)
         {
             var e = frame[i];
             while (sp > 0 && frame[stack[sp - 1]].EndTicks <= e.StartTicks) sp--;
@@ -92,38 +96,41 @@ public static class DebugProfiler
             stack[sp++] = i;
         }
 
-        var perTick = 1000.0 / Stopwatch.Frequency;
+        double perTick = 1000.0 / Stopwatch.Frequency;
         var byName =
             new Dictionary<string, (double total, double self, int calls, int minDepth)>(
                 StringComparer.Ordinal
             );
-        for (var i = 0; i < n; i++)
+        for (int i = 0; i < n; i++)
         {
             var e = frame[i];
-            var name = Profiler.NameOf(e.NameId);
-            var selfTicks = e.DurationTicks - childTicks[i];
+            string name = Profiler.NameOf(e.NameId);
+            long selfTicks = e.DurationTicks - childTicks[i];
             if (selfTicks < 0) selfTicks = 0;
 
-            byName.TryGetValue(name, out var acc);
-            var first = acc.calls == 0;
+            byName.TryGetValue(key: name, value: out var acc);
+            bool first = acc.calls == 0;
             acc.total += e.DurationTicks * perTick;
             acc.self += selfTicks * perTick;
             acc.calls += 1;
-            acc.minDepth = first ? e.Depth : Math.Min(acc.minDepth, e.Depth);
+            acc.minDepth = first ? e.Depth : Math.Min(val1: acc.minDepth, val2: e.Depth);
             byName[name] = acc;
         }
 
         var result = new List<ScopeAggregate>(byName.Count);
         foreach (var kv in byName)
+        {
             result.Add(
                 new ScopeAggregate(
-                    kv.Key,
-                    kv.Value.total,
-                    kv.Value.self,
-                    kv.Value.calls,
-                    kv.Value.minDepth
+                    Name: kv.Key,
+                    TotalMs: kv.Value.total,
+                    SelfMs: kv.Value.self,
+                    Calls: kv.Value.calls,
+                    MinDepth: kv.Value.minDepth
                 )
             );
+        }
+
         result.Sort(static (a, b) => b.TotalMs.CompareTo(a.TotalMs));
         return result;
     }

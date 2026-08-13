@@ -19,47 +19,47 @@ namespace Zigote.Tests;
 public class ImplicitAnimationTests
 {
     private static readonly Constraints Room = new(
-        0f,
-        200f,
-        0f,
-        200f
+        minWidth: 0f,
+        maxWidth: 200f,
+        minHeight: 0f,
+        maxHeight: 200f
     );
 
     [Fact]
     public void AnimatingAfterReAttachStillRequestsLayout()
     {
-        var box = new AnimatedSize(new SizedBox(100f, 20f));
-        box.Attach(null!, null);
+        var box = new AnimatedSize(new SizedBox(width: 100f, height: 20f));
+        box.Attach(owner: null!, parent: null);
         box.Measure(Room); // first measure settles at the natural size
 
         box.Detach();
-        box.Attach(null!, null);
+        box.Attach(owner: null!, parent: null);
 
-        box.Child = new SizedBox(100f, 80f);
+        box.Child = new SizedBox(width: 100f, height: 80f);
         box.Measure(Room); // sees the new target and starts the transition
 
         box.NeedsLayout = false;
         Ticker.AdvanceAll(0.05f);
 
         Assert.True(
-            box.NeedsLayout,
-            "a tick after re-attach did not mark the widget for layout"
+            condition: box.NeedsLayout,
+            userMessage: "a tick after re-attach did not mark the widget for layout"
         );
     }
 
     [Fact]
     public void SwitcherSwappedWhileDetachedShowsTheNewChildOnceMounted()
     {
-        var first = new SizedBox(100f, 20f);
-        var second = new SizedBox(100f, 20f);
-        var switcher = new AnimatedSwitcher(first, 0.1f);
-        switcher.Attach(null!, null);
+        var first = new SizedBox(width: 100f, height: 20f);
+        var second = new SizedBox(width: 100f, height: 20f);
+        var switcher = new AnimatedSwitcher(child: first, duration: 0.1f);
+        switcher.Attach(owner: null!, parent: null);
         switcher.Measure(Room);
 
         // Unmounted (the pane is off-screen), swapped, then mounted again.
         switcher.Detach();
         switcher.Child = second;
-        switcher.Attach(null!, null);
+        switcher.Attach(owner: null!, parent: null);
         switcher.Measure(Room);
 
         switcher.NeedsLayout = false;
@@ -67,9 +67,9 @@ public class ImplicitAnimationTests
         switcher.Measure(Room);
 
         Assert.True(
-            switcher.NeedsLayout,
-            "the cross-fade never asked for a frame after re-attach"
+            condition: switcher.NeedsLayout,
+            userMessage: "the cross-fade never asked for a frame after re-attach"
         );
-        Assert.Same(second, switcher.Child);
+        Assert.Same(expected: second, actual: switcher.Child);
     }
 }

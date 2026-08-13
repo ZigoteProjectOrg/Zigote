@@ -20,17 +20,23 @@ public class ConstrainedBox(Constraints constraints, Widget? child = null) : Wid
         // The parent's ceiling wins over an imposed minimum. Constraints raises max to min when the
         // two cross (Constraints ctor), so a 280-wide minimum inside a 264-wide parent would measure
         // 280 and paint 16 px outside it — the failure mode of every fixed-min box on a phone.
-        var maxW = Math.Min(c.MaxWidth, Constraints.MaxWidth);
-        var maxH = Math.Min(c.MaxHeight, Constraints.MaxHeight);
+        float maxW = Math.Min(val1: c.MaxWidth, val2: Constraints.MaxWidth);
+        float maxH = Math.Min(val1: c.MaxHeight, val2: Constraints.MaxHeight);
         var merged = new Constraints(
-            Math.Min(Math.Max(c.MinWidth, Constraints.MinWidth), maxW),
-            maxW,
-            Math.Min(Math.Max(c.MinHeight, Constraints.MinHeight), maxH),
-            maxH
+            minWidth: Math.Min(
+                val1: Math.Max(val1: c.MinWidth, val2: Constraints.MinWidth),
+                val2: maxW
+            ),
+            maxWidth: maxW,
+            minHeight: Math.Min(
+                val1: Math.Max(val1: c.MinHeight, val2: Constraints.MinHeight),
+                val2: maxH
+            ),
+            maxHeight: maxH
         );
 
         _size = merged.Constrain(
-            Child?.Measure(merged) ?? new Size(merged.MinWidth, merged.MinHeight)
+            Child?.Measure(merged) ?? new Size(width: merged.MinWidth, height: merged.MinHeight)
         );
         return _size;
     }
@@ -38,26 +44,18 @@ public class ConstrainedBox(Constraints constraints, Widget? child = null) : Wid
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         Child?.Layout(origin);
     }
 
-    public override void Paint(PaintList paint)
-    {
-        Child?.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => Child?.Paint(paint);
 
-    public override Widget? HitTest(Offset point)
-    {
-        return Bounds.Contains(point.X, point.Y) ? Child?.HitTest(point) : null;
-    }
+    public override Widget? HitTest(Offset point) =>
+        Bounds.Contains(px: point.X, py: point.Y) ? Child?.HitTest(point) : null;
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(Child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Child);
 }

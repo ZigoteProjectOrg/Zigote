@@ -15,15 +15,17 @@ public class NetworkIntegrationTests
 
     private static void Pump(int frames, params NetworkManager[] managers)
     {
-        for (var f = 0; f < frames; f++)
+        for (int f = 0; f < frames; f++)
+        {
             foreach (var m in managers)
                 m.Tick(1f / 60f);
+        }
     }
 
     private static bool PumpUntil(Func<bool> condition, int maxFrames,
         params NetworkManager[] managers)
     {
-        for (var f = 0; f < maxFrames; f++)
+        for (int f = 0; f < maxFrames; f++)
         {
             foreach (var m in managers) m.Tick(1f / 60f);
             if (condition()) return true;
@@ -37,15 +39,16 @@ public class NetworkIntegrationTests
         var server = new NetworkManager(new LoopbackTransport());
         var client = new NetworkManager(new LoopbackTransport());
         server.StartServer(port);
-        client.StartClient("localhost", port);
+        client.StartClient(host: "localhost", port: port);
         Assert.True(
-            PumpUntil(
-                () => server.Connections.Count == 1 && client.ServerConnection is not null,
-                60,
+            condition: PumpUntil(
+                condition: () =>
+                    server.Connections.Count == 1 && client.ServerConnection is not null,
+                maxFrames: 60,
                 server,
                 client
             ),
-            "handshake did not complete"
+            userMessage: "handshake did not complete"
         );
         return (server, client);
     }
@@ -53,7 +56,7 @@ public class NetworkIntegrationTests
     [Fact]
     public void Client_Connects_To_Server()
     {
-        var serverPeers = 0;
+        int serverPeers = 0;
         var (server, client) = Connect(41001);
         server.PeerConnected += _ => serverPeers++;
         try
@@ -82,13 +85,13 @@ public class NetworkIntegrationTests
 
             Assert.True(
                 PumpUntil(
-                    () => received is not null,
-                    30,
+                    condition: () => received is not null,
+                    maxFrames: 30,
                     server,
                     client
                 )
             );
-            Assert.Equal("hello server", received);
+            Assert.Equal(expected: "hello server", actual: received);
         }
         finally
         {
@@ -109,13 +112,13 @@ public class NetworkIntegrationTests
 
             Assert.True(
                 PumpUntil(
-                    () => received is not null,
-                    30,
+                    condition: () => received is not null,
+                    maxFrames: 30,
                     server,
                     client
                 )
             );
-            Assert.Equal("broadcast", received);
+            Assert.Equal(expected: "broadcast", actual: received);
         }
         finally
         {
@@ -141,15 +144,15 @@ public class NetworkIntegrationTests
                 }
             );
             Assert.True(
-                PumpUntil(
-                    () => task.IsCompleted,
-                    60,
+                condition: PumpUntil(
+                    condition: () => task.IsCompleted,
+                    maxFrames: 60,
                     server,
                     client
                 ),
-                "RPC did not complete"
+                userMessage: "RPC did not complete"
             );
-            Assert.Equal(42, task.Result.Sum);
+            Assert.Equal(expected: 42, actual: task.Result.Sum);
         }
         finally
         {
@@ -164,34 +167,41 @@ public class NetworkIntegrationTests
         var (server, client) = Connect(41005);
         try
         {
-            client.Replication.RegisterPrefab(PlayerPrefab, () => new TestPlayer());
+            client.Replication.RegisterPrefab(
+                prefabId: PlayerPrefab,
+                factory: () => new TestPlayer()
+            );
 
-            var player = server.Replication.Spawn(new TestPlayer(), PlayerPrefab);
-            player.Transform = new Transform3D(new Vec3(5, 0, -3), Quat.Identity, Vec3.One);
+            var player = server.Replication.Spawn(obj: new TestPlayer(), prefabId: PlayerPrefab);
+            player.Transform = new Transform3D(
+                position: new Vec3(x: 5, y: 0, z: -3),
+                rotation: Quat.Identity,
+                scale: Vec3.One
+            );
             player.Health.Value = 80;
 
             Assert.True(
-                PumpUntil(
-                    () => client.Replication.Objects.Count == 1,
-                    60,
+                condition: PumpUntil(
+                    condition: () => client.Replication.Objects.Count == 1,
+                    maxFrames: 60,
                     server,
                     client
                 ),
-                "spawn did not replicate"
+                userMessage: "spawn did not replicate"
             );
 
             var clientPlayer = (TestPlayer)client.Replication.Objects.Values.First();
             Assert.True(
-                PumpUntil(
-                    () => clientPlayer.Health.Value == 80,
-                    60,
+                condition: PumpUntil(
+                    condition: () => clientPlayer.Health.Value == 80,
+                    maxFrames: 60,
                     server,
                     client
                 ),
-                "state did not replicate"
+                userMessage: "state did not replicate"
             );
-            Assert.Equal(80, clientPlayer.Health.Value);
-            Assert.Equal(5f, clientPlayer.NetPosition.Value.X, 2);
+            Assert.Equal(expected: 80, actual: clientPlayer.Health.Value);
+            Assert.Equal(expected: 5f, actual: clientPlayer.NetPosition.Value.X, precision: 2);
         }
         finally
         {
@@ -206,18 +216,21 @@ public class NetworkIntegrationTests
         var (server, client) = Connect(41006);
         try
         {
-            client.Replication.RegisterPrefab(PlayerPrefab, () => new TestPlayer());
-            var player = server.Replication.Spawn(new TestPlayer(), PlayerPrefab);
-            Pump(20, server, client);
+            client.Replication.RegisterPrefab(
+                prefabId: PlayerPrefab,
+                factory: () => new TestPlayer()
+            );
+            var player = server.Replication.Spawn(obj: new TestPlayer(), prefabId: PlayerPrefab);
+            Pump(frames: 20, server, client);
 
             var clientPlayer = (TestPlayer)client.Replication.Objects.Values.First();
-            Assert.Equal(100, clientPlayer.Health.Value);
+            Assert.Equal(expected: 100, actual: clientPlayer.Health.Value);
 
             player.Health.Value = 33;
             Assert.True(
                 PumpUntil(
-                    () => clientPlayer.Health.Value == 33,
-                    60,
+                    condition: () => clientPlayer.Health.Value == 33,
+                    maxFrames: 60,
                     server,
                     client
                 )
@@ -236,12 +249,15 @@ public class NetworkIntegrationTests
         var (server, client) = Connect(41007);
         try
         {
-            client.Replication.RegisterPrefab(PlayerPrefab, () => new TestPlayer());
-            var player = server.Replication.Spawn(new TestPlayer(), PlayerPrefab);
+            client.Replication.RegisterPrefab(
+                prefabId: PlayerPrefab,
+                factory: () => new TestPlayer()
+            );
+            var player = server.Replication.Spawn(obj: new TestPlayer(), prefabId: PlayerPrefab);
             Assert.True(
                 PumpUntil(
-                    () => client.Replication.Objects.Count == 1,
-                    60,
+                    condition: () => client.Replication.Objects.Count == 1,
+                    maxFrames: 60,
                     server,
                     client
                 )
@@ -249,13 +265,13 @@ public class NetworkIntegrationTests
 
             server.Replication.Despawn(player);
             Assert.True(
-                PumpUntil(
-                    () => client.Replication.Objects.Count == 0,
-                    60,
+                condition: PumpUntil(
+                    condition: () => client.Replication.Objects.Count == 0,
+                    maxFrames: 60,
                     server,
                     client
                 ),
-                "despawn did not replicate"
+                userMessage: "despawn did not replicate"
             );
         }
         finally
@@ -277,8 +293,8 @@ public class NetworkIntegrationTests
             client.ServerConnection!.Disconnect();
             Assert.True(
                 PumpUntil(
-                    () => dropped is not null,
-                    30,
+                    condition: () => dropped is not null,
+                    maxFrames: 30,
                     server,
                     client
                 )
@@ -296,15 +312,9 @@ public class NetworkIntegrationTests
     {
         public string Text = "";
 
-        public void Serialize(NetWriter w)
-        {
-            w.WriteString(Text);
-        }
+        public void Serialize(NetWriter w) => w.WriteString(Text);
 
-        public void Deserialize(NetReader r)
-        {
-            Text = r.ReadString();
-        }
+        public void Deserialize(NetReader r) => Text = r.ReadString();
     }
 
     private sealed class AddRequest : INetMessage
@@ -328,25 +338,16 @@ public class NetworkIntegrationTests
     {
         public int Sum;
 
-        public void Serialize(NetWriter w)
-        {
-            w.WriteVarInt(Sum);
-        }
+        public void Serialize(NetWriter w) => w.WriteVarInt(Sum);
 
-        public void Deserialize(NetReader r)
-        {
-            Sum = r.ReadVarInt();
-        }
+        public void Deserialize(NetReader r) => Sum = r.ReadVarInt();
     }
 
     private sealed class TestPlayer : NetworkTransform
     {
         public readonly NetVar<int> Health = NetVars.Int(100);
 
-        public TestPlayer()
-        {
-            Register(Health);
-        }
+        public TestPlayer() => Register(Health);
     }
 }
 

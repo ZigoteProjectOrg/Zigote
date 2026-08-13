@@ -21,18 +21,14 @@ namespace Zigote.Mcp;
 /// </summary>
 public static class AppHost
 {
-    private static readonly TimeSpan QueryTimeout = TimeSpan.FromSeconds(15);
     private const int LogLines = 400;
+    private static readonly TimeSpan QueryTimeout = TimeSpan.FromSeconds(15);
 
     // "zigote inspect: 127.0.0.1:PORT" — printed by InspectServer.Start exactly for launchers.
-    private static readonly Regex PortLine = new(@"zigote inspect: 127\.0\.0\.1:(\d+)", RegexOptions.Compiled);
-
-    private sealed class LaunchedApp(Process process)
-    {
-        public Process Process { get; } = process;
-        public int Port; // updated in place when a watch restart announces a new one
-        public readonly Queue<string> Log = [];
-    }
+    private static readonly Regex PortLine = new(
+        pattern: @"zigote inspect: 127\.0\.0\.1:(\d+)",
+        options: RegexOptions.Compiled
+    );
 
     private static readonly List<LaunchedApp> Apps = [];
     private static readonly Lock Gate = new();
@@ -46,22 +42,23 @@ public static class AppHost
         try
         {
             using var client = new TcpClient();
-            client.Connect(IPAddress.Loopback, port);
+            client.Connect(address: IPAddress.Loopback, port: port);
             client.ReceiveTimeout = (int)QueryTimeout.TotalMilliseconds;
             client.SendTimeout = (int)QueryTimeout.TotalMilliseconds;
 
             using var stream = client.GetStream();
-            var request = Encoding.UTF8.GetBytes(command + "\n");
+            byte[] request = Encoding.UTF8.GetBytes(command + "\n");
             stream.Write(request);
 
-            using var reader = new StreamReader(stream, Encoding.UTF8);
+            using var reader = new StreamReader(stream: stream, encoding: Encoding.UTF8);
             return reader.ReadToEnd().Trim();
         }
         catch (Exception e) when (e is SocketException or IOException)
         {
             throw new ToolError(
                 $"no Zigote app answered on port {port} ({e.Message}). Launch one with the " +
-                "`launch` tool, or start it with ZIGOTE_INSPECT=0 and pass the port it prints.");
+                "`launch` tool, or start it with ZIGOTE_INSPECT=0 and pass the port it prints."
+            );
         }
     }
 
@@ -72,19 +69,25 @@ public static class AppHost
 
         lock (Gate)
         {
-            for (var i = Apps.Count - 1; i >= 0; i--)
+            for (int i = Apps.Count - 1; i >= 0; i--)
+            {
                 if (!Apps[i].Process.HasExited)
                     return Apps[i].Port;
+            }
 
             if (Apps.Count > 0)
+            {
                 throw new ToolError(
                     "every app launched in this session has exited — `logs` has their last " +
-                    "output, which usually says why");
+                    "output, which usually says why"
+                );
+            }
         }
 
         throw new ToolError(
             "no app to talk to: nothing launched in this session and no `port` given. Use the " +
-            "`launch` tool first, or pass the port of an app started with ZIGOTE_INSPECT=0.");
+            "`launch` tool first, or pass the port of an app started with ZIGOTE_INSPECT=0."
+        );
     }
 
     /// <summary>
@@ -93,7 +96,8 @@ public static class AppHost
     ///     build's own chatter out of the stdout being scanned — the same trick Zigote.Cli uses
     ///     for the preview target list.
     /// </summary>
-    public static (int Port, int Pid) Launch(string project, string? preview, bool watch, int waitSeconds)
+    public static (int Port, int Pid) Launch(string project, string? preview, bool watch,
+        int waitSeconds)
     {
         var start = new ProcessStartInfo("dotnet") {
             UseShellExecute = false,
@@ -105,7 +109,7 @@ public static class AppHost
         string[] verb = watch
             ? ["watch", "run", "--non-interactive"]
             : ["run", "-v", "q", "--nologo"];
-        foreach (var a in verb) start.ArgumentList.Add(a);
+        foreach (string a in verb) start.ArgumentList.Add(a);
         start.ArgumentList.Add("--project");
         start.ArgumentList.Add(project);
         start.Environment["ZIGOTE_INSPECT"] = "0"; // 0 = any free port, announced on stdout
@@ -118,28 +122,33 @@ public static class AppHost
         // Drain both pipes for the process's whole life — a full pipe blocks the app — into the
         // rolling log, watching every line for a port announcement: the first one completes the
         // launch, later ones are watch restarts moving the app to a fresh port.
-        var announced = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var announced =
+            new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         void Drain(StreamReader pipe)
         {
             new Thread(() =>
-            {
-                while (pipe.ReadLine() is { } line)
                 {
-                    lock (app.Log)
+                    while (pipe.ReadLine() is { } line)
                     {
-                        app.Log.Enqueue(line);
-                        while (app.Log.Count > LogLines) app.Log.Dequeue();
-                    }
+                        lock (app.Log)
+                        {
+                            app.Log.Enqueue(line);
+                            while (app.Log.Count > LogLines) app.Log.Dequeue();
+                        }
 
-                    if (PortLine.Match(line) is { Success: true } m)
-                    {
-                        var port = int.Parse(m.Groups[1].Value);
-                        lock (Gate) app.Port = port;
-                        announced.TrySetResult(port);
+                        if (PortLine.Match(line) is { Success: true } m)
+                        {
+                            int port = int.Parse(m.Groups[1].Value);
+                            lock (Gate) app.Port = port;
+                            announced.TrySetResult(port);
+                        }
                     }
                 }
-            }) { IsBackground = true, Name = "zigote-mcp-drain" }.Start();
+            ) {
+                IsBackground = true,
+                Name = "zigote-mcp-drain",
+            }.Start();
         }
 
         Drain(process.StandardOutput);
@@ -152,15 +161,20 @@ public static class AppHost
         while (!announced.Task.IsCompleted)
         {
             if (process.HasExited)
+            {
                 throw new ToolError(
                     $"the app exited (code {process.ExitCode}) before announcing an inspect port. " +
-                    $"Recent output:\n{Tail(app, 40)}");
+                    $"Recent output:\n{Tail(app: app, lines: 40)}"
+                );
+            }
+
             if (DateTime.UtcNow > deadline)
             {
                 Kill(process);
                 throw new ToolError(
                     $"no inspect port announced within {waitSeconds}s — the build may still be " +
-                    $"running (raise wait_seconds) or the app never started. Recent output:\n{Tail(app, 40)}");
+                    $"running (raise wait_seconds) or the app never started. Recent output:\n{Tail(app: app, lines: 40)}"
+                );
             }
 
             Thread.Sleep(100);
@@ -181,13 +195,15 @@ public static class AppHost
         lock (Gate)
         {
             app = (pid is { } p ? Apps.LastOrDefault(a => a.Process.Id == p) : Apps.LastOrDefault())
-                  ?? throw new ToolError(pid is { } q
-                      ? $"pid {q} is not an app this server launched"
-                      : "nothing launched in this session — logs only exist for apps `launch` started");
+                  ?? throw new ToolError(
+                      pid is { } q
+                          ? $"pid {q} is not an app this server launched"
+                          : "nothing launched in this session — logs only exist for apps `launch` started"
+                  );
         }
 
-        var state = app.Process.HasExited ? $"exited (code {app.Process.ExitCode})" : "running";
-        return $"pid {app.Process.Id}, {state}, port {app.Port}\n{Tail(app, lines)}";
+        string state = app.Process.HasExited ? $"exited (code {app.Process.ExitCode})" : "running";
+        return $"pid {app.Process.Id}, {state}, port {app.Port}\n{Tail(app: app, lines: lines)}";
     }
 
     /// <summary>Stop one launched app by pid, or every app this server launched.</summary>
@@ -197,9 +213,13 @@ public static class AppHost
         {
             var targets = pid is { } p ? Apps.Where(a => a.Process.Id == p).ToList() : [.. Apps];
             if (targets.Count == 0)
-                throw new ToolError(pid is { } q
-                    ? $"pid {q} is not an app this server launched"
-                    : "nothing launched in this session — apps you started yourself are yours to stop");
+            {
+                throw new ToolError(
+                    pid is { } q
+                        ? $"pid {q} is not an app this server launched"
+                        : "nothing launched in this session — apps you started yourself are yours to stop"
+                );
+            }
 
             foreach (var app in targets)
             {
@@ -238,7 +258,17 @@ public static class AppHost
         lock (app.Log)
         {
             if (app.Log.Count == 0) return "(no output)";
-            return string.Join('\n', app.Log.TakeLast(Math.Clamp(lines, 1, LogLines)));
+            return string.Join(
+                separator: '\n',
+                values: app.Log.TakeLast(Math.Clamp(value: lines, min: 1, max: LogLines))
+            );
         }
+    }
+
+    private sealed class LaunchedApp(Process process)
+    {
+        public readonly Queue<string> Log = [];
+        public int Port; // updated in place when a watch restart announces a new one
+        public Process Process { get; } = process;
     }
 }

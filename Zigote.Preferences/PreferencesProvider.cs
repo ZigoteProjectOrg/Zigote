@@ -4,7 +4,8 @@ using Zigote.Core.State;
 namespace Zigote.Preferences;
 
 /// <summary>
-///     Declarative grouping for preferences: derive, call <see cref="Register{T}(string, T, IEqualityComparer{T}?)" />
+///     Declarative grouping for preferences: derive, call
+///     <see cref="Register{T}(string, T, IEqualityComparer{T}?)" />
 ///     once per preference in the constructor, and the provider gives the group a shared key prefix,
 ///     a generic enumeration for settings UIs (<see cref="Preferences" />), and a group-scoped
 ///     <see cref="Reset" />. Constructing a provider registers it with its
@@ -18,7 +19,7 @@ namespace Zigote.Preferences;
 ///     {
 ///         public Preference&lt;bool&gt;   ShowGrid { get; }
 ///         public Preference&lt;double&gt; UiScale  { get; }
-///
+/// 
 ///         public EditorPreferences(PreferenceStore store) : base(store, "editor")
 ///         {
 ///             ShowGrid = Register("showGrid", true);      // key: "editor.showGrid"
@@ -49,10 +50,7 @@ public abstract class PreferencesProvider
     {
         get
         {
-            lock (_registered)
-            {
-                return _registered.ToArray();
-            }
+            lock (_registered) return _registered.ToArray();
         }
     }
 
@@ -64,10 +62,7 @@ public abstract class PreferencesProvider
     public void Reset()
     {
         IPreference[] snapshot;
-        lock (_registered)
-        {
-            snapshot = _registered.ToArray();
-        }
+        lock (_registered) snapshot = _registered.ToArray();
 
         Reactive.Sync(() => Reactive.Batch(() =>
                 {
@@ -82,10 +77,8 @@ public abstract class PreferencesProvider
     ///     key and records it for <see cref="Preferences" /> and <see cref="Reset" />.
     /// </summary>
     protected Preference<T> Register<T>(string key, T defaultValue,
-        IEqualityComparer<T>? comparer = null)
-    {
-        return Track(Store.Preference(FullKey(key), defaultValue, comparer));
-    }
+        IEqualityComparer<T>? comparer = null) =>
+        Track(Store.Preference(key: FullKey(key), defaultValue: defaultValue, comparer: comparer));
 
     /// <summary>Reflection-free variant for NativeAOT; otherwise identical to the default overload.</summary>
     protected Preference<T> Register<T>(
@@ -96,10 +89,10 @@ public abstract class PreferencesProvider
     {
         return Track(
             Store.Preference(
-                FullKey(key),
-                defaultValue,
-                typeInfo,
-                comparer
+                key: FullKey(key),
+                defaultValue: defaultValue,
+                typeInfo: typeInfo,
+                comparer: comparer
             )
         );
     }
@@ -114,7 +107,8 @@ public abstract class PreferencesProvider
     {
         lock (_registered)
         {
-            if (!_registered.Contains(preference)) _registered.Add(preference);
+            if (!_registered.Contains(preference))
+                _registered.Add(preference);
         }
 
         return preference;

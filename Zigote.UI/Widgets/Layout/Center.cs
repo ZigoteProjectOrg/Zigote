@@ -38,56 +38,50 @@ public class Center : Widget
         // forced the child to fill, leaving nothing to centre.
         _childSize = Child?.Measure(
             new Constraints(
-                0,
-                c.MaxWidth,
-                0,
-                c.MaxHeight
+                minWidth: 0,
+                maxWidth: c.MaxWidth,
+                minHeight: 0,
+                maxHeight: c.MaxHeight
             )
         ) ?? Size.Zero;
-        var w = WidthFactor.HasValue ? _childSize.Width * WidthFactor.Value
+        float w = WidthFactor.HasValue ? _childSize.Width * WidthFactor.Value
             : float.IsFinite(c.MaxWidth) ? c.MaxWidth : _childSize.Width;
-        var h = HeightFactor.HasValue ? _childSize.Height * HeightFactor.Value
+        float h = HeightFactor.HasValue ? _childSize.Height * HeightFactor.Value
             : float.IsFinite(c.MaxHeight) ? c.MaxHeight : _childSize.Height;
-        _ownSize = c.Constrain(new Size(w, h));
+        _ownSize = c.Constrain(new Size(width: w, height: h));
         return _ownSize;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _ownSize.Width,
-            _ownSize.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _ownSize.Width,
+            height: _ownSize.Height
         );
 
-        var cx = HorizontalAlignment switch {
+        float cx = HorizontalAlignment switch {
             HorizontalAlignment.Left => origin.X,
             HorizontalAlignment.Right => origin.X + _ownSize.Width - _childSize.Width,
-            _ => origin.X + (_ownSize.Width - _childSize.Width) / 2f,
+            _ => origin.X + ((_ownSize.Width - _childSize.Width) / 2f),
         };
-        var cy = VerticalAlignment switch {
+        float cy = VerticalAlignment switch {
             VerticalAlignment.Top => origin.Y,
             VerticalAlignment.Bottom => origin.Y + _ownSize.Height - _childSize.Height,
-            _ => origin.Y + (_ownSize.Height - _childSize.Height) / 2f,
+            _ => origin.Y + ((_ownSize.Height - _childSize.Height) / 2f),
         };
 
-        Child?.Layout(new Offset(cx, cy));
+        Child?.Layout(new Offset(x: cx, y: cy));
     }
 
-    public override void Paint(PaintList paint)
-    {
-        Child?.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => Child?.Paint(paint);
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return Child?.HitTest(point) ?? null;
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(Child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Child);
 }

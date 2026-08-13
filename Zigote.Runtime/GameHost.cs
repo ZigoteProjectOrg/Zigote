@@ -51,16 +51,22 @@ public sealed class GameHost : IDisposable
     {
         projectFile = Path.GetFullPath(projectFile);
         var project = ZigoteProject.Load(projectFile);
-        var projDir = Path.GetDirectoryName(projectFile) ?? ".";
+        string projDir = Path.GetDirectoryName(projectFile) ?? ".";
         Directory.SetCurrentDirectory(projDir);
 
         if (!File.Exists(project.StartupScene))
+        {
             throw new FileNotFoundException(
-                $"Startup scene not found: {project.StartupScene}",
-                project.StartupScene
+                message: $"Startup scene not found: {project.StartupScene}",
+                fileName: project.StartupScene
             );
+        }
 
-        return new GameHost(project, projDir, SceneGraph.Load(project.StartupScene));
+        return new GameHost(
+            project: project,
+            projectDir: projDir,
+            scene: SceneGraph.Load(project.StartupScene)
+        );
     }
 
     /// <summary>Apply the project's saved render settings (or engine defaults) with debug views stripped.</summary>
@@ -79,15 +85,16 @@ public sealed class GameHost : IDisposable
         if (ZigoteEngine.Instance is not { } engine) return;
         if (!string.IsNullOrEmpty(Scene.EnvironmentPath) &&
             ContentFiles.Exists(Scene.EnvironmentPath))
-        {
             engine.SetEnvironmentHdri(ContentFiles.ReadAllBytes(Scene.EnvironmentPath));
-        }
         else
         {
             if (!string.IsNullOrEmpty(Scene.EnvironmentPath))
+            {
                 Console.Error.WriteLine(
                     $"[Zigote] environment '{Scene.EnvironmentPath}' not found; using procedural."
                 );
+            }
+
             engine.SetEnvironmentProcedural();
         }
     }
@@ -97,15 +104,15 @@ public sealed class GameHost : IDisposable
     {
         if (Session is not null) return;
         Session = new GameSession(
-            Scene.Root,
-            Scripts,
-            Sprites2D,
-            new GameSessionHostInfo {
+            root: Scene.Root,
+            registry: Scripts,
+            sprites: Sprites2D,
+            host: new GameSessionHostInfo {
                 ScenePath = Project.StartupScene,
                 SaveDirectory = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                    string.IsNullOrWhiteSpace(Project.Name) ? "ZigoteGame" : Project.Name,
-                    "saves"
+                    path1: Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    path2: string.IsNullOrWhiteSpace(Project.Name) ? "ZigoteGame" : Project.Name,
+                    path3: "saves"
                 ),
             }
         );
@@ -118,6 +125,6 @@ public sealed class GameHost : IDisposable
     {
         if (Session is null) return;
         if (dt > MaxStep) dt = MaxStep;
-        Session.Update(Scene.Root, dt);
+        Session.Update(root: Scene.Root, dt: dt);
     }
 }

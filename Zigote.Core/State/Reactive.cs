@@ -1,3 +1,7 @@
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
+
 namespace Zigote.Core.State;
 
 /// <summary>
@@ -16,7 +20,10 @@ internal enum NodeState : byte
     /// <summary>Value is current; nothing upstream changed.</summary>
     Clean = 0,
 
-    /// <summary>A <em>transitive</em> source may have changed — must resolve sources before trusting the value.</summary>
+    /// <summary>
+    ///     A <em>transitive</em> source may have changed — must resolve sources before trusting the
+    ///     value.
+    /// </summary>
     Check = 1,
 
     /// <summary>A <em>direct</em> source changed — must recompute.</summary>
@@ -24,20 +31,25 @@ internal enum NodeState : byte
 }
 
 /// <summary>
-///     A node that can be depended upon — a <see cref="Signal{T}" />, or (through <see cref="Reaction" />)
-///     a <see cref="Computed{T}" />. Carries the monotonically-increasing <see cref="Version" /> bumped
+///     A node that can be depended upon — a <see cref="Signal{T}" />, or (through
+///     <see cref="Reaction" />)
+///     a <see cref="Computed{T}" />. Carries the monotonically-increasing <see cref="Version" />
+///     bumped
 ///     whenever its value changes, so an unobserved reader can detect "did any of my sources actually
 ///     change?" without being subscribed, and owns the observer edges pointing back at it.
 ///     <para>
 ///         <b>Observer storage</b> is one inline slot plus a growable array rather than a set: the
-///         overwhelmingly common shape is zero or one observer (which then costs no allocation at all),
+///         overwhelmingly common shape is zero or one observer (which then costs no allocation at
+///         all),
 ///         and the hot operation is <see cref="MarkObservers" /> on every write — a walk over a packed
-///         array, not a hash-set enumeration. Ceiling: add/remove are a linear scan, which is the right
+///         array, not a hash-set enumeration. Ceiling: add/remove are a linear scan, which is the
+///         right
 ///         trade up to the low hundreds of observers per source; past that, a source with thousands of
 ///         watchers would want per-edge back-pointers (preact's intrusive node list) instead.
 ///     </para>
 ///     <para>
-///         Public only because <see cref="Signal{T}" />/<see cref="Reaction" /> (public) derive from it;
+///         Public only because <see cref="Signal{T}" />/<see cref="Reaction" /> (public) derive from
+///         it;
 ///         it has no public members and cannot be subclassed outside this assembly.
 ///     </para>
 /// </summary>
@@ -51,34 +63,28 @@ public abstract class Source
     private Reaction[]? _rest;
     private int _restCount;
 
-    private protected Source()
-    {
-    }
+    private protected Source() { }
 
     internal bool HasObservers => _observer0 != null;
 
     /// <summary>Register this source as a dependency of the currently-running reaction (if any).</summary>
-    internal void Track()
-    {
-        Reactive.EvalContext?.AddSource(this);
-    }
+    internal void Track() => Reactive.EvalContext?.AddSource(this);
 
     /// <summary>Resolve to a current value (a signal is always current; a computed recomputes if stale).</summary>
     internal abstract void Refresh();
 
     /// <summary>Gained the first observer (a computed uses this to subscribe to its own sources).</summary>
-    private protected virtual void OnObserved()
-    {
-    }
+    private protected virtual void OnObserved() { }
 
     /// <summary>Lost the last observer (a computed uses this to detach, cascading up the cone).</summary>
-    private protected virtual void OnUnobserved()
-    {
-    }
+    private protected virtual void OnUnobserved() { }
 
     internal void AddObserver(Reaction r)
     {
-        System.Diagnostics.Debug.Assert(!IsObserver(r), "Reactive: observer edge added twice.");
+        Debug.Assert(
+            condition: !IsObserver(r),
+            message: "Reactive: observer edge added twice."
+        );
         if (_observer0 is null)
         {
             _observer0 = r;
@@ -87,7 +93,8 @@ public abstract class Source
         }
 
         if (_rest is null) _rest = new Reaction[4];
-        else if (_restCount == _rest.Length) Array.Resize(ref _rest, _rest.Length * 2);
+        else if (_restCount == _rest.Length)
+            Array.Resize(array: ref _rest, newSize: _rest.Length * 2);
         _rest[_restCount++] = r;
     }
 
@@ -95,7 +102,7 @@ public abstract class Source
     {
         if (_observer0 is null) return;
 
-        if (ReferenceEquals(_observer0, r))
+        if (ReferenceEquals(objA: _observer0, objB: r))
         {
             // Promote the last of the tail into the inline slot (order is not part of the contract).
             if (_restCount > 0)
@@ -110,9 +117,9 @@ public abstract class Source
             return;
         }
 
-        for (var i = 0; i < _restCount; i++)
+        for (int i = 0; i < _restCount; i++)
         {
-            if (!ReferenceEquals(_rest![i], r)) continue;
+            if (!ReferenceEquals(objA: _rest![i], objB: r)) continue;
             _rest[i] = _rest[--_restCount];
             _rest[_restCount] = null!;
             return;
@@ -126,10 +133,10 @@ public abstract class Source
 
         // Snapshot the count: a handler reached from MarkStale may subscribe, and the new observer is
         // by definition already up to date with this change.
-        var n = _restCount;
-        _observer0.MarkStale(state, fromSourceWrite);
-        for (var i = 0; i < n && i < _restCount; i++)
-            _rest![i].MarkStale(state, fromSourceWrite);
+        int n = _restCount;
+        _observer0.MarkStale(newState: state, fromSourceWrite: fromSourceWrite);
+        for (int i = 0; i < n && i < _restCount; i++)
+            _rest![i].MarkStale(newState: state, fromSourceWrite: fromSourceWrite);
     }
 
     /// <summary>
@@ -145,7 +152,7 @@ public abstract class Source
         Reactive.EnterBatch();
         try
         {
-            MarkObservers(NodeState.Dirty, true);
+            MarkObservers(state: NodeState.Dirty, fromSourceWrite: true);
         }
         finally
         {
@@ -157,62 +164,46 @@ public abstract class Source
     private protected void ClearObservers()
     {
         _observer0 = null;
-        if (_rest != null) Array.Clear(_rest, 0, _restCount);
+        if (_rest != null) Array.Clear(array: _rest, index: 0, length: _restCount);
         _restCount = 0;
     }
 
     private bool IsObserver(Reaction r)
     {
-        if (ReferenceEquals(_observer0, r)) return true;
-        for (var i = 0; i < _restCount; i++)
-            if (ReferenceEquals(_rest![i], r))
+        if (ReferenceEquals(objA: _observer0, objB: r)) return true;
+        for (int i = 0; i < _restCount; i++)
+        {
+            if (ReferenceEquals(objA: _rest![i], objB: r))
                 return true;
+        }
+
         return false;
     }
 }
 
 /// <summary>
-///     Base of every derived node — a <see cref="Computed{T}" /> or an <see cref="Effect" />. Holds the
+///     Base of every derived node — a <see cref="Computed{T}" /> or an <see cref="Effect" />. Holds
+///     the
 ///     ordered dependency list, the tri-colour state, and the shared push (<see cref="MarkStale" />) /
 ///     pull (<see cref="Refresh" />) machinery. Auto-tracking: whatever sources <see cref="Execute" />
 ///     reads become dependencies, re-derived every run, so conditional dependencies come and go.
 ///     <para>
-///         <b>Lazy + leak-free:</b> a reaction subscribes to its sources only while it is <em>watched</em>
-///         (an effect always is; a computed only while it has observers). An unobserved computed neither
-///         recomputes on upstream change nor is retained by its sources — it re-derives lazily on read,
+///         <b>Lazy + leak-free:</b> a reaction subscribes to its sources only while it is
+///         <em>watched</em>
+///         (an effect always is; a computed only while it has observers). An unobserved computed
+///         neither
+///         recomputes on upstream change nor is retained by its sources — it re-derives lazily on
+///         read,
 ///         detecting staleness by comparing the combined source <see cref="Source.Version" />.
 ///     </para>
 ///     <para>
-///         Public only because <see cref="Computed{T}" />/<see cref="Effect" /> (public) derive from it;
+///         Public only because <see cref="Computed{T}" />/<see cref="Effect" /> (public) derive from
+///         it;
 ///         it has no public members and is not meant to be subclassed outside this assembly.
 ///     </para>
 /// </summary>
 public abstract class Reaction : Source
 {
-    // Ordered dependency list, reconciled positionally (the Reactively algorithm): each run's reads
-    // are compared slot-by-slot against the previous run's list, so a run whose dependencies are
-    // unchanged does no set bookkeeping at all; only from the first divergence on is the tail
-    // unwatched/rewatched.
-    private Source[] _sources = [];
-    private int _sourceCount;
-
-    // The run in progress: how many leading reads matched _sources positionally, and — once a read
-    // diverges — the replacement tail collected into _reads.
-    private Source[] _reads = [];
-    private int _readCount;
-    private int _matched;
-    private bool _diverged;
-    private Source? _lastRead;
-
-    private protected NodeState State;
-    private protected bool Disposed;
-    private bool _running;
-    private bool _failed;
-    private bool _dirtiedWhileRunning;
-    private bool _hasRun;
-    private long _depsVersion;
-    private long _validatedVersion = -1;
-
     /// <summary>
     ///     Bound on self-referential re-runs (a reaction that writes a source it reads). Small on purpose:
     ///     the spin holds the global gate, so a "converging" reaction that needs hundreds of rounds is a
@@ -220,23 +211,52 @@ public abstract class Reaction : Source
     /// </summary>
     private const int MaxSelfReruns = 100;
 
-    private protected Reaction()
-    {
-    }
+    private protected bool Disposed;
+
+    private protected NodeState State;
+    private long _depsVersion;
+    private bool _dirtiedWhileRunning;
+    private bool _diverged;
+    private bool _failed;
+    private bool _hasRun;
+
+    private string? _label;
+    private Source? _lastRead;
+    private int _matched;
+    private int _readCount;
+
+    // The run in progress: how many leading reads matched _sources positionally, and — once a read
+    // diverges — the replacement tail collected into _reads.
+    private Source[] _reads = [];
+
+    private int _sourceCount;
+
+    // Ordered dependency list, reconciled positionally (the Reactively algorithm): each run's reads
+    // are compared slot-by-slot against the previous run's list, so a run whose dependencies are
+    // unchanged does no set bookkeeping at all; only from the first divergence on is the tail
+    // unwatched/rewatched.
+    private Source[] _sources = [];
+    private long _validatedVersion = -1;
+
+    private protected Reaction() { }
 
     /// <summary>Effects are always watched; a computed is watched only while it has ≥1 observer.</summary>
     internal virtual bool IsWatched => HasObservers;
 
     /// <summary>Body is executing right now — reading a running <see cref="Computed{T}" /> is a cycle.</summary>
-    internal bool IsRunning => _running;
+    internal bool IsRunning { get; private set; }
+
+    /// <summary>
+    ///     Human-readable name for the diagnostics table — the body's declaring type and method, worked
+    ///     out once, on the first run after tracking is switched on. Never on the hot path.
+    /// </summary>
+    internal string Label => _label ??= DescribeBody();
 
     /// <summary>Run the body under dependency tracking (compute a value / perform a side effect).</summary>
     private protected abstract void Execute();
 
     /// <summary>Runs untracked, before <see cref="Execute" /> (effect cleanup).</summary>
-    private protected virtual void BeforeExecute()
-    {
-    }
+    private protected virtual void BeforeExecute() { }
 
     /// <summary>Invoked the first time this reaction is flagged stale in a cascade (was Clean).</summary>
     private protected abstract void OnScheduled();
@@ -246,7 +266,7 @@ public abstract class Reaction : Source
     {
         // Adjacent duplicate — `a.Value + a.Value`, or a diamond whose two branches both read the root.
         // One compare instead of the scans below, which is what the shape actually costs otherwise.
-        if (ReferenceEquals(source, _lastRead)) return;
+        if (ReferenceEquals(objA: source, objB: _lastRead)) return;
         _lastRead = source;
 
         // Fast path, and the whole point of the positional reconcile: this run is re-reading the same
@@ -255,7 +275,8 @@ public abstract class Reaction : Source
         // advanced past the slot holding an earlier read of the same source — so the scans below are only
         // needed off this path. (Checking them first made a run over n dependencies O(n^2): measured
         // 1.4us for a 64-dependency computed.)
-        if (!_diverged && _matched < _sourceCount && ReferenceEquals(_sources[_matched], source))
+        if (!_diverged && _matched < _sourceCount &&
+            ReferenceEquals(objA: _sources[_matched], objB: source))
         {
             _matched++;
             return;
@@ -264,17 +285,22 @@ public abstract class Reaction : Source
         // A source read twice in one run yields ONE slot (observer edges are per-source, and the
         // reconcile below assumes no duplicates). Dependency lists are small (typically 1-4), so a
         // linear scan beats hashing here.
-        for (var i = 0; i < _matched; i++)
-            if (ReferenceEquals(_sources[i], source))
+        for (int i = 0; i < _matched; i++)
+        {
+            if (ReferenceEquals(objA: _sources[i], objB: source))
                 return;
-        for (var i = 0; i < _readCount; i++)
-            if (ReferenceEquals(_reads[i], source))
+        }
+
+        for (int i = 0; i < _readCount; i++)
+        {
+            if (ReferenceEquals(objA: _reads[i], objB: source))
                 return;
+        }
 
         _diverged = true;
 
         if (_readCount == _reads.Length)
-            Array.Resize(ref _reads, Math.Max(4, _reads.Length * 2));
+            Array.Resize(array: ref _reads, newSize: Math.Max(val1: 4, val2: _reads.Length * 2));
         _reads[_readCount++] = source;
     }
 
@@ -290,12 +316,12 @@ public abstract class Reaction : Source
     {
         if (Disposed) return;
 
-        if (_running && fromSourceWrite) _dirtiedWhileRunning = true;
+        if (IsRunning && fromSourceWrite) _dirtiedWhileRunning = true;
 
         // _failed: the last run threw, so this node is stale-but-unscheduled — its state never made it
         // back to Clean and a plain "already >= newState" bail would leave it deaf to every future change.
         if (State >= newState && !_failed) return;
-        var wasClean = State == NodeState.Clean || _failed;
+        bool wasClean = State == NodeState.Clean || _failed;
         _failed = false;
         if (newState > State) State = newState;
         if (wasClean) OnScheduled();
@@ -307,7 +333,7 @@ public abstract class Reaction : Source
     /// </summary>
     internal override void Refresh()
     {
-        if (Disposed || _running) return;
+        if (Disposed || IsRunning) return;
 
         // Fast-out: already validated at the current global version → nothing anywhere has changed.
         if (_hasRun && _validatedVersion == Reactive.GlobalVersion) return;
@@ -315,7 +341,7 @@ public abstract class Reaction : Source
         // The loop only iterates more than once when Execute wrote a source it also reads (see MarkStale
         // → _dirtiedWhileRunning): a self-referential reaction re-runs until it stabilises, or the guard
         // trips. A normal reaction runs the body path at most once.
-        var spins = 0;
+        int spins = 0;
         try
         {
             do
@@ -323,17 +349,13 @@ public abstract class Reaction : Source
                 _dirtiedWhileRunning = false;
 
                 if (!_hasRun)
-                {
                     Update();
-                }
                 else if (State == NodeState.Dirty)
-                {
                     Update();
-                }
                 else if (State == NodeState.Check)
                 {
                     // Watched & maybe-dirty: resolve sources; a changed one pushes us to Dirty (see Computed.Execute).
-                    for (var i = 0; i < _sourceCount; i++)
+                    for (int i = 0; i < _sourceCount; i++)
                     {
                         _sources[i].Refresh();
                         if (State == NodeState.Dirty) break;
@@ -345,7 +367,7 @@ public abstract class Reaction : Source
                 {
                     // Unobserved: not subscribed, so state is unreliable — verify via the combined source version.
                     long sum = 0;
-                    for (var i = 0; i < _sourceCount; i++)
+                    for (int i = 0; i < _sourceCount; i++)
                     {
                         var s = _sources[i];
                         s.Refresh();
@@ -359,9 +381,11 @@ public abstract class Reaction : Source
                     return; // Execute may have disposed us (Update already bailed before reconciling)
 
                 if (++spins > MaxSelfReruns)
+                {
                     throw new InvalidOperationException(
                         "Reactive: a reaction re-dirtied itself without converging — it writes a source it reads."
                     );
+                }
             } while (_dirtiedWhileRunning);
         }
         catch
@@ -377,19 +401,8 @@ public abstract class Reaction : Source
         _validatedVersion = Reactive.GlobalVersion;
     }
 
-    /// <summary>
-    ///     Human-readable name for the diagnostics table — the body's declaring type and method, worked
-    ///     out once, on the first run after tracking is switched on. Never on the hot path.
-    /// </summary>
-    internal string Label => _label ??= DescribeBody();
-
-    private string? _label;
-
     /// <summary>Overridden by <see cref="Computed{T}" />/<see cref="Effect" /> to name their body.</summary>
-    private protected virtual string DescribeBody()
-    {
-        return GetType().Name;
-    }
+    private protected virtual string DescribeBody() => GetType().Name;
 
     private void Update()
     {
@@ -401,7 +414,7 @@ public abstract class Reaction : Source
         // every Signal read on this thread takes the gated path, so EvalContext is consulted exactly as
         // before. Deliberately coarser than EvalContext (which goes null across BeforeExecute) — being
         // conservative here only costs a reaction's own reads the old price, and never mis-tracks.
-        var wasInReaction = Reactive.EnterReaction();
+        bool wasInReaction = Reactive.EnterReaction();
 
         try
         {
@@ -414,14 +427,14 @@ public abstract class Reaction : Source
             _readCount = 0;
             _diverged = false;
             _lastRead = null;
-            _running = true;
+            IsRunning = true;
             try
             {
                 Execute();
             }
             finally
             {
-                _running = false;
+                IsRunning = false;
                 Reactive.EvalContext = prev;
             }
         }
@@ -434,7 +447,7 @@ public abstract class Reaction : Source
         // Dispose already detached from sources; don't let ReconcileSources re-subscribe a dead node.
         if (Disposed)
         {
-            Array.Clear(_reads, 0, _readCount);
+            Array.Clear(array: _reads, index: 0, length: _readCount);
             _readCount = 0;
             return;
         }
@@ -442,7 +455,7 @@ public abstract class Reaction : Source
         ReconcileSources();
 
         long sum = 0;
-        for (var i = 0; i < _sourceCount; i++) sum += _sources[i].Version;
+        for (int i = 0; i < _sourceCount; i++) sum += _sources[i].Version;
         _depsVersion = sum;
         _hasRun = true;
     }
@@ -451,11 +464,11 @@ public abstract class Reaction : Source
     {
         // Only (un)wire observer edges while watched — an unobserved reaction leaves no trace on its
         // sources (leak-free), it just records what it read for a future connect.
-        var watched = IsWatched;
+        bool watched = IsWatched;
 
         // Drop the stale tail: everything past the matched prefix was not re-read this run.
-        var keep = _matched;
-        for (var i = keep; i < _sourceCount; i++)
+        int keep = _matched;
+        for (int i = keep; i < _sourceCount; i++)
         {
             if (watched) _sources[i].RemoveObserver(this);
             _sources[i] = null!;
@@ -465,48 +478,60 @@ public abstract class Reaction : Source
         if (!_diverged) return;
 
         // Splice in this run's divergent tail and wire its edges.
-        var count = keep + _readCount;
+        int count = keep + _readCount;
         if (_sources.Length < count)
-            Array.Resize(ref _sources, Math.Max(count, _sources.Length * 2));
+        {
+            Array.Resize(
+                array: ref _sources,
+                newSize: Math.Max(val1: count, val2: _sources.Length * 2)
+            );
+        }
+
         Array.Copy(
-            _reads,
-            0,
-            _sources,
-            keep,
-            _readCount
+            sourceArray: _reads,
+            sourceIndex: 0,
+            destinationArray: _sources,
+            destinationIndex: keep,
+            length: _readCount
         );
-        Array.Clear(_reads, 0, _readCount);
+        Array.Clear(array: _reads, index: 0, length: _readCount);
         _sourceCount = count;
         _readCount = 0;
         if (!watched) return;
-        for (var i = keep; i < count; i++) _sources[i].AddObserver(this);
+        for (int i = keep; i < count; i++) _sources[i].AddObserver(this);
     }
 
-    /// <summary>Became watched: subscribe to every current source (recomputing only if the value is stale).</summary>
+    /// <summary>
+    ///     Became watched: subscribe to every current source (recomputing only if the value is
+    ///     stale).
+    /// </summary>
     private protected void Connect()
     {
         if (_hasRun && _validatedVersion == Reactive.GlobalVersion)
         {
             // Value is current (nothing changed since we last computed) — just wire the observer edges
             // to the already-recorded sources; each source computed connects recursively down the cone.
-            for (var i = 0; i < _sourceCount; i++) _sources[i].AddObserver(this);
+            for (int i = 0; i < _sourceCount; i++) _sources[i].AddObserver(this);
             State = NodeState.Clean;
         }
         else
         {
             // Stale (or never run): drop the recorded sources so ReconcileSources treats all as new and
             // recompute under `watched` to wire the edges.
-            Array.Clear(_sources, 0, _sourceCount);
+            Array.Clear(array: _sources, index: 0, length: _sourceCount);
             _sourceCount = 0;
             State = NodeState.Dirty;
             Refresh();
         }
     }
 
-    /// <summary>No longer watched (or disposed): unsubscribe from all sources; cascades to source computeds.</summary>
+    /// <summary>
+    ///     No longer watched (or disposed): unsubscribe from all sources; cascades to source
+    ///     computeds.
+    /// </summary>
     private protected void DetachFromSources()
     {
-        for (var i = 0; i < _sourceCount; i++) _sources[i].RemoveObserver(this);
+        for (int i = 0; i < _sourceCount; i++) _sources[i].RemoveObserver(this);
 
         // Keep the recorded list while merely unwatched: a re-connect that is provably current
         // (validated at the current global version) rewires these edges without a recompute, and a
@@ -514,7 +539,7 @@ public abstract class Reaction : Source
         // Dispose (flag already set by the caller) drops the references for good.
         if (Disposed)
         {
-            Array.Clear(_sources, 0, _sourceCount);
+            Array.Clear(array: _sources, index: 0, length: _sourceCount);
             _sourceCount = 0;
         }
 
@@ -523,18 +548,29 @@ public abstract class Reaction : Source
 }
 
 /// <summary>
-///     The reactive runtime: a single re-entrant <b>graph lock</b>, the global version counter, and the
+///     The reactive runtime: a single re-entrant <b>graph lock</b>, the global version counter, and
+///     the
 ///     coalescing effect batch.
 ///     <para>
 ///         The lock makes signal writes safe from ANY thread (a timer/async can set a signal) — every
 ///         graph mutation runs under it, so the current-reaction pointer (thread-static) is only ever
-///         touched by the one thread holding the lock. It is re-entrant (a recompute reads more signals
-///         under the same lock) and uncontended in single-threaded UI use, so the cost is negligible. It
+///         touched by the one thread holding the lock. It is re-entrant (a recompute reads more
+///         signals
+///         under the same lock) and uncontended in single-threaded UI use, so the cost is negligible.
+///         It
 ///         does NOT cover consumer widget/UI mutation — a UI host marshals that to its own thread.
 ///     </para>
 /// </summary>
 public static class Reactive
 {
+    /// <summary>
+    ///     Guards against a dependency cycle (an effect that keeps dirtying a source it reads).
+    ///     Deliberately
+    ///     small: a spin holds the global gate, stalling every other thread, and nothing legitimate needs
+    ///     more than a handful of rounds — this is a tripwire for a programming error, not a budget.
+    /// </summary>
+    private const int MaxDrain = 100;
+
     internal static readonly object Gate = new();
 
     /// <summary>
@@ -566,31 +602,62 @@ public static class Reactive
     ///         skipping a lock acquisition in exchange.
     ///     </para>
     /// </summary>
-    [ThreadStatic]
-    private static bool _inReaction;
+    [ThreadStatic] private static bool _inReaction;
 
-    /// <inheritdoc cref="_inReaction" />
-    internal static bool InReaction => _inReaction;
+    private static Reaction? _evalContext;
 
-    /// <summary>Set for the duration of a reaction body; restores the previous value (bodies nest).</summary>
-    internal static bool EnterReaction()
-    {
-        var previous = _inReaction;
-        _inReaction = true;
-        return previous;
-    }
-
-    /// <inheritdoc cref="EnterReaction" />
-    internal static void LeaveReaction(bool previous)
-    {
-        _inReaction = previous;
-    }
+    /// <summary>Bumped on every signal write, so an unobserved computed can fast-out when nothing changed.</summary>
+    internal static long GlobalVersion;
 
     /// <summary>
-    ///     The reaction currently running (its reads become dependencies). Plain static, NOT thread-static:
+    ///     Attribute every reaction run to its body's <c>Type.Method</c>, so
+    ///     <see cref="HottestReactions" /> can answer <em>which</em> computed or effect is churning —
+    ///     <see cref="Runs" /> only says that something is. Off by default; devtools turns it on with
+    ///     its Reactive panel.
+    ///     <para>
+    ///         Opt-in because it is the one diagnostic with a real cost: a dictionary lookup per body
+    ///         run, and a reflected name per reaction the first time it runs. Off, it is one predictable
+    ///         branch.
+    ///     </para>
+    /// </summary>
+    public static bool TrackReactions;
+
+    // ponytail: aggregated by call site, not per instance — "which code churns" is the question people
+    // actually ask, and it needs no live-node registry (no weak refs, no lifetime bookkeeping). Per
+    // instance would mean keeping every reaction discoverable for as long as it lives.
+    private static readonly Dictionary<string, long> RunsByLabel = new(StringComparer.Ordinal);
+
+    /// <summary>
+    ///     Handler for an exception thrown by an effect body (or a computed recompute reached from one)
+    ///     during the batch drain. When set, the drain isolates the failure — it reports it here and keeps
+    ///     running the remaining effects, so one bad reaction can't drop its siblings or crash the thread
+    ///     that wrote the signal (e.g. a background timer). When null, the first exception is rethrown to
+    ///     the writer after every effect has still had a chance to run. Hosts should set this to log.
+    /// </summary>
+    public static Action<Exception>? OnError;
+
+    // Graph-wide scheduling state. Like EvalContext these are lock-owned, not thread-owned: a batch can
+    // only be open while its opener holds the gate, so one shared depth and one shared drain list are
+    // exactly equivalent to per-thread copies — minus the TLS cost and the per-thread List allocation.
+    private static int _batchDepth;
+    private static readonly List<Effect> Effects = [];
+    private static readonly List<Effect> Deferred = [];
+
+    // Lock-free mirror of Deferred.Count, so a host's per-frame idle gate can ask "is there parked
+    // cross-thread work?" without taking the graph gate on every frame it would otherwise sleep
+    // through. Written under the lock, read from anywhere.
+    private static int _deferredCount;
+
+    /// <inheritdoc cref="_inReaction" />
+    internal static bool InReaction => InReaction;
+
+    /// <summary>
+    ///     The reaction currently running (its reads become dependencies). Plain static, NOT
+    ///     thread-static:
     ///     every access happens under <see cref="Gate" />, so mutual exclusion already gives it a single
     ///     owner — per-thread storage would only add a TLS indirection to the hottest read in the graph
-    ///     (measured: ~3.5x on a tracked <c>Value</c> read). <see cref="AssertLocked" /> pins the invariant
+    ///     (measured: ~3.5x on a tracked <c>Value</c> read). <see cref="AssertLocked" /> pins the
+    ///     invariant
     ///     in DEBUG.
     /// </summary>
     internal static Reaction? EvalContext
@@ -606,11 +673,6 @@ public static class Reactive
             _evalContext = value;
         }
     }
-
-    private static Reaction? _evalContext;
-
-    /// <summary>Bumped on every signal write, so an unobserved computed can fast-out when nothing changed.</summary>
-    internal static long GlobalVersion;
 
     /// <summary>
     ///     Writes committed to the graph since start — every <see cref="Signal{T}" /> set that passed its
@@ -637,28 +699,29 @@ public static class Reactive
     public static int PendingDeferred { get; private set; }
 
     /// <summary>
-    ///     Attribute every reaction run to its body's <c>Type.Method</c>, so
-    ///     <see cref="HottestReactions" /> can answer <em>which</em> computed or effect is churning —
-    ///     <see cref="Runs" /> only says that something is. Off by default; devtools turns it on with
-    ///     its Reactive panel.
-    ///     <para>
-    ///         Opt-in because it is the one diagnostic with a real cost: a dictionary lookup per body
-    ///         run, and a reflected name per reaction the first time it runs. Off, it is one predictable
-    ///         branch.
-    ///     </para>
+    ///     Whether any <see cref="EffectAffinity.Deferred" /> effect is parked, waiting for the host's
+    ///     next <see cref="DrainDeferred" />. A frame loop that idles when nothing is dirty must treat
+    ///     this as work — otherwise a background write parks an effect and the loop sleeps through it.
+    ///     Lock-free, safe from any thread.
     /// </summary>
-    public static bool TrackReactions;
+    public static bool HasPendingDeferred => Volatile.Read(ref _deferredCount) > 0;
 
-    // ponytail: aggregated by call site, not per instance — "which code churns" is the question people
-    // actually ask, and it needs no live-node registry (no weak refs, no lifetime bookkeeping). Per
-    // instance would mean keeping every reaction discoverable for as long as it lives.
-    private static readonly Dictionary<string, long> RunsByLabel = new(StringComparer.Ordinal);
+    /// <summary>Set for the duration of a reaction body; restores the previous value (bodies nest).</summary>
+    internal static bool EnterReaction()
+    {
+        bool previous = _inReaction;
+        _inReaction = true;
+        return previous;
+    }
+
+    /// <inheritdoc cref="EnterReaction" />
+    internal static void LeaveReaction(bool previous) => _inReaction = previous;
 
     internal static void RecordRun(Reaction r)
     {
         AssertLocked();
-        var label = r.Label;
-        RunsByLabel.TryGetValue(label, out var n);
+        string label = r.Label;
+        RunsByLabel.TryGetValue(key: label, value: out long n);
         RunsByLabel[label] = n + 1;
     }
 
@@ -672,9 +735,9 @@ public static class Reactive
         using (Hold())
         {
             var all = new (string Label, long Runs)[RunsByLabel.Count];
-            var i = 0;
-            foreach (var (label, runs) in RunsByLabel) all[i++] = (label, runs);
-            Array.Sort(all, static (a, b) => b.Runs.CompareTo(a.Runs));
+            int i = 0;
+            foreach ((string label, long runs) in RunsByLabel) all[i++] = (label, runs);
+            Array.Sort(array: all, comparison: static (a, b) => b.Runs.CompareTo(a.Runs));
             return all.Length <= top ? all : all[..top];
         }
     }
@@ -682,16 +745,14 @@ public static class Reactive
     /// <summary>Clear the per-body counts — "what churns while I do <em>this</em>".</summary>
     public static void ResetReactionStats()
     {
-        using (Hold())
-        {
-            RunsByLabel.Clear();
-        }
+        using (Hold()) RunsByLabel.Clear();
     }
 
     /// <summary>
     ///     Name a reaction body by the method that wrote it. Lambdas compile to
     ///     <c>&lt;Build&gt;b__3_0</c> inside a <c>&lt;&gt;c</c> display class, so both get unwrapped back
-    ///     to the enclosing type and method — <c>SettingsPage.Build</c>, not <c>&lt;&gt;c.&lt;Build&gt;b__3_0</c>.
+    ///     to the enclosing type and method — <c>SettingsPage.Build</c>, not
+    ///     <c>&lt;&gt;c.&lt;Build&gt;b__3_0</c>.
     /// </summary>
     internal static string Describe(Delegate body)
     {
@@ -716,53 +777,20 @@ public static class Reactive
     private static string Unwrap(string methodName)
     {
         if (methodName.Length == 0 || methodName[0] != '<') return methodName;
-        var end = methodName.IndexOf('>');
+        int end = methodName.IndexOf('>');
         return end > 1 ? methodName[1..end] : methodName;
     }
 
     /// <summary>
-    ///     Handler for an exception thrown by an effect body (or a computed recompute reached from one)
-    ///     during the batch drain. When set, the drain isolates the failure — it reports it here and keeps
-    ///     running the remaining effects, so one bad reaction can't drop its siblings or crash the thread
-    ///     that wrote the signal (e.g. a background timer). When null, the first exception is rethrown to
-    ///     the writer after every effect has still had a chance to run. Hosts should set this to log.
+    ///     In DEBUG, pin the "graph state is only touched under the gate" invariant the fields rely
+    ///     on.
     /// </summary>
-    public static Action<Exception>? OnError;
-
-    // Graph-wide scheduling state. Like EvalContext these are lock-owned, not thread-owned: a batch can
-    // only be open while its opener holds the gate, so one shared depth and one shared drain list are
-    // exactly equivalent to per-thread copies — minus the TLS cost and the per-thread List allocation.
-    private static int _batchDepth;
-    private static readonly List<Effect> Effects = [];
-    private static readonly List<Effect> Deferred = [];
-
-    // Lock-free mirror of Deferred.Count, so a host's per-frame idle gate can ask "is there parked
-    // cross-thread work?" without taking the graph gate on every frame it would otherwise sleep
-    // through. Written under the lock, read from anywhere.
-    private static int _deferredCount;
-
-    /// <summary>
-    ///     Whether any <see cref="EffectAffinity.Deferred" /> effect is parked, waiting for the host's
-    ///     next <see cref="DrainDeferred" />. A frame loop that idles when nothing is dirty must treat
-    ///     this as work — otherwise a background write parks an effect and the loop sleeps through it.
-    ///     Lock-free, safe from any thread.
-    /// </summary>
-    public static bool HasPendingDeferred => Volatile.Read(ref _deferredCount) > 0;
-
-    /// <summary>
-    ///     Guards against a dependency cycle (an effect that keeps dirtying a source it reads). Deliberately
-    ///     small: a spin holds the global gate, stalling every other thread, and nothing legitimate needs
-    ///     more than a handful of rounds — this is a tripwire for a programming error, not a budget.
-    /// </summary>
-    private const int MaxDrain = 100;
-
-    /// <summary>In DEBUG, pin the "graph state is only touched under the gate" invariant the fields rely on.</summary>
-    [System.Diagnostics.Conditional("DEBUG")]
+    [Conditional("DEBUG")]
     internal static void AssertLocked()
     {
-        System.Diagnostics.Debug.Assert(
-            Monitor.IsEntered(Gate),
-            "Reactive graph state touched without holding Reactive.Gate."
+        Debug.Assert(
+            condition: Monitor.IsEntered(Gate),
+            message: "Reactive graph state touched without holding Reactive.Gate."
         );
     }
 
@@ -772,14 +800,15 @@ public static class Reactive
     ///     <see cref="object.Equals(object)" />, which boxes both operands on every write/recompute. Enums
     ///     are exempt — the runtime has a non-boxing comparer for them.
     /// </summary>
-    [System.Diagnostics.Conditional("DEBUG")]
+    [Conditional("DEBUG")]
     internal static void AssertUnboxedEquality<T>(IEqualityComparer<T>? custom)
     {
         if (custom != null) return;
         var t = typeof(T);
-        System.Diagnostics.Debug.Assert(
-            !t.IsValueType || t.IsEnum || Nullable.GetUnderlyingType(t) != null ||
-            typeof(IEquatable<T>).IsAssignableFrom(t),
+        Debug.Assert(
+            condition: !t.IsValueType || t.IsEnum || Nullable.GetUnderlyingType(t) != null ||
+                       typeof(IEquatable<T>).IsAssignableFrom(t),
+            message:
             $"Signal<{t.Name}>: value type without IEquatable<{t.Name}> — equality boxes twice per write. " +
             "Implement IEquatable<T> or pass an explicit comparer."
         );
@@ -789,9 +818,7 @@ public static class Reactive
     ///     Take the graph lock, bounded by <see cref="LockTimeoutMs" />. Re-entrant, like <c>lock</c>:
     ///     a thread that already holds it acquires immediately.
     /// </summary>
-    [System.Runtime.CompilerServices.MethodImpl(
-        System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining
-    )]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static Held Hold()
     {
         // Uncontended (and re-entrant) acquisition takes the same fast path as `lock`. The timed wait is
@@ -812,42 +839,29 @@ public static class Reactive
     ///     DEBUG-only: remember who holds the gate, so a timeout can name them. Free in RELEASE — the
     ///     thread-id read is a TLS access, and this sits on the hottest path in the graph.
     /// </summary>
-    [System.Diagnostics.Conditional("DEBUG")]
-    private static void RecordHolder()
-    {
-        _holderThread = Environment.CurrentManagedThreadId;
-    }
+    [Conditional("DEBUG")]
+    private static void RecordHolder() => _holderThread = Environment.CurrentManagedThreadId;
 
     private static void WaitForGate()
     {
-        var holder =
+        int holder =
             _holderThread; // sampled before the wait: who we are about to blame (DEBUG only)
         if (LockTimeoutMs < 0)
             Monitor.Enter(Gate);
-        else if (!Monitor.TryEnter(Gate, LockTimeoutMs))
+        else if (!Monitor.TryEnter(obj: Gate, millisecondsTimeout: LockTimeoutMs))
+        {
             throw new ReactiveDeadlockException(
                 $"Reactive: thread {Environment.CurrentManagedThreadId} waited {LockTimeoutMs} ms for the " +
                 $"graph lock{(holder == 0 ? "" : $" held by thread {holder}")}. A reaction body or change " +
                 "handler is blocking while holding it — move blocking or UI work to an " +
                 "EffectAffinity.Deferred effect."
             );
+        }
 
         RecordHolder();
     }
 
-    internal static void Bump()
-    {
-        GlobalVersion++;
-    }
-
-    /// <summary>The <c>using</c> scope returned by <see cref="Hold" />; releasing is the gate release.</summary>
-    internal readonly struct Held : IDisposable
-    {
-        public void Dispose()
-        {
-            Monitor.Exit(Gate);
-        }
-    }
+    internal static void Bump() => GlobalVersion++;
 
     internal static void ScheduleEffect(Effect e)
     {
@@ -860,7 +874,7 @@ public static class Reactive
             {
                 e.QueuedDeferred = true;
                 Deferred.Add(e);
-                Volatile.Write(ref _deferredCount, Deferred.Count);
+                Volatile.Write(location: ref _deferredCount, value: Deferred.Count);
             }
 
             return;
@@ -874,10 +888,12 @@ public static class Reactive
     ///     calls this once per frame on its own thread; a background writer only marks them. Failures are
     ///     isolated exactly like the inline drain (see <see cref="OnError" />).
     ///     <para>
-    ///         <b>The sanctioned cross-thread pattern</b> (audio, network, asset IO): the background thread
+    ///         <b>The sanctioned cross-thread pattern</b> (audio, network, asset IO): the background
+    ///         thread
     ///         writes signals and nothing else; every effect that reacts to those signals with real work —
     ///         UI mutation, another lock, IO — is <see cref="EffectAffinity.Deferred" />; the frame loop
-    ///         calls this once at frame start. The background thread then holds the graph lock only for the
+    ///         calls this once at frame start. The background thread then holds the graph lock only for
+    ///         the
     ///         write itself, and the work lands on the thread that owns it.
     ///     </para>
     /// </summary>
@@ -896,7 +912,7 @@ public static class Reactive
             try
             {
                 // Index-based: a body may queue further deferred effects, which this same pass picks up.
-                for (var i = 0; i < Deferred.Count; i++)
+                for (int i = 0; i < Deferred.Count; i++)
                 {
                     var e = Deferred[i];
                     e.QueuedDeferred = false;
@@ -914,12 +930,12 @@ public static class Reactive
             finally
             {
                 Deferred.Clear();
-                Volatile.Write(ref _deferredCount, 0);
+                Volatile.Write(location: ref _deferredCount, value: 0);
                 LeaveBatch();
             }
 
             if (firstError != null)
-                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(firstError);
+                ExceptionDispatchInfo.Throw(firstError);
         }
     }
 
@@ -1011,10 +1027,7 @@ public static class Reactive
     /// <summary>Run <paramref name="fn" /> holding the graph lock (for composed multi-step writes).</summary>
     public static void Sync(Action fn)
     {
-        using (Hold())
-        {
-            fn();
-        }
+        using (Hold()) fn();
     }
 
     /// <summary>
@@ -1058,10 +1071,10 @@ public static class Reactive
         AssertLocked();
         if (Effects.Count == 0) return;
 
-        var i = 0;
-        var round =
+        int i = 0;
+        int round =
             Effects.Count; // end of the current wave; effects queued by effects start the next
-        var guard = 0;
+        int guard = 0;
         Exception? firstError = null;
         try
         {
@@ -1073,10 +1086,13 @@ public static class Reactive
                 if (i == round)
                 {
                     if (++guard > MaxDrain)
+                    {
                         throw new InvalidOperationException(
                             $"Reactive: effects did not converge after {MaxDrain} iterations — a dependency cycle " +
                             "(an effect that writes a signal it reads)?"
                         );
+                    }
+
                     round = Effects.Count;
                 }
 
@@ -1100,12 +1116,19 @@ public static class Reactive
 
         // No handler installed: surface the first failure to the writer, but only after every effect ran.
         if (firstError != null)
-            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(firstError);
+            ExceptionDispatchInfo.Throw(firstError);
+    }
+
+    /// <summary>The <c>using</c> scope returned by <see cref="Hold" />; releasing is the gate release.</summary>
+    internal readonly struct Held : IDisposable
+    {
+        public void Dispose() => Monitor.Exit(Gate);
     }
 }
 
 /// <summary>
-///     A thread gave up waiting for the reactive graph lock (see <see cref="Reactive.LockTimeoutMs" />).
+///     A thread gave up waiting for the reactive graph lock (see <see cref="Reactive.LockTimeoutMs" />
+///     ).
 ///     Always a real bug in a reaction body or change handler, never load: the graph lock is held for
 ///     microseconds unless user code blocks under it.
 /// </summary>
@@ -1124,15 +1147,17 @@ public static class ReactiveExtensions
     {
         if (source is Source src)
         {
-            var first = true;
+            bool first = true;
             return new Effect(() =>
                 {
                     src.Track(); // depend on the source's changes
                     if (first) first = false;
                     else
+                    {
                         Reactive.UntrackedInvoke(
                             onChanged
                         ); // callback reads must not extend the subscription
+                    }
                 }
             );
         }
@@ -1149,12 +1174,14 @@ public static class ReactiveExtensions
     /// </summary>
     public static IDisposable ObserveAny(Action onChanged, params ISignal[] sources)
     {
-        var first = true;
+        bool first = true;
         return new Effect(() =>
             {
-                for (var i = 0; i < sources.Length; i++)
+                for (int i = 0; i < sources.Length; i++)
+                {
                     if (sources[i] is Source src)
                         src.Track();
+                }
 
                 if (first) first = false;
                 else Reactive.UntrackedInvoke(onChanged);
@@ -1164,9 +1191,6 @@ public static class ReactiveExtensions
 
     private sealed class ActionDisposable(Action dispose) : IDisposable
     {
-        public void Dispose()
-        {
-            dispose();
-        }
+        public void Dispose() => dispose();
     }
 }

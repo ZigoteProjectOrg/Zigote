@@ -24,17 +24,14 @@ public sealed class ProjectPreferences : IDisposable
     public ViewportPreferences Viewport { get; }
     public LayoutPreferences Layout { get; }
 
+    public void Dispose() => Store.Dispose();
+
     /// <summary>
     ///     <c>&lt;project&gt;.prefs.json</c>, next to the .zigoteproj — the same convention the
     ///     old standalone layout file used.
     /// </summary>
-    public static string PathFor(string projectFile)
-    {
-        return Path.ChangeExtension(projectFile, ".prefs.json");
-    }
-
-    public void Dispose()
-    {
-        Store.Dispose();
-    }
+    public static string PathFor(string projectFile) => Path.ChangeExtension(
+        path: projectFile,
+        extension: ".prefs.json"
+    );
 }

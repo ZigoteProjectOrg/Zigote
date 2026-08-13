@@ -38,58 +38,59 @@ public sealed class AdwBreakpointCondition
         _requiresBoth = requiresBoth;
     }
 
-    public static AdwBreakpointCondition MinWidth(float px)
-    {
-        return new AdwBreakpointCondition(AdwBreakpointConditionType.MinWidth, px);
-    }
+    public static AdwBreakpointCondition MinWidth(float px) => new(
+        type: AdwBreakpointConditionType.MinWidth,
+        value: px
+    );
 
-    public static AdwBreakpointCondition MaxWidth(float px)
-    {
-        return new AdwBreakpointCondition(AdwBreakpointConditionType.MaxWidth, px);
-    }
+    public static AdwBreakpointCondition MaxWidth(float px) => new(
+        type: AdwBreakpointConditionType.MaxWidth,
+        value: px
+    );
 
-    public static AdwBreakpointCondition MinHeight(float px)
-    {
-        return new AdwBreakpointCondition(AdwBreakpointConditionType.MinHeight, px);
-    }
+    public static AdwBreakpointCondition MinHeight(float px) => new(
+        type: AdwBreakpointConditionType.MinHeight,
+        value: px
+    );
 
-    public static AdwBreakpointCondition MaxHeight(float px)
-    {
-        return new AdwBreakpointCondition(AdwBreakpointConditionType.MaxHeight, px);
-    }
+    public static AdwBreakpointCondition MaxHeight(float px) => new(
+        type: AdwBreakpointConditionType.MaxHeight,
+        value: px
+    );
 
-    public static AdwBreakpointCondition MinAspectRatio(float ratio)
-    {
-        return new AdwBreakpointCondition(AdwBreakpointConditionType.MinAspectRatio, ratio);
-    }
+    public static AdwBreakpointCondition MinAspectRatio(float ratio) => new(
+        type: AdwBreakpointConditionType.MinAspectRatio,
+        value: ratio
+    );
 
-    public static AdwBreakpointCondition MaxAspectRatio(float ratio)
-    {
-        return new AdwBreakpointCondition(AdwBreakpointConditionType.MaxAspectRatio, ratio);
-    }
+    public static AdwBreakpointCondition MaxAspectRatio(float ratio) => new(
+        type: AdwBreakpointConditionType.MaxAspectRatio,
+        value: ratio
+    );
 
     /// <summary>Both conditions must hold.</summary>
-    public AdwBreakpointCondition And(AdwBreakpointCondition other)
-    {
-        return new AdwBreakpointCondition(this, other, true);
-    }
+    public AdwBreakpointCondition And(AdwBreakpointCondition other) =>
+        new(lhs: this, rhs: other, requiresBoth: true);
 
     /// <summary>Either condition may hold.</summary>
-    public AdwBreakpointCondition Or(AdwBreakpointCondition other)
-    {
-        return new AdwBreakpointCondition(this, other, false);
-    }
+    public AdwBreakpointCondition Or(AdwBreakpointCondition other) => new(
+        lhs: this,
+        rhs: other,
+        requiresBoth: false
+    );
 
     /// <summary>Does this condition hold at the given size?</summary>
     public bool Evaluate(Size size)
     {
         if (_lhs is not null && _rhs is not null)
+        {
             return _requiresBoth
                 ? _lhs.Evaluate(size) && _rhs.Evaluate(size)
                 : _lhs.Evaluate(size) || _rhs.Evaluate(size);
+        }
 
         // A zero-height box has no meaningful ratio; report false rather than dividing by it.
-        var ratio = size.Height > 0f ? size.Width / size.Height : 0f;
+        float ratio = size.Height > 0f ? size.Width / size.Height : 0f;
         return _type switch {
             AdwBreakpointConditionType.MinWidth => size.Width >= _value,
             AdwBreakpointConditionType.MaxWidth => size.Width <= _value,
@@ -104,7 +105,7 @@ public sealed class AdwBreakpointCondition
     {
         if (_lhs is not null && _rhs is not null)
             return $"{_lhs} {(_requiresBoth ? "and" : "or")} {_rhs}";
-        var name = _type switch {
+        string name = _type switch {
             AdwBreakpointConditionType.MinWidth => "min-width",
             AdwBreakpointConditionType.MaxWidth => "max-width",
             AdwBreakpointConditionType.MinHeight => "min-height",
@@ -149,14 +150,10 @@ public sealed class AdwBreakpoint(AdwBreakpointCondition condition)
 public sealed class AdwBreakpointBin : Widget
 {
     private Widget? _active;
-    private AdwBreakpoint? _activeBreakpoint;
     private Widget? _child;
     private Size _size;
 
-    public AdwBreakpointBin(Widget? child = null)
-    {
-        _child = child;
-    }
+    public AdwBreakpointBin(Widget? child = null) => _child = child;
 
     /// <summary>Shown when no breakpoint matches.</summary>
     public Widget? Child
@@ -164,7 +161,7 @@ public sealed class AdwBreakpointBin : Widget
         get => _child;
         set
         {
-            if (ReferenceEquals(_child, value)) return;
+            if (ReferenceEquals(objA: _child, objB: value)) return;
             _child = value;
             MarkNeedsLayout();
         }
@@ -174,67 +171,63 @@ public sealed class AdwBreakpointBin : Widget
     public List<AdwBreakpoint> Breakpoints { get; } = [];
 
     /// <summary>The breakpoint currently applied, or null when the plain child is showing.</summary>
-    public AdwBreakpoint? CurrentBreakpoint => _activeBreakpoint;
+    public AdwBreakpoint? CurrentBreakpoint { get; private set; }
 
     public override Size Measure(Constraints c)
     {
         _size = c.Constrain(
             new Size(
-                float.IsFinite(c.MaxWidth) ? c.MaxWidth : 0f,
-                float.IsFinite(c.MaxHeight) ? c.MaxHeight : 0f
+                width: float.IsFinite(c.MaxWidth) ? c.MaxWidth : 0f,
+                height: float.IsFinite(c.MaxHeight) ? c.MaxHeight : 0f
             )
         );
 
         // Last match wins, so a narrowest-first list reads top to bottom like a stylesheet.
         AdwBreakpoint? match = null;
         foreach (var bp in Breakpoints)
+        {
             if (bp.Condition.Evaluate(_size))
                 match = bp;
+        }
 
-        if (!ReferenceEquals(match, _activeBreakpoint))
+        if (!ReferenceEquals(objA: match, objB: CurrentBreakpoint))
         {
-            _activeBreakpoint?.Unapply?.Invoke();
-            _activeBreakpoint = match;
+            CurrentBreakpoint?.Unapply?.Invoke();
+            CurrentBreakpoint = match;
             match?.Apply?.Invoke();
         }
 
         var next = match?.Child ?? Child;
-        if (!ReferenceEquals(next, _active))
+        if (!ReferenceEquals(objA: next, objB: _active))
         {
             // SwapChild keeps the outgoing subtree from staying mounted — it owns effects and
             // tickers that would otherwise run forever behind the visible one.
-            SwapChild(_active, next);
+            SwapChild(previous: _active, next: next);
             _active = next;
         }
 
-        _active?.Measure(Constraints.Tight(_size.Width, _size.Height));
+        _active?.Measure(Constraints.Tight(width: _size.Width, height: _size.Height));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         _active?.Layout(origin);
     }
 
-    public override void Paint(PaintList paint)
-    {
-        _active?.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => _active?.Paint(paint);
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return _active?.HitTest(point);
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(_active);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(_active);
 }

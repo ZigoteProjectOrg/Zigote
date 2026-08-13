@@ -21,10 +21,7 @@ internal sealed class AccentPicker : ComposedWidget
 
     private readonly GalleryApp _app;
 
-    public AccentPicker(GalleryApp app)
-    {
-        _app = app;
-    }
+    public AccentPicker(GalleryApp app) => _app = app;
 
     /// <summary>Swatch diameter — 28 in a row, larger on a page that shows them off.</summary>
     public float Size { get; set; } = 28f;
@@ -35,8 +32,13 @@ internal sealed class AccentPicker : ComposedWidget
             {
                 var active = _app.Accent.Value;
                 var wrap = new Wrap(spacing: Spacing.Sm, runSpacing: Spacing.Sm);
-                foreach (var (accent, name) in Accents)
-                    wrap.Children.Add(Swatch(accent, name, accent == active));
+                foreach ((var accent, string name) in Accents)
+                {
+                    wrap.Children.Add(
+                        Swatch(accent: accent, name: name, selected: accent == active)
+                    );
+                }
+
                 return wrap;
             }
         );
@@ -51,10 +53,14 @@ internal sealed class AccentPicker : ComposedWidget
             BorderColor = selected ? color.Darken(0.25f) : Color.Transparent,
             BorderWidth = 2f,
             Child = SizedBox.Square(
-                Size,
-                selected
+                size: Size,
+                child: selected
                     ? new Center {
-                        Child = new IconGlyph(MaterialIcons.Check, Size * 0.55f, Color.White),
+                        Child = new IconGlyph(
+                            glyph: MaterialIcons.Check,
+                            size: Size * 0.55f,
+                            color: Color.White
+                        ),
                     }
                     : null
             ),
@@ -71,6 +77,6 @@ internal sealed class AccentPicker : ComposedWidget
                 _app.Accent.Value = accent;
             },
         };
-        return new Tooltip(name, pressable);
+        return new Tooltip(message: name, child: pressable);
     }
 }

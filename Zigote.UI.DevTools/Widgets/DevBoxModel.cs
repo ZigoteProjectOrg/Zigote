@@ -16,35 +16,35 @@ public sealed class DevBoxModel : LeafWidget
 {
     private const float DiagramH = 120f;
     private const float LabelSize = 9.5f;
-
-    private Size _size;
-    private ThemeData _theme = ThemeData.Dark;
+    private Widget? _labelWidget;
+    private int _parKeyW = int.MinValue, _parKeyH;
+    private string _parName = "", _selName = "";
+    private string _parSizeText = "";
 
     // Key-cached labels (paint runs every frame while the panel is open).
     private int _selKeyW = int.MinValue, _selKeyH;
     private string _selSizeText = "";
-    private int _parKeyW = int.MinValue, _parKeyH;
-    private string _parSizeText = "";
-    private Widget? _labelWidget;
-    private string _parName = "", _selName = "";
+
+    private Size _size;
+    private ThemeData _theme = ThemeData.Dark;
 
     public Widget? Target { get; set; }
 
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        var w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : c.MinWidth;
-        _size = new Size(w, DiagramH);
+        float w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : c.MinWidth;
+        _size = new Size(width: w, height: DiagramH);
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
@@ -66,33 +66,33 @@ public sealed class DevBoxModel : LeafWidget
         var selB = sel.Bounds;
         var refB = parent?.Bounds ?? selB;
         // A child can overflow its parent — fit the union so both boxes stay on the diagram.
-        var uniX = MathF.Min(refB.X, selB.X);
-        var uniY = MathF.Min(refB.Y, selB.Y);
-        var uniW = MathF.Max(refB.Right, selB.Right) - uniX;
-        var uniH = MathF.Max(refB.Bottom, selB.Bottom) - uniY;
+        float uniX = MathF.Min(x: refB.X, y: selB.X);
+        float uniY = MathF.Min(x: refB.Y, y: selB.Y);
+        float uniW = MathF.Max(x: refB.Right, y: selB.Right) - uniX;
+        float uniH = MathF.Max(x: refB.Bottom, y: selB.Bottom) - uniY;
         if (uniW <= 0f || uniH <= 0f) return;
 
         var area = new Rect(
-            Bounds.X + 4f,
-            Bounds.Y + 14f,
-            Bounds.Width - 8f,
-            Bounds.Height - 18f
+            x: Bounds.X + 4f,
+            y: Bounds.Y + 14f,
+            width: Bounds.Width - 8f,
+            height: Bounds.Height - 18f
         );
-        var scale = MathF.Min(area.Width / uniW, area.Height / uniH);
-        var ox = area.X + (area.Width - uniW * scale) * 0.5f;
-        var oy = area.Y + (area.Height - uniH * scale) * 0.5f;
+        float scale = MathF.Min(x: area.Width / uniW, y: area.Height / uniH);
+        float ox = area.X + ((area.Width - (uniW * scale)) * 0.5f);
+        float oy = area.Y + ((area.Height - (uniH * scale)) * 0.5f);
 
         Rect Map(Rect r)
         {
             return new Rect(
-                ox + (r.X - uniX) * scale,
-                oy + (r.Y - uniY) * scale,
-                MathF.Max(2f, r.Width * scale),
-                MathF.Max(2f, r.Height * scale)
+                x: ox + ((r.X - uniX) * scale),
+                y: oy + ((r.Y - uniY) * scale),
+                width: MathF.Max(x: 2f, y: r.Width * scale),
+                height: MathF.Max(x: 2f, y: r.Height * scale)
             );
         }
 
-        if (!ReferenceEquals(sel, _labelWidget))
+        if (!ReferenceEquals(objA: sel, objB: _labelWidget))
         {
             _labelWidget = sel;
             _selName = sel.GetType().Name;
@@ -102,23 +102,23 @@ public sealed class DevBoxModel : LeafWidget
         if (parent is not null)
         {
             var p = Map(refB);
-            paint.AddRect(p, _theme.Fill1.WithAlpha(0.4f), 2f);
+            paint.AddRect(bounds: p, color: _theme.Fill1.WithAlpha(0.4f), radius: 2f);
             paint.AddBorder(
-                p,
-                _theme.Hint.WithAlpha(0.55f),
-                2f,
-                1f
+                bounds: p,
+                color: _theme.Hint.WithAlpha(0.55f),
+                radius: 2f,
+                width: 1f
             );
             paint.AddText(
-                _parName,
-                p.X + 3f,
-                Bounds.Y + 10f,
-                _theme.Hint,
-                LabelSize
+                text: _parName,
+                baselineX: p.X + 3f,
+                baselineY: Bounds.Y + 10f,
+                color: _theme.Hint,
+                fontSize: LabelSize
             );
 
-            var pw = (int)MathF.Round(refB.Width);
-            var ph = (int)MathF.Round(refB.Height);
+            int pw = (int)MathF.Round(refB.Width);
+            int ph = (int)MathF.Round(refB.Height);
             if (pw != _parKeyW || ph != _parKeyH)
             {
                 _parKeyW = pw;
@@ -126,28 +126,32 @@ public sealed class DevBoxModel : LeafWidget
                 _parSizeText = $"{pw}×{ph}";
             }
 
-            var ptw = TextMeasure.Width(_parSizeText, LabelSize, fontFamily: "code");
+            float ptw = TextMeasure.Width(
+                text: _parSizeText,
+                fontSize: LabelSize,
+                fontFamily: "code"
+            );
             paint.AddText(
-                _parSizeText,
-                p.Right - ptw - 3f,
-                p.Bottom - 3f,
-                _theme.Hint.WithAlpha(0.8f),
-                LabelSize,
+                text: _parSizeText,
+                baselineX: p.Right - ptw - 3f,
+                baselineY: p.Bottom - 3f,
+                color: _theme.Hint.WithAlpha(0.8f),
+                fontSize: LabelSize,
                 fontFamily: "code"
             );
         }
 
         var s = Map(selB);
-        paint.AddRect(s, _theme.Primary.WithAlpha(0.25f), 2f);
+        paint.AddRect(bounds: s, color: _theme.Primary.WithAlpha(0.25f), radius: 2f);
         paint.AddBorder(
-            s,
-            _theme.Primary,
-            2f,
-            1.5f
+            bounds: s,
+            color: _theme.Primary,
+            radius: 2f,
+            width: 1.5f
         );
 
-        var sw = (int)MathF.Round(selB.Width);
-        var sh = (int)MathF.Round(selB.Height);
+        int sw = (int)MathF.Round(selB.Width);
+        int sh = (int)MathF.Round(selB.Height);
         if (sw != _selKeyW || sh != _selKeyH)
         {
             _selKeyW = sw;
@@ -155,22 +159,22 @@ public sealed class DevBoxModel : LeafWidget
             _selSizeText = $"{sw}×{sh}";
         }
 
-        var stw = TextMeasure.Width(_selSizeText, LabelSize, fontFamily: "code");
-        var scx = s.X + (s.Width - stw) * 0.5f;
-        var scy = s.Y + s.Height * 0.5f + LabelSize * 0.35f;
+        float stw = TextMeasure.Width(text: _selSizeText, fontSize: LabelSize, fontFamily: "code");
+        float scx = s.X + ((s.Width - stw) * 0.5f);
+        float scy = s.Y + (s.Height * 0.5f) + (LabelSize * 0.35f);
         // If the box is too small for the label, place it just outside (below or above).
         if (stw + 4f > s.Width || s.Height < 12f)
         {
-            scx = Math.Clamp(s.X, area.X, area.Right - stw);
+            scx = Math.Clamp(value: s.X, min: area.X, max: area.Right - stw);
             scy = s.Bottom + LabelSize + 2f <= area.Bottom ? s.Bottom + LabelSize : s.Y - 2f;
         }
 
         paint.AddText(
-            _selSizeText,
-            scx,
-            scy,
-            _theme.Primary,
-            LabelSize,
+            text: _selSizeText,
+            baselineX: scx,
+            baselineY: scy,
+            color: _theme.Primary,
+            fontSize: LabelSize,
             fontFamily: "code"
         );
     }
@@ -179,11 +183,11 @@ public sealed class DevBoxModel : LeafWidget
     {
         var b = Target?.Bounds ?? default;
         return HashCode.Combine(
-            Target?.GetType(),
-            b.X,
-            b.Y,
-            b.Width,
-            b.Height
+            value1: Target?.GetType(),
+            value2: b.X,
+            value3: b.Y,
+            value4: b.Width,
+            value5: b.Height
         );
     }
 }

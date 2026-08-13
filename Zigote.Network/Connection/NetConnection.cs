@@ -59,26 +59,25 @@ public sealed class NetConnection
     internal void EndSend(DeliveryMethod delivery, int transportChannel = 0)
     {
         _transport.Send(
-            Id,
-            _send.AsSpan(),
-            delivery,
-            transportChannel
+            connectionId: Id,
+            payload: _send.AsSpan(),
+            delivery: delivery,
+            channel: transportChannel
         );
     }
 
     /// <summary>Register the handler invoked when a payload arrives on <paramref name="channel" />.</summary>
-    internal void On(NetChannel channel, Action<NetConnection, NetReader> handler)
-    {
+    internal void On(NetChannel channel, Action<NetConnection, NetReader> handler) =>
         _handlers[(byte)channel] = handler;
-    }
 
     internal void HandleReceive(ReadOnlySpan<byte> payload, DeliveryMethod delivery,
         int transportChannel)
     {
         if (payload.Length == 0) return;
         _recv.SetSource(payload);
-        var channel = _recv.ReadByte();
-        if (_handlers.TryGetValue(channel, out var handler)) handler(this, _recv);
+        byte channel = _recv.ReadByte();
+        if (_handlers.TryGetValue(key: channel, value: out var handler))
+            handler(arg1: this, arg2: _recv);
     }
 
     /// <summary>Gracefully close this connection.</summary>

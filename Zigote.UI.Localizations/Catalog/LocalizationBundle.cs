@@ -24,9 +24,7 @@ public sealed class LocalizationBundle
 {
     private readonly Dictionary<Locale, LocalizationCatalog> _catalogs = new();
 
-    public LocalizationBundle()
-    {
-    }
+    public LocalizationBundle() { }
 
     public LocalizationBundle(params LocalizationCatalog[] catalogs)
     {
@@ -60,31 +58,33 @@ public sealed class LocalizationBundle
     /// <summary>Register (or extend) a locale's catalog from raw key/template pairs.</summary>
     public LocalizationBundle Add(Locale locale, IEnumerable<KeyValuePair<string, string>> messages)
     {
-        if (_catalogs.TryGetValue(locale, out var existing)) existing.AddRange(messages);
-        else Add(new LocalizationCatalog(locale, messages));
+        if (_catalogs.TryGetValue(key: locale, value: out var existing))
+            existing.AddRange(messages);
+        else Add(new LocalizationCatalog(locale: locale, messages: messages));
         return this;
     }
 
     /// <summary>True when a catalog exists for the locale or its bare language.</summary>
-    public bool Supports(Locale locale)
-    {
-        return CatalogFor(locale) is not null;
-    }
+    public bool Supports(Locale locale) => CatalogFor(locale) is not null;
 
     /// <summary>The best catalog for a locale: exact, else same language (preferring a script match).</summary>
     public LocalizationCatalog? CatalogFor(Locale locale)
     {
-        if (_catalogs.TryGetValue(locale, out var exact)) return exact;
+        if (_catalogs.TryGetValue(key: locale, value: out var exact)) return exact;
 
         LocalizationCatalog? sameLanguage = null;
         foreach (var (key, catalog) in _catalogs)
         {
-            if (!string.Equals(key.Language, locale.Language, StringComparison.Ordinal)) continue;
+            if (!string.Equals(
+                    a: key.Language,
+                    b: locale.Language,
+                    comparisonType: StringComparison.Ordinal
+                )) continue;
             sameLanguage ??= catalog;
             if (locale.Script is not null && string.Equals(
-                    key.Script,
-                    locale.Script,
-                    StringComparison.Ordinal
+                    a: key.Script,
+                    b: locale.Script,
+                    comparisonType: StringComparison.Ordinal
                 ))
                 return catalog;
         }
@@ -95,16 +95,16 @@ public sealed class LocalizationBundle
     public string Translate(Locale locale, string key,
         IReadOnlyDictionary<string, object?>? args = null)
     {
-        var primary = CatalogFor(locale)?.Translate(key, args);
+        string? primary = CatalogFor(locale)?.Translate(key: key, args: args);
         if (primary is not null) return primary;
 
         if (FallbackLocale != locale)
         {
-            var fallback = CatalogFor(FallbackLocale)?.Translate(key, args);
+            string? fallback = CatalogFor(FallbackLocale)?.Translate(key: key, args: args);
             if (fallback is not null) return fallback;
         }
 
-        if (OnMissing?.Invoke(key, locale) is { } handled) return handled;
+        if (OnMissing?.Invoke(arg1: key, arg2: locale) is { } handled) return handled;
 
         return MissingPolicy switch {
             MissingTranslationPolicy.Empty => string.Empty,
@@ -115,23 +115,17 @@ public sealed class LocalizationBundle
         };
     }
 
-    public string Translate(Locale locale, string key, params (string Name, object? Value)[] args)
-    {
-        return Translate(locale, key, MessageFormat.ToDictionary(args));
-    }
+    public string
+        Translate(Locale locale, string key, params (string Name, object? Value)[] args) =>
+        Translate(locale: locale, key: key, args: MessageFormat.ToDictionary(args));
 
     /// <summary>
     ///     A payload bound to <paramref name="locale" /> for provider storage /
     ///     <c>Localizations.Of</c>.
     /// </summary>
-    public StringLocalizations For(Locale locale)
-    {
-        return new StringLocalizations(this, locale);
-    }
+    public StringLocalizations For(Locale locale) => new(bundle: this, locale: locale);
 
     /// <summary>Expose this bundle as a delegate so it plugs into a <see cref="LocalizationsScope" />.</summary>
-    public LocalizationsDelegate<StringLocalizations> AsDelegate()
-    {
-        return LocalizationsDelegates.Create(Supports, For);
-    }
+    public LocalizationsDelegate<StringLocalizations> AsDelegate() =>
+        LocalizationsDelegates.Create(isSupported: Supports, load: For);
 }

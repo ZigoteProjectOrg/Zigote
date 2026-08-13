@@ -12,10 +12,8 @@ public static class LodMath
     ///     camera <paramref name="distance" />. A <paramref name="maxDistance" /> &lt;= 0 means
     ///     "no distance limit" (never culled by distance).
     /// </summary>
-    public static bool CulledByDistance(float maxDistance, float distance)
-    {
-        return maxDistance > 0f && distance > maxDistance;
-    }
+    public static bool CulledByDistance(float maxDistance, float distance) =>
+        maxDistance > 0f && distance > maxDistance;
 
     /// <summary>
     ///     Select the active LOD level for a camera at <paramref name="distance" /> among the LOD
@@ -26,10 +24,10 @@ public static class LodMath
     /// </summary>
     public static int SelectLevel(ReadOnlySpan<float> levelMaxDistances, float distance)
     {
-        var fallback = -1;
-        for (var i = 0; i < levelMaxDistances.Length; i++)
+        int fallback = -1;
+        for (int i = 0; i < levelMaxDistances.Length; i++)
         {
-            var d = levelMaxDistances[i];
+            float d = levelMaxDistances[i];
             if (d <= 0f)
             {
                 if (fallback < 0) fallback = i; // first "covers all" level is the fallback

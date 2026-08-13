@@ -22,10 +22,10 @@ public sealed class Material3D
     public string Name { get; set; } = "";
 
     public Vec4 BaseColorFactor { get; set; } = new(
-        1,
-        1,
-        1,
-        1
+        x: 1,
+        y: 1,
+        z: 1,
+        w: 1
     );
 
     public float MetallicFactor { get; set; } = 0f;
@@ -48,10 +48,7 @@ public sealed class Material3D
 
     // ── Factories ─────────────────────────────────────────────────────────────
 
-    public static Material3D Flat(Vec4 color)
-    {
-        return new Material3D { BaseColorFactor = color };
-    }
+    public static Material3D Flat(Vec4 color) => new() { BaseColorFactor = color };
 
     public static Material3D FromPixels(string name, byte[] pixels, uint width, uint height)
     {
@@ -61,10 +58,10 @@ public sealed class Material3D
         return new Material3D {
             Name = name,
             BaseColorFactor = new Vec4(
-                1,
-                1,
-                1,
-                1
+                x: 1,
+                y: 1,
+                z: 1,
+                w: 1
             ),
             BaseColorPixels = (byte[])pixels.Clone(),
             BaseColorWidth = width,

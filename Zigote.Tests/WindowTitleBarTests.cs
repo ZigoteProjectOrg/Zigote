@@ -20,7 +20,7 @@ public class WindowTitleBarTests
         return new WindowTitleBar {
             Title = "Zigote Editor",
             Style = WindowChromeStyle.AdwaitaCsd,
-            Leading = new SizedBox(leadingWidth, WindowTitleBar.BarHeight),
+            Leading = new SizedBox(width: leadingWidth, height: WindowTitleBar.BarHeight),
         };
     }
 
@@ -36,14 +36,14 @@ public class WindowTitleBarTests
     {
         var bar = Bar(130f); // a File/Edit/Help-sized menu strip
         bar.Measure(new Constraints(maxWidth: width, maxHeight: WindowTitleBar.BarHeight));
-        bar.Layout(new Offset(0f, 0f));
+        bar.Layout(new Offset(x: 0f, y: 0f));
         bar.Paint(new PaintList()); // threw ArgumentException below ~132px before the guard moved
     }
 
     [Fact]
     public void LeadingIsLaidOutAtTheLeftAndNeverExceedsTheBar()
     {
-        var lead = new SizedBox(130f, WindowTitleBar.BarHeight);
+        var lead = new SizedBox(width: 130f, height: WindowTitleBar.BarHeight);
         var bar = new WindowTitleBar {
             Title = "Zigote Editor",
             Style = WindowChromeStyle.AdwaitaCsd,
@@ -51,10 +51,14 @@ public class WindowTitleBarTests
         };
 
         bar.Measure(new Constraints(maxWidth: 800f, maxHeight: WindowTitleBar.BarHeight));
-        bar.Layout(new Offset(0f, 0f));
+        bar.Layout(new Offset(x: 0f, y: 0f));
 
-        Assert.Equal(0f, lead.Bounds.X, 3); // flush left — no traffic-light inset off macOS
-        Assert.Equal(0f, lead.Bounds.Y, 3);
+        Assert.Equal(
+            expected: 0f,
+            actual: lead.Bounds.X,
+            precision: 3
+        ); // flush left — no traffic-light inset off macOS
+        Assert.Equal(expected: 0f, actual: lead.Bounds.Y, precision: 3);
         Assert.True(lead.Bounds.Right <= bar.Bounds.Right);
     }
 }

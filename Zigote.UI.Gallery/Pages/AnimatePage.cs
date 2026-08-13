@@ -28,36 +28,38 @@ internal sealed class AnimatePage : ComposedWidget
     {
         // Staggered entrance of a small list.
         var list = new Column(crossAxisAlignment: CrossAxisAlignment.Stretch);
-        for (var i = 0; i < 5; i++)
+        for (int i = 0; i < 5; i++)
+        {
             list.Children.Add(
                 new Padding(
-                    EdgeInsets.Only(bottom: 6),
-                    new Card(
+                    padding: EdgeInsets.Only(bottom: 6),
+                    child: new Card(
                             new Padding(
-                                EdgeInsets.All(10),
-                                new Text($"Row {i + 1}")
+                                padding: EdgeInsets.All(10),
+                                child: new Text($"Row {i + 1}")
                             )
                         ).Animate()
                         .FadeIn(delay: (i * 130).ms, duration: 450.ms)
-                        .Move(begin: new Offset(0, 16))
+                        .Move(begin: new Offset(x: 0, y: 16))
                 )
             );
+        }
 
         var replay = new FilledButton(
-            new Text("Replay animations"),
-            () => MarkNeedsBuild()
+            child: new Text("Replay animations"),
+            onPressed: () => MarkNeedsBuild()
         );
         var replayHint = new Text(
-            "Effects play once on mount — rebuild to replay.",
-            new TextStyle(12, color: Colors.Gray)
+            data: "Effects play once on mount — rebuild to replay.",
+            style: new TextStyle(fontSize: 12, color: Colors.Gray)
         );
 
         return Sections(
             Section(
-                "Replay",
+                title: "Replay",
                 // Beside the button the caption gets ~140 px and wraps to three lines at phone
                 // width — stack them there, keep the single row everywhere wider.
-                new AdaptiveBuilder((_, size) => size == WindowSizeClass.Compact
+                child: new AdaptiveBuilder((_, size) => size == WindowSizeClass.Compact
                     ? new Column(
                         crossAxisAlignment: CrossAxisAlignment.Start,
                         children: [replay, new SizedBox(height: 8), replayHint]
@@ -69,21 +71,28 @@ internal sealed class AnimatePage : ComposedWidget
                 )
             ),
             Section(
-                "Fluent API — the flutter_animate way",
-                new Column(
+                title: "Fluent API — the flutter_animate way",
+                child: new Column(
                     crossAxisAlignment: CrossAxisAlignment.Start,
                     children: [
                         // Only the sample re-builds with the size class; the animated text below
                         // stays put so a resize doesn't replay its entrance.
                         new AdaptiveBuilder((_, size) => new Text(
-                                size == WindowSizeClass.Compact
+                                data: size == WindowSizeClass.Compact
                                     ? FluentSampleStacked
                                     : FluentSample,
-                                new TextStyle(12, fontStyle: FontStyle.Italic, color: Colors.Gray)
+                                style: new TextStyle(
+                                    fontSize: 12,
+                                    fontStyle: FontStyle.Italic,
+                                    color: Colors.Gray
+                                )
                             )
                         ),
                         new SizedBox(height: 12),
-                        new Text("Hello, Zigote!", new TextStyle(28, fontWeight: FontWeight.Bold))
+                        new Text(
+                                data: "Hello, Zigote!",
+                                style: new TextStyle(fontSize: 28, fontWeight: FontWeight.Bold)
+                            )
                             .Animate()
                             .Fade(500.ms)
                             .Scale(delay: 500.ms),
@@ -91,38 +100,48 @@ internal sealed class AnimatePage : ComposedWidget
                 )
             ),
             Section(
-                "Effects",
-                new Wrap(
+                title: "Effects",
+                child: new Wrap(
                     spacing: 10,
                     runSpacing: 10,
                     children: [
                         new Chip("Fade").Animate().FadeIn(550.ms),
                         new Chip("Slide").Animate().Slide(550.ms),
-                        new Chip("Scale").Animate().Scale(550.ms, curve: Curves.EaseOutBack),
-                        new Chip("Move").Animate().Move(550.ms, begin: new Offset(-30, 0)),
+                        new Chip("Scale").Animate().Scale(
+                            duration: 550.ms,
+                            curve: Curves.EaseOutBack
+                        ),
+                        new Chip("Move").Animate().Move(
+                            duration: 550.ms,
+                            begin: new Offset(x: -30, y: 0)
+                        ),
                         new Chip("Fade + Slide").Animate()
                             .FadeIn(550.ms)
-                            .Slide(begin: new Offset(0.3f, 0)),
+                            .Slide(begin: new Offset(x: 0.3f, y: 0)),
                         new Chip("Shake").Animate().Shake(delay: 550.ms, duration: 600.ms),
                     ]
                 )
             ),
             Section(
-                "Sequenced with .Then()",
-                new Text("Fade, then rise", new TextStyle(17, fontWeight: FontWeight.Medium))
+                title: "Sequenced with .Then()",
+                child: new Text(
+                        data: "Fade, then rise",
+                        style: new TextStyle(fontSize: 17, fontWeight: FontWeight.Medium)
+                    )
                     .Animate()
                     .FadeIn(550.ms)
                     .Then(150.ms)
-                    .Move(begin: new Offset(0, 14), curve: Curves.Spring)
+                    .Move(begin: new Offset(x: 0, y: 14), curve: Curves.Spring)
             ),
-            Section("Staggered list", list),
+            Section(title: "Staggered list", child: list),
             Section(
-                "State transitions",
-                new Text(
+                title: "State transitions",
+                child: new Text(
+                    data:
                     "Checkbox, Radio, Switch, Segmented control, Chips and Tabs animate their own " +
                     "state changes — see the Selection page. Dialogs, dropdowns and context menus " +
                     "animate on open — see the Overlays page.",
-                    new TextStyle(13, color: Colors.Gray)
+                    style: new TextStyle(fontSize: 13, color: Colors.Gray)
                 )
             )
         );

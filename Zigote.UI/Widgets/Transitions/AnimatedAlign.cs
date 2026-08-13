@@ -16,7 +16,7 @@ public sealed class AnimatedAlign : ImplicitlyAnimatedWidget
     private AlignT _to;
 
     public AnimatedAlign(AlignT alignment, Widget? child = null, float duration = 0.25f,
-        Func<float, float>? curve = null) : base(duration, curve)
+        Func<float, float>? curve = null) : base(durationSeconds: duration, curve: curve)
     {
         _from = _to = alignment;
         Child = child;
@@ -36,22 +36,22 @@ public sealed class AnimatedAlign : ImplicitlyAnimatedWidget
         }
     }
 
-    private AlignT Current => AlignT.Lerp(_from, _to, Progress);
+    private AlignT Current => AlignT.Lerp(a: _from, b: _to, t: Progress);
 
     public override Size Measure(Constraints c)
     {
         _childSize = Child?.Measure(
             new Constraints(
-                0,
-                c.MaxWidth,
-                0,
-                c.MaxHeight
+                minWidth: 0,
+                maxWidth: c.MaxWidth,
+                minHeight: 0,
+                maxHeight: c.MaxHeight
             )
         ) ?? Size.Zero;
         _size = c.Constrain(
             new Size(
-                float.IsFinite(c.MaxWidth) ? c.MaxWidth : _childSize.Width,
-                float.IsFinite(c.MaxHeight) ? c.MaxHeight : _childSize.Height
+                width: float.IsFinite(c.MaxWidth) ? c.MaxWidth : _childSize.Width,
+                height: float.IsFinite(c.MaxHeight) ? c.MaxHeight : _childSize.Height
             )
         );
         return _size;
@@ -60,27 +60,19 @@ public sealed class AnimatedAlign : ImplicitlyAnimatedWidget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
-        var o = Current.Within(_size, _childSize);
-        Child?.Layout(new Offset(origin.X + o.X, origin.Y + o.Y));
+        var o = Current.Within(outer: _size, child: _childSize);
+        Child?.Layout(new Offset(x: origin.X + o.X, y: origin.Y + o.Y));
     }
 
-    public override void Paint(PaintList paint)
-    {
-        Child?.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => Child?.Paint(paint);
 
-    public override Widget? HitTest(Offset point)
-    {
-        return Bounds.Contains(point.X, point.Y) ? Child?.HitTest(point) : null;
-    }
+    public override Widget? HitTest(Offset point) =>
+        Bounds.Contains(px: point.X, py: point.Y) ? Child?.HitTest(point) : null;
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(Child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Child);
 }

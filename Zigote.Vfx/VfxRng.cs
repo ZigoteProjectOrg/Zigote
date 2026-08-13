@@ -11,7 +11,7 @@ public struct VfxRng(uint seed)
 
     public uint NextUInt()
     {
-        var x = _state;
+        uint x = _state;
         x ^= x << 13;
         x ^= x >> 17;
         x ^= x << 5;
@@ -20,34 +20,23 @@ public struct VfxRng(uint seed)
     }
 
     /// <summary>Uniform float in [0, 1).</summary>
-    public float NextFloat()
-    {
-        return (NextUInt() >> 8) * (1f / 16777216f);
-    }
+    public float NextFloat() => (NextUInt() >> 8) * (1f / 16777216f);
 
     /// <summary>Uniform float in [-1, 1).</summary>
-    public float Signed()
-    {
-        return NextFloat() * 2f - 1f;
-    }
+    public float Signed() => (NextFloat() * 2f) - 1f;
 
-    public float Range(float min, float max)
-    {
-        return min == max ? min : min + (max - min) * NextFloat();
-    }
+    public float Range(float min, float max) =>
+        min == max ? min : min + ((max - min) * NextFloat());
 
     /// <summary>Uniformly distributed point on the unit sphere.</summary>
     public Vec3 OnUnitSphere()
     {
-        var z = Signed();
-        var a = NextFloat() * MathF.Tau;
-        var r = MathF.Sqrt(MathF.Max(0f, 1f - z * z));
-        return new Vec3(r * MathF.Cos(a), r * MathF.Sin(a), z);
+        float z = Signed();
+        float a = NextFloat() * MathF.Tau;
+        float r = MathF.Sqrt(MathF.Max(x: 0f, y: 1f - (z * z)));
+        return new Vec3(x: r * MathF.Cos(a), y: r * MathF.Sin(a), z: z);
     }
 
     /// <summary>Uniformly distributed point inside the unit sphere.</summary>
-    public Vec3 InsideUnitSphere()
-    {
-        return OnUnitSphere() * MathF.Cbrt(NextFloat());
-    }
+    public Vec3 InsideUnitSphere() => OnUnitSphere() * MathF.Cbrt(NextFloat());
 }

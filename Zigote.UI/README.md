@@ -81,12 +81,11 @@ class Counter : ComposedWidget
 }
 ```
 
-- **`MarkNeedsPaint()` < `MarkNeedsLayout()` < `MarkNeedsBuild()`/`Invalidate()`** — pick the cheapest that
-  covers the change. Only the last re-runs `Build`.
-- **`OwnEffect(() => …)`** is the fine-grained path: a signal-tracked effect that writes into retained
-  children, allocating nothing. **`Watch`** is for when the tree's *shape* depends on a signal.
-- **`OnMount`/`OnUnmount` + `Own(...)`** scope subscriptions and tickers to the time the widget is
-  actually in the tree.
+- **`MarkNeedsPaint()` < `MarkNeedsLayout()` < `MarkNeedsBuild()`/`Invalidate()`** — pick the cheapest that covers the
+  change. Only the last re-runs `Build`.
+- **`OwnEffect(() => …)`** is the fine-grained path: a signal-tracked effect that writes into retained children,
+  allocating nothing. **`Watch`** is for when the tree's *shape* depends on a signal.
+- **`OnMount`/`OnUnmount` + `Own(...)`** scope subscriptions and tickers to the time the widget is actually in the tree.
 - **`InheritedWidget`** (`ThemeProvider`, `MediaQuery`) propagates data down the tree; consumers read it with
   `BuildContext.DependOn<T>()` and rebuild only when it changes.
 - **Compose by default** — controls are built from the layout kernel + `DecoratedBox` (background) +
@@ -95,17 +94,17 @@ class Counter : ComposedWidget
 
 ## What's in the box
 
-| Area                                     | Highlights                                                                                                                                                                                                                                                                                                                                                |
-|------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Layout** (`Widgets/Layout/`)           | `Column`/`Row`/`Expanded`/`Stack`/`Wrap`, `Padding`/`Align`/`Center`, `SizedBox`/`ConstrainedBox`, `DecoratedBox`, `Opacity`/`ClipRect`/`Transform`, `InteractiveViewer` (drag-pan, pinch/⌘-wheel zoom, double-tap), `ScrollView`/`ListView` (virtualized; `ListView.Builder`/`GridView.Builder` build rows on demand, `GridView.Rebind` grows one in place), `SplitPane`, `TreeView<T>`, `ReorderableList`, `NavigationSplitView`                              |
-| **Controls** (`Widgets/Controls/`)       | `Label`, `Button`, `Checkbox`, `Radio<T>`, `Switch`, `Slider`, `TextField` (single/multiline + IME), `Dropdown<T>`, `TabBar`/`TabView`, `Card`, `ProgressBar`, `Dialog`, `Snackbar`, `Tooltip`, `ContextMenu`, `Chip`, `Badge`, `NumberInput`, `SegmentedControl`, `SearchField`, `Popover`, `ColorPicker`, `CurveEditor`, `GradientEditor`, `CodeEditor` |
-| **Transitions** (`Widgets/Transitions/`) | Explicit (`FadeTransition`/`SlideTransition`/`ScaleTransition`/`AnimatedContainer`) + implicit (`AnimatedOpacity`/`AnimatedAlign`/`AnimatedPadding`/`AnimatedSwitcher`/`TweenAnimationBuilder<T>`) driven by `AnimationController`                                                                                                                        |
-| **Animate** (`Widgets/Animate/`)         | flutter_animate-style fluent API: `widget.Animate().Fade(500.ms).Scale(delay: 500.ms)`                                                                                                                                                                                                                                                                    |
-| **Navigation** (`Widgets/Navigation/`)   | Navigator 2.0 — `context.Push`/`Pop`, named routes, declarative `Pages` + `OnPopPage`                                                                                                                                                                                                                                                                     |
-| **Overlays** (`App`)                     | `PushOverlay`/`PopOverlay`; painted above and hit-tested before Root                                                                                                                                                                                                                                                                                      |
-| **DragDrop** (`Widgets/DragDrop/`)       | `Draggable<T>` + `DragTarget<T>` (in-app) and OS-file/text drop                                                                                                                                                                                                                                                                                           |
-| **Menu** (`Widgets/Menu/`)               | One `AppMenu` model → native `NSMenu` on macOS, in-window `MenuBar` elsewhere                                                                                                                                                                                                                                                                             |
-| **Focus / Semantics**                    | Tab/arrow/Esc traversal (`Focus/`), platform-neutral accessibility tree (`Semantics/`)                                                                                                                                                                                                                                                                    |
+| Area                                     | Highlights                                                                                                                                                                                                                                                                                                                                                                                                                         |
+|------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Layout** (`Widgets/Layout/`)           | `Column`/`Row`/`Expanded`/`Stack`/`Wrap`, `Padding`/`Align`/`Center`, `SizedBox`/`ConstrainedBox`, `DecoratedBox`, `Opacity`/`ClipRect`/`Transform`, `InteractiveViewer` (drag-pan, pinch/⌘-wheel zoom, double-tap), `ScrollView`/`ListView` (virtualized; `ListView.Builder`/`GridView.Builder` build rows on demand, `GridView.Rebind` grows one in place), `SplitPane`, `TreeView<T>`, `ReorderableList`, `NavigationSplitView` |
+| **Controls** (`Widgets/Controls/`)       | `Label`, `Button`, `Checkbox`, `Radio<T>`, `Switch`, `Slider`, `TextField` (single/multiline + IME), `Dropdown<T>`, `TabBar`/`TabView`, `Card`, `ProgressBar`, `Dialog`, `Snackbar`, `Tooltip`, `ContextMenu`, `Chip`, `Badge`, `NumberInput`, `SegmentedControl`, `SearchField`, `Popover`, `ColorPicker`, `CurveEditor`, `GradientEditor`, `CodeEditor`                                                                          |
+| **Transitions** (`Widgets/Transitions/`) | Explicit (`FadeTransition`/`SlideTransition`/`ScaleTransition`/`AnimatedContainer`) + implicit (`AnimatedOpacity`/`AnimatedAlign`/`AnimatedPadding`/`AnimatedSwitcher`/`TweenAnimationBuilder<T>`) driven by `AnimationController`                                                                                                                                                                                                 |
+| **Animate** (`Widgets/Animate/`)         | flutter_animate-style fluent API: `widget.Animate().Fade(500.ms).Scale(delay: 500.ms)`                                                                                                                                                                                                                                                                                                                                             |
+| **Navigation** (`Widgets/Navigation/`)   | Navigator 2.0 — `context.Push`/`Pop`, named routes, declarative `Pages` + `OnPopPage`                                                                                                                                                                                                                                                                                                                                              |
+| **Overlays** (`App`)                     | `PushOverlay`/`PopOverlay`; painted above and hit-tested before Root                                                                                                                                                                                                                                                                                                                                                               |
+| **DragDrop** (`Widgets/DragDrop/`)       | `Draggable<T>` + `DragTarget<T>` (in-app) and OS-file/text drop                                                                                                                                                                                                                                                                                                                                                                    |
+| **Menu** (`Widgets/Menu/`)               | One `AppMenu` model → native `NSMenu` on macOS, in-window `MenuBar` elsewhere                                                                                                                                                                                                                                                                                                                                                      |
+| **Focus / Semantics**                    | Tab/arrow/Esc traversal (`Focus/`), platform-neutral accessibility tree (`Semantics/`)                                                                                                                                                                                                                                                                                                                                             |
 
 ## Theming & design tokens
 
@@ -138,8 +137,8 @@ and a reserved `ISemanticsBridge` seam.
 
 ## Hot reload
 
-Edit a widget's `Build()` while the app runs and the live UI updates without a restart — widget instances and
-their fields are preserved, only `Build()` re-runs. Run any
+Edit a widget's `Build()` while the app runs and the live UI updates without a restart — widget instances and their
+fields are preserved, only `Build()` re-runs. Run any
 `App`-based app under `dotnet watch`, or use Rider/VS "apply changes". Constructor/field-initializer/
 `OnMount` edits and native Zig/shader changes still need a full restart.
 
@@ -159,10 +158,10 @@ supported:
   and client-side decorations.
 - **[`Zigote.UI.Material`](../Zigote.UI.Material/README.md)** — the Material vocabulary with the Flutter names.
 
-Alongside them: **[`Zigote.UI.Charts`](../Zigote.UI.Charts/README.md)** (declarative charting),
-**[`Zigote.UI.Localizations`](../Zigote.UI.Localizations/README.md)** (i18n),
-**[`Zigote.UI.BottomSheet`](../Zigote.UI.BottomSheet/README.md)**, and
-**[`Zigote.UI.DevTools`](../Zigote.UI.DevTools/README.md)**.
+Alongside them: **[`Zigote.UI.Charts`](../Zigote.UI.Charts/README.md)** (declarative charting), **[
+`Zigote.UI.Localizations`](../Zigote.UI.Localizations/README.md)** (i18n), **[
+`Zigote.UI.BottomSheet`](../Zigote.UI.BottomSheet/README.md)**, and **[
+`Zigote.UI.DevTools`](../Zigote.UI.DevTools/README.md)**.
 
 ## Testing
 

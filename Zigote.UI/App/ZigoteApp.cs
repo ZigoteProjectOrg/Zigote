@@ -1,3 +1,4 @@
+using System.Reflection;
 using Zigote.Core.Native;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
@@ -46,6 +47,12 @@ namespace Zigote.UI.Host;
 /// </summary>
 public class ZigoteApp
 {
+    // The previewed widget's name, or null in a normal run — also the switch for the frame-loop guard.
+    private string? _preview;
+
+    // Whether the previous lifecycle state was Paused, so OnResume fires only for the
+    // suspend→foreground pair and not for plain desktop focus regains.
+    private bool _wasPaused;
     // ── Window / engine ───────────────────────────────────────────────────────
 
     public string Title { get; set; } = "Zigote App";
@@ -120,39 +127,26 @@ public class ZigoteApp
     /// </summary>
     public static bool AutoInstallDevTools { get; set; } = true;
 
-    // Whether the previous lifecycle state was Paused, so OnResume fires only for the
-    // suspend→foreground pair and not for plain desktop focus regains.
-    private bool _wasPaused;
-
-    // The previewed widget's name, or null in a normal run — also the switch for the frame-loop guard.
-    private string? _preview;
-
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     /// <summary>
     ///     Called once after the window and engine are ready, before the first frame.
     ///     Override to perform one-time setup (load assets, wire state, etc.).
     /// </summary>
-    protected virtual void OnInit()
-    {
-    }
+    protected virtual void OnInit() { }
 
     /// <summary>
     ///     Called every frame before widget layout. Use to sync state into widget properties.
     ///     <paramref name="dt" /> is the seconds elapsed since the previous frame.
     /// </summary>
-    protected virtual void OnUpdate(float dt)
-    {
-    }
+    protected virtual void OnUpdate(float dt) { }
 
     /// <summary>
     ///     Called once after the render loop exits (window closed or
     ///     <see cref="UI.App.ShouldQuit" /> set). <see cref="App" /> and <see cref="RootNavigator" />
     ///     are still valid here — they are cleared only after this returns.
     /// </summary>
-    protected virtual void OnQuit()
-    {
-    }
+    protected virtual void OnQuit() { }
 
     /// <summary>
     ///     The OS is suspending the app (mobile background). Persist anything important here —
@@ -161,19 +155,13 @@ public class ZigoteApp
     ///     focus-driven Resumed↔Inactive transitions, observable via
     ///     <see cref="App.AddLifecycleObserver" />).
     /// </summary>
-    protected virtual void OnPause()
-    {
-    }
+    protected virtual void OnPause() { }
 
     /// <summary>The app returned to the foreground after <see cref="OnPause" />.</summary>
-    protected virtual void OnResume()
-    {
-    }
+    protected virtual void OnResume() { }
 
     /// <summary>OS low-memory warning: drop caches that can be rebuilt.</summary>
-    protected virtual void OnLowMemory()
-    {
-    }
+    protected virtual void OnLowMemory() { }
 
     // ── Overlay / snackbar helpers (delegate to UiApp) ───────────────────────
 
@@ -181,27 +169,18 @@ public class ZigoteApp
         string? actionLabel = null, Action? onAction = null)
     {
         App?.ShowSnackbar(
-            message,
-            duration,
-            actionLabel,
-            onAction
+            message: message,
+            duration: duration,
+            actionLabel: actionLabel,
+            onAction: onAction
         );
     }
 
-    public void PushOverlay(Widget overlay)
-    {
-        App?.PushOverlay(overlay);
-    }
+    public void PushOverlay(Widget overlay) => App?.PushOverlay(overlay);
 
-    public void PopOverlay(Widget overlay)
-    {
-        App?.PopOverlay(overlay);
-    }
+    public void PopOverlay(Widget overlay) => App?.PopOverlay(overlay);
 
-    public void ClearOverlays()
-    {
-        App?.ClearOverlays();
-    }
+    public void ClearOverlays() => App?.ClearOverlays();
 
     // ── Entry point ───────────────────────────────────────────────────────────
 
@@ -241,11 +220,11 @@ public class ZigoteApp
     private void RunCore()
     {
         using var uiApp = new App(
-            Title,
-            Width,
-            Height,
-            FontPath,
-            FontName,
+            title: Title,
+            width: Width,
+            height: Height,
+            fontPath: FontPath,
+            fontName: FontName,
             transparentWindow: TransparentWindow
         );
         App = uiApp;
@@ -288,13 +267,13 @@ public class ZigoteApp
         // else that opens the socket). The callback is the live preview swap — same resolution as the
         // ZIGOTE_PREVIEW startup path, minus the restart.
         InspectServer.Start(
-            uiApp,
-            target =>
+            app: uiApp,
+            setPreview: target =>
             {
                 _preview = target;
                 uiApp.Root = new ThemeProvider(Theme) { Child = WidgetPreview.Resolve(target) };
             },
-            SetThemeByName
+            setTheme: SetThemeByName
         );
 
         // A preview is watched in the IDE, so the app's own window is a duplicate — and once a device
@@ -302,7 +281,8 @@ public class ZigoteApp
         // still renders, which is what the frame capture reads.
         // ZIGOTE_PREVIEW_HEADLESS covers the case with no widget chosen yet: a previewer starts the app
         // before you have picked anything, and a window flashing up then is just as distracting.
-        var headless = Environment.GetEnvironmentVariable("ZIGOTE_PREVIEW_HEADLESS") is "1" or "true";
+        bool headless =
+            Environment.GetEnvironmentVariable("ZIGOTE_PREVIEW_HEADLESS") is "1" or "true";
         if ((_preview is not null || headless) &&
             Environment.GetEnvironmentVariable("ZIGOTE_PREVIEW_WINDOW") is not "show")
         {
@@ -316,7 +296,7 @@ public class ZigoteApp
         while (!uiApp.ShouldQuit)
         {
             // Sync theme if the subclass changed it at runtime (e.g., dark/light toggle)
-            if (!ReferenceEquals(themeProvider.Data, Theme))
+            if (!ReferenceEquals(objA: themeProvider.Data, objB: Theme))
             {
                 themeProvider.Data = Theme;
                 uiApp.Theme = Theme;
@@ -334,7 +314,9 @@ public class ZigoteApp
                 // actually fails — a missing ancestor provider, most often. A preview that dies takes
                 // the watch session with it, so the tree is replaced with the reason and the loop
                 // continues; the next save gets a fresh attempt.
-                uiApp.Root = new ThemeProvider(Theme) { Child = WidgetPreview.Failure(_preview, e) };
+                uiApp.Root = new ThemeProvider(Theme) {
+                    Child = WidgetPreview.Failure(target: _preview, error: e),
+                };
             }
         }
 
@@ -387,21 +369,22 @@ public class ZigoteApp
         {
             var type = Type.GetType("Zigote.UI.DevTools.DevTools, Zigote.UI.DevTools");
             var install = type?.GetMethod(
-                "Install",
-                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static
+                name: "Install",
+                bindingAttr: BindingFlags.Public |
+                             BindingFlags.Static
             );
 
             // Install(App, DevToolsProfile = Auto) — pass Type.Missing for the optional profile so the
             // renderer-resolved Auto default applies (2D vs 3D by the live backend).
             install?.Invoke(
-                null,
-                System.Reflection.BindingFlags.OptionalParamBinding,
-                null,
-                new object?[] {
+                obj: null,
+                invokeAttr: BindingFlags.OptionalParamBinding,
+                binder: null,
+                parameters: new[] {
                     app,
                     Type.Missing,
                 },
-                null
+                culture: null
             );
         }
         catch

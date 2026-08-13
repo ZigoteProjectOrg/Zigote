@@ -30,14 +30,38 @@ internal static class ArtSource
     ///     script so the credits survive the publish-time font subsetting this app turns on.
     /// </summary>
     public static readonly ArtPiece[] Showcase = [
-        new("https://nekos.best/api/v2/neko/407f4272-8653-4d64-a222-6ecce753aaee.png", "STARFOX1015"),
-        new("https://nekos.best/api/v2/neko/2a751033-78da-4ff5-8d48-2177fb0b2af2.png", "Bling"),
-        new("https://nekos.best/api/v2/waifu/e8b562e6-a400-445b-8910-a7fedbc8843e.png", "Benkyousiro_0"),
-        new("https://nekos.best/api/v2/waifu/56c63765-9c41-4e28-bee6-7eb7981bb565.png", "Kou"),
-        new("https://nekos.best/api/v2/kitsune/e3180cfc-19d5-47ce-a3d7-d90a8f93068b.png", "Lamina"),
-        new("https://nekos.best/api/v2/kitsune/2fa354c9-c1b9-4ae3-8f18-c493b098357e.png", "Yagen"),
-        new("https://nekos.best/api/v2/husbando/5d01e511-79cd-40de-a183-82d3bde74440.png", "To___e"),
-        new("https://nekos.best/api/v2/husbando/695368f2-a140-4eb0-bde8-c4120d484f13.png", "Uniii"),
+        new(
+            Url: "https://nekos.best/api/v2/neko/407f4272-8653-4d64-a222-6ecce753aaee.png",
+            Artist: "STARFOX1015"
+        ),
+        new(
+            Url: "https://nekos.best/api/v2/neko/2a751033-78da-4ff5-8d48-2177fb0b2af2.png",
+            Artist: "Bling"
+        ),
+        new(
+            Url: "https://nekos.best/api/v2/waifu/e8b562e6-a400-445b-8910-a7fedbc8843e.png",
+            Artist: "Benkyousiro_0"
+        ),
+        new(
+            Url: "https://nekos.best/api/v2/waifu/56c63765-9c41-4e28-bee6-7eb7981bb565.png",
+            Artist: "Kou"
+        ),
+        new(
+            Url: "https://nekos.best/api/v2/kitsune/e3180cfc-19d5-47ce-a3d7-d90a8f93068b.png",
+            Artist: "Lamina"
+        ),
+        new(
+            Url: "https://nekos.best/api/v2/kitsune/2fa354c9-c1b9-4ae3-8f18-c493b098357e.png",
+            Artist: "Yagen"
+        ),
+        new(
+            Url: "https://nekos.best/api/v2/husbando/5d01e511-79cd-40de-a183-82d3bde74440.png",
+            Artist: "To___e"
+        ),
+        new(
+            Url: "https://nekos.best/api/v2/husbando/695368f2-a140-4eb0-bde8-c4120d484f13.png",
+            Artist: "Uniii"
+        ),
     ];
 
     // The SFW categories, rotated so the feed does not read as one long variation on a theme.
@@ -50,14 +74,18 @@ internal static class ArtSource
     /// </summary>
     public static async Task<ArtPiece[]> FetchPageAsync(int page, CancellationToken ct = default)
     {
-        var category = Categories[page % Categories.Length];
-        var url = $"https://nekos.best/api/v2/{category}?amount={PageSize}";
+        string category = Categories[page % Categories.Length];
+        string url = $"https://nekos.best/api/v2/{category}?amount={PageSize}";
 
         // Keyed by page, not by URL: this endpoint answers with a fresh random set every call, so
         // URL-keyed caching would pin page 0's pictures onto every page after it. With the page in
         // the key, each page hits the API exactly once per machine and is read from disk forever
         // after — scrolling back up, or restarting, costs the API nothing.
-        var json = await NetworkCache.FetchAsync(url, ct, $"nekos:{category}:page{page}")
+        byte[] json = await NetworkCache.FetchAsync(
+                url: url,
+                ct: ct,
+                cacheKey: $"nekos:{category}:page{page}"
+            )
             .ConfigureAwait(false);
         return Parse(json);
     }
@@ -67,17 +95,21 @@ internal static class ArtSource
         // JsonDocument, not a deserialized model: one shape, two fields, and no reflection for the
         // AOT publish to trim away.
         using var document = JsonDocument.Parse(json);
-        if (!document.RootElement.TryGetProperty("results", out var results)) return [];
+        if (!document.RootElement.TryGetProperty(
+                propertyName: "results",
+                value: out var results
+            )) return [];
 
         var pieces = new List<ArtPiece>(results.GetArrayLength());
         foreach (var result in results.EnumerateArray())
         {
-            if (!result.TryGetProperty("url", out var url) || url.GetString() is not { } link)
+            if (!result.TryGetProperty(propertyName: "url", value: out var url) ||
+                url.GetString() is not { } link)
                 continue;
-            var artist = result.TryGetProperty("artist_name", out var name)
+            string artist = result.TryGetProperty(propertyName: "artist_name", value: out var name)
                 ? name.GetString() ?? "Unknown artist"
                 : "Unknown artist";
-            pieces.Add(new ArtPiece(link, artist));
+            pieces.Add(new ArtPiece(Url: link, Artist: artist));
         }
 
         return [.. pieces];

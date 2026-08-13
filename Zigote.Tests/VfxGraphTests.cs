@@ -31,8 +31,8 @@ public class VfxGraphTests
         doc.Nodes.Add(node);
         doc.Edges.Add(
             new GraphEdge {
-                From = new GraphPinEndpoint(node.Id, fromPin),
-                To = new GraphPinEndpoint(target.Id, toPin),
+                From = new GraphPinEndpoint(NodeId: node.Id, PinId: fromPin),
+                To = new GraphPinEndpoint(NodeId: target.Id, PinId: toPin),
             }
         );
         return node;
@@ -45,15 +45,18 @@ public class VfxGraphTests
 
         Assert.True(compiled.Success);
         Assert.DoesNotContain(
-            compiled.Diagnostics,
-            d => d.Severity == GraphDiagnosticSeverity.Error
+            collection: compiled.Diagnostics,
+            filter: d => d.Severity == GraphDiagnosticSeverity.Error
         );
         Assert.True(compiled.Asset.SpawnRate > 0f);
         Assert.NotEmpty(compiled.Asset.UpdateModules);
 
         var sim = new CpuParticleSimulator(compiled.Asset);
-        for (var i = 0; i < 60; i++) sim.Tick(1f / 60f);
-        Assert.True(sim.Pool.Count > 0, "default preset should spawn particles");
+        for (int i = 0; i < 60; i++) sim.Tick(1f / 60f);
+        Assert.True(
+            condition: sim.Pool.Count > 0,
+            userMessage: "default preset should spawn particles"
+        );
     }
 
     [Theory]
@@ -64,9 +67,9 @@ public class VfxGraphTests
     [InlineData("Rain", VfxBlendMode.AlphaBlend)]
     public void NamedPresets_Compile(string preset, VfxBlendMode blend)
     {
-        var compiled = VfxGraphCompiler.Compile(VfxPresets.Create(preset, preset));
+        var compiled = VfxGraphCompiler.Compile(VfxPresets.Create(preset: preset, name: preset));
         Assert.True(compiled.Success);
-        Assert.Equal(blend, compiled.Asset.Blend);
+        Assert.Equal(expected: blend, actual: compiled.Asset.Blend);
         Assert.True(compiled.Asset.SpawnRate > 0f);
     }
 
@@ -76,7 +79,7 @@ public class VfxGraphTests
         var doc = new GraphDocument { DomainId = VfxNodeLibrary.DomainId };
         var compiled = VfxGraphCompiler.Compile(doc);
         Assert.False(compiled.Success);
-        Assert.Contains(compiled.Diagnostics, d => d.Code == "VFX0001");
+        Assert.Contains(collection: compiled.Diagnostics, filter: d => d.Code == "VFX0001");
     }
 
     [Fact]
@@ -85,8 +88,8 @@ public class VfxGraphTests
         var (doc, _) = NewGraph();
         var compiled = VfxGraphCompiler.Compile(doc);
         Assert.True(compiled.Success); // warning, not error
-        Assert.Contains(compiled.Diagnostics, d => d.Code == "VFX0002");
-        Assert.Equal(0f, compiled.Asset.SpawnRate);
+        Assert.Contains(collection: compiled.Diagnostics, filter: d => d.Code == "VFX0002");
+        Assert.Equal(expected: 0f, actual: compiled.Asset.SpawnRate);
     }
 
     [Fact]
@@ -98,18 +101,18 @@ public class VfxGraphTests
         output.Properties["duration"] = GraphValue.FromFloat(1.5f);
         output.Properties["space"] = GraphValue.FromInt((int)SimulationSpace.Local);
         AddInto(
-            doc,
-            output,
-            VfxNodeLibrary.SpawnRate,
-            "out.spawn",
-            "in.spawn"
+            doc: doc,
+            target: output,
+            defId: VfxNodeLibrary.SpawnRate,
+            fromPin: "out.spawn",
+            toPin: "in.spawn"
         );
 
         var asset = VfxGraphCompiler.Compile(doc).Asset;
-        Assert.Equal(256, asset.Capacity);
+        Assert.Equal(expected: 256, actual: asset.Capacity);
         Assert.False(asset.Looping);
-        Assert.Equal(1.5f, asset.Duration, 4);
-        Assert.Equal(SimulationSpace.Local, asset.Space);
+        Assert.Equal(expected: 1.5f, actual: asset.Duration, precision: 4);
+        Assert.Equal(expected: SimulationSpace.Local, actual: asset.Space);
     }
 
     [Fact]
@@ -117,30 +120,30 @@ public class VfxGraphTests
     {
         var (doc, output) = NewGraph();
         AddInto(
-            doc,
-            output,
-            VfxNodeLibrary.SpawnRate,
-            "out.spawn",
-            "in.spawn"
+            doc: doc,
+            target: output,
+            defId: VfxNodeLibrary.SpawnRate,
+            fromPin: "out.spawn",
+            toPin: "in.spawn"
         );
         // Wire over-life BEFORE the force, opposite to the desired execution order.
         AddInto(
-            doc,
-            output,
-            VfxNodeLibrary.ColorOverLife,
-            "out.update",
-            "in.update"
+            doc: doc,
+            target: output,
+            defId: VfxNodeLibrary.ColorOverLife,
+            fromPin: "out.update",
+            toPin: "in.update"
         );
         AddInto(
-            doc,
-            output,
-            VfxNodeLibrary.Gravity,
-            "out.update",
-            "in.update"
+            doc: doc,
+            target: output,
+            defId: VfxNodeLibrary.Gravity,
+            fromPin: "out.update",
+            toPin: "in.update"
         );
 
         var asset = VfxGraphCompiler.Compile(doc).Asset;
-        Assert.Equal(2, asset.UpdateModules.Count);
+        Assert.Equal(expected: 2, actual: asset.UpdateModules.Count);
         Assert.IsType<GravityModule>(asset.UpdateModules[0]);
         Assert.IsType<ColorOverLifeModule>(asset.UpdateModules[1]);
     }
@@ -150,39 +153,39 @@ public class VfxGraphTests
     {
         var (doc, output) = NewGraph();
         AddInto(
-            doc,
-            output,
-            VfxNodeLibrary.SpawnRate,
-            "out.spawn",
-            "in.spawn"
+            doc: doc,
+            target: output,
+            defId: VfxNodeLibrary.SpawnRate,
+            fromPin: "out.spawn",
+            toPin: "in.spawn"
         );
         var initColor = AddInto(
-            doc,
-            output,
-            VfxNodeLibrary.InitColor,
-            "out.init",
-            "in.init"
+            doc: doc,
+            target: output,
+            defId: VfxNodeLibrary.InitColor,
+            fromPin: "out.init",
+            toPin: "in.init"
         );
 
         var color = new GraphNode { DefinitionId = VfxNodeLibrary.ColorValue };
         color.Properties["color"] = GraphValue.FromFloat4(
-            0.1f,
-            0.2f,
-            0.3f,
-            1f
+            x: 0.1f,
+            y: 0.2f,
+            z: 0.3f,
+            w: 1f
         );
         doc.Nodes.Add(color);
         doc.Edges.Add(
             new GraphEdge {
-                From = new GraphPinEndpoint(color.Id, "out.color"),
-                To = new GraphPinEndpoint(initColor.Id, "in.color"),
+                From = new GraphPinEndpoint(NodeId: color.Id, PinId: "out.color"),
+                To = new GraphPinEndpoint(NodeId: initColor.Id, PinId: "in.color"),
             }
         );
 
         var asset = VfxGraphCompiler.Compile(doc).Asset;
-        Assert.Equal(0.1f, asset.StartColor.R, 4);
-        Assert.Equal(0.2f, asset.StartColor.G, 4);
-        Assert.Equal(0.3f, asset.StartColor.B, 4);
+        Assert.Equal(expected: 0.1f, actual: asset.StartColor.R, precision: 4);
+        Assert.Equal(expected: 0.2f, actual: asset.StartColor.G, precision: 4);
+        Assert.Equal(expected: 0.3f, actual: asset.StartColor.B, precision: 4);
     }
 
     [Fact]
@@ -200,30 +203,30 @@ public class VfxGraphTests
     {
         var (doc, output) = NewGraph();
         var rate = AddInto(
-            doc,
-            output,
-            VfxNodeLibrary.SpawnRate,
-            "out.spawn",
-            "in.spawn"
+            doc: doc,
+            target: output,
+            defId: VfxNodeLibrary.SpawnRate,
+            fromPin: "out.spawn",
+            toPin: "in.spawn"
         );
         var domain = new VfxDomain();
 
         Assert.True(
             domain.CanCreateEdge(
-                doc,
-                new GraphPinEndpoint(rate.Id, "out.spawn"),
-                new GraphPinEndpoint(output.Id, "in.spawn"),
-                out _
+                graph: doc,
+                from: new GraphPinEndpoint(NodeId: rate.Id, PinId: "out.spawn"),
+                to: new GraphPinEndpoint(NodeId: output.Id, PinId: "in.spawn"),
+                reason: out _
             )
         );
 
         // spawn output into the update input is a type mismatch.
         Assert.False(
             domain.CanCreateEdge(
-                doc,
-                new GraphPinEndpoint(rate.Id, "out.spawn"),
-                new GraphPinEndpoint(output.Id, "in.update"),
-                out var reason
+                graph: doc,
+                from: new GraphPinEndpoint(NodeId: rate.Id, PinId: "out.spawn"),
+                to: new GraphPinEndpoint(NodeId: output.Id, PinId: "in.update"),
+                reason: out string? reason
             )
         );
         Assert.NotNull(reason);
@@ -231,10 +234,10 @@ public class VfxGraphTests
         // self-loop.
         Assert.False(
             domain.CanCreateEdge(
-                doc,
-                new GraphPinEndpoint(output.Id, "in.spawn"),
-                new GraphPinEndpoint(output.Id, "in.update"),
-                out _
+                graph: doc,
+                from: new GraphPinEndpoint(NodeId: output.Id, PinId: "in.spawn"),
+                to: new GraphPinEndpoint(NodeId: output.Id, PinId: "in.update"),
+                reason: out _
             )
         );
     }
@@ -246,7 +249,7 @@ public class VfxGraphTests
         doc.Nodes.Add(new GraphNode { DefinitionId = VfxNodeLibrary.Output });
         var result = new VfxDomain().Validate(doc);
         Assert.False(result.IsValid);
-        Assert.Contains(result.Diagnostics, d => d.Code == "VFX0003");
+        Assert.Contains(collection: result.Diagnostics, filter: d => d.Code == "VFX0003");
     }
 
     [Fact]
@@ -254,32 +257,40 @@ public class VfxGraphTests
     {
         var ramp = new ColorRamp(
             [
-                new ColorStop(0f, new Color(1f, 0f, 0f)),
+                new ColorStop(position: 0f, color: new Color(r: 1f, g: 0f, b: 0f)),
                 new ColorStop(
-                    0.5f,
-                    new Color(
-                        0f,
-                        1f,
-                        0f,
-                        0.5f
+                    position: 0.5f,
+                    color: new Color(
+                        r: 0f,
+                        g: 1f,
+                        b: 0f,
+                        a: 0.5f
                     )
                 ),
                 new ColorStop(
-                    1f,
-                    new Color(
-                        0f,
-                        0f,
-                        1f,
-                        0f
+                    position: 1f,
+                    color: new Color(
+                        r: 0f,
+                        g: 0f,
+                        b: 1f,
+                        a: 0f
                     )
                 ),
             ]
         );
         var parsed = VfxRampJson.Parse(VfxRampJson.Serialize(ramp));
 
-        Assert.Equal(3, parsed.Stops.Count);
-        Assert.Equal(1f, parsed.Evaluate(0.5f).G, 3); // middle stop is fully green
-        Assert.Equal(0.5f, parsed.Evaluate(0.5f).A, 3); // …at half alpha
-        Assert.Equal(0f, parsed.Evaluate(1f).A, 3);
+        Assert.Equal(expected: 3, actual: parsed.Stops.Count);
+        Assert.Equal(
+            expected: 1f,
+            actual: parsed.Evaluate(0.5f).G,
+            precision: 3
+        ); // middle stop is fully green
+        Assert.Equal(
+            expected: 0.5f,
+            actual: parsed.Evaluate(0.5f).A,
+            precision: 3
+        ); // …at half alpha
+        Assert.Equal(expected: 0f, actual: parsed.Evaluate(1f).A, precision: 3);
     }
 }

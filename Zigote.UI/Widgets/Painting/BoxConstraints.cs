@@ -32,10 +32,10 @@ public readonly struct BoxConstraints
     public static BoxConstraints Tight(Size size)
     {
         return new BoxConstraints(
-            size.Width,
-            size.Width,
-            size.Height,
-            size.Height
+            minWidth: size.Width,
+            maxWidth: size.Width,
+            minHeight: size.Height,
+            maxHeight: size.Height
         );
     }
 
@@ -43,10 +43,10 @@ public readonly struct BoxConstraints
     public static BoxConstraints TightFor(double? width = null, double? height = null)
     {
         return new BoxConstraints(
-            width ?? 0,
-            width ?? double.PositiveInfinity,
-            height ?? 0,
-            height ?? double.PositiveInfinity
+            minWidth: width ?? 0,
+            maxWidth: width ?? double.PositiveInfinity,
+            minHeight: height ?? 0,
+            maxHeight: height ?? double.PositiveInfinity
         );
     }
 
@@ -54,10 +54,10 @@ public readonly struct BoxConstraints
     public static BoxConstraints Loose(Size size)
     {
         return new BoxConstraints(
-            0,
-            size.Width,
-            0,
-            size.Height
+            minWidth: 0,
+            maxWidth: size.Width,
+            minHeight: 0,
+            maxHeight: size.Height
         );
     }
 
@@ -65,25 +65,22 @@ public readonly struct BoxConstraints
     public static BoxConstraints Expand(double? width = null, double? height = null)
     {
         return new BoxConstraints(
-            width ?? double.PositiveInfinity,
-            width ?? double.PositiveInfinity,
-            height ?? double.PositiveInfinity,
-            height ?? double.PositiveInfinity
+            minWidth: width ?? double.PositiveInfinity,
+            maxWidth: width ?? double.PositiveInfinity,
+            minHeight: height ?? double.PositiveInfinity,
+            maxHeight: height ?? double.PositiveInfinity
         );
     }
 
     public Constraints ToConstraints()
     {
         return new Constraints(
-            MinWidth,
-            MaxWidth,
-            MinHeight,
-            MaxHeight
+            minWidth: MinWidth,
+            maxWidth: MaxWidth,
+            minHeight: MinHeight,
+            maxHeight: MaxHeight
         );
     }
 
-    public static implicit operator Constraints(BoxConstraints b)
-    {
-        return b.ToConstraints();
-    }
+    public static implicit operator Constraints(BoxConstraints b) => b.ToConstraints();
 }

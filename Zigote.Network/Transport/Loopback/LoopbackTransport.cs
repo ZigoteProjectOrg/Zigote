@@ -29,10 +29,7 @@ public sealed class LoopbackTransport : ITransport
     private int _boundPort = -1;
     private int _nextConnId = 1;
 
-    public LoopbackTransport(NetConfig? config = null)
-    {
-        _config = config ?? new NetConfig();
-    }
+    public LoopbackTransport(NetConfig? config = null) => _config = config ?? new NetConfig();
 
     public TransportRole Role { get; private set; }
     public bool IsRunning { get; private set; }
@@ -58,15 +55,12 @@ public sealed class LoopbackTransport : ITransport
         IsRunning = true;
 
         LoopbackTransport? server;
-        lock (RegistryLock)
-        {
-            Servers.TryGetValue(port, out server);
-        }
+        lock (RegistryLock) Servers.TryGetValue(key: port, value: out server);
 
         if (server is null || !server.IsRunning)
         {
-            _inbox.Enqueue(Inbound.Error(1, $"No loopback server on port {port}"));
-            _inbox.Enqueue(Inbound.Disconnected(1, DisconnectReason.ConnectFailed));
+            _inbox.Enqueue(Inbound.Error(id: 1, error: $"No loopback server on port {port}"));
+            _inbox.Enqueue(Inbound.Disconnected(id: 1, reason: DisconnectReason.ConnectFailed));
             IsRunning = false;
             return;
         }
@@ -77,6 +71,7 @@ public sealed class LoopbackTransport : ITransport
     public void Update(float deltaTime)
     {
         while (_inbox.TryDequeue(out var ev))
+        {
             switch (ev.Kind)
             {
                 case EvKind.Connected:
@@ -84,31 +79,35 @@ public sealed class LoopbackTransport : ITransport
                     break;
                 case EvKind.Disconnected:
                     _links.Remove(ev.ConnId);
-                    Listener?.OnDisconnected(ev.ConnId, ev.Reason);
+                    Listener?.OnDisconnected(connectionId: ev.ConnId, reason: ev.Reason);
                     break;
                 case EvKind.Receive:
                     Listener?.OnReceive(
-                        ev.ConnId,
-                        ev.Data,
-                        ev.Delivery,
-                        ev.Channel
+                        connectionId: ev.ConnId,
+                        payload: ev.Data,
+                        delivery: ev.Delivery,
+                        channel: ev.Channel
                     );
                     break;
                 case EvKind.Error:
-                    Listener?.OnError(ev.ConnId, ev.ErrorText ?? "loopback error");
+                    Listener?.OnError(
+                        connectionId: ev.ConnId,
+                        error: ev.ErrorText ?? "loopback error"
+                    );
                     break;
             }
+        }
     }
 
     public void Send(int connectionId, ReadOnlySpan<byte> payload, DeliveryMethod delivery,
         int channel = 0)
     {
-        if (!_links.TryGetValue(connectionId, out var link)) return;
+        if (!_links.TryGetValue(key: connectionId, value: out var link)) return;
 
-        var copy = payload.ToArray();
+        byte[] copy = payload.ToArray();
         link.Stats.PacketsSent++;
         link.Stats.BytesSent += copy.Length;
-        link.Peer._links.TryGetValue(link.RemoteConnId, out var peerLink);
+        link.Peer._links.TryGetValue(key: link.RemoteConnId, value: out var peerLink);
         if (peerLink is not null)
         {
             peerLink.Stats.PacketsReceived++;
@@ -117,33 +116,34 @@ public sealed class LoopbackTransport : ITransport
 
         link.Peer._inbox.Enqueue(
             Inbound.Receive(
-                link.RemoteConnId,
-                copy,
-                delivery,
-                channel
+                id: link.RemoteConnId,
+                data: copy,
+                delivery: delivery,
+                channel: channel
             )
         );
     }
 
     public void Disconnect(int connectionId)
     {
-        if (!_links.TryGetValue(connectionId, out var link)) return;
+        if (!_links.TryGetValue(key: connectionId, value: out var link)) return;
         link.Peer._inbox.Enqueue(
-            Inbound.Disconnected(link.RemoteConnId, DisconnectReason.RemoteClose)
+            Inbound.Disconnected(id: link.RemoteConnId, reason: DisconnectReason.RemoteClose)
         );
         _links.Remove(connectionId);
     }
 
     public void Stop()
     {
-        foreach (var (id, _) in _links.ToArray()) Disconnect(id);
+        foreach ((int id, _) in _links.ToArray()) Disconnect(id);
         _links.Clear();
 
         if (_boundPort >= 0)
         {
             lock (RegistryLock)
             {
-                if (Servers.TryGetValue(_boundPort, out var s) && ReferenceEquals(s, this))
+                if (Servers.TryGetValue(key: _boundPort, value: out var s) &&
+                    ReferenceEquals(objA: s, objB: this))
                     Servers.Remove(_boundPort);
             }
 
@@ -154,15 +154,10 @@ public sealed class LoopbackTransport : ITransport
         Role = TransportRole.None;
     }
 
-    public NetworkStats? GetStats(int connectionId)
-    {
-        return _links.TryGetValue(connectionId, out var l) ? l.Stats : null;
-    }
+    public NetworkStats? GetStats(int connectionId) =>
+        _links.TryGetValue(key: connectionId, value: out var l) ? l.Stats : null;
 
-    public void Dispose()
-    {
-        Stop();
-    }
+    public void Dispose() => Stop();
 
     /// <summary>
     ///     Create an already-connected server/client pair without using the port registry — ideal for
@@ -186,24 +181,25 @@ public sealed class LoopbackTransport : ITransport
     /// <summary>Clears the process-wide server registry. Call in test teardown to avoid port clashes.</summary>
     public static void ResetRegistry()
     {
-        lock (RegistryLock)
-        {
-            Servers.Clear();
-        }
+        lock (RegistryLock) Servers.Clear();
     }
 
     private void AcceptClient(LoopbackTransport client)
     {
         if (_links.Count >= _config.MaxConnections)
         {
-            client._inbox.Enqueue(Inbound.Disconnected(1, DisconnectReason.ServerFull));
+            client._inbox.Enqueue(Inbound.Disconnected(id: 1, reason: DisconnectReason.ServerFull));
             return;
         }
 
-        var serverSideId = _nextConnId++;
+        int serverSideId = _nextConnId++;
         // Server's link to the client uses serverSideId; the client side always calls the server connection 1.
-        _links[serverSideId] = new Link(client, 1, new NetworkStats());
-        client._links[1] = new Link(this, serverSideId, new NetworkStats());
+        _links[serverSideId] = new Link(peer: client, remoteConnId: 1, stats: new NetworkStats());
+        client._links[1] = new Link(
+            peer: this,
+            remoteConnId: serverSideId,
+            stats: new NetworkStats()
+        );
 
         _inbox.Enqueue(Inbound.Connected(serverSideId));
         client._inbox.Enqueue(Inbound.Connected(1));

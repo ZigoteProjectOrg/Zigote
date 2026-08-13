@@ -17,37 +17,37 @@ public sealed class MeshStreamerTests
     [Fact]
     public void Want_AcquiresAndUploadsOnce_Drop_Unloads_ReWant_Reloads()
     {
-        var tmp = Path.GetTempFileName();
-        var blob = new byte[] {
+        string tmp = Path.GetTempFileName();
+        byte[] blob = new byte[] {
             9,
             8,
             7,
             6,
             5,
         };
-        File.WriteAllBytes(tmp, blob);
+        File.WriteAllBytes(path: tmp, bytes: blob);
         try
         {
             var reg = new AssetRegistry();
             var mgr = new AssetManager(id => reg.Resolve(id)
             ); // registry stores the absolute temp path
             var uploads = new List<byte[]>();
-            var unloads = 0;
+            int unloads = 0;
 
             var streamer = new MeshStreamer(
-                mgr,
-                _ => reg.Register(tmp), // node → AssetId
-                (_, bytes) => uploads.Add(bytes),
-                _ => unloads++
+                assets: mgr,
+                resolve: _ => reg.Register(tmp), // node → AssetId
+                upload: (_, bytes) => uploads.Add(bytes),
+                unload: _ => unloads++
             );
 
-            var node = new SceneNode("m", NodeKind.Mesh) {
+            var node = new SceneNode(name: "m", kind: NodeKind.Mesh) {
                 MeshPath = "meshes/x.zmesh",
                 Handle = 1,
             };
 
             // First Want kicks off the async load; nothing is uploaded until it completes.
-            streamer.Want(node, 1f);
+            streamer.Want(node: node, distance: 1f);
             Assert.Empty(uploads);
 
             // Pump + re-Want until the blob is applied on the main thread.
@@ -56,24 +56,24 @@ public sealed class MeshStreamerTests
             while (uploads.Count == 0 && DateTime.UtcNow < deadline)
             {
                 mgr.Pump(frame++);
-                streamer.Want(node, 1f);
+                streamer.Want(node: node, distance: 1f);
                 Thread.Sleep(1);
             }
 
             Assert.Single(uploads);
-            Assert.Equal(blob, uploads[0]);
+            Assert.Equal(expected: blob, actual: uploads[0]);
 
             // Idempotent: staying in range does not re-upload.
-            streamer.Want(node, 1f);
+            streamer.Want(node: node, distance: 1f);
             Assert.Single(uploads);
 
             // Out of range: release + unload (hide).
             streamer.Drop(node);
-            Assert.Equal(1, unloads);
+            Assert.Equal(expected: 1, actual: unloads);
 
             // Back in range: the cache entry is still resident, so it uploads again immediately.
-            streamer.Want(node, 1f);
-            Assert.Equal(2, uploads.Count);
+            streamer.Want(node: node, distance: 1f);
+            Assert.Equal(expected: 2, actual: uploads.Count);
         }
         finally
         {
@@ -85,25 +85,25 @@ public sealed class MeshStreamerTests
     public void BuiltinPrimitive_And_NonMesh_AreNotStreamed()
     {
         var mgr = new AssetManager(_ => null);
-        var uploads = 0;
+        int uploads = 0;
         var streamer = new MeshStreamer(
-            mgr,
-            _ => AssetId.New(),
-            (_, _) => uploads++,
-            _ => { }
+            assets: mgr,
+            resolve: _ => AssetId.New(),
+            upload: (_, _) => uploads++,
+            unload: _ => { }
         );
 
-        var cube = new SceneNode("c", NodeKind.Mesh) {
+        var cube = new SceneNode(name: "c", kind: NodeKind.Mesh) {
             MeshPath = "#cube",
             Handle = 1,
         };
-        var light = new SceneNode("l", NodeKind.Light);
+        var light = new SceneNode(name: "l", kind: NodeKind.Light);
 
         Assert.False(MeshStreamer.IsStreamable(cube));
         Assert.False(MeshStreamer.IsStreamable(light));
 
-        streamer.Want(cube, 1f);
-        streamer.Want(light, 1f);
-        Assert.Equal(0, uploads);
+        streamer.Want(node: cube, distance: 1f);
+        streamer.Want(node: light, distance: 1f);
+        Assert.Equal(expected: 0, actual: uploads);
     }
 }

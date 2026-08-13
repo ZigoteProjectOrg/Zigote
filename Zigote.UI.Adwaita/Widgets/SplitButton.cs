@@ -23,14 +23,14 @@ public sealed class AdwSplitButton : ComposedWidget
     public string Label
     {
         get => _label;
-        set => this.Set(ref _label, value);
+        set => this.Set(field: ref _label, value: value);
     }
 
     /// <summary>Optional icon glyph (an <see cref="Icons" /> constant) drawn before the label.</summary>
     public string? IconName
     {
         get => _iconName;
-        set => this.Set(ref _iconName, value);
+        set => this.Set(field: ref _iconName, value: value);
     }
 
     public Action? OnPressed { get; set; }
@@ -38,7 +38,7 @@ public sealed class AdwSplitButton : ComposedWidget
     public AdwButtonStyle Style
     {
         get => _style;
-        set => this.Set(ref _style, value);
+        set => this.Set(field: ref _style, value: value);
     }
 
     // Plain setters: both are read when the arrow opens the popover, never during Build.
@@ -48,28 +48,30 @@ public sealed class AdwSplitButton : ComposedWidget
     public bool Enabled
     {
         get => _enabled;
-        set => this.Set(ref _enabled, value);
+        set => this.Set(field: ref _enabled, value: value);
     }
 
     protected override Widget Build(BuildContext context)
     {
         var theme = ThemeProvider.Of(context);
-        var fg = AdwStyle.ButtonForeground(theme, Style);
+        var fg = AdwStyle.ButtonForeground(theme: theme, style: Style);
         const float radius = AdwMetrics.ControlRadius;
         const float height = AdwMetrics.ButtonHeight;
 
         var mainBox = new DecoratedBox {
             Child = AdwStyle.ButtonBody(
-                new AdwButtonContent(IconName, Label) { Color = fg },
-                height
+                content: new AdwButtonContent(iconName: IconName, label: Label) { Color = fg },
+                height: height
             ),
         };
         var arrowBox = new DecoratedBox {
             // splitbutton > menubutton > button: padding 4px either side of a 16px arrow.
             Child = new SizedBox(
-                AdwMetrics.IconSize + 8f,
-                height,
-                new Center(new IconGlyph(Icons.DropDown, AdwMetrics.IconSize, fg))
+                width: AdwMetrics.IconSize + 8f,
+                height: height,
+                child: new Center(
+                    new IconGlyph(glyph: Icons.DropDown, size: AdwMetrics.IconSize, color: fg)
+                )
             ),
         };
 
@@ -90,10 +92,10 @@ public sealed class AdwSplitButton : ComposedWidget
             SemanticsLabel = Label,
         };
         main.WireFill(
-            mainBox,
-            theme,
-            Style,
-            () => Enabled
+            box: mainBox,
+            theme: theme,
+            style: Style,
+            enabled: () => Enabled
         );
 
         var group = new ClipRRect(radius);
@@ -104,10 +106,10 @@ public sealed class AdwSplitButton : ComposedWidget
             SemanticsLabel = "Open menu",
         };
         arrow.WireFill(
-            arrowBox,
-            theme,
-            Style,
-            () => Enabled
+            box: arrowBox,
+            theme: theme,
+            style: Style,
+            enabled: () => Enabled
         );
         arrow.OnPressed = () => OpenMenu(group.Bounds);
 
@@ -118,7 +120,7 @@ public sealed class AdwSplitButton : ComposedWidget
                 // from both ends rather than running the full height of the button.
                 new Container {
                     Width = 1f,
-                    Height = height - AdwMetrics.ToolbarPadding * 2f,
+                    Height = height - (AdwMetrics.ToolbarPadding * 2f),
                     Background = separator,
                 },
                 arrow,
@@ -130,10 +132,10 @@ public sealed class AdwSplitButton : ComposedWidget
         return Enabled
             ? group
             : new Opacity(
-                Style is AdwButtonStyle.Flat
+                opacity: Style is AdwButtonStyle.Flat
                     ? AdwStyle.StrongDisabledOpacity
                     : AdwStyle.DisabledOpacity,
-                group
+                child: group
             );
     }
 
@@ -142,10 +144,10 @@ public sealed class AdwSplitButton : ComposedWidget
         var app = AppInstance.Active;
         if (app is null || MenuItems.Count == 0) return;
         new AdwPopover(
-            app,
-            MenuItems,
-            anchor,
-            i => OnMenuSelected?.Invoke(i),
+            app: app,
+            items: MenuItems,
+            anchor: anchor,
+            onPick: i => OnMenuSelected?.Invoke(i),
             minWidth: anchor.Width
         ).Show();
     }

@@ -31,18 +31,23 @@ public static class VfxGraphSerializer
                 DefinitionId = node.DefinitionId,
                 Version = node.DefinitionVersion,
             };
-            foreach (var (key, value) in node.Properties) nd.Props.Add(ToPropDto(key, value));
-            if (graph.EditorData.NodeLayouts.TryGetValue(node.Id, out var layout))
+            foreach ((string key, var value) in node.Properties)
+                nd.Props.Add(ToPropDto(key: key, v: value));
+            if (graph.EditorData.NodeLayouts.TryGetValue(key: node.Id, value: out var layout))
+            {
                 nd.Layout = new LayoutDto {
                     X = layout.X,
                     Y = layout.Y,
                     W = layout.Width,
                     H = layout.Height,
                 };
+            }
+
             dto.Nodes.Add(nd);
         }
 
         foreach (var e in graph.Edges)
+        {
             dto.Edges.Add(
                 new EdgeDto {
                     FromNode = e.From.NodeId,
@@ -51,13 +56,15 @@ public static class VfxGraphSerializer
                     ToPin = e.To.PinId,
                 }
             );
+        }
 
-        return JsonSerializer.Serialize(dto, Options);
+        return JsonSerializer.Serialize(value: dto, options: Options);
     }
 
     public static GraphDocument Deserialize(string json)
     {
-        var dto = JsonSerializer.Deserialize<GraphDto>(json, Options) ?? new GraphDto();
+        var dto = JsonSerializer.Deserialize<GraphDto>(json: json, options: Options) ??
+                  new GraphDto();
         var graph = new GraphDocument {
             Name = dto.Name,
             DomainId = string.IsNullOrEmpty(dto.DomainId) ? VfxNodeLibrary.DomainId : dto.DomainId,
@@ -81,6 +88,7 @@ public static class VfxGraphSerializer
 
             graph.Nodes.Add(node);
             if (nd.Layout is { } l)
+            {
                 graph.EditorData.NodeLayouts[node.Id] =
                     new NodeLayoutData {
                         X = l.X,
@@ -88,15 +96,18 @@ public static class VfxGraphSerializer
                         Width = l.W,
                         Height = l.H,
                     };
+            }
         }
 
         foreach (var e in dto.Edges)
+        {
             graph.Edges.Add(
                 new GraphEdge {
-                    From = new GraphPinEndpoint(e.FromNode, e.FromPin),
-                    To = new GraphPinEndpoint(e.ToNode, e.ToPin),
+                    From = new GraphPinEndpoint(NodeId: e.FromNode, PinId: e.FromPin),
+                    To = new GraphPinEndpoint(NodeId: e.ToNode, PinId: e.ToPin),
                 }
             );
+        }
 
         return graph;
     }
@@ -129,19 +140,19 @@ public static class VfxGraphSerializer
             GraphValueKind.Float => GraphValue.FromFloat(p.F ?? 0f),
             GraphValueKind.String => GraphValue.FromString(p.S ?? ""),
             GraphValueKind.Float2 when p.V is { Length: >= 2 } => GraphValue.FromFloat2(
-                p.V[0],
-                p.V[1]
+                x: p.V[0],
+                y: p.V[1]
             ),
             GraphValueKind.Float3 when p.V is { Length: >= 3 } => GraphValue.FromFloat3(
-                p.V[0],
-                p.V[1],
-                p.V[2]
+                x: p.V[0],
+                y: p.V[1],
+                z: p.V[2]
             ),
             GraphValueKind.Float4 when p.V is { Length: >= 4 } => GraphValue.FromFloat4(
-                p.V[0],
-                p.V[1],
-                p.V[2],
-                p.V[3]
+                x: p.V[0],
+                y: p.V[1],
+                z: p.V[2],
+                w: p.V[3]
             ),
             _ => null,
         };
@@ -165,7 +176,7 @@ public static class VfxGraphSerializer
 
         // Must keep its setter: System.Text.Json skips getter-only properties on deserialize, which
         // silently drops every node property on round-trip (spawn rates fall back to defaults).
-        public List<PropDto> Props { get; set; } = [];
+        public List<PropDto> Props { get; } = [];
 
         public LayoutDto? Layout { get; set; }
     }

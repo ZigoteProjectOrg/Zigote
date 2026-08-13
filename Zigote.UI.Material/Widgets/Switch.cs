@@ -1,7 +1,6 @@
 using Zigote.Core.Animation;
 using Zigote.Core.Events;
 using Zigote.UI.Semantics;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.Material;
 
@@ -12,20 +11,22 @@ namespace Zigote.UI.Material;
 public class Switch : Widget
 {
     private readonly AnimationController _anim;
+    private float _hitPadX, _hitPadY;
     private bool _hovered;
     private bool _pressed;
-    private float _hitPadX, _hitPadY;
     private Size _size;
     private ThemeData _theme = ThemeData.Dark;
-    private bool _value;
-    private float _trackW = ControlMetrics.SwitchWidth;
     private float _trackH = ControlMetrics.SwitchHeight;
+    private float _trackW = ControlMetrics.SwitchWidth;
+    private bool _value;
 
     public Switch(bool value, Action<bool>? onChanged = null)
     {
         _value = value;
         OnChanged = onChanged;
-        _anim = new AnimationController(0.15f, this) { Curve = Curves.EaseOut };
+        _anim = new AnimationController(durationSeconds: 0.15f, vsync: this) {
+            Curve = Curves.EaseOut,
+        };
         _anim.OnTick += MarkNeedsPaint;
         // Jump to initial position without animating.
         if (value) _anim.Complete();
@@ -54,19 +55,26 @@ public class Switch : Widget
     public float TrackW
     {
         get => _trackW;
-        set => SetLayout(ref _trackW, value);
+        set => SetLayout(field: ref _trackW, value: value);
     }
 
     public float TrackH
     {
         get => _trackH;
-        set => SetLayout(ref _trackH, value);
+        set => SetLayout(field: ref _trackH, value: value);
     }
 
     public override bool Focusable => true;
 
     /// <summary>Optional accessible name (e.g. the setting this switch toggles).</summary>
     public string? SemanticsLabel { get; set; }
+
+    private Rect HitRect => new(
+        x: Bounds.X - _hitPadX,
+        y: Bounds.Y - _hitPadY,
+        width: Bounds.Width + (_hitPadX * 2f),
+        height: Bounds.Height + (_hitPadY * 2f)
+    );
 
 
     public override void DescribeSemantics(SemanticsConfiguration config)
@@ -75,10 +83,10 @@ public class Switch : Widget
         config.Label = SemanticsLabel;
         config.Actions = SemanticsAction.Tap | SemanticsAction.Focus;
         config.AddFlag(SemanticsFlags.Checkable)
-            .AddFlag(SemanticsFlags.Checked, Value)
-            .AddFlag(SemanticsFlags.Focusable, Enabled)
-            .AddFlag(SemanticsFlags.Focused, Focused)
-            .AddFlag(SemanticsFlags.Disabled, !Enabled);
+            .AddFlag(flag: SemanticsFlags.Checked, on: Value)
+            .AddFlag(flag: SemanticsFlags.Focusable, on: Enabled)
+            .AddFlag(flag: SemanticsFlags.Focused, on: Focused)
+            .AddFlag(flag: SemanticsFlags.Disabled, on: !Enabled);
     }
 
     // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
@@ -104,75 +112,69 @@ public class Switch : Widget
     public override int DebugStateHash()
     {
         return HashCode.Combine(
-            Value,
-            _anim.Progress.GetHashCode(),
-            _hovered,
-            _pressed,
-            Focused
+            value1: Value,
+            value2: _anim.Progress.GetHashCode(),
+            value3: _hovered,
+            value4: _pressed,
+            value5: Focused
         );
     }
 
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        _size = c.Constrain(new Size(TrackW, TrackH));
+        _size = c.Constrain(new Size(width: TrackW, height: TrackH));
         // The 38×22 capsule is half a finger target. Grow the hit rect around the unchanged
         // track instead of the track itself, so the switch looks identical on every platform.
-        _hitPadX = MathF.Max(0f, (TouchMetrics.AtLeast(_size.Width) - _size.Width) / 2f);
-        _hitPadY = MathF.Max(0f, (TouchMetrics.AtLeast(_size.Height) - _size.Height) / 2f);
+        _hitPadX = MathF.Max(x: 0f, y: (TouchMetrics.AtLeast(_size.Width) - _size.Width) / 2f);
+        _hitPadY = MathF.Max(x: 0f, y: (TouchMetrics.AtLeast(_size.Height) - _size.Height) / 2f);
         return _size;
     }
 
-    private Rect HitRect => new(
-        Bounds.X - _hitPadX,
-        Bounds.Y - _hitPadY,
-        Bounds.Width + _hitPadX * 2f,
-        Bounds.Height + _hitPadY * 2f
-    );
-
-    public override Widget? HitTest(Offset point)
-    {
-        return HitRect.Contains(point.X, point.Y) ? this : null;
-    }
+    public override Widget? HitTest(Offset point) =>
+        HitRect.Contains(px: point.X, py: point.Y) ? this : null;
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
     public override void Paint(PaintList paint)
     {
-        var r = TrackH / 2f;
+        float r = TrackH / 2f;
 
         // Capsule track: accent when on, neutral fill when off.
         var track = Value ? _theme.Primary : _theme.Fill1;
-        if (Enabled) track = StateStyle.Fill(track, _hovered, _pressed);
+        if (Enabled)
+            track = StateStyle.Fill(baseColor: track, hovered: _hovered, pressed: _pressed);
         else track = StateStyle.Disabled(track);
-        paint.AddRect(Bounds, track, Radii.Capsule);
+        paint.AddRect(bounds: Bounds, color: track, radius: Radii.Capsule);
 
         // White knob, inset from the track edges, slides across the travel distance.
-        var inset = Spacing.Xxs;
-        var thumbR = r - inset;
-        var travel = TrackW - TrackH;
-        var thumbCx = Bounds.X + r + travel * _anim.Value;
-        var thumbCy = Bounds.Y + r;
-        var knob = Enabled ? new Color(1f, 1f, 1f) : StateStyle.Disabled(new Color(1f, 1f, 1f));
+        float inset = Spacing.Xxs;
+        float thumbR = r - inset;
+        float travel = TrackW - TrackH;
+        float thumbCx = Bounds.X + r + (travel * _anim.Value);
+        float thumbCy = Bounds.Y + r;
+        var knob = Enabled
+            ? new Color(r: 1f, g: 1f, b: 1f)
+            : StateStyle.Disabled(new Color(r: 1f, g: 1f, b: 1f));
         var thumbRect = new Rect(
-            thumbCx - thumbR,
-            thumbCy - thumbR,
-            thumbR * 2f,
-            thumbR * 2f
+            x: thumbCx - thumbR,
+            y: thumbCy - thumbR,
+            width: thumbR * 2f,
+            height: thumbR * 2f
         );
-        paint.AddElevation(thumbRect, Radii.Capsule, Elevation.Z1);
-        paint.AddRect(thumbRect, knob, Radii.Capsule);
+        paint.AddElevation(bounds: thumbRect, radius: Radii.Capsule, style: Elevation.Z1);
+        paint.AddRect(bounds: thumbRect, color: knob, radius: Radii.Capsule);
 
         if (Focused && Enabled)
-            paint.AddFocusRing(Bounds, Radii.Capsule, _theme);
+            paint.AddFocusRing(bounds: Bounds, radius: Radii.Capsule, theme: _theme);
     }
 
     private void Toggle()
@@ -210,7 +212,7 @@ public class Switch : Widget
 
     public override void OnPointerUp(Offset point)
     {
-        if (_pressed && Enabled && HitRect.Contains(point.X, point.Y))
+        if (_pressed && Enabled && HitRect.Contains(px: point.X, py: point.Y))
             Toggle();
         if (_pressed)
         {

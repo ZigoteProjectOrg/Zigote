@@ -1,7 +1,6 @@
 using Zigote.Core;
 using Zigote.Core.Animation;
 using Zigote.Core.Paint;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.Widgets;
 
@@ -15,17 +14,20 @@ namespace Zigote.UI.Widgets;
 ///     <para>
 ///         Effects run in parallel by default. Each effect's <c>delay</c>/<c>duration</c>/<c>curve</c>
 ///         inherits from the previous effect when omitted (the first inherits
-///         <see cref="DefaultDuration" />/<see cref="DefaultCurve" />); a <see cref="Then" /> resets the
+///         <see cref="DefaultDuration" />/<see cref="DefaultCurve" />); a <see cref="Then" /> resets
+///         the
 ///         baseline so following effects start where the previous one ended.
 ///     </para>
 ///     <para>
 ///         For state-driven transitions set <see cref="Target" /> to 0 or 1: the animation plays
 ///         forward/reverse toward it, snapping without
-///         animating on first mount. Otherwise it plays once on mount when <see cref="AutoPlay" /> is set.
+///         animating on first mount. Otherwise it plays once on mount when <see cref="AutoPlay" /> is
+///         set.
 ///     </para>
 ///     <para>
 ///         Backed by the paint pipeline's real capabilities: <see cref="FadeEffect" /> (alpha),
-///         <see cref="MoveEffect" />/<see cref="SlideEffect" />/<see cref="ShakeEffect" /> (translation)
+///         <see cref="MoveEffect" />/<see cref="SlideEffect" />/<see cref="ShakeEffect" />
+///         (translation)
 ///         are pure paint; <see cref="ScaleEffect" /> scales via layout (re-measures the child and
 ///         centres it, so the surrounding slot stays stable). Rotation/blur/colour-matrix effects are
 ///         intentionally absent — the renderer has no such primitives.
@@ -33,35 +35,41 @@ namespace Zigote.UI.Widgets;
 /// </summary>
 public sealed class Animate : Widget
 {
-    /// <summary>Duration used by the first effect (and any effect that omits its own). 300 ms like flutter_animate.</summary>
-    public static TimeSpan DefaultDuration { get; set; } = TimeSpan.FromMilliseconds(300);
-
-    /// <summary>Curve used by the first effect (and any effect that omits its own).</summary>
-    public static Func<float, float> DefaultCurve { get; set; } = Curves.EaseOut;
-
-    private readonly AnimationController _controller;
     private readonly List<AnimateEffect> _effects = [];
+    private float _alpha = 1f;
+    private bool _explicitTarget;
+    private bool _mounted;
 
     private Size _natural;
-    private float _alpha = 1f;
+    private bool _played;
+    private int _resolvedCount = -1;
     private float _scale = 1f;
-    private float _tx;
-    private float _ty;
+    private float? _target;
 
     private float _totalS = 0.0001f;
-    private int _resolvedCount = -1;
-    private bool _mounted;
-    private bool _played;
-    private float? _target;
-    private bool _explicitTarget;
+    private float _tx;
+    private float _ty;
 
     public Animate(Widget? child = null)
     {
         Child = child;
-        _controller = new AnimationController(0.0001f, this) { Curve = Curves.Linear };
-        _controller.OnTick += MarkNeedsLayout;
-        _controller.OnCompleted += () => OnComplete?.Invoke(_controller);
+        Controller =
+            new AnimationController(
+                durationSeconds: 0.0001f,
+                vsync: this
+            ) { Curve = Curves.Linear };
+        Controller.OnTick += MarkNeedsLayout;
+        Controller.OnCompleted += () => OnComplete?.Invoke(Controller);
     }
+
+    /// <summary>
+    ///     Duration used by the first effect (and any effect that omits its own). 300 ms like
+    ///     flutter_animate.
+    /// </summary>
+    public static TimeSpan DefaultDuration { get; set; } = TimeSpan.FromMilliseconds(300);
+
+    /// <summary>Curve used by the first effect (and any effect that omits its own).</summary>
+    public static Func<float, float> DefaultCurve { get; set; } = Curves.EaseOut;
 
     public Widget? Child { get; set; }
 
@@ -71,11 +79,14 @@ public sealed class Animate : Widget
     /// <summary>Fires once when a forward play reaches the end.</summary>
     public Action<AnimationController>? OnComplete { get; set; }
 
-    /// <summary>Fires when the timeline starts playing (mount, <see cref="Play" />, or a forward <see cref="Target" />).</summary>
+    /// <summary>
+    ///     Fires when the timeline starts playing (mount, <see cref="Play" />, or a forward
+    ///     <see cref="Target" />).
+    /// </summary>
     public Action<AnimationController>? OnPlay { get; set; }
 
     /// <summary>The controller driving the timeline — for advanced use (repeat, manual value, listeners).</summary>
-    public AnimationController Controller => _controller;
+    public AnimationController Controller { get; }
 
     /// <summary>
     ///     Drive the animation toward a target position (0 = start, 1 = end), reversing when it drops.
@@ -88,9 +99,9 @@ public sealed class Animate : Widget
         set
         {
             _explicitTarget = value.HasValue;
-            if (Nearly(_target, value)) return;
+            if (Nearly(a: _target, b: value)) return;
             _target = value;
-            if (_mounted && value is { } t) DriveToTarget(t, true);
+            if (_mounted && value is { } t) DriveToTarget(t: t, animate: true);
         }
     }
 
@@ -104,7 +115,10 @@ public sealed class Animate : Widget
         return this;
     }
 
-    /// <summary>Fade opacity. Defaults to 0→1 (fade in); pass only <paramref name="begin" /> or <paramref name="end" /> for smart defaults.</summary>
+    /// <summary>
+    ///     Fade opacity. Defaults to 0→1 (fade in); pass only <paramref name="begin" /> or
+    ///     <paramref name="end" /> for smart defaults.
+    /// </summary>
     public Animate Fade(TimeSpan? duration = null, TimeSpan? delay = null,
         Func<float, float>? curve = null, float? begin = null, float? end = null)
     {
@@ -124,11 +138,11 @@ public sealed class Animate : Widget
         Func<float, float>? curve = null)
     {
         return Fade(
-            duration,
-            delay,
-            curve,
-            0f,
-            1f
+            duration: duration,
+            delay: delay,
+            curve: curve,
+            begin: 0f,
+            end: 1f
         );
     }
 
@@ -137,11 +151,11 @@ public sealed class Animate : Widget
         Func<float, float>? curve = null)
     {
         return Fade(
-            duration,
-            delay,
-            curve,
-            1f,
-            0f
+            duration: duration,
+            delay: delay,
+            curve: curve,
+            begin: 1f,
+            end: 0f
         );
     }
 
@@ -199,7 +213,7 @@ public sealed class Animate : Widget
                 Duration = duration,
                 Delay = delay,
                 Hz = hz,
-                Amount = amount ?? new Offset(6f, 0f),
+                Amount = amount ?? new Offset(x: 6f, y: 0f),
             }
         );
     }
@@ -223,24 +237,24 @@ public sealed class Animate : Widget
     public void Play()
     {
         EnsureResolved();
-        _controller.Forward();
-        OnPlay?.Invoke(_controller);
+        Controller.Forward();
+        OnPlay?.Invoke(Controller);
     }
 
     /// <summary>Restart the timeline from the beginning.</summary>
     public void Restart()
     {
         EnsureResolved();
-        _controller.Dismiss();
-        _controller.Forward();
-        OnPlay?.Invoke(_controller);
+        Controller.Dismiss();
+        Controller.Forward();
+        OnPlay?.Invoke(Controller);
     }
 
     /// <summary>Play the timeline in reverse from the current position.</summary>
     public void Reverse()
     {
         EnsureResolved();
-        _controller.Reverse();
+        Controller.Reverse();
     }
 
     // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -249,21 +263,19 @@ public sealed class Animate : Widget
     {
         // The previous ticker went with the last unmount; rebind so the timeline resumes after a
         // detach→re-attach cycle. CreateTicker owns it, so nothing to dispose by hand.
-        _controller.AttachTicker(this);
+        Controller.AttachTicker(this);
         EnsureResolved();
 
         if (!_mounted)
         {
             _mounted = true;
             if (_explicitTarget)
-            {
-                DriveToTarget(_target ?? 0f, false); // snap to initial state
-            }
+                DriveToTarget(t: _target ?? 0f, animate: false); // snap to initial state
             else if (AutoPlay && !_played)
             {
                 _played = true;
-                _controller.Forward();
-                OnPlay?.Invoke(_controller);
+                Controller.Forward();
+                OnPlay?.Invoke(Controller);
             }
         }
     }
@@ -275,18 +287,18 @@ public sealed class Animate : Widget
         if (_resolvedCount == _effects.Count) return;
         _resolvedCount = _effects.Count;
 
-        var defaultDur = (float)DefaultDuration.TotalSeconds;
+        float defaultDur = (float)DefaultDuration.TotalSeconds;
         float priorBeginS = 0f, priorEndS = 0f, priorDurS = defaultDur;
         var priorCurve = DefaultCurve;
-        var hasPrior = false;
-        var total = 0f;
+        bool hasPrior = false;
+        float total = 0f;
 
         foreach (var e in _effects)
         {
             if (e.IsMarker)
             {
-                var markerBegin = (hasPrior ? priorEndS : 0f) +
-                                  (float)(e.Delay?.TotalSeconds ?? 0d);
+                float markerBegin = (hasPrior ? priorEndS : 0f) +
+                                    (float)(e.Delay?.TotalSeconds ?? 0d);
                 e.BeginS = markerBegin;
                 e.EndS = markerBegin;
                 e.ResolvedCurve = priorCurve;
@@ -298,8 +310,8 @@ public sealed class Animate : Widget
                 continue;
             }
 
-            var durS = (float)(e.Duration?.TotalSeconds ?? (hasPrior ? priorDurS : defaultDur));
-            var beginS = e.Delay is { } d
+            float durS = (float)(e.Duration?.TotalSeconds ?? (hasPrior ? priorDurS : defaultDur));
+            float beginS = e.Delay is { } d
                 ? (float)d.TotalSeconds
                 : hasPrior
                     ? priorBeginS
@@ -310,7 +322,7 @@ public sealed class Animate : Widget
             e.EndS = beginS + durS;
             e.ResolvedCurve = curve;
 
-            total = MathF.Max(total, e.EndS);
+            total = MathF.Max(x: total, y: e.EndS);
             priorBeginS = beginS;
             priorEndS = e.EndS;
             priorDurS = durS;
@@ -318,8 +330,8 @@ public sealed class Animate : Widget
             hasPrior = true;
         }
 
-        _totalS = MathF.Max(total, 0.0001f);
-        _controller.Duration = _totalS;
+        _totalS = MathF.Max(x: total, y: 0.0001f);
+        Controller.Duration = _totalS;
     }
 
     private void Recompute()
@@ -328,25 +340,25 @@ public sealed class Animate : Widget
         var f = AnimateFrame.Identity;
         if (_effects.Count > 0)
         {
-            var elapsed =
-                _controller.Value * _totalS; // Value == Progress (Linear controller curve)
+            float elapsed =
+                Controller.Value * _totalS; // Value == Progress (Linear controller curve)
             foreach (var e in _effects)
             {
                 if (e.IsMarker) continue;
-                var durS = MathF.Max(0.0001f, e.EndS - e.BeginS);
-                var raw = Math.Clamp((elapsed - e.BeginS) / durS, 0f, 1f);
-                var eased = e.ResolvedCurve(raw);
+                float durS = MathF.Max(x: 0.0001f, y: e.EndS - e.BeginS);
+                float raw = Math.Clamp(value: (elapsed - e.BeginS) / durS, min: 0f, max: 1f);
+                float eased = e.ResolvedCurve(raw);
                 e.Apply(
-                    ref f,
-                    raw,
-                    eased,
-                    _natural
+                    frame: ref f,
+                    raw: raw,
+                    eased: eased,
+                    natural: _natural
                 );
             }
         }
 
-        _alpha = Math.Clamp(f.Alpha, 0f, 1f);
-        _scale = MathF.Max(0f, f.Scale);
+        _alpha = Math.Clamp(value: f.Alpha, min: 0f, max: 1f);
+        _scale = MathF.Max(x: 0f, y: f.Scale);
         _tx = f.Tx;
         _ty = f.Ty;
     }
@@ -356,14 +368,14 @@ public sealed class Animate : Widget
         EnsureResolved();
         if (t >= 0.5f)
         {
-            if (animate) _controller.Forward();
-            else _controller.Complete();
-            if (animate) OnPlay?.Invoke(_controller);
+            if (animate) Controller.Forward();
+            else Controller.Complete();
+            if (animate) OnPlay?.Invoke(Controller);
         }
         else
         {
-            if (animate) _controller.Reverse();
-            else _controller.Dismiss();
+            if (animate) Controller.Reverse();
+            else Controller.Dismiss();
         }
     }
 
@@ -386,10 +398,10 @@ public sealed class Animate : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _natural.Width,
-            _natural.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _natural.Width,
+            height: _natural.Height
         );
         if (Child is null) return;
 
@@ -399,13 +411,13 @@ public sealed class Animate : Widget
             return;
         }
 
-        var sw = _natural.Width * _scale;
-        var sh = _natural.Height * _scale;
-        Child.Measure(Constraints.Tight(sw, sh));
+        float sw = _natural.Width * _scale;
+        float sh = _natural.Height * _scale;
+        Child.Measure(Constraints.Tight(width: sw, height: sh));
         Child.Layout(
             new Offset(
-                origin.X + (_natural.Width - sw) / 2f,
-                origin.Y + (_natural.Height - sh) / 2f
+                x: origin.X + ((_natural.Width - sw) / 2f),
+                y: origin.Y + ((_natural.Height - sh) / 2f)
             )
         );
     }
@@ -414,10 +426,10 @@ public sealed class Animate : Widget
     {
         if (Child is null || _alpha <= 0.001f) return;
 
-        var fade = _alpha < 0.999f;
-        var move = _tx != 0f || _ty != 0f;
+        bool fade = _alpha < 0.999f;
+        bool move = _tx != 0f || _ty != 0f;
         if (fade) paint.PushAlpha(_alpha);
-        if (move) paint.PushTranslate(_tx, _ty);
+        if (move) paint.PushTranslate(dx: _tx, dy: _ty);
         Child.Paint(paint);
         if (move) paint.PopTranslate();
         if (fade) paint.PopAlpha();
@@ -426,12 +438,9 @@ public sealed class Animate : Widget
     public override Widget? HitTest(Offset point)
     {
         if (_alpha <= 0.01f || Child is null) return null;
-        var p = _tx != 0f || _ty != 0f ? new Offset(point.X - _tx, point.Y - _ty) : point;
+        var p = _tx != 0f || _ty != 0f ? new Offset(x: point.X - _tx, y: point.Y - _ty) : point;
         return Child.HitTest(p);
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(Child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Child);
 }

@@ -25,22 +25,16 @@ public static class Net
     public static NetworkClock? Clock => Manager?.Clock;
     public static ReplicationManager? Replication => Manager?.Replication;
 
-    public static void OnMessage<T>(Action<NetConnection, T> handler) where T : INetMessage, new()
-    {
-        Manager?.OnMessage(handler);
-    }
+    public static void OnMessage<T>(Action<NetConnection, T> handler)
+        where T : INetMessage, new() => Manager?.OnMessage(handler);
 
     public static void SendToServer<T>(T message,
         DeliveryMethod delivery = DeliveryMethod.ReliableOrdered)
-        where T : INetMessage, new()
-    {
-        Manager?.SendToServer(message, delivery);
-    }
+        where T : INetMessage, new() =>
+        Manager?.SendToServer(message: message, delivery: delivery);
 
     public static void SendToAll<T>(T message,
         DeliveryMethod delivery = DeliveryMethod.ReliableOrdered)
-        where T : INetMessage, new()
-    {
-        Manager?.SendToAll(message, delivery);
-    }
+        where T : INetMessage, new() =>
+        Manager?.SendToAll(message: message, delivery: delivery);
 }

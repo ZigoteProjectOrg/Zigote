@@ -38,11 +38,12 @@ public sealed class ImageGridPage : ComposedWidget
     public ImageGridPage()
     {
         _grid = GridView.Builder(
-            Columns,
-            0,
-            Cell,
-            Spacing.Md,
-            Spacing.Md,
+            crossAxisCount: Columns,
+            itemCount: 0,
+            itemBuilder: Cell,
+            mainAxisSpacing: Spacing.Md,
+            crossAxisSpacing: Spacing.Md,
+            childAspectRatio:
             0.72 // the sources are portraits, so portrait cells waste the least of each tile
         );
     }
@@ -58,15 +59,15 @@ public sealed class ImageGridPage : ComposedWidget
             Children = {
                 new Expanded(
                     new Padding(
-                        EdgeInsets.Symmetric(Spacing.Lg, Spacing.Md),
-                        new Stack {
+                        padding: EdgeInsets.Symmetric(horizontal: Spacing.Lg, vertical: Spacing.Md),
+                        child: new Stack {
                             Children = {
                                 _grid,
                                 new Align(
-                                    Alignment.BottomCenter,
-                                    new Padding(
-                                        EdgeInsets.Only(bottom: Spacing.Lg),
-                                        new Watch(Footer)
+                                    alignment: Alignment.BottomCenter,
+                                    child: new Padding(
+                                        padding: EdgeInsets.Only(bottom: Spacing.Lg),
+                                        child: new Watch(Footer)
                                     )
                                 ),
                             },
@@ -104,7 +105,7 @@ public sealed class ImageGridPage : ComposedWidget
         try
         {
             var pieces = await ArtSource.FetchPageAsync(page).ConfigureAwait(false);
-            App.Active?.Post(() => Append(page, pieces));
+            App.Active?.Post(() => Append(page: page, pieces: pieces));
         }
         catch (Exception error)
         {
@@ -128,7 +129,10 @@ public sealed class ImageGridPage : ComposedWidget
         {
             if (!_urls.Add(piece.Url)) continue;
             var art = piece;
-            var tile = new ArtImage(art, TileMaxDim) { OnPressed = () => ArtViewer.Show(art) };
+            var tile =
+                new ArtImage(piece: art, maxDim: TileMaxDim) {
+                    OnPressed = () => ArtViewer.Show(art),
+                };
             if (tile.WasCached) _cached++;
             _items.Add(tile);
         }
@@ -139,13 +143,13 @@ public sealed class ImageGridPage : ComposedWidget
         // Re-point the existing grid instead of building a new one: a new grid is a new ListView,
         // and a new ListView starts at the top.
         GridView.Rebind(
-            _grid,
-            Columns,
-            _items.Count,
-            Cell,
-            Spacing.Md,
-            Spacing.Md,
-            0.72
+            list: _grid,
+            crossAxisCount: Columns,
+            itemCount: _items.Count,
+            itemBuilder: Cell,
+            mainAxisSpacing: Spacing.Md,
+            crossAxisSpacing: Spacing.Md,
+            childAspectRatio: 0.72
         );
     }
 
@@ -154,49 +158,67 @@ public sealed class ImageGridPage : ComposedWidget
         _error.Value = null;
         RequestNextPage();
         foreach (var tile in _items)
+        {
             if (tile.State.Peek() == ArtState.Failed)
                 tile.Reload();
+        }
     }
 
     private Widget Footer()
     {
         if (_error.Value is { } message)
-            return new AdwButton($"{message} — Try Again", Retry) { Pill = true };
+            return new AdwButton(label: $"{message} — Try Again", onPressed: Retry) { Pill = true };
 
         if (_loading.Value)
+        {
             return new DecoratedBox {
-                Fill = Color.Rgba(0, 0, 0, 0.55f),
+                Fill = Color.Rgba(
+                    r: 0,
+                    g: 0,
+                    b: 0,
+                    a: 0.55f
+                ),
                 Radius = AdwMetrics.Pill,
                 Child = new Padding(
-                    EdgeInsets.Symmetric(Spacing.Md, Spacing.Xs),
-                    new Row(
+                    padding: EdgeInsets.Symmetric(horizontal: Spacing.Md, vertical: Spacing.Xs),
+                    child: new Row(
                         spacing: Spacing.Sm,
                         mainAxisSize: MainAxisSize.Min,
                         crossAxisAlignment: CrossAxisAlignment.Center
                     ) {
                         Children = {
                             new AdwSpinner(16f),
-                            new Label("Fetching more", AdwTypography.Caption, Color.White),
+                            new Label(
+                                text: "Fetching more",
+                                style: AdwTypography.Caption,
+                                color: Color.White
+                            ),
                         },
                     }
                 ),
             };
+        }
 
         return SizedBox.Shrink();
     }
 
     private Widget Status()
     {
-        var count = _shown.Value;
-        var caption = count == 0
+        int count = _shown.Value;
+        string caption = count == 0
             ? "Scroll to the bottom to fetch the next page"
             : _page >= ArtSource.MaxPages
                 ? $"End of the feed — {_cached} of {count} came straight off the disk"
                 : $"Click a picture to zoom it · {_cached} of {count} came straight off the disk";
 
         return new Padding(
-            EdgeInsets.Only(Spacing.Lg, 0f, Spacing.Lg, Spacing.Lg),
-            Demo.Bar(Demo.Value($"{count} pictures"), Demo.Caption(caption))
+            padding: EdgeInsets.Only(
+                left: Spacing.Lg,
+                top: 0f,
+                right: Spacing.Lg,
+                bottom: Spacing.Lg
+            ),
+            child: Demo.Bar(Demo.Value($"{count} pictures"), Demo.Caption(caption))
         );
     }
 }

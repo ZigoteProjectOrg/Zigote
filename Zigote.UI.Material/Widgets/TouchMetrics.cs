@@ -22,14 +22,9 @@ internal static class TouchMetrics
         MediaQuery.Of(BuildContext.Current).SizeClass == WindowSizeClass.Compact;
 
     /// <summary>The desktop value, or a finger-sized one on a phone.</summary>
-    public static float Pick(float desktop, float touch = MinTarget)
-    {
-        return IsCompact ? touch : desktop;
-    }
+    public static float Pick(float desktop, float touch = MinTarget) => IsCompact ? touch : desktop;
 
     /// <summary>The desktop value, raised to at least <paramref name="touch" /> on a phone.</summary>
-    public static float AtLeast(float desktop, float touch = MinTarget)
-    {
-        return IsCompact ? MathF.Max(desktop, touch) : desktop;
-    }
+    public static float AtLeast(float desktop, float touch = MinTarget) =>
+        IsCompact ? MathF.Max(x: desktop, y: touch) : desktop;
 }

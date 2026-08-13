@@ -36,50 +36,41 @@ internal sealed class ArbCatalog
 
         foreach (var pair in root)
         {
-            var key = pair.Key;
-            var value = pair.Value;
+            string key = pair.Key;
+            object? value = pair.Value;
             if (key == "@@locale")
-            {
                 locale = value as string;
-            }
             else if (key == "@@class")
-            {
                 className = value as string;
-            }
             else if (key == "@@namespace")
-            {
                 ns = value as string;
-            }
-            else if (key.StartsWith("@", StringComparison.Ordinal))
+            else if (key.StartsWith(value: "@", comparisonType: StringComparison.Ordinal))
             {
                 // @@x globals and @key metadata — not messages.
             }
-            else if (value is string s)
-            {
-                messages[key] = s;
-            }
+            else if (value is string s) messages[key] = s;
         }
 
         locale ??= LocaleFromFileName(path)
                    ?? throw new FormatException("no @@locale and no _xx filename suffix");
 
         return new ArbCatalog(
-            locale,
-            className,
-            ns,
-            messages
+            locale: locale,
+            className: className,
+            ns: ns,
+            messages: messages
         );
     }
 
     private static string? LocaleFromFileName(string path)
     {
         // "…/gallery_en.arb" → "en"; "…/app_zh-Hant.arb" → "zh-Hant".
-        var name = path;
-        var slash = name.LastIndexOf('/');
+        string name = path;
+        int slash = name.LastIndexOf('/');
         if (slash >= 0) name = name.Substring(slash + 1);
-        if (name.EndsWith(".arb", StringComparison.OrdinalIgnoreCase))
-            name = name.Substring(0, name.Length - 4);
-        var underscore = name.LastIndexOf('_');
+        if (name.EndsWith(value: ".arb", comparisonType: StringComparison.OrdinalIgnoreCase))
+            name = name.Substring(startIndex: 0, length: name.Length - 4);
+        int underscore = name.LastIndexOf('_');
         return underscore >= 0 && underscore < name.Length - 1
             ? name.Substring(underscore + 1)
             : null;
@@ -111,14 +102,14 @@ internal sealed class JsonReader(string text)
         while (true)
         {
             SkipWhitespace();
-            var key = ReadString();
+            string key = ReadString();
             SkipWhitespace();
             Expect(':');
-            var value = ReadValue();
-            result.Add(new KeyValuePair<string, object?>(key, value));
+            object? value = ReadValue();
+            result.Add(new KeyValuePair<string, object?>(key: key, value: value));
 
             SkipWhitespace();
-            var c = Next();
+            char c = Next();
             if (c == ',') continue;
             if (c == '}') return result;
             throw Error($"expected ',' or '}}', found '{c}'");
@@ -128,7 +119,7 @@ internal sealed class JsonReader(string text)
     private object? ReadValue()
     {
         SkipWhitespace();
-        var c = Peek();
+        char c = Peek();
         switch (c)
         {
             case '"': return ReadString();
@@ -162,7 +153,7 @@ internal sealed class JsonReader(string text)
         {
             result.Add(ReadValue());
             SkipWhitespace();
-            var c = Next();
+            char c = Next();
             if (c == ',') continue;
             if (c == ']') return result;
             throw Error($"expected ',' or ']', found '{c}'");
@@ -175,7 +166,7 @@ internal sealed class JsonReader(string text)
         var sb = new StringBuilder();
         while (true)
         {
-            var c = Next();
+            char c = Next();
             if (c == '"') return sb.ToString();
             if (c != '\\')
             {
@@ -183,7 +174,7 @@ internal sealed class JsonReader(string text)
                 continue;
             }
 
-            var esc = Next();
+            char esc = Next();
             switch (esc)
             {
                 case '"': sb.Append('"'); break;
@@ -195,8 +186,8 @@ internal sealed class JsonReader(string text)
                 case 'r': sb.Append('\r'); break;
                 case 't': sb.Append('\t'); break;
                 case 'u':
-                    var code = 0;
-                    for (var k = 0; k < 4; k++) code = code * 16 + HexDigit(Next());
+                    int code = 0;
+                    for (int k = 0; k < 4; k++) code = (code * 16) + HexDigit(Next());
                     sb.Append((char)code);
                     break;
                 default: throw Error($"bad escape '\\{esc}'");
@@ -206,16 +197,16 @@ internal sealed class JsonReader(string text)
 
     private double ReadNumber()
     {
-        var start = _i;
+        int start = _i;
         while (_i < text.Length && (char.IsDigit(text[_i]) ||
                                     text[_i] is '-' or '+' or '.' or 'e' or 'E'))
             _i++;
-        var span = text.Substring(start, _i - start);
+        string span = text.Substring(startIndex: start, length: _i - start);
         return double.TryParse(
-            span,
-            NumberStyles.Float,
-            CultureInfo.InvariantCulture,
-            out var d
+            s: span,
+            style: NumberStyles.Float,
+            provider: CultureInfo.InvariantCulture,
+            result: out double d
         )
             ? d
             : throw Error($"bad number '{span}'");
@@ -236,15 +227,9 @@ internal sealed class JsonReader(string text)
         while (_i < text.Length && char.IsWhiteSpace(text[_i])) _i++;
     }
 
-    private char Peek()
-    {
-        return _i < text.Length ? text[_i] : throw Error("unexpected end");
-    }
+    private char Peek() => _i < text.Length ? text[_i] : throw Error("unexpected end");
 
-    private char Next()
-    {
-        return _i < text.Length ? text[_i++] : throw Error("unexpected end");
-    }
+    private char Next() => _i < text.Length ? text[_i++] : throw Error("unexpected end");
 
     private void Expect(char c)
     {
@@ -253,13 +238,10 @@ internal sealed class JsonReader(string text)
 
     private void ExpectWord(string word)
     {
-        foreach (var c in word) Expect(c);
+        foreach (char c in word) Expect(c);
     }
 
-    private FormatException Error(string message)
-    {
-        return new FormatException($"{message} (at offset {_i})");
-    }
+    private FormatException Error(string message) => new($"{message} (at offset {_i})");
 }
 
 /// <summary>
@@ -277,12 +259,12 @@ internal static class IcuArgs
 {
     public static void Scan(string template, List<LocalizationsGenerator.IcuArg> into)
     {
-        var i = 0;
+        int i = 0;
         ScanBody(
-            template,
-            ref i,
-            template.Length,
-            into
+            s: template,
+            i: ref i,
+            end: template.Length,
+            into: into
         );
     }
 
@@ -291,7 +273,7 @@ internal static class IcuArgs
     {
         while (i < end)
         {
-            var c = s[i];
+            char c = s[i];
             if (c == '\'')
             {
                 i++;
@@ -319,24 +301,24 @@ internal static class IcuArgs
 
             // Placeholder: {name} or {name, type[, style-or-submessages]}
             i++; // consume '{'
-            var nameStart = i;
+            int nameStart = i;
             while (i < end && s[i] != ',' && s[i] != '}') i++;
             if (i >= end) return;
-            var name = s.Substring(nameStart, i - nameStart).Trim();
+            string name = s.Substring(startIndex: nameStart, length: i - nameStart).Trim();
 
             if (s[i] == '}')
             {
                 i++;
-                AddArg(into, name, null);
+                AddArg(into: into, name: name, kind: null);
                 continue;
             }
 
             i++; // consume ','
-            var typeStart = i;
+            int typeStart = i;
             while (i < end && s[i] != ',' && s[i] != '}') i++;
             if (i >= end) return;
-            var kind = s.Substring(typeStart, i - typeStart).Trim();
-            AddArg(into, name, kind);
+            string kind = s.Substring(startIndex: typeStart, length: i - typeStart).Trim();
+            AddArg(into: into, name: name, kind: kind);
 
             if (s[i] == '}')
             {
@@ -351,28 +333,28 @@ internal static class IcuArgs
                 // Body = sequence of "selector {submessage}" — recurse into each submessage so
                 // nested placeholders are collected too.
                 while (i < end && s[i] != '}')
+                {
                     if (s[i] == '{')
                     {
                         i++; // enter submessage
                         ScanBody(
-                            s,
-                            ref i,
-                            end,
-                            into
+                            s: s,
+                            i: ref i,
+                            end: end,
+                            into: into
                         );
                         if (i < end && s[i] == '}') i++; // close submessage
                     }
                     else
-                    {
                         i++;
-                    }
+                }
 
                 if (i < end) i++; // close the placeholder
             }
             else
             {
                 // number/date/time style token — skip to the closing brace.
-                var depth = 1;
+                int depth = 1;
                 while (i < end && depth > 0)
                 {
                     if (s[i] == '{') depth++;
@@ -387,22 +369,22 @@ internal static class IcuArgs
     {
         if (name.Length == 0 || name == "#") return;
 
-        var csType = kind switch {
+        string csType = kind switch {
             "plural" or "selectordinal" or "number" => "double",
             "date" or "time" => "global::System.DateTime",
             "select" => "string",
             _ => "object",
         };
 
-        for (var idx = 0; idx < into.Count; idx++)
+        for (int idx = 0; idx < into.Count; idx++)
         {
             if (into[idx].Name != name) continue;
             // A typed occurrence refines an earlier bare "object" reference.
             if (into[idx].CsType == "object" && csType != "object")
-                into[idx] = new LocalizationsGenerator.IcuArg(name, csType);
+                into[idx] = new LocalizationsGenerator.IcuArg(name: name, csType: csType);
             return;
         }
 
-        into.Add(new LocalizationsGenerator.IcuArg(name, csType));
+        into.Add(new LocalizationsGenerator.IcuArg(name: name, csType: csType));
     }
 }

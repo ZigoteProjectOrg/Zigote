@@ -19,13 +19,13 @@ public class AppAssetsTests
     [Fact]
     public void Path_keeps_the_relative_path_and_roots_it()
     {
-        var resolved = AppAssets.Path("Sprites/hero.png");
+        string resolved = AppAssets.Path("Sprites/hero.png");
 
-        Assert.True(System.IO.Path.IsPathRooted(resolved));
+        Assert.True(Path.IsPathRooted(resolved));
         Assert.EndsWith(
-            System.IO.Path.Combine("Sprites", "hero.png"),
-            resolved,
-            StringComparison.Ordinal
+            expectedEndString: Path.Combine(path1: "Sprites", path2: "hero.png"),
+            actualString: resolved,
+            comparisonType: StringComparison.Ordinal
         );
     }
 
@@ -34,10 +34,18 @@ public class AppAssetsTests
     {
         // A forward-slashed literal is what app code writes (and what the shaker matches on); it must
         // resolve on Windows too, where Path.Combine yields backslashes.
-        var resolved = AppAssets.Path("Audio/Ui/click.wav");
+        string resolved = AppAssets.Path("Audio/Ui/click.wav");
 
-        Assert.Contains("Audio", resolved, StringComparison.Ordinal);
-        Assert.Contains("click.wav", resolved, StringComparison.Ordinal);
+        Assert.Contains(
+            expectedSubstring: "Audio",
+            actualString: resolved,
+            comparisonType: StringComparison.Ordinal
+        );
+        Assert.Contains(
+            expectedSubstring: "click.wav",
+            actualString: resolved,
+            comparisonType: StringComparison.Ordinal
+        );
     }
 
     [Fact]
@@ -53,6 +61,10 @@ public class AppAssetsTests
     public void Reading_a_missing_asset_throws_naming_the_file()
     {
         var error = Assert.ThrowsAny<IOException>(() => AppAssets.ReadAllBytes("nope/missing.bin"));
-        Assert.Contains("missing.bin", error.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            expectedSubstring: "missing.bin",
+            actualString: error.Message,
+            comparisonType: StringComparison.Ordinal
+        );
     }
 }

@@ -12,62 +12,18 @@ namespace Zigote.Tests;
 ///     (disposing what they own), so the subtree only comes back live if something re-measures it.
 ///     Nothing else in the re-attach path invalidates measure
 ///     caches, so a <see cref="ComposedWidget" /> ancestor at unchanged constraints early-returned
-///     its cached size, the rebuild never ran, and the subtree rendered blank. <see cref="Widget.Detach" />
+///     its cached size, the rebuild never ran, and the subtree rendered blank.
+///     <see cref="Widget.Detach" />
 ///     flags the widget for layout to close that hole.
 /// </summary>
 public class DetachReattachMeasureTests
 {
     private static readonly Constraints Room = new(
-        0f,
-        200f,
-        0f,
-        200f
+        minWidth: 0f,
+        maxWidth: 200f,
+        minHeight: 0f,
+        maxHeight: 200f
     );
-
-    private sealed class Probe : Widget
-    {
-        public int Measures;
-
-        public override Size Measure(Constraints constraints)
-        {
-            Measures++;
-            return new Size(10f, 10f);
-        }
-
-        public override void Layout(Offset origin)
-        {
-            Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                10f,
-                10f
-            );
-        }
-
-        public override void Paint(PaintList paint)
-        {
-        }
-    }
-
-    private sealed class Leaf : ComposedWidget
-    {
-        public readonly List<Probe> Built = [];
-
-        protected override Widget Build(BuildContext context)
-        {
-            var probe = new Probe();
-            Built.Add(probe);
-            return probe;
-        }
-    }
-
-    private sealed class Wrapper(Widget child) : ComposedWidget
-    {
-        protected override Widget Build(BuildContext context)
-        {
-            return child;
-        }
-    }
 
     [Fact]
     public void ReattachedSubtreeIsRebuiltNotLeftBlank()
@@ -87,7 +43,7 @@ public class DetachReattachMeasureTests
 
         // The transient re-parent: the whole subtree goes away and comes straight back.
         wrapper.Detach();
-        var measures = leaf.Built[0].Measures;
+        int measures = leaf.Built[0].Measures;
 
         wrapper.Measure(Room); // same constraints, same generation — the stale cache must not win
         wrapper.Layout(Offset.Zero);
@@ -95,8 +51,48 @@ public class DetachReattachMeasureTests
         // The retained tree survives the round trip — no rebuild, so no lost focus/scroll/animation.
         Assert.Single(leaf.Built);
         Assert.True(
-            leaf.Built[0].Measures > measures,
-            "the re-attached subtree was never re-measured — it renders blank"
+            condition: leaf.Built[0].Measures > measures,
+            userMessage: "the re-attached subtree was never re-measured — it renders blank"
         );
+    }
+
+    private sealed class Probe : Widget
+    {
+        public int Measures;
+
+        public override Size Measure(Constraints constraints)
+        {
+            Measures++;
+            return new Size(width: 10f, height: 10f);
+        }
+
+        public override void Layout(Offset origin)
+        {
+            Bounds = new Rect(
+                x: origin.X,
+                y: origin.Y,
+                width: 10f,
+                height: 10f
+            );
+        }
+
+        public override void Paint(PaintList paint) { }
+    }
+
+    private sealed class Leaf : ComposedWidget
+    {
+        public readonly List<Probe> Built = [];
+
+        protected override Widget Build(BuildContext context)
+        {
+            var probe = new Probe();
+            Built.Add(probe);
+            return probe;
+        }
+    }
+
+    private sealed class Wrapper(Widget child) : ComposedWidget
+    {
+        protected override Widget Build(BuildContext context) => child;
     }
 }

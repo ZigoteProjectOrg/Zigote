@@ -11,7 +11,10 @@ public class ProjectSettingsTests
     [Fact]
     public void RenderSettings_RoundTrip_Through_ProjectFile()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"zigote_test_{Guid.NewGuid():N}.zigoteproj");
+        string path = Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: $"zigote_test_{Guid.NewGuid():N}.zigoteproj"
+        );
         try
         {
             var project = new ZigoteProject {
@@ -26,12 +29,12 @@ public class ProjectSettingsTests
             project.Save(path);
 
             var loaded = ZigoteProject.Load(path);
-            Assert.Equal("RoundTrip", loaded.Name);
+            Assert.Equal(expected: "RoundTrip", actual: loaded.Name);
             Assert.NotNull(loaded.RenderSettings);
-            Assert.Equal(0.42f, loaded.RenderSettings!.Value.AmbientIntensity);
-            Assert.Equal(1.23f, loaded.RenderSettings!.Value.Exposure);
-            Assert.Equal(1f, loaded.RenderSettings!.Value.DofEnabled);
-            Assert.Equal(4.0f, loaded.RenderSettings!.Value.DofFStop);
+            Assert.Equal(expected: 0.42f, actual: loaded.RenderSettings!.Value.AmbientIntensity);
+            Assert.Equal(expected: 1.23f, actual: loaded.RenderSettings!.Value.Exposure);
+            Assert.Equal(expected: 1f, actual: loaded.RenderSettings!.Value.DofEnabled);
+            Assert.Equal(expected: 4.0f, actual: loaded.RenderSettings!.Value.DofFStop);
         }
         finally
         {
@@ -44,13 +47,16 @@ public class ProjectSettingsTests
     [Fact]
     public void Project_Without_RenderSettings_Loads_Null()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"zigote_test_{Guid.NewGuid():N}.zigoteproj");
+        string path = Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: $"zigote_test_{Guid.NewGuid():N}.zigoteproj"
+        );
         try
         {
             new ZigoteProject { Name = "NoSettings" }.Save(path);
 
             var loaded = ZigoteProject.Load(path);
-            Assert.Equal("NoSettings", loaded.Name);
+            Assert.Equal(expected: "NoSettings", actual: loaded.Name);
             Assert.Null(loaded.RenderSettings);
         }
         finally

@@ -35,10 +35,10 @@ internal sealed class ChartsPage : ComposedWidget
         };
 
         var series = new List<(double X, double Y, string S)>();
-        for (var i = 0; i < 24; i++)
+        for (int i = 0; i < 24; i++)
         {
-            series.Add((i, 20 + 8 * Math.Sin(i / 3.0), "A"));
-            series.Add((i, 26 + 6 * Math.Sin(i / 2.4 + 1), "B"));
+            series.Add((i, 20 + (8 * Math.Sin(i / 3.0)), "A"));
+            series.Add((i, 26 + (6 * Math.Sin((i / 2.4) + 1)), "B"));
         }
 
         var bubbles = new List<(double X, double Y, double R, string S)> {
@@ -65,61 +65,67 @@ internal sealed class ChartsPage : ComposedWidget
         };
 
         var quarters = new List<Quarter> {
-            new("Q1", 62),
-            new("Q2", 78),
-            new("Q3", 41),
-            new("Q4", 95),
+            new(name: "Q1", value: 62),
+            new(name: "Q2", value: 78),
+            new(name: "Q3", value: 41),
+            new(name: "Q4", value: 95),
         };
         var animated = new Chart {
-            Marks = { BarMark.Of(quarters, q => q.Name, q => q.Value) },
+            Marks = { BarMark.Of(data: quarters, x: q => q.Name, y: q => q.Value) },
             YAxis = { Title = "score" },
         };
         var rand = new Random();
 
         var bubbleMark = PointMark.Of(
-            bubbles,
-            d => d.X,
-            d => d.Y,
-            d => d.S
+            data: bubbles,
+            x: d => d.X,
+            y: d => d.Y,
+            series: d => d.S
         );
         bubbleMark.SizeBy = d => d.R;
 
-        var donutMark = SectorMark.Of(platforms, d => d.Share, d => d.Name);
+        var donutMark = SectorMark.Of(data: platforms, value: d => d.Share, category: d => d.Name);
         donutMark.InnerRadiusFraction = 0.6f;
 
         return new Column(
             crossAxisAlignment: CrossAxisAlignment.Stretch,
             children: [
                 // ── Advanced / interactive / animated (full width — they need the room) ──
-                Section("Live metrics — real-time stream", new LiveLineChart()),
+                Section(title: "Live metrics — real-time stream", child: new LiveLineChart()),
                 // Zoom is bound to modifier + wheel; touch has neither, so a phone must not be told
                 // to use a gesture it cannot make (pan works — a horizontal drag survives the
                 // touch arena).
                 Section(
-                    size == WindowSizeClass.Compact
+                    title: size == WindowSizeClass.Compact
                         ? "Scroll & zoom — drag to pan"
                         : "Scroll & zoom — drag to pan, ⌘/Ctrl-scroll to zoom",
-                    DemoCharts.ZoomPan()
+                    child: DemoCharts.ZoomPan()
                 ),
-                Section("Range selection — drag across the plot", DemoCharts.RangeSelection()),
-                Section("Dual axis — price line + volume bars", DemoCharts.DualAxis()),
                 Section(
-                    "Function plot — y = f(x), pan/zoom re-samples",
-                    DemoCharts.FunctionPlot()
+                    title: "Range selection — drag across the plot",
+                    child: DemoCharts.RangeSelection()
+                ),
+                Section(
+                    title: "Dual axis — price line + volume bars",
+                    child: DemoCharts.DualAxis()
+                ),
+                Section(
+                    title: "Function plot — y = f(x), pan/zoom re-samples",
+                    child: DemoCharts.FunctionPlot()
                 ),
 
                 // ── Compact gallery of mark types (two-column grid) ──
                 Grid2(
                     Section(
-                        "Grouped bars — revenue by month × region",
-                        ChartBox(
+                        title: "Grouped bars — revenue by month × region",
+                        child: ChartBox(
                             new Chart {
                                 Marks = {
                                     BarMark.Of(
-                                        sales,
-                                        d => d.Month,
-                                        d => d.Rev,
-                                        d => d.Region
+                                        data: sales,
+                                        x: d => d.Month,
+                                        y: d => d.Rev,
+                                        series: d => d.Region
                                     ),
                                 },
                                 YAxis = { Title = "K$" },
@@ -127,15 +133,15 @@ internal sealed class ChartsPage : ComposedWidget
                         )
                     ),
                     Section(
-                        "Multi-series line",
-                        ChartBox(
+                        title: "Multi-series line",
+                        child: ChartBox(
                             new Chart {
                                 Marks = {
                                     LineMark.Of(
-                                        series,
-                                        d => d.X,
-                                        d => d.Y,
-                                        d => d.S
+                                        data: series,
+                                        x: d => d.X,
+                                        y: d => d.Y,
+                                        series: d => d.S
                                     ),
                                 },
                                 YAxis = { Title = "°C" },
@@ -143,23 +149,23 @@ internal sealed class ChartsPage : ComposedWidget
                         )
                     ),
                     Section(
-                        "Stacked area",
-                        ChartBox(
+                        title: "Stacked area",
+                        child: ChartBox(
                             new Chart {
                                 Marks = {
                                     AreaMark.Of(
-                                        sales,
-                                        d => d.Month,
-                                        d => d.Rev,
-                                        d => d.Region
+                                        data: sales,
+                                        x: d => d.Month,
+                                        y: d => d.Rev,
+                                        series: d => d.Region
                                     ),
                                 },
                             }
                         )
                     ),
                     Section(
-                        "Bubble scatter (size = reach)",
-                        ChartBox(
+                        title: "Bubble scatter (size = reach)",
+                        child: ChartBox(
                             new Chart {
                                 Marks = { bubbleMark },
                                 XAxis = {
@@ -170,19 +176,21 @@ internal sealed class ChartsPage : ComposedWidget
                             }
                         )
                     ),
-                    Section("Donut", ChartBox(new Chart { Marks = { donutMark } })),
+                    Section(title: "Donut", child: ChartBox(new Chart { Marks = { donutMark } })),
                     Section(
-                        "Horizontal bars",
-                        ChartBox(
+                        title: "Horizontal bars",
+                        child: ChartBox(
                             new Chart {
-                                Marks = { BarMark.Of(bench, d => d.Fps, d => d.Engine) },
+                                Marks = {
+                                    BarMark.Of(data: bench, x: d => d.Fps, y: d => d.Engine),
+                                },
                                 XAxis = { Title = "fps" },
                             }
                         )
                     ),
                     Section(
-                        "Animated data updates",
-                        new Column(
+                        title: "Animated data updates",
+                        child: new Column(
                             crossAxisAlignment: CrossAxisAlignment.Stretch,
                             children: [
                                 ChartBox(animated),
@@ -190,30 +198,42 @@ internal sealed class ChartsPage : ComposedWidget
                                 // to spare once the grid collapses to one full-width column.
                                 new SizedBox(height: size == WindowSizeClass.Compact ? 12 : 40),
                                 new ElevatedButton(
-                                    new Text("Shuffle data"),
-                                    () =>
+                                    child: new Text("Shuffle data"),
+                                    onPressed: () =>
                                     {
                                         foreach (var q in quarters)
-                                            q.Value = 15 + rand.NextDouble() * 90;
+                                            q.Value = 15 + (rand.NextDouble() * 90);
                                         animated.InvalidateData(true);
                                     }
                                 ),
                             ]
                         )
                     ),
-                    Section("Heatmap — activity by weekday × hour", DemoCharts.Heatmap()),
-                    Section("Threshold + trend + annotation", DemoCharts.ThresholdTrend()),
-                    Section("Interactive donut — tap a slice", DemoCharts.InteractiveDonut()),
                     Section(
-                        "100% stacked — normalized per column",
-                        DemoCharts.NormalizedStack()
+                        title: "Heatmap — activity by weekday × hour",
+                        child: DemoCharts.Heatmap()
                     ),
-                    Section("Streamgraph — center-stacked areas", DemoCharts.Streamgraph()),
                     Section(
-                        "Custom axis — pinned ticks, SLO emphasized",
-                        DemoCharts.CustomAxis()
+                        title: "Threshold + trend + annotation",
+                        child: DemoCharts.ThresholdTrend()
                     ),
-                    Section("Overlay painter — ChartProxy", DemoCharts.ProxyOverlay())
+                    Section(
+                        title: "Interactive donut — tap a slice",
+                        child: DemoCharts.InteractiveDonut()
+                    ),
+                    Section(
+                        title: "100% stacked — normalized per column",
+                        child: DemoCharts.NormalizedStack()
+                    ),
+                    Section(
+                        title: "Streamgraph — center-stacked areas",
+                        child: DemoCharts.Streamgraph()
+                    ),
+                    Section(
+                        title: "Custom axis — pinned ticks, SLO emphasized",
+                        child: DemoCharts.CustomAxis()
+                    ),
+                    Section(title: "Overlay painter — ChartProxy", child: DemoCharts.ProxyOverlay())
                 ),
             ]
         );

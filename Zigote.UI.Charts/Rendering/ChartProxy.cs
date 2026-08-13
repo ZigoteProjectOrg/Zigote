@@ -30,10 +30,7 @@ public readonly struct ChartProxy
     public Rect PlotRect => _ctx?.PlotRect ?? Rect.Zero;
 
     /// <summary>Screen x of a data x value (NaN while invalid).</summary>
-    public float PositionX(ChartValue x)
-    {
-        return _ctx?.MapX(x) ?? float.NaN;
-    }
+    public float PositionX(ChartValue x) => _ctx?.MapX(x) ?? float.NaN;
 
     /// <summary>Screen y of a data y value; <paramref name="secondary" /> = the opposite-side axis.</summary>
     public float PositionY(ChartValue y, bool secondary = false)
@@ -42,10 +39,10 @@ public readonly struct ChartProxy
         return ctx?.MapY(y) ?? float.NaN;
     }
 
-    public Offset Position(ChartValue x, ChartValue y, bool secondaryY = false)
-    {
-        return new Offset(PositionX(x), PositionY(y, secondaryY));
-    }
+    public Offset Position(ChartValue x, ChartValue y, bool secondaryY = false) => new(
+        x: PositionX(x),
+        y: PositionY(y: y, secondary: secondaryY)
+    );
 
     /// <summary>
     ///     x-domain magnitude under a screen x: the numeric value, seconds for a time axis, or a
@@ -54,7 +51,7 @@ public readonly struct ChartProxy
     public double XValueAt(float screenX)
     {
         if (_ctx is null || _ctx.PlotRect.Width <= 0f) return double.NaN;
-        var t = (screenX - _ctx.PlotRect.X) / _ctx.PlotRect.Width;
+        float t = (screenX - _ctx.PlotRect.X) / _ctx.PlotRect.Width;
         return _ctx.XScale.NumericAt(t);
     }
 
@@ -63,7 +60,7 @@ public readonly struct ChartProxy
     {
         var ctx = secondary ? _secondary : _ctx;
         if (ctx is null || ctx.PlotRect.Height <= 0f) return double.NaN;
-        var t = (ctx.PlotRect.Bottom - screenY) / ctx.PlotRect.Height;
+        float t = (ctx.PlotRect.Bottom - screenY) / ctx.PlotRect.Height;
         return ctx.YScale.NumericAt(t);
     }
 }

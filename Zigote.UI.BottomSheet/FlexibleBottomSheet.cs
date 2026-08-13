@@ -12,7 +12,8 @@ namespace Zigote.UI.BottomSheets;
 ///         It fills the space it is given and draws two things into it: the scrim (when
 ///         <see cref="IsModal" />) and, anchored to the bottom edge, a rounded card
 ///         <see cref="BottomSheetController.Extent" /> tall. <see cref="Reveal" /> — supplied by
-///         <see cref="FlexibleBottomSheetRoute{T}" /> — slides the card in and out; leave it null and the
+///         <see cref="FlexibleBottomSheetRoute{T}" /> — slides the card in and out; leave it null and
+///         the
 ///         sheet is simply always up.
 ///     </para>
 ///     <para>
@@ -58,7 +59,7 @@ public sealed class FlexibleBottomSheet : Widget
         Style = style ?? BottomSheetStyle.Default;
         IsExpand = isExpand;
 
-        _contentPad = new Padding(Style.Padding, content);
+        _contentPad = new Padding(padding: Style.Padding, child: content);
         _body = new Column(crossAxisAlignment: CrossAxisAlignment.Stretch) {
             MainAxisSize = isExpand ? MainAxisSize.Max : MainAxisSize.Min,
         };
@@ -75,7 +76,9 @@ public sealed class FlexibleBottomSheet : Widget
                 child: new Align(child: _pill)
             );
             _handleDrag =
-                new SheetDragArea(_pillArea, controller) { OnTap = () => OnHandleTap?.Invoke() };
+                new SheetDragArea(child: _pillArea, sheet: controller) {
+                    OnTap = () => OnHandleTap?.Invoke(),
+                };
             _body.Children.Add(_handleDrag);
         }
 
@@ -83,23 +86,19 @@ public sealed class FlexibleBottomSheet : Widget
 
         // The card is rounded on all four corners and padded out at the bottom by that radius, so the
         // bottom corners always sit below the window edge and only the top ones are ever seen.
-        _radiusPad = new Padding(EdgeInsets.Zero, _body);
-        _clip = new ClipRRect(0f, _radiusPad);
+        _radiusPad = new Padding(padding: EdgeInsets.Zero, child: _body);
+        _clip = new ClipRRect(radius: 0f, child: _radiusPad);
         _card = new DecoratedBox { Child = _clip };
 
         controller.ExtentChanged += OnExtentChanged;
-    }
-
-    private void OnExtentChanged(float extent)
-    {
-        MarkNeedsLayout();
     }
 
     public BottomSheetController Controller { get; }
 
     /// <summary>
     ///     Appearance tokens. Colour, shape, shadow and content padding are re-read every layout, so a
-    ///     host that recolours with the theme just assigns a new style. <see cref="BottomSheetStyle.ShowDragHandle" />
+    ///     host that recolours with the theme just assigns a new style.
+    ///     <see cref="BottomSheetStyle.ShowDragHandle" />
     ///     and the pill's own dimensions are read when the sheet is constructed — they shape the tree.
     /// </summary>
     public BottomSheetStyle Style { get; set; }
@@ -144,17 +143,27 @@ public sealed class FlexibleBottomSheet : Widget
     {
         get
         {
-            var floor = Controller.MinExtent > 0.0001f
+            float floor = Controller.MinExtent > 0.0001f
                 ? Controller.MinExtent
                 : Controller.MaxExtent;
-            var collapse = floor > 0.0001f ? Math.Clamp(Controller.Value / floor, 0f, 1f) : 1f;
+            float collapse = floor > 0.0001f
+                ? Math.Clamp(value: Controller.Value / floor, min: 0f, max: 1f)
+                : 1f;
             return RevealValue * collapse;
         }
     }
 
+    /// <summary>Whether any of the card is actually revealed.</summary>
+    private bool IsOnScreen => _sheetPx * RevealValue >= 0.5f;
+
+    /// <inheritdoc />
+    public override bool ExcludeSemantics => !IsOnScreen;
+
+    private void OnExtentChanged(float extent) => MarkNeedsLayout();
+
     public override void Attach(App owner, Widget? parent)
     {
-        base.Attach(owner, parent);
+        base.Attach(owner: owner, parent: parent);
         Controller.AttachTicker(); // a previous attach's ticker is replaced, not accumulated
         Controller.ExtentChanged -= OnExtentChanged; // re-parenting attaches without a detach
         Controller.ExtentChanged += OnExtentChanged;
@@ -191,67 +200,76 @@ public sealed class FlexibleBottomSheet : Widget
         _radiusPad.Insets = EdgeInsets.Only(bottom: _res.CornerRadius);
         if (_pill is not null) _pill.Background = _res.DragHandleColor;
 
-        _size = c.Constrain(new Size(c.MaxWidth, c.MaxHeight));
+        _size = c.Constrain(new Size(width: c.MaxWidth, height: c.MaxHeight));
 
         // An open keyboard takes the bottom of the window: the sheet sits on top of it rather than
         // under it, so a text field in the sheet stays visible.
-        _bottomInset = MathF.Min(media.ViewInsets.Bottom, _size.Height);
+        _bottomInset = MathF.Min(x: media.ViewInsets.Bottom, y: _size.Height);
         var pad = Style.Padding;
         _contentPad.Insets = IsSafeArea && _bottomInset <= 0f
             ? new EdgeInsets(
-                pad.Left,
-                pad.Top,
-                pad.Right,
-                pad.Bottom + media.Padding.Bottom
+                left: pad.Left,
+                top: pad.Top,
+                right: pad.Right,
+                bottom: pad.Bottom + media.Padding.Bottom
             )
             : pad;
 
-        var available = MathF.Max(0f, _size.Height - _bottomInset - TopInset);
+        float available = MathF.Max(x: 0f, y: _size.Height - _bottomInset - TopInset);
         Controller.AvailableHeight = available;
 
-        var target = Math.Clamp(Controller.Value, 0f, 1f) * available;
+        float target = Math.Clamp(value: Controller.Value, min: 0f, max: 1f) * available;
         if (!IsExpand)
         {
             // Hug the content: measure it loose first and never grow past what it needs.
             var natural = _card.Measure(
                 new Constraints(
-                    _size.Width,
-                    _size.Width,
-                    0f,
-                    available + _res.CornerRadius
+                    minWidth: _size.Width,
+                    maxWidth: _size.Width,
+                    minHeight: 0f,
+                    maxHeight: available + _res.CornerRadius
                 )
             );
-            target = MathF.Min(target, MathF.Max(0f, natural.Height - _res.CornerRadius));
+            target = MathF.Min(
+                x: target,
+                y: MathF.Max(x: 0f, y: natural.Height - _res.CornerRadius)
+            );
         }
 
         _sheetPx = MathF.Round(target);
-        _card.Measure(Constraints.Tight(_size.Width, _sheetPx + _res.CornerRadius));
+        _card.Measure(Constraints.Tight(width: _size.Width, height: _sheetPx + _res.CornerRadius));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         // Top-anchored to the revealed strip: whatever is not revealed hangs off the bottom edge.
-        var top = origin.Y + _size.Height - _bottomInset - _sheetPx * RevealValue;
-        _card.Layout(new Offset(origin.X, top));
+        float top = origin.Y + _size.Height - _bottomInset - (_sheetPx * RevealValue);
+        _card.Layout(new Offset(x: origin.X, y: top));
     }
 
     public override void Paint(PaintList paint)
     {
         if (IsModal && _res.BarrierColor.A > 0f && Presence > 0.001f)
-            paint.AddRect(Bounds, _res.BarrierColor.WithAlpha(_res.BarrierColor.A * Presence));
+        {
+            paint.AddRect(
+                bounds: Bounds,
+                color: _res.BarrierColor.WithAlpha(_res.BarrierColor.A * Presence)
+            );
+        }
+
         if (IsOnScreen) _card.Paint(paint);
     }
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         // Parked below the bottom edge: not there at all, so a sheet left mounted while closed (a
         // persistent sheet with a bottom bar) never swallows clicks meant for the page behind it.
         if (!IsOnScreen) return null;
@@ -263,13 +281,10 @@ public sealed class FlexibleBottomSheet : Widget
 
     public override void OnPointerUp(Offset point)
     {
-        if (IsDismissible && Bounds.Contains(point.X, point.Y)) Controller.Close();
+        if (IsDismissible && Bounds.Contains(px: point.X, py: point.Y)) Controller.Close();
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(_card);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(_card);
 
     /// <summary>
     ///     A parked sheet is not shown, so Tab must not walk into it and a screen reader must not read
@@ -277,14 +292,6 @@ public sealed class FlexibleBottomSheet : Widget
     ///     <see cref="GetChildren" /> (and so in the tree) because a host may keep it mounted while
     ///     closed, waiting for a bottom bar to pull it back out.
     /// </summary>
-    public override IEnumerable<Widget> GetVisibleChildren()
-    {
-        return IsOnScreen ? ChildOrEmpty(_card) : [];
-    }
-
-    /// <summary>Whether any of the card is actually revealed.</summary>
-    private bool IsOnScreen => _sheetPx * RevealValue >= 0.5f;
-
-    /// <inheritdoc />
-    public override bool ExcludeSemantics => !IsOnScreen;
+    public override IEnumerable<Widget> GetVisibleChildren() =>
+        IsOnScreen ? ChildOrEmpty(_card) : [];
 }

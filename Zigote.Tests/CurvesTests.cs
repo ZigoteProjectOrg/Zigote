@@ -28,32 +28,42 @@ public class CurvesTests
     [MemberData(nameof(AllCurves))]
     public void Endpoints_AreNormalised(string name, Func<float, float> curve)
     {
-        Assert.True(MathF.Abs(curve(0f) - 0f) < Eps, $"{name}(0) = {curve(0f)}");
-        Assert.True(MathF.Abs(curve(1f) - 1f) < Eps, $"{name}(1) = {curve(1f)}");
+        Assert.True(
+            condition: MathF.Abs(curve(0f) - 0f) < Eps,
+            userMessage: $"{name}(0) = {curve(0f)}"
+        );
+        Assert.True(
+            condition: MathF.Abs(curve(1f) - 1f) < Eps,
+            userMessage: $"{name}(1) = {curve(1f)}"
+        );
     }
 
     [Theory]
     [MemberData(nameof(AllCurves))]
     public void StaysFinite_AcrossDomain(string name, Func<float, float> curve)
     {
-        for (var t = 0f; t <= 1f; t += 0.05f)
-            Assert.True(float.IsFinite(curve(t)), $"{name}({t}) = {curve(t)}");
+        for (float t = 0f; t <= 1f; t += 0.05f)
+        {
+            Assert.True(
+                condition: float.IsFinite(curve(t)),
+                userMessage: $"{name}({t}) = {curve(t)}"
+            );
+        }
     }
 
     [Theory]
     [InlineData(0.25f)]
     [InlineData(0.5f)]
     [InlineData(0.75f)]
-    public void Linear_IsIdentity(float t)
-    {
-        Assert.Equal(t, Curves.Linear(t), 5);
-    }
+    public void Linear_IsIdentity(float t) => Assert.Equal(
+        expected: t,
+        actual: Curves.Linear(t),
+        precision: 5
+    );
 
     [Fact]
-    public void EaseInOut_IsSymmetricAtMidpoint()
-    {
+    public void EaseInOut_IsSymmetricAtMidpoint() =>
         Assert.True(MathF.Abs(Curves.EaseInOut(0.5f) - 0.5f) < Eps);
-    }
 
     [Fact]
     public void MonotonicEases_AreIncreasing()
@@ -65,11 +75,14 @@ public class CurvesTests
                      Curves.EaseInOut,
                  })
         {
-            var prev = curve(0f);
-            for (var t = 0.05f; t <= 1f; t += 0.05f)
+            float prev = curve(0f);
+            for (float t = 0.05f; t <= 1f; t += 0.05f)
             {
-                var cur = curve(t);
-                Assert.True(cur >= prev - Eps, $"non-monotonic at {t}: {cur} < {prev}");
+                float cur = curve(t);
+                Assert.True(
+                    condition: cur >= prev - Eps,
+                    userMessage: $"non-monotonic at {t}: {cur} < {prev}"
+                );
                 prev = cur;
             }
         }

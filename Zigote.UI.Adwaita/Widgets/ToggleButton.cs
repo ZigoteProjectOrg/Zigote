@@ -28,7 +28,7 @@ public sealed class AdwToggleButton : ComposedWidget
     public string Label
     {
         get => _label;
-        set => this.Set(ref _label, value);
+        set => this.Set(field: ref _label, value: value);
     }
 
     public bool Active
@@ -47,13 +47,13 @@ public sealed class AdwToggleButton : ComposedWidget
     public AdwButtonStyle Style
     {
         get => _style;
-        set => this.Set(ref _style, value);
+        set => this.Set(field: ref _style, value: value);
     }
 
     public bool Enabled
     {
         get => _enabled;
-        set => this.Set(ref _enabled, value);
+        set => this.Set(field: ref _enabled, value: value);
     }
 
     protected override Widget Build(BuildContext context)
@@ -61,7 +61,7 @@ public sealed class AdwToggleButton : ComposedWidget
         var theme = ThemeProvider.Of(context);
         const float radius = AdwMetrics.ControlRadius;
 
-        var label = new LabelWidget(Label, AdwTypography.Heading) { MaxLines = 1 };
+        var label = new LabelWidget(text: Label, style: AdwTypography.Heading) { MaxLines = 1 };
         var box = new DecoratedBox {
             Radius = radius,
             Child = AdwStyle.ButtonBody(label),
@@ -93,14 +93,14 @@ public sealed class AdwToggleButton : ComposedWidget
             // `:checked` is its own rung of every ladder in _buttons.scss — 30/35/40% for a raised
             // button, the $selected_* steps for a flat one, a 15% ink overlay on a solid accent —
             // not "the pressed fill, latched", which is what this used to paint.
-            label.Color = AdwStyle.ButtonForeground(theme, Style);
+            label.Color = AdwStyle.ButtonForeground(theme: theme, style: Style);
             var target = AdwStyle.ButtonFill(
-                theme,
-                Style,
-                pressable.Hovered,
-                pressable.Pressed,
-                Enabled,
-                Active
+                theme: theme,
+                style: Style,
+                hovered: pressable.Hovered,
+                pressed: pressable.Pressed,
+                enabled: Enabled,
+                @checked: Active
             );
 
             fill.Target(target); // first call (right below) snaps, later state changes fade
@@ -112,10 +112,10 @@ public sealed class AdwToggleButton : ComposedWidget
         return Enabled
             ? pressable
             : new Opacity(
-                Style is AdwButtonStyle.Flat && !Active
+                opacity: Style is AdwButtonStyle.Flat && !Active
                     ? AdwStyle.StrongDisabledOpacity
                     : AdwStyle.DisabledOpacity,
-                pressable
+                child: pressable
             );
     }
 }

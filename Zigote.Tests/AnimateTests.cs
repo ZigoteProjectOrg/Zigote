@@ -25,10 +25,7 @@ public class AnimateTests
         return p;
     }
 
-    private static Widget Box()
-    {
-        return new DecoratedBox { Fill = new Color(1f, 0f, 0f) };
-    }
+    private static Widget Box() => new DecoratedBox { Fill = new Color(r: 1f, g: 0f, b: 0f) };
 
     [Fact]
     public void Headline_Example_Fade500_Scale_Delay500_Totals_1s()
@@ -36,8 +33,8 @@ public class AnimateTests
         // Text("Hello").Animate().Fade(500.ms).Scale(delay: 500.ms): scale inherits the 500 ms
         // duration and starts at 500 ms, so the whole timeline is 1 s.
         var a = Box().Animate().Fade(500.ms).Scale(delay: 500.ms);
-        a.Measure(Constraints.Tight(20, 20)); // resolves the timeline
-        Assert.Equal(1.0f, a.Controller.Duration, 3);
+        a.Measure(Constraints.Tight(width: 20, height: 20)); // resolves the timeline
+        Assert.Equal(expected: 1.0f, actual: a.Controller.Duration, precision: 3);
     }
 
     [Fact]
@@ -45,8 +42,8 @@ public class AnimateTests
     {
         // No delays → both effects start at 0; scale inherits the fade's 300 ms → total 300 ms.
         var a = Box().Animate().Fade(300.ms).Scale();
-        a.Measure(Constraints.Tight(20, 20));
-        Assert.Equal(0.3f, a.Controller.Duration, 3);
+        a.Measure(Constraints.Tight(width: 20, height: 20));
+        Assert.Equal(expected: 0.3f, actual: a.Controller.Duration, precision: 3);
     }
 
     [Fact]
@@ -54,8 +51,8 @@ public class AnimateTests
     {
         // fade [0,400], then +100 baseline, move inherits 400 ms → [500,900] → total 900 ms.
         var a = Box().Animate().Fade(400.ms).Then(100.ms).Move();
-        a.Measure(Constraints.Tight(20, 20));
-        Assert.Equal(0.9f, a.Controller.Duration, 3);
+        a.Measure(Constraints.Tight(width: 20, height: 20));
+        Assert.Equal(expected: 0.9f, actual: a.Controller.Duration, precision: 3);
     }
 
     [Fact]
@@ -64,7 +61,7 @@ public class AnimateTests
         // Idle at progress 0 (not attached, so autoplay hasn't run): a fade-in is fully transparent,
         // so Paint short-circuits and emits no commands.
         var a = Box().Animate().FadeIn();
-        var p = Paint(a, Constraints.Tight(20, 20));
+        var p = Paint(w: a, c: Constraints.Tight(width: 20, height: 20));
         Assert.Empty(p.DebugCommands);
     }
 
@@ -73,8 +70,11 @@ public class AnimateTests
     {
         var a = Box().Animate().FadeIn();
         a.Controller.Complete(); // jump to the settled end state
-        var p = Paint(a, Constraints.Tight(20, 20));
-        Assert.Contains(p.DebugCommands, c => (PaintCommandKind)c.Kind == PaintCommandKind.Rect);
+        var p = Paint(w: a, c: Constraints.Tight(width: 20, height: 20));
+        Assert.Contains(
+            collection: p.DebugCommands,
+            filter: c => (PaintCommandKind)c.Kind == PaintCommandKind.Rect
+        );
     }
 
     [Fact]
@@ -84,13 +84,13 @@ public class AnimateTests
         // 60 fps (16.67 ms × 60) and 30 fps (33.3 ms × 30) both reach the same place after 1 s.
         var fast = new AnimationController(1f);
         fast.Forward();
-        for (var i = 0; i < 60; i++) fast.Tick(1f / 60f);
+        for (int i = 0; i < 60; i++) fast.Tick(1f / 60f);
 
         var slow = new AnimationController(1f);
         slow.Forward();
-        for (var i = 0; i < 30; i++) slow.Tick(1f / 30f);
+        for (int i = 0; i < 30; i++) slow.Tick(1f / 30f);
 
-        Assert.Equal(fast.Progress, slow.Progress, 3);
+        Assert.Equal(expected: fast.Progress, actual: slow.Progress, precision: 3);
         Assert.True(fast.Progress >= 0.999f);
     }
 
@@ -102,15 +102,21 @@ public class AnimateTests
         var c = new AnimationController(1f);
         c.Forward();
         c.Tick(10f); // a 10-second stall
-        Assert.Equal(AnimationController.MaxFrameDelta, c.Progress, 3);
-        Assert.Equal(AnimationStatus.Forward, c.Status); // still animating, not jumped to Completed
+        Assert.Equal(expected: AnimationController.MaxFrameDelta, actual: c.Progress, precision: 3);
+        Assert.Equal(
+            expected: AnimationStatus.Forward,
+            actual: c.Status
+        ); // still animating, not jumped to Completed
     }
 
     [Fact]
     public void No_Effects_Is_A_Transparent_Passthrough()
     {
         var a = Box().Animate();
-        var p = Paint(a, Constraints.Tight(20, 20));
-        Assert.Contains(p.DebugCommands, c => (PaintCommandKind)c.Kind == PaintCommandKind.Rect);
+        var p = Paint(w: a, c: Constraints.Tight(width: 20, height: 20));
+        Assert.Contains(
+            collection: p.DebugCommands,
+            filter: c => (PaintCommandKind)c.Kind == PaintCommandKind.Rect
+        );
     }
 }

@@ -15,18 +15,15 @@ public class LiquidGlass : Widget
     private float _resolvedThickness;
     private Size _size;
 
-    public LiquidGlass(Widget? child = null)
-    {
-        Child = child;
-    }
+    public LiquidGlass(Widget? child = null) => Child = child;
 
     public Widget? Child { get; set; }
 
     public Color Color { get; set; } = new(
-        0.9f,
-        0.95f,
-        1f,
-        0.12f
+        r: 0.9f,
+        g: 0.95f,
+        b: 1f,
+        a: 0.12f
     );
 
     public float BorderRadius { get; set; } = 15f;
@@ -40,10 +37,8 @@ public class LiquidGlass : Widget
     /// <summary>
     ///     Automatically uses a parent LiquidGlassLayer if available, or creates its own.
     /// </summary>
-    public static Widget Auto(Widget child, float borderRadius = 15f)
-    {
-        return new LiquidGlassAuto(child) { BorderRadius = borderRadius };
-    }
+    public static Widget Auto(Widget child, float borderRadius = 15f) =>
+        new LiquidGlassAuto(child) { BorderRadius = borderRadius };
 
     public override Size Measure(Constraints c)
     {
@@ -69,10 +64,10 @@ public class LiquidGlass : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         Child?.Layout(origin);
     }
@@ -81,13 +76,13 @@ public class LiquidGlass : Widget
     {
         // Emit the hardware liquid glass shader draw command
         paint.AddLiquidGlass(
-            Bounds,
-            _resolvedColor,
-            BorderRadius,
-            _resolvedThickness,
-            GlowX,
-            GlowY,
-            _resolvedPinch
+            bounds: Bounds,
+            color: _resolvedColor,
+            radius: BorderRadius,
+            thickness: _resolvedThickness,
+            glowX: GlowX,
+            glowY: GlowY,
+            pinch: _resolvedPinch
         );
 
         Child?.Paint(paint);
@@ -95,14 +90,11 @@ public class LiquidGlass : Widget
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return Child?.HitTest(point) ?? this;
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(Child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Child);
 }
 
 /// <summary>
@@ -112,10 +104,7 @@ internal class LiquidGlassAuto : ComposedWidget
 {
     private readonly Widget _child;
 
-    public LiquidGlassAuto(Widget child)
-    {
-        _child = child;
-    }
+    public LiquidGlassAuto(Widget child) => _child = child;
 
     public float BorderRadius { get; set; } = 15f;
 

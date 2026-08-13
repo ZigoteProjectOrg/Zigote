@@ -8,10 +8,35 @@ namespace Zigote.UI.Adwaita;
 /// </summary>
 public sealed class AdwAvatar : ComposedWidget
 {
+    /// <summary>
+    ///     libadwaita's fourteen avatar colours (<c>$avatarcolorlist</c> in <c>_avatar.scss</c>) as
+    ///     (font colour, background). The stylesheet paints a vertical gradient between two tones;
+    ///     this renderer's flat fill takes the darker one, which is the tone the pairing was
+    ///     contrast-checked against.
+    ///     ponytail: flat instead of the gradient — swap in a two-stop fill if DecoratedBox ever
+    ///     grows one.
+    /// </summary>
+    private static readonly (Color Fg, Color Bg)[] AvatarColors = [
+        (Color.Rgb(r: 0xcf, g: 0xe1, b: 0xf5), Color.Rgb(r: 0x33, g: 0x7f, b: 0xdc)), // blue
+        (Color.Rgb(r: 0xca, g: 0xea, b: 0xf2), Color.Rgb(r: 0x0f, g: 0x9a, b: 0xc8)), // cyan
+        (Color.Rgb(r: 0xce, g: 0xf8, b: 0xd8), Color.Rgb(r: 0x29, g: 0xae, b: 0x74)), // green
+        (Color.Rgb(r: 0xe6, g: 0xf9, b: 0xd7), Color.Rgb(r: 0x6a, g: 0xb8, b: 0x5b)), // lime
+        (Color.Rgb(r: 0xf9, g: 0xf4, b: 0xe1), Color.Rgb(r: 0xd2, g: 0x9d, b: 0x09)), // yellow
+        (Color.Rgb(r: 0xff, g: 0xea, b: 0xd1), Color.Rgb(r: 0xd6, g: 0x84, b: 0x00)), // gold
+        (Color.Rgb(r: 0xff, g: 0xe5, b: 0xc5), Color.Rgb(r: 0xed, g: 0x5b, b: 0x00)), // orange
+        (Color.Rgb(r: 0xf8, g: 0xd2, b: 0xce), Color.Rgb(r: 0xe6, g: 0x2d, b: 0x42)), // raspberry
+        (Color.Rgb(r: 0xfa, g: 0xc7, b: 0xde), Color.Rgb(r: 0xe3, g: 0x3b, b: 0x6a)), // magenta
+        (Color.Rgb(r: 0xe7, g: 0xc2, b: 0xe8), Color.Rgb(r: 0x99, g: 0x45, b: 0xb5)), // purple
+        (Color.Rgb(r: 0xd5, g: 0xd2, b: 0xf5), Color.Rgb(r: 0x7a, g: 0x59, b: 0xca)), // violet
+        (Color.Rgb(r: 0xf2, g: 0xea, b: 0xde), Color.Rgb(r: 0xb0, g: 0x89, b: 0x52)), // beige
+        (Color.Rgb(r: 0xe5, g: 0xd6, b: 0xca), Color.Rgb(r: 0x78, g: 0x53, b: 0x36)), // brown
+        (Color.Rgb(r: 0xd8, g: 0xd7, b: 0xd3), Color.Rgb(r: 0x6e, g: 0x6d, b: 0x71)), // gray
+    ];
+
+    private Widget? _customImage;
+    private string? _iconName;
     private float _size;
     private string? _text;
-    private string? _iconName;
-    private Widget? _customImage;
 
     public AdwAvatar(float size = 40f, string? text = null, string? iconName = null)
     {
@@ -23,21 +48,21 @@ public sealed class AdwAvatar : ComposedWidget
     public float Size
     {
         get => _size;
-        set => this.Set(ref _size, value);
+        set => this.Set(field: ref _size, value: value);
     }
 
     /// <summary>Name to derive initials and the accent hue from.</summary>
     public string? Text
     {
         get => _text;
-        set => this.Set(ref _text, value);
+        set => this.Set(field: ref _text, value: value);
     }
 
     /// <summary>Fallback glyph (a <see cref="MaterialIcons" /> constant); null uses the person icon.</summary>
     public string? IconName
     {
         get => _iconName;
-        set => this.Set(ref _iconName, value);
+        set => this.Set(field: ref _iconName, value: value);
     }
 
     /// <summary>
@@ -49,14 +74,19 @@ public sealed class AdwAvatar : ComposedWidget
     public Widget? CustomImage
     {
         get => _customImage;
-        set => this.Set(ref _customImage, value);
+        set => this.Set(field: ref _customImage, value: value);
     }
 
     protected override Widget Build(BuildContext context)
     {
         // A real picture is the identity when there is one; initials and the glyph are fallbacks.
         if (CustomImage is { } image)
-            return new ClipRRect(Size / 2f, SizedBox.Square(Size, image));
+        {
+            return new ClipRRect(
+                radius: Size / 2f,
+                child: SizedBox.Square(size: Size, child: image)
+            );
+        }
 
         var theme = ThemeProvider.Of(context);
 
@@ -66,7 +96,7 @@ public sealed class AdwAvatar : ComposedWidget
         {
             var (fg, bg) = ColorFor(Text!);
             fill = bg;
-            inner = new Label(Initials(Text!), Size * 0.4f, fg) {
+            inner = new Label(text: Initials(Text!), fontSize: Size * 0.4f, color: fg) {
                 FontWeight = FontWeight.Bold,
                 MaxLines = 1,
             };
@@ -74,56 +104,36 @@ public sealed class AdwAvatar : ComposedWidget
         else
         {
             fill = AdwPalette.For(theme).ButtonFill;
-            inner = new IconGlyph(IconName ?? MaterialIcons.Person, Size * 0.55f, theme.Label2);
+            inner = new IconGlyph(
+                glyph: IconName ?? MaterialIcons.Person,
+                size: Size * 0.55f,
+                color: theme.Label2
+            );
         }
 
         return new DecoratedBox {
             Fill = fill,
             Radius = Size / 2f,
-            Child = SizedBox.Square(Size, new Center { Child = inner }),
+            Child = SizedBox.Square(size: Size, child: new Center { Child = inner }),
         };
     }
 
     /// <summary>First letters of the first two words, uppercased.</summary>
     private static string Initials(string text)
     {
-        var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var initials = "";
-        for (var i = 0; i < words.Length && i < 2; i++)
+        string[] words = text.Split(separator: ' ', options: StringSplitOptions.RemoveEmptyEntries);
+        string initials = "";
+        for (int i = 0; i < words.Length && i < 2; i++)
             initials += char.ToUpperInvariant(words[i][0]);
         return initials;
     }
 
-    /// <summary>
-    ///     libadwaita's fourteen avatar colours (<c>$avatarcolorlist</c> in <c>_avatar.scss</c>) as
-    ///     (font colour, background). The stylesheet paints a vertical gradient between two tones;
-    ///     this renderer's flat fill takes the darker one, which is the tone the pairing was
-    ///     contrast-checked against.
-    ///     ponytail: flat instead of the gradient — swap in a two-stop fill if DecoratedBox ever
-    ///     grows one.
-    /// </summary>
-    private static readonly (Color Fg, Color Bg)[] AvatarColors = [
-        (Color.Rgb(0xcf, 0xe1, 0xf5), Color.Rgb(0x33, 0x7f, 0xdc)), // blue
-        (Color.Rgb(0xca, 0xea, 0xf2), Color.Rgb(0x0f, 0x9a, 0xc8)), // cyan
-        (Color.Rgb(0xce, 0xf8, 0xd8), Color.Rgb(0x29, 0xae, 0x74)), // green
-        (Color.Rgb(0xe6, 0xf9, 0xd7), Color.Rgb(0x6a, 0xb8, 0x5b)), // lime
-        (Color.Rgb(0xf9, 0xf4, 0xe1), Color.Rgb(0xd2, 0x9d, 0x09)), // yellow
-        (Color.Rgb(0xff, 0xea, 0xd1), Color.Rgb(0xd6, 0x84, 0x00)), // gold
-        (Color.Rgb(0xff, 0xe5, 0xc5), Color.Rgb(0xed, 0x5b, 0x00)), // orange
-        (Color.Rgb(0xf8, 0xd2, 0xce), Color.Rgb(0xe6, 0x2d, 0x42)), // raspberry
-        (Color.Rgb(0xfa, 0xc7, 0xde), Color.Rgb(0xe3, 0x3b, 0x6a)), // magenta
-        (Color.Rgb(0xe7, 0xc2, 0xe8), Color.Rgb(0x99, 0x45, 0xb5)), // purple
-        (Color.Rgb(0xd5, 0xd2, 0xf5), Color.Rgb(0x7a, 0x59, 0xca)), // violet
-        (Color.Rgb(0xf2, 0xea, 0xde), Color.Rgb(0xb0, 0x89, 0x52)), // beige
-        (Color.Rgb(0xe5, 0xd6, 0xca), Color.Rgb(0x78, 0x53, 0x36)), // brown
-        (Color.Rgb(0xd8, 0xd7, 0xd3), Color.Rgb(0x6e, 0x6d, 0x71)), // gray
-    ];
-
     /// <summary>Stable colour from the text — a deterministic hash into the fourteen above.</summary>
     private static (Color Fg, Color Bg) ColorFor(string text)
     {
-        var h = 0;
-        foreach (var ch in text) h = unchecked(h * 31 + ch);
-        return AvatarColors[(h % AvatarColors.Length + AvatarColors.Length) % AvatarColors.Length];
+        int h = 0;
+        foreach (char ch in text) h = unchecked((h * 31) + ch);
+        return AvatarColors[((h % AvatarColors.Length) + AvatarColors.Length) %
+                            AvatarColors.Length];
     }
 }

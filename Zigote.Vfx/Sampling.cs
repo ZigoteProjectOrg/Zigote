@@ -8,15 +8,9 @@ public readonly struct FloatRange(float min, float max)
     public readonly float Min = min;
     public readonly float Max = max;
 
-    public static FloatRange Constant(float v)
-    {
-        return new FloatRange(v, v);
-    }
+    public static FloatRange Constant(float v) => new(min: v, max: v);
 
-    public float Sample(ref VfxRng rng)
-    {
-        return rng.Range(Min, Max);
-    }
+    public float Sample(ref VfxRng rng) => rng.Range(min: Min, max: Max);
 }
 
 public readonly struct ColorStop(float position, Color color)
@@ -39,15 +33,14 @@ public sealed class ColorRamp
     public ColorRamp(IEnumerable<ColorStop> stops)
     {
         _stops = stops.OrderBy(s => s.Position).ToArray();
-        if (_stops.Length == 0) _stops = [new ColorStop(0f, Color.White)];
+        if (_stops.Length == 0) _stops = [new ColorStop(position: 0f, color: Color.White)];
     }
 
     public IReadOnlyList<ColorStop> Stops => _stops;
 
-    public static ColorRamp Solid(Color c)
-    {
-        return new ColorRamp([new ColorStop(0f, c), new ColorStop(1f, c)]);
-    }
+    public static ColorRamp Solid(Color c) => new(
+        [new ColorStop(position: 0f, color: c), new ColorStop(position: 1f, color: c)]
+    );
 
     public Color Evaluate(float t)
     {
@@ -55,14 +48,14 @@ public sealed class ColorRamp
         var last = _stops[^1];
         if (t >= last.Position) return last.Color;
 
-        for (var i = 1; i < _stops.Length; i++)
+        for (int i = 1; i < _stops.Length; i++)
         {
             var b = _stops[i];
             if (t > b.Position) continue;
             var a = _stops[i - 1];
-            var span = b.Position - a.Position;
-            var k = span <= 0f ? 0f : (t - a.Position) / span;
-            return VfxMath.LerpColor(a.Color, b.Color, k);
+            float span = b.Position - a.Position;
+            float k = span <= 0f ? 0f : (t - a.Position) / span;
+            return VfxMath.LerpColor(a: a.Color, b: b.Color, t: k);
         }
 
         return last.Color;
@@ -83,20 +76,18 @@ public sealed class FloatCurve
     public FloatCurve(IEnumerable<CurveKey> keys)
     {
         _keys = keys.OrderBy(k => k.Position).ToArray();
-        if (_keys.Length == 0) _keys = [new CurveKey(0f, 1f)];
+        if (_keys.Length == 0) _keys = [new CurveKey(position: 0f, value: 1f)];
     }
 
     public IReadOnlyList<CurveKey> Keys => _keys;
 
-    public static FloatCurve Constant(float v)
-    {
-        return new FloatCurve([new CurveKey(0f, v), new CurveKey(1f, v)]);
-    }
+    public static FloatCurve Constant(float v) => new(
+        [new CurveKey(position: 0f, value: v), new CurveKey(position: 1f, value: v)]
+    );
 
-    public static FloatCurve Linear(float from, float to)
-    {
-        return new FloatCurve([new CurveKey(0f, from), new CurveKey(1f, to)]);
-    }
+    public static FloatCurve Linear(float from, float to) => new(
+        [new CurveKey(position: 0f, value: from), new CurveKey(position: 1f, value: to)]
+    );
 
     public float Evaluate(float t)
     {
@@ -104,14 +95,14 @@ public sealed class FloatCurve
         var last = _keys[^1];
         if (t >= last.Position) return last.Value;
 
-        for (var i = 1; i < _keys.Length; i++)
+        for (int i = 1; i < _keys.Length; i++)
         {
             var b = _keys[i];
             if (t > b.Position) continue;
             var a = _keys[i - 1];
-            var span = b.Position - a.Position;
-            var k = span <= 0f ? 0f : (t - a.Position) / span;
-            return a.Value + (b.Value - a.Value) * k;
+            float span = b.Position - a.Position;
+            float k = span <= 0f ? 0f : (t - a.Position) / span;
+            return a.Value + ((b.Value - a.Value) * k);
         }
 
         return last.Value;
@@ -123,10 +114,10 @@ internal static class VfxMath
     public static Color LerpColor(Color a, Color b, float t)
     {
         return new Color(
-            a.R + (b.R - a.R) * t,
-            a.G + (b.G - a.G) * t,
-            a.B + (b.B - a.B) * t,
-            a.A + (b.A - a.A) * t
+            r: a.R + ((b.R - a.R) * t),
+            g: a.G + ((b.G - a.G) * t),
+            b: a.B + ((b.B - a.B) * t),
+            a: a.A + ((b.A - a.A) * t)
         );
     }
 }

@@ -23,9 +23,9 @@ public static class ScriptSerializer
         var result = new Dictionary<string, string>();
         foreach (var field in meta.ExportedFields)
         {
-            var value = field.GetValue(instance);
+            object? value = field.GetValue(instance);
             if (value is null) continue;
-            result[field.Name] = ValueToJson(value, field.Kind);
+            result[field.Name] = ValueToJson(value: value, kind: field.Kind);
         }
 
         return result;
@@ -41,8 +41,10 @@ public static class ScriptSerializer
         IReadOnlyDictionary<string, string> stored)
     {
         foreach (var field in meta.ExportedFields)
-            if (stored.TryGetValue(field.Name, out var json))
-                DeserializeField(instance, field, json);
+        {
+            if (stored.TryGetValue(key: field.Name, value: out string? json))
+                DeserializeField(instance: instance, field: field, json: json);
+        }
     }
 
     /// <summary>
@@ -54,8 +56,8 @@ public static class ScriptSerializer
     {
         try
         {
-            var value = JsonToValue(json, field.Kind);
-            if (value != null) field.SetValue(instance, value);
+            object? value = JsonToValue(json: json, kind: field.Kind);
+            if (value != null) field.SetValue(instance: instance, value: value);
         }
         catch (Exception ex)
         {
@@ -78,7 +80,11 @@ public static class ScriptSerializer
                 $"{{\"r\":{c.R.ToString(CultureInfo.InvariantCulture)},\"g\":{c.G.ToString(CultureInfo.InvariantCulture)},\"b\":{c.B.ToString(CultureInfo.InvariantCulture)},\"a\":{c.A.ToString(CultureInfo.InvariantCulture)}}}",
             // Source-gen'd primitive metadata — exported-field restore runs at play time, which under
             // NativeAOT has no reflection-based serializer.
-            _ => JsonSerializer.Serialize(value, value.GetType(), ScriptJsonContext.Default),
+            _ => JsonSerializer.Serialize(
+                value: value,
+                inputType: value.GetType(),
+                context: ScriptJsonContext.Default
+            ),
         };
     }
 
@@ -87,37 +93,52 @@ public static class ScriptSerializer
         switch (kind)
         {
             case ExportedFieldKind.Bool:
-                return JsonSerializer.Deserialize(json, ScriptJsonContext.Default.Boolean);
+                return JsonSerializer.Deserialize(
+                    json: json,
+                    jsonTypeInfo: ScriptJsonContext.Default.Boolean
+                );
             case ExportedFieldKind.Int:
-                return JsonSerializer.Deserialize(json, ScriptJsonContext.Default.Int32);
+                return JsonSerializer.Deserialize(
+                    json: json,
+                    jsonTypeInfo: ScriptJsonContext.Default.Int32
+                );
             case ExportedFieldKind.Float:
-                return JsonSerializer.Deserialize(json, ScriptJsonContext.Default.Single);
+                return JsonSerializer.Deserialize(
+                    json: json,
+                    jsonTypeInfo: ScriptJsonContext.Default.Single
+                );
             case ExportedFieldKind.Double:
-                return JsonSerializer.Deserialize(json, ScriptJsonContext.Default.Double);
+                return JsonSerializer.Deserialize(
+                    json: json,
+                    jsonTypeInfo: ScriptJsonContext.Default.Double
+                );
             case ExportedFieldKind.String:
-                return JsonSerializer.Deserialize(json, ScriptJsonContext.Default.String);
+                return JsonSerializer.Deserialize(
+                    json: json,
+                    jsonTypeInfo: ScriptJsonContext.Default.String
+                );
             case ExportedFieldKind.Vec2:
             {
                 var n = JsonNode.Parse(json)!;
-                return new Vec2(n["x"]!.GetValue<float>(), n["y"]!.GetValue<float>());
+                return new Vec2(x: n["x"]!.GetValue<float>(), y: n["y"]!.GetValue<float>());
             }
             case ExportedFieldKind.Vec3:
             {
                 var n = JsonNode.Parse(json)!;
                 return new Vec3(
-                    n["x"]!.GetValue<float>(),
-                    n["y"]!.GetValue<float>(),
-                    n["z"]!.GetValue<float>()
+                    x: n["x"]!.GetValue<float>(),
+                    y: n["y"]!.GetValue<float>(),
+                    z: n["z"]!.GetValue<float>()
                 );
             }
             case ExportedFieldKind.Color:
             {
                 var n = JsonNode.Parse(json)!;
                 return new Color(
-                    n["r"]!.GetValue<float>(),
-                    n["g"]!.GetValue<float>(),
-                    n["b"]!.GetValue<float>(),
-                    n["a"]!.GetValue<float>()
+                    r: n["r"]!.GetValue<float>(),
+                    g: n["g"]!.GetValue<float>(),
+                    b: n["b"]!.GetValue<float>(),
+                    a: n["a"]!.GetValue<float>()
                 );
             }
             default: return null;

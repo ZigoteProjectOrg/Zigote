@@ -18,9 +18,7 @@ namespace Zigote.Audioplayer;
 /// </summary>
 public sealed record AudioSource
 {
-    private AudioSource()
-    {
-    }
+    private AudioSource() { }
 
     /// <summary>Path on disk, or null for a push stream (<see cref="Stream" />).</summary>
     public string? Path { get; private init; }
@@ -47,15 +45,21 @@ public sealed record AudioSource
     /// </summary>
     public object? Tag { get; private init; }
 
-    /// <summary>True when this source is fed by <see cref="AudioPlayer.Push" /> rather than read from disk.</summary>
+    /// <summary>
+    ///     True when this source is fed by <see cref="AudioPlayer.Push" /> rather than read from
+    ///     disk.
+    /// </summary>
     public bool IsStream => Path is null;
 
     /// <summary>A whole file. Streamed by default — the right answer for anything album-length.</summary>
     public static AudioSource File(string path, bool streaming = true, float gainDb = 0f,
-        object? tag = null)
-    {
-        return new AudioSource { Path = path, Streaming = streaming, GainDb = gainDb, Tag = tag };
-    }
+        object? tag = null) =>
+        new() {
+            Path = path,
+            Streaming = streaming,
+            GainDb = gainDb,
+            Tag = tag,
+        };
 
     /// <summary>
     ///     A region of a file — one track of a gapless rip, a preview snippet. Playback stops at
@@ -64,8 +68,7 @@ public sealed record AudioSource
     public static AudioSource Clip(string path, TimeSpan start, TimeSpan? end = null,
         bool streaming = true, float gainDb = 0f, object? tag = null)
     {
-        return new AudioSource
-        {
+        return new AudioSource {
             Path = path,
             Streaming = streaming,
             Start = start > TimeSpan.Zero ? start : TimeSpan.Zero,
@@ -80,8 +83,9 @@ public sealed record AudioSource
     ///     as they arrive (an internet radio station), then <see cref="AudioPlayer.FinishStream" />.
     ///     Unseekable, and usually of unknown length.
     /// </summary>
-    public static AudioSource Stream(float gainDb = 0f, object? tag = null)
-    {
-        return new AudioSource { GainDb = gainDb, Tag = tag };
-    }
+    public static AudioSource Stream(float gainDb = 0f, object? tag = null) =>
+        new() {
+            GainDb = gainDb,
+            Tag = tag,
+        };
 }

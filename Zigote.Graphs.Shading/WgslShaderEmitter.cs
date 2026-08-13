@@ -18,26 +18,37 @@ public static class WgslShaderEmitter
         var sb = new StringBuilder();
         sb.Append(Prelude());
         sb.AppendLine();
-        for (var i = 0; i < program.Ramps.Count; i++) sb.AppendLine(EmitRamp(i, program.Ramps[i]));
+        for (int i = 0; i < program.Ramps.Count; i++)
+            sb.AppendLine(EmitRamp(index: i, ramp: program.Ramps[i]));
         sb.AppendLine(
             "fn zg_surface(uv: vec2<f32>, gen: vec3<f32>, nrm: vec3<f32>) -> ZgSurface {"
         );
 
         foreach (var ins in program.Instructions)
+        {
             sb.AppendLine(
-                $"  let v{ins.Result}: {ShaderCoerce.WgslType(ins.Type)} = {Expr(ins, program)};"
+                $"  let v{ins.Result}: {ShaderCoerce.WgslType(ins.Type)} = {Expr(ins: ins, p: program)};"
             );
+        }
 
-        var baseColor = Vec4Root(program, program.BaseColor, "vec4<f32>(0.8, 0.8, 0.8, 1.0)");
-        var metallic = ScalarRoot(program, program.Metallic, 0f);
-        var roughness = ScalarRoot(program, program.Roughness, 0.5f);
-        var specular = ScalarRoot(program, program.Specular, 1f);
-        var clearcoat = ScalarRoot(program, program.Clearcoat, 0f);
-        var coatRough = ScalarRoot(program, program.ClearcoatRoughness, 0.03f);
-        var emisColor = Vec4Root(program, program.Emission, "vec4<f32>(0.0, 0.0, 0.0, 1.0)");
-        var emisStr = ScalarRoot(program, program.EmissionStrength, 0f);
-        var normal = program.Normal >= 0
-            ? Coerce(program, program.Normal, ShaderValueType.Vec3)
+        string baseColor = Vec4Root(
+            p: program,
+            id: program.BaseColor,
+            fallback: "vec4<f32>(0.8, 0.8, 0.8, 1.0)"
+        );
+        string metallic = ScalarRoot(p: program, id: program.Metallic, fallback: 0f);
+        string roughness = ScalarRoot(p: program, id: program.Roughness, fallback: 0.5f);
+        string specular = ScalarRoot(p: program, id: program.Specular, fallback: 1f);
+        string clearcoat = ScalarRoot(p: program, id: program.Clearcoat, fallback: 0f);
+        string coatRough = ScalarRoot(p: program, id: program.ClearcoatRoughness, fallback: 0.03f);
+        string emisColor = Vec4Root(
+            p: program,
+            id: program.Emission,
+            fallback: "vec4<f32>(0.0, 0.0, 0.0, 1.0)"
+        );
+        string emisStr = ScalarRoot(p: program, id: program.EmissionStrength, fallback: 0f);
+        string normal = program.Normal >= 0
+            ? Coerce(p: program, id: program.Normal, target: ShaderValueType.Vec3)
             : "nrm";
 
         sb.AppendLine("  var s: ZgSurface;");
@@ -206,21 +217,21 @@ public static class WgslShaderEmitter
             case ShaderOp.InputNormal: return "nrm";
             case ShaderOp.Coerce:
                 return ShaderCoerce.Emit(
-                    $"v{ins.Args[0]}",
-                    p.Instructions[ins.Args[0]].Type,
-                    ins.Type
+                    expr: $"v{ins.Args[0]}",
+                    from: p.Instructions[ins.Args[0]].Type,
+                    to: ins.Type
                 );
             case ShaderOp.Math:
-                return EmitMath((int)ins.P0, $"v{ins.Args[0]}", $"v{ins.Args[1]}");
+                return EmitMath(op: (int)ins.P0, a: $"v{ins.Args[0]}", b: $"v{ins.Args[1]}");
             case ShaderOp.Clamp:
                 return
                     $"clamp(v{ins.Args[0]}, v{ins.Args[1]}, max(v{ins.Args[1]}, v{ins.Args[2]}))";
             case ShaderOp.MixColor:
                 return EmitMix(
-                    (int)ins.P0,
-                    $"v{ins.Args[0]}",
-                    $"v{ins.Args[1]}",
-                    $"v{ins.Args[2]}"
+                    mode: (int)ins.P0,
+                    fac: $"v{ins.Args[0]}",
+                    a: $"v{ins.Args[1]}",
+                    b: $"v{ins.Args[2]}"
                 );
 
             case ShaderOp.Mapping:
@@ -276,10 +287,10 @@ public static class WgslShaderEmitter
     private static string EmitRamp(int index, ShaderColorRamp ramp)
     {
         var stops = ramp.Stops;
-        var last = stops.Count - 1;
+        int last = stops.Count - 1;
         var sb = new StringBuilder();
         sb.AppendLine($"fn zg_ramp_{index}(t: f32) -> vec4<f32> {{");
-        for (var i = 0; i < stops.Count; i++)
+        for (int i = 0; i < stops.Count; i++)
         {
             var s = stops[i];
             sb.AppendLine($"  let c{i} = vec4<f32>({F(s.R)}, {F(s.G)}, {F(s.B)}, {F(s.A)});");
@@ -287,13 +298,13 @@ public static class WgslShaderEmitter
 
         sb.AppendLine($"  if (t <= {F(stops[0].Pos)}) {{ return c0; }}");
         sb.AppendLine($"  if (t >= {F(stops[last].Pos)}) {{ return c{last}; }}");
-        for (var i = 0; i < last; i++)
+        for (int i = 0; i < last; i++)
         {
             var a = stops[i];
             var b = stops[i + 1];
-            var span = b.Pos - a.Pos;
-            var fExpr = span > 1e-6f ? $"clamp((t - {F(a.Pos)}) / {F(span)}, 0.0, 1.0)" : "0.0";
-            var g = ramp.Interpolation switch {
+            float span = b.Pos - a.Pos;
+            string fExpr = span > 1e-6f ? $"clamp((t - {F(a.Pos)}) / {F(span)}, 0.0, 1.0)" : "0.0";
+            string g = ramp.Interpolation switch {
                 RampInterpolation.Constant => "0.0",
                 RampInterpolation.Ease => "f * f * (3.0 - 2.0 * f)",
                 _ => "f",
@@ -334,8 +345,8 @@ public static class WgslShaderEmitter
 
     private static string EmitMix(int mode, string fac, string a, string b)
     {
-        var one = "vec4<f32>(1.0)";
-        var blended = (MixMode)mode switch {
+        string one = "vec4<f32>(1.0)";
+        string blended = (MixMode)mode switch {
             MixMode.Darken => $"min({a}, {b})",
             MixMode.Multiply => $"({a} * {b})",
             MixMode.Lighten => $"max({a}, {b})",
@@ -345,32 +356,26 @@ public static class WgslShaderEmitter
             MixMode.Difference => $"abs({a} - {b})",
             _ => b,
         };
-        var f = $"clamp({fac}, 0.0, 1.0)";
+        string f = $"clamp({fac}, 0.0, 1.0)";
         return $"vec4<f32>(mix(({a}).rgb, ({blended}).rgb, {f}), mix(({a}).a, ({b}).a, {f}))";
     }
 
     // ── Surface-root expressions ────────────────────────────────────────────────
 
-    private static string ScalarRoot(ShaderGraphProgram p, int id, float fallback)
-    {
-        return id < 0 ? F(fallback) : Coerce(p, id, ShaderValueType.Float);
-    }
+    private static string ScalarRoot(ShaderGraphProgram p, int id, float fallback) =>
+        id < 0 ? F(fallback) : Coerce(p: p, id: id, target: ShaderValueType.Float);
 
-    private static string Vec4Root(ShaderGraphProgram p, int id, string fallback)
-    {
-        return id < 0 ? fallback : Coerce(p, id, ShaderValueType.Vec4);
-    }
+    private static string Vec4Root(ShaderGraphProgram p, int id, string fallback) =>
+        id < 0 ? fallback : Coerce(p: p, id: id, target: ShaderValueType.Vec4);
 
-    private static string Coerce(ShaderGraphProgram p, int id, ShaderValueType target)
-    {
-        return ShaderCoerce.Emit($"v{id}", p.Instructions[id].Type, target);
-    }
+    private static string Coerce(ShaderGraphProgram p, int id, ShaderValueType target) =>
+        ShaderCoerce.Emit(expr: $"v{id}", from: p.Instructions[id].Type, to: target);
 
     /// <summary>Format a float as a WGSL f32 literal (always with a decimal point).</summary>
     internal static string F(float v)
     {
         if (float.IsNaN(v) || float.IsInfinity(v)) v = 0f;
-        var s = v.ToString("0.0######", CultureInfo.InvariantCulture);
+        string s = v.ToString(format: "0.0######", provider: CultureInfo.InvariantCulture);
         return s;
     }
 }

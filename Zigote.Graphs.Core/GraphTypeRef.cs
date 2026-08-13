@@ -16,8 +16,5 @@ public readonly record struct GraphTypeRef(string Id)
     public static readonly GraphTypeRef Color = new("core.color");
     public static readonly GraphTypeRef Any = new("core.any");
 
-    public override string ToString()
-    {
-        return Id;
-    }
+    public override string ToString() => Id;
 }

@@ -12,7 +12,7 @@ public sealed class TagIndex
 
     public void Set(int id, string? tag)
     {
-        if (_tagOf.TryGetValue(id, out var old))
+        if (_tagOf.TryGetValue(key: id, value: out string? old))
         {
             if (old == tag) return;
             _byTag[old].Remove(id);
@@ -20,33 +20,28 @@ public sealed class TagIndex
         }
 
         if (string.IsNullOrEmpty(tag)) return;
-        if (!_byTag.TryGetValue(tag, out var list)) _byTag[tag] = list = [];
+        if (!_byTag.TryGetValue(key: tag, value: out var list)) _byTag[tag] = list = [];
         list.Add(id);
         _tagOf[id] = tag;
     }
 
-    public void Remove(int id)
-    {
-        Set(id, null);
-    }
+    public void Remove(int id) => Set(id: id, tag: null);
 
-    public string? TagOf(int id)
-    {
-        return _tagOf.GetValueOrDefault(id);
-    }
+    public string? TagOf(int id) => _tagOf.GetValueOrDefault(id);
 
-    /// <summary>Ids carrying <paramref name="tag" />, appended to <paramref name="results" /> after clearing it.</summary>
+    /// <summary>
+    ///     Ids carrying <paramref name="tag" />, appended to <paramref name="results" /> after
+    ///     clearing it.
+    /// </summary>
     public int WithTag(string tag, List<int> results)
     {
         results.Clear();
-        if (_byTag.TryGetValue(tag, out var list)) results.AddRange(list);
+        if (_byTag.TryGetValue(key: tag, value: out var list)) results.AddRange(list);
         return results.Count;
     }
 
-    public int Count(string tag)
-    {
-        return _byTag.TryGetValue(tag, out var list) ? list.Count : 0;
-    }
+    public int Count(string tag) =>
+        _byTag.TryGetValue(key: tag, value: out var list) ? list.Count : 0;
 
     public void Clear()
     {

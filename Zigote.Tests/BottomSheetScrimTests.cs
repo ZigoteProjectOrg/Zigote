@@ -18,10 +18,10 @@ public class BottomSheetScrimTests
 {
     private static AdwBottomSheet Laid(out int closes, float w = 400f, float h = 600f)
     {
-        var count = 0;
+        int count = 0;
         var sheet = new AdwBottomSheet(
-            new SizedBox(w, h), // content behind, claims nothing
-            new Container { Height = 200f }
+            content: new SizedBox(width: w, height: h), // content behind, claims nothing
+            sheet: new Container { Height = 200f }
         ) {
             Modal = true,
             ShowDragHandle = true,
@@ -31,7 +31,7 @@ public class BottomSheetScrimTests
             if (!open) count++;
         };
         sheet.Open = true; // unattached: snaps open, no animation
-        sheet.Measure(Constraints.Tight(w, h));
+        sheet.Measure(Constraints.Tight(width: w, height: h));
         sheet.Layout(Offset.Zero);
         closes = count;
         return sheet;
@@ -42,10 +42,12 @@ public class BottomSheetScrimTests
     {
         var sheet = Laid(out _);
 
-        var hit = sheet.HitTest(new Offset(200f, 4f)); // inside the strip the sheet never covers
+        var hit = sheet.HitTest(
+            new Offset(x: 200f, y: 4f)
+        ); // inside the strip the sheet never covers
         var scrim = Assert.IsType<FlexibleBottomSheet>(hit);
 
-        scrim.OnPointerUp(new Offset(200f, 4f));
+        scrim.OnPointerUp(new Offset(x: 200f, y: 4f));
         Assert.False(sheet.Open);
     }
 
@@ -54,7 +56,7 @@ public class BottomSheetScrimTests
     {
         var sheet = Laid(out _);
 
-        var hit = sheet.HitTest(new Offset(200f, 580f)); // low in the card
+        var hit = sheet.HitTest(new Offset(x: 200f, y: 580f)); // low in the card
         Assert.IsNotType<FlexibleBottomSheet>(hit);
         Assert.True(sheet.Open);
     }
@@ -70,15 +72,18 @@ public class BottomSheetScrimTests
     public void ClosedSheet_LetsClicksThroughToTheContent()
     {
         var content = new Container { Height = 600f };
-        var sheet = new AdwBottomSheet(content, new Container { Height = 200f }) { Modal = true };
+        var sheet =
+            new AdwBottomSheet(content: content, sheet: new Container { Height = 200f }) {
+                Modal = true,
+            };
 
         sheet.Open = true; // unattached: snaps open…
-        sheet.Measure(Constraints.Tight(400f, 600f));
+        sheet.Measure(Constraints.Tight(width: 400f, height: 600f));
         sheet.Layout(Offset.Zero);
         sheet.Open = false; // …and shut again
-        sheet.Measure(Constraints.Tight(400f, 600f));
+        sheet.Measure(Constraints.Tight(width: 400f, height: 600f));
         sheet.Layout(Offset.Zero);
 
-        Assert.Same(content, sheet.HitTest(new Offset(200f, 300f)));
+        Assert.Same(expected: content, actual: sheet.HitTest(new Offset(x: 200f, y: 300f)));
     }
 }

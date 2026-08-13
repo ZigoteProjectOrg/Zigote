@@ -21,11 +21,11 @@ public sealed class SlideTransition(AnimationController controller, Widget? chil
 
     public Widget? Child { get; set; } = child;
     public AnimationController Controller { get; } = controller;
-    public Offset BeginOffset { get; set; } = new(0f, 40f); // slide up from below
+    public Offset BeginOffset { get; set; } = new(x: 0f, y: 40f); // slide up from below
 
     public override Size Measure(Constraints c)
     {
-        _size = Child?.Measure(c) ?? new Size(0f, 0f);
+        _size = Child?.Measure(c) ?? new Size(width: 0f, height: 0f);
         return _size;
     }
 
@@ -33,16 +33,16 @@ public sealed class SlideTransition(AnimationController controller, Widget? chil
     {
         _naturalOrigin = origin;
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
 
-        var t = Controller.Value;
-        var ox = BeginOffset.X + (0f - BeginOffset.X) * t;
-        var oy = BeginOffset.Y + (0f - BeginOffset.Y) * t;
-        Child?.Layout(new Offset(origin.X + ox, origin.Y + oy));
+        float t = Controller.Value;
+        float ox = BeginOffset.X + ((0f - BeginOffset.X) * t);
+        float oy = BeginOffset.Y + ((0f - BeginOffset.Y) * t);
+        Child?.Layout(new Offset(x: origin.X + ox, y: origin.Y + oy));
     }
 
     public override void Paint(PaintList paint)
@@ -54,7 +54,7 @@ public sealed class SlideTransition(AnimationController controller, Widget? chil
     public override Widget? HitTest(Offset point)
     {
         if (Controller.Progress < 0.01f) return null;
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return Child?.HitTest(point) ?? this;
     }
 

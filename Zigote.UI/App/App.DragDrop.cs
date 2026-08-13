@@ -18,25 +18,28 @@ public partial class App
 {
     // External-drop accumulation (a begin…complete run of DROP_FILE/DROP_TEXT events).
     private readonly List<string> _dropFiles = [];
-    private string? _dropText;
-    private Offset _dropPoint;
+
+    // Active in-app drag session (null when none).
+    private DragFeedbackOverlay? _dragOverlay;
 
     // The target currently highlighted under the pointer (shared by external + in-app drags).
     private Widget? _dropHoverTarget;
-
-    // Active in-app drag session (null when none).
-    private DragData? _activeDrag;
-    private DragFeedbackOverlay? _dragOverlay;
-
-    /// <summary>Raised after any external OS drop (files/text), regardless of whether a widget accepted
-    /// it — lets a host handle drops globally (e.g. "open the dropped file").</summary>
-    public event Action<DragData>? ExternalDropped;
+    private Offset _dropPoint;
+    private string? _dropText;
 
     /// <summary>True while an in-app drag session is active (a Draggable is being dragged).</summary>
-    public bool IsDragging => _activeDrag is not null;
+    public bool IsDragging => ActiveDrag is not null;
 
     /// <summary>The payload of the active in-app drag, or null when not dragging.</summary>
-    public DragData? ActiveDrag => _activeDrag;
+    public DragData? ActiveDrag { get; private set; }
+
+    private static DragData ExternalProbe { get; } = new() { IsExternal = true };
+
+    /// <summary>
+    ///     Raised after any external OS drop (files/text), regardless of whether a widget accepted
+    ///     it — lets a host handle drops globally (e.g. "open the dropped file").
+    /// </summary>
+    public event Action<DragData>? ExternalDropped;
 
     // ── In-app drag session (driven by Draggable) ───────────────────────────────
 
@@ -47,12 +50,16 @@ public partial class App
     /// </summary>
     public void StartDrag(DragData data, Widget feedback, Offset grabAnchor)
     {
-        if (_activeDrag is not null) EndDrag(_mousePos, true);
+        if (ActiveDrag is not null) EndDrag(pointer: _mousePos, cancelled: true);
 
-        _activeDrag = data;
-        _dragOverlay = new DragFeedbackOverlay(feedback, _mousePos, grabAnchor);
+        ActiveDrag = data;
+        _dragOverlay = new DragFeedbackOverlay(
+            feedback: feedback,
+            pointer: _mousePos,
+            grabAnchor: grabAnchor
+        );
         PushOverlay(_dragOverlay);
-        UpdateDropTarget(data, _mousePos);
+        UpdateDropTarget(data: data, point: _mousePos);
         ResolveAndApplyCursor();
         _repaint.MarkAll();
     }
@@ -60,7 +67,7 @@ public partial class App
     /// <summary>Advance the active in-app drag to a new pointer position (no-op if not dragging).</summary>
     public void UpdateDrag(Offset pointer)
     {
-        if (_activeDrag is null) return;
+        if (ActiveDrag is null) return;
         if (_dragOverlay is not null)
         {
             // Damage just the ghost's old + new regions — the overlay repositions itself, so a
@@ -71,7 +78,7 @@ public partial class App
             MarkPaintFor(_dragOverlay.Feedback);
         }
 
-        UpdateDropTarget(_activeDrag, pointer);
+        UpdateDropTarget(data: ActiveDrag, point: pointer);
     }
 
     /// <summary>
@@ -80,10 +87,10 @@ public partial class App
     /// </summary>
     public bool EndDrag(Offset pointer, bool cancelled = false)
     {
-        if (_activeDrag is null) return false;
+        if (ActiveDrag is null) return false;
 
-        var data = _activeDrag;
-        var target = cancelled ? null : FindDropTarget(data, pointer);
+        var data = ActiveDrag;
+        var target = cancelled ? null : FindDropTarget(data: data, point: pointer);
 
         ClearDropTarget();
         if (_dragOverlay is not null)
@@ -92,8 +99,8 @@ public partial class App
             _dragOverlay = null;
         }
 
-        _activeDrag = null;
-        target?.OnDrop(data, pointer);
+        ActiveDrag = null;
+        target?.OnDrop(data: data, point: pointer);
         ResolveAndApplyCursor();
         _repaint.MarkAll();
         return target is not null;
@@ -112,28 +119,31 @@ public partial class App
 
             case DropFileEvent f:
                 _dropFiles.Add(f.Path);
-                _dropPoint = new Offset(f.X, f.Y);
+                _dropPoint = new Offset(x: f.X, y: f.Y);
                 break;
 
             case DropTextEvent t:
                 _dropText = t.Text;
-                _dropPoint = new Offset(t.X, t.Y);
+                _dropPoint = new Offset(x: t.X, y: t.Y);
                 break;
 
             case DropPositionEvent p:
                 // Drag-over feedback while hovering. SDL doesn't reveal the payload until the drop, so
                 // the probe data is empty apart from IsExternal — targets highlight on "any OS drop".
-                _dropPoint = new Offset(p.X, p.Y);
-                UpdateDropTarget(ExternalProbe, _dropPoint);
+                _dropPoint = new Offset(x: p.X, y: p.Y);
+                UpdateDropTarget(data: ExternalProbe, point: _dropPoint);
                 break;
 
             case DropCompleteEvent c:
-                if (c.X != 0f || c.Y != 0f) _dropPoint = new Offset(c.X, c.Y);
+                if (c.X != 0f || c.Y != 0f) _dropPoint = new Offset(x: c.X, y: c.Y);
                 var data = BuildExternalDropData();
                 ClearDropTarget();
                 if (data.HasFiles || data.HasText)
                 {
-                    FindDropTarget(data, _dropPoint)?.OnDrop(data, _dropPoint);
+                    FindDropTarget(data: data, point: _dropPoint)?.OnDrop(
+                        data: data,
+                        point: _dropPoint
+                    );
                     ExternalDropped?.Invoke(data);
                 }
 
@@ -143,8 +153,6 @@ public partial class App
                 break;
         }
     }
-
-    private static DragData ExternalProbe { get; } = new() { IsExternal = true };
 
     private DragData BuildExternalDropData()
     {
@@ -171,8 +179,8 @@ public partial class App
 
     private void UpdateDropTarget(DragData data, Offset point)
     {
-        var target = FindDropTarget(data, point);
-        if (ReferenceEquals(target, _dropHoverTarget)) return;
+        var target = FindDropTarget(data: data, point: point);
+        if (ReferenceEquals(objA: target, objB: _dropHoverTarget)) return;
 
         _dropHoverTarget?.OnDragLeave();
         _dropHoverTarget = target;

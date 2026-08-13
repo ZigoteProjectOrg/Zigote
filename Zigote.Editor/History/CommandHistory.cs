@@ -25,10 +25,7 @@ public sealed class CommandHistory
     }
 
     /// <summary>End a coalescing interaction; the next command pushes normally again.</summary>
-    public void EndInteraction()
-    {
-        _interacting = false;
-    }
+    public void EndInteraction() => _interacting = false;
 
     public void Execute(ICommand command)
     {

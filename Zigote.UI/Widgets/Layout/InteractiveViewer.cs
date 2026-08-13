@@ -43,21 +43,17 @@ public class InteractiveViewer : Widget
     private Offset _cursor;
     private Offset _dragLast;
     private bool _dragging;
-    private Offset _lastTapPoint;
 
     // Not long.MinValue — `now - long.MinValue` overflows negative and would read as "just tapped".
     private long _lastTapMs = long.MinValue / 2;
+    private Offset _lastTapPoint;
     private Offset _offset;
-    private float _scale = 1f;
     private Size _size;
     private Offset _targetOffset;
     private float _targetScale = 1f;
     private Ticker? _ticker;
 
-    public InteractiveViewer(Widget? child = null)
-    {
-        Child = child;
-    }
+    public InteractiveViewer(Widget? child = null) => Child = child;
 
     public Widget? Child { get; set; }
 
@@ -93,7 +89,7 @@ public class InteractiveViewer : Widget
     public Action<float>? OnScaleChanged { get; set; }
 
     /// <summary>The scale actually being painted (mid-animation this eases toward the target).</summary>
-    public float Scale => _scale;
+    public float Scale { get; private set; } = 1f;
 
     /// <summary>
     ///     Where the content's top-left sits relative to the viewport's, in logical pixels — the
@@ -104,14 +100,15 @@ public class InteractiveViewer : Widget
 
     /// <summary>True when the content is zoomed or panned away from its resting position.</summary>
     public bool IsTransformed =>
-        MathF.Abs(_scale - 1f) > 1e-4f || MathF.Abs(_offset.X) > 0.01f ||
+        MathF.Abs(Scale - 1f) > 1e-4f || MathF.Abs(_offset.X) > 0.01f ||
         MathF.Abs(_offset.Y) > 0.01f;
 
     /// <summary>Ease back to <see cref="MinScale" />, centred.</summary>
-    public void Reset(bool animate = true)
-    {
-        Set(MinScale, Offset.Zero, animate);
-    }
+    public void Reset(bool animate = true) => Set(
+        scale: MinScale,
+        offset: Offset.Zero,
+        animate: animate
+    );
 
     /// <summary>
     ///     Zoom to an absolute <paramref name="scale" /> keeping <paramref name="focus" /> (a window
@@ -119,8 +116,12 @@ public class InteractiveViewer : Widget
     /// </summary>
     public void ZoomTo(float scale, Offset? focus = null, bool animate = true)
     {
-        var target = Math.Clamp(scale, MinScale, MaxScale);
-        ZoomBy(target / MathF.Max(_targetScale, 1e-4f), focus, animate);
+        float target = Math.Clamp(value: scale, min: MinScale, max: MaxScale);
+        ZoomBy(
+            factor: target / MathF.Max(x: _targetScale, y: 1e-4f),
+            focus: focus,
+            animate: animate
+        );
     }
 
     public override Size Measure(Constraints c)
@@ -129,8 +130,8 @@ public class InteractiveViewer : Widget
 
         // A resize changes what "covering the viewport" means, so re-clamp rather than leaving the
         // content parked outside the new box.
-        _targetOffset = Clamp(_targetOffset, _targetScale);
-        _offset = Clamp(_offset, _scale);
+        _targetOffset = Clamp(offset: _targetOffset, scale: _targetScale);
+        _offset = Clamp(offset: _offset, scale: Scale);
         return _size;
     }
 
@@ -139,10 +140,10 @@ public class InteractiveViewer : Widget
         // Untransformed, like Transform: the child keeps the slot it measured, and only paint and
         // hit-testing move. That is what keeps zoom off the layout path entirely.
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         Child?.Layout(origin);
     }
@@ -159,16 +160,14 @@ public class InteractiveViewer : Widget
             paint.PopTransform();
         }
         else
-        {
             Child.Paint(paint);
-        }
 
         if (ClipContent) paint.AddClipEnd();
     }
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
 
         // Claiming is what gives a drag somewhere to start: nearly every widget answers a hit, so
         // "children first" would leave no pannable surface anywhere over the content.
@@ -183,7 +182,7 @@ public class InteractiveViewer : Widget
     public override void OnPointerDown(Offset point)
     {
         _cursor = point;
-        var now = Environment.TickCount64;
+        long now = Environment.TickCount64;
         if (DoubleTapToZoom && now - _lastTapMs <= DoubleTapMs &&
             MathF.Abs(point.X - _lastTapPoint.X) <= DoubleTapSlop &&
             MathF.Abs(point.Y - _lastTapPoint.Y) <= DoubleTapSlop)
@@ -205,19 +204,13 @@ public class InteractiveViewer : Widget
         // the pointer without a button being held.
         _cursor = point;
         if (!_dragging) return;
-        PanBy(new Offset(point.X - _dragLast.X, point.Y - _dragLast.Y));
+        PanBy(new Offset(x: point.X - _dragLast.X, y: point.Y - _dragLast.Y));
         _dragLast = point;
     }
 
-    public override void OnPointerUp(Offset point)
-    {
-        _dragging = false;
-    }
+    public override void OnPointerUp(Offset point) => _dragging = false;
 
-    public override void OnPointerCancel()
-    {
-        _dragging = false;
-    }
+    public override void OnPointerCancel() => _dragging = false;
 
     public override void OnScroll(float dx, float dy)
     {
@@ -225,40 +218,40 @@ public class InteractiveViewer : Widget
         if (ScaleEnabled && (modifiers & (Modifiers.Cmd | Modifiers.Ctrl)) != 0)
         {
             // Exponential in the wheel delta so a notch is the same relative zoom at every scale.
-            ZoomBy(MathF.Pow(1.0015f, dy * WheelSpeed), _cursor, false);
+            ZoomBy(
+                factor: MathF.Pow(x: 1.0015f, y: dy * WheelSpeed),
+                focus: _cursor,
+                animate: false
+            );
             return;
         }
 
         // Content moves opposite the scroll offset, which is the sign flip ScrollView applies on
         // the other side of the same convention.
-        if (PanEnabled && PanBy(new Offset(-dx * WheelSpeed, dy * WheelSpeed))) return;
+        if (PanEnabled && PanBy(new Offset(x: -dx * WheelSpeed, y: dy * WheelSpeed))) return;
 
         // Nothing left to pan: bubble, so a viewer sitting at rest inside a scrolling page never
         // swallows the page's wheel.
-        base.OnScroll(dx, dy);
+        base.OnScroll(dx: dx, dy: dy);
     }
 
     // ── Touch ───────────────────────────────────────────────────────────────────
 
-    public override bool CanTouchScale()
-    {
-        return ScaleEnabled && Child is not null;
-    }
+    public override bool CanTouchScale() => ScaleEnabled && Child is not null;
 
-    public override void OnTouchScale(float scale, Offset focus)
-    {
-        ZoomBy(scale, focus, false);
-    }
+    public override void OnTouchScale(float scale, Offset focus) => ZoomBy(
+        factor: scale,
+        focus: focus,
+        animate: false
+    );
 
-    public override bool CanTouchScroll(bool vertical)
-    {
-        return PanEnabled && Child is not null && CanPan(vertical);
-    }
+    public override bool CanTouchScroll(bool vertical) =>
+        PanEnabled && Child is not null && CanPan(vertical);
 
     public override void OnTouchScroll(float dx, float dy)
     {
         // Finger pixels, 1:1 with the content — no wheel multiplier here.
-        if (!PanBy(new Offset(dx, dy))) base.OnTouchScroll(dx, dy);
+        if (!PanBy(new Offset(x: dx, y: dy))) base.OnTouchScroll(dx: dx, dy: dy);
     }
 
     public override void Detach()
@@ -268,55 +261,59 @@ public class InteractiveViewer : Widget
         _ticker = null;
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(Child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Child);
 
-    public override int DebugStateHash()
-    {
-        return HashCode.Combine(_scale, _offset.X, _offset.Y);
-    }
+    public override int DebugStateHash() => HashCode.Combine(
+        value1: Scale,
+        value2: _offset.X,
+        value3: _offset.Y
+    );
 
     // ── Transform state ─────────────────────────────────────────────────────────
 
     /// <summary>screen = viewportTopLeft + offset + scale × (point − viewportTopLeft).</summary>
     private Matrix2D BuildMatrix()
     {
-        return Matrix2D.Translation(Bounds.X + _offset.X, Bounds.Y + _offset.Y) *
-               Matrix2D.Scale(_scale, _scale) *
-               Matrix2D.Translation(-Bounds.X, -Bounds.Y);
+        return Matrix2D.Translation(dx: Bounds.X + _offset.X, dy: Bounds.Y + _offset.Y) *
+               Matrix2D.Scale(sx: Scale, sy: Scale) *
+               Matrix2D.Translation(dx: -Bounds.X, dy: -Bounds.Y);
     }
 
     private void ToggleZoom(Offset point)
     {
         if (_targetScale > MinScale * 1.01f) Reset();
-        else ZoomTo(Math.Clamp(DoubleTapScale, MinScale, MaxScale), point);
+        else
+        {
+            ZoomTo(
+                scale: Math.Clamp(value: DoubleTapScale, min: MinScale, max: MaxScale),
+                focus: point
+            );
+        }
     }
 
     private void ZoomBy(float factor, Offset? focus, bool animate)
     {
         if (!ScaleEnabled || Child is null || !float.IsFinite(factor)) return;
 
-        var target = Math.Clamp(_targetScale * factor, MinScale, MaxScale);
-        var applied = target / _targetScale;
+        float target = Math.Clamp(value: _targetScale * factor, min: MinScale, max: MaxScale);
+        float applied = target / _targetScale;
         if (MathF.Abs(applied - 1f) < 1e-4f) return;
 
         // Hold the focus point still: it is the content under the fingers (or the pointer), and a
         // zoom that lets it drift feels like the picture is sliding out from under you.
         var anchor = focus ?? new Offset(
-            Bounds.X + _size.Width * 0.5f,
-            Bounds.Y + _size.Height * 0.5f
+            x: Bounds.X + (_size.Width * 0.5f),
+            y: Bounds.Y + (_size.Height * 0.5f)
         );
-        var fx = anchor.X - Bounds.X;
-        var fy = anchor.Y - Bounds.Y;
+        float fx = anchor.X - Bounds.X;
+        float fy = anchor.Y - Bounds.Y;
         Set(
-            target,
-            new Offset(
-                fx * (1f - applied) + applied * _targetOffset.X,
-                fy * (1f - applied) + applied * _targetOffset.Y
+            scale: target,
+            offset: new Offset(
+                x: (fx * (1f - applied)) + (applied * _targetOffset.X),
+                y: (fy * (1f - applied)) + (applied * _targetOffset.Y)
             ),
-            animate
+            animate: animate
         );
     }
 
@@ -324,21 +321,21 @@ public class InteractiveViewer : Widget
     {
         if (Child is null) return false;
         var next = Clamp(
-            new Offset(_targetOffset.X + delta.X, _targetOffset.Y + delta.Y),
-            _targetScale
+            offset: new Offset(x: _targetOffset.X + delta.X, y: _targetOffset.Y + delta.Y),
+            scale: _targetScale
         );
         if (MathF.Abs(next.X - _targetOffset.X) < 0.01f &&
             MathF.Abs(next.Y - _targetOffset.Y) < 0.01f)
             return false;
 
-        Set(_targetScale, next, false);
+        Set(scale: _targetScale, offset: next, animate: false);
         return true;
     }
 
     private void Set(float scale, Offset offset, bool animate)
     {
         _targetScale = scale;
-        _targetOffset = Clamp(offset, scale);
+        _targetOffset = Clamp(offset: offset, scale: scale);
         if (animate)
         {
             (_ticker ??= new Ticker(Tick)).Start();
@@ -346,25 +343,25 @@ public class InteractiveViewer : Widget
         }
 
         _ticker?.Stop();
-        _scale = _targetScale;
+        Scale = _targetScale;
         _offset = _targetOffset;
         Changed();
     }
 
     private void Tick(float dt)
     {
-        var k = 1f - MathF.Exp(-dt * Ease); // frame-rate independent
-        _scale += (_targetScale - _scale) * k;
+        float k = 1f - MathF.Exp(-dt * Ease); // frame-rate independent
+        Scale += (_targetScale - Scale) * k;
         _offset = new Offset(
-            _offset.X + (_targetOffset.X - _offset.X) * k,
-            _offset.Y + (_targetOffset.Y - _offset.Y) * k
+            x: _offset.X + ((_targetOffset.X - _offset.X) * k),
+            y: _offset.Y + ((_targetOffset.Y - _offset.Y) * k)
         );
 
-        if (MathF.Abs(_targetScale - _scale) < 0.001f &&
+        if (MathF.Abs(_targetScale - Scale) < 0.001f &&
             MathF.Abs(_targetOffset.X - _offset.X) < 0.3f &&
             MathF.Abs(_targetOffset.Y - _offset.Y) < 0.3f)
         {
-            _scale = _targetScale;
+            Scale = _targetScale;
             _offset = _targetOffset;
             _ticker?.Stop();
         }
@@ -375,22 +372,22 @@ public class InteractiveViewer : Widget
     private void Changed()
     {
         MarkNeedsPaint(); // paint-only: the child's layout never moves
-        OnScaleChanged?.Invoke(_scale);
+        OnScaleChanged?.Invoke(Scale);
     }
 
     private bool CanPan(bool vertical)
     {
         if (!ConstrainToBounds) return true;
-        var extent = vertical ? _size.Height : _size.Width;
-        return extent * _targetScale - extent > 0.5f;
+        float extent = vertical ? _size.Height : _size.Width;
+        return (extent * _targetScale) - extent > 0.5f;
     }
 
     private Offset Clamp(Offset offset, float scale)
     {
         return ConstrainToBounds
             ? new Offset(
-                ClampAxis(offset.X, _size.Width, scale),
-                ClampAxis(offset.Y, _size.Height, scale)
+                x: ClampAxis(v: offset.X, extent: _size.Width, scale: scale),
+                y: ClampAxis(v: offset.Y, extent: _size.Height, scale: scale)
             )
             : offset;
     }
@@ -401,7 +398,7 @@ public class InteractiveViewer : Widget
     /// </summary>
     private static float ClampAxis(float v, float extent, float scale)
     {
-        var overflow = extent * scale - extent;
-        return overflow > 0f ? Math.Clamp(v, -overflow, 0f) : -overflow * 0.5f;
+        float overflow = (extent * scale) - extent;
+        return overflow > 0f ? Math.Clamp(value: v, min: -overflow, max: 0f) : -overflow * 0.5f;
     }
 }

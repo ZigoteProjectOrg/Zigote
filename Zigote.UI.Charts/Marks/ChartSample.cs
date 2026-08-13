@@ -16,9 +16,9 @@ internal static class ChartSamples
     /// <summary>Pair xs/ys into samples; an empty xs plots ys against their indices (0, 1, 2, …).</summary>
     internal static ChartSample[] Pair(ReadOnlySpan<double> xs, ReadOnlySpan<double> ys)
     {
-        var n = xs.IsEmpty ? ys.Length : Math.Min(xs.Length, ys.Length);
+        int n = xs.IsEmpty ? ys.Length : Math.Min(val1: xs.Length, val2: ys.Length);
         var data = new ChartSample[n];
-        for (var i = 0; i < n; i++) data[i] = new ChartSample(xs.IsEmpty ? i : xs[i], ys[i]);
+        for (int i = 0; i < n; i++) data[i] = new ChartSample(X: xs.IsEmpty ? i : xs[i], Y: ys[i]);
         return data;
     }
 }

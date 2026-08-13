@@ -23,15 +23,21 @@ internal static class MobileNativeResolver
         if (!OperatingSystem.IsIOS() && !OperatingSystem.IsTvOS() &&
             !OperatingSystem.IsMacCatalyst()) return;
         NativeLibrary.SetDllImportResolver(
-            typeof(MobileNativeResolver).Assembly,
-            static (name, _, _) =>
+            assembly: typeof(MobileNativeResolver).Assembly,
+            resolver: static (name, _, _) =>
             {
                 if (name != "zigote") return IntPtr.Zero;
                 // Simulator builds bundle the engine as a loose dylib (the simulator doesn't
                 // enforce device code-signing); device builds link it statically into the app
                 // binary, where the main-program handle resolves the symbols.
-                var bundled = Path.Combine(AppContext.BaseDirectory, "libzigote.dylib");
-                if (File.Exists(bundled) && NativeLibrary.TryLoad(bundled, out var handle))
+                string bundled = Path.Combine(
+                    path1: AppContext.BaseDirectory,
+                    path2: "libzigote.dylib"
+                );
+                if (File.Exists(bundled) && NativeLibrary.TryLoad(
+                        libraryPath: bundled,
+                        handle: out IntPtr handle
+                    ))
                     return handle;
                 return NativeLibrary.GetMainProgramHandle();
             }

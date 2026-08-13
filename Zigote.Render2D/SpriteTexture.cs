@@ -18,33 +18,33 @@ public sealed class SpriteTexture
     public int Height { get; }
 
     public SpriteFrame FullFrame => new(
-        0f,
-        0f,
-        1f,
-        1f,
-        Width,
-        Height
+        U0: 0f,
+        V0: 0f,
+        U1: 1f,
+        V1: 1f,
+        PixelWidth: Width,
+        PixelHeight: Height
     );
 
     public static SpriteTexture? Load(ISpriteDevice device, string path,
         SpriteFilter filter = SpriteFilter.Linear, bool srgb = true,
         SpriteWrap wrap = SpriteWrap.Clamp)
     {
-        var handle = device.CreateTextureFromFile(
-            path,
-            filter,
-            srgb,
-            wrap,
-            out var width,
-            out var height
+        uint handle = device.CreateTextureFromFile(
+            path: path,
+            filter: filter,
+            srgb: srgb,
+            wrap: wrap,
+            width: out int width,
+            height: out int height
         );
         return handle == 0
             ? null
             : new SpriteTexture(
-                device,
-                handle,
-                width,
-                height
+                device: device,
+                handle: handle,
+                width: width,
+                height: height
             );
     }
 
@@ -53,21 +53,21 @@ public sealed class SpriteTexture
         SpriteFilter filter = SpriteFilter.Linear, bool srgb = true,
         SpriteWrap wrap = SpriteWrap.Clamp)
     {
-        var handle = device.CreateTexture(
-            rgba,
-            width,
-            height,
-            filter,
-            srgb,
-            wrap
+        uint handle = device.CreateTexture(
+            rgba: rgba,
+            width: width,
+            height: height,
+            filter: filter,
+            srgb: srgb,
+            wrap: wrap
         );
         return handle == 0
             ? null
             : new SpriteTexture(
-                device,
-                handle,
-                width,
-                height
+                device: device,
+                handle: handle,
+                width: width,
+                height: height
             );
     }
 

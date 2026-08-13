@@ -17,10 +17,8 @@ public sealed class NavigatorScope : InheritedWidget
 
     public Navigator State { get; }
 
-    public override bool UpdateShouldNotify(InheritedWidget oldWidget)
-    {
-        return oldWidget is not NavigatorScope s || !ReferenceEquals(s.State, State);
-    }
+    public override bool UpdateShouldNotify(InheritedWidget oldWidget) =>
+        oldWidget is not NavigatorScope s || !ReferenceEquals(objA: s.State, objB: State);
 }
 
 /// <summary>
@@ -33,27 +31,25 @@ internal sealed class NavigatorBody : Widget
     private readonly Navigator _state;
     private Size _size;
 
-    public NavigatorBody(Navigator state)
-    {
-        _state = state;
-    }
+    public NavigatorBody(Navigator state) => _state = state;
 
     private IReadOnlyList<Route> Routes => _state.History;
 
     public override Size Measure(Constraints c)
     {
         MeasureCount++;
-        _size = c.Constrain(new Size(c.MaxWidth, c.MaxHeight));
-        var tight = Constraints.Tight(_size.Width, _size.Height);
+        _size = c.Constrain(new Size(width: c.MaxWidth, height: c.MaxHeight));
+        var tight = Constraints.Tight(width: _size.Width, height: _size.Height);
 
         var routes = Routes;
-        var first = FirstLayoutIndex(routes);
-        for (var i = 0; i < routes.Count; i++)
+        int first = FirstLayoutIndex(routes);
+        for (int i = 0; i < routes.Count; i++)
         {
             // Every route keeps its content built and attached (state preservation) — only the
             // measure itself is skipped for covered routes.
             var content = routes[i].EnsureContent(BuildContext.Current);
-            if (content.Owner is null && Owner is not null) content.Attach(Owner, this);
+            if (content.Owner is null && Owner is not null)
+                content.Attach(owner: Owner, parent: this);
             if (i >= first) content.Measure(tight);
         }
 
@@ -64,20 +60,20 @@ internal sealed class NavigatorBody : Widget
     {
         LayoutCount++;
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
 
         var routes = Routes;
-        for (var i = FirstLayoutIndex(routes); i < routes.Count; i++)
+        for (int i = FirstLayoutIndex(routes); i < routes.Count; i++)
         {
             var r = routes[i];
             var content = r.ContentOrNull;
             if (content is null) continue;
-            var off = r.TransitionOffset(_size, r.Transition.Value);
-            content.Layout(new Offset(origin.X + off.X, origin.Y + off.Y));
+            var off = r.TransitionOffset(size: _size, t: r.Transition.Value);
+            content.Layout(new Offset(x: origin.X + off.X, y: origin.Y + off.Y));
         }
     }
 
@@ -87,13 +83,13 @@ internal sealed class NavigatorBody : Widget
         var routes = Routes;
         if (routes.Count == 0) return;
 
-        for (var i = FirstVisibleIndex(routes); i < routes.Count; i++)
+        for (int i = FirstVisibleIndex(routes); i < routes.Count; i++)
         {
             var r = routes[i];
             var content = r.ContentOrNull;
             if (content is null) continue;
 
-            var op = r.TransitionOpacity(r.Transition.Value);
+            float op = r.TransitionOpacity(r.Transition.Value);
             if (op <= 0.001f) continue;
 
             if (op < 0.999f)
@@ -103,9 +99,7 @@ internal sealed class NavigatorBody : Widget
                 paint.PopAlpha();
             }
             else
-            {
                 content.Paint(paint);
-            }
         }
     }
 
@@ -115,16 +109,19 @@ internal sealed class NavigatorBody : Widget
     // revealed by a pop must have fresh geometry from its first visible frame.
     private static int FirstLayoutIndex(IReadOnlyList<Route> routes)
     {
-        for (var i = 0; i < routes.Count; i++)
+        for (int i = 0; i < routes.Count; i++)
+        {
             if (routes[i].Status != RouteStatus.Idle)
                 return 0;
+        }
+
         return FirstVisibleIndex(routes);
     }
 
     // Start painting at the topmost opaque, fully-settled route; everything below it is obscured.
     private static int FirstVisibleIndex(IReadOnlyList<Route> routes)
     {
-        for (var i = routes.Count - 1; i >= 0; i--)
+        for (int i = routes.Count - 1; i >= 0; i--)
         {
             var r = routes[i];
             if (r.Opaque && r.Status == RouteStatus.Idle && r.Transition.Value >= 0.999f)
@@ -136,7 +133,7 @@ internal sealed class NavigatorBody : Widget
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         // Input is modal — only the current (topmost non-popping) route is interactive. Returning
         // this body for misses makes it a barrier so clicks never fall through to routes beneath.
         var hit = _state.CurrentRoute?.ContentOrNull?.HitTest(point);
@@ -146,8 +143,10 @@ internal sealed class NavigatorBody : Widget
     public override IEnumerable<Widget> GetChildren()
     {
         foreach (var r in Routes)
+        {
             if (r.ContentOrNull is { } content)
                 yield return content;
+        }
     }
 
     /// <summary>
@@ -164,7 +163,8 @@ internal sealed class NavigatorBody : Widget
 
 /// <summary>
 ///     A stack of routes, supporting both the imperative API (<c>Push</c>/<c>Pop</c>, named routes)
-///     and the declarative <b>Navigator 2.0</b> page API (<see cref="Pages" /> + <see cref="OnPopPage" />).
+///     and the declarative <b>Navigator 2.0</b> page API (<see cref="Pages" /> +
+///     <see cref="OnPopPage" />).
 ///     The stack is kept as two ordered sections — declarative <c>Pages</c> at the bottom and
 ///     imperatively-pushed routes on top — plus a transient set of routes still animating out.
 ///     <para>
@@ -176,6 +176,28 @@ internal sealed class NavigatorBody : Widget
 /// </summary>
 public sealed class Navigator : ComposedWidget
 {
+    private readonly NavigatorBody _body;
+
+    // Routes removed from the stack but still animating out (painted on top until gone).
+    private readonly List<Route> _exiting = [];
+
+    // Combined bottom→top render order, rebuilt on every structural change.
+    private readonly List<Route> _history = [];
+
+    // Declarative (Navigator 2.0) routes, bottom→top, matching Navigator.Pages.
+    private readonly List<Route> _pages = [];
+
+    // Imperatively-pushed routes, stacked on top of the pages.
+    private readonly List<Route> _pushed = [];
+    private readonly NavigatorScope _scope;
+    private bool _backRegistered;
+
+    public Navigator()
+    {
+        _body = new NavigatorBody(this);
+        _scope = new NavigatorScope(state: this, child: _body);
+    }
+
     /// <summary>Declarative page stack (Navigator 2.0). When set, describes the initial routes.</summary>
     public List<Page>? Pages { get; set; }
 
@@ -201,11 +223,29 @@ public sealed class Navigator : ComposedWidget
     /// <summary>Last-resort factory when a name resolves to nothing.</summary>
     public RouteFactory? OnUnknownRoute { get; set; }
 
-    /// <summary>A predicate matching a route by its settings name — for <c>PopUntil</c>.</summary>
-    public static Predicate<Route> WithName(string name)
+    /// <summary>Combined route stack in render order (bottom → top).</summary>
+    public IReadOnlyList<Route> History => _history;
+
+    /// <summary>True if there is a route that <see cref="Pop" /> can remove.</summary>
+    public bool CanPop => _pushed.Count > 0 || _pages.Count > 1;
+
+    /// <summary>The topmost route currently receiving input (skips routes animating out).</summary>
+    public Route? CurrentRoute
     {
-        return r => r.Settings.Name == name;
+        get
+        {
+            for (int i = _history.Count - 1; i >= 0; i--)
+            {
+                if (_history[i].Status != RouteStatus.Popping)
+                    return _history[i];
+            }
+
+            return _history.Count > 0 ? _history[^1] : null;
+        }
     }
+
+    /// <summary>A predicate matching a route by its settings name — for <c>PopUntil</c>.</summary>
+    public static Predicate<Route> WithName(string name) => r => r.Settings.Name == name;
 
     /// <summary>The nearest enclosing navigator. Throws if none is found.</summary>
     public static Navigator Of(BuildContext context)
@@ -218,64 +258,16 @@ public sealed class Navigator : ComposedWidget
     }
 
     /// <summary>The nearest enclosing navigator, or null if none is found.</summary>
-    public static Navigator? MaybeOf(BuildContext context)
-    {
-        return context.FindAncestor<NavigatorScope>()?.State;
-    }
-
-    // Routes removed from the stack but still animating out (painted on top until gone).
-    private readonly List<Route> _exiting = [];
-
-    // Combined bottom→top render order, rebuilt on every structural change.
-    private readonly List<Route> _history = [];
-
-    // Declarative (Navigator 2.0) routes, bottom→top, matching Navigator.Pages.
-    private readonly List<Route> _pages = [];
-
-    // Imperatively-pushed routes, stacked on top of the pages.
-    private readonly List<Route> _pushed = [];
-
-    private readonly NavigatorBody _body;
-    private readonly NavigatorScope _scope;
-    private bool _backRegistered;
-
-    public Navigator()
-    {
-        _body = new NavigatorBody(this);
-        _scope = new NavigatorScope(this, _body);
-    }
-
-    /// <summary>Combined route stack in render order (bottom → top).</summary>
-    public IReadOnlyList<Route> History => _history;
-
-    /// <summary>True if there is a route that <see cref="Pop" /> can remove.</summary>
-    public bool CanPop => _pushed.Count > 0 || _pages.Count > 1;
-
-    /// <summary>The topmost route currently receiving input (skips routes animating out).</summary>
-    public Route? CurrentRoute
-    {
-        get
-        {
-            for (var i = _history.Count - 1; i >= 0; i--)
-                if (_history[i].Status != RouteStatus.Popping)
-                    return _history[i];
-            return _history.Count > 0 ? _history[^1] : null;
-        }
-    }
+    public static Navigator? MaybeOf(BuildContext context) =>
+        context.FindAncestor<NavigatorScope>()?.State;
 
     // The route stack is per-mount: it is torn down in OnUnmount, so a re-attached navigator starts
     // from its declared Pages/Home again — the same lifetime the state object used to give it.
     // Not the constructor: Pages/Home/InitialRoute arrive via the object initialiser, after it runs.
-    protected override void OnMount()
-    {
-        BuildInitialRoutes();
-    }
+    protected override void OnMount() => BuildInitialRoutes();
 
     /// <summary>Pop for the system back action; false when this navigator is at its root.</summary>
-    private bool HandleSystemBack()
-    {
-        return MaybePop();
-    }
+    private bool HandleSystemBack() => MaybePop();
 
     protected override Widget Build(BuildContext context)
     {
@@ -326,21 +318,17 @@ public sealed class Navigator : ComposedWidget
     }
 
     /// <summary>Push a page built from <paramref name="builder" />.</summary>
-    public Task<object?> Push(WidgetBuilder builder, RouteSettings? settings = null)
-    {
-        return Push(new MaterialPageRoute<object?>(builder, settings));
-    }
+    public Task<object?> Push(WidgetBuilder builder, RouteSettings? settings = null) => Push(
+        new MaterialPageRoute<object?>(builder: builder, settings: settings)
+    );
 
     /// <summary>Push a page showing the given widget.</summary>
-    public Task<object?> Push(Widget page)
-    {
-        return Push(_ => page);
-    }
+    public Task<object?> Push(Widget page) => Push(_ => page);
 
     /// <summary>Resolve and push a named route (via <c>Routes</c> / <c>OnGenerateRoute</c>).</summary>
     public Task<object?> PushNamed(string name, object? arguments = null)
     {
-        var route = GenerateRoute(new RouteSettings(name, arguments))
+        var route = GenerateRoute(new RouteSettings(Name: name, Arguments: arguments))
                     ?? throw new InvalidOperationException(
                         $"Navigator.PushNamed: no route registered for '{name}'."
                     );
@@ -355,7 +343,7 @@ public sealed class Navigator : ComposedWidget
         // synchronously inside Push, so assigning it afterwards would miss the callback.
         var replaced = CurrentRoute;
         if (replaced is not null)
-            route.OnEntered = () => RemoveInstant(replaced, result);
+            route.OnEntered = () => RemoveInstant(r: replaced, result: result);
         return Push(route);
     }
 
@@ -363,13 +351,13 @@ public sealed class Navigator : ComposedWidget
     public Task<object?> PushReplacementNamed(string name, object? arguments = null,
         object? result = null)
     {
-        var route = GenerateRoute(new RouteSettings(name, arguments))
+        var route = GenerateRoute(new RouteSettings(Name: name, Arguments: arguments))
                     ?? throw new InvalidOperationException(
                         $"Navigator.PushReplacementNamed: no route registered for '{name}'."
                     );
         var replaced = CurrentRoute;
         if (replaced is not null)
-            route.OnEntered = () => RemoveInstant(replaced, result);
+            route.OnEntered = () => RemoveInstant(r: replaced, result: result);
         AddPushed(route);
         return (route as Route<object?>)?.Popped ?? Task.FromResult<object?>(null);
     }
@@ -380,7 +368,7 @@ public sealed class Navigator : ComposedWidget
         if (_pushed.Count > 0)
         {
             var r = _pushed[^1];
-            if (r.Status != RouteStatus.Popping) BeginPop(r, result);
+            if (r.Status != RouteStatus.Popping) BeginPop(r: r, result: result);
             return;
         }
 
@@ -389,7 +377,7 @@ public sealed class Navigator : ComposedWidget
             var r = _pages[^1];
             if (r.Status == RouteStatus.Popping) return;
             var handler = OnPopPage;
-            if (handler is null || handler(r, result)) BeginPop(r, result);
+            if (handler is null || handler(arg1: r, arg2: result)) BeginPop(r: r, result: result);
         }
     }
 
@@ -404,7 +392,7 @@ public sealed class Navigator : ComposedWidget
     /// <summary>Pop routes from the top until <paramref name="predicate" /> matches the top route.</summary>
     public void PopUntil(Predicate<Route> predicate)
     {
-        var guard = 0;
+        int guard = 0;
         while (_pushed.Count > 0 && !predicate(_pushed[^1]) && guard++ < 1024)
             RemoveInstant(_pushed[^1]);
         while (_pushed.Count == 0 && _pages.Count > 1 && !predicate(_pages[^1]) && guard++ < 1024)
@@ -422,11 +410,11 @@ public sealed class Navigator : ComposedWidget
     {
         var matched = new HashSet<Route>();
         var next = new List<Route>(pages.Count);
-        var hadPages = _pages.Count > 0;
+        bool hadPages = _pages.Count > 0;
 
         foreach (var p in pages)
         {
-            var existing = FindPageRoute(p, matched);
+            var existing = FindPageRoute(p: p, taken: matched);
             if (existing is not null)
             {
                 existing.SourcePage = p;
@@ -446,8 +434,10 @@ public sealed class Navigator : ComposedWidget
         // removes its route synchronously, which would corrupt enumeration of _pages.
         var exits = new List<Route>();
         foreach (var r in _pages)
+        {
             if (!matched.Contains(r) && r.Status != RouteStatus.Popping)
                 exits.Add(r);
+        }
 
         _pages.Clear();
         _pages.AddRange(next);
@@ -466,7 +456,6 @@ public sealed class Navigator : ComposedWidget
 
     private void BuildInitialRoutes()
     {
-
         if (Pages is { Count: > 0 })
         {
             foreach (var p in Pages)
@@ -497,9 +486,9 @@ public sealed class Navigator : ComposedWidget
     private Route? GenerateRoute(RouteSettings settings)
     {
         if (settings.Name is not null && Routes is not null &&
-            Routes.TryGetValue(settings.Name, out var builder))
+            Routes.TryGetValue(key: settings.Name, value: out var builder))
         {
-            var r = new MaterialPageRoute<object?>(builder, settings);
+            var r = new MaterialPageRoute<object?>(builder: builder, settings: settings);
             Install(r);
             return r;
         }
@@ -548,7 +537,7 @@ public sealed class Navigator : ComposedWidget
 
     private void RemoveInstant(Route r, object? result = null)
     {
-        var removed = _pushed.Remove(r) | _pages.Remove(r) | _exiting.Remove(r);
+        bool removed = _pushed.Remove(r) | _pages.Remove(r) | _exiting.Remove(r);
         if (!removed) return;
 
         r.CompleteWith(result ?? r.PendingResult);
@@ -558,24 +547,25 @@ public sealed class Navigator : ComposedWidget
         _body.MarkNeedsLayout();
     }
 
-    private void OnRouteVisualUpdate()
-    {
-        _body.MarkNeedsLayout();
-    }
+    private void OnRouteVisualUpdate() => _body.MarkNeedsLayout();
 
     private Route? FindPageRoute(Page p, HashSet<Route> taken)
     {
         foreach (var r in _pages)
-            if (!taken.Contains(r) && r.IsPageBased && r.SourcePage is { } sp && PagesMatch(sp, p))
+        {
+            if (!taken.Contains(r) && r.IsPageBased && r.SourcePage is { } sp &&
+                PagesMatch(a: sp, b: p))
                 return r;
+        }
+
         return null;
     }
 
     private static bool PagesMatch(Page a, Page b)
     {
         if (a.Key is not null || b.Key is not null)
-            return Equals(a.Key, b.Key) && a.GetType() == b.GetType();
-        return ReferenceEquals(a, b);
+            return Equals(objA: a.Key, objB: b.Key) && a.GetType() == b.GetType();
+        return ReferenceEquals(objA: a, objB: b);
     }
 
     private void RebuildHistory()
@@ -592,15 +582,9 @@ internal sealed class WidgetRoute : PageRoute<object?>
 {
     private readonly Widget _widget;
 
-    public WidgetRoute(Widget widget)
-    {
-        _widget = widget;
-    }
+    public WidgetRoute(Widget widget) => _widget = widget;
 
     public override float TransitionDuration => 0f;
 
-    protected override Widget BuildContent(BuildContext context)
-    {
-        return _widget;
-    }
+    protected override Widget BuildContent(BuildContext context) => _widget;
 }

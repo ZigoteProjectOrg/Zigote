@@ -38,10 +38,12 @@ public class BlocConcurrencyTests : IDisposable
     {
         using var bloc = new TallyBloc();
 
-        RunProducers((producer, i) => bloc.Add(new Tagged(producer, i)));
+        RunProducers((producer, i) => bloc.Add(new Tagged(Producer: producer, Sequence: i)));
 
-        Assert.True(bloc.AwaitHandled(Producers * PerProducer, Budget),
-            $"only {bloc.Handled} of {Producers * PerProducer} events were handled");
+        Assert.True(
+            condition: bloc.AwaitHandled(count: Producers * PerProducer, budget: Budget),
+            userMessage: $"only {bloc.Handled} of {Producers * PerProducer} events were handled"
+        );
         Assert.Empty(bloc.Duplicates);
     }
 
@@ -52,15 +54,23 @@ public class BlocConcurrencyTests : IDisposable
         // queue must not reorder, or "typed, then submitted" can arrive as "submitted, then typed".
         using var bloc = new TallyBloc();
 
-        RunProducers((producer, i) => bloc.Add(new Tagged(producer, i)));
-        Assert.True(bloc.AwaitHandled(Producers * PerProducer, Budget), "pump did not drain");
+        RunProducers((producer, i) => bloc.Add(new Tagged(Producer: producer, Sequence: i)));
+        Assert.True(
+            condition: bloc.AwaitHandled(count: Producers * PerProducer, budget: Budget),
+            userMessage: "pump did not drain"
+        );
 
-        foreach (var (producer, sequence) in bloc.PerProducer())
+        foreach ((int producer, var sequence) in bloc.PerProducer())
         {
-            Assert.Equal(PerProducer, sequence.Count);
-            for (var i = 0; i < sequence.Count; i++)
-                Assert.True(sequence[i] == i,
-                    $"producer {producer} saw {sequence[i]} at position {i} — the queue reordered it");
+            Assert.Equal(expected: PerProducer, actual: sequence.Count);
+            for (int i = 0; i < sequence.Count; i++)
+            {
+                Assert.True(
+                    condition: sequence[i] == i,
+                    userMessage:
+                    $"producer {producer} saw {sequence[i]} at position {i} — the queue reordered it"
+                );
+            }
         }
     }
 
@@ -71,10 +81,16 @@ public class BlocConcurrencyTests : IDisposable
         // handler awaits often enough that the pump resumes on pool threads rather than the callers'.
         using var bloc = new OverlapBloc();
 
-        RunProducers((_, _) => bloc.Add(new Tagged(0, 0)), perProducer: 500);
+        RunProducers(
+            add: (_, _) => bloc.Add(new Tagged(Producer: 0, Sequence: 0)),
+            perProducer: 500
+        );
 
-        Assert.True(bloc.AwaitHandled(Producers * 500, Budget), "pump did not drain");
-        Assert.Equal(1, bloc.MaxConcurrent);
+        Assert.True(
+            condition: bloc.AwaitHandled(count: Producers * 500, budget: Budget),
+            userMessage: "pump did not drain"
+        );
+        Assert.Equal(expected: 1, actual: bloc.MaxConcurrent);
     }
 
     [Fact]
@@ -82,33 +98,39 @@ public class BlocConcurrencyTests : IDisposable
     {
         var escaped = new ConcurrentBag<Exception>();
 
-        for (var attempt = 0; attempt < 50; attempt++)
+        for (int attempt = 0; attempt < 50; attempt++)
         {
             var bloc = new TallyBloc();
-            var stop = false;
+            bool stop = false;
 
-            var producers = Enumerable.Range(0, Producers).Select(p => Task.Factory.StartNew(
-                    () =>
+            var producers = Enumerable.Range(start: 0, count: Producers).Select(p =>
+                Task.Factory.StartNew(
+                    action: () =>
                     {
-                        for (var i = 0; !Volatile.Read(ref stop) && i < PerProducer; i++)
+                        for (int i = 0; !Volatile.Read(ref stop) && i < PerProducer; i++)
+                        {
                             try
                             {
-                                bloc.Add(new Tagged(p, i));
+                                bloc.Add(new Tagged(Producer: p, Sequence: i));
                             }
                             catch (Exception ex)
                             {
                                 escaped.Add(ex); // Add is documented never to throw, dead or alive
                             }
+                        }
                     },
-                    TaskCreationOptions.LongRunning
+                    creationOptions: TaskCreationOptions.LongRunning
                 )
             ).ToArray();
 
             Thread.Yield();
             bloc.Dispose();
-            Volatile.Write(ref stop, true);
+            Volatile.Write(location: ref stop, value: true);
 
-            Assert.True(Task.WaitAll(producers, Budget), $"attempt {attempt}: producers did not finish");
+            Assert.True(
+                condition: Task.WaitAll(tasks: producers, timeout: Budget),
+                userMessage: $"attempt {attempt}: producers did not finish"
+            );
         }
 
         Assert.Empty(escaped);
@@ -121,17 +143,24 @@ public class BlocConcurrencyTests : IDisposable
         // bloc" is the ordinary path out of a handler, not an edge case. Reading Lifetime there used
         // to throw ObjectDisposedException, because Dispose disposes the token source.
         using var parked = new ManualResetEventSlim();
-        var observed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var bloc = new ParkingBloc(parked, observed);
+        var observed =
+            new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var bloc = new ParkingBloc(release: parked, observed: observed);
 
-        bloc.Add(new Tagged(0, 0));
-        Assert.True(SpinWait.SpinUntil(() => bloc.Parked, Budget), "handler never parked");
+        bloc.Add(new Tagged(Producer: 0, Sequence: 0));
+        Assert.True(
+            condition: SpinWait.SpinUntil(condition: () => bloc.Parked, timeout: Budget),
+            userMessage: "handler never parked"
+        );
 
         bloc.Dispose();
         parked.Set();
 
-        Assert.True(observed.Task.Wait(Budget), "handler never resumed");
-        Assert.True(observed.Task.Result, "Lifetime did not read as cancelled after dispose");
+        Assert.True(condition: observed.Task.Wait(Budget), userMessage: "handler never resumed");
+        Assert.True(
+            condition: observed.Task.Result,
+            userMessage: "Lifetime did not read as cancelled after dispose"
+        );
     }
 
     [Fact]
@@ -141,15 +170,16 @@ public class BlocConcurrencyTests : IDisposable
         // Interlocked exchange, so they can each end up holding the other's instance.
         var escaped = new ConcurrentBag<Exception>();
 
-        for (var attempt = 0; attempt < 200; attempt++)
+        for (int attempt = 0; attempt < 200; attempt++)
         {
             var bloc = new TallyBloc();
-            var stop = false;
+            bool stop = false;
 
             var spinner = Task.Factory.StartNew(
-                () =>
+                action: () =>
                 {
                     while (!Volatile.Read(ref stop))
+                    {
                         try
                         {
                             _ = bloc.RestartPublic();
@@ -158,14 +188,18 @@ public class BlocConcurrencyTests : IDisposable
                         {
                             escaped.Add(ex);
                         }
+                    }
                 },
-                TaskCreationOptions.LongRunning
+                creationOptions: TaskCreationOptions.LongRunning
             );
 
             Thread.Yield();
             bloc.Dispose();
-            Volatile.Write(ref stop, true);
-            Assert.True(spinner.Wait(Budget), $"attempt {attempt}: spinner did not finish");
+            Volatile.Write(location: ref stop, value: true);
+            Assert.True(
+                condition: spinner.Wait(Budget),
+                userMessage: $"attempt {attempt}: spinner did not finish"
+            );
         }
 
         Assert.Empty(escaped);
@@ -177,46 +211,58 @@ public class BlocConcurrencyTests : IDisposable
         // Emits are serialised on the pump, so the timeline must read as one contiguous chain: every
         // transition starts where the previous one ended. A gap means two handlers overlapped, or a
         // state was published that the timeline never saw.
-        var events = 0;
+        int events = 0;
         var transitions = new List<(int From, int To)>();
 
         BlocObserver.OnEvent = (_, _) => Interlocked.Increment(ref events);
         BlocObserver.OnChange = (_, from, to) =>
         {
-            lock (transitions) transitions.Add((((TallyState)from!).Handled, ((TallyState)to!).Handled));
+            lock (transitions)
+                transitions.Add((((TallyState)from!).Handled, ((TallyState)to!).Handled));
         };
 
         using var bloc = new TallyBloc();
-        RunProducers((producer, i) => bloc.Add(new Tagged(producer, i)));
-        Assert.True(bloc.AwaitHandled(Producers * PerProducer, Budget), "pump did not drain");
+        RunProducers((producer, i) => bloc.Add(new Tagged(Producer: producer, Sequence: i)));
+        Assert.True(
+            condition: bloc.AwaitHandled(count: Producers * PerProducer, budget: Budget),
+            userMessage: "pump did not drain"
+        );
 
-        Assert.Equal(Producers * PerProducer, Volatile.Read(ref events));
+        Assert.Equal(expected: Producers * PerProducer, actual: Volatile.Read(ref events));
 
         lock (transitions)
         {
-            Assert.Equal(Producers * PerProducer, transitions.Count);
-            for (var i = 1; i < transitions.Count; i++)
-                Assert.True(transitions[i].From == transitions[i - 1].To,
-                    $"timeline breaks at {i}: {transitions[i - 1]} then {transitions[i]}");
+            Assert.Equal(expected: Producers * PerProducer, actual: transitions.Count);
+            for (int i = 1; i < transitions.Count; i++)
+            {
+                Assert.True(
+                    condition: transitions[i].From == transitions[i - 1].To,
+                    userMessage:
+                    $"timeline breaks at {i}: {transitions[i - 1]} then {transitions[i]}"
+                );
+            }
         }
     }
 
     private static void RunProducers(Action<int, int> add, int perProducer = PerProducer)
     {
         var tasks = new Task[Producers];
-        for (var p = 0; p < Producers; p++)
+        for (int p = 0; p < Producers; p++)
         {
-            var producer = p;
+            int producer = p;
             tasks[p] = Task.Factory.StartNew(
-                () =>
+                action: () =>
                 {
-                    for (var i = 0; i < perProducer; i++) add(producer, i);
+                    for (int i = 0; i < perProducer; i++) add(arg1: producer, arg2: i);
                 },
-                TaskCreationOptions.LongRunning
+                creationOptions: TaskCreationOptions.LongRunning
             );
         }
 
-        Assert.True(Task.WaitAll(tasks, Budget), "producers did not finish");
+        Assert.True(
+            condition: Task.WaitAll(tasks: tasks, timeout: Budget),
+            userMessage: "producers did not finish"
+        );
     }
 }
 
@@ -240,20 +286,15 @@ file sealed class TallyBloc() : SyncBloc<Tagged, TallyState>(new TallyState(0))
         get
         {
             lock (_seen)
-            {
                 return _seen.GroupBy(t => t).Where(g => g.Count() > 1).Select(g => g.Key).ToArray();
-            }
         }
     }
 
-    public CancellationToken RestartPublic()
-    {
-        return Restart();
-    }
+    public CancellationToken RestartPublic() => Restart();
 
     public bool AwaitHandled(int count, TimeSpan budget)
     {
-        Volatile.Write(ref _target, count);
+        Volatile.Write(location: ref _target, value: count);
         if (Handled >= count) return true; // already there; nobody will set the event again
         return _reached.Wait(budget);
     }
@@ -270,20 +311,14 @@ file sealed class TallyBloc() : SyncBloc<Tagged, TallyState>(new TallyState(0))
 
     protected override void OnEvent(Tagged @event)
     {
-        lock (_seen)
-        {
-            _seen.Add(@event);
-        }
+        lock (_seen) _seen.Add(@event);
 
-        var handled = Interlocked.Increment(ref _handled);
+        int handled = Interlocked.Increment(ref _handled);
         Emit(new TallyState(handled));
         if (handled >= Volatile.Read(ref _target)) _reached.Set();
     }
 
-    protected override void OnDispose()
-    {
-        _reached.Dispose();
-    }
+    protected override void OnDispose() => _reached.Dispose();
 }
 
 /// <summary>Awaits inside the handler, so the pump resumes on pool threads and any overlap shows up.</summary>
@@ -299,36 +334,36 @@ file sealed class OverlapBloc() : Bloc<Tagged, int>(0)
 
     public bool AwaitHandled(int count, TimeSpan budget)
     {
-        Volatile.Write(ref _target, count);
+        Volatile.Write(location: ref _target, value: count);
         if (Volatile.Read(ref _handled) >= count) return true;
         return _reached.Wait(budget);
     }
 
     protected override async ValueTask OnEventAsync(Tagged @event, CancellationToken ct)
     {
-        var inside = Interlocked.Increment(ref _concurrent);
-        InterlockedMax(ref _max, inside);
+        int inside = Interlocked.Increment(ref _concurrent);
+        InterlockedMax(target: ref _max, value: inside);
 
         await Task.Yield(); // the pump comes back on a different thread
 
-        InterlockedMax(ref _max, Volatile.Read(ref _concurrent));
+        InterlockedMax(target: ref _max, value: Volatile.Read(ref _concurrent));
         Interlocked.Decrement(ref _concurrent);
 
-        var handled = Interlocked.Increment(ref _handled);
+        int handled = Interlocked.Increment(ref _handled);
         if (handled >= Volatile.Read(ref _target)) _reached.Set();
     }
 
-    protected override void OnDispose()
-    {
-        _reached.Dispose();
-    }
+    protected override void OnDispose() => _reached.Dispose();
 
     private static void InterlockedMax(ref int target, int value)
     {
         int seen;
         while (value > (seen = Volatile.Read(ref target)))
-            if (Interlocked.CompareExchange(ref target, value, seen) == seen)
+        {
+            if (Interlocked.CompareExchange(location1: ref target, value: value, comparand: seen) ==
+                seen)
                 return;
+        }
     }
 }
 
@@ -343,7 +378,10 @@ file sealed class ParkingBloc(ManualResetEventSlim release, TaskCompletionSource
     protected override async ValueTask OnEventAsync(Tagged @event, CancellationToken ct)
     {
         _parked = true;
-        await Task.Run(() => release.Wait(TimeSpan.FromSeconds(30)), CancellationToken.None);
+        await Task.Run(
+            function: () => release.Wait(TimeSpan.FromSeconds(30)),
+            cancellationToken: CancellationToken.None
+        );
 
         try
         {

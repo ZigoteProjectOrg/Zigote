@@ -13,13 +13,13 @@ namespace Zigote.Vfx;
 /// </summary>
 public sealed class CpuParticleSimulator
 {
+    public Quat Orientation = Quat.Identity;
+    public Vec3 Position;
     private bool[] _burstFired;
     private bool _finished;
     private float _loopTime;
     private VfxRng _rng;
     private float _spawnAccumulator;
-    public Quat Orientation = Quat.Identity;
-    public Vec3 Position;
 
     public CpuParticleSimulator(VfxEmitterAsset asset)
     {
@@ -63,25 +63,25 @@ public sealed class CpuParticleSimulator
     /// <summary>Manually spawn <paramref name="count" /> particles immediately (scripting bursts).</summary>
     public void Burst(int count)
     {
-        for (var i = 0; i < count; i++) TrySpawn();
+        for (int i = 0; i < count; i++) TrySpawn();
     }
 
     private void Emit(float dt)
     {
-        var prev = _loopTime;
-        var next = _loopTime + dt;
+        float prev = _loopTime;
+        float next = _loopTime + dt;
 
         _spawnAccumulator += Asset.SpawnRate * dt;
-        var spawnCount = (int)_spawnAccumulator;
+        int spawnCount = (int)_spawnAccumulator;
         _spawnAccumulator -= spawnCount;
-        for (var i = 0; i < spawnCount; i++) TrySpawn();
+        for (int i = 0; i < spawnCount; i++) TrySpawn();
 
-        for (var i = 0; i < Asset.Bursts.Count; i++)
+        for (int i = 0; i < Asset.Bursts.Count; i++)
         {
             if (_burstFired[i]) continue;
             var b = Asset.Bursts[i];
             if (b.Time < prev || b.Time >= next) continue;
-            for (var k = 0; k < b.Count; k++) TrySpawn();
+            for (int k = 0; k < b.Count; k++) TrySpawn();
             _burstFired[i] = true;
         }
 
@@ -94,14 +94,12 @@ public sealed class CpuParticleSimulator
             Array.Clear(_burstFired);
         }
         else
-        {
             _finished = true;
-        }
     }
 
     private bool TrySpawn()
     {
-        if (!Pool.TryEmit(out var idx)) return false;
+        if (!Pool.TryEmit(out int idx)) return false;
         InitParticle(ref Pool.At(idx));
         return true;
     }
@@ -109,16 +107,16 @@ public sealed class CpuParticleSimulator
     private void InitParticle(ref Particle p)
     {
         p.Age = 0f;
-        p.Lifetime = MathF.Max(0.0001f, Asset.StartLifetime.Sample(ref _rng));
+        p.Lifetime = MathF.Max(x: 0.0001f, y: Asset.StartLifetime.Sample(ref _rng));
         p.Seed = _rng.NextUInt();
 
-        SampleShape(out var localPos, out var localDir);
+        SampleShape(position: out var localPos, direction: out var localDir);
 
         p.Position = Asset.Space == SimulationSpace.World
             ? Position + Orientation.RotateVec(localPos)
             : localPos;
 
-        var speed = Asset.StartSpeed.Sample(ref _rng);
+        float speed = Asset.StartSpeed.Sample(ref _rng);
         p.Velocity = Orientation.RotateVec(localDir) * speed;
 
         p.StartSize = Asset.StartSize.Sample(ref _rng);
@@ -126,15 +124,15 @@ public sealed class CpuParticleSimulator
         p.Rotation = Asset.StartRotation.Sample(ref _rng);
         p.AngularVelocity = Asset.StartAngularVelocity.Sample(ref _rng);
 
-        var ct = _rng.NextFloat();
-        p.StartColor = VfxMath.LerpColor(Asset.StartColor, Asset.StartColorVariation, ct);
+        float ct = _rng.NextFloat();
+        p.StartColor = VfxMath.LerpColor(a: Asset.StartColor, b: Asset.StartColorVariation, t: ct);
         p.Color = p.StartColor;
     }
 
     private void SampleShape(out Vec3 position, out Vec3 direction)
     {
         var axis = Asset.EmitDirection.LengthSq() > 0f ? Asset.EmitDirection.Normalize() : Vec3.Up;
-        Basis(axis, out var tangent, out var bitangent);
+        Basis(axis: axis, tangent: out var tangent, bitangent: out var bitangent);
 
         switch (Asset.Shape)
         {
@@ -154,7 +152,7 @@ public sealed class CpuParticleSimulator
             case EmissionShape.Hemisphere:
             {
                 var p = _rng.InsideUnitSphere() * Asset.ShapeRadius;
-                if (p.Dot(axis) < 0f) p = p - axis * (2f * p.Dot(axis));
+                if (p.Dot(axis) < 0f) p = p - (axis * (2f * p.Dot(axis)));
                 position = p;
                 direction = p.LengthSq() > 0f ? p.Normalize() : axis;
                 break;
@@ -162,17 +160,17 @@ public sealed class CpuParticleSimulator
 
             case EmissionShape.Box:
                 position = new Vec3(
-                    _rng.Signed() * Asset.ShapeBoxHalfExtents.X,
-                    _rng.Signed() * Asset.ShapeBoxHalfExtents.Y,
-                    _rng.Signed() * Asset.ShapeBoxHalfExtents.Z
+                    x: _rng.Signed() * Asset.ShapeBoxHalfExtents.X,
+                    y: _rng.Signed() * Asset.ShapeBoxHalfExtents.Y,
+                    z: _rng.Signed() * Asset.ShapeBoxHalfExtents.Z
                 );
                 direction = axis;
                 break;
 
             case EmissionShape.Circle:
             {
-                var phi = _rng.NextFloat() * MathF.Tau;
-                var radial = tangent * MathF.Cos(phi) + bitangent * MathF.Sin(phi);
+                float phi = _rng.NextFloat() * MathF.Tau;
+                var radial = (tangent * MathF.Cos(phi)) + (bitangent * MathF.Sin(phi));
                 position = radial * Asset.ShapeRadius;
                 direction = radial;
                 break;
@@ -181,16 +179,16 @@ public sealed class CpuParticleSimulator
             case EmissionShape.Cone:
             default:
             {
-                var phiPos = _rng.NextFloat() * MathF.Tau;
-                var rPos = MathF.Sqrt(_rng.NextFloat()) * Asset.ShapeRadius;
-                position = (tangent * MathF.Cos(phiPos) + bitangent * MathF.Sin(phiPos)) * rPos;
+                float phiPos = _rng.NextFloat() * MathF.Tau;
+                float rPos = MathF.Sqrt(_rng.NextFloat()) * Asset.ShapeRadius;
+                position = ((tangent * MathF.Cos(phiPos)) + (bitangent * MathF.Sin(phiPos))) * rPos;
 
-                var cosA = MathF.Cos(Asset.ConeAngleDegrees * (MathF.PI / 180f));
-                var z = _rng.Range(cosA, 1f);
-                var s = MathF.Sqrt(MathF.Max(0f, 1f - z * z));
-                var phiDir = _rng.NextFloat() * MathF.Tau;
-                direction = axis * z +
-                            (tangent * MathF.Cos(phiDir) + bitangent * MathF.Sin(phiDir)) * s;
+                float cosA = MathF.Cos(Asset.ConeAngleDegrees * (MathF.PI / 180f));
+                float z = _rng.Range(min: cosA, max: 1f);
+                float s = MathF.Sqrt(MathF.Max(x: 0f, y: 1f - (z * z)));
+                float phiDir = _rng.NextFloat() * MathF.Tau;
+                direction = (axis * z) +
+                            (((tangent * MathF.Cos(phiDir)) + (bitangent * MathF.Sin(phiDir))) * s);
                 break;
             }
         }
@@ -198,16 +196,16 @@ public sealed class CpuParticleSimulator
 
     private void UpdateParticles(float dt)
     {
-        var ctx = new VfxUpdateContext(dt, ElapsedTime);
+        var ctx = new VfxUpdateContext(dt: dt, time: ElapsedTime);
         var items = Pool.Items;
         var modules = Asset.UpdateModules;
 
-        var i = 0;
+        int i = 0;
         while (i < Pool.Count)
         {
             ref var p = ref items[i];
 
-            for (var m = 0; m < modules.Count; m++) modules[m].Apply(ref p, in ctx);
+            for (int m = 0; m < modules.Count; m++) modules[m].Apply(p: ref p, ctx: in ctx);
 
             p.Position += p.Velocity * dt;
             p.Rotation += p.AngularVelocity * dt;

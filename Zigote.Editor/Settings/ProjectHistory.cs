@@ -14,10 +14,14 @@ public sealed class ProjectHistory : PreferencesProvider
 {
     private const int MaxRecent = 12;
 
-    public ProjectHistory(PreferenceStore store) : base(store, "projects")
+    public ProjectHistory(PreferenceStore store) : base(store: store, prefix: "projects")
     {
-        Recent = Register("recent", Array.Empty<string>(), OrdinalArrayComparer.Instance);
-        Last = Register<string?>("last", null);
+        Recent = Register(
+            key: "recent",
+            defaultValue: Array.Empty<string>(),
+            comparer: OrdinalArrayComparer.Instance
+        );
+        Last = Register<string?>(key: "last", defaultValue: null);
     }
 
     /// <summary>Most-recent-first absolute project paths, capped at 12.</summary>
@@ -29,30 +33,28 @@ public sealed class ProjectHistory : PreferencesProvider
     /// <summary>Record a project as the most-recently opened.</summary>
     public void RecordOpened(string projectPath)
     {
-        var full = Path.GetFullPath(projectPath);
-        Recent.Update(list => PrependDistinct(list, full));
+        string full = Path.GetFullPath(projectPath);
+        Recent.Update(list => PrependDistinct(list: list, full: full));
         Last.Value = full;
     }
 
     /// <summary>Drop a project from the recent list (e.g. when it no longer exists).</summary>
     public void Forget(string projectPath)
     {
-        var full = Path.GetFullPath(projectPath);
-        Recent.Update(list => list.Where(p => !PathEquals(p, full)).ToArray());
-        if (Last.Peek() is { } last && PathEquals(last, full)) Last.Value = null;
+        string full = Path.GetFullPath(projectPath);
+        Recent.Update(list => list.Where(p => !PathEquals(a: p, b: full)).ToArray());
+        if (Last.Peek() is { } last && PathEquals(a: last, b: full)) Last.Value = null;
     }
 
     /// <summary>Empty the recent list (the Settings window's Clear button); Last is kept.</summary>
-    public void ClearRecent()
-    {
-        Recent.Reset();
-    }
+    public void ClearRecent() => Recent.Reset();
 
     private static string[] PrependDistinct(string[] list, string full)
     {
         var result = new List<string>(list.Length + 1) { full };
-        result.AddRange(list.Where(p => !PathEquals(p, full)));
-        if (result.Count > MaxRecent) result.RemoveRange(MaxRecent, result.Count - MaxRecent);
+        result.AddRange(list.Where(p => !PathEquals(a: p, b: full)));
+        if (result.Count > MaxRecent)
+            result.RemoveRange(index: MaxRecent, count: result.Count - MaxRecent);
         return result.ToArray();
     }
 
@@ -61,14 +63,14 @@ public sealed class ProjectHistory : PreferencesProvider
         try
         {
             return string.Equals(
-                Path.GetFullPath(a),
-                Path.GetFullPath(b),
-                StringComparison.OrdinalIgnoreCase
+                a: Path.GetFullPath(a),
+                b: Path.GetFullPath(b),
+                comparisonType: StringComparison.OrdinalIgnoreCase
             );
         }
         catch
         {
-            return string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+            return string.Equals(a: a, b: b, comparisonType: StringComparison.OrdinalIgnoreCase);
         }
     }
 
@@ -78,7 +80,7 @@ public sealed class ProjectHistory : PreferencesProvider
 
         public bool Equals(string[]? x, string[]? y)
         {
-            if (ReferenceEquals(x, y)) return true;
+            if (ReferenceEquals(objA: x, objB: y)) return true;
             if (x is null || y is null) return false;
             return x.AsSpan().SequenceEqual(y);
         }
@@ -86,7 +88,7 @@ public sealed class ProjectHistory : PreferencesProvider
         public int GetHashCode(string[] obj)
         {
             var hash = new HashCode();
-            foreach (var s in obj) hash.Add(s, StringComparer.Ordinal);
+            foreach (string s in obj) hash.Add(value: s, comparer: StringComparer.Ordinal);
             return hash.ToHashCode();
         }
     }

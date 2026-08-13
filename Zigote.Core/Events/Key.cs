@@ -220,7 +220,7 @@ public static class KeyNames
         if (string.IsNullOrWhiteSpace(token)) return false;
         token = token.Trim();
 
-        if (Aliases.TryGetValue(token, out key)) return true;
+        if (Aliases.TryGetValue(key: token, value: out key)) return true;
 
         // Single letter A-Z.
         if (token.Length == 1 && char.IsAsciiLetter(token[0]))
@@ -237,7 +237,8 @@ public static class KeyNames
         }
 
         // Function key F1-F24.
-        if ((token[0] == 'F' || token[0] == 'f') && int.TryParse(token.AsSpan(1), out var n) &&
+        if ((token[0] == 'F' || token[0] == 'f') &&
+            int.TryParse(s: token.AsSpan(1), result: out int n) &&
             n is >= 1 and <= 24)
         {
             key = n <= 12 ? KeyCode.F1 + (uint)(n - 1) : KeyCode.F13 + (uint)(n - 13);
@@ -245,7 +246,8 @@ public static class KeyNames
         }
 
         // Fall back to the enum's own names (e.g. "PageUp", "KpEnter").
-        return Enum.TryParse(token, true, out key) && Enum.IsDefined(key);
+        return Enum.TryParse(value: token, ignoreCase: true, result: out key) &&
+               Enum.IsDefined(key);
     }
 
     /// <summary>Canonical display name for a key (letters/digits/F-keys rendered compactly).</summary>

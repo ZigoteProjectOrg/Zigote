@@ -4,10 +4,10 @@ using Zigote.UI.Charts.Marks;
 using Zigote.UI.Debug;
 using Zigote.UI.DevTools.Diagnostics;
 using Zigote.UI.DevTools.Widgets;
+using Zigote.UI.Host;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Layout;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.DevTools.Panels;
 
@@ -20,37 +20,37 @@ namespace Zigote.UI.DevTools.Panels;
 /// </summary>
 public sealed class PipelinePanel : IDevPanel
 {
-    private static readonly Color Blue = Color.Rgb(10, 132, 255);
-    private static readonly Color Cyan = Color.Rgb(100, 210, 255);
-    private static readonly Color Green = Color.Rgb(48, 209, 88);
-    private static readonly Color Purple = Color.Rgb(191, 90, 242);
+    private static readonly Color Blue = Color.Rgb(r: 10, g: 132, b: 255);
+    private static readonly Color Cyan = Color.Rgb(r: 100, g: 210, b: 255);
+    private static readonly Color Green = Color.Rgb(r: 48, g: 209, b: 88);
+    private static readonly Color Purple = Color.Rgb(r: 191, g: 90, b: 242);
 
     private readonly DevChartCard _draws;
-    private readonly DevKeyValue _drawsNow = new("Current", valueColor: Blue);
+    private readonly DevKeyValue _drawsNow = new(key: "Current", valueColor: Blue);
     private readonly DevKeyValue _frameIndex = new("Frame index");
     private readonly DevNote _idle = new("");
     private readonly DevChartCard _passes;
-    private readonly DevKeyValue _passesNow = new("Per frame", valueColor: Purple);
-    private readonly DevChartCard _tris;
-    private readonly DevKeyValue _trisNow = new("Current", valueColor: Cyan);
-    private readonly DevChartCard _visible;
-    private readonly DevKeyValue _visibleNow = new("After culling", valueColor: Green);
+    private readonly DevKeyValue _passesNow = new(key: "Per frame", valueColor: Purple);
 
     // Per-readout caches: Refresh runs every frame while the panel is open, so all formatting goes
     // through CachedText (zero-alloc while the rendered text is unchanged).
     private readonly CachedText _tDraws = new();
-    private readonly CachedText _tVisible = new();
-    private readonly CachedText _tPasses = new();
     private readonly CachedText _tFrame = new();
+    private readonly CachedText _tPasses = new();
+    private readonly CachedText _tVisible = new();
+    private readonly DevChartCard _tris;
+    private readonly DevKeyValue _trisNow = new(key: "Current", valueColor: Cyan);
+    private readonly DevChartCard _visible;
+    private readonly DevKeyValue _visibleNow = new(key: "After culling", valueColor: Green);
     private long _trisKey = -1;
     private string _trisText = "—";
 
     public PipelinePanel()
     {
-        _draws = Card(DevChartData.DrawCalls, "draw calls", Blue);
-        _tris = Card(DevChartData.Triangles, "triangles", Cyan);
-        _visible = Card(DevChartData.VisibleObjects, "visible", Green);
-        _passes = Card(DevChartData.RenderPasses, "passes", Purple);
+        _draws = Card(ring: DevChartData.DrawCalls, name: "draw calls", color: Blue);
+        _tris = Card(ring: DevChartData.Triangles, name: "triangles", color: Cyan);
+        _visible = Card(ring: DevChartData.VisibleObjects, name: "visible", color: Green);
+        _passes = Card(ring: DevChartData.RenderPasses, name: "passes", color: Purple);
     }
 
     public string Title => "Pipeline";
@@ -85,12 +85,12 @@ public sealed class PipelinePanel : IDevPanel
     public void Refresh(float dt)
     {
         var t = App.Active?.Theme ?? ThemeData.Dark;
-        var rev = DevChartData.Revision;
-        var now = DevChartData.Time;
-        _draws.Sync(rev, now, t);
-        _tris.Sync(rev, now, t);
-        _visible.Sync(rev, now, t);
-        _passes.Sync(rev, now, t);
+        int rev = DevChartData.Revision;
+        float now = DevChartData.Time;
+        _draws.Sync(revision: rev, now: now, theme: t);
+        _tris.Sync(revision: rev, now: now, theme: t);
+        _visible.Sync(revision: rev, now: now, theme: t);
+        _passes.Sync(revision: rev, now: now, theme: t);
 
         if (!DebugStats.EngineOk)
         {
@@ -123,12 +123,12 @@ public sealed class PipelinePanel : IDevPanel
     private static DevChartCard Card(TimeSeriesRing ring, string name, Color color)
     {
         var chart = DevChart.Sparkline();
-        var m = AreaMark.Of(ring, s => s.Time, s => s.Value);
+        var m = AreaMark.Of(data: ring, x: s => s.Time, y: s => s.Value);
         m.Name = name;
         m.Color = color;
         m.Opacity = 0.22f;
         m.Interpolation = ChartInterpolation.Step;
         chart.Marks.Add(m);
-        return new DevChartCard(chart, 56f, 60f);
+        return new DevChartCard(chart: chart, height: 56f, windowSeconds: 60f);
     }
 }

@@ -2,17 +2,15 @@ namespace Zigote.Vfx;
 
 /// <summary>
 ///     Fixed-capacity, contiguous particle storage. Births append; deaths swap-remove (O(1), order is
-///     irrelevant for additive/depth-sorted draws). The backing array is allocated once so the steady-state
+///     irrelevant for additive/depth-sorted draws). The backing array is allocated once so the
+///     steady-state
 ///     simulation step never touches the heap (see <c>HotPathAllocationTests</c> discipline).
 /// </summary>
 public sealed class ParticlePool
 {
     private Particle[] _items;
 
-    public ParticlePool(int capacity)
-    {
-        _items = new Particle[Math.Max(1, capacity)];
-    }
+    public ParticlePool(int capacity) => _items = new Particle[Math.Max(val1: 1, val2: capacity)];
 
     public int Count { get; private set; }
     public int Capacity => _items.Length;
@@ -21,12 +19,9 @@ public sealed class ParticlePool
     public Particle[] Items => _items;
 
     /// <summary>The live particles, for readers (preview/render upload).</summary>
-    public ReadOnlySpan<Particle> Live => _items.AsSpan(0, Count);
+    public ReadOnlySpan<Particle> Live => _items.AsSpan(start: 0, length: Count);
 
-    public ref Particle At(int index)
-    {
-        return ref _items[index];
-    }
+    public ref Particle At(int index) => ref _items[index];
 
     public bool TryEmit(out int index)
     {
@@ -41,19 +36,13 @@ public sealed class ParticlePool
         return true;
     }
 
-    public void KillAt(int index)
-    {
-        _items[index] = _items[--Count];
-    }
+    public void KillAt(int index) => _items[index] = _items[--Count];
 
-    public void Clear()
-    {
-        Count = 0;
-    }
+    public void Clear() => Count = 0;
 
     public void EnsureCapacity(int capacity)
     {
         if (capacity <= _items.Length) return;
-        Array.Resize(ref _items, capacity);
+        Array.Resize(array: ref _items, newSize: capacity);
     }
 }

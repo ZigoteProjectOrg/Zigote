@@ -18,13 +18,13 @@ public sealed class AdwClamp : ComposedWidget
     public Widget Child
     {
         get => _child;
-        set => this.Set(ref _child, value);
+        set => this.Set(field: ref _child, value: value);
     }
 
     public float MaximumSize
     {
         get => _maximumSize;
-        set => this.Set(ref _maximumSize, value);
+        set => this.Set(field: ref _maximumSize, value: value);
     }
 
     protected override Widget Build(BuildContext context)
@@ -32,13 +32,13 @@ public sealed class AdwClamp : ComposedWidget
         return new Align {
             Alignment = Alignment.TopCenter,
             Child = new ConstrainedBox(
-                new Constraints(
-                    0f,
-                    MaximumSize,
-                    0f,
-                    float.PositiveInfinity
+                constraints: new Constraints(
+                    minWidth: 0f,
+                    maxWidth: MaximumSize,
+                    minHeight: 0f,
+                    maxHeight: float.PositiveInfinity
                 ),
-                Child
+                child: Child
             ),
         };
     }

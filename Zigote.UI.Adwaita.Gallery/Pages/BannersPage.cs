@@ -8,7 +8,11 @@ public sealed class BannersPage : ComposedWidget
 {
     private const string DefaultButton = "Network Settings";
 
-    private readonly AdwBanner _banner = new("Metered connection — updates paused", DefaultButton);
+    private readonly AdwBanner _banner = new(
+        title: "Metered connection — updates paused",
+        buttonLabel: DefaultButton
+    );
+
     private string _buttonLabel = DefaultButton;
     private bool _showButton = true;
 
@@ -23,32 +27,37 @@ public sealed class BannersPage : ComposedWidget
                 _banner,
                 new Expanded(
                     new GalleryPage(
-                        "Banner",
+                        title: "Banner",
+                        description:
                         "A bar with contextual information, revealed and dismissed in place.",
-                        MaterialIcons.Campaign
+                        iconName: MaterialIcons.Campaign
                     ) {
                         Children = {
                             Demo.Group(
-                                "This Banner",
-                                "Every row here drives the bar above.",
+                                title: "This Banner",
+                                description: "Every row here drives the bar above.",
                                 new AdwSwitchRow(
-                                    "Revealed",
-                                    "Slides in and out rather than appearing",
-                                    true,
-                                    on => _banner.Revealed = on
+                                    title: "Revealed",
+                                    subtitle: "Slides in and out rather than appearing",
+                                    value: true,
+                                    onChanged: on => _banner.Revealed = on
                                 ),
-                                new AdwEntryRow("Title", _banner.Title, s => _banner.Title = s),
                                 new AdwEntryRow(
-                                    "Button",
-                                    DefaultButton,
-                                    s =>
+                                    title: "Title",
+                                    text: _banner.Title,
+                                    onChanged: s => _banner.Title = s
+                                ),
+                                new AdwEntryRow(
+                                    title: "Button",
+                                    text: DefaultButton,
+                                    onChanged: s =>
                                     {
                                         _buttonLabel = s;
                                         ApplyButton();
                                     }
                                 ),
                                 new AdwSwitchRow(
-                                    "Show Button",
+                                    title: "Show Button",
                                     value: true,
                                     onChanged: on =>
                                     {
@@ -58,23 +67,24 @@ public sealed class BannersPage : ComposedWidget
                                 )
                             ),
                             Demo.Group(
-                                "When to Use One",
+                                title: "When to Use One",
+                                description:
                                 "A banner is for state the user can act on — not for confirmation.",
                                 new AdwActionRow(
-                                    "Use a banner",
-                                    "Offline, metered, unsaved changes, an update waiting"
+                                    title: "Use a banner",
+                                    subtitle: "Offline, metered, unsaved changes, an update waiting"
                                 ) { IconName = MaterialIcons.Campaign },
                                 new AdwActionRow(
-                                    "Use a toast",
-                                    "Something that already happened and needs no answer"
+                                    title: "Use a toast",
+                                    subtitle: "Something that already happened and needs no answer"
                                 ) {
                                     IconName = MaterialIcons.Notifications,
                                     ShowChevron = true,
                                     OnActivated = () => host.Open("Toasts"),
                                 },
                                 new AdwActionRow(
-                                    "Use an alert dialog",
-                                    "A decision that has to be made before anything else"
+                                    title: "Use an alert dialog",
+                                    subtitle: "A decision that has to be made before anything else"
                                 ) {
                                     IconName = MaterialIcons.WebAsset,
                                     ShowChevron = true,
@@ -88,8 +98,5 @@ public sealed class BannersPage : ComposedWidget
         };
     }
 
-    private void ApplyButton()
-    {
-        _banner.ButtonLabel = _showButton ? _buttonLabel : null;
-    }
+    private void ApplyButton() => _banner.ButtonLabel = _showButton ? _buttonLabel : null;
 }

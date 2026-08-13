@@ -12,8 +12,6 @@ internal sealed class Shell : ComposedWidget
     private const float CollapseWidth = 620f;
 
     private readonly GalleryApp _app;
-    private readonly Signal<int> _selected = new(0);
-    private readonly Signal<bool> _searchOn = new(false);
 
     // Pages are built once and kept: leaving a page and coming back should find the animation
     // transport, the carousel position and the toast counter where they were left. The pages
@@ -23,6 +21,12 @@ internal sealed class Shell : ComposedWidget
     // Retained (house pattern: hoist stateful widgets out of Watch) so the search text survives the
     // header rebuilds and the page cross-fade survives a selection change.
     private readonly AdwSearchEntry _searchEntry = new() { Placeholder = "Search pages" };
+    private readonly Signal<bool> _searchOn = new(false);
+
+    // The search bar slides open rather than appearing: AnimatedSize eases the top bar's height
+    // between nothing and the entry, clipping the entry while it grows (GtkSearchBar's reveal).
+    private readonly AnimatedSize _searchReveal = new(child: SizedBox.Shrink(), duration: 0.16f);
+    private readonly Signal<int> _selected = new(0);
     private readonly AdwSidebar _sidebar = new(GalleryRegistry.SidebarSections());
 
     private readonly AdwNavigationSplitView _split = new() {
@@ -31,17 +35,14 @@ internal sealed class Shell : ComposedWidget
         SidebarWidth = 280f,
     };
 
-    private readonly AdwToastOverlay _toasts = new(SizedBox.Shrink());
     private readonly AnimatedSwitcher _switcher;
 
-    // The search bar slides open rather than appearing: AnimatedSize eases the top bar's height
-    // between nothing and the entry, clipping the entry while it grows (GtkSearchBar's reveal).
-    private readonly AnimatedSize _searchReveal = new(SizedBox.Shrink(), 0.16f);
+    private readonly AdwToastOverlay _toasts = new(SizedBox.Shrink());
 
     public Shell(GalleryApp app)
     {
         _app = app;
-        _switcher = new AnimatedSwitcher(Page(0), 0.18f);
+        _switcher = new AnimatedSwitcher(child: Page(0), duration: 0.18f);
 
         // Filter is signal-backed inside AdwSidebar: a keystroke re-filters the rows in place.
         _searchEntry.OnChanged = query => _sidebar.Filter = query;
@@ -62,10 +63,7 @@ internal sealed class Shell : ComposedWidget
 
     private GalleryEntry Current => GalleryRegistry.Entries[_selected.Value];
 
-    private Widget Page(int index)
-    {
-        return _pages[index] ??= GalleryRegistry.Entries[index].Build();
-    }
+    private Widget Page(int index) => _pages[index] ??= GalleryRegistry.Entries[index].Build();
 
     protected override Widget Build(BuildContext context)
     {
@@ -79,15 +77,12 @@ internal sealed class Shell : ComposedWidget
             TopBars = { new Watch(ContentHeader) },
         };
         _toasts.Child = _split;
-        return new GalleryHost(_app, this, _toasts);
+        return new GalleryHost(app: _app, shell: this, child: _toasts);
     }
 
     // ── Services the pages, the menu and the shortcuts use ────────────────────
 
-    public void Toast(AdwToast toast)
-    {
-        _toasts.AddToast(toast);
-    }
+    public void Toast(AdwToast toast) => _toasts.AddToast(toast);
 
     /// <summary>
     ///     Reveal the search bar and put the caret in it (Ctrl+F). Pressing it again while the bar
@@ -106,15 +101,15 @@ internal sealed class Shell : ComposedWidget
     /// <summary>Open a page by title, from a cross link or the welcome page.</summary>
     public void Open(string pageTitle)
     {
-        var index = GalleryRegistry.IndexOf(pageTitle);
+        int index = GalleryRegistry.IndexOf(pageTitle);
         if (index < 0) return;
         _sidebar.Selected = index; // fires OnSelected: page swap + collapsed push
     }
 
-    public void ShowPreferences()
-    {
-        GalleryPreferences.Show(_app, title => Toast(new AdwToast(title)));
-    }
+    public void ShowPreferences() => GalleryPreferences.Show(
+        app: _app,
+        toast: title => Toast(new AdwToast(title))
+    );
 
     // ── Chrome ────────────────────────────────────────────────────────────────
 
@@ -130,11 +125,14 @@ internal sealed class Shell : ComposedWidget
         };
         bar.Start.Add(
             new Tooltip(
-                "Search (Ctrl+F)",
-                Demo.IconButton(MaterialIcons.Search, () => SetSearch(!_searchOn.Value))
+                message: "Search (Ctrl+F)",
+                child: Demo.IconButton(
+                    icon: MaterialIcons.Search,
+                    onPressed: () => SetSearch(!_searchOn.Value)
+                )
             )
         );
-        bar.End.Add(GalleryMenu.Build(_app, this));
+        bar.End.Add(GalleryMenu.Build(app: _app, shell: this));
         return bar;
     }
 
@@ -142,13 +140,13 @@ internal sealed class Shell : ComposedWidget
     private Widget SearchField()
     {
         return new Padding(
-            EdgeInsets.Only(
-                Spacing.Sm,
-                0f,
-                Spacing.Sm,
-                Spacing.Sm
+            padding: EdgeInsets.Only(
+                left: Spacing.Sm,
+                top: 0f,
+                right: Spacing.Sm,
+                bottom: Spacing.Sm
             ),
-            _searchEntry
+            child: _searchEntry
         );
     }
 
@@ -156,7 +154,7 @@ internal sealed class Shell : ComposedWidget
     {
         var entry = Current;
         var bar = new AdwHeaderBar {
-            TitleWidget = new AdwWindowTitle(entry.Title, entry.Subtitle),
+            TitleWidget = new AdwWindowTitle(title: entry.Title, subtitle: entry.Subtitle),
             // Collapsed, this bar stands alone at the top of the window — so it takes over the
             // start of the titlebar (the sidebar's bar is no longer on screen to hold it).
             ShowStartWindowControls = _split.IsCollapsed.Value,

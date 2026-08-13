@@ -42,20 +42,11 @@ internal sealed class GalleryHost : InheritedWidget
     }
 
     /// <summary>Open the page with this title (the sidebar follows), for in-page cross links.</summary>
-    public void Open(string pageTitle)
-    {
-        _shell.Open(pageTitle);
-    }
+    public void Open(string pageTitle) => _shell.Open(pageTitle);
 
     /// <summary>Open the preferences dialog — the Ctrl+, shortcut and a page's cross link.</summary>
-    public void ShowPreferences()
-    {
-        _shell.ShowPreferences();
-    }
+    public void ShowPreferences() => _shell.ShowPreferences();
 
     // The data never changes — the shell instance is fixed for the life of the window.
-    public override bool UpdateShouldNotify(InheritedWidget oldWidget)
-    {
-        return false;
-    }
+    public override bool UpdateShouldNotify(InheritedWidget oldWidget) => false;
 }

@@ -20,46 +20,50 @@ internal sealed class EditorsPage : ComposedWidget
 
         return Sections(
             Section(
-                "Color picker",
-                new SizedBox(height: 240, child: new ColorPicker(Colors.Blue, _ => { }))
+                title: "Color picker",
+                child: new SizedBox(
+                    height: 240,
+                    child: new ColorPicker(initial: Colors.Blue, onChanged: _ => { })
+                )
             ),
-            Section("Color swatch field", new ColorSwatchField(Colors.Orange)),
+            Section(title: "Color swatch field", child: new ColorSwatchField(Colors.Orange)),
             Section(
-                "Gradient editor",
-                new SizedBox(
+                title: "Gradient editor",
+                child: new SizedBox(
                     height: 72,
                     child: new GradientEditor(
-                        new ColorGradient(
+                        gradient: new ColorGradient(
                             [
-                                new GradientStop(0f, Colors.Blue),
-                                new GradientStop(0.5f, Colors.Purple),
-                                new GradientStop(1f, Colors.Red),
+                                new GradientStop(position: 0f, color: Colors.Blue),
+                                new GradientStop(position: 0.5f, color: Colors.Purple),
+                                new GradientStop(position: 1f, color: Colors.Red),
                             ]
                         ),
-                        _ => { }
+                        onChanged: _ => { }
                     )
                 )
             ),
             Section(
-                "Curve editor",
-                new SizedBox(
+                title: "Curve editor",
+                child: new SizedBox(
                     height: 180,
                     child: new CurveEditor(
-                        new EditableCurve(
+                        curve: new EditableCurve(
                             [
-                                new CurveKey(0f, 0f), new CurveKey(0.5f, 0.85f),
-                                new CurveKey(1f, 1f),
+                                new CurveKey(time: 0f, value: 0f),
+                                new CurveKey(time: 0.5f, value: 0.85f),
+                                new CurveKey(time: 1f, value: 1f),
                             ]
                         ),
-                        _ => { }
+                        onChanged: _ => { }
                     )
                 )
             ),
             Section(
-                "Code editor",
+                title: "Code editor",
                 // The editor scrolls its own content with the wheel only, so on a phone whatever
                 // the box shows is all that is reachable — give the sample room to fit uncut.
-                new AdaptiveBuilder((_, size) => new SizedBox(
+                child: new AdaptiveBuilder((_, size) => new SizedBox(
                         height: size == WindowSizeClass.Compact ? 220 : 170,
                         child: code
                     )

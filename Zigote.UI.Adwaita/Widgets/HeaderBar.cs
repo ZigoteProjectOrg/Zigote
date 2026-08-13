@@ -6,8 +6,8 @@ namespace Zigote.UI.Adwaita;
 /// </summary>
 public sealed class AdwWindowTitle : ComposedWidget
 {
-    private string _title;
     private string? _subtitle;
+    private string _title;
 
     public AdwWindowTitle(string title = "", string? subtitle = null)
     {
@@ -18,13 +18,13 @@ public sealed class AdwWindowTitle : ComposedWidget
     public string Title
     {
         get => _title;
-        set => this.Set(ref _title, value);
+        set => this.Set(field: ref _title, value: value);
     }
 
     public string? Subtitle
     {
         get => _subtitle;
-        set => this.Set(ref _subtitle, value);
+        set => this.Set(field: ref _subtitle, value: value);
     }
 
     protected override Widget Build(BuildContext context)
@@ -37,19 +37,26 @@ public sealed class AdwWindowTitle : ComposedWidget
             mainAxisAlignment: MainAxisAlignment.Center
         );
         col.Children.Add(
-            new Label(Title, AdwTypography.Heading, theme.OnBackground) {
+            new Label(text: Title, style: AdwTypography.Heading, color: theme.OnBackground) {
                 MaxLines = 1,
                 Overflow = TextOverflow.Ellipsis,
             }
         );
         if (!string.IsNullOrEmpty(Subtitle))
+        {
             col.Children.Add(
-                new Label(Subtitle!, AdwTypography.Caption, AdwPalette.For(theme).DimLabel) {
+                new Label(
+                    text: Subtitle!,
+                    style: AdwTypography.Caption,
+                    color: AdwPalette.For(theme).DimLabel
+                ) {
                     MaxLines = 1,
                     Overflow = TextOverflow.Ellipsis,
                 }
             );
-        return new Padding(EdgeInsets.Symmetric(AdwMetrics.RowPaddingX), col);
+        }
+
+        return new Padding(padding: EdgeInsets.Symmetric(AdwMetrics.RowPaddingX), child: col);
     }
 }
 
@@ -59,24 +66,29 @@ public sealed class AdwWindowTitle : ComposedWidget
 /// </summary>
 public sealed class AdwHeaderBar : ComposedWidget
 {
+    private bool _flat;
+
+    private HeaderLayout? _layout;
+    private bool _showBackButton;
+    private bool _showEndWindowControls = true;
+    private bool _showStartWindowControls = true;
     private string? _title;
     private Widget? _titleWidget;
-    private bool _showBackButton;
-    private bool _flat;
-    private bool _showStartWindowControls = true;
-    private bool _showEndWindowControls = true;
 
-    /// <summary>Custom center widget; when null an <see cref="AdwWindowTitle" /> of <see cref="Title" /> is used.</summary>
+    /// <summary>
+    ///     Custom center widget; when null an <see cref="AdwWindowTitle" /> of <see cref="Title" />
+    ///     is used.
+    /// </summary>
     public Widget? TitleWidget
     {
         get => _titleWidget;
-        set => this.Set(ref _titleWidget, value);
+        set => this.Set(field: ref _titleWidget, value: value);
     }
 
     public string? Title
     {
         get => _title;
-        set => this.Set(ref _title, value);
+        set => this.Set(field: ref _title, value: value);
     }
 
     /// <summary>Widgets packed at the start (after the back button). Populate before mounting.</summary>
@@ -88,7 +100,7 @@ public sealed class AdwHeaderBar : ComposedWidget
     public bool ShowBackButton
     {
         get => _showBackButton;
-        set => this.Set(ref _showBackButton, value);
+        set => this.Set(field: ref _showBackButton, value: value);
     }
 
     public Action? OnBack { get; set; }
@@ -97,7 +109,7 @@ public sealed class AdwHeaderBar : ComposedWidget
     public bool Flat
     {
         get => _flat;
-        set => this.Set(ref _flat, value);
+        set => this.Set(field: ref _flat, value: value);
     }
 
     /// <summary>
@@ -109,17 +121,15 @@ public sealed class AdwHeaderBar : ComposedWidget
     public bool ShowStartWindowControls
     {
         get => _showStartWindowControls;
-        set => this.Set(ref _showStartWindowControls, value);
+        set => this.Set(field: ref _showStartWindowControls, value: value);
     }
 
     /// <inheritdoc cref="ShowStartWindowControls" />
     public bool ShowEndWindowControls
     {
         get => _showEndWindowControls;
-        set => this.Set(ref _showEndWindowControls, value);
+        set => this.Set(field: ref _showEndWindowControls, value: value);
     }
-
-    private HeaderLayout? _layout;
 
     /// <summary>
     ///     Whether the last measure found more packed into the bar than it can hold. The overflow is
@@ -141,13 +151,16 @@ public sealed class AdwHeaderBar : ComposedWidget
         if (ShowStartWindowControls)
             startRow.Children.Add(new AdwWindowControls(AdwControlsSide.Start));
         if (ShowBackButton)
+        {
             startRow.Children.Add(
-                new AdwButton("Back", () => OnBack?.Invoke()) {
+                new AdwButton(label: "Back", onPressed: () => OnBack?.Invoke()) {
                     IconName = Icons.ArrowBack,
                     Style = AdwButtonStyle.Flat,
                     Circular = true,
                 }
             );
+        }
+
         foreach (var w in Start) startRow.Children.Add(w);
 
         var endRow = new Row(
@@ -159,25 +172,27 @@ public sealed class AdwHeaderBar : ComposedWidget
             endRow.Children.Add(new AdwWindowControls(AdwControlsSide.End));
 
         _layout = new HeaderLayout(
-            startRow,
-            TitleWidget ?? new AdwWindowTitle(Title ?? ""),
-            endRow
+            start: startRow,
+            title: TitleWidget ?? new AdwWindowTitle(Title ?? ""),
+            end: endRow
         );
 
         // A headerbar that IS the window's titlebar loses a pixel to the window's own outline:
         // 46px with 6px of bottom padding, against 47/7 for a bar packed inside the content.
-        var titlebar = AdwWindowControls.IsWindowChrome(this);
-        var height = titlebar ? AdwMetrics.TitleBarHeight : AdwMetrics.HeaderBarHeight;
+        bool titlebar = AdwWindowControls.IsWindowChrome(this);
+        float height = titlebar ? AdwMetrics.TitleBarHeight : AdwMetrics.HeaderBarHeight;
 
         var bar = new DecoratedBox {
             Fill = Flat ? Color.Transparent : theme.TitleBar,
             // `> windowhandle > box { padding: 6px 7px 7px 7px }`.
             Child = new Padding(
                 EdgeInsets.FromLtrb(
-                    AdwMetrics.HeaderBarPaddingX,
-                    AdwMetrics.HeaderBarPadding,
-                    AdwMetrics.HeaderBarPaddingX,
-                    titlebar ? AdwMetrics.HeaderBarPadding : AdwMetrics.HeaderBarPadding + 1f
+                    left: AdwMetrics.HeaderBarPaddingX,
+                    top: AdwMetrics.HeaderBarPadding,
+                    right: AdwMetrics.HeaderBarPaddingX,
+                    bottom: titlebar
+                        ? AdwMetrics.HeaderBarPadding
+                        : AdwMetrics.HeaderBarPadding + 1f
                 )
             ) {
                 Child = _layout,
@@ -218,15 +233,23 @@ public sealed class AdwHeaderBar : ComposedWidget
         private Size _startSize;
         private Size _titleSize;
 
+        /// <summary>
+        ///     More packed in than the bar can hold. Clipping is gated on it: a bar with room to
+        ///     spare must not have its focus rings and shadows shaved at the edges, and a too-full one
+        ///     must lose its tail rather than stack controls on top of each other.
+        /// </summary>
+        public bool Overflowing =>
+            _startSize.Width + _titleSize.Width + _endSize.Width + (Gap * 2f) > _size.Width + 0.5f;
+
         public override Size Measure(Constraints c)
         {
-            var bounded = float.IsFinite(c.MaxWidth);
-            var maxW = bounded ? c.MaxWidth : 0f;
+            bool bounded = float.IsFinite(c.MaxWidth);
+            float maxW = bounded ? c.MaxWidth : 0f;
             var slot = new Constraints(
-                0f,
-                bounded ? c.MaxWidth : float.PositiveInfinity,
-                0f,
-                c.MaxHeight
+                minWidth: 0f,
+                maxWidth: bounded ? c.MaxWidth : float.PositiveInfinity,
+                minHeight: 0f,
+                maxHeight: c.MaxHeight
             );
             _startSize = start.Measure(slot);
             // Only what the start side left over: measuring both against the whole bar let a packed
@@ -235,80 +258,77 @@ public sealed class AdwHeaderBar : ComposedWidget
             // ellipsizing label) now does; one that cannot overflows into the clip below instead.
             _endSize = end.Measure(
                 bounded
-                    ? new Constraints(0f, MathF.Max(0f, maxW - _startSize.Width), 0f, c.MaxHeight)
+                    ? new Constraints(
+                        minWidth: 0f,
+                        maxWidth: MathF.Max(x: 0f, y: maxW - _startSize.Width),
+                        minHeight: 0f,
+                        maxHeight: c.MaxHeight
+                    )
                     : slot
             );
 
-            var free = MathF.Max(0f, maxW - _startSize.Width - _endSize.Width - Gap * 2f);
+            float free = MathF.Max(x: 0f, y: maxW - _startSize.Width - _endSize.Width - (Gap * 2f));
             _titleSize = title.Measure(
                 new Constraints(
-                    0f,
-                    float.IsFinite(c.MaxWidth) ? free : float.PositiveInfinity,
-                    0f,
-                    c.MaxHeight
+                    minWidth: 0f,
+                    maxWidth: float.IsFinite(c.MaxWidth) ? free : float.PositiveInfinity,
+                    minHeight: 0f,
+                    maxHeight: c.MaxHeight
                 )
             );
 
-            var width = float.IsFinite(c.MaxWidth)
+            float width = float.IsFinite(c.MaxWidth)
                 ? maxW
-                : _startSize.Width + _titleSize.Width + _endSize.Width + Gap * 2f;
-            var height = MathF.Max(
-                _titleSize.Height,
-                MathF.Max(_startSize.Height, _endSize.Height)
+                : _startSize.Width + _titleSize.Width + _endSize.Width + (Gap * 2f);
+            float height = MathF.Max(
+                x: _titleSize.Height,
+                y: MathF.Max(x: _startSize.Height, y: _endSize.Height)
             );
-            _size = c.Constrain(new Size(width, height));
+            _size = c.Constrain(new Size(width: width, height: height));
             return _size;
         }
 
         public override void Layout(Offset origin)
         {
             Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                _size.Width,
-                _size.Height
+                x: origin.X,
+                y: origin.Y,
+                width: _size.Width,
+                height: _size.Height
             );
-            start.Layout(new Offset(origin.X, Center(origin.Y, _startSize.Height)));
+            start.Layout(
+                new Offset(x: origin.X, y: Center(top: origin.Y, childHeight: _startSize.Height))
+            );
             // Right-aligned, but never back past where the start side ends: with more packed in than
             // the bar can hold, the end side runs off the right edge (and is clipped) rather than
             // sliding left over its neighbour.
             end.Layout(
                 new Offset(
-                    MathF.Max(
-                        origin.X + _startSize.Width + Gap,
-                        origin.X + _size.Width - _endSize.Width
+                    x: MathF.Max(
+                        x: origin.X + _startSize.Width + Gap,
+                        y: origin.X + _size.Width - _endSize.Width
                     ),
-                    Center(origin.Y, _endSize.Height)
+                    y: Center(top: origin.Y, childHeight: _endSize.Height)
                 )
             );
 
-            var left = origin.X + _startSize.Width + Gap;
-            var right = origin.X + _size.Width - _endSize.Width - Gap - _titleSize.Width;
-            var centered = origin.X + (_size.Width - _titleSize.Width) / 2f;
+            float left = origin.X + _startSize.Width + Gap;
+            float right = origin.X + _size.Width - _endSize.Width - Gap - _titleSize.Width;
+            float centered = origin.X + ((_size.Width - _titleSize.Width) / 2f);
             title.Layout(
                 new Offset(
-                    right >= left ? Math.Clamp(centered, left, right) : left,
-                    Center(origin.Y, _titleSize.Height)
+                    x: right >= left ? Math.Clamp(value: centered, min: left, max: right) : left,
+                    y: Center(top: origin.Y, childHeight: _titleSize.Height)
                 )
             );
         }
 
-        private float Center(float top, float childHeight)
-        {
-            return top + (_size.Height - childHeight) / 2f;
-        }
-
-        /// <summary>
-        ///     More packed in than the bar can hold. Clipping is gated on it: a bar with room to
-        ///     spare must not have its focus rings and shadows shaved at the edges, and a too-full one
-        ///     must lose its tail rather than stack controls on top of each other.
-        /// </summary>
-        public bool Overflowing =>
-            _startSize.Width + _titleSize.Width + _endSize.Width + Gap * 2f > _size.Width + 0.5f;
+        private float Center(float top, float childHeight) =>
+            top + ((_size.Height - childHeight) / 2f);
 
         public override void Paint(PaintList paint)
         {
-            var overflowing = Overflowing;
+            bool overflowing = Overflowing;
             if (overflowing) paint.AddClipStart(Bounds);
             title.Paint(paint);
             start.Paint(paint);
@@ -318,15 +338,12 @@ public sealed class AdwHeaderBar : ComposedWidget
 
         public override Widget? HitTest(Offset point)
         {
-            if (!Bounds.Contains(point.X, point.Y)) return null;
+            if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
             // Sides first: they overlap nothing now, but a title widget that fills its slot (a view
             // switcher) must not swallow points that belong to a button.
             return start.HitTest(point) ?? end.HitTest(point) ?? title.HitTest(point) ?? this;
         }
 
-        public override IEnumerable<Widget> GetChildren()
-        {
-            return [start, title, end];
-        }
+        public override IEnumerable<Widget> GetChildren() => [start, title, end];
     }
 }

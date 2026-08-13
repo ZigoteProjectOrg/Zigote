@@ -1,5 +1,7 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Text;
 using Zigote.Core.Diagnostics;
 using Zigote.Core.State;
 
@@ -77,21 +79,43 @@ public sealed class Background : IDisposable
     /// </summary>
     public static Action<Exception, string>? OnError;
 
-    private readonly Background? _parent;
-    private readonly Action<Action>? _toUi;
-    private readonly Action? _requestFrame;
-    private readonly CancellationTokenSource _lifetime;
+    /// <summary>Time a slice takes on the frame that started it — a quarter of a 60 Hz frame.</summary>
+    private static readonly TimeSpan DefaultSliceBudget = TimeSpan.FromMilliseconds(4);
+
+    private static readonly ConcurrentDictionary<Type, bool>
+        MutablePayloads = new();
+
+    private static readonly HashSet<Type> MutableGenerics = [
+        typeof(List<>),
+        typeof(Dictionary<,>),
+        typeof(HashSet<>),
+        typeof(Queue<>),
+        typeof(Stack<>),
+        typeof(SortedList<,>),
+        typeof(SortedDictionary<,>),
+    ];
+
     private readonly List<Background> _children = [];
-    private int _pending;
 
     /// <summary>Root-only. Results that asked to wait for a frame with room, in arrival order.</summary>
     private readonly Queue<Action>? _idle;
 
-    /// <summary>Root-only. Work that is spread over frames a slice at a time.</summary>
-    private readonly List<SliceJob>? _slices;
+    private readonly CancellationTokenSource _lifetime;
+
+    private readonly Background? _parent;
+    private readonly Action? _requestFrame;
 
     /// <summary>Root-only. Reused by <see cref="RunFrame" /> so walking the slices allocates nothing.</summary>
     private readonly List<SliceJob>? _sliceScratch;
+
+    /// <summary>Root-only. Work that is spread over frames a slice at a time.</summary>
+    private readonly List<SliceJob>? _slices;
+
+    private readonly Action<Action>? _toUi;
+    private int _pending;
+
+    /// <summary>Which slice gets the frame first. Bumped per frame so none of them starves.</summary>
+    private int _sliceCursor;
 
     /// <param name="toUi">
     ///     Marshals a callback onto the host's UI thread — <c>App.Post</c> in a Zigote app. Every
@@ -136,10 +160,11 @@ public sealed class Background : IDisposable
     {
         get
         {
-            var total = Volatile.Read(ref _pending);
+            int total = Volatile.Read(ref _pending);
             lock (_children)
             {
-                foreach (var child in _children) total += child.Pending;
+                foreach (var child in _children)
+                    total += child.Pending;
             }
 
             return total;
@@ -152,32 +177,11 @@ public sealed class Background : IDisposable
         get
         {
             var root = Root;
-            lock (root._idle!)
-            {
-                return root._idle.Count == 0 && root._slices!.Count == 0;
-            }
+            lock (root._idle!) return root._idle.Count == 0 && root._slices!.Count == 0;
         }
     }
 
     private Background Root => _parent?.Root ?? this;
-
-    /// <summary>
-    ///     A scope that dies with this one: a screen, a feature, a page's search box. Its failures are
-    ///     reported and contained — a child throwing does not cancel its parent or its siblings, which
-    ///     is the opposite of a Kotlin <c>coroutineScope</c> and the right default for a UI, where one
-    ///     failed thumbnail must not take the library down with it.
-    /// </summary>
-    public Background Child(string name)
-    {
-        var child = new Background(this, name);
-        lock (_children)
-        {
-            _children.Add(child);
-        }
-
-        if (_lifetime.IsCancellationRequested) child.Dispose();
-        return child;
-    }
 
     /// <summary>
     ///     Stop this scope and everything under it. In-flight work is cancelled and its results are
@@ -204,10 +208,22 @@ public sealed class Background : IDisposable
         if (!_lifetime.IsCancellationRequested) _lifetime.Cancel();
 
         if (_parent is null) return;
-        lock (_parent._children)
-        {
-            _parent._children.Remove(this);
-        }
+        lock (_parent._children) _parent._children.Remove(this);
+    }
+
+    /// <summary>
+    ///     A scope that dies with this one: a screen, a feature, a page's search box. Its failures are
+    ///     reported and contained — a child throwing does not cancel its parent or its siblings, which
+    ///     is the opposite of a Kotlin <c>coroutineScope</c> and the right default for a UI, where one
+    ///     failed thumbnail must not take the library down with it.
+    /// </summary>
+    public Background Child(string name)
+    {
+        var child = new Background(parent: this, name: name);
+        lock (_children) _children.Add(child);
+
+        if (_lifetime.IsCancellationRequested) child.Dispose();
+        return child;
     }
 
     // ── starting work ─────────────────────────────────────────────────────────
@@ -216,8 +232,8 @@ public sealed class Background : IDisposable
     public void Run(Action work, [CallerMemberName] string origin = "")
     {
         Launch(
-            origin,
-            _ =>
+            origin: origin,
+            body: _ =>
             {
                 work();
                 return Task.CompletedTask;
@@ -233,12 +249,12 @@ public sealed class Background : IDisposable
         [CallerMemberName] string origin = "")
     {
         Launch(
-            origin,
-            _ =>
+            origin: origin,
+            body: _ =>
             {
                 var result = work();
-                WarnIfMutable(result, origin);
-                Post(() => onUi(result), deliver, origin);
+                WarnIfMutable(value: result, origin: origin);
+                Post(ui: () => onUi(result), deliver: deliver, origin: origin);
                 return Task.CompletedTask;
             }
         );
@@ -248,20 +264,16 @@ public sealed class Background : IDisposable
     ///     Await something genuinely asynchronous (an HTTP fetch, a portal round trip). The token is
     ///     <see cref="Lifetime" />, so the work stops when the scope does.
     /// </summary>
-    public void RunAsync(Func<CancellationToken, Task> work, [CallerMemberName] string origin = "")
-    {
-        Launch(origin, work);
-    }
+    public void
+        RunAsync(Func<CancellationToken, Task> work, [CallerMemberName] string origin = "") =>
+        Launch(origin: origin, body: work);
 
     /// <summary>
     ///     A slot for work that supersedes itself: a search box, a regroup, a debounced save. Starting
     ///     a new run cancels the one before it, so the last thing asked for is the thing that lands.
     ///     Hold one per independent unit — a bloc that scans <i>and</i> filters needs two.
     /// </summary>
-    public Latest Latest()
-    {
-        return new Latest(this);
-    }
+    public Latest Latest() => new(this);
 
     // ── the UI thread's side ──────────────────────────────────────────────────
 
@@ -273,15 +285,12 @@ public sealed class Background : IDisposable
 
         if (deliver == Deliver.Next)
         {
-            Root._toUi!(() => Guarded(ui, origin));
+            Root._toUi!(() => Guarded(ui: ui, origin: origin));
             return;
         }
 
         var root = Root;
-        lock (root._idle!)
-        {
-            root._idle.Enqueue(() => Guarded(ui, origin));
-        }
+        lock (root._idle!) root._idle.Enqueue(() => Guarded(ui: ui, origin: origin));
 
         root._requestFrame?.Invoke();
     }
@@ -313,34 +322,31 @@ public sealed class Background : IDisposable
 
         var root = Root;
         var job = new SliceJob(
-            key,
-            count,
-            step,
-            onDone,
-            this,
-            origin
+            key: key,
+            count: count,
+            step: step,
+            onDone: onDone,
+            owner: this,
+            origin: origin
         );
 
         lock (root._idle!)
         {
-            root._slices!.RemoveAll(existing => Equals(existing.Key, key));
+            root._slices!.RemoveAll(existing => Equals(objA: existing.Key, objB: key));
             root._slices.Add(job);
         }
 
         // A first slice on this frame, so a list is never empty for a frame it did not have to be.
         // Nullable, not a TimeSpan.Zero sentinel: zero is default(TimeSpan), so a caller asking for
         // "one unit now, the rest later" would be indistinguishable from one that said nothing.
-        Advance(job, Stopwatch.GetTimestamp() + BudgetTicks(firstFrame ?? DefaultSliceBudget));
+        Advance(
+            job: job,
+            deadline: Stopwatch.GetTimestamp() + BudgetTicks(firstFrame ?? DefaultSliceBudget)
+        );
         if (!job.Done) return;
 
-        lock (root._idle)
-        {
-            root._slices!.Remove(job);
-        }
+        lock (root._idle) root._slices!.Remove(job);
     }
-
-    /// <summary>Time a slice takes on the frame that started it — a quarter of a 60 Hz frame.</summary>
-    private static readonly TimeSpan DefaultSliceBudget = TimeSpan.FromMilliseconds(4);
 
     /// <summary>
     ///     The frame loop's side of all this: deliver what has been waiting and advance unfinished
@@ -356,7 +362,7 @@ public sealed class Background : IDisposable
         var root = Root;
         if (root._lifetime.IsCancellationRequested) return;
 
-        var deadline = Stopwatch.GetTimestamp() + BudgetTicks(budget);
+        long deadline = Stopwatch.GetTimestamp() + BudgetTicks(budget);
 
         // Results first, slices second: a result may replace the very list a slice is filling, and
         // doing it the other way round means building rows that are thrown away on the same frame.
@@ -368,10 +374,7 @@ public sealed class Background : IDisposable
         while (true)
         {
             Action? next;
-            lock (root._idle!)
-            {
-                next = root._idle.Count > 0 ? root._idle.Dequeue() : null;
-            }
+            lock (root._idle!) next = root._idle.Count > 0 ? root._idle.Dequeue() : null;
 
             if (next is null) break;
             next();
@@ -383,10 +386,7 @@ public sealed class Background : IDisposable
         // allocation on the idle path is the kind of garbage that only shows up as a GC every few
         // seconds with no line of code to blame.
         bool anySlices;
-        lock (root._idle!)
-        {
-            anySlices = root._slices!.Count > 0;
-        }
+        lock (root._idle!) anySlices = root._slices!.Count > 0;
 
         if (!anySlices)
         {
@@ -398,25 +398,22 @@ public sealed class Background : IDisposable
         // is walking, and the alternative to a copy is mutating the list under its own enumerator.
         var jobs = root._sliceScratch!;
         jobs.Clear();
-        lock (root._idle!)
-        {
-            jobs.AddRange(root._slices!);
-        }
+        lock (root._idle!) jobs.AddRange(root._slices!);
 
         // Round-robin start, so two lists filling at once share the frame instead of the second
         // one sitting empty until the first finishes.
-        var start = root._sliceCursor++ % jobs.Count;
-        for (var n = 0; n < jobs.Count; n++)
+        int start = root._sliceCursor++ % jobs.Count;
+        for (int n = 0; n < jobs.Count; n++)
         {
             var job = jobs[(start + n) % jobs.Count];
             if (job.Owner._lifetime.IsCancellationRequested) job.Fail();
-            else Advance(job, deadline);
+            else Advance(job: job, deadline: deadline);
 
             if (job.Done)
+            {
                 lock (root._idle!)
-                {
                     root._slices!.Remove(job);
-                }
+            }
 
             if (Stopwatch.GetTimestamp() >= deadline) break;
         }
@@ -424,9 +421,6 @@ public sealed class Background : IDisposable
         jobs.Clear(); // do not pin finished jobs until the next frame
         if (!FrameIdle) root._requestFrame?.Invoke();
     }
-
-    /// <summary>Which slice gets the frame first. Bumped per frame so none of them starves.</summary>
-    private int _sliceCursor;
 
     // ── tests and headless tools ──────────────────────────────────────────────
 
@@ -442,10 +436,7 @@ public sealed class Background : IDisposable
         made = new Background(action =>
             {
                 var root = made!;
-                lock (root._idle!)
-                {
-                    root._idle.Enqueue(action);
-                }
+                lock (root._idle!) root._idle.Enqueue(action);
             }
         );
         return made;
@@ -460,7 +451,7 @@ public sealed class Background : IDisposable
     public bool Drain(TimeSpan timeout)
     {
         var root = Root;
-        var deadline = Stopwatch.GetTimestamp() + BudgetTicks(timeout);
+        long deadline = Stopwatch.GetTimestamp() + BudgetTicks(timeout);
 
         while (Stopwatch.GetTimestamp() < deadline)
         {
@@ -497,7 +488,7 @@ public sealed class Background : IDisposable
                 {
                     // Reported, not rethrown, and the scope stays usable: a failed unit of work is
                     // not a reason to tear down the feature that started it.
-                    Report(ex, origin);
+                    Report(ex: ex, origin: origin);
                 }
                 finally
                 {
@@ -516,12 +507,12 @@ public sealed class Background : IDisposable
     {
         if (token.IsCancellationRequested || _lifetime.IsCancellationRequested) return;
         Post(
-            () =>
+            ui: () =>
             {
                 if (!token.IsCancellationRequested) ui();
             },
-            deliver,
-            origin
+            deliver: deliver,
+            origin: origin
         );
     }
 
@@ -532,14 +523,13 @@ public sealed class Background : IDisposable
             // At least one unit, then as many as the budget allows: forward progress must not
             // depend on the budget being generous enough for a single step.
             do
-            {
                 job.Step(job.Next++);
-            } while (!job.Done && Stopwatch.GetTimestamp() < deadline);
+            while (!job.Done && Stopwatch.GetTimestamp() < deadline);
         }
         catch (Exception ex)
         {
             job.Fail();
-            Report(ex, job.Origin);
+            Report(ex: ex, origin: job.Origin);
             return;
         }
 
@@ -555,22 +545,24 @@ public sealed class Background : IDisposable
         }
         catch (Exception ex)
         {
-            Report(ex, origin);
+            Report(ex: ex, origin: origin);
         }
     }
 
     internal void Report(Exception ex, string origin)
     {
-        var where = $"{Path}.{origin}";
+        string where = $"{Path}.{origin}";
         try
         {
-            if (OnError is { } hook) hook(ex, where);
+            if (OnError is { } hook) hook(arg1: ex, arg2: where);
             else
+            {
                 DebugLog.Add(
-                    DebugLogLevel.Error,
-                    $"background {where} failed — {ex}",
-                    "background"
+                    level: DebugLogLevel.Error,
+                    message: $"background {where} failed — {ex}",
+                    category: "background"
                 );
+            }
         }
         catch
         {
@@ -580,7 +572,7 @@ public sealed class Background : IDisposable
 
     private static long BudgetTicks(TimeSpan budget)
     {
-        var seconds = budget.TotalSeconds;
+        double seconds = budget.TotalSeconds;
         // TimeSpan.MaxValue would overflow the tick arithmetic; a century is the same thing here.
         return seconds >= int.MaxValue / (double)Stopwatch.Frequency
             ? long.MaxValue / 2
@@ -604,36 +596,26 @@ public sealed class Background : IDisposable
     {
         if (value is null) return;
         var type = value.GetType();
-        if (!MutablePayloads.TryGetValue(type, out var mutable))
+        if (!MutablePayloads.TryGetValue(key: type, value: out bool mutable))
         {
             mutable = type.IsArray || (type.IsGenericType && MutableGenerics.Contains(
                           type.GetGenericTypeDefinition()
                       )) ||
-                      type == typeof(System.Text.StringBuilder);
+                      type == typeof(StringBuilder);
             MutablePayloads[type] = mutable;
         }
 
         if (mutable)
+        {
             DebugLog.Add(
-                DebugLogLevel.Warning,
+                level: DebugLogLevel.Warning,
+                message:
                 $"{Path}.{origin} hands a mutable {type.Name} to the UI thread — the worker can still " +
                 "write it. Hand over an ImmutableArray, a record, or a copy.",
-                "background"
+                category: "background"
             );
+        }
     }
-
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, bool>
-        MutablePayloads = new();
-
-    private static readonly HashSet<Type> MutableGenerics = [
-        typeof(List<>),
-        typeof(Dictionary<,>),
-        typeof(HashSet<>),
-        typeof(Queue<>),
-        typeof(Stack<>),
-        typeof(SortedList<,>),
-        typeof(SortedDictionary<,>),
-    ];
 
     private sealed class SliceJob(
         object key,
@@ -644,9 +626,9 @@ public sealed class Background : IDisposable
         string origin)
     {
         public readonly object Key = key;
-        public readonly Action<int> Step = step;
-        public readonly Background Owner = owner;
         public readonly string Origin = origin;
+        public readonly Background Owner = owner;
+        public readonly Action<int> Step = step;
         public int Next;
 
         public bool Done => Next >= count;
@@ -663,7 +645,7 @@ public sealed class Background : IDisposable
             var callback = onDone;
             onDone = null; // exactly once, however many frames it took
             if (callback is null) return;
-            scope.Guarded(callback, Origin);
+            scope.Guarded(ui: callback, origin: Origin);
         }
     }
 }
@@ -678,10 +660,9 @@ public sealed class Latest : IDisposable
     private readonly Background _owner;
     private CancellationTokenSource? _current;
 
-    internal Latest(Background owner)
-    {
-        _owner = owner;
-    }
+    internal Latest(Background owner) => _owner = owner;
+
+    public void Dispose() => Cancel();
 
     /// <summary>
     ///     Compute on a worker and deliver on the UI thread, cancelling whatever was running.
@@ -693,20 +674,20 @@ public sealed class Latest : IDisposable
     {
         var token = Restart();
         _owner.Launch(
-            origin,
-            async ct =>
+            origin: origin,
+            body: async ct =>
             {
-                if (delay > TimeSpan.Zero) await Task.Delay(delay, ct);
+                if (delay > TimeSpan.Zero) await Task.Delay(delay: delay, cancellationToken: ct);
                 ct.ThrowIfCancellationRequested();
                 var result = work(ct);
                 _owner.DeliverResult(
-                    () => onUi(result),
-                    ct,
-                    deliver,
-                    origin
+                    ui: () => onUi(result),
+                    token: ct,
+                    deliver: deliver,
+                    origin: origin
                 );
             },
-            token
+            token: token
         );
     }
 
@@ -720,14 +701,14 @@ public sealed class Latest : IDisposable
     {
         var token = Restart();
         _owner.Launch(
-            origin,
-            async ct =>
+            origin: origin,
+            body: async ct =>
             {
-                if (delay > TimeSpan.Zero) await Task.Delay(delay, ct);
+                if (delay > TimeSpan.Zero) await Task.Delay(delay: delay, cancellationToken: ct);
                 ct.ThrowIfCancellationRequested();
                 work(ct);
             },
-            token
+            token: token
         );
     }
 
@@ -737,28 +718,23 @@ public sealed class Latest : IDisposable
     {
         var token = Restart();
         _owner.Launch(
-            origin,
-            async ct =>
+            origin: origin,
+            body: async ct =>
             {
-                if (delay > TimeSpan.Zero) await Task.Delay(delay, ct);
+                if (delay > TimeSpan.Zero) await Task.Delay(delay: delay, cancellationToken: ct);
                 ct.ThrowIfCancellationRequested();
                 await work(ct);
             },
-            token
+            token: token
         );
     }
 
     /// <summary>Stop the outstanding run without starting a replacement.</summary>
     public void Cancel()
     {
-        var previous = Interlocked.Exchange(ref _current, null);
+        var previous = Interlocked.Exchange(location1: ref _current, value: null);
         previous?.Cancel();
         previous?.Dispose();
-    }
-
-    public void Dispose()
-    {
-        Cancel();
     }
 
     /// <summary>
@@ -769,7 +745,7 @@ public sealed class Latest : IDisposable
     private CancellationToken Restart()
     {
         var next = CancellationTokenSource.CreateLinkedTokenSource(_owner.Lifetime);
-        var previous = Interlocked.Exchange(ref _current, next);
+        var previous = Interlocked.Exchange(location1: ref _current, value: next);
         previous?.Cancel();
         previous?.Dispose();
         return next.Token;

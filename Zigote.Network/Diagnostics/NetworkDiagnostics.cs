@@ -15,8 +15,8 @@ public sealed class NetworkDiagnostics(NetworkManager manager)
     {
         get
         {
-            var sum = 0f;
-            var n = 0;
+            float sum = 0f;
+            int n = 0;
             foreach (var conn in manager.Connections.Values)
             {
                 sum += conn.Stats.RoundTripTime;
@@ -31,9 +31,9 @@ public sealed class NetworkDiagnostics(NetworkManager manager)
     {
         get
         {
-            var worst = 0f;
+            float worst = 0f;
             foreach (var conn in manager.Connections.Values)
-                worst = Math.Max(worst, conn.Stats.PacketLoss);
+                worst = Math.Max(val1: worst, val2: conn.Stats.PacketLoss);
             return worst;
         }
     }
@@ -52,7 +52,7 @@ public sealed class NetworkDiagnostics(NetworkManager manager)
 
     private float Sum(Func<NetworkStats, float> select)
     {
-        var total = 0f;
+        float total = 0f;
         foreach (var conn in manager.Connections.Values) total += select(conn.Stats);
         return total;
     }

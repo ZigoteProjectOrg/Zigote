@@ -45,19 +45,25 @@ public sealed class AdwPreferencesDialog : AdwDialog
             };
 
             if (owner.Pages.Count > 1)
+            {
                 col.Children.Add(
                     new Padding(
-                        EdgeInsets.Only(bottom: Spacing.Sm),
+                        padding: EdgeInsets.Only(bottom: Spacing.Sm),
                         // heightFactor 1: hug the switcher's height, fill (and center on) the width.
-                        new Center(new Watch(Switcher), heightFactor: 1.0)
+                        child: new Center(child: new Watch(Switcher), heightFactor: 1.0)
                     )
                 );
+            }
 
             col.Children.Add(
                 new Expanded(
                     new Watch(() => owner.Pages.Count == 0
                         ? new SizedBox()
-                        : owner.Pages[Math.Clamp(owner._page.Value, 0, owner.Pages.Count - 1)]
+                        : owner.Pages[Math.Clamp(
+                            value: owner._page.Value,
+                            min: 0,
+                            max: owner.Pages.Count - 1
+                        )]
                     )
                 )
             );
@@ -70,14 +76,14 @@ public sealed class AdwPreferencesDialog : AdwDialog
         private Widget Switcher()
         {
             return new AdwToggleGroup(
-                [
+                toggles: [
                     .. owner.Pages.Select((page, i) => page is AdwPreferencesPage p
-                        ? new AdwToggle(p.Title, p.IconName)
+                        ? new AdwToggle(Label: p.Title, IconName: p.IconName)
                         : new AdwToggle($"Page {i + 1}")
                     ),
                 ],
-                owner._page.Value,
-                i => owner._page.Value = i
+                active: owner._page.Value,
+                onActive: i => owner._page.Value = i
             );
         }
     }

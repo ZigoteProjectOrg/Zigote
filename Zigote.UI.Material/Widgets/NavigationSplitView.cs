@@ -14,8 +14,8 @@ public sealed class NavigationSplitView : Widget
     private readonly Func<int, Widget> _detailBuilder;
     private readonly Sidebar _sidebar;
     private readonly SplitPane _split;
-    private Size _size;
     private int _selected;
+    private Size _size;
 
     public NavigationSplitView(ThemeData theme, IEnumerable<string> items,
         Func<int, Widget> detailBuilder,
@@ -25,15 +25,17 @@ public sealed class NavigationSplitView : Widget
         OnChanged = onChanged;
 
         var labels = items as IReadOnlyList<string> ?? new List<string>(items);
-        _selected = labels.Count == 0 ? 0 : Math.Clamp(selected, 0, labels.Count - 1);
+        _selected = labels.Count == 0
+            ? 0
+            : Math.Clamp(value: selected, min: 0, max: labels.Count - 1);
 
         _sidebar = new Sidebar(
-            theme,
-            labels,
-            _selected,
-            Select
+            theme: theme,
+            items: labels,
+            selected: _selected,
+            onSelect: Select
         );
-        _split = new SplitPane(theme, _sidebar, _detailBuilder(_selected)) {
+        _split = new SplitPane(theme: theme, first: _sidebar, second: _detailBuilder(_selected)) {
             SplitRatio = 0.22f,
             MinPaneSize = 160f,
         };
@@ -61,7 +63,7 @@ public sealed class NavigationSplitView : Widget
         _sidebar.Selected = index;
         _split.Second = _detailBuilder(index);
         // Re-wire ownership so the freshly built detail subtree is attached to the app.
-        if (Owner is not null) _split.Second?.Attach(Owner, _split);
+        if (Owner is not null) _split.Second?.Attach(owner: Owner, parent: _split);
         OnChanged?.Invoke(index);
         MarkNeedsLayout();
     }
@@ -71,7 +73,7 @@ public sealed class NavigationSplitView : Widget
         // Side-by-side master/detail assumes a wide viewport: at phone width the 160pt sidebar
         // minimum leaves the detail a sliver and the divider no room to travel at all. Stack the
         // two panes instead — same widget, same selection model, just a top/bottom split.
-        var compact = TouchMetrics.IsCompact;
+        bool compact = TouchMetrics.IsCompact;
         if (_split.Vertical != compact)
         {
             _split.Vertical = compact;
@@ -88,22 +90,19 @@ public sealed class NavigationSplitView : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         _split.Layout(origin);
     }
 
-    public override void Paint(PaintList paint)
-    {
-        _split.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => _split.Paint(paint);
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return _split.HitTest(point) ?? this;
     }
 
@@ -132,7 +131,9 @@ internal sealed class Sidebar : Widget
         _theme = theme;
         _items = items;
         _onSelect = onSelect;
-        Selected = items.Count == 0 ? -1 : Math.Clamp(selected, 0, items.Count - 1);
+        Selected = items.Count == 0
+            ? -1
+            : Math.Clamp(value: selected, min: 0, max: items.Count - 1);
         _rowY = new float[items.Count];
     }
 
@@ -146,21 +147,21 @@ internal sealed class Sidebar : Widget
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
         _rowH = TouchMetrics.Pick(ControlMetrics.RegularHeight);
-        var h = Spacing.Sm * 2f + _items.Count * (_rowH + Spacing.Xxs);
-        _size = c.Constrain(new Size(c.MaxWidth, MathF.Max(h, c.MinHeight)));
+        float h = (Spacing.Sm * 2f) + (_items.Count * (_rowH + Spacing.Xxs));
+        _size = c.Constrain(new Size(width: c.MaxWidth, height: MathF.Max(x: h, y: c.MinHeight)));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
-        var y = origin.Y + Spacing.Sm;
-        for (var i = 0; i < _items.Count; i++)
+        float y = origin.Y + Spacing.Sm;
+        for (int i = 0; i < _items.Count; i++)
         {
             _rowY[i] = y;
             y += _rowH + Spacing.Xxs;
@@ -172,43 +173,49 @@ internal sealed class Sidebar : Widget
         // Recessed sidebar background. Uses Background (not SurfaceAlt, which is pure white in the light
         // theme and so was indistinguishable from the surrounding surface) so the source list reads as a
         // distinct panel in both light and dark.
-        paint.AddRect(Bounds, _theme.Background);
+        paint.AddRect(bounds: Bounds, color: _theme.Background);
 
         // The sidebar sizes to its content but its pane does not: more rows than the pane is tall
         // used to paint over the detail view (and, stacked on a phone, over the divider).
         paint.AddClipStart(Bounds);
 
-        var fs = _theme.FontSizeBody;
-        var rowW = Bounds.Width - Spacing.Sm * 2f;
+        float fs = _theme.FontSizeBody;
+        float rowW = Bounds.Width - (Spacing.Sm * 2f);
 
-        for (var i = 0; i < _items.Count; i++)
+        for (int i = 0; i < _items.Count; i++)
         {
             var row = new Rect(
-                Bounds.X + Spacing.Sm,
-                _rowY[i],
-                rowW,
-                _rowH
+                x: Bounds.X + Spacing.Sm,
+                y: _rowY[i],
+                width: rowW,
+                height: _rowH
             );
-            var isSelected = i == Selected;
+            bool isSelected = i == Selected;
 
             if (isSelected)
-                paint.AddRect(row, _theme.Selection.WithAlpha(0.18f), Radii.Md);
+            {
+                paint.AddRect(
+                    bounds: row,
+                    color: _theme.Selection.WithAlpha(0.18f),
+                    radius: Radii.Md
+                );
+            }
             else if (i == _hovered)
-                paint.AddRect(row, _theme.Fill2, Radii.Md);
+                paint.AddRect(bounds: row, color: _theme.Fill2, radius: Radii.Md);
 
-            var label = _items[i];
+            string label = _items[i];
             if (!string.IsNullOrEmpty(label))
             {
                 var fg = isSelected ? _theme.OnSurface : _theme.Hint;
-                var ts = TextMeasure.Measure(label, fs);
-                var bx = row.X + Spacing.Md;
-                var by = row.Y + (row.Height - ts.Height) / 2f + fs * 0.8f;
+                var ts = TextMeasure.Measure(text: label, fontSize: fs);
+                float bx = row.X + Spacing.Md;
+                float by = row.Y + ((row.Height - ts.Height) / 2f) + (fs * 0.8f);
                 paint.AddText(
-                    label,
-                    bx,
-                    by,
-                    fg,
-                    fs
+                    text: label,
+                    baselineX: bx,
+                    baselineY: by,
+                    color: fg,
+                    fontSize: fs
                 );
             }
         }
@@ -216,25 +223,23 @@ internal sealed class Sidebar : Widget
         paint.AddClipEnd();
 
         if (Focused)
-            paint.AddFocusRing(Bounds, 0f, _theme);
+            paint.AddFocusRing(bounds: Bounds, radius: 0f, theme: _theme);
     }
 
-    public override Widget? HitTest(Offset point)
-    {
-        return Bounds.Contains(point.X, point.Y) ? this : null;
-    }
+    public override Widget? HitTest(Offset point) =>
+        Bounds.Contains(px: point.X, py: point.Y) ? this : null;
 
     private int RowAt(Offset point)
     {
-        for (var i = 0; i < _items.Count; i++)
+        for (int i = 0; i < _items.Count; i++)
         {
             var row = new Rect(
-                Bounds.X + Spacing.Sm,
-                _rowY[i],
-                Bounds.Width - Spacing.Sm * 2f,
-                _rowH
+                x: Bounds.X + Spacing.Sm,
+                y: _rowY[i],
+                width: Bounds.Width - (Spacing.Sm * 2f),
+                height: _rowH
             );
-            if (row.Contains(point.X, point.Y)) return i;
+            if (row.Contains(px: point.X, py: point.Y)) return i;
         }
 
         return -1;
@@ -242,7 +247,7 @@ internal sealed class Sidebar : Widget
 
     public override void OnPointerMove(Offset point)
     {
-        var i = RowAt(point);
+        int i = RowAt(point);
         if (i == _hovered) return;
         _hovered = i;
         MarkNeedsPaint();
@@ -257,7 +262,7 @@ internal sealed class Sidebar : Widget
 
     public override void OnPointerDown(Offset point)
     {
-        var i = RowAt(point);
+        int i = RowAt(point);
         if (i < 0 || i == Selected) return;
         _onSelect(i);
     }
@@ -270,13 +275,13 @@ internal sealed class Sidebar : Widget
         {
             case 82: // Up
             {
-                var next = Math.Clamp(Selected - 1, 0, _items.Count - 1);
+                int next = Math.Clamp(value: Selected - 1, min: 0, max: _items.Count - 1);
                 if (next != Selected) _onSelect(next);
                 break;
             }
             case 81: // Down
             {
-                var next = Math.Clamp(Selected + 1, 0, _items.Count - 1);
+                int next = Math.Clamp(value: Selected + 1, min: 0, max: _items.Count - 1);
                 if (next != Selected) _onSelect(next);
                 break;
             }

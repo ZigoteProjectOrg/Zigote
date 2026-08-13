@@ -23,8 +23,11 @@ public sealed class CompiledShaderGraph
     public string? TexturePath(TextureSlot slot)
     {
         foreach (var t in Textures)
+        {
             if (t.Slot == slot)
                 return t.Path;
+        }
+
         return null;
     }
 
@@ -39,14 +42,14 @@ public sealed class CompiledShaderGraph
 
         int F(float v)
         {
-            var id = instr.Count;
+            int id = instr.Count;
             instr.Add(
                 new ShaderInstr(
-                    id,
-                    ShaderOp.ConstFloat,
-                    ShaderValueType.Float,
-                    [],
-                    v
+                    Result: id,
+                    Op: ShaderOp.ConstFloat,
+                    Type: ShaderValueType.Float,
+                    Args: [],
+                    P0: v
                 )
             );
             return id;
@@ -54,17 +57,17 @@ public sealed class CompiledShaderGraph
 
         int V4(float r, float g, float b, float a)
         {
-            var id = instr.Count;
+            int id = instr.Count;
             instr.Add(
                 new ShaderInstr(
-                    id,
-                    ShaderOp.ConstVec4,
-                    ShaderValueType.Vec4,
-                    [],
-                    r,
-                    g,
-                    b,
-                    a
+                    Result: id,
+                    Op: ShaderOp.ConstVec4,
+                    Type: ShaderValueType.Vec4,
+                    Args: [],
+                    P0: r,
+                    P1: g,
+                    P2: b,
+                    P3: a
                 )
             );
             return id;
@@ -73,19 +76,19 @@ public sealed class CompiledShaderGraph
         var program = new ShaderGraphProgram {
             Instructions = instr,
             BaseColor = V4(
-                c.BaseR,
-                c.BaseG,
-                c.BaseB,
-                c.BaseA
+                r: c.BaseR,
+                g: c.BaseG,
+                b: c.BaseB,
+                a: c.BaseA
             ),
             Metallic = F(c.Metallic),
             Roughness = F(c.Roughness),
             Specular = F(c.Specular),
             Emission = V4(
-                c.EmissiveR,
-                c.EmissiveG,
-                c.EmissiveB,
-                1f
+                r: c.EmissiveR,
+                g: c.EmissiveG,
+                b: c.EmissiveB,
+                a: 1f
             ),
             EmissionStrength = F(1f),
             Clearcoat = F(c.Clearcoat),

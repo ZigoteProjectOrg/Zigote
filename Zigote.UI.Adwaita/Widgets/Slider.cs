@@ -19,12 +19,17 @@ public sealed class AdwSlider : Widget
     private Size _size;
     private ThemeData _theme = ThemeData.Dark;
 
-    /// <summary>Where the track starts along the slider's axis, and how long it is. Both are the X
-    ///     axis horizontally and the Y axis vertically — everything else is shared.</summary>
+    private float _trackLength;
+
+    /// <summary>
+    ///     Where the track starts along the slider's axis, and how long it is. Both are the X
+    ///     axis horizontally and the Y axis vertically — everything else is shared.
+    /// </summary>
     private float _trackStart;
 
-    private float _trackLength;
     private float _value;
+
+    private bool _vertical;
 
     public AdwSlider(float value = 0f, float min = 0f, float max = 1f,
         Action<float>? onChanged = null)
@@ -38,19 +43,19 @@ public sealed class AdwSlider : Widget
     public float Value
     {
         get => _value;
-        set => SetPaint(ref _value, value);
+        set => SetPaint(field: ref _value, value: value);
     }
 
     public float Min
     {
         get => _min;
-        set => SetPaint(ref _min, value);
+        set => SetPaint(field: ref _min, value: value);
     }
 
     public float Max
     {
         get => _max;
-        set => SetPaint(ref _max, value);
+        set => SetPaint(field: ref _max, value: value);
     }
 
     public Action<float>? OnChanged { get; set; }
@@ -59,7 +64,7 @@ public sealed class AdwSlider : Widget
     public bool Enabled
     {
         get => _enabled;
-        set => SetPaint(ref _enabled, value);
+        set => SetPaint(field: ref _enabled, value: value);
     }
 
     /// <summary>Optional accessible name (the parameter this slider controls).</summary>
@@ -73,10 +78,8 @@ public sealed class AdwSlider : Widget
     public bool Vertical
     {
         get => _vertical;
-        set => SetLayout(ref _vertical, value);
+        set => SetLayout(field: ref _vertical, value: value);
     }
-
-    private bool _vertical;
 
     public override bool Focusable => Enabled;
 
@@ -93,13 +96,13 @@ public sealed class AdwSlider : Widget
     {
         config.Role = SemanticsRole.Slider;
         config.Label = SemanticsLabel;
-        var pct = Max > Min ? (Value - Min) / (Max - Min) * 100f : 0f;
+        float pct = Max > Min ? (Value - Min) / (Max - Min) * 100f : 0f;
         config.Value = $"{pct:F0}%";
         config.Actions =
             SemanticsAction.Increase | SemanticsAction.Decrease | SemanticsAction.Focus;
-        config.AddFlag(SemanticsFlags.Focusable, Enabled)
-            .AddFlag(SemanticsFlags.Focused, Focused)
-            .AddFlag(SemanticsFlags.Disabled, !Enabled);
+        config.AddFlag(flag: SemanticsFlags.Focusable, on: Enabled)
+            .AddFlag(flag: SemanticsFlags.Focused, on: Focused)
+            .AddFlag(flag: SemanticsFlags.Disabled, on: !Enabled);
     }
 
     public override void UpdateFrom(Widget newWidget)
@@ -118,11 +121,11 @@ public sealed class AdwSlider : Widget
     public override int DebugStateHash()
     {
         return HashCode.Combine(
-            Value,
-            _dragging,
-            _hovered,
-            Enabled,
-            Focused
+            value1: Value,
+            value2: _dragging,
+            value3: _hovered,
+            value4: Enabled,
+            value5: Focused
         );
     }
 
@@ -131,27 +134,27 @@ public sealed class AdwSlider : Widget
         _theme = ThemeProvider.Of(BuildContext.Current);
         if (Vertical)
         {
-            var h = float.IsFinite(c.MaxHeight) ? c.MaxHeight : 200f;
-            _size = c.Constrain(new Size(AdwMetrics.ButtonHeight, h));
+            float h = float.IsFinite(c.MaxHeight) ? c.MaxHeight : 200f;
+            _size = c.Constrain(new Size(width: AdwMetrics.ButtonHeight, height: h));
             return _size;
         }
 
-        var w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 200f;
-        _size = c.Constrain(new Size(w, AdwMetrics.ButtonHeight));
+        float w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 200f;
+        _size = c.Constrain(new Size(width: w, height: AdwMetrics.ButtonHeight));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
-        var extent = Vertical ? _size.Height : _size.Width;
+        float extent = Vertical ? _size.Height : _size.Width;
         _trackStart = (Vertical ? Bounds.Y : Bounds.X) + KnobR;
-        _trackLength = MathF.Max(0f, extent - KnobR * 2f);
+        _trackLength = MathF.Max(x: 0f, y: extent - (KnobR * 2f));
     }
 
     public override void Paint(PaintList paint)
@@ -159,75 +162,87 @@ public sealed class AdwSlider : Widget
         if (!Enabled) paint.PushAlpha(AdwStyle.DisabledOpacity);
 
         var p = AdwPalette.For(_theme);
-        var t = Max > Min ? Math.Clamp((Value - Min) / (Max - Min), 0f, 1f) : 0f;
-        var thickness = AdwMetrics.SliderTrack;
+        float t = Max > Min ? Math.Clamp(value: (Value - Min) / (Max - Min), min: 0f, max: 1f) : 0f;
+        float thickness = AdwMetrics.SliderTrack;
 
         // The centre line across the axis, and the knob's position along it — vertically the value
         // grows upward, which is the one thing a fader does not share with a horizontal scale.
-        var cross = Vertical
-            ? Bounds.X + Bounds.Width / 2f
-            : Bounds.Y + Bounds.Height / 2f;
-        var knobPos = Vertical
-            ? _trackStart + (1f - t) * _trackLength
-            : _trackStart + t * _trackLength;
+        float cross = Vertical
+            ? Bounds.X + (Bounds.Width / 2f)
+            : Bounds.Y + (Bounds.Height / 2f);
+        float knobPos = Vertical
+            ? _trackStart + ((1f - t) * _trackLength)
+            : _trackStart + (t * _trackLength);
 
         Rect Along(float start, float length)
         {
             return Vertical
                 ? new Rect(
-                    cross - thickness / 2f,
-                    start,
-                    thickness,
-                    length
+                    x: cross - (thickness / 2f),
+                    y: start,
+                    width: thickness,
+                    height: length
                 )
                 : new Rect(
-                    start,
-                    cross - thickness / 2f,
-                    length,
-                    thickness
+                    x: start,
+                    y: cross - (thickness / 2f),
+                    width: length,
+                    height: thickness
                 );
         }
 
         // %scale_trough — currentColor 15%, brightening to 20% while the whole scale is hot.
         paint.AddRect(
-            Along(_trackStart, _trackLength),
-            AdwStyle.TroughFill(_theme, _hovered || _dragging),
-            Radii.Capsule
+            bounds: Along(start: _trackStart, length: _trackLength),
+            color: AdwStyle.TroughFill(theme: _theme, hovered: _hovered || _dragging),
+            radius: Radii.Capsule
         );
 
         // Horizontally the fill runs from the start to the knob; vertically from the knob down to
         // the end, so a fader fills from the bottom.
-        var filledStart = Vertical ? knobPos : _trackStart;
-        var filled = Vertical ? _trackStart + _trackLength - knobPos : knobPos - _trackStart;
+        float filledStart = Vertical ? knobPos : _trackStart;
+        float filled = Vertical ? _trackStart + _trackLength - knobPos : knobPos - _trackStart;
         if (filled > 0f)
-            paint.AddRect(Along(filledStart, filled), _theme.Accent, Radii.Capsule);
+        {
+            paint.AddRect(
+                bounds: Along(start: filledStart, length: filled),
+                color: _theme.Accent,
+                radius: Radii.Capsule
+            );
+        }
 
         var knob = new Rect(
-            (Vertical ? cross : knobPos) - KnobR,
-            (Vertical ? knobPos : cross) - KnobR,
-            KnobR * 2f,
-            KnobR * 2f
+            x: (Vertical ? cross : knobPos) - KnobR,
+            y: (Vertical ? knobPos : cross) - KnobR,
+            width: KnobR * 2f,
+            height: KnobR * 2f
         );
-        paint.AddElevation(knob, KnobR, Elevation.Z1);
+        paint.AddElevation(bounds: knob, radius: KnobR, style: Elevation.Z1);
         // `> slider { background-color: $slider_color }` with a 1px rgb(0 0 6 / 10%) ring — the
         // knob is white-over-view-bg, not pure white, so it doesn't glare in dark mode.
-        paint.AddRect(knob, AdwStyle.SliderKnob(_theme, _hovered || _dragging), KnobR);
-        paint.AddBorder(knob, AdwStyle.Ink.WithAlpha(0.1f), KnobR);
+        paint.AddRect(
+            bounds: knob,
+            color: AdwStyle.SliderKnob(theme: _theme, hot: _hovered || _dragging),
+            radius: KnobR
+        );
+        paint.AddBorder(bounds: knob, color: AdwStyle.Ink.WithAlpha(0.1f), radius: KnobR);
 
         if (Focused && Enabled)
+        {
             paint.AddFocusRing(
-                Along(Vertical ? Bounds.Y : Bounds.X, Vertical ? _size.Height : _size.Width),
-                Radii.Capsule,
-                _theme
+                bounds: Along(
+                    start: Vertical ? Bounds.Y : Bounds.X,
+                    length: Vertical ? _size.Height : _size.Width
+                ),
+                radius: Radii.Capsule,
+                theme: _theme
             );
+        }
 
         if (!Enabled) paint.PopAlpha();
     }
 
-    public override MouseCursor? GetCursor(Offset point)
-    {
-        return Enabled ? MouseCursor.Pointer : null;
-    }
+    public override MouseCursor? GetCursor(Offset point) => Enabled ? MouseCursor.Pointer : null;
 
     public override void OnPointerEnter()
     {
@@ -260,10 +275,7 @@ public sealed class AdwSlider : Widget
     ///     in either direction — a fader is dragged along the very axis its scroll parent uses, and
     ///     a horizontal scale must survive a finger that settles downward before setting off.
     /// </summary>
-    public override bool CanTouchDrag(bool vertical)
-    {
-        return _dragging;
-    }
+    public override bool CanTouchDrag(bool vertical) => _dragging;
 
     public override void OnPointerUp(Offset point)
     {
@@ -282,7 +294,7 @@ public sealed class AdwSlider : Widget
     public override void OnKey(char keyChar, uint scancode, bool down, Modifiers mods)
     {
         if (!down || !Enabled) return;
-        var step = (Max - Min) / 20f; // 5% step
+        float step = (Max - Min) / 20f; // 5% step
         switch ((KeyCode)scancode)
         {
             case KeyCode.Right or KeyCode.Up:
@@ -296,7 +308,7 @@ public sealed class AdwSlider : Widget
 
     private void UpdateValueBy(float delta)
     {
-        var newVal = Math.Clamp(Value + delta, Min, Max);
+        float newVal = Math.Clamp(value: Value + delta, min: Min, max: Max);
         if (MathF.Abs(newVal - Value) <= 0.0001f) return;
         Value = newVal;
         OnChanged?.Invoke(Value);
@@ -304,12 +316,12 @@ public sealed class AdwSlider : Widget
 
     private void UpdateValue(Offset point)
     {
-        var along = Vertical ? point.Y : point.X;
-        var t = _trackLength > 0f
-            ? Math.Clamp((along - _trackStart) / _trackLength, 0f, 1f)
+        float along = Vertical ? point.Y : point.X;
+        float t = _trackLength > 0f
+            ? Math.Clamp(value: (along - _trackStart) / _trackLength, min: 0f, max: 1f)
             : 0f;
         if (Vertical) t = 1f - t;
-        var newVal = Min + t * (Max - Min);
+        float newVal = Min + (t * (Max - Min));
         if (MathF.Abs(newVal - Value) <= 0.0001f) return;
         Value = newVal;
         OnChanged?.Invoke(Value);

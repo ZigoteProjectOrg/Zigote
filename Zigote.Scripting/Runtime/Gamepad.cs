@@ -48,24 +48,18 @@ public static class Gamepad
     public static bool IsConnected => ConnectedProvider?.Invoke() ?? false;
 
     /// <summary>Left stick (X right, Y up), raw (apply your own dead-zone).</summary>
-    public static Vec2 LeftStick => new(Axis(GamepadAxis.LeftX), -Axis(GamepadAxis.LeftY));
+    public static Vec2 LeftStick => new(x: Axis(GamepadAxis.LeftX), y: -Axis(GamepadAxis.LeftY));
 
-    public static Vec2 RightStick => new(Axis(GamepadAxis.RightX), -Axis(GamepadAxis.RightY));
+    public static Vec2 RightStick => new(x: Axis(GamepadAxis.RightX), y: -Axis(GamepadAxis.RightY));
 
-    public static float Axis(GamepadAxis axis)
-    {
-        return AxisProvider?.Invoke((int)axis) ?? 0f;
-    }
+    public static float Axis(GamepadAxis axis) => AxisProvider?.Invoke((int)axis) ?? 0f;
 
-    public static bool Button(GamepadButton button)
-    {
-        return ButtonProvider?.Invoke((int)button) ?? false;
-    }
+    public static bool Button(GamepadButton button) => ButtonProvider?.Invoke((int)button) ?? false;
 
     /// <summary>Apply a radial dead-zone and rescale the remainder to the full range.</summary>
     public static float DeadZone(float value, float deadZone = 0.12f)
     {
-        var a = MathF.Abs(value);
+        float a = MathF.Abs(value);
         if (a <= deadZone) return 0f;
         return MathF.Sign(value) * ((a - deadZone) / (1f - deadZone));
     }

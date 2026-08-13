@@ -11,10 +11,10 @@ public static class ShaderGraphCompiler
 {
     public static CompiledShaderGraph Compile(GraphDocument graph)
     {
-        var program = ShaderGraphLowerer.Lower(graph, out var diagnostics);
-        var hasError = diagnostics.Any(d => d.Severity == GraphDiagnosticSeverity.Error);
+        var program = ShaderGraphLowerer.Lower(graph: graph, diagnostics: out var diagnostics);
+        bool hasError = diagnostics.Any(d => d.Severity == GraphDiagnosticSeverity.Error);
         var constants = new CpuShaderEvaluator(program).Constants();
-        var wgsl = WgslShaderEmitter.Emit(program);
+        string wgsl = WgslShaderEmitter.Emit(program);
 
         return new CompiledShaderGraph {
             Success = !hasError,

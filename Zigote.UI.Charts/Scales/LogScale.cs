@@ -15,8 +15,8 @@ public class LogScale : ChartScale
     public double? Min { get; set; }
     public double? Max { get; set; }
 
-    public double DomainMin => Math.Pow(10, _logMin);
-    public double DomainMax => Math.Pow(10, _logMax);
+    public double DomainMin => Math.Pow(x: 10, y: _logMin);
+    public double DomainMax => Math.Pow(x: 10, y: _logMax);
 
     public override void Reset()
     {
@@ -43,8 +43,8 @@ public class LogScale : ChartScale
         if (Finalized) return;
         Finalized = true;
 
-        var min = Min ?? (double.IsInfinity(_dataMin) ? 1 : _dataMin);
-        var max = Max ?? (double.IsInfinity(_dataMax) ? 10 : _dataMax);
+        double min = Min ?? (double.IsInfinity(_dataMin) ? 1 : _dataMin);
+        double max = Max ?? (double.IsInfinity(_dataMax) ? 10 : _dataMax);
         if (min <= 0) min = 1e-9;
         if (max <= min) max = min * 10;
 
@@ -53,42 +53,39 @@ public class LogScale : ChartScale
         if (_logMax <= _logMin) _logMax = _logMin + 1;
     }
 
-    public override float Normalize(ChartValue value)
-    {
-        return NormalizeNumeric(value.Numeric);
-    }
+    public override float Normalize(ChartValue value) => NormalizeNumeric(value.Numeric);
 
     public override float NormalizeNumeric(double value)
     {
-        var clamped = Math.Max(value, Math.Pow(10, _logMin));
+        double clamped = Math.Max(val1: value, val2: Math.Pow(x: 10, y: _logMin));
         return (float)((Math.Log10(clamped) - _logMin) / (_logMax - _logMin));
     }
 
-    public override double NumericAt(float normalized)
-    {
-        return Math.Pow(10, _logMin + normalized * (_logMax - _logMin));
-    }
+    public override double NumericAt(float normalized) => Math.Pow(
+        x: 10,
+        y: _logMin + (normalized * (_logMax - _logMin))
+    );
 
     public override void BuildTicksInto(int targetCount, Func<ChartValue, string>? formatter,
         List<ChartTick> into)
     {
         into.Clear();
-        var decades = (int)Math.Round(_logMax - _logMin);
+        int decades = (int)Math.Round(_logMax - _logMin);
         // Few decades → subdivide each with the 1-2-5 mantissas; many → decade marks only.
         double[] mantissas = decades <= 2 ? [1.0, 2.0, 5.0] : [1.0];
-        for (var d = (int)_logMin; d <= (int)_logMax; d++)
-            foreach (var m in mantissas)
+        for (int d = (int)_logMin; d <= (int)_logMax; d++)
+        {
+            foreach (double m in mantissas)
             {
-                var v = m * Math.Pow(10, d);
-                var pos = NormalizeNumeric(v);
+                double v = m * Math.Pow(x: 10, y: d);
+                float pos = NormalizeNumeric(v);
                 if (pos is < -0.001f or > 1.001f) continue;
-                var label = formatter?.Invoke(ChartValue.Number(v)) ?? NiceScale.FormatNumber(v);
-                into.Add(new ChartTick(pos, label, ChartValue.Number(v)));
+                string label = formatter?.Invoke(ChartValue.Number(v)) ?? NiceScale.FormatNumber(v);
+                into.Add(new ChartTick(position: pos, label: label, value: ChartValue.Number(v)));
             }
+        }
     }
 
-    protected override string DefaultTickLabel(ChartValue value)
-    {
-        return NiceScale.FormatNumber(value.Numeric);
-    }
+    protected override string DefaultTickLabel(ChartValue value) =>
+        NiceScale.FormatNumber(value.Numeric);
 }

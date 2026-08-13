@@ -17,16 +17,20 @@ internal sealed class ProgressPage : ComposedWidget
     protected override Widget Build(BuildContext context)
     {
         _slider ??= new Slider(
-            _progress,
-            0,
-            1,
-            v => { _progress = v; MarkNeedsBuild(); }
+            value: _progress,
+            min: 0,
+            max: 1,
+            onChanged: v =>
+            {
+                _progress = v;
+                MarkNeedsBuild();
+            }
         );
 
         return Sections(
             Section(
-                "Drive the value",
-                new Column(
+                title: "Drive the value",
+                child: new Column(
                     crossAxisAlignment: CrossAxisAlignment.Stretch,
                     children: [
                         _slider,
@@ -35,8 +39,8 @@ internal sealed class ProgressPage : ComposedWidget
                 )
             ),
             Section(
-                "Linear (determinate + indeterminate)",
-                new Column(
+                title: "Linear (determinate + indeterminate)",
+                child: new Column(
                     crossAxisAlignment: CrossAxisAlignment.Stretch,
                     children: [
                         new LinearProgressIndicator(_progress),
@@ -46,18 +50,18 @@ internal sealed class ProgressPage : ComposedWidget
                 )
             ),
             Section(
-                "Circular & spinner",
+                title: "Circular & spinner",
                 // The three indicators plus their gaps almost exactly fill a phone-width card, so
                 // a narrower screen (or a larger text scale) would squeeze the 160-px bar to
                 // nothing. Wrap reflows them into runs; wider windows keep the single row.
-                new AdaptiveBuilder((_, size) => size == WindowSizeClass.Compact
+                child: new AdaptiveBuilder((_, size) => size == WindowSizeClass.Compact
                     ? new Wrap(
                         spacing: 24,
                         runSpacing: 12,
                         children: [
                             new CircularProgressIndicator(),
                             new Spinner(28),
-                            new SizedBox(160, child: new ProgressBar(_progress)),
+                            new SizedBox(width: 160, child: new ProgressBar(_progress)),
                         ]
                     )
                     : new Row(
@@ -66,7 +70,7 @@ internal sealed class ProgressPage : ComposedWidget
                             new SizedBox(24),
                             new Spinner(28),
                             new SizedBox(24),
-                            new SizedBox(160, child: new ProgressBar(_progress)),
+                            new SizedBox(width: 160, child: new ProgressBar(_progress)),
                         ]
                     )
                 )

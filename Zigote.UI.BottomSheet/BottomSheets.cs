@@ -4,7 +4,8 @@ namespace Zigote.UI.BottomSheets;
 ///     Builds a flexible sheet's content. <paramref name="scroll" /> is the sheet's own scroller — put
 ///     the scrolling content in it (or return it) so dragging the content resizes the sheet, exactly
 ///     like attaching <c>bottom_sheet</c>'s <c>ScrollController</c>. <paramref name="sheet" /> is the
-///     live position: close the sheet with it, or read <see cref="BottomSheetController.Extent" /> in a
+///     live position: close the sheet with it, or read <see cref="BottomSheetController.Extent" /> in
+///     a
 ///     <c>Watch</c> to react to it.
 /// </summary>
 public delegate Widget FlexibleBottomSheetBuilder(
@@ -12,7 +13,10 @@ public delegate Widget FlexibleBottomSheetBuilder(
     SheetScrollView scroll,
     BottomSheetController sheet);
 
-/// <summary>Builds the pinned header of a sticky sheet. Its height is driven by <see cref="SheetStickyHeader" />.</summary>
+/// <summary>
+///     Builds the pinned header of a sticky sheet. Its height is driven by
+///     <see cref="SheetStickyHeader" />.
+/// </summary>
 public delegate Widget SheetHeaderBuilder(BuildContext context, BottomSheetController sheet);
 
 /// <summary>
@@ -66,27 +70,27 @@ public static class BottomSheets
         float? duration = null)
     {
         var controller = new BottomSheetController(
-            minHeight,
-            initHeight,
-            maxHeight,
-            anchors,
-            isCollapsible
+            minExtent: minHeight,
+            initExtent: initHeight,
+            maxExtent: maxHeight,
+            anchors: anchors,
+            isCollapsible: isCollapsible
         );
 
         return Push<T>(
-            context,
-            controller,
-            ctx =>
+            context: context,
+            controller: controller,
+            content: ctx =>
             {
                 var scroll = new SheetScrollView(controller);
-                return builder(ctx, scroll, controller);
+                return builder(context: ctx, scroll: scroll, sheet: controller);
             },
-            isModal,
-            isDismissible,
-            isExpand,
-            isSafeArea,
-            style,
-            duration
+            isModal: isModal,
+            isDismissible: isDismissible,
+            isExpand: isExpand,
+            isSafeArea: isSafeArea,
+            style: style,
+            duration: duration
         );
     }
 
@@ -107,19 +111,19 @@ public static class BottomSheets
         float? duration = null)
     {
         return ShowFlexible<object?>(
-            context,
-            builder,
-            minHeight,
-            initHeight,
-            maxHeight,
-            anchors,
-            isModal,
-            isDismissible,
-            isCollapsible,
-            isExpand,
-            isSafeArea,
-            style,
-            duration
+            context: context,
+            builder: builder,
+            minHeight: minHeight,
+            initHeight: initHeight,
+            maxHeight: maxHeight,
+            anchors: anchors,
+            isModal: isModal,
+            isDismissible: isDismissible,
+            isCollapsible: isCollapsible,
+            isExpand: isExpand,
+            isSafeArea: isSafeArea,
+            style: style,
+            duration: duration
         );
     }
 
@@ -147,38 +151,39 @@ public static class BottomSheets
         float? duration = null)
     {
         var controller = new BottomSheetController(
-            minHeight,
-            initHeight,
-            maxHeight,
-            anchors,
-            isCollapsible
+            minExtent: minHeight,
+            initExtent: initHeight,
+            maxExtent: maxHeight,
+            anchors: anchors,
+            isCollapsible: isCollapsible
         );
 
         return Push<T>(
-            context,
-            controller,
-            ctx =>
+            context: context,
+            controller: controller,
+            content: ctx =>
             {
                 var scroll = new SheetScrollView(controller);
                 var header = new SheetStickyHeader(
-                    headerBuilder(ctx, controller),
-                    controller,
-                    minHeaderHeight,
-                    maxHeaderHeight
+                    child: headerBuilder(context: ctx, sheet: controller),
+                    sheet: controller,
+                    minHeight: minHeaderHeight,
+                    maxHeight: maxHeaderHeight
                 );
                 return new Column(crossAxisAlignment: CrossAxisAlignment.Stretch) {
                     Children = {
-                        new SheetDragArea(header, controller),
-                        new Expanded(bodyBuilder(ctx, scroll, controller)),
+                        new SheetDragArea(child: header, sheet: controller),
+                        new Expanded(bodyBuilder(context: ctx, scroll: scroll, sheet: controller)),
                     },
                 };
             },
-            isModal,
-            isDismissible,
+            isModal: isModal,
+            isDismissible: isDismissible,
+            isExpand:
             true, // a sticky sheet always fills its extent — the header would jump otherwise
-            isSafeArea,
-            style,
-            duration
+            isSafeArea: isSafeArea,
+            style: style,
+            duration: duration
         );
     }
 
@@ -194,17 +199,17 @@ public static class BottomSheets
         float? duration)
     {
         var route = new FlexibleBottomSheetRoute<T>(
-            ctx => new FlexibleBottomSheet(
-                content(ctx),
-                controller,
-                style,
-                isExpand
+            build: ctx => new FlexibleBottomSheet(
+                content: content(ctx),
+                controller: controller,
+                style: style,
+                isExpand: isExpand
             ) {
                 IsModal = isModal,
                 IsDismissible = isDismissible,
                 IsSafeArea = isSafeArea,
             },
-            duration ?? Motion.Standard
+            duration: duration ?? Motion.Standard
         );
         return Navigator.Of(context).Push(route);
     }

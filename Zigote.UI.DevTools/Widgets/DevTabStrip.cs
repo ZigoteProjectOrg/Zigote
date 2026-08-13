@@ -16,36 +16,38 @@ namespace Zigote.UI.DevTools.Widgets;
 /// </summary>
 public sealed class DevTabStrip : ComposedWidget
 {
-    private int _selected;
-    private IReadOnlyList<string> _tabs;
-
     public DevTabStrip(IReadOnlyList<string> tabs, int selected, Action<int> onSelect)
     {
-        _tabs = tabs;
-        _selected = selected;
+        Tabs = tabs;
+        Selected = selected;
         OnSelect = onSelect;
     }
 
     public Action<int> OnSelect { get; }
 
-    public IReadOnlyList<string> Tabs => _tabs;
-    public int Selected => _selected;
+    public IReadOnlyList<string> Tabs { get; private set; }
+
+    public int Selected { get; private set; }
 
     /// <summary>Update the tab labels and/or the selected index, rebuilding only when changed.</summary>
     public void Set(IReadOnlyList<string> tabs, int selected)
     {
-        var changed = selected != _selected || tabs.Count != _tabs.Count;
+        bool changed = selected != Selected || tabs.Count != Tabs.Count;
         if (!changed)
-            for (var i = 0; i < tabs.Count; i++)
-                if (tabs[i] != _tabs[i])
+        {
+            for (int i = 0; i < tabs.Count; i++)
+            {
+                if (tabs[i] != Tabs[i])
                 {
                     changed = true;
                     break;
                 }
+            }
+        }
 
         if (!changed) return;
-        _tabs = tabs;
-        _selected = selected;
+        Tabs = tabs;
+        Selected = selected;
         MarkNeedsBuild();
     }
 
@@ -53,20 +55,20 @@ public sealed class DevTabStrip : ComposedWidget
     {
         var t = ThemeProvider.Of(context);
         var row = new Row(spacing: Spacing.Xs, mainAxisSize: MainAxisSize.Min);
-        for (var i = 0; i < Tabs.Count; i++)
+        for (int i = 0; i < Tabs.Count; i++)
         {
-            var idx = i;
+            int idx = i;
             row.Children.Add(
                 Pill(
-                    Tabs[i],
-                    i == Selected,
-                    () => OnSelect(idx),
-                    t
+                    label: Tabs[i],
+                    selected: i == Selected,
+                    onTap: () => OnSelect(idx),
+                    t: t
                 )
             );
         }
 
-        var height = DevKit.Compact
+        float height = DevKit.Compact
             ? ControlMetrics.MinTouchTarget
             : AdwMetrics.CompactControlHeight;
         return new SizedBox(
@@ -86,12 +88,12 @@ public sealed class DevTabStrip : ComposedWidget
         var box = new DecoratedBox {
             Radius = AdwMetrics.Pill,
             Child = new Padding(
-                EdgeInsets.Symmetric(Spacing.Md, Spacing.Xs),
-                new Center(
+                padding: EdgeInsets.Symmetric(horizontal: Spacing.Md, vertical: Spacing.Xs),
+                child: new Center(
                     new Label(
-                        label,
-                        selected ? AdwTypography.CaptionHeading : AdwTypography.Caption,
-                        selected ? t.OnBackground : p.DimLabel
+                        text: label,
+                        style: selected ? AdwTypography.CaptionHeading : AdwTypography.Caption,
+                        color: selected ? t.OnBackground : p.DimLabel
                     ) { MaxLines = 1 }
                 )
             ),

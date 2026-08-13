@@ -19,28 +19,28 @@ public class ReactiveDeferredDrainTests
         Assert.False(Reactive.HasPendingDeferred);
 
         var s = new Signal<int>(0);
-        var runs = 0;
+        int runs = 0;
         using var e = new Effect(
-            () =>
+            body: () =>
             {
                 _ = s.Value;
                 runs++;
             },
-            EffectAffinity.Deferred
+            affinity: EffectAffinity.Deferred
         );
 
         // Construction runs the body once inline, so it subscribes; nothing is parked yet.
         Reactive.DrainDeferred();
-        var atRest = runs;
+        int atRest = runs;
         Assert.False(Reactive.HasPendingDeferred);
 
         s.Value = 1;
         Assert.True(Reactive.HasPendingDeferred); // parked, NOT run
-        Assert.Equal(atRest, runs);
+        Assert.Equal(expected: atRest, actual: runs);
 
         Reactive.DrainDeferred();
         Assert.False(Reactive.HasPendingDeferred);
-        Assert.Equal(atRest + 1, runs);
+        Assert.Equal(expected: atRest + 1, actual: runs);
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public class ReactiveDeferredDrainTests
     {
         Reactive.DrainDeferred();
         var s = new Signal<int>(0);
-        using var e = new Effect(() => _ = s.Value, EffectAffinity.Deferred);
+        using var e = new Effect(body: () => _ = s.Value, affinity: EffectAffinity.Deferred);
         Reactive.DrainDeferred();
 
         var writer = new Thread(() => s.Value = 42);

@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Zigote.Core.Math3D;
 using Zigote.Runtime.Scene;
 using Zigote.Scripting.Metadata;
+
 // Dropdown<T> must be referenced with a concrete type — alias for clarity:
 
 namespace Zigote.Editor.Panels;
@@ -14,16 +15,16 @@ public sealed partial class InspectorPanel
     {
         // Fall back to the script's compiled-in default when the node has no stored override, so a
         // freshly attached script shows its real defaults (e.g. Speed = 90) instead of zeros.
-        if (!node.ScriptExports.TryGetValue(field.Name, out var currentJson))
+        if (!node.ScriptExports.TryGetValue(key: field.Name, value: out string? currentJson))
             currentJson = meta.DefaultExports.GetValueOrDefault(field.Name);
 
         void SaveJson(string json)
         {
             node.ScriptExports[field.Name] = json;
             _state.ApplyLiveScriptExport(
-                node,
-                field,
-                json
+                node: node,
+                field: field,
+                json: json
             ); // live-tune the running component in play mode
             _state.NotifySceneChanged();
         }
@@ -32,103 +33,108 @@ public sealed partial class InspectorPanel
         {
             case ExportedFieldKind.Bool:
             {
-                var cur = "true".Equals(currentJson, StringComparison.OrdinalIgnoreCase);
+                bool cur = "true".Equals(
+                    value: currentJson,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                );
                 return PropRow.Toggle(
-                    field.DisplayName,
-                    cur,
-                    v => SaveJson(v ? "true" : "false"),
-                    _theme
+                    label: field.DisplayName,
+                    value: cur,
+                    onChange: v => SaveJson(v ? "true" : "false"),
+                    theme: _theme
                 );
             }
             case ExportedFieldKind.Int:
             {
-                var cur = int.TryParse(currentJson, out var i) ? i : 0f;
+                float cur = int.TryParse(s: currentJson, result: out int i) ? i : 0f;
                 return PropRow.Float(
-                    field.DisplayName,
-                    cur,
-                    v => SaveJson(((int)v).ToString()),
-                    _theme,
-                    (float)(field.RangeMin ?? 0),
-                    (float)(field.RangeMax ?? 1000),
-                    1f
+                    label: field.DisplayName,
+                    value: cur,
+                    onChange: v => SaveJson(((int)v).ToString()),
+                    theme: _theme,
+                    min: (float)(field.RangeMin ?? 0),
+                    max: (float)(field.RangeMax ?? 1000),
+                    step: 1f
                 );
             }
             case ExportedFieldKind.Float:
             {
-                var cur = float.TryParse(
-                    currentJson,
-                    NumberStyles.Float,
-                    CultureInfo.InvariantCulture,
-                    out var f
+                float cur = float.TryParse(
+                    s: currentJson,
+                    style: NumberStyles.Float,
+                    provider: CultureInfo.InvariantCulture,
+                    result: out float f
                 )
                     ? f
                     : 0f;
                 return PropRow.Float(
-                    field.DisplayName,
-                    cur,
-                    v => SaveJson(v.ToString(CultureInfo.InvariantCulture)),
-                    _theme,
-                    (float)(field.RangeMin ?? 0f),
-                    (float)(field.RangeMax ?? 100f),
-                    0.1f
+                    label: field.DisplayName,
+                    value: cur,
+                    onChange: v => SaveJson(v.ToString(CultureInfo.InvariantCulture)),
+                    theme: _theme,
+                    min: (float)(field.RangeMin ?? 0f),
+                    max: (float)(field.RangeMax ?? 100f),
+                    step: 0.1f
                 );
             }
             case ExportedFieldKind.String:
             {
-                var cur = currentJson != null
+                string cur = currentJson != null
                     ? JsonSerializer.Deserialize<string>(currentJson) ?? ""
                     : "";
                 return PropRow.Text(
-                    field.DisplayName,
-                    cur,
-                    v => SaveJson(JsonSerializer.Serialize(v)),
-                    _theme,
-                    _app
+                    label: field.DisplayName,
+                    value: cur,
+                    onChange: v => SaveJson(JsonSerializer.Serialize(v)),
+                    theme: _theme,
+                    app: _app
                 );
             }
             case ExportedFieldKind.Vec3:
             {
                 var cur = Vec3.Zero;
                 if (currentJson != null)
+                {
                     try
                     {
                         var n = JsonNode.Parse(currentJson)!;
                         cur = new Vec3(
-                            n["x"]!.GetValue<float>(),
-                            n["y"]!.GetValue<float>(),
-                            n["z"]!.GetValue<float>()
+                            x: n["x"]!.GetValue<float>(),
+                            y: n["y"]!.GetValue<float>(),
+                            z: n["z"]!.GetValue<float>()
                         );
                     }
                     catch
                     {
                         /* use default */
                     }
+                }
 
                 return field.IsColor
                     ? PropRow.Vec3Color(
-                        field.DisplayName,
-                        cur,
-                        v => SaveJson(
-                            $"{{\"x\":{v.X.ToString("G", CultureInfo.InvariantCulture)},\"y\":{v.Y.ToString("G", CultureInfo.InvariantCulture)},\"z\":{v.Z.ToString("G", CultureInfo.InvariantCulture)}}}"
+                        label: field.DisplayName,
+                        current: cur,
+                        setter: v => SaveJson(
+                            $"{{\"x\":{v.X.ToString(format: "G", provider: CultureInfo.InvariantCulture)},\"y\":{v.Y.ToString(format: "G", provider: CultureInfo.InvariantCulture)},\"z\":{v.Z.ToString(format: "G", provider: CultureInfo.InvariantCulture)}}}"
                         ),
-                        _theme
+                        theme: _theme
                     )
                     : PropRow.Vec3(
-                        field.DisplayName,
-                        cur,
-                        v => SaveJson(
-                            $"{{\"x\":{v.X.ToString("G", CultureInfo.InvariantCulture)},\"y\":{v.Y.ToString("G", CultureInfo.InvariantCulture)},\"z\":{v.Z.ToString("G", CultureInfo.InvariantCulture)}}}"
+                        label: field.DisplayName,
+                        current: cur,
+                        setter: v => SaveJson(
+                            $"{{\"x\":{v.X.ToString(format: "G", provider: CultureInfo.InvariantCulture)},\"y\":{v.Y.ToString(format: "G", provider: CultureInfo.InvariantCulture)},\"z\":{v.Z.ToString(format: "G", provider: CultureInfo.InvariantCulture)}}}"
                         ),
-                        _theme
+                        theme: _theme
                     );
             }
             default:
                 return PropRow.Text(
-                    field.DisplayName,
-                    currentJson ?? "",
-                    v => SaveJson(v),
-                    _theme,
-                    _app
+                    label: field.DisplayName,
+                    value: currentJson ?? "",
+                    onChange: v => SaveJson(v),
+                    theme: _theme,
+                    app: _app
                 );
         }
     }
@@ -136,10 +142,13 @@ public sealed partial class InspectorPanel
     private static string? ResolveProjectPath(string? scriptPath)
     {
         if (string.IsNullOrEmpty(scriptPath)) return null;
-        if (scriptPath.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)) return scriptPath;
-        var dir = Path.GetDirectoryName(scriptPath);
+        if (scriptPath.EndsWith(
+                value: ".csproj",
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )) return scriptPath;
+        string? dir = Path.GetDirectoryName(scriptPath);
         return dir != null
-            ? Directory.GetFiles(dir, "*.csproj").FirstOrDefault()
+            ? Directory.GetFiles(path: dir, searchPattern: "*.csproj").FirstOrDefault()
             : null;
     }
 }

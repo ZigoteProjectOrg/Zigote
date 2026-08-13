@@ -12,23 +12,23 @@ namespace Gallery;
 /// <summary>Shared building blocks for gallery pages: section cards, grids and small helpers.</summary>
 internal static class GalleryUi
 {
-    public static void Toast(string message)
-    {
-        App.Active?.ShowSnackbar(message);
-    }
+    public static void Toast(string message) => App.Active?.ShowSnackbar(message);
 
     /// <summary>A titled card wrapping one demo, the standard page building block.</summary>
     public static Widget Section(string title, Widget child)
     {
         return new Padding(
-            EdgeInsets.Only(bottom: 16),
-            new Card(
+            padding: EdgeInsets.Only(bottom: 16),
+            child: new Card(
                 new Padding(
-                    EdgeInsets.All(16),
-                    new Column(
+                    padding: EdgeInsets.All(16),
+                    child: new Column(
                         crossAxisAlignment: CrossAxisAlignment.Start,
                         children: [
-                            new Text(title, new TextStyle(15, fontWeight: FontWeight.SemiBold)),
+                            new Text(
+                                data: title,
+                                style: new TextStyle(fontSize: 15, fontWeight: FontWeight.SemiBold)
+                            ),
                             new SizedBox(height: 12),
                             child,
                         ]
@@ -61,8 +61,8 @@ internal static class GalleryUi
     {
         return new AdaptiveBuilder((_, size) => size == WindowSizeClass.Expanded
             ? GridView.Count(
-                2,
-                sections,
+                crossAxisCount: 2,
+                children: sections,
                 crossAxisSpacing: 16,
                 childAspectRatio: 1.85
             )
@@ -79,13 +79,16 @@ internal static class GalleryUi
     {
         return new AdaptiveBuilder((_, size) =>
             {
-                var touch = size == WindowSizeClass.Compact;
+                bool touch = size == WindowSizeClass.Compact;
 
                 // A zero-width strut raises the row to a finger-sized band without widening it — the
                 // row is Min-sized and sits inside horizontal groups (the radio group), so growing it
                 // on the main axis would push its siblings off the card.
                 Widget[] children = touch
-                    ? [new SizedBox(0, 44), control, new SizedBox(8), new Text(label)]
+                    ? [
+                        new SizedBox(width: 0, height: 44), control, new SizedBox(8),
+                        new Text(label),
+                    ]
                     : [control, new SizedBox(8), new Text(label)];
 
                 var row = new Row(
@@ -96,7 +99,9 @@ internal static class GalleryUi
 
                 // The detector captures the whole row, control included, so the tap has to carry the
                 // control's intent — that is what onTap is for.
-                return touch && onTap is not null ? new GestureDetector(row, onTap) : row;
+                return touch && onTap is not null
+                    ? new GestureDetector(child: row, onTap: onTap)
+                    : row;
             }
         );
     }
@@ -106,12 +111,9 @@ internal static class GalleryUi
         return new Container(
             width: 64,
             height: 64,
-            decoration: new BoxDecoration(color, BorderRadius.Circular(radius))
+            decoration: new BoxDecoration(color: color, borderRadius: BorderRadius.Circular(radius))
         );
     }
 
-    public static Widget ChartBox(Chart chart)
-    {
-        return new SizedBox(height: 220, child: chart);
-    }
+    public static Widget ChartBox(Chart chart) => new SizedBox(height: 220, child: chart);
 }

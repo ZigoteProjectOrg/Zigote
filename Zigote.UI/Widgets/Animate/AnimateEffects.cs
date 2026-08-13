@@ -31,13 +31,12 @@ internal struct AnimateFrame
 /// </summary>
 public abstract class AnimateEffect
 {
-    public TimeSpan? Delay { get; init; }
-    public TimeSpan? Duration { get; init; }
-    public Func<float, float>? Curve { get; init; }
-
     internal float BeginS;
     internal float EndS;
     internal Func<float, float> ResolvedCurve = Curves.EaseOut;
+    public TimeSpan? Delay { get; init; }
+    public TimeSpan? Duration { get; init; }
+    public Func<float, float>? Curve { get; init; }
 
     /// <summary>A zero-length baseline marker (<c>ThenEffect</c>) that shifts subsequent effect timing.</summary>
     internal virtual bool IsMarker => false;
@@ -50,10 +49,7 @@ public abstract class AnimateEffect
     /// </summary>
     internal abstract void Apply(ref AnimateFrame frame, float raw, float eased, Size natural);
 
-    private protected static float Lerp(float a, float b, float t)
-    {
-        return a + (b - a) * t;
-    }
+    private protected static float Lerp(float a, float b, float t) => a + ((b - a) * t);
 }
 
 /// <summary>Cross-fades opacity. Neutral value 1 (opaque); default 0→1 (fade in).</summary>
@@ -64,9 +60,9 @@ public sealed class FadeEffect : AnimateEffect
 
     internal override void Apply(ref AnimateFrame frame, float raw, float eased, Size natural)
     {
-        var begin = Begin ?? (End is null ? 0f : 1f);
-        var end = End ?? 1f;
-        frame.Alpha *= Lerp(begin, end, eased);
+        float begin = Begin ?? (End is null ? 0f : 1f);
+        float end = End ?? 1f;
+        frame.Alpha *= Lerp(a: begin, b: end, t: eased);
     }
 }
 
@@ -78,9 +74,9 @@ public sealed class ScaleEffect : AnimateEffect
 
     internal override void Apply(ref AnimateFrame frame, float raw, float eased, Size natural)
     {
-        var begin = Begin ?? (End is null ? 0f : 1f);
-        var end = End ?? 1f;
-        frame.Scale *= Lerp(begin, end, eased);
+        float begin = Begin ?? (End is null ? 0f : 1f);
+        float end = End ?? 1f;
+        frame.Scale *= Lerp(a: begin, b: end, t: eased);
     }
 }
 
@@ -92,15 +88,16 @@ public sealed class MoveEffect : AnimateEffect
 
     internal override void Apply(ref AnimateFrame frame, float raw, float eased, Size natural)
     {
-        var begin = Begin ?? (End is null ? new Offset(0f, 24f) : Offset.Zero);
+        var begin = Begin ?? (End is null ? new Offset(x: 0f, y: 24f) : Offset.Zero);
         var end = End ?? Offset.Zero;
-        frame.Tx += Lerp(begin.X, end.X, eased);
-        frame.Ty += Lerp(begin.Y, end.Y, eased);
+        frame.Tx += Lerp(a: begin.X, b: end.X, t: eased);
+        frame.Ty += Lerp(a: begin.Y, b: end.Y, t: eased);
     }
 }
 
 /// <summary>
-///     Translates by an offset expressed as a fraction of the widget's own size (like flutter_animate's
+///     Translates by an offset expressed as a fraction of the widget's own size (like
+///     flutter_animate's
 ///     <c>SlideEffect</c>). Neutral value zero; default (0,-0.25)→(0,0) (slide down from above).
 /// </summary>
 public sealed class SlideEffect : AnimateEffect
@@ -110,10 +107,10 @@ public sealed class SlideEffect : AnimateEffect
 
     internal override void Apply(ref AnimateFrame frame, float raw, float eased, Size natural)
     {
-        var begin = Begin ?? (End is null ? new Offset(0f, -0.25f) : Offset.Zero);
+        var begin = Begin ?? (End is null ? new Offset(x: 0f, y: -0.25f) : Offset.Zero);
         var end = End ?? Offset.Zero;
-        frame.Tx += Lerp(begin.X, end.X, eased) * natural.Width;
-        frame.Ty += Lerp(begin.Y, end.Y, eased) * natural.Height;
+        frame.Tx += Lerp(a: begin.X, b: end.X, t: eased) * natural.Width;
+        frame.Ty += Lerp(a: begin.Y, b: end.Y, t: eased) * natural.Height;
     }
 }
 
@@ -126,14 +123,14 @@ public sealed class ShakeEffect : AnimateEffect
     public float Hz { get; init; } = 8f;
 
     /// <summary>Peak displacement in pixels.</summary>
-    public Offset Amount { get; init; } = new(6f, 0f);
+    public Offset Amount { get; init; } = new(x: 6f, y: 0f);
 
     internal override void Apply(ref AnimateFrame frame, float raw, float eased, Size natural)
     {
-        var durS = MathF.Max(0.0001f, EndS - BeginS);
-        var phase = raw * durS * Hz * MathF.Tau;
-        var damp = 1f - raw; // taper to zero so it settles cleanly
-        var wave = MathF.Sin(phase) * damp;
+        float durS = MathF.Max(x: 0.0001f, y: EndS - BeginS);
+        float phase = raw * durS * Hz * MathF.Tau;
+        float damp = 1f - raw; // taper to zero so it settles cleanly
+        float wave = MathF.Sin(phase) * damp;
         frame.Tx += Amount.X * wave;
         frame.Ty += Amount.Y * wave;
     }
@@ -141,14 +138,13 @@ public sealed class ShakeEffect : AnimateEffect
 
 /// <summary>
 ///     A zero-length baseline marker. After a <c>Then</c>, subsequent effects with no explicit delay
-///     start where the previous effect ended (flutter_animate's <c>ThenEffect</c>). Contributes nothing
+///     start where the previous effect ended (flutter_animate's <c>ThenEffect</c>). Contributes
+///     nothing
 ///     visually.
 /// </summary>
 public sealed class ThenEffect : AnimateEffect
 {
     internal override bool IsMarker => true;
 
-    internal override void Apply(ref AnimateFrame frame, float raw, float eased, Size natural)
-    {
-    }
+    internal override void Apply(ref AnimateFrame frame, float raw, float eased, Size natural) { }
 }

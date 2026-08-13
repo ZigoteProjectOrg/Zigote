@@ -14,10 +14,8 @@ namespace Zigote.Core.Assets;
 public static class AssetPath
 {
     /// <summary>True for the <c>#name</c> built-in mesh primitives that have no backing file.</summary>
-    public static bool IsBuiltinPrimitive(string? path)
-    {
-        return !string.IsNullOrEmpty(path) && path[0] == '#';
-    }
+    public static bool IsBuiltinPrimitive(string? path) =>
+        !string.IsNullOrEmpty(path) && path[0] == '#';
 
     /// <summary>
     ///     Normalise <paramref name="path" /> to a project-relative, forward-slashed key. Absolute
@@ -28,13 +26,17 @@ public static class AssetPath
     {
         if (IsBuiltinPrimitive(path)) return path;
 
-        var normalized = path.Replace('\\', '/');
+        string normalized = path.Replace(oldChar: '\\', newChar: '/');
 
         if (Path.IsPathRooted(normalized) && !string.IsNullOrEmpty(contentRoot))
         {
-            var rootFull = Path.GetFullPath(contentRoot).Replace('\\', '/').TrimEnd('/');
-            var pathFull = Path.GetFullPath(path).Replace('\\', '/');
-            if (pathFull.StartsWith(rootFull + "/", StringComparison.OrdinalIgnoreCase))
+            string rootFull = Path.GetFullPath(contentRoot).Replace(oldChar: '\\', newChar: '/')
+                .TrimEnd('/');
+            string pathFull = Path.GetFullPath(path).Replace(oldChar: '\\', newChar: '/');
+            if (pathFull.StartsWith(
+                    value: rootFull + "/",
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                ))
                 normalized = pathFull[(rootFull.Length + 1)..];
         }
 
@@ -50,6 +52,6 @@ public static class AssetPath
         if (IsBuiltinPrimitive(relativePath)) return relativePath;
         if (Path.IsPathRooted(relativePath) || string.IsNullOrEmpty(contentRoot))
             return relativePath;
-        return Path.GetFullPath(Path.Combine(contentRoot, relativePath));
+        return Path.GetFullPath(Path.Combine(path1: contentRoot, path2: relativePath));
     }
 }

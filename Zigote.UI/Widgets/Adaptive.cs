@@ -1,5 +1,6 @@
 using Zigote.Core;
 using Zigote.Core.Paint;
+using Zigote.UI.Widgets.Transitions;
 
 namespace Zigote.UI.Widgets;
 
@@ -56,7 +57,7 @@ public static class WindowSize
 public sealed class AdaptiveBuilder : Widget
 {
     private readonly Func<BuildContext, WindowSizeClass, Widget> _builder;
-    private readonly Transitions.AnimatedSwitcher _switcher;
+    private readonly AnimatedSwitcher _switcher;
     private WindowSizeClass? _lastClass;
     private Size _size;
 
@@ -68,7 +69,7 @@ public sealed class AdaptiveBuilder : Widget
         float transitionDuration = 0.2f)
     {
         _builder = builder;
-        _switcher = new Transitions.AnimatedSwitcher(duration: transitionDuration);
+        _switcher = new AnimatedSwitcher(duration: transitionDuration);
     }
 
     // Unlike a raw LayoutBuilder (which rebuilds whenever the exact constraints change — i.e. every
@@ -85,7 +86,7 @@ public sealed class AdaptiveBuilder : Widget
         var cls = WindowSize.ClassFor(c.MaxWidth);
         if (_lastClass != cls)
         {
-            _switcher.Child = _builder(BuildContext.Current, cls);
+            _switcher.Child = _builder(arg1: BuildContext.Current, arg2: cls);
             _lastClass = cls;
         }
 
@@ -96,27 +97,21 @@ public sealed class AdaptiveBuilder : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         _switcher.Layout(origin);
     }
 
-    public override void Paint(PaintList paint)
-    {
-        _switcher.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => _switcher.Paint(paint);
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return _switcher.HitTest(point) ?? this;
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(_switcher);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(_switcher);
 }

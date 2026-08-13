@@ -8,49 +8,25 @@ public readonly struct Entity : IEquatable<Entity>
 {
     public readonly ulong Raw;
 
-    public Entity(ulong raw)
-    {
-        Raw = raw;
-    }
+    public Entity(ulong raw) => Raw = raw;
 
     public static readonly Entity Null = new(0);
 
     public bool IsNull => Raw == 0;
 
-    public bool Equals(Entity other)
-    {
-        return Raw == other.Raw;
-    }
+    public bool Equals(Entity other) => Raw == other.Raw;
 
-    public override bool Equals(object? obj)
-    {
-        return obj is Entity e && Equals(e);
-    }
+    public override bool Equals(object? obj) => obj is Entity e && Equals(e);
 
-    public override int GetHashCode()
-    {
-        return Raw.GetHashCode();
-    }
+    public override int GetHashCode() => Raw.GetHashCode();
 
-    public static bool operator ==(Entity a, Entity b)
-    {
-        return a.Raw == b.Raw;
-    }
+    public static bool operator ==(Entity a, Entity b) => a.Raw == b.Raw;
 
-    public static bool operator !=(Entity a, Entity b)
-    {
-        return a.Raw != b.Raw;
-    }
+    public static bool operator !=(Entity a, Entity b) => a.Raw != b.Raw;
 
-    public override string ToString()
-    {
-        return IsNull ? "Entity.Null" : $"Entity({Raw})";
-    }
+    public override string ToString() => IsNull ? "Entity.Null" : $"Entity({Raw})";
 
-    public static implicit operator ulong(Entity e)
-    {
-        return e.Raw;
-    }
+    public static implicit operator ulong(Entity e) => e.Raw;
 }
 
 /// <summary>flecs observer event kinds (passed to <see cref="EcsWorld.RegisterObserver{T}" />).</summary>

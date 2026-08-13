@@ -32,7 +32,10 @@ public sealed class AudioPlayer : IDisposable
     private readonly Signal<string?> _error = new(null);
     private readonly List<AudioSource> _items = [];
 
-    /// <summary>Playback order as positions into <see cref="_items" />. Shuffle rewrites it; nothing else does.</summary>
+    /// <summary>
+    ///     Playback order as positions into <see cref="_items" />. Shuffle rewrites it; nothing else
+    ///     does.
+    /// </summary>
     private readonly List<int> _order = [];
 
     private readonly Signal<TimeSpan> _position = new(TimeSpan.Zero);
@@ -56,7 +59,10 @@ public sealed class AudioPlayer : IDisposable
     private int _shuffleSeed;
     private uint _sound;
 
-    /// <summary>The caller asked for sound. Distinct from <see cref="State" />, which also reports buffering.</summary>
+    /// <summary>
+    ///     The caller asked for sound. Distinct from <see cref="State" />, which also reports
+    ///     buffering.
+    /// </summary>
     private bool _wantPlay;
 
     public AudioPlayer(IAudioApi audio)
@@ -69,11 +75,13 @@ public sealed class AudioPlayer : IDisposable
         _subscriptions.Add(Speed.Subscribe(_ => ApplyRate()));
         _subscriptions.Add(Shuffle.Subscribe(_ => Reorder()));
         // A successor scheduled under the old loop mode is no longer the successor.
-        _subscriptions.Add(Loop.Subscribe(mode =>
-            {
-                if (mode == LoopMode.One) DropNext();
-            }
-        ));
+        _subscriptions.Add(
+            Loop.Subscribe(mode =>
+                {
+                    if (mode == LoopMode.One) DropNext();
+                }
+            )
+        );
     }
 
     // ── knobs: writing these is how you drive the player ─────────────────────
@@ -126,9 +134,9 @@ public sealed class AudioPlayer : IDisposable
         set
         {
             _equalizer = value;
-            var id = value?.Id ?? 0;
-            if (_sound != 0) _audio.SetEq(_sound, id);
-            if (_next != 0) _audio.SetEq(_next, id);
+            uint id = value?.Id ?? 0;
+            if (_sound != 0) _audio.SetEq(id: _sound, eqId: id);
+            if (_next != 0) _audio.SetEq(id: _next, eqId: id);
         }
     }
 
@@ -163,7 +171,7 @@ public sealed class AudioPlayer : IDisposable
 
     /// <summary>Fraction of the way through the current item, 0–1. Zero when the length is unknown.</summary>
     public double Progress => _duration.Value is { TotalSeconds: > 0 } d
-        ? Math.Clamp(_position.Value.TotalSeconds / d.TotalSeconds, 0, 1)
+        ? Math.Clamp(value: _position.Value.TotalSeconds / d.TotalSeconds, min: 0, max: 1)
         : 0;
 
     /// <summary>Queue indices in play order — just_audio's <c>shuffleIndices</c>. This is "up next".</summary>
@@ -174,7 +182,7 @@ public sealed class AudioPlayer : IDisposable
     {
         get
         {
-            var np = NextOrderPos();
+            int np = NextOrderPos();
             return np >= 0 ? _order[np] : null;
         }
     }
@@ -215,10 +223,8 @@ public sealed class AudioPlayer : IDisposable
     // ── queue ────────────────────────────────────────────────────────────────
 
     /// <summary>Replace the queue with a single source — just_audio's <c>setAudioSource</c>.</summary>
-    public void SetAudioSource(AudioSource source, TimeSpan? initialPosition = null)
-    {
-        SetAudioSources([source], 0, initialPosition);
-    }
+    public void SetAudioSource(AudioSource source, TimeSpan? initialPosition = null) =>
+        SetAudioSources(sources: [source], initialIndex: 0, initialPosition: initialPosition);
 
     /// <summary>
     ///     Replace the queue. With no <paramref name="initialIndex" />, whatever is playing keeps
@@ -233,11 +239,12 @@ public sealed class AudioPlayer : IDisposable
         _items.AddRange(sources);
         _sequence.Value = [.. _items];
 
-        var target = initialIndex ?? IndexOfSame(currentItem);
+        int target = initialIndex ?? IndexOfSame(currentItem);
         if (target < 0 || target >= _items.Count) target = _items.Count > 0 ? 0 : -1;
 
-        var keepPlaying = initialIndex is null && initialPosition is null && _sound != 0
-                          && currentItem is not null && target >= 0 && _items[target] == currentItem;
+        bool keepPlaying = initialIndex is null && initialPosition is null && _sound != 0
+                           && currentItem is not null && target >= 0 &&
+                           _items[target] == currentItem;
 
         RebuildOrder(target);
         DropNext(); // whatever was armed may no longer be next
@@ -255,7 +262,11 @@ public sealed class AudioPlayer : IDisposable
             return;
         }
 
-        if (LoadFrom(_pos, initialPosition ?? TimeSpan.Zero, true) && _wantPlay) StartCurrent();
+        if (LoadFrom(
+                orderPos: _pos,
+                offset: initialPosition ?? TimeSpan.Zero,
+                skipFailures: true
+            ) && _wantPlay) StartCurrent();
     }
 
     /// <summary>Deal a new shuffle order. Pass a <paramref name="seed" /> to make it reproducible.</summary>
@@ -273,7 +284,11 @@ public sealed class AudioPlayer : IDisposable
         if (_order.Count == 0) return;
         _wantPlay = true;
 
-        if (_sound == 0 && !LoadFrom(_pos >= 0 ? _pos : 0, TimeSpan.Zero, true)) return;
+        if (_sound == 0 && !LoadFrom(
+                orderPos: _pos >= 0 ? _pos : 0,
+                offset: TimeSpan.Zero,
+                skipFailures: true
+            )) return;
         if (_state.Peek() == PlaybackState.Ended) SeekCurrent(TimeSpan.Zero);
         StartCurrent();
     }
@@ -288,10 +303,11 @@ public sealed class AudioPlayer : IDisposable
         DropNext();
         if (_sound == 0) return;
 
-        var cursor = _audio.Cursor(_sound);
+        float cursor = _audio.Cursor(_sound);
         _audio.Stop(_sound);
-        if (cursor > 0f) _audio.Seek(_sound, cursor);
-        if (_state.Peek() is not (PlaybackState.Idle or PlaybackState.Ended or PlaybackState.Failed))
+        if (cursor > 0f) _audio.Seek(id: _sound, seconds: cursor);
+        if (_state.Peek() is not (PlaybackState.Idle or PlaybackState.Ended
+            or PlaybackState.Failed))
             _state.Value = PlaybackState.Paused;
     }
 
@@ -320,12 +336,13 @@ public sealed class AudioPlayer : IDisposable
     {
         if (_order.Count == 0) return;
 
-        var target = index is { } i ? _order.IndexOf(i) : _pos;
+        int target = index is { } i ? _order.IndexOf(i) : _pos;
         if (target < 0) return;
 
         if (target != _pos || _sound == 0)
         {
-            if (LoadFrom(target, position, false) && _wantPlay) StartCurrent();
+            if (LoadFrom(orderPos: target, offset: position, skipFailures: false) && _wantPlay)
+                StartCurrent();
             return;
         }
 
@@ -333,16 +350,13 @@ public sealed class AudioPlayer : IDisposable
     }
 
     /// <summary>Seek by a delta — the ±10 s keys, without the clamping arithmetic at the call site.</summary>
-    public void SeekBy(TimeSpan delta)
-    {
-        Seek(_position.Peek() + delta);
-    }
+    public void SeekBy(TimeSpan delta) => Seek(_position.Peek() + delta);
 
     /// <summary>Next item, wrapping only under <see cref="LoopMode.All" />. No-op at the end otherwise.</summary>
     public void SeekToNext()
     {
-        var np = NextOrderPos();
-        if (np >= 0) MoveTo(np, false);
+        int np = NextOrderPos();
+        if (np >= 0) MoveTo(orderPos: np, auto: false);
     }
 
     /// <summary>
@@ -359,7 +373,7 @@ public sealed class AudioPlayer : IDisposable
             return;
         }
 
-        MoveTo(_pos > 0 ? _pos - 1 : _order.Count - 1, false);
+        MoveTo(orderPos: _pos > 0 ? _pos - 1 : _order.Count - 1, auto: false);
     }
 
     // ── push streams ─────────────────────────────────────────────────────────
@@ -368,10 +382,9 @@ public sealed class AudioPlayer : IDisposable
     ///     Feed an <see cref="AudioSource.Stream" /> item container bytes, returning how many were
     ///     taken. A short count means its queue is full — stop reading the socket until it drains.
     /// </summary>
-    public int Push(ReadOnlySpan<byte> bytes)
-    {
-        return _sound != 0 && Current is { IsStream: true } ? _audio.StreamPush(_sound, bytes) : 0;
-    }
+    public int Push(ReadOnlySpan<byte> bytes) => _sound != 0 && Current is { IsStream: true }
+        ? _audio.StreamPush(id: _sound, bytes: bytes)
+        : 0;
 
     /// <summary>No more bytes are coming. What is buffered plays out, then the queue advances.</summary>
     public void FinishStream()
@@ -391,10 +404,13 @@ public sealed class AudioPlayer : IDisposable
         if (_sound == 0 || Current is not { } src) return;
         if (_state.Peek() is PlaybackState.Ended or PlaybackState.Failed) return;
 
-        var cursor = _audio.Cursor(_sound);
+        float cursor = _audio.Cursor(_sound);
         if (cursor >= 0f && SeekSettled(cursor))
+        {
             _position.Value = TimeSpan.FromSeconds(
-                MathF.Max(0f, cursor - (float)src.Start.TotalSeconds));
+                MathF.Max(x: 0f, y: cursor - (float)src.Start.TotalSeconds)
+            );
+        }
 
         if (src.IsStream)
         {
@@ -403,7 +419,7 @@ public sealed class AudioPlayer : IDisposable
         else
         {
             // A streamed file's length is unknown until its header is parsed; publish it once it is.
-            if (_duration.Peek() is null) _duration.Value = DurationOf(_sound, src);
+            if (_duration.Peek() is null) _duration.Value = DurationOf(id: _sound, src: src);
             _buffered.Value = _duration.Peek() ?? _position.Peek();
             if (_state.Peek() == PlaybackState.Opening)
                 _state.Value = _wantPlay ? PlaybackState.Playing : PlaybackState.Ready;
@@ -419,16 +435,20 @@ public sealed class AudioPlayer : IDisposable
 
         if (_wantPlay && _next == 0 && Loop.Value != LoopMode.One && duration is { } total)
         {
-            var lead = (float)((total - elapsed).TotalSeconds / Rate());
-            var np = NextOrderPos();
-            if (lead <= GaplessLead.TotalSeconds && np >= 0) ArmNext(np, lead);
+            float lead = (float)((total - elapsed).TotalSeconds / Rate());
+            int np = NextOrderPos();
+            if (lead <= GaplessLead.TotalSeconds && np >= 0)
+                ArmNext(orderPos: np, secondsFromNow: lead);
         }
     }
 
-    /// <summary>Push-stream health. False when it took the player somewhere the caller must not continue from.</summary>
+    /// <summary>
+    ///     Push-stream health. False when it took the player somewhere the caller must not continue
+    ///     from.
+    /// </summary>
     private bool TickStream()
     {
-        var ahead = MathF.Max(0f, _audio.StreamBuffered(_sound));
+        float ahead = MathF.Max(x: 0f, y: _audio.StreamBuffered(_sound));
         _buffered.Value = _position.Peek() + TimeSpan.FromSeconds(ahead);
 
         switch (_audio.StreamStatus(_sound))
@@ -455,10 +475,7 @@ public sealed class AudioPlayer : IDisposable
                     if (ahead >= RebufferThreshold.TotalSeconds)
                         _state.Value = PlaybackState.Playing;
                 }
-                else if (state != PlaybackState.Playing)
-                {
-                    _state.Value = PlaybackState.Playing;
-                }
+                else if (state != PlaybackState.Playing) _state.Value = PlaybackState.Playing;
 
                 return true;
         }
@@ -473,7 +490,7 @@ public sealed class AudioPlayer : IDisposable
             return;
         }
 
-        var np = NextOrderPos();
+        int np = NextOrderPos();
         if (np < 0)
         {
             DropNext();
@@ -484,14 +501,15 @@ public sealed class AudioPlayer : IDisposable
         }
 
         if (_next != 0 && _nextPos == np) AdoptNext();
-        else MoveTo(np, true);
+        else MoveTo(orderPos: np, auto: true);
     }
 
     // ── sources ──────────────────────────────────────────────────────────────
 
     private void MoveTo(int orderPos, bool auto)
     {
-        if (LoadFrom(orderPos, TimeSpan.Zero, auto) && _wantPlay) StartCurrent();
+        if (LoadFrom(orderPos: orderPos, offset: TimeSpan.Zero, skipFailures: auto) && _wantPlay)
+            StartCurrent();
     }
 
     /// <summary>
@@ -501,9 +519,9 @@ public sealed class AudioPlayer : IDisposable
     /// </summary>
     private bool LoadFrom(int orderPos, TimeSpan offset, bool skipFailures)
     {
-        for (var attempt = 0; attempt <= _order.Count; attempt++)
+        for (int attempt = 0; attempt <= _order.Count; attempt++)
         {
-            if (Load(orderPos, offset)) return true;
+            if (Load(orderPos: orderPos, offset: offset)) return true;
             if (!skipFailures) return false;
 
             orderPos = NextOrderPos(); // Load moved _pos, so this is the failed item's successor
@@ -526,7 +544,9 @@ public sealed class AudioPlayer : IDisposable
 
         // ponytail: CreateFile parses the container header on the calling thread — a visible stutter
         // on a slow disk. Upgrade is Zigote.Core.Threading.Background, installing the id on arrival.
-        _sound = src.IsStream ? _audio.CreateStream() : _audio.CreateFile(src.Path!, src.Streaming);
+        _sound = src.IsStream
+            ? _audio.CreateStream()
+            : _audio.CreateFile(path: src.Path!, streaming: src.Streaming);
         if (_sound == 0)
         {
             Fail($"cannot open {src.Path ?? "stream"}");
@@ -534,19 +554,20 @@ public sealed class AudioPlayer : IDisposable
         }
 
         _error.Value = null;
-        _audio.SetSpatial(_sound, false); // music is not a point in a world
-        _audio.SetVolume(_sound, Gain(src));
-        _audio.SetRate(_sound, Rate());
-        if (_equalizer is { Id: not 0 }) _audio.SetEq(_sound, _equalizer.Id);
+        _audio.SetSpatial(id: _sound, enabled: false); // music is not a point in a world
+        _audio.SetVolume(id: _sound, volume: Gain(src));
+        _audio.SetRate(id: _sound, rate: Rate());
+        if (_equalizer is { Id: not 0 }) _audio.SetEq(id: _sound, eqId: _equalizer.Id);
 
         if (offset < TimeSpan.Zero) offset = TimeSpan.Zero;
         var sourceTime = src.Start + offset;
-        if (sourceTime > TimeSpan.Zero) _audio.Seek(_sound, (float)sourceTime.TotalSeconds);
+        if (sourceTime > TimeSpan.Zero)
+            _audio.Seek(id: _sound, seconds: (float)sourceTime.TotalSeconds);
         _seekGuard = -1f; // a fresh decoder has no stale cursor to guard against
 
         _position.Value = offset;
         _buffered.Value = offset;
-        _duration.Value = DurationOf(_sound, src);
+        _duration.Value = DurationOf(id: _sound, src: src);
         _state.Value = src.IsStream ? PlaybackState.Opening : PlaybackState.Ready;
         return true;
     }
@@ -578,15 +599,15 @@ public sealed class AudioPlayer : IDisposable
         var src = _items[_order[orderPos]];
         if (src.IsStream) return; // nothing to open ahead of time — the bytes have not arrived
 
-        var id = _audio.CreateFile(src.Path!, src.Streaming);
+        uint id = _audio.CreateFile(path: src.Path!, streaming: src.Streaming);
         if (id == 0) return; // it will fail loudly through the normal path when its turn comes
 
-        _audio.SetSpatial(id, false);
-        _audio.SetVolume(id, Gain(src));
-        _audio.SetRate(id, Rate());
-        if (_equalizer is { Id: not 0 }) _audio.SetEq(id, _equalizer.Id);
-        if (src.Start > TimeSpan.Zero) _audio.Seek(id, (float)src.Start.TotalSeconds);
-        _audio.ScheduleStart(id, MathF.Max(0f, secondsFromNow));
+        _audio.SetSpatial(id: id, enabled: false);
+        _audio.SetVolume(id: id, volume: Gain(src));
+        _audio.SetRate(id: id, rate: Rate());
+        if (_equalizer is { Id: not 0 }) _audio.SetEq(id: id, eqId: _equalizer.Id);
+        if (src.Start > TimeSpan.Zero) _audio.Seek(id: id, seconds: (float)src.Start.TotalSeconds);
+        _audio.ScheduleStart(id: id, secondsFromNow: MathF.Max(x: 0f, y: secondsFromNow));
 
         _next = id;
         _nextPos = orderPos;
@@ -611,7 +632,7 @@ public sealed class AudioPlayer : IDisposable
         _currentIndex.Value = _order[_pos];
         _position.Value = TimeSpan.Zero;
         _buffered.Value = TimeSpan.Zero;
-        _duration.Value = DurationOf(_sound, src);
+        _duration.Value = DurationOf(id: _sound, src: src);
         _state.Value = PlaybackState.Playing;
     }
 
@@ -632,8 +653,8 @@ public sealed class AudioPlayer : IDisposable
         if (position < TimeSpan.Zero) position = TimeSpan.Zero;
         if (_duration.Peek() is { } d && position > d) position = d;
 
-        var sourceTime = (float)(src.Start + position).TotalSeconds;
-        _audio.Seek(_sound, sourceTime);
+        float sourceTime = (float)(src.Start + position).TotalSeconds;
+        _audio.Seek(id: _sound, seconds: sourceTime);
         _seekGuard = sourceTime;
         _seekGuardTicks = 0;
         _position.Value = position;
@@ -667,11 +688,14 @@ public sealed class AudioPlayer : IDisposable
         DropNext();
     }
 
-    /// <summary>Rebuild <see cref="_order" /> around <paramref name="centreItem" />, an index into <see cref="_items" />.</summary>
+    /// <summary>
+    ///     Rebuild <see cref="_order" /> around <paramref name="centreItem" />, an index into
+    ///     <see cref="_items" />.
+    /// </summary>
     private void RebuildOrder(int centreItem)
     {
         _order.Clear();
-        for (var i = 0; i < _items.Count; i++) _order.Add(i);
+        for (int i = 0; i < _items.Count; i++) _order.Add(i);
 
         if (Shuffle.Value)
         {
@@ -680,16 +704,16 @@ public sealed class AudioPlayer : IDisposable
             // ponytail: the order still shifts when the count changes. Splicing new items into the
             // existing order at random points is the upgrade if that ever grates.
             var rng = new Random(_shuffleSeed);
-            for (var i = _order.Count - 1; i > 0; i--)
+            for (int i = _order.Count - 1; i > 0; i--)
             {
-                var j = rng.Next(i + 1);
+                int j = rng.Next(i + 1);
                 (_order[i], _order[j]) = (_order[j], _order[i]);
             }
 
             // Whatever is playing goes to the front, so shuffling does not cut the current track off.
             if (centreItem >= 0)
             {
-                var at = _order.IndexOf(centreItem);
+                int at = _order.IndexOf(centreItem);
                 if (at > 0) (_order[0], _order[at]) = (_order[at], _order[0]);
             }
         }
@@ -712,7 +736,7 @@ public sealed class AudioPlayer : IDisposable
     private int IndexOfSame(AudioSource? item)
     {
         if (item is null) return -1;
-        var byReference = _items.FindIndex(s => ReferenceEquals(s, item));
+        int byReference = _items.FindIndex(s => ReferenceEquals(objA: s, objB: item));
         return byReference >= 0 ? byReference : _items.IndexOf(item);
     }
 
@@ -727,7 +751,7 @@ public sealed class AudioPlayer : IDisposable
             return clipped > TimeSpan.Zero ? clipped : TimeSpan.Zero;
         }
 
-        var total = id != 0 ? _audio.Duration(id) : -1f;
+        float total = id != 0 ? _audio.Duration(id) : -1f;
         if (total < 0f) return null;
         var remaining = TimeSpan.FromSeconds(total) - src.Start;
         return remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero;
@@ -737,24 +761,22 @@ public sealed class AudioPlayer : IDisposable
     private float Gain(AudioSource src)
     {
         if (Muted.Value) return 0f;
-        var volume = MathF.Max(0f, Volume.Value);
-        return src.GainDb != 0f ? volume * MathF.Pow(10f, src.GainDb / 20f) : volume;
+        float volume = MathF.Max(x: 0f, y: Volume.Value);
+        return src.GainDb != 0f ? volume * MathF.Pow(x: 10f, y: src.GainDb / 20f) : volume;
     }
 
-    private float Rate()
-    {
-        return (float)Math.Clamp(Speed.Value, 0.25, 4.0);
-    }
+    private float Rate() => (float)Math.Clamp(value: Speed.Value, min: 0.25, max: 4.0);
 
     private void ApplyGain()
     {
-        if (_sound != 0 && Current is { } src) _audio.SetVolume(_sound, Gain(src));
-        if (_next != 0 && _nextPos >= 0) _audio.SetVolume(_next, Gain(_items[_order[_nextPos]]));
+        if (_sound != 0 && Current is { } src) _audio.SetVolume(id: _sound, volume: Gain(src));
+        if (_next != 0 && _nextPos >= 0)
+            _audio.SetVolume(id: _next, volume: Gain(_items[_order[_nextPos]]));
     }
 
     private void ApplyRate()
     {
-        if (_sound != 0) _audio.SetRate(_sound, Rate());
+        if (_sound != 0) _audio.SetRate(id: _sound, rate: Rate());
         // The successor's start was scheduled in wall-clock seconds at the old rate; that hand-off
         // is now wrong by however much the rate moved. Drop it and let Tick re-arm.
         DropNext();

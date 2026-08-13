@@ -27,13 +27,11 @@ public readonly struct CameraBody : IEquatable<CameraBody>
                ShutterAngleDeg.Equals(other.ShutterAngleDeg);
     }
 
-    public override bool Equals(object? obj)
-    {
-        return obj is CameraBody o && Equals(o);
-    }
+    public override bool Equals(object? obj) => obj is CameraBody o && Equals(o);
 
-    public override int GetHashCode()
-    {
-        return HashCode.Combine(Iso, ShutterSpeed, ShutterAngleDeg);
-    }
+    public override int GetHashCode() => HashCode.Combine(
+        value1: Iso,
+        value2: ShutterSpeed,
+        value3: ShutterAngleDeg
+    );
 }

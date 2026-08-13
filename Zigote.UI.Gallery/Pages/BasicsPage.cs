@@ -16,55 +16,82 @@ internal sealed class BasicsPage : ComposedWidget
     {
         return Sections(
             Section(
-                "Typography",
-                new Column(
+                title: "Typography",
+                child: new Column(
                     crossAxisAlignment: CrossAxisAlignment.Start,
                     children: [
-                        new Text("Large Title", new TextStyle(28, fontWeight: FontWeight.Bold)),
-                        new Text("Title", new TextStyle(20, fontWeight: FontWeight.SemiBold)),
-                        new Text("Headline", new TextStyle(15, fontWeight: FontWeight.SemiBold)),
-                        new Text("Body — the quick brown fox jumps over the lazy dog."),
-                        new Text("Italic caption", new TextStyle(12, fontStyle: FontStyle.Italic)),
                         new Text(
-                            "Accent-coloured",
-                            new TextStyle(color: Colors.Blue, fontWeight: FontWeight.Medium)
+                            data: "Large Title",
+                            style: new TextStyle(fontSize: 28, fontWeight: FontWeight.Bold)
+                        ),
+                        new Text(
+                            data: "Title",
+                            style: new TextStyle(fontSize: 20, fontWeight: FontWeight.SemiBold)
+                        ),
+                        new Text(
+                            data: "Headline",
+                            style: new TextStyle(fontSize: 15, fontWeight: FontWeight.SemiBold)
+                        ),
+                        new Text("Body — the quick brown fox jumps over the lazy dog."),
+                        new Text(
+                            data: "Italic caption",
+                            style: new TextStyle(fontSize: 12, fontStyle: FontStyle.Italic)
+                        ),
+                        new Text(
+                            data: "Accent-coloured",
+                            style: new TextStyle(color: Colors.Blue, fontWeight: FontWeight.Medium)
                         ),
                     ]
                 )
             ),
             Section(
-                "Buttons",
-                new Wrap(
+                title: "Buttons",
+                child: new Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                        new ElevatedButton(new Text("Elevated"), () => Toast("Elevated")),
-                        new FilledButton(new Text("Filled"), () => Toast("Filled")),
-                        new OutlinedButton(new Text("Outlined"), () => Toast("Outlined")),
-                        new TextButton(new Text("Text"), () => Toast("Text")),
+                        new ElevatedButton(
+                            child: new Text("Elevated"),
+                            onPressed: () => Toast("Elevated")
+                        ),
+                        new FilledButton(
+                            child: new Text("Filled"),
+                            onPressed: () => Toast("Filled")
+                        ),
+                        new OutlinedButton(
+                            child: new Text("Outlined"),
+                            onPressed: () => Toast("Outlined")
+                        ),
+                        new TextButton(child: new Text("Text"), onPressed: () => Toast("Text")),
                         new ElevatedButton(new Text("Disabled")),
                         new ElevatedButton(
-                            new Row(
+                            child: new Row(
                                 mainAxisSize: MainAxisSize.Min,
                                 children: [
                                     new Icon(MaterialIcons.Add) { Size = 16 }, new SizedBox(6),
                                     new Text("With icon"),
                                 ]
                             ),
-                            () => Toast("Icon + label")
+                            onPressed: () => Toast("Icon + label")
                         ),
                     ]
                 )
             ),
             Section(
-                "Icon buttons & gestures",
-                new AdaptiveBuilder((_, size) => new Row(
+                title: "Icon buttons & gestures",
+                child: new AdaptiveBuilder((_, size) => new Row(
                         [
-                            new IconButton(new Icon(MaterialIcons.Home), () => Toast("home")),
-                            new IconButton(new Icon(MaterialIcons.Search), () => Toast("search")),
                             new IconButton(
-                                new Icon(MaterialIcons.Settings),
-                                () => Toast("settings")
+                                icon: new Icon(MaterialIcons.Home),
+                                onPressed: () => Toast("home")
+                            ),
+                            new IconButton(
+                                icon: new Icon(MaterialIcons.Search),
+                                onPressed: () => Toast("search")
+                            ),
+                            new IconButton(
+                                icon: new Icon(MaterialIcons.Settings),
+                                onPressed: () => Toast("settings")
                             ),
                             new SizedBox(16),
                             new InkWell(
@@ -73,8 +100,8 @@ internal sealed class BasicsPage : ComposedWidget
                                     // A bare Container gets no control metrics of its own, so its
                                     // padding is the only thing sizing the tap target — 44 px on touch.
                                     padding: size == WindowSizeClass.Compact
-                                        ? EdgeInsets.Symmetric(16, 14)
-                                        : EdgeInsets.Symmetric(12, 8),
+                                        ? EdgeInsets.Symmetric(horizontal: 16, vertical: 14)
+                                        : EdgeInsets.Symmetric(horizontal: 12, vertical: 8),
                                     color: Colors.Blue,
                                     child: new Text("InkWell")
                                 )

@@ -46,13 +46,8 @@ public static class DeliveryMethodExtensions
             or DeliveryMethod.ReliableSequenced;
     }
 
-    public static bool IsOrdered(this DeliveryMethod m)
-    {
-        return m is DeliveryMethod.ReliableOrdered;
-    }
+    public static bool IsOrdered(this DeliveryMethod m) => m is DeliveryMethod.ReliableOrdered;
 
-    public static bool IsSequenced(this DeliveryMethod m)
-    {
-        return m is DeliveryMethod.UnreliableSequenced or DeliveryMethod.ReliableSequenced;
-    }
+    public static bool IsSequenced(this DeliveryMethod m) =>
+        m is DeliveryMethod.UnreliableSequenced or DeliveryMethod.ReliableSequenced;
 }

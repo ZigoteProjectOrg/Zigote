@@ -64,9 +64,12 @@ public sealed class ListTile : ComposedWidget
         //
         // 8pt of vertical padding leaves a caption-only tile ~30pt tall; a phone list row wants the
         // Material 48pt metric, which Md padding around a 13pt label reaches.
-        var padV = TouchMetrics.IsCompact ? Spacing.Md : Spacing.Sm;
+        float padV = TouchMetrics.IsCompact ? Spacing.Md : Spacing.Sm;
         Widget tap = new Pressable {
-            Child = new LayoutPadding(EdgeInsets.Symmetric(Spacing.Md, padV), main),
+            Child = new LayoutPadding(
+                padding: EdgeInsets.Symmetric(horizontal: Spacing.Md, vertical: padV),
+                child: main
+            ),
             OnPressed = () => OnPressed?.Invoke(),
             Enabled = OnPressed is not null,
             SelectedState = Selected,
@@ -74,6 +77,7 @@ public sealed class ListTile : ComposedWidget
 
         Widget content;
         if (Trailing is not null)
+        {
             content = new Row(
                 crossAxisAlignment: CrossAxisAlignment.Center,
                 children: [
@@ -82,10 +86,11 @@ public sealed class ListTile : ComposedWidget
                     new SizedBox(Spacing.Md),
                 ]
             );
+        }
         else
             content = tap;
 
-        if (Selected) content = new ColoredBox(theme.Selection, content);
+        if (Selected) content = new ColoredBox(color: theme.Selection, child: content);
 
         return content;
     }
@@ -117,11 +122,11 @@ public sealed class SwitchListTile : ComposedWidget
     protected override Widget Build(BuildContext context)
     {
         return new ListTile(
-            Secondary,
-            Title,
-            Subtitle,
-            new Switch(Value, OnChanged),
-            OnChanged is null ? null : () => OnChanged(!Value)
+            leading: Secondary,
+            title: Title,
+            subtitle: Subtitle,
+            trailing: new Switch(value: Value, onChanged: OnChanged),
+            onPressed: OnChanged is null ? null : () => OnChanged(!Value)
         );
     }
 }
@@ -152,11 +157,11 @@ public sealed class CheckboxListTile : ComposedWidget
     protected override Widget Build(BuildContext context)
     {
         return new ListTile(
-            Secondary,
-            Title,
-            Subtitle,
-            new Checkbox(Value, OnChanged),
-            OnChanged is null ? null : () => OnChanged(!Value)
+            leading: Secondary,
+            title: Title,
+            subtitle: Subtitle,
+            trailing: new Checkbox(value: Value, onChanged: OnChanged),
+            onPressed: OnChanged is null ? null : () => OnChanged(!Value)
         );
     }
 }
@@ -190,11 +195,11 @@ public sealed class RadioListTile<T> : ComposedWidget where T : IEquatable<T>
     protected override Widget Build(BuildContext context)
     {
         return new ListTile(
-            Secondary,
-            Title,
-            Subtitle,
-            new Radio<T>(Value, GroupValue, OnChanged),
-            OnChanged is null ? null : () => OnChanged(Value)
+            leading: Secondary,
+            title: Title,
+            subtitle: Subtitle,
+            trailing: new Radio<T>(value: Value, groupValue: GroupValue, onChanged: OnChanged),
+            onPressed: OnChanged is null ? null : () => OnChanged(Value)
         );
     }
 }

@@ -38,7 +38,7 @@ public class BlocTests : IDisposable
         bloc.Add(new Bump(1));
 
         // No polling, no pumping the loop: the state is already there.
-        Assert.Equal(1, bloc.Current.Value);
+        Assert.Equal(expected: 1, actual: bloc.Current.Value);
     }
 
     [Fact]
@@ -49,7 +49,14 @@ public class BlocTests : IDisposable
         bloc.Add(new Outer());
 
         // Nested dispatch would give outer-start, inner, outer-end.
-        Assert.Equal(new[] { "outer:start", "outer:end", "inner" }, bloc.Log);
+        Assert.Equal(
+            expected: new[] {
+                "outer:start",
+                "outer:end",
+                "inner",
+            },
+            actual: bloc.Log
+        );
     }
 
     [Fact]
@@ -57,18 +64,32 @@ public class BlocTests : IDisposable
     {
         var release = new ManualResetEventSlim();
         var drained = new ManualResetEventSlim();
-        using var bloc = new OrderBloc { Gate = release, Drained = drained };
+        using var bloc = new OrderBloc {
+            Gate = release,
+            Drained = drained,
+        };
 
         bloc.Add(new Slow());
         // The handler is parked on the gate, so these queue behind it rather than interleaving.
         bloc.Add(new Note("a"));
         bloc.Add(new Note("b"));
-        Assert.Equal(new[] { "slow:start" }, bloc.Log);
+        Assert.Equal(expected: new[] { "slow:start" }, actual: bloc.Log);
 
         release.Set();
-        Assert.True(drained.Wait(TimeSpan.FromSeconds(5)), "pump did not resume after the await");
+        Assert.True(
+            condition: drained.Wait(TimeSpan.FromSeconds(5)),
+            userMessage: "pump did not resume after the await"
+        );
 
-        Assert.Equal(new[] { "slow:start", "slow:end", "a", "b" }, bloc.Log);
+        Assert.Equal(
+            expected: new[] {
+                "slow:start",
+                "slow:end",
+                "a",
+                "b",
+            },
+            actual: bloc.Log
+        );
     }
 
     [Fact]
@@ -78,23 +99,33 @@ public class BlocTests : IDisposable
         // pumping flag. An Add landing there must either be seen by that check or start its own
         // pump — if both sides decide the other will handle it, the event sits in the queue until
         // some later Add happens to arrive, which in an app looks like one dead tap in a hundred.
-        for (var attempt = 0; attempt < 200; attempt++)
+        for (int attempt = 0; attempt < 200; attempt++)
         {
             using var bloc = new CounterBloc();
             using var start = new ManualResetEventSlim();
 
             var other = Task.Run(() =>
-            {
-                start.Wait();
-                for (var i = 0; i < 50; i++) bloc.Add(new Bump(1));
-            });
+                {
+                    start.Wait();
+                    for (int i = 0; i < 50; i++) bloc.Add(new Bump(1));
+                }
+            );
 
             start.Set();
-            for (var i = 0; i < 50; i++) bloc.Add(new Bump(1));
+            for (int i = 0; i < 50; i++) bloc.Add(new Bump(1));
 
-            Assert.True(other.Wait(TimeSpan.FromSeconds(5)), "producer stalled");
-            Assert.True(SpinWait.SpinUntil(() => bloc.Current.Value == 100, TimeSpan.FromSeconds(5)),
-                $"attempt {attempt}: stranded event — {bloc.Current.Value} of 100 handled");
+            Assert.True(
+                condition: other.Wait(TimeSpan.FromSeconds(5)),
+                userMessage: "producer stalled"
+            );
+            Assert.True(
+                condition: SpinWait.SpinUntil(
+                    condition: () => bloc.Current.Value == 100,
+                    timeout: TimeSpan.FromSeconds(5)
+                ),
+                userMessage:
+                $"attempt {attempt}: stranded event — {bloc.Current.Value} of 100 handled"
+            );
         }
     }
 
@@ -110,8 +141,11 @@ public class BlocTests : IDisposable
         bloc.Add(new Bump(1));
 
         Assert.Single(failures);
-        Assert.Contains("Boom", failures[0]);
-        Assert.Equal(1, bloc.Current.Value); // the event behind the failure still ran
+        Assert.Contains(expectedSubstring: "Boom", actualString: failures[0]);
+        Assert.Equal(
+            expected: 1,
+            actual: bloc.Current.Value
+        ); // the event behind the failure still ran
     }
 
     [Fact]
@@ -125,12 +159,22 @@ public class BlocTests : IDisposable
         using var bloc = new CounterBloc();
 
         bloc.Add(new BoomAsync());
-        Assert.True(SpinWait.SpinUntil(() => failures.Count == 1, TimeSpan.FromSeconds(5)),
-            "async failure never reported");
+        Assert.True(
+            condition: SpinWait.SpinUntil(
+                condition: () => failures.Count == 1,
+                timeout: TimeSpan.FromSeconds(5)
+            ),
+            userMessage: "async failure never reported"
+        );
 
         bloc.Add(new Bump(1));
-        Assert.True(SpinWait.SpinUntil(() => bloc.Current.Value == 1, TimeSpan.FromSeconds(5)),
-            "pump did not resume after an async failure");
+        Assert.True(
+            condition: SpinWait.SpinUntil(
+                condition: () => bloc.Current.Value == 1,
+                timeout: TimeSpan.FromSeconds(5)
+            ),
+            userMessage: "pump did not resume after an async failure"
+        );
     }
 
     [Fact]
@@ -143,7 +187,7 @@ public class BlocTests : IDisposable
         bloc.Add(new Boom());
         bloc.Add(new Bump(1));
 
-        Assert.Equal(1, bloc.Current.Value);
+        Assert.Equal(expected: 1, actual: bloc.Current.Value);
     }
 
     [Fact]
@@ -160,7 +204,7 @@ public class BlocTests : IDisposable
         Assert.True(bloc.LifetimeToken.IsCancellationRequested);
 
         bloc.Add(new Bump(1)); // dropped, not thrown
-        Assert.Equal(1, bloc.Current.Value);
+        Assert.Equal(expected: 1, actual: bloc.Current.Value);
 
         bloc.Dispose(); // idempotent
     }
@@ -204,14 +248,14 @@ public class BlocTests : IDisposable
     {
         using var bloc = new CounterBloc();
 
-        var rebuilds = 0;
+        int rebuilds = 0;
         using var _ = bloc.State.Observe(() => rebuilds++);
 
         bloc.Add(new Bump(1));
-        Assert.Equal(1, rebuilds);
+        Assert.Equal(expected: 1, actual: rebuilds);
 
         bloc.Add(new Bump(0)); // same record value → deduplicated by the signal
-        Assert.Equal(1, rebuilds);
+        Assert.Equal(expected: 1, actual: rebuilds);
     }
 
     [Fact]
@@ -220,15 +264,15 @@ public class BlocTests : IDisposable
         using var bloc = new CounterBloc();
         using var busy = bloc.Select(s => s.Busy);
 
-        var fires = 0;
+        int fires = 0;
         using var _ = busy.Observe(() => fires++);
 
         bloc.Add(new Bump(1)); // Value moves, Busy does not
         bloc.Add(new Bump(1));
-        Assert.Equal(0, fires);
+        Assert.Equal(expected: 0, actual: fires);
 
         bloc.Add(new SetBusy(true));
-        Assert.Equal(1, fires);
+        Assert.Equal(expected: 1, actual: fires);
     }
 
     [Fact]
@@ -243,7 +287,7 @@ public class BlocTests : IDisposable
         bloc.Add(new Bump(7));
         bloc.Dispose();
 
-        Assert.Equal(7, selected.Value);
+        Assert.Equal(expected: 7, actual: selected.Value);
     }
 
     [Fact]
@@ -251,26 +295,36 @@ public class BlocTests : IDisposable
     {
         var timeline = new List<string>();
         // Not GetType().Name: these events are file-local types, so the runtime name is mangled.
-        BlocObserver.OnEvent = (_, e) => timeline.Add($"event:{(e is Bump b ? $"Bump({b.By})" : "?")}");
-        BlocObserver.OnChange = (_, from, to) => timeline.Add($"change:{((CounterState)from!).Value}→{((CounterState)to!).Value}");
+        BlocObserver.OnEvent = (_, e) =>
+            timeline.Add($"event:{(e is Bump b ? $"Bump({b.By})" : "?")}");
+        BlocObserver.OnChange = (_, from, to) =>
+            timeline.Add($"change:{((CounterState)from!).Value}→{((CounterState)to!).Value}");
 
         using var bloc = new CounterBloc();
         bloc.Add(new Bump(1));
         bloc.Add(new Bump(2));
 
-        Assert.Equal(new[] { "event:Bump(1)", "change:0→1", "event:Bump(2)", "change:1→3" }, timeline);
+        Assert.Equal(
+            expected: new[] {
+                "event:Bump(1)",
+                "change:0→1",
+                "event:Bump(2)",
+                "change:1→3",
+            },
+            actual: timeline
+        );
     }
 
     [Fact]
     public void The_observer_does_not_report_a_deduplicated_emit_as_a_transition()
     {
-        var changes = 0;
+        int changes = 0;
         BlocObserver.OnChange = (_, _, _) => changes++;
 
         using var bloc = new CounterBloc();
         bloc.Add(new Bump(0)); // emits the state it is already in
 
-        Assert.Equal(0, changes);
+        Assert.Equal(expected: 0, actual: changes);
     }
 
     [Fact]
@@ -279,23 +333,21 @@ public class BlocTests : IDisposable
         var failures = new List<string>();
         BlocErrors.OnError = (_, context) => failures.Add(context);
         BlocObserver.OnEvent = (_, _) => throw new InvalidOperationException("observer is broken");
-        BlocObserver.OnChange = (_, _, _) => throw new InvalidOperationException("observer is broken");
+        BlocObserver.OnChange =
+            (_, _, _) => throw new InvalidOperationException("observer is broken");
 
         using var bloc = new CounterBloc();
         bloc.Add(new Bump(1));
 
-        Assert.Equal(1, bloc.Current.Value);
-        Assert.Equal(2, failures.Count); // one for each hook
+        Assert.Equal(expected: 1, actual: bloc.Current.Value);
+        Assert.Equal(expected: 2, actual: failures.Count); // one for each hook
     }
 
     private sealed class Probe : IDisposable
     {
         public bool Disposed;
 
-        public void Dispose()
-        {
-            Disposed = true;
-        }
+        public void Dispose() => Disposed = true;
     }
 }
 
@@ -311,19 +363,14 @@ file sealed record Boom : CounterEvent;
 
 file sealed record BoomAsync : CounterEvent;
 
-file sealed class CounterBloc() : Bloc<CounterEvent, CounterState>(new CounterState(0, false))
+file sealed class CounterBloc()
+    : Bloc<CounterEvent, CounterState>(new CounterState(Value: 0, Busy: false))
 {
     public CancellationToken LifetimeToken => Lifetime;
 
-    public void TrackPublic(IDisposable subscription)
-    {
-        Track(subscription);
-    }
+    public void TrackPublic(IDisposable subscription) => Track(subscription);
 
-    public CancellationToken RestartPublic()
-    {
-        return Restart();
-    }
+    public CancellationToken RestartPublic() => Restart();
 
     protected override async ValueTask OnEventAsync(CounterEvent @event, CancellationToken ct)
     {
@@ -365,10 +412,7 @@ file sealed class OrderBloc() : Bloc<OrderEvent, int>(0)
     {
         get
         {
-            lock (_log)
-            {
-                return _log.ToArray();
-            }
+            lock (_log) return _log.ToArray();
         }
     }
 
@@ -386,7 +430,10 @@ file sealed class OrderBloc() : Bloc<OrderEvent, int>(0)
                 break;
             case Slow:
                 Write("slow:start");
-                await Task.Run(() => Gate!.Wait(TimeSpan.FromSeconds(5)), ct);
+                await Task.Run(
+                    function: () => Gate!.Wait(TimeSpan.FromSeconds(5)),
+                    cancellationToken: ct
+                );
                 Write("slow:end");
                 break;
             case Note(var text):
@@ -398,9 +445,6 @@ file sealed class OrderBloc() : Bloc<OrderEvent, int>(0)
 
     private void Write(string entry)
     {
-        lock (_log)
-        {
-            _log.Add(entry);
-        }
+        lock (_log) _log.Add(entry);
     }
 }

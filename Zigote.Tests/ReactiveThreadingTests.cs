@@ -12,9 +12,11 @@ namespace Zigote.Tests;
 ///     The thread-related contracts of the reactive core: the graph-state invariant that lets
 ///     <c>Reactive.EvalContext</c> be a plain static (it is lock-owned, not thread-owned — a reaction
 ///     must never capture a source another thread's reaction read), the
-///     <see cref="EffectAffinity.Deferred" /> escape hatch that keeps a background write from running UI
+///     <see cref="EffectAffinity.Deferred" /> escape hatch that keeps a background write from running
+///     UI
 ///     bodies on the writer's thread under the graph lock, and the "user code is not invoked under the
-///     lock" property of <see cref="Signal{T}.Subscribe" /> — the shapes that turn into a deadlock or a
+///     lock" property of <see cref="Signal{T}.Subscribe" /> — the shapes that turn into a deadlock or
+///     a
 ///     torn dependency list when they regress.
 /// </summary>
 [Collection("Reactive-serial")]
@@ -31,12 +33,12 @@ public class ReactiveThreadingTests
         // its writes — detected here as a run whose value doesn't match its own source.
         const int threads = 4;
         const int writes = 2_000;
-        var bleed = 0;
+        int bleed = 0;
 
         Parallel.For(
-            0,
-            threads,
-            t =>
+            fromInclusive: 0,
+            toExclusive: threads,
+            body: t =>
             {
                 var mine = new Signal<int>(0);
                 var traffic =
@@ -44,8 +46,8 @@ public class ReactiveThreadingTests
                         0
                     ); // read from outside any reaction, concurrently with everyone
                 using var derived = Computed.From(() => mine.Value * 2);
-                var lastSeen = -1;
-                var runs = 0;
+                int lastSeen = -1;
+                int runs = 0;
                 using var effect = new Effect(() =>
                     {
                         lastSeen = derived.Value;
@@ -53,7 +55,7 @@ public class ReactiveThreadingTests
                     }
                 );
 
-                for (var i = 1; i <= writes; i++)
+                for (int i = 1; i <= writes; i++)
                 {
                     mine.Value = i;
                     if (lastSeen != i * 2) Interlocked.Increment(ref bleed);
@@ -69,80 +71,83 @@ public class ReactiveThreadingTests
             }
         );
 
-        Assert.Equal(0, bleed);
+        Assert.Equal(expected: 0, actual: bleed);
     }
 
     [Fact]
     public void A_deferred_effect_runs_only_on_the_hosts_drain()
     {
         var s = new Signal<int>(0);
-        var runs = 0;
-        var seen = -1;
+        int runs = 0;
+        int seen = -1;
         using var e = new Effect(
-            () =>
+            body: () =>
             {
                 seen = s.Value;
                 runs++;
             },
-            EffectAffinity.Deferred
+            affinity: EffectAffinity.Deferred
         );
 
-        Assert.Equal(1, runs); // construction runs on the creating thread, like any effect
-        Assert.Equal(0, seen);
+        Assert.Equal(
+            expected: 1,
+            actual: runs
+        ); // construction runs on the creating thread, like any effect
+        Assert.Equal(expected: 0, actual: seen);
 
         s.Value = 1;
-        Assert.Equal(1, runs); // the write only marked it
-        Assert.Equal(0, seen);
+        Assert.Equal(expected: 1, actual: runs); // the write only marked it
+        Assert.Equal(expected: 0, actual: seen);
 
         Reactive.DrainDeferred();
-        Assert.Equal(2, runs);
-        Assert.Equal(1, seen);
+        Assert.Equal(expected: 2, actual: runs);
+        Assert.Equal(expected: 1, actual: seen);
 
         Reactive.DrainDeferred(); // nothing pending → no re-run
-        Assert.Equal(2, runs);
+        Assert.Equal(expected: 2, actual: runs);
     }
 
     [Fact]
     public void Repeated_writes_coalesce_into_one_deferred_run()
     {
         var s = new Signal<int>(0);
-        var runs = 0;
-        var seen = -1;
+        int runs = 0;
+        int seen = -1;
         using var e = new Effect(
-            () =>
+            body: () =>
             {
                 seen = s.Value;
                 runs++;
             },
-            EffectAffinity.Deferred
+            affinity: EffectAffinity.Deferred
         );
 
-        for (var i = 1; i <= 100; i++) s.Value = i;
-        Assert.Equal(1, runs);
+        for (int i = 1; i <= 100; i++) s.Value = i;
+        Assert.Equal(expected: 1, actual: runs);
 
         Reactive.DrainDeferred();
-        Assert.Equal(2, runs); // one run for a hundred writes
-        Assert.Equal(100, seen); // and it sees the latest value
+        Assert.Equal(expected: 2, actual: runs); // one run for a hundred writes
+        Assert.Equal(expected: 100, actual: seen); // and it sees the latest value
     }
 
     [Fact]
     public void A_deferred_effect_disposed_while_queued_never_runs()
     {
         var s = new Signal<int>(0);
-        var runs = 0;
+        int runs = 0;
         var e = new Effect(
-            () =>
+            body: () =>
             {
                 _ = s.Value;
                 runs++;
             },
-            EffectAffinity.Deferred
+            affinity: EffectAffinity.Deferred
         );
 
         s.Value = 1; // queued
         e.Dispose();
         Reactive.DrainDeferred();
-        Assert.Equal(1, runs); // only the constructor run
+        Assert.Equal(expected: 1, actual: runs); // only the constructor run
     }
 
     [Fact]
@@ -151,17 +156,17 @@ public class ReactiveThreadingTests
         // The affinity contract: whatever thread writes, the body runs on the one that drains. This is
         // the audio/network-thread inversion the option exists to prevent.
         var s = new Signal<int>(0);
-        var ranOn = 0;
+        int ranOn = 0;
         using var e = new Effect(
-            () =>
+            body: () =>
             {
                 _ = s.Value;
                 ranOn = Environment.CurrentManagedThreadId;
             },
-            EffectAffinity.Deferred
+            affinity: EffectAffinity.Deferred
         );
 
-        var writerThread = 0;
+        int writerThread = 0;
         var writer = Task.Run(() =>
             {
                 writerThread = Environment.CurrentManagedThreadId;
@@ -170,9 +175,9 @@ public class ReactiveThreadingTests
         );
         Assert.True(writer.Wait(TimeoutMs));
 
-        Assert.NotEqual(writerThread, ranOn); // still the creating thread's run
+        Assert.NotEqual(expected: writerThread, actual: ranOn); // still the creating thread's run
         Reactive.DrainDeferred();
-        Assert.Equal(Environment.CurrentManagedThreadId, ranOn);
+        Assert.Equal(expected: Environment.CurrentManagedThreadId, actual: ranOn);
     }
 
     [Fact]
@@ -193,21 +198,21 @@ public class ReactiveThreadingTests
             }
         );
 
-        var observed = 0;
+        int observed = 0;
         using var sub = s.Subscribe(v =>
             {
                 observed = v;
                 ready.Set();
                 Assert.True(
-                    written.Wait(TimeoutMs),
-                    "the initial Subscribe callback still holds the graph lock"
+                    condition: written.Wait(TimeoutMs),
+                    userMessage: "the initial Subscribe callback still holds the graph lock"
                 );
             }
         );
 
         Assert.True(writer.Wait(TimeoutMs));
-        Assert.Equal(1, observed);
-        Assert.Equal(42, other.Peek());
+        Assert.Equal(expected: 1, actual: observed);
+        Assert.Equal(expected: 42, actual: other.Peek());
     }
 
     [Fact]
@@ -217,7 +222,7 @@ public class ReactiveThreadingTests
         // true deadlock. Bounded acquisition turns "the app is frozen" into an exception naming both
         // threads. (EffectAffinity.Deferred is the fix for the sanctioned version of this shape; this is
         // the backstop for the rest.)
-        var previous = Reactive.LockTimeoutMs;
+        int previous = Reactive.LockTimeoutMs;
         Reactive.LockTimeoutMs = 300;
         var s = new Signal<int>(0);
         using var holding = new ManualResetEventSlim();
@@ -245,7 +250,7 @@ public class ReactiveThreadingTests
         }
 
         s.Value = 2; // gate free again, business as usual
-        Assert.Equal(2, s.Peek());
+        Assert.Equal(expected: 2, actual: s.Peek());
     }
 
     [Fact]
@@ -254,10 +259,10 @@ public class ReactiveThreadingTests
         // Stress: writers on 4 threads, the "host" draining in a loop. Must not deadlock, lose the final
         // value, or leave the effect queued forever.
         var s = new Signal<int>(0);
-        var seen = -1;
-        using var e = new Effect(() => seen = s.Value, EffectAffinity.Deferred);
+        int seen = -1;
+        using var e = new Effect(body: () => seen = s.Value, affinity: EffectAffinity.Deferred);
 
-        var stop = false;
+        bool stop = false;
         var host = Task.Run(() =>
             {
                 while (!Volatile.Read(ref stop)) Reactive.DrainDeferred();
@@ -265,19 +270,19 @@ public class ReactiveThreadingTests
         );
 
         Parallel.For(
-            0,
-            4,
-            _ =>
+            fromInclusive: 0,
+            toExclusive: 4,
+            body: _ =>
             {
-                for (var i = 0; i < 5_000; i++) s.Value = i;
+                for (int i = 0; i < 5_000; i++) s.Value = i;
             }
         );
 
-        Volatile.Write(ref stop, true);
+        Volatile.Write(location: ref stop, value: true);
         Assert.True(host.Wait(TimeoutMs));
 
         Reactive.DrainDeferred();
-        Assert.Equal(s.Peek(), seen);
+        Assert.Equal(expected: s.Peek(), actual: seen);
     }
 }
 

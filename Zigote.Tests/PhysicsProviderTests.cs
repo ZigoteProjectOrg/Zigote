@@ -19,14 +19,14 @@ public class PhysicsProviderTests
 
         Assert.False(
             Physics.TryRaycast(
-                Vec3.Zero,
-                Vec3.Forward,
-                10f,
-                out var hit
+                origin: Vec3.Zero,
+                direction: Vec3.Forward,
+                maxDistance: 10f,
+                hit: out var hit
             )
         );
-        Assert.Equal(default, hit.Body);
-        Assert.Null(Physics.Raycast(Vec3.Zero, Vec3.Forward, 10f));
+        Assert.Equal(expected: default, actual: hit.Body);
+        Assert.Null(Physics.Raycast(origin: Vec3.Zero, direction: Vec3.Forward, maxDistance: 10f));
     }
 
     [Fact]
@@ -35,10 +35,10 @@ public class PhysicsProviderTests
         var fake = new FakeBackend {
             HasHit = true,
             Hit = new RaycastHit3D(
-                new RigidBodyHandle(7),
-                new Vec3(1, 2, 3),
-                Vec3.Up,
-                4.5f
+                body: new RigidBodyHandle(7),
+                point: new Vec3(x: 1, y: 2, z: 3),
+                normal: Vec3.Up,
+                distance: 4.5f
             ),
         };
         Physics.Backend = fake;
@@ -47,29 +47,29 @@ public class PhysicsProviderTests
             var ignore = new RigidBodyHandle(42);
             Assert.True(
                 Physics.TryRaycast(
-                    Vec3.Zero,
-                    Vec3.Forward,
-                    10f,
-                    ignore,
-                    out var hit
+                    origin: Vec3.Zero,
+                    direction: Vec3.Forward,
+                    maxDistance: 10f,
+                    ignore: ignore,
+                    hit: out var hit
                 )
             );
-            Assert.Equal(7u, hit.Body.BodyId);
-            Assert.Equal(new Vec3(1, 2, 3), hit.Point);
-            Assert.Equal(Vec3.Up, hit.Normal);
-            Assert.Equal(4.5f, hit.Distance);
-            Assert.Equal(ignore, fake.LastIgnore);
+            Assert.Equal(expected: 7u, actual: hit.Body.BodyId);
+            Assert.Equal(expected: new Vec3(x: 1, y: 2, z: 3), actual: hit.Point);
+            Assert.Equal(expected: Vec3.Up, actual: hit.Normal);
+            Assert.Equal(expected: 4.5f, actual: hit.Distance);
+            Assert.Equal(expected: ignore, actual: fake.LastIgnore);
 
             // The no-ignore overload passes None, never a valid body id.
             Assert.True(
                 Physics.TryRaycast(
-                    Vec3.Zero,
-                    Vec3.Forward,
-                    10f,
-                    out _
+                    origin: Vec3.Zero,
+                    direction: Vec3.Forward,
+                    maxDistance: 10f,
+                    hit: out _
                 )
             );
-            Assert.Equal(RigidBodyHandle.None, fake.LastIgnore);
+            Assert.Equal(expected: RigidBodyHandle.None, actual: fake.LastIgnore);
         }
         finally
         {
@@ -83,24 +83,26 @@ public class PhysicsProviderTests
         var fake = new FakeBackend {
             HasHit = true,
             Hit = new RaycastHit3D(
-                new RigidBodyHandle(3),
-                new Vec3(0, 1, 0),
-                Vec3.Up,
-                2f
+                body: new RigidBodyHandle(3),
+                point: new Vec3(x: 0, y: 1, z: 0),
+                normal: Vec3.Up,
+                distance: 2f
             ),
         };
         Physics.Backend = fake;
         try
         {
-            var hit = Physics.Raycast(Vec3.Zero, Vec3.Forward, 10f);
+            var hit = Physics.Raycast(origin: Vec3.Zero, direction: Vec3.Forward, maxDistance: 10f);
             Assert.NotNull(hit);
-            Assert.Equal(3u, hit!.Body.BodyId);
-            Assert.Equal(new Vec3(0, 1, 0), hit.Point);
-            Assert.Equal(Vec3.Up, hit.Normal);
-            Assert.Equal(2f, hit.Distance);
+            Assert.Equal(expected: 3u, actual: hit!.Body.BodyId);
+            Assert.Equal(expected: new Vec3(x: 0, y: 1, z: 0), actual: hit.Point);
+            Assert.Equal(expected: Vec3.Up, actual: hit.Normal);
+            Assert.Equal(expected: 2f, actual: hit.Distance);
 
             fake.HasHit = false;
-            Assert.Null(Physics.Raycast(Vec3.Zero, Vec3.Forward, 10f));
+            Assert.Null(
+                Physics.Raycast(origin: Vec3.Zero, direction: Vec3.Forward, maxDistance: 10f)
+            );
         }
         finally
         {
@@ -115,66 +117,34 @@ public class PhysicsProviderTests
         public RigidBodyHandle LastIgnore;
 
         public RigidBodyHandle CreateBody(PhysicsShapeType shape, Vec3 halfExtents, Vec3 position,
-            Vec3 eulerRotation, float mass, bool dynamic)
-        {
-            return RigidBodyHandle.None;
-        }
+            Vec3 eulerRotation, float mass, bool dynamic) =>
+            RigidBodyHandle.None;
 
-        public void DestroyBody(RigidBodyHandle body)
-        {
-        }
+        public void DestroyBody(RigidBodyHandle body) { }
 
-        public Vec3 GetPosition(RigidBodyHandle body)
-        {
-            return Vec3.Zero;
-        }
+        public Vec3 GetPosition(RigidBodyHandle body) => Vec3.Zero;
 
-        public void SetPosition(RigidBodyHandle body, Vec3 position)
-        {
-        }
+        public void SetPosition(RigidBodyHandle body, Vec3 position) { }
 
-        public Quat GetRotation(RigidBodyHandle body)
-        {
-            return Quat.Identity;
-        }
+        public Quat GetRotation(RigidBodyHandle body) => Quat.Identity;
 
-        public void SetRotation(RigidBodyHandle body, Quat rotation)
-        {
-        }
+        public void SetRotation(RigidBodyHandle body, Quat rotation) { }
 
-        public Vec3 GetLinearVelocity(RigidBodyHandle body)
-        {
-            return Vec3.Zero;
-        }
+        public Vec3 GetLinearVelocity(RigidBodyHandle body) => Vec3.Zero;
 
-        public void SetLinearVelocity(RigidBodyHandle body, Vec3 velocity)
-        {
-        }
+        public void SetLinearVelocity(RigidBodyHandle body, Vec3 velocity) { }
 
-        public Vec3 GetAngularVelocity(RigidBodyHandle body)
-        {
-            return Vec3.Zero;
-        }
+        public Vec3 GetAngularVelocity(RigidBodyHandle body) => Vec3.Zero;
 
-        public void SetAngularVelocity(RigidBodyHandle body, Vec3 velocity)
-        {
-        }
+        public void SetAngularVelocity(RigidBodyHandle body, Vec3 velocity) { }
 
-        public void AddForce(RigidBodyHandle body, Vec3 force)
-        {
-        }
+        public void AddForce(RigidBodyHandle body, Vec3 force) { }
 
-        public void AddForceAtPoint(RigidBodyHandle body, Vec3 force, Vec3 worldPoint)
-        {
-        }
+        public void AddForceAtPoint(RigidBodyHandle body, Vec3 force, Vec3 worldPoint) { }
 
-        public void AddTorque(RigidBodyHandle body, Vec3 torque)
-        {
-        }
+        public void AddTorque(RigidBodyHandle body, Vec3 torque) { }
 
-        public void AddImpulse(RigidBodyHandle body, Vec3 impulse)
-        {
-        }
+        public void AddImpulse(RigidBodyHandle body, Vec3 impulse) { }
 
         public bool TryRaycast(Vec3 origin, Vec3 direction, float maxDistance,
             RigidBodyHandle ignore, out RaycastHit3D hit)

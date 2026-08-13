@@ -58,41 +58,41 @@ public sealed class SearchField : Widget
     ///     Side inset that the leading glyph and trailing clear button reserve, square with the
     ///     height.
     /// </summary>
-    private float SideInset => MathF.Min(_size.Height, ControlMetrics.RegularHeight);
+    private float SideInset => MathF.Min(x: _size.Height, y: ControlMetrics.RegularHeight);
 
     private bool ShowClear => _field.Text.Length > 0;
 
     public override int DebugStateHash()
     {
         return HashCode.Combine(
-            _field.Text,
-            _clearHovered,
-            _clearPressed,
-            Focused
+            value1: _field.Text,
+            value2: _clearHovered,
+            value3: _clearPressed,
+            value4: Focused
         );
     }
 
     private Rect GlyphBox()
     {
-        var s = _theme.FontSizeBody;
-        var cy = Bounds.Y + (Bounds.Height - s) / 2f;
+        float s = _theme.FontSizeBody;
+        float cy = Bounds.Y + ((Bounds.Height - s) / 2f);
         return new Rect(
-            Bounds.X + Spacing.Sm,
-            cy,
-            s,
-            s
+            x: Bounds.X + Spacing.Sm,
+            y: cy,
+            width: s,
+            height: s
         );
     }
 
     private Rect ClearBox()
     {
-        var d = _theme.FontSizeBody;
-        var cy = Bounds.Y + (Bounds.Height - d) / 2f;
+        float d = _theme.FontSizeBody;
+        float cy = Bounds.Y + ((Bounds.Height - d) / 2f);
         return new Rect(
-            Bounds.Right - Spacing.Sm - d,
-            cy,
-            d,
-            d
+            x: Bounds.Right - Spacing.Sm - d,
+            y: cy,
+            width: d,
+            height: d
         );
     }
 
@@ -104,12 +104,12 @@ public sealed class SearchField : Widget
     {
         var box = ClearBox();
         if (!_compact) return box;
-        var grow = MathF.Max(0f, (TouchMetrics.MinTarget - box.Width) / 2f);
+        float grow = MathF.Max(x: 0f, y: (TouchMetrics.MinTarget - box.Width) / 2f);
         return new Rect(
-            box.X - grow,
-            MathF.Max(Bounds.Y, box.Y - grow),
-            box.Width + grow * 2f,
-            MathF.Min(Bounds.Height, box.Height + grow * 2f)
+            x: box.X - grow,
+            y: MathF.Max(x: Bounds.Y, y: box.Y - grow),
+            width: box.Width + (grow * 2f),
+            height: MathF.Min(x: Bounds.Height, y: box.Height + (grow * 2f))
         );
     }
 
@@ -120,19 +120,22 @@ public sealed class SearchField : Widget
         _theme = ThemeProvider.Of(BuildContext.Current);
         _compact = TouchMetrics.IsCompact;
         _size = c.Constrain(
-            new Size(MathF.Max(MinWidth, SideInset * 2f + 40f), TouchMetrics.AtLeast(Height))
+            new Size(
+                width: MathF.Max(x: MinWidth, y: (SideInset * 2f) + 40f),
+                height: TouchMetrics.AtLeast(Height)
+            )
         );
 
         // The inner field occupies the area between the leading glyph and trailing clear button.
-        var inner = MathF.Max(0f, _size.Width - SideInset * 2f);
+        float inner = MathF.Max(x: 0f, y: _size.Width - (SideInset * 2f));
         _field.Height = _size.Height;
         _field.MinWidth = inner;
         _field.Measure(
             new Constraints(
-                inner,
-                inner,
-                _size.Height,
-                _size.Height
+                minWidth: inner,
+                maxWidth: inner,
+                minHeight: _size.Height,
+                maxHeight: _size.Height
             )
         );
         return _size;
@@ -141,32 +144,32 @@ public sealed class SearchField : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
-        _field.Layout(new Offset(origin.X + SideInset, origin.Y));
+        _field.Layout(new Offset(x: origin.X + SideInset, y: origin.Y));
     }
 
     public override void Paint(PaintList paint)
     {
-        var radius = Radii.Capsule;
+        float radius = Radii.Capsule;
 
         // Flat translucent capsule. No border — the fill alone reads as a search field on macOS.
-        paint.AddRect(Bounds, _theme.Fill1, radius);
+        paint.AddRect(bounds: Bounds, color: _theme.Fill1, radius: radius);
 
-        PaintMagnifier(paint, GlyphBox(), _theme.Hint);
+        PaintMagnifier(paint: paint, box: GlyphBox(), color: _theme.Hint);
 
         _field.Paint(paint);
 
         if (ShowClear)
-            PaintClear(paint, ClearBox());
+            PaintClear(paint: paint, box: ClearBox());
 
         // This widget isn't itself focusable (hit-testing routes into the inner field), so the ring
         // tracks the field's focus and follows the capsule shape.
         if (_field.Focused)
-            paint.AddFocusRing(Bounds, radius, _theme);
+            paint.AddFocusRing(bounds: Bounds, radius: radius, theme: _theme);
     }
 
     /// <summary>Vector magnifier: a hairline ring plus a short diagonal handle, theme-tinted.</summary>
@@ -174,74 +177,78 @@ public sealed class SearchField : Widget
     {
         // Ring occupies the upper-left ~70% of the glyph box; handle trails to the lower-right.
         var ring = new Rect(
-            box.X,
-            box.Y,
-            box.Width * 0.7f,
-            box.Height * 0.7f
+            x: box.X,
+            y: box.Y,
+            width: box.Width * 0.7f,
+            height: box.Height * 0.7f
         );
         paint.AddBorder(
-            ring,
-            color,
-            Radii.Capsule,
-            1.5f
+            bounds: ring,
+            color: color,
+            radius: Radii.Capsule,
+            width: 1.5f
         );
 
-        var hx = ring.Right - ring.Width * 0.12f;
-        var hy = ring.Bottom - ring.Height * 0.12f;
-        var len = box.Width * 0.32f;
+        float hx = ring.Right - (ring.Width * 0.12f);
+        float hy = ring.Bottom - (ring.Height * 0.12f);
+        float len = box.Width * 0.32f;
         // Approximate the 45° handle with a short rounded bar.
         paint.AddRect(
-            new Rect(
-                hx,
-                hy,
-                len,
-                1.5f
+            bounds: new Rect(
+                x: hx,
+                y: hy,
+                width: len,
+                height: 1.5f
             ),
-            color,
-            Radii.Capsule
+            color: color,
+            radius: Radii.Capsule
         );
         paint.AddRect(
-            new Rect(
-                hx,
-                hy,
-                1.5f,
-                len
+            bounds: new Rect(
+                x: hx,
+                y: hy,
+                width: 1.5f,
+                height: len
             ),
-            color,
-            Radii.Capsule
+            color: color,
+            radius: Radii.Capsule
         );
     }
 
     private void PaintClear(PaintList paint, Rect box)
     {
-        var bg = StateStyle.Fill(_theme.Fill2, _clearHovered, _clearPressed);
-        paint.AddRect(box, bg, Radii.Capsule);
+        var bg = StateStyle.Fill(
+            baseColor: _theme.Fill2,
+            hovered: _clearHovered,
+            pressed: _clearPressed
+        );
+        paint.AddRect(bounds: box, color: bg, radius: Radii.Capsule);
 
         // Centred "×" glyph drawn as two crossed bars to stay crisp at small sizes.
-        var pad = box.Width * 0.3f;
-        var cx = box.X + box.Width / 2f;
-        var cy = box.Y + box.Height / 2f;
-        var arm = box.Width / 2f - pad;
+        float pad = box.Width * 0.3f;
+        float cx = box.X + (box.Width / 2f);
+        float cy = box.Y + (box.Height / 2f);
+        float arm = (box.Width / 2f) - pad;
         var fg = _theme.OnSurface.WithAlpha(0.8f);
         paint.AddRect(
-            new Rect(
-                cx - arm,
-                cy - 0.75f,
-                arm * 2f,
-                1.5f
+            bounds: new Rect(
+                x: cx - arm,
+                y: cy - 0.75f,
+                width: arm * 2f,
+                height: 1.5f
             ),
-            fg,
-            Radii.Capsule
+            color: fg,
+            radius: Radii.Capsule
         );
         paint.AddRect(
-            new Rect(
-                cx - 0.75f,
-                cy - arm,
-                1.5f,
-                arm * 2f
+            bounds: new Rect(
+                x: cx - 0.75f,
+                y: cy - arm,
+                width: 1.5f,
+                height: arm * 2f
             ),
-            fg,
-            Radii.Capsule
+            color: fg,
+            radius: Radii.Capsule
         );
     }
 
@@ -252,8 +259,8 @@ public sealed class SearchField : Widget
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
-        if (ShowClear && ClearHitBox().Contains(point.X, point.Y)) return this;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
+        if (ShowClear && ClearHitBox().Contains(px: point.X, py: point.Y)) return this;
 
         var hit = _field.HitTest(point);
         if (hit != null) return hit;
@@ -262,10 +269,7 @@ public sealed class SearchField : Widget
         return _field;
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return [_field];
-    }
+    public override IEnumerable<Widget> GetChildren() => [_field];
 
     private void Clear()
     {
@@ -293,14 +297,14 @@ public sealed class SearchField : Widget
 
     public override void OnPointerDown(Offset point)
     {
-        if (!ShowClear || !ClearHitBox().Contains(point.X, point.Y)) return;
+        if (!ShowClear || !ClearHitBox().Contains(px: point.X, py: point.Y)) return;
         _clearPressed = true;
         MarkNeedsPaint();
     }
 
     public override void OnPointerUp(Offset point)
     {
-        if (_clearPressed && ClearHitBox().Contains(point.X, point.Y))
+        if (_clearPressed && ClearHitBox().Contains(px: point.X, py: point.Y))
             Clear();
         if (_clearPressed)
         {

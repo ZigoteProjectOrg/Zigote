@@ -38,40 +38,27 @@ public static class Save
 
     public static SaveWriteResult Write<T>(string slot, T state)
     {
-        return Store?.Write(slot, state) ?? new SaveWriteResult(
-            SaveStatus.IoError,
-            "No save store assigned."
+        return Store?.Write(slot: slot, state: state) ?? new SaveWriteResult(
+            Status: SaveStatus.IoError,
+            Error: "No save store assigned."
         );
     }
 
     public static SaveWriteResult Write<T>(string slot, T state, JsonTypeInfo<T> typeInfo)
     {
-        return Store?.Write(slot, state, typeInfo) ??
-               new SaveWriteResult(SaveStatus.IoError, "No save store assigned.");
+        return Store?.Write(slot: slot, state: state, typeInfo: typeInfo) ??
+               new SaveWriteResult(Status: SaveStatus.IoError, Error: "No save store assigned.");
     }
 
-    public static SaveReadResult<T> Read<T>(string slot)
-    {
-        return Store?.Read<T>(slot) ?? new SaveReadResult<T>(SaveStatus.NotFound);
-    }
+    public static SaveReadResult<T> Read<T>(string slot) =>
+        Store?.Read<T>(slot) ?? new SaveReadResult<T>(SaveStatus.NotFound);
 
-    public static SaveReadResult<T> Read<T>(string slot, JsonTypeInfo<T> typeInfo)
-    {
-        return Store?.Read(slot, typeInfo) ?? new SaveReadResult<T>(SaveStatus.NotFound);
-    }
+    public static SaveReadResult<T> Read<T>(string slot, JsonTypeInfo<T> typeInfo) =>
+        Store?.Read(slot: slot, typeInfo: typeInfo) ?? new SaveReadResult<T>(SaveStatus.NotFound);
 
-    public static bool Exists(string slot)
-    {
-        return Store?.Exists(slot) ?? false;
-    }
+    public static bool Exists(string slot) => Store?.Exists(slot) ?? false;
 
-    public static bool Delete(string slot)
-    {
-        return Store?.Delete(slot) ?? false;
-    }
+    public static bool Delete(string slot) => Store?.Delete(slot) ?? false;
 
-    public static IReadOnlyList<SaveSlotInfo> List()
-    {
-        return Store?.List() ?? [];
-    }
+    public static IReadOnlyList<SaveSlotInfo> List() => Store?.List() ?? [];
 }

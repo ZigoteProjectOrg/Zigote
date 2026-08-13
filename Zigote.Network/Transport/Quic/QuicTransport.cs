@@ -54,14 +54,17 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
 
         if (!QuicListener.IsSupported)
         {
-            Listener?.OnError(0, "QUIC is not supported on this platform (MsQuic unavailable).");
+            Listener?.OnError(
+                connectionId: 0,
+                error: "QUIC is not supported on this platform (MsQuic unavailable)."
+            );
             return;
         }
 
         Role = TransportRole.Server;
         _cts = new CancellationTokenSource();
         _nextConnectionId = 0;
-        _ = RunServerAsync(port, _cts.Token);
+        _ = RunServerAsync(port: port, token: _cts.Token);
     }
 
     public void StartClient(string host, int port)
@@ -70,59 +73,67 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
 
         if (!QuicConnection.IsSupported)
         {
-            Listener?.OnError(0, "QUIC is not supported on this platform (MsQuic unavailable).");
+            Listener?.OnError(
+                connectionId: 0,
+                error: "QUIC is not supported on this platform (MsQuic unavailable)."
+            );
             return;
         }
 
         Role = TransportRole.Client;
         _cts = new CancellationTokenSource();
-        _ = RunClientAsync(host, port, _cts.Token);
+        _ = RunClientAsync(host: host, port: port, token: _cts.Token);
     }
 
     public void Update(float deltaTime)
     {
         while (_events.TryDequeue(out var ev))
+        {
             switch (ev.Kind)
             {
                 case EventKind.Connected:
                     Listener?.OnConnected(ev.ConnectionId);
                     break;
                 case EventKind.Disconnected:
-                    Listener?.OnDisconnected(ev.ConnectionId, ev.Reason);
+                    Listener?.OnDisconnected(connectionId: ev.ConnectionId, reason: ev.Reason);
                     break;
                 case EventKind.Receive:
                     Listener?.OnReceive(
-                        ev.ConnectionId,
-                        ev.Payload!,
-                        ev.Delivery,
-                        ev.Channel
+                        connectionId: ev.ConnectionId,
+                        payload: ev.Payload!,
+                        delivery: ev.Delivery,
+                        channel: ev.Channel
                     );
                     break;
                 case EventKind.Error:
-                    Listener?.OnError(ev.ConnectionId, ev.Error ?? "transport error");
+                    Listener?.OnError(
+                        connectionId: ev.ConnectionId,
+                        error: ev.Error ?? "transport error"
+                    );
                     break;
             }
+        }
 
         foreach (var conn in _conns.Values)
-            TickConnection(conn, deltaTime);
+            TickConnection(conn: conn, dt: deltaTime);
     }
 
     public void Send(int connectionId, ReadOnlySpan<byte> payload, DeliveryMethod delivery,
         int channel = 0)
     {
-        if (!_conns.TryGetValue(connectionId, out var conn) || conn.Closing) return;
+        if (!_conns.TryGetValue(key: connectionId, value: out var conn) || conn.Closing) return;
         SendFrame(
-            conn,
-            payload,
-            (byte)delivery,
-            (byte)channel
+            conn: conn,
+            payload: payload,
+            delivery: (byte)delivery,
+            channel: (byte)channel
         );
     }
 
     public void Disconnect(int connectionId)
     {
-        if (_conns.TryGetValue(connectionId, out var conn))
-            CloseConnection(conn, DisconnectReason.LocalClose, true);
+        if (_conns.TryGetValue(key: connectionId, value: out var conn))
+            CloseConnection(conn: conn, reason: DisconnectReason.LocalClose, notifyRemote: true);
     }
 
     public void Stop()
@@ -134,7 +145,13 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
             _cts?.Cancel();
 
             foreach (var conn in _conns.Values)
-                CloseConnection(conn, DisconnectReason.LocalClose, false);
+            {
+                CloseConnection(
+                    conn: conn,
+                    reason: DisconnectReason.LocalClose,
+                    notifyRemote: false
+                );
+            }
 
             _ = DisposeListenerAsync(_listener);
             _listener = null;
@@ -150,15 +167,10 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
         }
     }
 
-    public NetworkStats? GetStats(int connectionId)
-    {
-        return _conns.TryGetValue(connectionId, out var conn) ? conn.Stats : null;
-    }
+    public NetworkStats? GetStats(int connectionId) =>
+        _conns.TryGetValue(key: connectionId, value: out var conn) ? conn.Stats : null;
 
-    public void Dispose()
-    {
-        Stop();
-    }
+    public void Dispose() => Stop();
 
     private void TickConnection(Conn conn, float dt)
     {
@@ -166,21 +178,23 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
 
         conn.TimeSinceReceive += dt;
         conn.TimeSinceSend += dt;
-        UpdateBandwidth(conn, dt);
+        UpdateBandwidth(conn: conn, dt: dt);
 
         if (conn.TimeSinceReceive >= _config.ConnectionTimeout)
         {
-            CloseConnection(conn, DisconnectReason.Timeout, true);
+            CloseConnection(conn: conn, reason: DisconnectReason.Timeout, notifyRemote: true);
             return;
         }
 
         if (conn.TimeSinceSend >= _config.KeepAliveInterval)
+        {
             SendFrame(
-                conn,
-                ReadOnlySpan<byte>.Empty,
-                KeepAliveDelivery,
-                0
+                conn: conn,
+                payload: ReadOnlySpan<byte>.Empty,
+                delivery: KeepAliveDelivery,
+                channel: 0
             );
+        }
     }
 
     private static void UpdateBandwidth(Conn conn, float dt)
@@ -200,9 +214,9 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
         var stream = conn.Stream;
         if (stream is null) return;
 
-        var headerLen = VarUIntByteLength((uint)payload.Length) + 2;
-        var frame = new byte[headerLen + payload.Length];
-        var offset = WriteVarUInt(frame, (uint)payload.Length);
+        int headerLen = VarUIntByteLength((uint)payload.Length) + 2;
+        byte[] frame = new byte[headerLen + payload.Length];
+        int offset = WriteVarUInt(buffer: frame, value: (uint)payload.Length);
         frame[offset++] = delivery;
         frame[offset++] = channel;
         payload.CopyTo(frame.AsSpan(offset));
@@ -212,7 +226,7 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
         conn.Stats.BytesSent += frame.Length;
         conn.WindowBytesSent += frame.Length;
 
-        _ = WriteFrameAsync(conn, frame);
+        _ = WriteFrameAsync(conn: conn, frame: frame);
     }
 
     private async Task WriteFrameAsync(Conn conn, byte[] frame)
@@ -222,7 +236,8 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
             await conn.WriteLock.WaitAsync(conn.Token).ConfigureAwait(false);
             try
             {
-                await conn.Stream!.WriteAsync(frame, conn.Token).ConfigureAwait(false);
+                await conn.Stream!.WriteAsync(buffer: frame, cancellationToken: conn.Token)
+                    .ConfigureAwait(false);
                 await conn.Stream!.FlushAsync(conn.Token).ConfigureAwait(false);
             }
             finally
@@ -230,12 +245,14 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
                 conn.WriteLock.Release();
             }
         }
-        catch (OperationCanceledException)
-        {
-        }
+        catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            EnqueueDisconnect(conn, DisconnectReason.TransportError, ex.Message);
+            EnqueueDisconnect(
+                conn: conn,
+                reason: DisconnectReason.TransportError,
+                error: ex.Message
+            );
         }
     }
 
@@ -248,7 +265,7 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
             _serverCert = CreateDevCertificate();
 
             var options = new QuicListenerOptions {
-                ListenEndPoint = new IPEndPoint(IPAddress.IPv6Any, port),
+                ListenEndPoint = new IPEndPoint(address: IPAddress.IPv6Any, port: port),
                 ApplicationProtocols = [Alpn],
                 ConnectionOptionsCallback = (_, _, _) => ValueTask.FromResult(
                     new QuicServerConnectionOptions {
@@ -262,7 +279,8 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
                 ),
             };
 
-            _listener = await QuicListener.ListenAsync(options, token).ConfigureAwait(false);
+            _listener = await QuicListener.ListenAsync(options: options, cancellationToken: token)
+                .ConfigureAwait(false);
             IsRunning = true;
 
             while (!token.IsCancellationRequested)
@@ -275,23 +293,21 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
                     continue;
                 }
 
-                _ = AcceptConnectionAsync(quic, token);
+                _ = AcceptConnectionAsync(quic: quic, token: token);
             }
         }
-        catch (OperationCanceledException)
-        {
-        }
+        catch (OperationCanceledException) { }
         catch (Exception ex)
         {
             IsRunning = false;
-            _events.Enqueue(Event.MakeError(0, $"QUIC server failed: {ex.Message}"));
+            _events.Enqueue(Event.MakeError(id: 0, error: $"QUIC server failed: {ex.Message}"));
         }
     }
 
     private async Task AcceptConnectionAsync(QuicConnection quic, CancellationToken token)
     {
-        var id = Interlocked.Increment(ref _nextConnectionId);
-        var conn = new Conn(id, quic, _cts!);
+        int id = Interlocked.Increment(ref _nextConnectionId);
+        var conn = new Conn(id: id, quic: quic, cts: _cts!);
 
         try
         {
@@ -299,10 +315,14 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
             conn.Stream = stream;
 
             // First framed payload is the handshake carrying the client's ProtocolId.
-            var handshake = await ReadFrameAsync(conn).ConfigureAwait(false);
+            byte[]? handshake = await ReadFrameAsync(conn).ConfigureAwait(false);
             if (handshake is null || !VerifyHandshake(handshake))
             {
-                EnqueueDisconnect(conn, DisconnectReason.ProtocolMismatch, "protocol id mismatch");
+                EnqueueDisconnect(
+                    conn: conn,
+                    reason: DisconnectReason.ProtocolMismatch,
+                    error: "protocol id mismatch"
+                );
                 await quic.CloseAsync(0).ConfigureAwait(false);
                 await quic.DisposeAsync().ConfigureAwait(false);
                 return;
@@ -316,12 +336,10 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
             _events.Enqueue(Event.MakeConnected(id));
             _ = ReadLoopAsync(conn);
         }
-        catch (OperationCanceledException)
-        {
-        }
+        catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            _events.Enqueue(Event.MakeError(id, $"accept failed: {ex.Message}"));
+            _events.Enqueue(Event.MakeError(id: id, error: $"accept failed: {ex.Message}"));
             try
             {
                 await quic.DisposeAsync().ConfigureAwait(false);
@@ -338,11 +356,11 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
     private async Task RunClientAsync(string host, int port, CancellationToken token)
     {
         QuicConnection? quic = null;
-        var conn = new Conn(ServerConnectionId, null!, _cts!);
+        var conn = new Conn(id: ServerConnectionId, quic: null!, cts: _cts!);
 
         try
         {
-            var endpoint = await ResolveAsync(host, port).ConfigureAwait(false);
+            var endpoint = await ResolveAsync(host: host, port: port).ConfigureAwait(false);
 
             var options = new QuicClientConnectionOptions {
                 RemoteEndPoint = endpoint,
@@ -357,26 +375,34 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
             };
 
             using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(token);
-            connectCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(0.1f, _config.ConnectTimeout)));
+            connectCts.CancelAfter(
+                TimeSpan.FromSeconds(Math.Max(val1: 0.1f, val2: _config.ConnectTimeout))
+            );
 
-            quic = await QuicConnection.ConnectAsync(options, connectCts.Token)
+            quic = await QuicConnection.ConnectAsync(
+                    options: options,
+                    cancellationToken: connectCts.Token
+                )
                 .ConfigureAwait(false);
             conn.Quic = quic;
             IsRunning = true;
 
-            var stream = await quic.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, token)
+            var stream = await quic.OpenOutboundStreamAsync(
+                    type: QuicStreamType.Bidirectional,
+                    cancellationToken: token
+                )
                 .ConfigureAwait(false);
             conn.Stream = stream;
 
             SendHandshake(conn);
 
-            var ack = await ReadFrameAsync(conn).ConfigureAwait(false);
+            byte[]? ack = await ReadFrameAsync(conn).ConfigureAwait(false);
             if (ack is null || !VerifyHandshake(ack))
             {
                 EnqueueDisconnect(
-                    conn,
-                    DisconnectReason.ProtocolMismatch,
-                    "server protocol id mismatch"
+                    conn: conn,
+                    reason: DisconnectReason.ProtocolMismatch,
+                    error: "server protocol id mismatch"
                 );
                 await quic.CloseAsync(0).ConfigureAwait(false);
                 await quic.DisposeAsync().ConfigureAwait(false);
@@ -392,7 +418,10 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
         {
             IsRunning = false;
             _events.Enqueue(
-                Event.MakeDisconnected(ServerConnectionId, DisconnectReason.ConnectFailed)
+                Event.MakeDisconnected(
+                    id: ServerConnectionId,
+                    reason: DisconnectReason.ConnectFailed
+                )
             );
             if (quic is not null) await SafeDisposeAsync(quic).ConfigureAwait(false);
         }
@@ -400,10 +429,13 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
         {
             IsRunning = false;
             _events.Enqueue(
-                Event.MakeError(ServerConnectionId, $"QUIC connect failed: {ex.Message}")
+                Event.MakeError(id: ServerConnectionId, error: $"QUIC connect failed: {ex.Message}")
             );
             _events.Enqueue(
-                Event.MakeDisconnected(ServerConnectionId, DisconnectReason.ConnectFailed)
+                Event.MakeDisconnected(
+                    id: ServerConnectionId,
+                    reason: DisconnectReason.ConnectFailed
+                )
             );
             if (quic is not null) await SafeDisposeAsync(quic).ConfigureAwait(false);
         }
@@ -417,10 +449,14 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
         {
             while (!conn.Token.IsCancellationRequested)
             {
-                var payload = await ReadFrameAsync(conn).ConfigureAwait(false);
+                byte[]? payload = await ReadFrameAsync(conn).ConfigureAwait(false);
                 if (payload is null)
                 {
-                    EnqueueDisconnect(conn, DisconnectReason.RemoteClose, null);
+                    EnqueueDisconnect(
+                        conn: conn,
+                        reason: DisconnectReason.RemoteClose,
+                        error: null
+                    );
                     return;
                 }
 
@@ -434,20 +470,22 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
 
                 _events.Enqueue(
                     Event.MakeReceive(
-                        conn.Id,
-                        payload,
-                        (DeliveryMethod)conn.LastDelivery,
-                        conn.LastChannel
+                        id: conn.Id,
+                        payload: payload,
+                        delivery: (DeliveryMethod)conn.LastDelivery,
+                        channel: conn.LastChannel
                     )
                 );
             }
         }
-        catch (OperationCanceledException)
-        {
-        }
+        catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            EnqueueDisconnect(conn, DisconnectReason.TransportError, ex.Message);
+            EnqueueDisconnect(
+                conn: conn,
+                reason: DisconnectReason.TransportError,
+                error: ex.Message
+            );
         }
     }
 
@@ -456,18 +494,19 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
     {
         var stream = conn.Stream!;
 
-        var (length, headerBytes) =
-            await ReadVarUIntAsync(stream, conn.Token).ConfigureAwait(false);
+        (long length, int headerBytes) =
+            await ReadVarUIntAsync(stream: stream, token: conn.Token).ConfigureAwait(false);
         if (length < 0) return null; // EOF before any header byte
         if (length > MaxFrameLength)
             throw new InvalidOperationException($"frame too large ({length} bytes)");
 
-        var delivery = await ReadOneAsync(stream, conn.Token).ConfigureAwait(false);
-        var channel = await ReadOneAsync(stream, conn.Token).ConfigureAwait(false);
+        int delivery = await ReadOneAsync(stream: stream, token: conn.Token).ConfigureAwait(false);
+        int channel = await ReadOneAsync(stream: stream, token: conn.Token).ConfigureAwait(false);
         if (delivery < 0 || channel < 0) return null;
 
-        var payload = new byte[(int)length];
-        if (!await ReadExactAsync(stream, payload, conn.Token).ConfigureAwait(false)) return null;
+        byte[] payload = new byte[(int)length];
+        if (!await ReadExactAsync(stream: stream, buffer: payload, token: conn.Token)
+                .ConfigureAwait(false)) return null;
 
         conn.LastDelivery = (byte)delivery;
         conn.LastChannel = channel;
@@ -480,19 +519,19 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
     private void SendHandshake(Conn conn)
     {
         Span<byte> id = stackalloc byte[4];
-        BinaryPrimitives.WriteUInt32LittleEndian(id, _config.ProtocolId);
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: id, value: _config.ProtocolId);
         SendFrame(
-            conn,
-            id,
-            HandshakeDelivery,
-            0
+            conn: conn,
+            payload: id,
+            delivery: HandshakeDelivery,
+            channel: 0
         );
     }
 
     private bool VerifyHandshake(byte[] payload)
     {
         if (payload.Length < 4) return false;
-        var theirId = BinaryPrimitives.ReadUInt32LittleEndian(payload);
+        uint theirId = BinaryPrimitives.ReadUInt32LittleEndian(payload);
         return theirId == _config.ProtocolId;
     }
 
@@ -502,9 +541,9 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
     {
         if (!conn.MarkClosing()) return;
 
-        _conns.TryRemove(conn.Id, out _);
+        _conns.TryRemove(key: conn.Id, value: out _);
         if (notifyRemote)
-            _events.Enqueue(Event.MakeDisconnected(conn.Id, reason));
+            _events.Enqueue(Event.MakeDisconnected(id: conn.Id, reason: reason));
 
         _ = TeardownAsync(conn);
     }
@@ -513,10 +552,10 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
     {
         if (!conn.MarkClosing()) return;
 
-        _conns.TryRemove(conn.Id, out _);
+        _conns.TryRemove(key: conn.Id, value: out _);
         if (error is not null)
-            _events.Enqueue(Event.MakeError(conn.Id, error));
-        _events.Enqueue(Event.MakeDisconnected(conn.Id, reason));
+            _events.Enqueue(Event.MakeError(id: conn.Id, error: error));
+        _events.Enqueue(Event.MakeDisconnected(id: conn.Id, reason: reason));
 
         _ = TeardownAsync(conn);
     }
@@ -580,38 +619,45 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
     private static X509Certificate2 CreateDevCertificate()
     {
         using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-        var request = new CertificateRequest("CN=zigote", ecdsa, HashAlgorithmName.SHA256);
+        var request = new CertificateRequest(
+            subjectName: "CN=zigote",
+            key: ecdsa,
+            hashAlgorithm: HashAlgorithmName.SHA256
+        );
         var now = DateTimeOffset.UtcNow;
-        return request.CreateSelfSigned(now.AddMinutes(-5), now.AddYears(1));
+        return request.CreateSelfSigned(notBefore: now.AddMinutes(-5), notAfter: now.AddYears(1));
     }
 
     private static async Task<IPEndPoint> ResolveAsync(string host, int port)
     {
-        if (IPAddress.TryParse(host, out var ip))
-            return new IPEndPoint(ip, port);
+        if (IPAddress.TryParse(ipString: host, address: out var ip))
+            return new IPEndPoint(address: ip, port: port);
 
         var addresses = await Dns.GetHostAddressesAsync(host).ConfigureAwait(false);
         if (addresses.Length == 0)
             throw new InvalidOperationException($"could not resolve host '{host}'");
-        return new IPEndPoint(addresses[0], port);
+        return new IPEndPoint(address: addresses[0], port: port);
     }
 
     // ── Stream read helpers ─────────────────────────────────────────────────
 
     private static async Task<int> ReadOneAsync(QuicStream stream, CancellationToken token)
     {
-        var one = new byte[1];
-        var read = await stream.ReadAsync(one, token).ConfigureAwait(false);
+        byte[] one = new byte[1];
+        int read = await stream.ReadAsync(buffer: one, cancellationToken: token)
+            .ConfigureAwait(false);
         return read == 0 ? -1 : one[0];
     }
 
     private static async Task<bool> ReadExactAsync(QuicStream stream, byte[] buffer,
         CancellationToken token)
     {
-        var offset = 0;
+        int offset = 0;
         while (offset < buffer.Length)
         {
-            var read = await stream.ReadAsync(buffer.AsMemory(offset), token).ConfigureAwait(false);
+            int read = await stream
+                .ReadAsync(buffer: buffer.AsMemory(offset), cancellationToken: token)
+                .ConfigureAwait(false);
             if (read == 0) return false;
             offset += read;
         }
@@ -624,16 +670,18 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
         CancellationToken token)
     {
         ulong result = 0;
-        var shift = 0;
-        var headerBytes = 0;
+        int shift = 0;
+        int headerBytes = 0;
 
         while (shift < 35)
         {
-            var b = await ReadOneAsync(stream, token).ConfigureAwait(false);
+            int b = await ReadOneAsync(stream: stream, token: token).ConfigureAwait(false);
             if (b < 0)
+            {
                 return headerBytes == 0
                     ? (-1, 0)
                     : throw new EndOfStreamException("truncated length prefix");
+            }
 
             headerBytes++;
             result |= (ulong)(b & 0x7F) << shift;
@@ -648,7 +696,7 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
 
     private static int VarUIntByteLength(uint value)
     {
-        var count = 1;
+        int count = 1;
         while (value >= 0x80)
         {
             value >>= 7;
@@ -660,7 +708,7 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
 
     private static int WriteVarUInt(byte[] buffer, uint value)
     {
-        var offset = 0;
+        int offset = 0;
         while (value >= 0x80)
         {
             buffer[offset++] = (byte)((value & 0x7F) | 0x80);
@@ -675,7 +723,6 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
 
     private sealed class Conn(int id, QuicConnection quic, CancellationTokenSource cts)
     {
-        private int _closing;
         public int LastChannel;
 
         // Scratch from the last decoded frame (read loop is single-consumer, so this is safe).
@@ -687,20 +734,18 @@ public sealed class QuicTransport(NetConfig? config = null) : ITransport
         public long WindowBytesReceived;
         public long WindowBytesSent;
         public float WindowTime;
+        private int _closing;
 
         public int Id { get; } = id;
         public QuicConnection? Quic { get; set; } = quic;
         public QuicStream? Stream { get; set; }
-        public SemaphoreSlim WriteLock { get; } = new(1, 1);
+        public SemaphoreSlim WriteLock { get; } = new(initialCount: 1, maxCount: 1);
         public NetworkStats Stats { get; } = new();
         public CancellationToken Token { get; } = cts.Token;
 
         public bool Closing => Volatile.Read(ref _closing) != 0;
 
-        public bool MarkClosing()
-        {
-            return Interlocked.Exchange(ref _closing, 1) == 0;
-        }
+        public bool MarkClosing() => Interlocked.Exchange(location1: ref _closing, value: 1) == 0;
     }
 
     // ── Cross-thread event bridge ───────────────────────────────────────────

@@ -13,14 +13,9 @@ namespace Zigote.UI.Widgets.Controls;
 /// </summary>
 public sealed class TextSpan
 {
-    public TextSpan()
-    {
-    }
+    public TextSpan() { }
 
-    public TextSpan(string text)
-    {
-        Text = text;
-    }
+    public TextSpan(string text) => Text = text;
 
     public TextSpan(string text, Color color)
     {
@@ -67,46 +62,38 @@ public class RichText : LeafWidget
     private const string EllipsisGlyph = "…";
 
     private readonly List<TextSpan> _spans = [];
+    internal float BuiltBaseFs;
+    internal float BuiltLhFactor = 1.3f;
+    internal string FullText = "";
+    internal int LineCount;
+    internal LineMetrics[] Lines = [];
+    internal bool Rtl;
+    internal int RunCount;
 
     // ── Cached layout (rebuilt only when an input changes; see EnsureLayout) ──
     internal PlacedRun[] Runs = [];
-    internal int RunCount;
-    internal LineMetrics[] Lines = [];
-    internal int LineCount;
-    internal string FullText = "";
     internal int[] SpanOffsets = [];
-    internal bool Rtl;
-    internal float BuiltBaseFs;
-    internal float BuiltLhFactor = 1.3f;
     internal ThemeData ThemeRef = ThemeData.Dark;
-
-    private int _version;
-    private int _builtVersion = -1;
-    private float _builtWidth = -1f;
-    private bool _builtRtl;
+    private string? _builtFamily;
     private int _builtMaxLines;
     private TextOverflow _builtOverflow;
-    private FontWeight _builtWeight;
+    private bool _builtRtl;
     private FontStyle _builtStyle;
-    private string? _builtFamily;
-    private float _widest;
+    private int _builtVersion = -1;
+    private FontWeight _builtWeight;
+    private float _builtWidth = -1f;
+    private Size _size;
     private float _totalHeight;
     private bool _truncated;
-    private Size _size;
 
-    public RichText()
-    {
-    }
+    private int _version;
+    private float _widest;
 
-    public RichText(IEnumerable<TextSpan> spans)
-    {
-        _spans.AddRange(spans);
-    }
+    public RichText() { }
 
-    public RichText(params TextSpan[] spans)
-    {
-        _spans.AddRange(spans);
-    }
+    public RichText(IEnumerable<TextSpan> spans) => _spans.AddRange(spans);
+
+    public RichText(params TextSpan[] spans) => _spans.AddRange(spans);
 
     /// <summary>The styled runs, in flow order. Reassigning invalidates the cached layout.</summary>
     public List<TextSpan> Spans
@@ -134,7 +121,10 @@ public class RichText : LeafWidget
     /// </summary>
     public TextAlign? Align { get; set; }
 
-    /// <summary>Explicit direction override; <c>null</c> follows the ambient <see cref="Directionality" />.</summary>
+    /// <summary>
+    ///     Explicit direction override; <c>null</c> follows the ambient <see cref="Directionality" />
+    ///     .
+    /// </summary>
     public TextDirection? LayoutDirection { get; set; }
 
     /// <summary>Optional cap on rendered lines. <c>null</c> leaves wrapping unbounded.</summary>
@@ -163,12 +153,12 @@ public class RichText : LeafWidget
     public override int DebugStateHash()
     {
         return HashCode.Combine(
-            _version,
-            RunCount,
-            Color?.R,
-            Color?.G,
-            Color?.B,
-            _truncated
+            value1: _version,
+            value2: RunCount,
+            value3: Color?.R,
+            value4: Color?.G,
+            value5: Color?.B,
+            value6: _truncated
         );
     }
 
@@ -177,23 +167,23 @@ public class RichText : LeafWidget
         ThemeRef = ThemeProvider.Of(BuildContext.Current);
         Rtl = (LayoutDirection ?? Directionality.Of(BuildContext.Current)) == TextDirection.Rtl;
 
-        var baseFs = FontSize ?? ThemeRef.FontSizeBody;
-        var lhFactor = LineHeight ?? ThemeRef.LineHeight;
-        var maxW = float.IsFinite(c.MaxWidth) && c.MaxWidth > 0f ? c.MaxWidth : float.MaxValue;
+        float baseFs = FontSize ?? ThemeRef.FontSizeBody;
+        float lhFactor = LineHeight ?? ThemeRef.LineHeight;
+        float maxW = float.IsFinite(c.MaxWidth) && c.MaxWidth > 0f ? c.MaxWidth : float.MaxValue;
 
-        EnsureLayout(maxW, baseFs, lhFactor);
+        EnsureLayout(maxWidth: maxW, baseFs: baseFs, lhFactor: lhFactor);
 
-        _size = c.Constrain(new Size(_widest, _totalHeight));
+        _size = c.Constrain(new Size(width: _widest, height: _totalHeight));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
@@ -201,65 +191,72 @@ public class RichText : LeafWidget
     {
         if (RunCount == 0) return;
 
-        var needsClip = _truncated || MaxLines is > 0 || _widest > Bounds.Width + 0.5f;
+        bool needsClip = _truncated || MaxLines is > 0 || _widest > Bounds.Width + 0.5f;
         if (needsClip) paint.AddClipStart(Bounds);
 
-        for (var i = 0; i < RunCount; i++)
+        for (int i = 0; i < RunCount; i++)
         {
             ref readonly var run = ref Runs[i];
             var line = Lines[run.Line];
-            var x = Bounds.X + LineAlignOffset(run.Line) + run.X;
-            var top = Bounds.Y + line.Top;
-            var baseline = Bounds.Y + line.Baseline;
+            float x = Bounds.X + LineAlignOffset(run.Line) + run.X;
+            float top = Bounds.Y + line.Top;
+            float baseline = Bounds.Y + line.Baseline;
 
             var span = _spans[run.Span];
             if (span.Background is { } bg)
+            {
                 paint.AddRect(
-                    new Rect(
-                        x,
-                        top,
-                        run.Width,
-                        line.Height
+                    bounds: new Rect(
+                        x: x,
+                        y: top,
+                        width: run.Width,
+                        height: line.Height
                     ),
-                    bg
+                    color: bg
                 );
+            }
 
-            var fs = SpanFs(span);
+            float fs = SpanFs(span);
             var color = span.Color ?? Color ?? ThemeRef.Label1;
             paint.AddText(
-                run.Slice,
-                x,
-                baseline,
-                color,
-                fs,
-                BuiltLhFactor,
-                span.Weight ?? FontWeight,
-                span.Style ?? FontStyle,
+                text: run.Slice,
+                baselineX: x,
+                baselineY: baseline,
+                color: color,
+                fontSize: fs,
+                lineHeight: BuiltLhFactor,
+                fontWeight: span.Weight ?? FontWeight,
+                fontStyle: span.Style ?? FontStyle,
                 fontFamily: span.FontFamily ?? FontFamily
             );
 
             // Text decorations are plain rects — no dedicated paint primitive needed.
-            var deco = MathF.Max(1f, fs / 14f);
+            float deco = MathF.Max(x: 1f, y: fs / 14f);
             if (span.Underline)
+            {
                 paint.AddRect(
-                    new Rect(
-                        x,
-                        baseline + deco,
-                        run.Width,
-                        deco
+                    bounds: new Rect(
+                        x: x,
+                        y: baseline + deco,
+                        width: run.Width,
+                        height: deco
                     ),
-                    color
+                    color: color
                 );
+            }
+
             if (span.Strikethrough)
+            {
                 paint.AddRect(
-                    new Rect(
-                        x,
-                        baseline - fs * 0.3f,
-                        run.Width,
-                        deco
+                    bounds: new Rect(
+                        x: x,
+                        y: baseline - (fs * 0.3f),
+                        width: run.Width,
+                        height: deco
                     ),
-                    color
+                    color: color
                 );
+            }
         }
 
         if (needsClip) paint.AddClipEnd();
@@ -271,32 +268,26 @@ public class RichText : LeafWidget
     internal float LineAlignOffset(int line)
     {
         var align = Align ?? (Rtl ? TextAlign.Right : TextAlign.Left);
-        var lineW = Lines[line].Width;
+        float lineW = Lines[line].Width;
         return align switch {
-            TextAlign.Center => MathF.Max(0f, (Bounds.Width - lineW) / 2f),
-            TextAlign.Right => MathF.Max(0f, Bounds.Width - lineW),
+            TextAlign.Center => MathF.Max(x: 0f, y: (Bounds.Width - lineW) / 2f),
+            TextAlign.Right => MathF.Max(x: 0f, y: Bounds.Width - lineW),
             _ => 0f,
         };
     }
 
-    internal float SpanFs(TextSpan s)
-    {
-        return s.FontSize ?? FontSize ?? ThemeRef.FontSizeBody;
-    }
+    internal float SpanFs(TextSpan s) => s.FontSize ?? FontSize ?? ThemeRef.FontSizeBody;
 
-    internal TextSpan SpanAt(int index)
-    {
-        return _spans[index];
-    }
+    internal TextSpan SpanAt(int index) => _spans[index];
 
     internal float SpanWidth(TextSpan s, string text)
     {
         return TextMeasure.Width(
-            text,
-            SpanFs(s),
-            s.Weight ?? FontWeight,
-            s.Style ?? FontStyle,
-            s.FontFamily ?? FontFamily
+            text: text,
+            fontSize: SpanFs(s),
+            weight: s.Weight ?? FontWeight,
+            style: s.Style ?? FontStyle,
+            fontFamily: s.FontFamily ?? FontFamily
         );
     }
 
@@ -319,7 +310,7 @@ public class RichText : LeafWidget
         _builtStyle = FontStyle;
         _builtFamily = FontFamily;
 
-        BuildLayout(maxWidth, baseFs, lhFactor);
+        BuildLayout(maxWidth: maxWidth, baseFs: baseFs, lhFactor: lhFactor);
         OnLayoutRebuilt();
     }
 
@@ -332,8 +323,8 @@ public class RichText : LeafWidget
 
         // Full concatenated text + per-span global char offsets (semantics, selection, word-select).
         if (SpanOffsets.Length < _spans.Count + 1) SpanOffsets = new int[_spans.Count + 1];
-        var total = 0;
-        for (var s = 0; s < _spans.Count; s++)
+        int total = 0;
+        for (int s = 0; s < _spans.Count; s++)
         {
             SpanOffsets[s] = total;
             total += _spans[s].Text.Length;
@@ -347,24 +338,24 @@ public class RichText : LeafWidget
         };
 
         // ── Wrap state ──
-        var cursor = 0f; // x within the current line
-        var lineMaxFs = 0f;
-        var lineOpen = false;
+        float cursor = 0f; // x within the current line
+        float lineMaxFs = 0f;
+        bool lineOpen = false;
 
         // Current (open) run — a maximal same-span stretch on one line.
-        var curSpan = -1;
-        var runStart = 0;
-        var runEnd = 0;
-        var runX = 0f;
-        var runW = 0f;
+        int curSpan = -1;
+        int runStart = 0;
+        int runEnd = 0;
+        float runX = 0f;
+        float runW = 0f;
 
         // Whitespace measured but not yet committed: dropped at a wrap, placed before the next word.
-        var pendSpan = -1;
-        var pendStart = 0;
-        var pendEnd = 0;
-        var pendW = 0f;
+        int pendSpan = -1;
+        int pendStart = 0;
+        int pendEnd = 0;
+        float pendW = 0f;
 
-        var capped = false;
+        bool capped = false;
 
         void FlushRun()
         {
@@ -375,15 +366,15 @@ public class RichText : LeafWidget
             }
 
             if (Runs.Length == RunCount)
-                Array.Resize(ref Runs, Math.Max(8, Runs.Length * 2));
-            var spanText = _spans[curSpan].Text;
+                Array.Resize(array: ref Runs, newSize: Math.Max(val1: 8, val2: Runs.Length * 2));
+            string spanText = _spans[curSpan].Text;
             Runs[RunCount++] = new PlacedRun(
-                curSpan,
-                SpanOffsets[curSpan] + runStart,
-                spanText.Substring(runStart, runEnd - runStart),
-                runX,
-                runW,
-                LineCount
+                span: curSpan,
+                charStart: SpanOffsets[curSpan] + runStart,
+                slice: spanText.Substring(startIndex: runStart, length: runEnd - runStart),
+                x: runX,
+                width: runW,
+                line: LineCount
             );
             curSpan = -1;
         }
@@ -406,7 +397,7 @@ public class RichText : LeafWidget
             }
 
             cursor += w;
-            lineMaxFs = MathF.Max(lineMaxFs, fs);
+            lineMaxFs = MathF.Max(x: lineMaxFs, y: fs);
             lineOpen = true;
         }
 
@@ -414,11 +405,11 @@ public class RichText : LeafWidget
         {
             if (pendSpan < 0) return;
             Append(
-                pendSpan,
-                pendStart,
-                pendEnd,
-                pendW,
-                SpanFs(_spans[pendSpan])
+                span: pendSpan,
+                start: pendStart,
+                end: pendEnd,
+                w: pendW,
+                fs: SpanFs(_spans[pendSpan])
             );
             pendSpan = -1;
         }
@@ -428,16 +419,16 @@ public class RichText : LeafWidget
         {
             FlushRun();
             if (Lines.Length == LineCount)
-                Array.Resize(ref Lines, Math.Max(4, Lines.Length * 2));
-            var fs = lineMaxFs > 0f ? lineMaxFs : baseFs;
+                Array.Resize(array: ref Lines, newSize: Math.Max(val1: 4, val2: Lines.Length * 2));
+            float fs = lineMaxFs > 0f ? lineMaxFs : baseFs;
             Lines[LineCount] = new LineMetrics(
-                cursor,
-                fs,
-                0f,
-                0f,
-                0f
+                width: cursor,
+                maxFontSize: fs,
+                top: 0f,
+                height: 0f,
+                baseline: 0f
             );
-            _widest = MathF.Max(_widest, cursor);
+            _widest = MathF.Max(x: _widest, y: cursor);
             LineCount++;
             cursor = 0f;
             lineMaxFs = 0f;
@@ -445,17 +436,17 @@ public class RichText : LeafWidget
             return _builtMaxLines <= 0 || LineCount < _builtMaxLines;
         }
 
-        for (var s = 0; s < _spans.Count && !capped; s++)
+        for (int s = 0; s < _spans.Count && !capped; s++)
         {
             var span = _spans[s];
-            var t = span.Text;
+            string t = span.Text;
             if (t.Length == 0) continue;
-            var fs = SpanFs(span);
+            float fs = SpanFs(span);
 
-            var i = 0;
+            int i = 0;
             while (i < t.Length)
             {
-                var ch = t[i];
+                char ch = t[i];
                 if (ch == '\n')
                 {
                     pendSpan = -1; // line-trailing spaces vanish at a break
@@ -472,9 +463,9 @@ public class RichText : LeafWidget
 
                 if (ch == ' ')
                 {
-                    var st = i;
+                    int st = i;
                     while (i < t.Length && t[i] == ' ') i++;
-                    var w = SpanWidth(span, t[st..i]);
+                    float w = SpanWidth(s: span, text: t[st..i]);
                     if (pendSpan == s && pendEnd == st)
                     {
                         pendEnd = i;
@@ -494,19 +485,19 @@ public class RichText : LeafWidget
                 }
 
                 {
-                    var st = i;
+                    int st = i;
                     while (i < t.Length && t[i] != ' ' && t[i] != '\n') i++;
-                    var w = SpanWidth(span, t[st..i]);
+                    float w = SpanWidth(s: span, text: t[st..i]);
 
                     if (cursor + pendW + w <= maxWidth || cursor <= 0f)
                     {
                         ResolvePending();
                         Append(
-                            s,
-                            st,
-                            i,
-                            w,
-                            fs
+                            span: s,
+                            start: st,
+                            end: i,
+                            w: w,
+                            fs: fs
                         );
                     }
                     else
@@ -519,11 +510,11 @@ public class RichText : LeafWidget
                         }
 
                         Append(
-                            s,
-                            st,
-                            i,
-                            w,
-                            fs
+                            span: s,
+                            start: st,
+                            end: i,
+                            w: w,
+                            fs: fs
                         );
                     }
                 }
@@ -536,23 +527,20 @@ public class RichText : LeafWidget
             if (Overflow == TextOverflow.Ellipsis && RunCount > 0)
                 EllipsizeLastRun(maxWidth);
         }
-        else if (lineOpen || (LineCount == 0 && FullText.Length > 0))
-        {
-            EndLine();
-        }
+        else if (lineOpen || (LineCount == 0 && FullText.Length > 0)) EndLine();
 
         // ── Finalize line geometry (tops/baselines) + RTL mirroring ──
-        var top = 0f;
-        for (var l = 0; l < LineCount; l++)
+        float top = 0f;
+        for (int l = 0; l < LineCount; l++)
         {
             var line = Lines[l];
-            var height = line.MaxFontSize * lhFactor;
+            float height = line.MaxFontSize * lhFactor;
             Lines[l] = new LineMetrics(
-                line.Width,
-                line.MaxFontSize,
-                top,
-                height,
-                top + line.MaxFontSize * 0.8f
+                width: line.Width,
+                maxFontSize: line.MaxFontSize,
+                top: top,
+                height: height,
+                baseline: top + (line.MaxFontSize * 0.8f)
             );
             top += height;
         }
@@ -560,11 +548,13 @@ public class RichText : LeafWidget
         _totalHeight = top;
 
         if (Rtl)
-            for (var r = 0; r < RunCount; r++)
+        {
+            for (int r = 0; r < RunCount; r++)
             {
                 ref var run = ref Runs[r];
                 run = run.WithX(Lines[run.Line].Width - run.X - run.Width);
             }
+        }
     }
 
     /// <summary>
@@ -575,43 +565,44 @@ public class RichText : LeafWidget
     {
         ref var run = ref Runs[RunCount - 1];
         var span = _spans[run.Span];
-        var budget = MathF.Max(0f, maxWidth - run.X);
-        var ellipsisW = SpanWidth(span, EllipsisGlyph);
+        float budget = MathF.Max(x: 0f, y: maxWidth - run.X);
+        float ellipsisW = SpanWidth(s: span, text: EllipsisGlyph);
 
-        var text = run.Slice;
+        string text = run.Slice;
         int lo = 0, hi = text.Length;
         while (lo < hi)
         {
-            var mid = (lo + hi + 1) / 2;
-            if (SpanWidth(span, text[..mid]) + ellipsisW <= budget) lo = mid;
+            int mid = (lo + hi + 1) / 2;
+            if (SpanWidth(s: span, text: text[..mid]) + ellipsisW <= budget) lo = mid;
             else hi = mid - 1;
         }
 
-        var slice = text[..lo].TrimEnd() + EllipsisGlyph;
-        var w = SpanWidth(span, slice);
+        string slice = text[..lo].TrimEnd() + EllipsisGlyph;
+        float w = SpanWidth(s: span, text: slice);
         run = new PlacedRun(
-            run.Span,
-            run.CharStart,
-            slice,
-            run.X,
-            w,
-            run.Line
+            span: run.Span,
+            charStart: run.CharStart,
+            slice: slice,
+            x: run.X,
+            width: w,
+            line: run.Line
         );
 
         var line = Lines[run.Line];
         Lines[run.Line] = new LineMetrics(
-            run.X + w,
-            line.MaxFontSize,
-            line.Top,
-            line.Height,
-            line.Baseline
+            width: run.X + w,
+            maxFontSize: line.MaxFontSize,
+            top: line.Top,
+            height: line.Height,
+            baseline: line.Baseline
         );
     }
 
-    /// <summary>Called after the cached run layout is rebuilt (selection subclasses refresh advances here).</summary>
-    internal virtual void OnLayoutRebuilt()
-    {
-    }
+    /// <summary>
+    ///     Called after the cached run layout is rebuilt (selection subclasses refresh advances
+    ///     here).
+    /// </summary>
+    internal virtual void OnLayoutRebuilt() { }
 
     /// <summary>One placed same-span stretch on one line, with its pre-sliced paint string.</summary>
     internal readonly struct PlacedRun(
@@ -638,12 +629,12 @@ public class RichText : LeafWidget
         public PlacedRun WithX(float x2)
         {
             return new PlacedRun(
-                Span,
-                CharStart,
-                Slice,
-                x2,
-                Width,
-                Line
+                span: Span,
+                charStart: CharStart,
+                slice: Slice,
+                x: x2,
+                width: Width,
+                line: Line
             );
         }
     }

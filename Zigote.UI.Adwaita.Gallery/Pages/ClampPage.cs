@@ -18,24 +18,24 @@ public sealed class ClampPage : ComposedWidget
         var theme = ThemeProvider.Of(context);
 
         return new GalleryPage(
-            "Clamp",
-            "A maximum width for content, centred in whatever space it is given.",
-            MaterialIcons.FitScreen
+            title: "Clamp",
+            description: "A maximum width for content, centred in whatever space it is given.",
+            iconName: MaterialIcons.FitScreen
         ) {
             ClampWidth = 720f,
             Children = {
                 Demo.Group(
-                    "Maximum Width",
-                    "Every page in this gallery is inside one of these, at 600 px.",
+                    title: "Maximum Width",
+                    description: "Every page in this gallery is inside one of these, at 600 px.",
                     new AdwActionRow("Cap") {
                         Suffixes = {
                             new SizedBox(
-                                220f,
+                                width: 220f,
                                 child: new AdwSlider(
-                                    400f,
-                                    180f,
-                                    680f,
-                                    v => _max.Value = MathF.Round(v)
+                                    value: 400f,
+                                    min: 180f,
+                                    max: 680f,
+                                    onChanged: v => _max.Value = MathF.Round(v)
                                 )
                             ),
                         },
@@ -46,20 +46,24 @@ public sealed class ClampPage : ComposedWidget
                     )
                 ),
                 new Watch(() => Demo.Stage(
-                        new AdwClamp(
-                            new Column(
+                        child: new AdwClamp(
+                            child: new Column(
                                 spacing: Spacing.Md,
                                 mainAxisSize: MainAxisSize.Min,
                                 crossAxisAlignment: CrossAxisAlignment.Stretch
                             ) {
                                 Children = {
-                                    new Label(Sample, AdwTypography.Body, theme.OnBackground),
+                                    new Label(
+                                        text: Sample,
+                                        style: AdwTypography.Body,
+                                        color: theme.OnBackground
+                                    ),
                                     new AdwButton("A button inside the clamp") { Pill = true },
                                 },
                             },
-                            _max.Value
+                            maximumSize: _max.Value
                         ),
-                        Spacing.Md
+                        padding: Spacing.Md
                     )
                 ),
                 Demo.Caption("Narrow the window: the clamp gives way before the content wraps."),

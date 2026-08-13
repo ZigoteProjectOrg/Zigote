@@ -1,5 +1,4 @@
 using Zigote.Core.Animation;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.Material;
 
@@ -11,15 +10,15 @@ namespace Zigote.UI.Material;
 public class ProgressBar : Widget
 {
     private readonly AnimationController _anim;
+    private float _height = ControlMetrics.SliderTrack + 2f;
     private Size _size;
     private ThemeData _theme = ThemeData.Dark;
     private float? _value;
-    private float _height = ControlMetrics.SliderTrack + 2f;
 
     public ProgressBar(float? value = 0f)
     {
         // Duration matches the original dt*0.8 speed: 1/0.8 = 1.25 s per cycle.
-        _anim = new AnimationController(1.25f, this);
+        _anim = new AnimationController(durationSeconds: 1.25f, vsync: this);
         _anim.OnTick += MarkNeedsPaint;
         _value = value;
         if (value is null) _anim.Repeat(); // start indeterminate loop immediately
@@ -41,7 +40,7 @@ public class ProgressBar : Widget
     public float Height
     {
         get => _height;
-        set => SetLayout(ref _height, value);
+        set => SetLayout(field: ref _height, value: value);
     }
 
     public float? Radius { get; set; }
@@ -56,68 +55,75 @@ public class ProgressBar : Widget
     }
 
 
-    public override int DebugStateHash()
-    {
-        return HashCode.Combine(_value.GetHashCode(), _anim.Progress.GetHashCode());
-    }
+    public override int DebugStateHash() => HashCode.Combine(
+        value1: _value.GetHashCode(),
+        value2: _anim.Progress.GetHashCode()
+    );
 
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        var w = float.IsPositiveInfinity(c.MaxWidth) ? 200f : c.MaxWidth;
-        _size = c.Constrain(new Size(w, Height));
+        float w = float.IsPositiveInfinity(c.MaxWidth) ? 200f : c.MaxWidth;
+        _size = c.Constrain(new Size(width: w, height: Height));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
     public override void Paint(PaintList paint)
     {
         // Capsule track at the bar's full height; the rounded ends read as a pill.
-        var radius = Radius ?? Bounds.Height / 2f;
-        paint.AddRect(Bounds, _theme.Fill1, radius);
+        float radius = Radius ?? Bounds.Height / 2f;
+        paint.AddRect(bounds: Bounds, color: _theme.Fill1, radius: radius);
 
         if (_value is { } v)
         {
-            var fillW = MathF.Max(0f, Math.Clamp(v, 0f, 1f) * Bounds.Width);
+            float fillW = MathF.Max(
+                x: 0f,
+                y: Math.Clamp(value: v, min: 0f, max: 1f) * Bounds.Width
+            );
             if (fillW > 0)
+            {
                 paint.AddRect(
-                    new Rect(
-                        Bounds.X,
-                        Bounds.Y,
-                        fillW,
-                        Bounds.Height
+                    bounds: new Rect(
+                        x: Bounds.X,
+                        y: Bounds.Y,
+                        width: fillW,
+                        height: Bounds.Height
                     ),
-                    _theme.Primary,
-                    radius
+                    color: _theme.Primary,
+                    radius: radius
                 );
+            }
         }
         else
         {
             // Sliding block 30% wide, position driven by animation value.
-            var blockW = Bounds.Width * 0.30f;
-            var startX = Bounds.X + (Bounds.Width + blockW) * _anim.Value - blockW;
-            var visX = MathF.Max(Bounds.X, startX);
-            var visW = MathF.Min(Bounds.X + Bounds.Width, startX + blockW) - visX;
+            float blockW = Bounds.Width * 0.30f;
+            float startX = Bounds.X + ((Bounds.Width + blockW) * _anim.Value) - blockW;
+            float visX = MathF.Max(x: Bounds.X, y: startX);
+            float visW = MathF.Min(x: Bounds.X + Bounds.Width, y: startX + blockW) - visX;
             if (visW > 0)
+            {
                 paint.AddRect(
-                    new Rect(
-                        visX,
-                        Bounds.Y,
-                        visW,
-                        Bounds.Height
+                    bounds: new Rect(
+                        x: visX,
+                        y: Bounds.Y,
+                        width: visW,
+                        height: Bounds.Height
                     ),
-                    _theme.Primary,
-                    radius
+                    color: _theme.Primary,
+                    radius: radius
                 );
+            }
         }
     }
 }

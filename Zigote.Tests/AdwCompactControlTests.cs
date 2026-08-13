@@ -16,36 +16,53 @@ public class AdwCompactControlTests
 {
     private static Size Measure(Widget w, float maxWidth = 200f)
     {
-        var wrapper = new ThemeProvider(ThemeData.Dark, w);
-        wrapper.Measure(new Constraints(0f, maxWidth, 0f, 400f));
-        wrapper.Layout(new Offset(0f, 0f));
-        return new Size(w.Bounds.Width, w.Bounds.Height);
+        var wrapper = new ThemeProvider(data: ThemeData.Dark, child: w);
+        wrapper.Measure(
+            new Constraints(
+                minWidth: 0f,
+                maxWidth: maxWidth,
+                minHeight: 0f,
+                maxHeight: 400f
+            )
+        );
+        wrapper.Layout(new Offset(x: 0f, y: 0f));
+        return new Size(width: w.Bounds.Width, height: w.Bounds.Height);
     }
 
     [Fact]
     public void EveryCompactControlResolvesTheSameHeight()
     {
-        var heights = new[] {
+        float[] heights = new[] {
             Measure(new AdwEntry { Compact = true }).Height,
             Measure(new AdwDropDown(["one", "two"]) { Compact = true }).Height,
-            Measure(new AdwSpinButton(1, 0, 10) { Compact = true }).Height,
-            Measure(new AdwButton("Go", () => { }) { Compact = true }).Height,
+            Measure(new AdwSpinButton(value: 1, min: 0, max: 10) { Compact = true }).Height,
+            Measure(new AdwButton(label: "Go", onPressed: () => { }) { Compact = true }).Height,
         };
 
-        Assert.All(heights, h => Assert.Equal(AdwMetrics.CompactControlHeight, h, 3));
+        Assert.All(
+            collection: heights,
+            action: h => Assert.Equal(
+                expected: AdwMetrics.CompactControlHeight,
+                actual: h,
+                precision: 3
+            )
+        );
     }
 
     [Fact]
     public void EveryRegularControlResolvesTheSameHeight()
     {
-        var heights = new[] {
+        float[] heights = new[] {
             Measure(new AdwEntry()).Height,
             Measure(new AdwDropDown(["one", "two"])).Height,
-            Measure(new AdwSpinButton(1, 0, 10)).Height,
-            Measure(new AdwButton("Go", () => { })).Height,
+            Measure(new AdwSpinButton(value: 1, min: 0, max: 10)).Height,
+            Measure(new AdwButton(label: "Go", onPressed: () => { })).Height,
         };
 
-        Assert.All(heights, h => Assert.Equal(AdwMetrics.ButtonHeight, h, 3));
+        Assert.All(
+            collection: heights,
+            action: h => Assert.Equal(expected: AdwMetrics.ButtonHeight, actual: h, precision: 3)
+        );
         Assert.True(AdwMetrics.CompactControlHeight < AdwMetrics.ButtonHeight);
     }
 
@@ -57,14 +74,17 @@ public class AdwCompactControlTests
     [Fact]
     public void CompactSearchEntryKeepsItsTrailingButtonSquare()
     {
-        var search = new AdwSearchEntry { Compact = true, Text = "x" };
+        var search = new AdwSearchEntry {
+            Compact = true,
+            Text = "x",
+        };
         var size = Measure(search);
-        Assert.Equal(AdwMetrics.CompactControlHeight, size.Height, 3);
+        Assert.Equal(expected: AdwMetrics.CompactControlHeight, actual: size.Height, precision: 3);
 
         // Press the centre of the trailing square. Sized off EntryHeight instead, that box would
         // start 34px from the right of a 28px-tall field and this press would land in the text.
-        search.OnPointerDown(new Offset(size.Width - size.Height / 2f, size.Height / 2f));
-        Assert.Equal("", search.Text);
+        search.OnPointerDown(new Offset(x: size.Width - (size.Height / 2f), y: size.Height / 2f));
+        Assert.Equal(expected: "", actual: search.Text);
     }
 
     /// <summary>
@@ -75,20 +95,27 @@ public class AdwCompactControlTests
     [Fact]
     public void ButtonPaddingAndHeightFollowTheirLibadwaitaRole()
     {
-        var label = Measure(new AdwButton("Save", () => { }), 400f);
+        var label = Measure(w: new AdwButton(label: "Save", onPressed: () => { }), maxWidth: 400f);
         var iconText = Measure(
-            new AdwButton("Save", () => { }) { IconName = Icons.Save },
-            400f
+            w: new AdwButton(label: "Save", onPressed: () => { }) { IconName = Icons.Save },
+            maxWidth: 400f
         );
-        var pill = Measure(new AdwButton("Save", () => { }) { Pill = true }, 400f);
+        var pill = Measure(
+            w: new AdwButton(label: "Save", onPressed: () => { }) { Pill = true },
+            maxWidth: 400f
+        );
 
-        Assert.Equal(AdwMetrics.ButtonHeight, label.Height, 3);
-        Assert.Equal(AdwMetrics.PillHeight, pill.Height, 3);
+        Assert.Equal(expected: AdwMetrics.ButtonHeight, actual: label.Height, precision: 3);
+        Assert.Equal(expected: AdwMetrics.PillHeight, actual: pill.Height, precision: 3);
 
         // Same label; the icon adds its glyph + gap but the frame tightens by 8px a side, so an
         // icon+label button is NOT simply the text button plus the icon's width.
-        var tightening = (AdwMetrics.ButtonPaddingX - AdwMetrics.ImageTextPaddingX) * 2f;
-        Assert.Equal(label.Width + AdwMetrics.IconSize + 6f - tightening, iconText.Width, 1);
+        float tightening = (AdwMetrics.ButtonPaddingX - AdwMetrics.ImageTextPaddingX) * 2f;
+        Assert.Equal(
+            expected: label.Width + AdwMetrics.IconSize + 6f - tightening,
+            actual: iconText.Width,
+            precision: 1
+        );
         Assert.True(pill.Width > label.Width);
     }
 
@@ -101,38 +128,41 @@ public class AdwCompactControlTests
     public void CoreMetricsMatchTheLibadwaitaStylesheet()
     {
         // _buttons.scss: button { min-height: 24px; padding: 5px 10px } → 34; .text-button 17px.
-        Assert.Equal(34f, AdwMetrics.ButtonHeight);
-        Assert.Equal(17f, AdwMetrics.ButtonPaddingX);
-        Assert.Equal(9f, AdwMetrics.ImageTextPaddingX); // .image-text-button
-        Assert.Equal(32f, AdwMetrics.PillPaddingX); // .pill { padding: 10px 32px }
-        Assert.Equal(44f, AdwMetrics.PillHeight); // 24 + 10 + 10
+        Assert.Equal(expected: 34f, actual: AdwMetrics.ButtonHeight);
+        Assert.Equal(expected: 17f, actual: AdwMetrics.ButtonPaddingX);
+        Assert.Equal(expected: 9f, actual: AdwMetrics.ImageTextPaddingX); // .image-text-button
+        Assert.Equal(
+            expected: 32f,
+            actual: AdwMetrics.PillPaddingX
+        ); // .pill { padding: 10px 32px }
+        Assert.Equal(expected: 44f, actual: AdwMetrics.PillHeight); // 24 + 10 + 10
 
         // _entries.scss: entry { min-height: 34px }
-        Assert.Equal(34f, AdwMetrics.EntryHeight);
+        Assert.Equal(expected: 34f, actual: AdwMetrics.EntryHeight);
         // _header-bar.scss: headerbar { min-height: 47px }
-        Assert.Equal(47f, AdwMetrics.HeaderBarHeight);
+        Assert.Equal(expected: 47f, actual: AdwMetrics.HeaderBarHeight);
         // _menus.scss: modelbutton { min-height: 32px }
-        Assert.Equal(32f, AdwMetrics.MenuRowHeight);
+        Assert.Equal(expected: 32f, actual: AdwMetrics.MenuRowHeight);
         // _lists.scss: row > box.header { min-height: 50px }, .rich-list padding 8px 12px
-        Assert.Equal(50f, AdwMetrics.RowMinHeight);
-        Assert.Equal(12f, AdwMetrics.RowPaddingX);
-        Assert.Equal(8f, AdwMetrics.RowPaddingY);
+        Assert.Equal(expected: 50f, actual: AdwMetrics.RowMinHeight);
+        Assert.Equal(expected: 12f, actual: AdwMetrics.RowPaddingX);
+        Assert.Equal(expected: 8f, actual: AdwMetrics.RowPaddingY);
 
         // _checks.scss: check { min-height: 14px; padding: 3px } → 20
-        Assert.Equal(20f, AdwMetrics.CheckSize);
+        Assert.Equal(expected: 20f, actual: AdwMetrics.CheckSize);
         // _switch.scss: slider 20px + 3px padding either side → 26
-        Assert.Equal(26f, AdwMetrics.SwitchHeight);
-        Assert.Equal(20f, AdwMetrics.SwitchHeight - 6f);
+        Assert.Equal(expected: 26f, actual: AdwMetrics.SwitchHeight);
+        Assert.Equal(expected: 20f, actual: AdwMetrics.SwitchHeight - 6f);
         // _scale.scss: trough { min-height: 10px }, slider { min-width: 20px }
-        Assert.Equal(10f, AdwMetrics.SliderTrack);
-        Assert.Equal(20f, AdwMetrics.SliderKnob);
+        Assert.Equal(expected: 10f, actual: AdwMetrics.SliderTrack);
+        Assert.Equal(expected: 20f, actual: AdwMetrics.SliderKnob);
         // _progress-bar.scss: trough/progress { min-height: 8px }
-        Assert.Equal(8f, AdwMetrics.ProgressBarHeight);
+        Assert.Equal(expected: 8f, actual: AdwMetrics.ProgressBarHeight);
         // _toggle-group.scss: --group-padding: 3px; .round radius 17px
-        Assert.Equal(3f, AdwMetrics.ToggleGroupPadding);
-        Assert.Equal(17f, AdwMetrics.RoundToggleRadius);
+        Assert.Equal(expected: 3f, actual: AdwMetrics.ToggleGroupPadding);
+        Assert.Equal(expected: 17f, actual: AdwMetrics.RoundToggleRadius);
         // _sidebars.scss: .navigation-sidebar row { min-height: 36px; padding: 0 8px; margin ...2px }
-        Assert.Equal(8f, AdwMetrics.SidebarRowPaddingX);
-        Assert.Equal(2f, AdwMetrics.SidebarRowGap);
+        Assert.Equal(expected: 8f, actual: AdwMetrics.SidebarRowPaddingX);
+        Assert.Equal(expected: 2f, actual: AdwMetrics.SidebarRowGap);
     }
 }

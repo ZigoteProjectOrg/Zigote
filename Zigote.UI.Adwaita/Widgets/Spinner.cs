@@ -1,5 +1,4 @@
 using Zigote.Core.Animation;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.Adwaita;
 
@@ -34,53 +33,50 @@ public class AdwSpinner : Widget
 
     // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
     // re-attach rebinds instead of leaking one per attach cascade.
-    protected override void OnMount()
-    {
-        _anim.AttachTicker(this);
-    }
+    protected override void OnMount() => _anim.AttachTicker(this);
 
 
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        var s = MathF.Min(Size, MaxSize);
-        _box = c.Constrain(new Size(s, s));
+        float s = MathF.Min(x: Size, y: MaxSize);
+        _box = c.Constrain(new Size(width: s, height: s));
         return _box;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _box.Width,
-            _box.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _box.Width,
+            height: _box.Height
         );
     }
 
     public override void Paint(PaintList paint)
     {
-        var s = MathF.Min(MathF.Min(Bounds.Width, Bounds.Height), MaxSize);
+        float s = MathF.Min(x: MathF.Min(x: Bounds.Width, y: Bounds.Height), y: MaxSize);
         if (s <= 2f) return;
 
-        var stroke = MathF.Max(1.5f, 2.5f * s / 32f);
-        var ring = (s - stroke) / 2f;
+        float stroke = MathF.Max(x: 1.5f, y: 2.5f * s / 32f);
+        float ring = (s - stroke) / 2f;
         if (ring <= 0f) return;
 
-        var cx = Bounds.X + Bounds.Width / 2f;
-        var cy = Bounds.Y + Bounds.Height / 2f;
+        float cx = Bounds.X + (Bounds.Width / 2f);
+        float cy = Bounds.Y + (Bounds.Height / 2f);
         var color = _theme.Label2;
 
         // The faint full track libadwaita draws behind the arc.
         StrokeArc(
-            paint,
-            cx,
-            cy,
-            ring,
-            0f,
-            MathF.Tau,
-            color.WithAlpha(color.A * 0.15f),
-            stroke
+            paint: paint,
+            cx: cx,
+            cy: cy,
+            r: ring,
+            from: 0f,
+            to: MathF.Tau,
+            color: color.WithAlpha(color.A * 0.15f),
+            width: stroke
         );
 
         // Both ends of the arc advance monotonically: the head is eased over the first half of the
@@ -90,27 +86,25 @@ public class AdwSpinner : Widget
         // the rest of the revolution, so each end advances exactly one turn per cycle — continuous
         // across the Repeat wrap.
         const float span = MathF.Tau * 0.5f;
-        var t = _anim.Progress;
-        var basis = t * (MathF.Tau - span) - MathF.PI / 2f;
-        var tail = basis + span * Smooth(Math.Clamp(t * 2f - 1f, 0f, 1f));
-        var head = basis + span * Smooth(Math.Clamp(t * 2f, 0f, 1f)) + MathF.Tau * 0.02f;
+        float t = _anim.Progress;
+        float basis = (t * (MathF.Tau - span)) - (MathF.PI / 2f);
+        float tail = basis + (span * Smooth(Math.Clamp(value: (t * 2f) - 1f, min: 0f, max: 1f)));
+        float head = basis + (span * Smooth(Math.Clamp(value: t * 2f, min: 0f, max: 1f))) +
+                     (MathF.Tau * 0.02f);
 
         StrokeArc(
-            paint,
-            cx,
-            cy,
-            ring,
-            tail,
-            head,
-            color,
-            stroke
+            paint: paint,
+            cx: cx,
+            cy: cy,
+            r: ring,
+            from: tail,
+            to: head,
+            color: color,
+            width: stroke
         );
     }
 
-    private static float Smooth(float x)
-    {
-        return x * x * (3f - 2f * x);
-    }
+    private static float Smooth(float x) => x * x * (3f - (2f * x));
 
     /// <summary>
     ///     Stroke a circular arc as cubic Béziers (≤90° each, the standard 4/3·tan(θ/4) handle
@@ -120,36 +114,33 @@ public class AdwSpinner : Widget
     private static void StrokeArc(PaintList paint, float cx, float cy, float r,
         float from, float to, Color color, float width)
     {
-        var total = to - from;
+        float total = to - from;
         if (MathF.Abs(total) < 1e-4f) return;
 
-        var segments = (int)MathF.Ceiling(MathF.Abs(total) / (MathF.PI / 2f));
-        var step = total / segments;
-        var k = 4f / 3f * MathF.Tan(step / 4f);
+        int segments = (int)MathF.Ceiling(MathF.Abs(total) / (MathF.PI / 2f));
+        float step = total / segments;
+        float k = 4f / 3f * MathF.Tan(step / 4f);
 
-        for (var i = 0; i < segments; i++)
+        for (int i = 0; i < segments; i++)
         {
-            var a0 = from + step * i;
-            var a1 = a0 + step;
+            float a0 = from + (step * i);
+            float a1 = a0 + step;
             float c0 = MathF.Cos(a0), s0 = MathF.Sin(a0);
             float c1 = MathF.Cos(a1), s1 = MathF.Sin(a1);
             paint.AddBezier(
-                cx + c0 * r,
-                cy + s0 * r,
-                cx + (c0 - k * s0) * r,
-                cy + (s0 + k * c0) * r,
-                cx + (c1 + k * s1) * r,
-                cy + (s1 - k * c1) * r,
-                cx + c1 * r,
-                cy + s1 * r,
-                color,
-                width
+                x0: cx + (c0 * r),
+                y0: cy + (s0 * r),
+                x1: cx + ((c0 - (k * s0)) * r),
+                y1: cy + ((s0 + (k * c0)) * r),
+                x2: cx + ((c1 + (k * s1)) * r),
+                y2: cy + ((s1 - (k * c1)) * r),
+                x3: cx + (c1 * r),
+                y3: cy + (s1 * r),
+                color: color,
+                width: width
             );
         }
     }
 
-    public override int DebugStateHash()
-    {
-        return HashCode.Combine(Size, _anim.Progress);
-    }
+    public override int DebugStateHash() => HashCode.Combine(value1: Size, value2: _anim.Progress);
 }

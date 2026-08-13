@@ -19,10 +19,7 @@ public sealed class AlwaysRelevant : IInterestManagement
 {
     public static readonly AlwaysRelevant Instance = new();
 
-    public bool IsRelevant(NetObject obj, NetConnection connection)
-    {
-        return true;
-    }
+    public bool IsRelevant(NetObject obj, NetConnection connection) => true;
 }
 
 /// <summary>
@@ -41,14 +38,12 @@ public sealed class DistanceInterestManagement(float radius) : IInterestManageme
     public bool IsRelevant(NetObject obj, NetConnection connection)
     {
         if (obj.OwnerConnectionId == connection.Id) return true;
-        if (!_viewPositions.TryGetValue(connection.Id, out var view))
+        if (!_viewPositions.TryGetValue(key: connection.Id, value: out var view))
             return true; // unknown view → don't hide
-        var r2 = Radius * Radius;
+        float r2 = Radius * Radius;
         return (obj.RelevancePosition - view).LengthSq() <= r2;
     }
 
-    public void SetViewPosition(NetConnection connection, Vec3 position)
-    {
+    public void SetViewPosition(NetConnection connection, Vec3 position) =>
         _viewPositions[connection.Id] = position;
-    }
 }

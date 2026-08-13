@@ -8,13 +8,18 @@ namespace Zigote.UI.DevTools.Diagnostics;
 /// <summary>
 ///     History rings behind the charts-powered devtools panels, fed from
 ///     <see cref="DebugStats.Sampled" /> (fired once per rendered frame — <see cref="App" /> samples
-///     unconditionally on the main window). Sampling runs whether or not the panel is open, so opening a
-///     panel shows history rather than a blank chart. Each ring has its own cadence chosen to match how
-///     fast its source actually changes (engine counters at 0.4 s, CPU / memory / GPU at 1 s), so pushes
+///     unconditionally on the main window). Sampling runs whether or not the panel is open, so opening
+///     a
+///     panel shows history rather than a blank chart. Each ring has its own cadence chosen to match
+///     how
+///     fast its source actually changes (engine counters at 0.4 s, CPU / memory / GPU at 1 s), so
+///     pushes
 ///     are effectively free.
 ///     <para>
-///         <see cref="Revision" /> bumps on every push wave; panels relayout their charts (and shift the
-///         rolling x-window) only when it changes, keeping the per-frame cost at "paint cached geometry".
+///         <see cref="Revision" /> bumps on every push wave; panels relayout their charts (and shift
+///         the
+///         rolling x-window) only when it changes, keeping the per-frame cost at "paint cached
+///         geometry".
 ///     </para>
 /// </summary>
 public static class DevChartData
@@ -92,18 +97,18 @@ public static class DevChartData
         _fastTimer += dt;
         if (_fastTimer >= FastPeriod)
         {
-            var elapsed = _fastTimer;
+            float elapsed = _fastTimer;
             _fastTimer = 0f;
-            Fps.Push(Time, DebugStats.Fps);
-            FrameMs.Push(Time, DebugStats.FrameMs);
-            UiCommands.Push(Time, DebugStats.UiPaintCommands);
-            OverlayCommands.Push(Time, DebugStats.OverlayPaintCommands);
+            Fps.Push(time: Time, value: DebugStats.Fps);
+            FrameMs.Push(time: Time, value: DebugStats.FrameMs);
+            UiCommands.Push(time: Time, value: DebugStats.UiPaintCommands);
+            OverlayCommands.Push(time: Time, value: DebugStats.OverlayPaintCommands);
 
             // Rates, not totals: a monotonic counter drawn as a line only ever slopes upward.
-            var runs = Reactive.Runs;
-            var rebuilds = Watch.Rebuilds;
-            ReactionRuns.Push(Time, (float)((runs - _lastRuns) / elapsed));
-            WatchRebuilds.Push(Time, (float)((rebuilds - _lastRebuilds) / elapsed));
+            long runs = Reactive.Runs;
+            long rebuilds = Watch.Rebuilds;
+            ReactionRuns.Push(time: Time, value: (runs - _lastRuns) / elapsed);
+            WatchRebuilds.Push(time: Time, value: (rebuilds - _lastRebuilds) / elapsed);
             _lastRuns = runs;
             _lastRebuilds = rebuilds;
 
@@ -112,15 +117,13 @@ public static class DevChartData
                 var e = DebugStats.Engine;
                 Rendering3D = e.FrameIndex != _lastFrameIndex;
                 _lastFrameIndex = e.FrameIndex;
-                DrawCalls.Push(Time, e.DrawCalls);
-                Triangles.Push(Time, e.Triangles);
-                VisibleObjects.Push(Time, e.VisibleObjects);
-                RenderPasses.Push(Time, e.RenderPasses);
+                DrawCalls.Push(time: Time, value: e.DrawCalls);
+                Triangles.Push(time: Time, value: e.Triangles);
+                VisibleObjects.Push(time: Time, value: e.VisibleObjects);
+                RenderPasses.Push(time: Time, value: e.RenderPasses);
             }
             else
-            {
                 Rendering3D = false;
-            }
 
             Revision++;
         }
@@ -128,37 +131,43 @@ public static class DevChartData
         _slowTimer += dt;
         if (_slowTimer >= SlowPeriod)
         {
-            var elapsed = _slowTimer;
+            float elapsed = _slowTimer;
             _slowTimer = 0f;
-            var heap = DebugStats.GcMb;
-            var ws = DebugStats.MemMb;
-            WorkingSetMb.Push(Time, ws);
-            GcHeapMb.Push(Time, heap);
+            float heap = DebugStats.GcMb;
+            float ws = DebugStats.MemMb;
+            WorkingSetMb.Push(time: Time, value: ws);
+            GcHeapMb.Push(time: Time, value: heap);
             // Working set includes the managed heap plus every native allocation (wgpu, SDL, images,
             // the CLR runtime itself). The remainder after the managed heap is the "unmanaged" slice.
-            UnmanagedMb.Push(Time, MathF.Max(0f, ws - heap));
-            CpuPct.Push(Time, DebugStats.CpuPct);
+            UnmanagedMb.Push(time: Time, value: MathF.Max(x: 0f, y: ws - heap));
+            CpuPct.Push(time: Time, value: DebugStats.CpuPct);
 
-            Gen0PerSec.Push(Time, (DebugStats.Gen0Collections - _lastGen0) / elapsed);
-            Gen1PerSec.Push(Time, (DebugStats.Gen1Collections - _lastGen1) / elapsed);
-            Gen2PerSec.Push(Time, (DebugStats.Gen2Collections - _lastGen2) / elapsed);
+            Gen0PerSec.Push(time: Time, value: (DebugStats.Gen0Collections - _lastGen0) / elapsed);
+            Gen1PerSec.Push(time: Time, value: (DebugStats.Gen1Collections - _lastGen1) / elapsed);
+            Gen2PerSec.Push(time: Time, value: (DebugStats.Gen2Collections - _lastGen2) / elapsed);
             _lastGen0 = DebugStats.Gen0Collections;
             _lastGen1 = DebugStats.Gen1Collections;
             _lastGen2 = DebugStats.Gen2Collections;
 
-            var alloc = GC.GetTotalAllocatedBytes();
+            long alloc = GC.GetTotalAllocatedBytes();
             if (_lastAllocBytes > 0)
-                AllocMbPerSec.Push(Time, (alloc - _lastAllocBytes) / elapsed / (1024f * 1024f));
+            {
+                AllocMbPerSec.Push(
+                    time: Time,
+                    value: (alloc - _lastAllocBytes) / elapsed / (1024f * 1024f)
+                );
+            }
+
             _lastAllocBytes = alloc;
 
             if (DebugStats.EngineOk)
             {
                 var e = DebugStats.Engine;
-                var bufMb = e.GpuBufferMemory / (1024f * 1024f);
-                var texMb = e.GpuTextureMemory / (1024f * 1024f);
-                GpuBufferMb.Push(Time, bufMb);
-                GpuTextureMb.Push(Time, texMb);
-                GpuTotalMb.Push(Time, bufMb + texMb);
+                float bufMb = e.GpuBufferMemory / (1024f * 1024f);
+                float texMb = e.GpuTextureMemory / (1024f * 1024f);
+                GpuBufferMb.Push(time: Time, value: bufMb);
+                GpuTextureMb.Push(time: Time, value: texMb);
+                GpuTotalMb.Push(time: Time, value: bufMb + texMb);
             }
 
             Revision++;

@@ -20,17 +20,14 @@ public struct ChangeGate<TKey>
     /// <summary>True (and latches the key) when <paramref name="key" /> differs from the last call.</summary>
     public bool Changed(TKey key)
     {
-        if (_has && EqualityComparer<TKey>.Default.Equals(_key, key)) return false;
+        if (_has && EqualityComparer<TKey>.Default.Equals(x: _key, y: key)) return false;
         _has = true;
         _key = key;
         return true;
     }
 
     /// <summary>Forces the next <see cref="Changed" /> to report true.</summary>
-    public void Invalidate()
-    {
-        _has = false;
-    }
+    public void Invalidate() => _has = false;
 }
 
 /// <summary>
@@ -53,7 +50,7 @@ public struct Memo<TKey, TValue>
 
     public TValue Get(TKey key, Func<TKey, TValue> compute)
     {
-        if (_has && EqualityComparer<TKey>.Default.Equals(_key, key)) return Value!;
+        if (_has && EqualityComparer<TKey>.Default.Equals(x: _key, y: key)) return Value!;
         Value = compute(key);
         _key = key;
         _has = true;
@@ -66,8 +63,8 @@ public struct Memo<TKey, TValue>
     /// </summary>
     public TValue Get<TState>(TKey key, TState state, Func<TState, TKey, TValue> compute)
     {
-        if (_has && EqualityComparer<TKey>.Default.Equals(_key, key)) return Value!;
-        Value = compute(state, key);
+        if (_has && EqualityComparer<TKey>.Default.Equals(x: _key, y: key)) return Value!;
+        Value = compute(arg1: state, arg2: key);
         _key = key;
         _has = true;
         return Value;

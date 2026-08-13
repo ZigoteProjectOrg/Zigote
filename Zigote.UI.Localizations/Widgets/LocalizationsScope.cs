@@ -103,13 +103,17 @@ public sealed class LocalizationsScope : Widget
                 : fallback;
 
         var pool = supported.Count > 0 ? supported : new List<Locale> { requested };
-        var initial = LocaleResolution.Resolve(requested, pool, fallback);
+        var initial = LocaleResolution.Resolve(
+            preferred: requested,
+            supported: pool,
+            fallback: fallback
+        );
 
         var controller = new LocalizationsController(
-            delegates,
-            supported,
-            initial,
-            fallback
+            delegates: delegates,
+            supportedLocales: supported,
+            initial: initial,
+            fallback: fallback
         );
         var data = controller.Load(initial);
 
@@ -123,32 +127,28 @@ public sealed class LocalizationsScope : Widget
             _provider.Child = _directionality;
         }
         else
-        {
             _provider.Child = content;
-        }
 
-        controller.Bind(_provider, _directionality);
+        controller.Bind(provider: _provider, directionality: _directionality);
         controller.LocaleChanged += RaiseLocaleChanged;
         Controller = controller;
     }
 
-    private void RaiseLocaleChanged(Locale locale)
-    {
-        OnLocaleChanged?.Invoke(locale);
-    }
+    private void RaiseLocaleChanged(Locale locale) => OnLocaleChanged?.Invoke(locale);
 
     // ── Widget protocol (transparent delegation to the retained provider) ─────
 
     public override void Attach(App owner, Widget? parent)
     {
         EnsureBuilt();
-        base.Attach(owner, parent);
+        base.Attach(owner: owner, parent: parent);
 
         // Register as the app's locale seam (App.SetLocale/LocaleInfo), which is what the inspect
         // socket's `locale`/`locales` commands drive. A resolve to an unsupported tag is still true —
         // the controller resolved it, which is the behaviour the app itself would have.
         // ponytail: last-attached scope wins; per-window registries if nested scopes ever need it.
-        _setLocale = tag => Locale.TryParse(tag, out var l) && (Controller!.SetLocale(l) || true);
+        _setLocale = tag =>
+            Locale.TryParse(tag: tag, locale: out var l) && (Controller!.SetLocale(l) || true);
         owner.SetLocale = _setLocale;
         owner.LocaleInfo = () => (
             Controller!.Locale.ToString(),
@@ -160,7 +160,7 @@ public sealed class LocalizationsScope : Widget
     {
         EnsureBuilt();
         // If the scope was attached before the provider existed, attach the provider subtree now.
-        if (Owner != null && _provider!.Owner == null) _provider.Attach(Owner, this);
+        if (Owner != null && _provider!.Owner == null) _provider.Attach(owner: Owner, parent: this);
         MeasuredSize = _provider!.Measure(constraints);
         return MeasuredSize;
     }
@@ -171,27 +171,18 @@ public sealed class LocalizationsScope : Widget
         Bounds = _provider.Bounds;
     }
 
-    public override void Paint(PaintList paint)
-    {
-        _provider?.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => _provider?.Paint(paint);
 
-    public override Widget? HitTest(Offset point)
-    {
-        return _provider?.HitTest(point);
-    }
+    public override Widget? HitTest(Offset point) => _provider?.HitTest(point);
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return _provider is null ? [] : [_provider];
-    }
+    public override IEnumerable<Widget> GetChildren() => _provider is null ? [] : [_provider];
 
     public override void Detach()
     {
         if (Controller != null) Controller.LocaleChanged -= RaiseLocaleChanged;
         // Only unhook if the hooks are still ours — a preview swap may have attached the next tree's
         // scope before this one detaches, and its registration must survive.
-        if (Owner is { } owner && ReferenceEquals(owner.SetLocale, _setLocale))
+        if (Owner is { } owner && ReferenceEquals(objA: owner.SetLocale, objB: _setLocale))
         {
             owner.SetLocale = null;
             owner.LocaleInfo = null;

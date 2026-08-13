@@ -48,10 +48,7 @@ public static class StateStyle
     }
 
     /// <summary>Apply the disabled opacity to <paramref name="c" />.</summary>
-    public static Color Disabled(Color c)
-    {
-        return c.WithAlpha(c.A * DisabledOpacity);
-    }
+    public static Color Disabled(Color c) => c.WithAlpha(c.A * DisabledOpacity);
 
     /// <summary>Collapse the common hover/press/disable booleans into a <see cref="ControlState" />.</summary>
     public static ControlState StateOf(bool hovered, bool pressed, bool disabled = false,

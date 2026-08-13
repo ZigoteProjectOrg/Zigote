@@ -25,13 +25,12 @@ public static class Program
 
         try
         {
-            return args[0] switch
-            {
+            return args[0] switch {
                 "create" => Create(args[1..]),
                 "add" => Add(args[1..]),
                 "preview" => RunPreview(args[1..]),
                 "--version" or "-v" => Version(),
-                _ => Fail($"unknown command '{args[0]}'")
+                _ => Fail($"unknown command '{args[0]}'"),
             };
         }
         catch (CliError e)
@@ -94,19 +93,22 @@ public static class Program
 
     private static int Create(string[] args)
     {
-        var options = Options.Parse(args, out var positional);
+        var options = Options.Parse(args: args, positional: out var positional);
         if (positional.Count == 0) throw new CliError("create needs a name: zigote create <Name>");
 
-        var name = Identifier.Validate(positional[0]);
-        var root = Path.Combine(options.Directory, name);
-        var engine = options.ResolveEngine(root);
+        string name = Identifier.Validate(positional[0]);
+        string root = Path.Combine(path1: options.Directory, path2: name);
+        string engine = options.ResolveEngine(root);
 
-        var files = new Scaffolder(root, options.Force);
-        files.Write($"{name}/{name}.csproj", Templates.AppCsproj(name, engine));
-        files.Write($"{name}/Program.cs", Templates.AppProgram(name));
-        files.Write($"{name}/{name}App.cs", Templates.AppShell(name));
-        files.Write(".gitignore", Templates.GitIgnore());
-        files.Write("README.md", Templates.Readme(name));
+        var files = new Scaffolder(root: root, force: options.Force);
+        files.Write(
+            relativePath: $"{name}/{name}.csproj",
+            content: Templates.AppCsproj(name: name, engine: engine)
+        );
+        files.Write(relativePath: $"{name}/Program.cs", content: Templates.AppProgram(name));
+        files.Write(relativePath: $"{name}/{name}App.cs", content: Templates.AppShell(name));
+        files.Write(relativePath: ".gitignore", content: Templates.GitIgnore());
+        files.Write(relativePath: "README.md", content: Templates.Readme(name));
 
         files.Report();
         Console.WriteLine();
@@ -117,28 +119,41 @@ public static class Program
 
     private static int Add(string[] args)
     {
-        var options = Options.Parse(args, out var positional);
+        var options = Options.Parse(args: args, positional: out var positional);
         if (positional.Count == 0) throw new CliError("add needs a platform: zigote add android");
         if (positional[0] != "android")
             throw new CliError($"unknown platform '{positional[0]}'. Only 'android' exists today.");
 
-        var root = options.Directory;
+        string root = options.Directory;
         // The app to attach to is the one shared project in the tree — found rather than asked
         // for, because getting it wrong silently produces a head that compiles nothing.
-        var app = FindAppProject(root);
-        var name = Path.GetFileNameWithoutExtension(app);
-        var engine = options.ResolveEngine(root);
-        var appId = options.AppId ?? $"dev.zigote.{name}";
+        string app = FindAppProject(root);
+        string name = Path.GetFileNameWithoutExtension(app);
+        string engine = options.ResolveEngine(root);
+        string appId = options.AppId ?? $"dev.zigote.{name}";
 
-        var files = new Scaffolder(root, options.Force);
-        files.Write($"{name}.Android/{name}.Android.csproj", Templates.AndroidCsproj(name, appId, engine));
-        files.Write($"{name}.Android/Properties/AndroidManifest.xml", Templates.AndroidManifest(appId, name));
-        files.Write($"{name}.Android/{name}Application.cs", Templates.AndroidApplication(name));
+        var files = new Scaffolder(root: root, force: options.Force);
+        files.Write(
+            relativePath: $"{name}.Android/{name}.Android.csproj",
+            content: Templates.AndroidCsproj(name: name, appId: appId, engine: engine)
+        );
+        files.Write(
+            relativePath: $"{name}.Android/Properties/AndroidManifest.xml",
+            content: Templates.AndroidManifest(appId: appId, name: name)
+        );
+        files.Write(
+            relativePath: $"{name}.Android/{name}Application.cs",
+            content: Templates.AndroidApplication(name)
+        );
 
         files.Report();
         Console.WriteLine();
-        Console.WriteLine($"  dotnet build {name}.Android -p:ZigTargetRid=android-arm64   # device");
-        Console.WriteLine($"  dotnet build {name}.Android -p:ZigTargetRid=android-x64     # emulator");
+        Console.WriteLine(
+            $"  dotnet build {name}.Android -p:ZigTargetRid=android-arm64   # device"
+        );
+        Console.WriteLine(
+            $"  dotnet build {name}.Android -p:ZigTargetRid=android-x64     # emulator"
+        );
         Console.WriteLine();
         Console.WriteLine("The RID is mandatory: it selects the managed RID AND the native");
         Console.WriteLine("cross-compile, and the generated project refuses to build without it.");
@@ -147,8 +162,12 @@ public static class Program
 
     private static int RunPreview(string[] args)
     {
-        var options = Options.Parse(args, out var positional);
-        return Preview.Run(options, positional, FindAppProject(options.Directory));
+        var options = Options.Parse(args: args, positional: out var positional);
+        return Preview.Run(
+            options: options,
+            positional: positional,
+            project: FindAppProject(options.Directory)
+        );
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
@@ -160,22 +179,44 @@ public static class Program
     private static string FindAppProject(string root)
     {
         var candidates = Directory
-            .EnumerateFiles(root, "*.csproj", SearchOption.TopDirectoryOnly)
-            .Concat(Directory
-                .EnumerateDirectories(root)
-                .Where(d => !Path.GetFileName(d).StartsWith('.'))
-                .SelectMany(d => Directory.EnumerateFiles(d, "*.csproj", SearchOption.TopDirectoryOnly)))
-            .Where(p => !Path.GetFileNameWithoutExtension(p).EndsWith(".Android", StringComparison.Ordinal))
-            .Where(p => !Path.GetFileNameWithoutExtension(p).EndsWith(".iOS", StringComparison.Ordinal))
+            .EnumerateFiles(
+                path: root,
+                searchPattern: "*.csproj",
+                searchOption: SearchOption.TopDirectoryOnly
+            )
+            .Concat(
+                Directory
+                    .EnumerateDirectories(root)
+                    .Where(d => !Path.GetFileName(d).StartsWith('.'))
+                    .SelectMany(d => Directory.EnumerateFiles(
+                            path: d,
+                            searchPattern: "*.csproj",
+                            searchOption: SearchOption.TopDirectoryOnly
+                        )
+                    )
+            )
+            .Where(p => !Path.GetFileNameWithoutExtension(p).EndsWith(
+                    value: ".Android",
+                    comparisonType: StringComparison.Ordinal
+                )
+            )
+            .Where(p => !Path.GetFileNameWithoutExtension(p).EndsWith(
+                    value: ".iOS",
+                    comparisonType: StringComparison.Ordinal
+                )
+            )
             .ToList();
 
-        return candidates.Count switch
-        {
-            0 => throw new CliError($"no app project found under '{root}'. Run this from inside the app, or pass --dir."),
+        return candidates.Count switch {
+            0 => throw new CliError(
+                $"no app project found under '{root}'. Run this from inside the app, or pass --dir."
+            ),
             1 => candidates[0],
             _ => throw new CliError(
                 "more than one app project here, so which one the head belongs to is ambiguous: " +
-                string.Join(", ", candidates.Select(Path.GetFileName)) + ". Run from inside one of them.")
+                string.Join(separator: ", ", values: candidates.Select(Path.GetFileName)) +
+                ". Run from inside one of them."
+            ),
         };
     }
 }

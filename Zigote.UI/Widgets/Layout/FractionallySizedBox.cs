@@ -23,41 +23,34 @@ public class FractionallySizedBox(
 
     public override Size Measure(Constraints c)
     {
-        var availW = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 0f;
-        var availH = float.IsFinite(c.MaxHeight) ? c.MaxHeight : 0f;
+        float availW = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 0f;
+        float availH = float.IsFinite(c.MaxHeight) ? c.MaxHeight : 0f;
 
-        var cw = WidthFactor.HasValue ? availW * WidthFactor.Value : availW;
-        var ch = HeightFactor.HasValue ? availH * HeightFactor.Value : availH;
+        float cw = WidthFactor.HasValue ? availW * WidthFactor.Value : availW;
+        float ch = HeightFactor.HasValue ? availH * HeightFactor.Value : availH;
 
-        _childSize = Child?.Measure(Constraints.Tight(cw, ch)) ?? new Size(cw, ch);
-        _size = c.Constrain(new Size(availW, availH));
+        _childSize = Child?.Measure(Constraints.Tight(width: cw, height: ch)) ??
+                     new Size(width: cw, height: ch);
+        _size = c.Constrain(new Size(width: availW, height: availH));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
-        var o = Alignment.Within(_size, _childSize);
-        Child?.Layout(new Offset(origin.X + o.X, origin.Y + o.Y));
+        var o = Alignment.Within(outer: _size, child: _childSize);
+        Child?.Layout(new Offset(x: origin.X + o.X, y: origin.Y + o.Y));
     }
 
-    public override void Paint(PaintList paint)
-    {
-        Child?.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => Child?.Paint(paint);
 
-    public override Widget? HitTest(Offset point)
-    {
-        return Bounds.Contains(point.X, point.Y) ? Child?.HitTest(point) : null;
-    }
+    public override Widget? HitTest(Offset point) =>
+        Bounds.Contains(px: point.X, py: point.Y) ? Child?.HitTest(point) : null;
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(Child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Child);
 }

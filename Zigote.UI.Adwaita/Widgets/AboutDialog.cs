@@ -42,8 +42,10 @@ public sealed class AdwAboutDialog : AdwDialog
     public string? Copyright { get; init; }
     public string? License { get; init; }
 
-    /// <summary>Everywhere else the app lives — issue tracker, translations, source. Shown as a
-    ///     boxed list under the website, which is where the HIG puts them.</summary>
+    /// <summary>
+    ///     Everywhere else the app lives — issue tracker, translations, source. Shown as a
+    ///     boxed list under the website, which is where the HIG puts them.
+    /// </summary>
     public List<AdwAboutLink> Links { get; init; } = [];
 
     private sealed class Content(AdwAboutDialog owner) : ComposedWidget
@@ -62,19 +64,34 @@ public sealed class AdwAboutDialog : AdwDialog
             // ── Hero: icon, name, developer, version pill ────────────────────────
             // `dialog.about image.large-icons { -gtk-icon-size: 128px }`.
             if (owner.IconName is { } icon)
+            {
                 col.Children.Add(
-                    new Center { Child = new IconGlyph(icon, 128f, theme.OnBackground) }
+                    new Center {
+                        Child = new IconGlyph(glyph: icon, size: 128f, color: theme.OnBackground),
+                    }
                 );
+            }
+
             col.Children.Add(
-                new Label(owner.AppName, AdwTypography.Title2, theme.OnBackground) {
+                new Label(
+                    text: owner.AppName,
+                    style: AdwTypography.Title2,
+                    color: theme.OnBackground
+                ) {
                     Align = TextAlign.Center,
                 }
             );
             if (owner.DeveloperName is { } dev)
+            {
                 col.Children.Add(
-                    new Label(dev, AdwTypography.Caption, p.DimLabel) { Align = TextAlign.Center }
+                    new Label(text: dev, style: AdwTypography.Caption, color: p.DimLabel) {
+                        Align = TextAlign.Center,
+                    }
                 );
+            }
+
             if (owner.Version is { } version)
+            {
                 col.Children.Add(
                     new Center {
                         Child = new DecoratedBox {
@@ -82,78 +99,111 @@ public sealed class AdwAboutDialog : AdwDialog
                             Radius = AdwMetrics.Pill,
                             // `.app-version { padding: 3px 18px; border-radius: 999px }`.
                             Child = new Padding(
-                                EdgeInsets.Symmetric(18f, 3f),
-                                new Label(version, AdwTypography.CaptionHeading, theme.PrimaryDark)
+                                padding: EdgeInsets.Symmetric(horizontal: 18f, vertical: 3f),
+                                child: new Label(
+                                    text: version,
+                                    style: AdwTypography.CaptionHeading,
+                                    color: theme.PrimaryDark
+                                )
                             ),
                         },
                     }
                 );
+            }
 
             // ── Boxed-list rows ──────────────────────────────────────────────────
             AdwActionRow Link(string label, string? subtitle, string? icon, Action onActivated)
             {
-                var row = new AdwActionRow(label, subtitle) {
+                var row = new AdwActionRow(title: label, subtitle: subtitle) {
                     IconName = icon,
                     OnActivated = onActivated,
                 };
                 row.Suffixes.Add(
-                    new IconGlyph(Icons.ChevronRight, AdwMetrics.IconSize, p.DimLabel)
+                    new IconGlyph(
+                        glyph: Icons.ChevronRight,
+                        size: AdwMetrics.IconSize,
+                        color: p.DimLabel
+                    )
                 );
                 return row;
             }
 
             var links = new AdwPreferencesGroup();
             if (owner.Website is { } site)
+            {
                 links.Rows.Add(
                     Link(
-                        "Website",
-                        site,
-                        MaterialIcons.Public,
-                        () => owner.OnWebsite?.Invoke()
+                        label: "Website",
+                        subtitle: site,
+                        icon: MaterialIcons.Public,
+                        onActivated: () => owner.OnWebsite?.Invoke()
                     )
                 );
+            }
+
             foreach (var link in owner.Links)
+            {
                 links.Rows.Add(
                     Link(
-                        link.Label,
-                        link.Subtitle,
-                        link.IconName,
-                        link.OnActivated
+                        label: link.Label,
+                        subtitle: link.Subtitle,
+                        icon: link.IconName,
+                        onActivated: link.OnActivated
                     )
                 );
+            }
 
             if (links.Rows.Count > 0)
-                col.Children.Add(new Padding(EdgeInsets.Only(top: Spacing.Md), links));
+            {
+                col.Children.Add(
+                    new Padding(padding: EdgeInsets.Only(top: Spacing.Md), child: links)
+                );
+            }
 
             if (owner.Comments is { } comments)
+            {
                 col.Children.Add(
                     new Padding(
-                        EdgeInsets.Only(top: Spacing.Md),
-                        new Label(comments, AdwTypography.Body, theme.OnBackground) {
+                        padding: EdgeInsets.Only(top: Spacing.Md),
+                        child: new Label(
+                            text: comments,
+                            style: AdwTypography.Body,
+                            color: theme.OnBackground
+                        ) {
                             Align = TextAlign.Center,
                         }
                     )
                 );
+            }
 
             // ── Legal ────────────────────────────────────────────────────────────
             if (owner.Copyright is { } copyright)
+            {
                 col.Children.Add(
                     new Padding(
-                        EdgeInsets.Only(top: Spacing.Md),
-                        new Label(copyright, AdwTypography.Caption, p.DimLabel) {
+                        padding: EdgeInsets.Only(top: Spacing.Md),
+                        child: new Label(
+                            text: copyright,
+                            style: AdwTypography.Caption,
+                            color: p.DimLabel
+                        ) {
                             Align = TextAlign.Center,
                         }
                     )
                 );
+            }
+
             if (owner.License is { } license)
+            {
                 col.Children.Add(
-                    new Label(license, AdwTypography.Caption, p.DimLabel) {
+                    new Label(text: license, style: AdwTypography.Caption, color: p.DimLabel) {
                         Align = TextAlign.Center,
                     }
                 );
+            }
 
             return new SingleChildScrollView(
-                col,
+                child: col,
                 padding: EdgeInsets.All(Spacing.Xxl)
             );
         }

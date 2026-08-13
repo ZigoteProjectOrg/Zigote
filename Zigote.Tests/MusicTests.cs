@@ -23,15 +23,15 @@ public class MusicTests
         Audio.Backend = fake;
         try
         {
-            Music.Play("music/theme.ogg", 0f);
+            Music.Play(path: "music/theme.ogg", crossfadeSeconds: 0f);
 
             var track = fake.Sounds.Single();
             Assert.True(track.Streaming);
             Assert.False(track.Spatial);
             Assert.True(track.Looping);
             Assert.True(track.Playing);
-            Assert.Equal(1f, track.Volume, 3);
-            Assert.Equal("music/theme.ogg", Music.CurrentTrack);
+            Assert.Equal(expected: 1f, actual: track.Volume, precision: 3);
+            Assert.Equal(expected: "music/theme.ogg", actual: Music.CurrentTrack);
         }
         finally
         {
@@ -47,8 +47,8 @@ public class MusicTests
         Audio.Backend = fake;
         try
         {
-            Music.Play("music/theme.ogg", 0f);
-            Music.Play("music/theme.ogg", 0f);
+            Music.Play(path: "music/theme.ogg", crossfadeSeconds: 0f);
+            Music.Play(path: "music/theme.ogg", crossfadeSeconds: 0f);
             Assert.Single(fake.Sounds);
         }
         finally
@@ -65,22 +65,22 @@ public class MusicTests
         Audio.Backend = fake;
         try
         {
-            Music.Play("a.ogg", 0f);
+            Music.Play(path: "a.ogg", crossfadeSeconds: 0f);
             var a = fake.Sounds[0];
 
             Music.Play("b.ogg");
             var b = fake.Sounds[1];
-            Assert.Equal(0f, b.Volume, 3); // incoming starts silent
+            Assert.Equal(expected: 0f, actual: b.Volume, precision: 3); // incoming starts silent
 
             Music.Tick(0.5f);
-            Assert.Equal(0.5f, b.Volume, 2);
-            Assert.Equal(0.5f, a.Volume, 2);
+            Assert.Equal(expected: 0.5f, actual: b.Volume, precision: 2);
+            Assert.Equal(expected: 0.5f, actual: a.Volume, precision: 2);
             Assert.False(a.Destroyed);
 
             Music.Tick(0.6f); // fade completes
-            Assert.Equal(1f, b.Volume, 2);
+            Assert.Equal(expected: 1f, actual: b.Volume, precision: 2);
             Assert.True(a.Destroyed);
-            Assert.Equal("b.ogg", Music.CurrentTrack);
+            Assert.Equal(expected: "b.ogg", actual: Music.CurrentTrack);
         }
         finally
         {
@@ -96,7 +96,7 @@ public class MusicTests
         Audio.Backend = fake;
         try
         {
-            Music.Play("a.ogg", 0f);
+            Music.Play(path: "a.ogg", crossfadeSeconds: 0f);
             var a = fake.Sounds[0];
 
             Music.Stop(0.5f);
@@ -104,7 +104,7 @@ public class MusicTests
             Assert.False(a.Destroyed); // still fading
 
             Music.Tick(0.25f);
-            Assert.Equal(0.5f, a.Volume, 2);
+            Assert.Equal(expected: 0.5f, actual: a.Volume, precision: 2);
             Music.Tick(0.3f);
             Assert.True(a.Destroyed);
         }
@@ -122,20 +122,20 @@ public class MusicTests
         Audio.Backend = fake;
         try
         {
-            Music.Play("a.ogg", 0f);
+            Music.Play(path: "a.ogg", crossfadeSeconds: 0f);
             var a = fake.Sounds[0];
             Music.DuckVolume = 0.25f;
             Music.DuckSeconds = 0.5f;
 
             Music.Ducked = true;
             Music.Tick(0.25f); // halfway down: duck level ~0.5 of the way 1 → 0.25
-            Assert.InRange(a.Volume, 0.55f, 0.75f);
+            Assert.InRange(actual: a.Volume, low: 0.55f, high: 0.75f);
             Music.Tick(0.5f);
-            Assert.Equal(0.25f, a.Volume, 2);
+            Assert.Equal(expected: 0.25f, actual: a.Volume, precision: 2);
 
             Music.Ducked = false;
             Music.Tick(1f);
-            Assert.Equal(1f, a.Volume, 2);
+            Assert.Equal(expected: 1f, actual: a.Volume, precision: 2);
         }
         finally
         {
@@ -151,11 +151,11 @@ public class MusicTests
         Audio.Backend = fake;
         try
         {
-            Music.Play("a.ogg", 0f);
+            Music.Play(path: "a.ogg", crossfadeSeconds: 0f);
             Music.Play("b.ogg"); // mid-crossfade
             Music.Reset();
 
-            Assert.All(fake.Sounds, s => Assert.True(s.Destroyed));
+            Assert.All(collection: fake.Sounds, action: s => Assert.True(s.Destroyed));
             Assert.False(Music.IsPlaying);
             Assert.Null(Music.CurrentTrack);
         }
@@ -174,8 +174,8 @@ public class MusicTests
         {
             var bus = Audio.CreateBus();
             Music.Bus = bus;
-            Music.Play("a.ogg", 0f);
-            Assert.Equal(bus, fake.Sounds[0].Bus);
+            Music.Play(path: "a.ogg", crossfadeSeconds: 0f);
+            Assert.Equal(expected: bus, actual: fake.Sounds[0].Bus);
         }
         finally
         {
@@ -236,67 +236,39 @@ public class MusicTests
             if (Of(sound) is { } s) s.Bus = bus;
         }
 
-        public AudioBus CreateBus()
-        {
-            return new AudioBus(_nextBus++);
-        }
+        public AudioBus CreateBus() => new(_nextBus++);
 
-        public void SetBusVolume(AudioBus bus, float volume)
-        {
-        }
+        public void SetBusVolume(AudioBus bus, float volume) { }
 
-        public void SetBusPitch(AudioBus bus, float pitch)
-        {
-        }
+        public void SetBusPitch(AudioBus bus, float pitch) { }
 
-        public void SetListener(Vec3 position, Vec3 forward, Vec3 up)
-        {
-        }
+        public void SetListener(Vec3 position, Vec3 forward, Vec3 up) { }
 
-        public void SetMasterVolume(float volume)
-        {
-        }
+        public void SetMasterVolume(float volume) { }
 
         public void PlayUiTone(float frequencyHz, float durationSeconds, float volume,
-            SoundWave wave)
-        {
-        }
+            SoundWave wave) { }
 
         public void PlayToneAt(Vec3 position, float frequencyHz, float durationSeconds,
             float volume,
-            SoundWave wave, float minDistance, float maxDistance, float rolloff)
-        {
-        }
+            SoundWave wave, float minDistance, float maxDistance, float rolloff) { }
 
-        public void SetPitch(SoundHandle sound, float pitch)
-        {
-        }
+        public void SetPitch(SoundHandle sound, float pitch) { }
 
-        public void SetPosition(SoundHandle sound, Vec3 position)
-        {
-        }
+        public void SetPosition(SoundHandle sound, Vec3 position) { }
 
-        public void SetVelocity(SoundHandle sound, Vec3 velocity)
-        {
-        }
+        public void SetVelocity(SoundHandle sound, Vec3 velocity) { }
 
         public void SetAttenuation(SoundHandle sound, float minDistance, float maxDistance,
-            float rolloff)
-        {
-        }
+            float rolloff) { }
 
-        public bool IsPlaying(SoundHandle sound)
-        {
-            return Of(sound)?.Playing ?? false;
-        }
+        public bool IsPlaying(SoundHandle sound) => Of(sound)?.Playing ?? false;
 
-        public void StopAll()
-        {
-        }
+        public void StopAll() { }
 
         private SoundState? Of(SoundHandle h)
         {
-            var index = (int)h.Id - 1;
+            int index = (int)h.Id - 1;
             return index >= 0 && index < Sounds.Count ? Sounds[index] : null;
         }
 

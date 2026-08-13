@@ -20,264 +20,264 @@ internal static class GalleryRegistry
 {
     public static readonly GallerySection[] Sections = [
         new(
-            null,
-            [
+            Title: null,
+            Entries: [
                 new GalleryEntry(
-                    "Welcome",
-                    "What this gallery is",
-                    MaterialIcons.WavingHand,
-                    () => new WelcomePage()
+                    Title: "Welcome",
+                    Subtitle: "What this gallery is",
+                    IconName: MaterialIcons.WavingHand,
+                    Build: () => new WelcomePage()
                 ),
             ]
         ),
         new(
-            "Navigation",
-            [
+            Title: "Navigation",
+            Entries: [
                 new GalleryEntry(
-                    "Navigation View",
-                    "A page stack with a header that follows it",
-                    MaterialIcons.Layers,
-                    () => new NavigationViewPage()
+                    Title: "Navigation View",
+                    Subtitle: "A page stack with a header that follows it",
+                    IconName: MaterialIcons.Layers,
+                    Build: () => new NavigationViewPage()
                 ),
                 new GalleryEntry(
-                    "Split Views",
-                    "Sidebar layouts that fold at narrow widths",
-                    MaterialIcons.VerticalSplit,
-                    () => new SplitViewsPage()
+                    Title: "Split Views",
+                    Subtitle: "Sidebar layouts that fold at narrow widths",
+                    IconName: MaterialIcons.VerticalSplit,
+                    Build: () => new SplitViewsPage()
                 ),
                 new GalleryEntry(
-                    "Paned",
-                    "Two panes and a draggable handle",
-                    MaterialIcons.Splitscreen,
-                    () => new PanedPage()
+                    Title: "Paned",
+                    Subtitle: "Two panes and a draggable handle",
+                    IconName: MaterialIcons.Splitscreen,
+                    Build: () => new PanedPage()
                 ),
                 new GalleryEntry(
-                    "Breakpoints",
-                    "Containers that fold on their own size",
-                    MaterialIcons.Rule,
-                    () => new BreakpointsPage()
+                    Title: "Breakpoints",
+                    Subtitle: "Containers that fold on their own size",
+                    IconName: MaterialIcons.Rule,
+                    Build: () => new BreakpointsPage()
                 ),
                 new GalleryEntry(
-                    "View Switcher",
-                    "One stack, a header switcher and a bottom bar",
-                    MaterialIcons.SwitchLeft,
-                    () => new ViewSwitcherPage()
+                    Title: "View Switcher",
+                    Subtitle: "One stack, a header switcher and a bottom bar",
+                    IconName: MaterialIcons.SwitchLeft,
+                    Build: () => new ViewSwitcherPage()
                 ),
                 new GalleryEntry(
-                    "Tab View",
-                    "Pinned and closable tabs with a tab menu",
-                    MaterialIcons.Tab,
-                    () => new TabViewPage()
+                    Title: "Tab View",
+                    Subtitle: "Pinned and closable tabs with a tab menu",
+                    IconName: MaterialIcons.Tab,
+                    Build: () => new TabViewPage()
                 ),
                 new GalleryEntry(
-                    "Bottom Sheet",
-                    "A sheet you drag up over the content",
-                    MaterialIcons.VerticalAlignBottom,
-                    () => new BottomSheetsPage()
+                    Title: "Bottom Sheet",
+                    Subtitle: "A sheet you drag up over the content",
+                    IconName: MaterialIcons.VerticalAlignBottom,
+                    Build: () => new BottomSheetsPage()
                 ),
                 new GalleryEntry(
-                    "Carousel",
-                    "Swipeable pages with dot and line indicators",
-                    MaterialIcons.ViewCarousel,
-                    () => new CarouselPage()
+                    Title: "Carousel",
+                    Subtitle: "Swipeable pages with dot and line indicators",
+                    IconName: MaterialIcons.ViewCarousel,
+                    Build: () => new CarouselPage()
                 ),
                 new GalleryEntry(
-                    "Image Grid",
-                    "A lazy, virtualized grid that pages as it scrolls",
-                    MaterialIcons.GridView,
-                    () => new ImageGridPage()
-                ),
-            ]
-        ),
-        new(
-            "Controls",
-            [
-                new GalleryEntry(
-                    "Buttons",
-                    "Every style, size and shape",
-                    MaterialIcons.SmartButton,
-                    () => new ButtonsPage()
-                ),
-                new GalleryEntry(
-                    "Toggles",
-                    "Linked groups, toggle buttons and switches",
-                    MaterialIcons.ToggleOn,
-                    () => new TogglesPage()
-                ),
-                new GalleryEntry(
-                    "Checks & Radios",
-                    "Check buttons, radio groups and their rows",
-                    MaterialIcons.CheckBox,
-                    () => new ChecksPage()
-                ),
-                new GalleryEntry(
-                    "Sliders & Progress",
-                    "Ranges, spin buttons, progress and level bars",
-                    MaterialIcons.Tune,
-                    () => new SlidersPage()
-                ),
-                new GalleryEntry(
-                    "Entries",
-                    "Text, search and password entries, plain and as rows",
-                    MaterialIcons.TextFields,
-                    () => new EntriesPage()
-                ),
-                new GalleryEntry(
-                    "Colour & Completion",
-                    "Colour button, suggestion entry and separators",
-                    MaterialIcons.Palette,
-                    () => new ColorAndCompletionPage()
-                ),
-                new GalleryEntry(
-                    "Shortcuts",
-                    "Key caps and the keyboard-shortcuts dialog",
-                    MaterialIcons.Keyboard,
-                    () => new ShortcutsPage()
-                ),
-                new GalleryEntry(
-                    "Menus & Popovers",
-                    "Menu buttons, split buttons and popovers",
-                    MaterialIcons.MoreVert,
-                    () => new MenusPage()
+                    Title: "Image Grid",
+                    Subtitle: "A lazy, virtualized grid that pages as it scrolls",
+                    IconName: MaterialIcons.GridView,
+                    Build: () => new ImageGridPage()
                 ),
             ]
         ),
         new(
-            "Lists",
-            [
+            Title: "Controls",
+            Entries: [
                 new GalleryEntry(
-                    "Boxed Lists",
-                    "Every row type, from actions to expanders",
-                    MaterialIcons.ViewList,
-                    () => new ListsPage()
+                    Title: "Buttons",
+                    Subtitle: "Every style, size and shape",
+                    IconName: MaterialIcons.SmartButton,
+                    Build: () => new ButtonsPage()
                 ),
                 new GalleryEntry(
-                    "Preferences",
-                    "The preferences dialog pattern",
-                    MaterialIcons.Settings,
-                    () => new PreferencesPage()
+                    Title: "Toggles",
+                    Subtitle: "Linked groups, toggle buttons and switches",
+                    IconName: MaterialIcons.ToggleOn,
+                    Build: () => new TogglesPage()
                 ),
                 new GalleryEntry(
-                    "Large Lists",
-                    "Two thousand rows, recycled while you scroll",
-                    MaterialIcons.FormatListNumbered,
-                    () => new LargeListsPage()
-                ),
-            ]
-        ),
-        new(
-            "Feedback",
-            [
-                new GalleryEntry(
-                    "Banners",
-                    "An inline bar for something that needs an answer",
-                    MaterialIcons.Campaign,
-                    () => new BannersPage()
+                    Title: "Checks & Radios",
+                    Subtitle: "Check buttons, radio groups and their rows",
+                    IconName: MaterialIcons.CheckBox,
+                    Build: () => new ChecksPage()
                 ),
                 new GalleryEntry(
-                    "Toasts",
-                    "Transient messages with an optional action",
-                    MaterialIcons.Notifications,
-                    () => new ToastsPage()
+                    Title: "Sliders & Progress",
+                    Subtitle: "Ranges, spin buttons, progress and level bars",
+                    IconName: MaterialIcons.Tune,
+                    Build: () => new SlidersPage()
                 ),
                 new GalleryEntry(
-                    "Alert Dialogs",
-                    "Adaptive dialogs with suggested and destructive responses",
-                    MaterialIcons.WebAsset,
-                    () => new AlertsPage()
+                    Title: "Entries",
+                    Subtitle: "Text, search and password entries, plain and as rows",
+                    IconName: MaterialIcons.TextFields,
+                    Build: () => new EntriesPage()
                 ),
                 new GalleryEntry(
-                    "Spinner",
-                    "The indeterminate Adwaita spinner",
-                    MaterialIcons.Autorenew,
-                    () => new SpinnerPage()
+                    Title: "Colour & Completion",
+                    Subtitle: "Colour button, suggestion entry and separators",
+                    IconName: MaterialIcons.Palette,
+                    Build: () => new ColorAndCompletionPage()
                 ),
                 new GalleryEntry(
-                    "Status Pages",
-                    "Empty, error and welcome states",
-                    MaterialIcons.Info,
-                    () => new StatusPagesPage()
+                    Title: "Shortcuts",
+                    Subtitle: "Key caps and the keyboard-shortcuts dialog",
+                    IconName: MaterialIcons.Keyboard,
+                    Build: () => new ShortcutsPage()
                 ),
                 new GalleryEntry(
-                    "Avatar",
-                    "Initials, images and fallback icons",
-                    MaterialIcons.AccountCircle,
-                    () => new AvatarPage()
+                    Title: "Menus & Popovers",
+                    Subtitle: "Menu buttons, split buttons and popovers",
+                    IconName: MaterialIcons.MoreVert,
+                    Build: () => new MenusPage()
                 ),
             ]
         ),
         new(
-            "Layout",
-            [
+            Title: "Lists",
+            Entries: [
                 new GalleryEntry(
-                    "Clamp",
-                    "Reading-width content in a wide window",
-                    MaterialIcons.FitScreen,
-                    () => new ClampPage()
+                    Title: "Boxed Lists",
+                    Subtitle: "Every row type, from actions to expanders",
+                    IconName: MaterialIcons.ViewList,
+                    Build: () => new ListsPage()
                 ),
                 new GalleryEntry(
-                    "Wrap Box",
-                    "Children that flow onto new lines",
-                    MaterialIcons.WrapText,
-                    () => new WrapBoxPage()
+                    Title: "Preferences",
+                    Subtitle: "The preferences dialog pattern",
+                    IconName: MaterialIcons.Settings,
+                    Build: () => new PreferencesPage()
                 ),
                 new GalleryEntry(
-                    "Adaptive",
-                    "One layout that answers to the window size",
-                    MaterialIcons.Devices,
-                    () => new AdaptivePage()
-                ),
-            ]
-        ),
-        new(
-            "Style",
-            [
-                new GalleryEntry(
-                    "Style Classes",
-                    "The libadwaita style classes on real widgets",
-                    MaterialIcons.Palette,
-                    () => new StylesPage()
-                ),
-                new GalleryEntry(
-                    "Typography",
-                    "The Adwaita type scale",
-                    MaterialIcons.FormatSize,
-                    () => new TypographyPage()
-                ),
-                new GalleryEntry(
-                    "Colors",
-                    "Named colors and the nine system accents",
-                    MaterialIcons.ColorLens,
-                    () => new ColorsPage()
-                ),
-                new GalleryEntry(
-                    "Animations",
-                    "Curves, transitions and implicit animation",
-                    MaterialIcons.Animation,
-                    () => new AnimationsPage()
+                    Title: "Large Lists",
+                    Subtitle: "Two thousand rows, recycled while you scroll",
+                    IconName: MaterialIcons.FormatListNumbered,
+                    Build: () => new LargeListsPage()
                 ),
             ]
         ),
         new(
-            "Zigote",
-            [
+            Title: "Feedback",
+            Entries: [
                 new GalleryEntry(
-                    "Reactivity",
-                    "Signals, computed values and effects driving the UI",
-                    MaterialIcons.Bolt,
-                    () => new ReactivityPage()
+                    Title: "Banners",
+                    Subtitle: "An inline bar for something that needs an answer",
+                    IconName: MaterialIcons.Campaign,
+                    Build: () => new BannersPage()
                 ),
                 new GalleryEntry(
-                    "Concurrency",
-                    "Threads writing signals, frame-budgeted delivery and sliced work",
-                    MaterialIcons.Speed,
-                    () => new ConcurrencyPage()
+                    Title: "Toasts",
+                    Subtitle: "Transient messages with an optional action",
+                    IconName: MaterialIcons.Notifications,
+                    Build: () => new ToastsPage()
                 ),
                 new GalleryEntry(
-                    "Drag and Drop",
-                    "Draggable payloads and drop targets",
-                    MaterialIcons.OpenWith,
-                    () => new DragDropPage()
+                    Title: "Alert Dialogs",
+                    Subtitle: "Adaptive dialogs with suggested and destructive responses",
+                    IconName: MaterialIcons.WebAsset,
+                    Build: () => new AlertsPage()
+                ),
+                new GalleryEntry(
+                    Title: "Spinner",
+                    Subtitle: "The indeterminate Adwaita spinner",
+                    IconName: MaterialIcons.Autorenew,
+                    Build: () => new SpinnerPage()
+                ),
+                new GalleryEntry(
+                    Title: "Status Pages",
+                    Subtitle: "Empty, error and welcome states",
+                    IconName: MaterialIcons.Info,
+                    Build: () => new StatusPagesPage()
+                ),
+                new GalleryEntry(
+                    Title: "Avatar",
+                    Subtitle: "Initials, images and fallback icons",
+                    IconName: MaterialIcons.AccountCircle,
+                    Build: () => new AvatarPage()
+                ),
+            ]
+        ),
+        new(
+            Title: "Layout",
+            Entries: [
+                new GalleryEntry(
+                    Title: "Clamp",
+                    Subtitle: "Reading-width content in a wide window",
+                    IconName: MaterialIcons.FitScreen,
+                    Build: () => new ClampPage()
+                ),
+                new GalleryEntry(
+                    Title: "Wrap Box",
+                    Subtitle: "Children that flow onto new lines",
+                    IconName: MaterialIcons.WrapText,
+                    Build: () => new WrapBoxPage()
+                ),
+                new GalleryEntry(
+                    Title: "Adaptive",
+                    Subtitle: "One layout that answers to the window size",
+                    IconName: MaterialIcons.Devices,
+                    Build: () => new AdaptivePage()
+                ),
+            ]
+        ),
+        new(
+            Title: "Style",
+            Entries: [
+                new GalleryEntry(
+                    Title: "Style Classes",
+                    Subtitle: "The libadwaita style classes on real widgets",
+                    IconName: MaterialIcons.Palette,
+                    Build: () => new StylesPage()
+                ),
+                new GalleryEntry(
+                    Title: "Typography",
+                    Subtitle: "The Adwaita type scale",
+                    IconName: MaterialIcons.FormatSize,
+                    Build: () => new TypographyPage()
+                ),
+                new GalleryEntry(
+                    Title: "Colors",
+                    Subtitle: "Named colors and the nine system accents",
+                    IconName: MaterialIcons.ColorLens,
+                    Build: () => new ColorsPage()
+                ),
+                new GalleryEntry(
+                    Title: "Animations",
+                    Subtitle: "Curves, transitions and implicit animation",
+                    IconName: MaterialIcons.Animation,
+                    Build: () => new AnimationsPage()
+                ),
+            ]
+        ),
+        new(
+            Title: "Zigote",
+            Entries: [
+                new GalleryEntry(
+                    Title: "Reactivity",
+                    Subtitle: "Signals, computed values and effects driving the UI",
+                    IconName: MaterialIcons.Bolt,
+                    Build: () => new ReactivityPage()
+                ),
+                new GalleryEntry(
+                    Title: "Concurrency",
+                    Subtitle: "Threads writing signals, frame-budgeted delivery and sliced work",
+                    IconName: MaterialIcons.Speed,
+                    Build: () => new ConcurrencyPage()
+                ),
+                new GalleryEntry(
+                    Title: "Drag and Drop",
+                    Subtitle: "Draggable payloads and drop targets",
+                    IconName: MaterialIcons.OpenWith,
+                    Build: () => new DragDropPage()
                 ),
             ]
         ),
@@ -290,16 +290,22 @@ internal static class GalleryRegistry
     {
         return [
             .. Sections.Select(s => new AdwSidebarSection(
-                    s.Title,
-                    [.. s.Entries.Select(e => new AdwSidebarItem(e.Title, e.IconName))]
+                    title: s.Title,
+                    items: [
+                        .. s.Entries.Select(e => new AdwSidebarItem(
+                                title: e.Title,
+                                iconName: e.IconName
+                            )
+                        ),
+                    ]
                 )
             ),
         ];
     }
 
     /// <summary>Index of a page by title, or -1 — the target of an in-page cross link.</summary>
-    public static int IndexOf(string title)
-    {
-        return Array.FindIndex(Entries, e => e.Title == title);
-    }
+    public static int IndexOf(string title) => Array.FindIndex(
+        array: Entries,
+        match: e => e.Title == title
+    );
 }

@@ -13,12 +13,12 @@ namespace Zigote.UI.Adwaita;
 public sealed class AdwExpanderRow : ComposedWidget
 {
     private readonly Signal<bool> _expanded = new(false);
-    private string _title;
-    private string? _subtitle;
-    private Widget? _headerSuffix;
-    private bool _showEnableSwitch;
     private bool _enableExpansion = true;
     private bool _enabled = true;
+    private Widget? _headerSuffix;
+    private bool _showEnableSwitch;
+    private string? _subtitle;
+    private string _title;
 
     public AdwExpanderRow(string title = "", string? subtitle = null)
     {
@@ -29,13 +29,13 @@ public sealed class AdwExpanderRow : ComposedWidget
     public string Title
     {
         get => _title;
-        set => this.Set(ref _title, value);
+        set => this.Set(field: ref _title, value: value);
     }
 
     public string? Subtitle
     {
         get => _subtitle;
-        set => this.Set(ref _subtitle, value);
+        set => this.Set(field: ref _subtitle, value: value);
     }
 
     /// <summary>The nested rows revealed when expanded. Populate before mounting.</summary>
@@ -51,14 +51,14 @@ public sealed class AdwExpanderRow : ComposedWidget
     public Widget? HeaderSuffix
     {
         get => _headerSuffix;
-        set => this.Set(ref _headerSuffix, value);
+        set => this.Set(field: ref _headerSuffix, value: value);
     }
 
     /// <summary>Show an enable switch before the chevron; off = collapsed and not expandable.</summary>
     public bool ShowEnableSwitch
     {
         get => _showEnableSwitch;
-        set => this.Set(ref _showEnableSwitch, value);
+        set => this.Set(field: ref _showEnableSwitch, value: value);
     }
 
     /// <summary>
@@ -70,14 +70,14 @@ public sealed class AdwExpanderRow : ComposedWidget
     public bool EnableExpansion
     {
         get => _enableExpansion;
-        set => this.Set(ref _enableExpansion, value);
+        set => this.Set(field: ref _enableExpansion, value: value);
     }
 
     /// <summary>Adwaita dims a whole insensitive row (header and nested rows) and stops activating it.</summary>
     public bool Enabled
     {
         get => _enabled;
-        set => this.Set(ref _enabled, value);
+        set => this.Set(field: ref _enabled, value: value);
     }
 
     /// <summary>Fired when the enable switch is toggled.</summary>
@@ -88,15 +88,16 @@ public sealed class AdwExpanderRow : ComposedWidget
         var theme = ThemeProvider.Of(context);
         var p = AdwPalette.For(theme);
 
-        var header = new AdwActionRow(Title, Subtitle) {
+        var header = new AdwActionRow(title: Title, subtitle: Subtitle) {
             OnActivated = Enabled ? ToggleExpanded : null,
         };
         if (HeaderSuffix is not null) header.Suffixes.Add(HeaderSuffix);
         if (ShowEnableSwitch)
+        {
             header.Suffixes.Add(
                 new AdwSwitch(
-                    _enableExpansion,
-                    on =>
+                    value: _enableExpansion,
+                    onChanged: on =>
                     {
                         _enableExpansion = on;
                         if (!on) _expanded.Value = false;
@@ -104,6 +105,7 @@ public sealed class AdwExpanderRow : ComposedWidget
                     }
                 ) { Enabled = Enabled }
             );
+        }
 
         // Retained chevron: the Watch retargets it (triggering the spin) and returns the same
         // instance every time — Watch keeps it, nothing rebuilds. libadwaita rotates
@@ -115,7 +117,11 @@ public sealed class AdwExpanderRow : ComposedWidget
                 {
                     // `image.expander-row-arrow` is .dimmed, and `&:checked` takes it to opacity 1
                     // in --accent-color — the expanded state is accent-marked, not just rotated.
-                    chevron.Set(_expanded.Value, p.DimLabel, theme.PrimaryDark);
+                    chevron.Set(
+                        expanded: _expanded.Value,
+                        dim: p.DimLabel,
+                        accent: theme.PrimaryDark
+                    );
                     return chevron;
                 }
             )
@@ -141,11 +147,11 @@ public sealed class AdwExpanderRow : ComposedWidget
         // transparent) }` — the nested rows sit in a recess, which is what separates them from the
         // header row once the separator scrolls out of view.
         var reveal = new RevealBox(
-            new DecoratedBox {
+            child: new DecoratedBox {
                 Fill = p.CardShade.WithAlpha(p.CardShade.A * 0.5f),
                 Child = revealed,
             },
-            _expanded.Value
+            shown: _expanded.Value
         );
 
         Widget column = new Column(
@@ -163,7 +169,7 @@ public sealed class AdwExpanderRow : ComposedWidget
             },
         };
         // Adwaita disabled rows dim wholesale.
-        return Enabled ? column : new Opacity(AdwStyle.DisabledOpacity, column);
+        return Enabled ? column : new Opacity(opacity: AdwStyle.DisabledOpacity, child: column);
     }
 
     private void ToggleExpanded()
@@ -181,27 +187,27 @@ public sealed class AdwExpanderRow : ComposedWidget
     {
         private readonly IconGlyph _glyph;
         private readonly Transform _spin;
-        private ColorTween _color = new(Color.Transparent, Color.Transparent);
+        private ColorTween _color = new(begin: Color.Transparent, end: Color.Transparent);
         private bool _first = true;
         private float _fromAngle, _toAngle;
 
-        public SpinChevron() : base(0.2f, Curves.EaseOut)
+        public SpinChevron() : base(durationSeconds: 0.2f, curve: Curves.EaseOut)
         {
-            _glyph = new IconGlyph(Icons.ChevronDown, AdwMetrics.IconSize);
-            _spin = new Transform(Offset.Zero, _glyph);
+            _glyph = new IconGlyph(glyph: Icons.ChevronDown, size: AdwMetrics.IconSize);
+            _spin = new Transform(translation: Offset.Zero, child: _glyph);
             Controller.OnTick += Apply;
         }
 
         public void Set(bool expanded, Color dim, Color accent)
         {
-            var angle = expanded ? MathF.PI : 0f; // 0.5turn clockwise, like the CSS
+            float angle = expanded ? MathF.PI : 0f; // 0.5turn clockwise, like the CSS
             var color = expanded ? accent : dim;
 
             if (_first)
             {
                 _first = false;
                 _fromAngle = _toAngle = angle;
-                _color = new ColorTween(color, color);
+                _color = new ColorTween(begin: color, end: color);
                 Apply();
                 return;
             }
@@ -209,21 +215,18 @@ public sealed class AdwExpanderRow : ComposedWidget
             if (MathF.Abs(angle - _toAngle) < 1e-3f)
             {
                 // Same state, new palette — theme swaps retint in place, no spin.
-                _color = new ColorTween(color, color);
+                _color = new ColorTween(begin: color, end: color);
                 Apply();
                 return;
             }
 
             _fromAngle = CurrentAngle(); // ease from whatever is on screen, even mid-flight
             _toAngle = angle;
-            _color = new ColorTween(_glyph.Color ?? color, color);
+            _color = new ColorTween(begin: _glyph.Color ?? color, end: color);
             Animate();
         }
 
-        private float CurrentAngle()
-        {
-            return _fromAngle + (_toAngle - _fromAngle) * Progress;
-        }
+        private float CurrentAngle() => _fromAngle + ((_toAngle - _fromAngle) * Progress);
 
         private void Apply()
         {
@@ -231,10 +234,7 @@ public sealed class AdwExpanderRow : ComposedWidget
             _glyph.Color = _color.Evaluate(Progress);
         }
 
-        public override Size Measure(Constraints c)
-        {
-            return _spin.Measure(c);
-        }
+        public override Size Measure(Constraints c) => _spin.Measure(c);
 
         public override void Layout(Offset origin)
         {
@@ -242,20 +242,12 @@ public sealed class AdwExpanderRow : ComposedWidget
             Bounds = _spin.Bounds;
         }
 
-        public override void Paint(PaintList paint)
-        {
-            _spin.Paint(paint);
-        }
+        public override void Paint(PaintList paint) => _spin.Paint(paint);
 
-        public override Widget? HitTest(Offset point)
-        {
-            return null; // decoration only — the row itself is the press target
-        }
+        public override Widget? HitTest(Offset point) =>
+            null; // decoration only — the row itself is the press target
 
-        public override IEnumerable<Widget> GetChildren()
-        {
-            return ChildOrEmpty(_spin);
-        }
+        public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(_spin);
     }
 
     /// <summary>
@@ -271,7 +263,10 @@ public sealed class AdwExpanderRow : ComposedWidget
         private Size _size;
         private float _to;
 
-        public RevealBox(Widget child, bool shown) : base(0.25f, Curves.EaseOut)
+        public RevealBox(Widget child, bool shown) : base(
+            durationSeconds: 0.25f,
+            curve: Curves.EaseOut
+        )
         {
             _child = child;
             _from = _to = shown ? 1f : 0f;
@@ -284,7 +279,7 @@ public sealed class AdwExpanderRow : ComposedWidget
         {
             set
             {
-                var target = value ? 1f : 0f;
+                float target = value ? 1f : 0f;
                 if (MathF.Abs(target - _to) < 1e-4f) return;
                 _from = Factor; // ease from whatever is on screen, even mid-flight
                 _to = target;
@@ -292,30 +287,32 @@ public sealed class AdwExpanderRow : ComposedWidget
             }
         }
 
-        private float Factor => _from + (_to - _from) * Progress;
+        private float Factor => _from + ((_to - _from) * Progress);
 
         public override Size Measure(Constraints c)
         {
             _childSize = _child.Measure(c);
-            _size = c.Constrain(new Size(_childSize.Width, _childSize.Height * Factor));
+            _size = c.Constrain(
+                new Size(width: _childSize.Width, height: _childSize.Height * Factor)
+            );
             return _size;
         }
 
         public override void Layout(Offset origin)
         {
             Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                _size.Width,
-                _size.Height
+                x: origin.X,
+                y: origin.Y,
+                width: _size.Width,
+                height: _size.Height
             );
             // Pin the child's bottom to ours so the body slides down into place (GTK slide-down).
-            _child.Layout(new Offset(origin.X, origin.Y + _size.Height - _childSize.Height));
+            _child.Layout(new Offset(x: origin.X, y: origin.Y + _size.Height - _childSize.Height));
         }
 
         public override void Paint(PaintList paint)
         {
-            var f = Factor;
+            float f = Factor;
             if (f <= 0.001f) return;
             if (f >= 0.999f)
             {
@@ -331,12 +328,9 @@ public sealed class AdwExpanderRow : ComposedWidget
         public override Widget? HitTest(Offset point)
         {
             // Bounds only cover the revealed strip, so collapsed/clipped content is unreachable.
-            return Bounds.Contains(point.X, point.Y) ? _child.HitTest(point) : null;
+            return Bounds.Contains(px: point.X, py: point.Y) ? _child.HitTest(point) : null;
         }
 
-        public override IEnumerable<Widget> GetChildren()
-        {
-            return ChildOrEmpty(_child);
-        }
+        public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(_child);
     }
 }

@@ -3,8 +3,8 @@ using Zigote.Core.Animation;
 using Zigote.Core.Events;
 using Zigote.Core.Paint;
 using Zigote.Core.State;
-using Zigote.UI.Semantics;
 using Zigote.UI.Host;
+using Zigote.UI.Semantics;
 
 namespace Zigote.UI.Widgets;
 
@@ -18,10 +18,16 @@ public abstract class Widget : ITickerProvider
 {
     [ThreadStatic] public static Widget? CurrentScrollParent;
 
+    protected Constraints LastConstraints;
+
     private bool _focused;
     private List<IDisposable>? _owned;
 
-    protected Constraints LastConstraints;
+    // Cached single-child snapshot for GetChildren: a collection-expression `[Child]` allocates a
+    // wrapper per call, and per-frame tree walks (devtools layers, semantics, hot reload) call
+    // GetChildren on every widget. Re-allocated only when the child reference changes; a returned
+    // array is never mutated afterwards, so stale holders keep a stable snapshot.
+    private Widget[]? _singleChildCache;
 
     public Widget? Parent { get; set; }
     public App? Owner { get; set; }
@@ -99,13 +105,28 @@ public abstract class Widget : ITickerProvider
     /// </summary>
     public virtual bool ExcludeSemantics => false;
 
+    // ── Mount lifecycle ───────────────────────────────────────────────────────
+
+    /// <summary>
+    ///     True between <see cref="OnMount" /> and <see cref="OnUnmount" /> — i.e. while this widget is
+    ///     live in a tree. A detached widget instance is not destroyed (its fields <em>are</em> its
+    ///     state, and they survive), so re-attaching it mounts it again.
+    /// </summary>
+    public bool Mounted { get; private set; }
+
+    /// <summary>
+    ///     Create a <see cref="Ticker" /> owned by this widget's mount period — the
+    ///     <see cref="ITickerProvider" /> every <c>AnimationController(…, vsync: this)</c> wants. Muted
+    ///     while unmounted, disposed on unmount.
+    /// </summary>
+    public Ticker CreateTicker(Action<float> onTick) =>
+        Own(new Ticker(onTick) { Muted = !Mounted });
+
     /// <summary>
     ///     Called when keyboard focus is gained/lost. Override for focus-aware widgets (e.g. close a
     ///     popup on blur).
     /// </summary>
-    protected virtual void OnFocusChanged(bool focused)
-    {
-    }
+    protected virtual void OnFocusChanged(bool focused) { }
 
     /// <summary>
     ///     Describe this widget to the accessibility layer by filling <paramref name="config" /> (role,
@@ -114,9 +135,7 @@ public abstract class Widget : ITickerProvider
     ///     Override on every interactive control and on text/image leaves. See
     ///     <see cref="SemanticsBuilder" />.
     /// </summary>
-    public virtual void DescribeSemantics(SemanticsConfiguration config)
-    {
-    }
+    public virtual void DescribeSemantics(SemanticsConfiguration config) { }
 
     public virtual void Attach(App owner, Widget? parent)
     {
@@ -127,7 +146,7 @@ public abstract class Widget : ITickerProvider
         // a lazy ComposedWidget build) that reconciles THIS widget's live child list mid-iteration —
         // GetChildren() returns the actual List for multi-child containers. Children added by such
         // a reconcile are attached by the reconcile itself, so iterating the snapshot loses nothing.
-        foreach (var child in GetChildren().ToArray()) child.Attach(owner, this);
+        foreach (var child in GetChildren().ToArray()) child.Attach(owner: owner, parent: this);
     }
 
     public virtual void Detach()
@@ -139,8 +158,11 @@ public abstract class Widget : ITickerProvider
         // outgoing tree's detach into it would tear it out of the live tree. Sequential
         // detach-then-attach swaps are unaffected: at detach time the child still points here.
         foreach (var child in GetChildren().ToArray())
-            if (ReferenceEquals(child.Parent, this))
+        {
+            if (ReferenceEquals(objA: child.Parent, objB: this))
                 child.Detach();
+        }
+
         // Children first, then self: a teardown body must never observe a half-dead parent.
         // Runs while Owner is still set so OnUnmount can still reach the app (unregister a back
         // handler, release a text-input session).
@@ -165,15 +187,6 @@ public abstract class Widget : ITickerProvider
         NeedsPaint = true;
     }
 
-    // ── Mount lifecycle ───────────────────────────────────────────────────────
-
-    /// <summary>
-    ///     True between <see cref="OnMount" /> and <see cref="OnUnmount" /> — i.e. while this widget is
-    ///     live in a tree. A detached widget instance is not destroyed (its fields <em>are</em> its
-    ///     state, and they survive), so re-attaching it mounts it again.
-    /// </summary>
-    public bool Mounted { get; private set; }
-
     /// <summary>
     ///     Start anything that must stop when this widget leaves the tree: signal subscriptions,
     ///     tickers, async work. Runs on attach and again on every re-attach, so it is paired 1:1 with
@@ -186,18 +199,14 @@ public abstract class Widget : ITickerProvider
     ///         in <c>Build</c>.
     ///     </para>
     /// </summary>
-    protected virtual void OnMount()
-    {
-    }
+    protected virtual void OnMount() { }
 
     /// <summary>
     ///     Counterpart to <see cref="OnMount" />, run when the widget leaves the tree. Everything
     ///     registered with <see cref="Own{T}" />/<see cref="OwnEffect(Action)" /> is disposed right
     ///     after this returns — override only for teardown that those cannot express.
     /// </summary>
-    protected virtual void OnUnmount()
-    {
-    }
+    protected virtual void OnUnmount() { }
 
     /// <summary>
     ///     Fire <see cref="OnMount" /> if it has not run for the current mount period. Called from
@@ -219,7 +228,7 @@ public abstract class Widget : ITickerProvider
         OnUnmount();
         if (_owned == null) return;
         // Reverse order: later registrations may depend on earlier ones (a controller owning a ticker).
-        for (var i = _owned.Count - 1; i >= 0; i--) _owned[i].Dispose();
+        for (int i = _owned.Count - 1; i >= 0; i--) _owned[i].Dispose();
         _owned.Clear();
     }
 
@@ -257,16 +266,13 @@ public abstract class Widget : ITickerProvider
     ///         background thread must marshal to the UI thread itself (see <c>VideoControls</c>).
     ///     </para>
     /// </summary>
-    protected Effect OwnEffect(Action body)
-    {
-        return Own(new Effect(body));
-    }
+    protected Effect OwnEffect(Action body) => Own(new Effect(body));
 
-    /// <summary><see cref="OwnEffect(Action)" /> for a body returning a cleanup thunk (run before each re-run and on dispose).</summary>
-    protected Effect OwnEffect(Func<Action> bodyWithCleanup)
-    {
-        return Own(new Effect(bodyWithCleanup));
-    }
+    /// <summary>
+    ///     <see cref="OwnEffect(Action)" /> for a body returning a cleanup thunk (run before each
+    ///     re-run and on dispose).
+    /// </summary>
+    protected Effect OwnEffect(Func<Action> bodyWithCleanup) => Own(new Effect(bodyWithCleanup));
 
     /// <summary>
     ///     Put <paramref name="next" /> in this widget's single-child slot and tear down
@@ -294,19 +300,10 @@ public abstract class Widget : ITickerProvider
     /// </summary>
     protected void SwapChild(Widget? previous, Widget? next)
     {
-        if (next != null && Owner != null) next.Attach(Owner, this);
-        if (ReferenceEquals(previous, next) || previous is null) return;
-        if (previous.Parent is null || ReferenceEquals(previous.Parent, this)) previous.Detach();
-    }
-
-    /// <summary>
-    ///     Create a <see cref="Ticker" /> owned by this widget's mount period — the
-    ///     <see cref="ITickerProvider" /> every <c>AnimationController(…, vsync: this)</c> wants. Muted
-    ///     while unmounted, disposed on unmount.
-    /// </summary>
-    public Ticker CreateTicker(Action<float> onTick)
-    {
-        return Own(new Ticker(onTick) { Muted = !Mounted });
+        if (next != null && Owner != null) next.Attach(owner: Owner, parent: this);
+        if (ReferenceEquals(objA: previous, objB: next) || previous is null) return;
+        if (previous.Parent is null || ReferenceEquals(objA: previous.Parent, objB: this))
+            previous.Detach();
     }
 
     // ── Invalidating property setters ─────────────────────────────────────────
@@ -322,28 +319,37 @@ public abstract class Widget : ITickerProvider
     // of re-invalidating every frame forever), and -0.0 does not equal 0.0 (one redundant repaint).
     // Color/EdgeInsets and friends define `operator ==` as Equals, so they are unaffected.
 
-    /// <summary>Store <paramref name="value" /> and rebuild if it differs. Use when the child <em>structure</em> depends on it.</summary>
+    /// <summary>
+    ///     Store <paramref name="value" /> and rebuild if it differs. Use when the child
+    ///     <em>structure</em> depends on it.
+    /// </summary>
     protected bool SetBuild<T>(ref T field, T value)
     {
-        if (EqualityComparer<T>.Default.Equals(field, value)) return false;
+        if (EqualityComparer<T>.Default.Equals(x: field, y: value)) return false;
         field = value;
         MarkNeedsBuild();
         return true;
     }
 
-    /// <summary>Store <paramref name="value" /> and relayout if it differs. Use when the measured size may change.</summary>
+    /// <summary>
+    ///     Store <paramref name="value" /> and relayout if it differs. Use when the measured size may
+    ///     change.
+    /// </summary>
     protected bool SetLayout<T>(ref T field, T value)
     {
-        if (EqualityComparer<T>.Default.Equals(field, value)) return false;
+        if (EqualityComparer<T>.Default.Equals(x: field, y: value)) return false;
         field = value;
         MarkNeedsLayout();
         return true;
     }
 
-    /// <summary>Store <paramref name="value" /> and repaint if it differs. Use when the size provably cannot change.</summary>
+    /// <summary>
+    ///     Store <paramref name="value" /> and repaint if it differs. Use when the size provably
+    ///     cannot change.
+    /// </summary>
     protected bool SetPaint<T>(ref T field, T value)
     {
-        if (EqualityComparer<T>.Default.Equals(field, value)) return false;
+        if (EqualityComparer<T>.Default.Equals(x: field, y: value)) return false;
         field = value;
         MarkNeedsPaint();
         return true;
@@ -420,22 +426,14 @@ public abstract class Widget : ITickerProvider
     ///     Return the deepest widget under <paramref name="point" /> (screen coords),
     ///     or null if this widget does not cover the point.
     /// </summary>
-    public virtual Widget? HitTest(Offset point)
-    {
-        return Bounds.Contains(point.X, point.Y) ? this : null;
-    }
+    public virtual Widget? HitTest(Offset point) =>
+        Bounds.Contains(px: point.X, py: point.Y) ? this : null;
 
-    public virtual void OnPointerDown(Offset point)
-    {
-    }
+    public virtual void OnPointerDown(Offset point) { }
 
-    public virtual void OnPointerUp(Offset point)
-    {
-    }
+    public virtual void OnPointerUp(Offset point) { }
 
-    public virtual void OnPointerMove(Offset point)
-    {
-    }
+    public virtual void OnPointerMove(Offset point) { }
 
     /// <summary>
     ///     Raw pointer motion, in logical pixels, delivered while the pointer is captured
@@ -447,17 +445,11 @@ public abstract class Widget : ITickerProvider
     ///         capture.
     ///     </para>
     /// </summary>
-    public virtual void OnPointerRelative(float deltaX, float deltaY)
-    {
-    }
+    public virtual void OnPointerRelative(float deltaX, float deltaY) { }
 
-    public virtual void OnPointerEnter()
-    {
-    }
+    public virtual void OnPointerEnter() { }
 
-    public virtual void OnPointerExit()
-    {
-    }
+    public virtual void OnPointerExit() { }
 
     /// <summary>
     ///     The mouse cursor this widget wants shown when the pointer is at <paramref name="point" />
@@ -466,18 +458,11 @@ public abstract class Widget : ITickerProvider
     ///     chain until a non-null value is found. Override to show resize / hand / text cursors, e.g. a
     ///     split divider returns <see cref="MouseCursor.ResizeEW" /> over its hit region.
     /// </summary>
-    public virtual MouseCursor? GetCursor(Offset point)
-    {
-        return null;
-    }
+    public virtual MouseCursor? GetCursor(Offset point) => null;
 
-    public virtual void OnRightClick(Offset point)
-    {
-    }
+    public virtual void OnRightClick(Offset point) { }
 
-    public virtual void OnRightPointerUp(Offset point)
-    {
-    }
+    public virtual void OnRightPointerUp(Offset point) { }
 
     /// <summary>
     ///     The pointer sequence this widget was tracking ended without a logical up: a touch was
@@ -487,9 +472,7 @@ public abstract class Widget : ITickerProvider
     ///     state, commit nothing (no tap, no click). Widgets that track state across down→up
     ///     must override this alongside <see cref="OnPointerUp" />.
     /// </summary>
-    public virtual void OnPointerCancel()
-    {
-    }
+    public virtual void OnPointerCancel() { }
 
     /// <summary>
     ///     A touch was held in place past the long-press threshold. The default maps it to
@@ -497,15 +480,9 @@ public abstract class Widget : ITickerProvider
     ///     gesture, so right-click-driven menus work unchanged. Override to attach a distinct
     ///     long-press behavior (see <c>GestureDetector.onLongPress</c>).
     /// </summary>
-    public virtual void OnLongPress(Offset point)
-    {
-        OnRightClick(point);
-    }
+    public virtual void OnLongPress(Offset point) => OnRightClick(point);
 
-    public virtual void OnScroll(float dx, float dy)
-    {
-        ScrollParent?.OnScroll(dx, dy);
-    }
+    public virtual void OnScroll(float dx, float dy) => ScrollParent?.OnScroll(dx: dx, dy: dy);
 
     // ── Touch scrolling ─────────────────────────────────────────────────────────
     //
@@ -520,10 +497,7 @@ public abstract class Widget : ITickerProvider
     ///     the pressed widget (e.g. a horizontal slider inside a vertical list keeps horizontal
     ///     drags). Default: no.
     /// </summary>
-    public virtual bool CanTouchScroll(bool vertical)
-    {
-        return false;
-    }
+    public virtual bool CanTouchScroll(bool vertical) => false;
 
     /// <summary>
     ///     Is the press this widget is already handling a drag of its own — a slider being scrubbed,
@@ -549,29 +523,22 @@ public abstract class Widget : ITickerProvider
     ///         nothing here: the App already stops arbitrating once a long-press fires.
     ///     </para>
     /// </summary>
-    public virtual bool CanTouchDrag(bool vertical)
-    {
-        return false;
-    }
+    public virtual bool CanTouchDrag(bool vertical) => false;
 
     /// <summary>
     ///     Scroll by a finger-drag delta in logical pixels (positive = the finger moved
     ///     right/down; content follows the finger). Unconsumable remainder bubbles to
     ///     <see cref="ScrollParent" /> like wheel scrolling.
     /// </summary>
-    public virtual void OnTouchScroll(float dx, float dy)
-    {
-        ScrollParent?.OnTouchScroll(dx, dy);
-    }
+    public virtual void OnTouchScroll(float dx, float dy) =>
+        ScrollParent?.OnTouchScroll(dx: dx, dy: dy);
 
     /// <summary>
     ///     The scrolling finger lifted with residual velocity (logical px/sec, finger-direction
     ///     signs like <see cref="OnTouchScroll" />). Start inertial scrolling from it.
     /// </summary>
-    public virtual void OnTouchFling(float velocityX, float velocityY)
-    {
-        ScrollParent?.OnTouchFling(velocityX, velocityY);
-    }
+    public virtual void OnTouchFling(float velocityX, float velocityY) =>
+        ScrollParent?.OnTouchFling(velocityX: velocityX, velocityY: velocityY);
 
     // ── Pinch-to-zoom ───────────────────────────────────────────────────────────
     //
@@ -584,10 +551,7 @@ public abstract class Widget : ITickerProvider
     ///     Can this widget consume a two-finger pinch right now? Default: no, which lets the
     ///     gesture fall through to an ancestor (a zoomable page inside a scrolling list).
     /// </summary>
-    public virtual bool CanTouchScale()
-    {
-        return false;
-    }
+    public virtual bool CanTouchScale() => false;
 
     /// <summary>
     ///     Scale by <paramref name="scale" /> (a per-event multiplier: &gt;1 the fingers spread,
@@ -595,9 +559,7 @@ public abstract class Widget : ITickerProvider
     ///     under the fingers' centroid, which must stay put as the content scales, or the zoom
     ///     drifts away from what the user is holding.
     /// </summary>
-    public virtual void OnTouchScale(float scale, Offset focus)
-    {
-    }
+    public virtual void OnTouchScale(float scale, Offset focus) { }
 
     // ── Drag-and-drop targets ───────────────────────────────────────────────────
     //
@@ -611,25 +573,16 @@ public abstract class Widget : ITickerProvider
     ///     locate a drop target — must have no side effects (highlighting belongs in
     ///     <see cref="OnDragEnter" />). Default: no.
     /// </summary>
-    public virtual bool CanAcceptDrop(DragData data)
-    {
-        return false;
-    }
+    public virtual bool CanAcceptDrop(DragData data) => false;
 
     /// <summary>The pointer carrying an acceptable payload entered this target — turn on hover feedback.</summary>
-    public virtual void OnDragEnter(DragData data)
-    {
-    }
+    public virtual void OnDragEnter(DragData data) { }
 
     /// <summary>The drag left this target (moved off it or was released/cancelled) — turn off feedback.</summary>
-    public virtual void OnDragLeave()
-    {
-    }
+    public virtual void OnDragLeave() { }
 
     /// <summary>The payload was released over this target. Perform the drop.</summary>
-    public virtual void OnDrop(DragData data, Offset point)
-    {
-    }
+    public virtual void OnDrop(DragData data, Offset point) { }
 
     /// <summary>
     ///     Returns a hash that represents this widget's current visual state.
@@ -641,40 +594,31 @@ public abstract class Widget : ITickerProvider
     public virtual int DebugStateHash()
     {
         return HashCode.Combine(
-            Bounds.X,
-            Bounds.Y,
-            Bounds.Width,
-            Bounds.Height
+            value1: Bounds.X,
+            value2: Bounds.Y,
+            value3: Bounds.Width,
+            value4: Bounds.Height
         );
     }
 
     /// <summary>Called when this widget has keyboard focus and a key is pressed/released.</summary>
-    public virtual void OnKey(char keyChar, uint scancode, bool down, Modifiers mods)
-    {
-    }
+    public virtual void OnKey(char keyChar, uint scancode, bool down, Modifiers mods) { }
 
     /// <summary>Called when this widget has keyboard focus and text input is received.</summary>
-    public virtual void OnTextInput(string text)
-    {
-    }
+    public virtual void OnTextInput(string text) { }
 
     /// <summary>
     ///     Called for transient IME pre-edit updates. An empty string cancels the active composition.
     ///     The selection offsets describe the IME's selected subrange in its native UTF-8 units.
     /// </summary>
-    public virtual void OnTextComposition(string text, int selectionStart, int selectionLength)
-    {
-    }
+    public virtual void OnTextComposition(string text, int selectionStart, int selectionLength) { }
 
     /// <summary>
     ///     Returns the direct children of this widget.
     ///     Used by the framework for focus traversal and tree walks.
     ///     Override in every container widget; the default returns an empty sequence.
     /// </summary>
-    public virtual IEnumerable<Widget> GetChildren()
-    {
-        return [];
-    }
+    public virtual IEnumerable<Widget> GetChildren() => [];
 
     /// <summary>
     ///     The children that are actually SHOWN right now — what focus traversal and the semantics
@@ -684,23 +628,14 @@ public abstract class Widget : ITickerProvider
     ///     visible subset. Lifecycle walks (attach/detach, hot reload) stay on
     ///     <see cref="GetChildren" /> — hidden children remain part of the tree.
     /// </summary>
-    public virtual IEnumerable<Widget> GetVisibleChildren()
-    {
-        return GetChildren();
-    }
-
-    // Cached single-child snapshot for GetChildren: a collection-expression `[Child]` allocates a
-    // wrapper per call, and per-frame tree walks (devtools layers, semantics, hot reload) call
-    // GetChildren on every widget. Re-allocated only when the child reference changes; a returned
-    // array is never mutated afterwards, so stale holders keep a stable snapshot.
-    private Widget[]? _singleChildCache;
+    public virtual IEnumerable<Widget> GetVisibleChildren() => GetChildren();
 
     /// <summary>Allocation-free `[Child]` for single-child <see cref="GetChildren" /> overrides.</summary>
     protected IEnumerable<Widget> ChildOrEmpty(Widget? child)
     {
         if (child is null) return Array.Empty<Widget>();
         var cached = _singleChildCache;
-        if (cached is null || !ReferenceEquals(cached[0], child))
+        if (cached is null || !ReferenceEquals(objA: cached[0], objB: child))
             _singleChildCache = cached = [child];
         return cached;
     }
@@ -712,7 +647,5 @@ public abstract class Widget : ITickerProvider
     ///     scroll position, in-flight animation) survives while its configuration updates.
     ///     Default: no-op — the instance keeps its current configuration.
     /// </summary>
-    public virtual void UpdateFrom(Widget newWidget)
-    {
-    }
+    public virtual void UpdateFrom(Widget newWidget) { }
 }

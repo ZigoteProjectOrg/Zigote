@@ -64,9 +64,9 @@ public sealed class GraphInspectorPanel : Widget
         // Header
         _content.Children.Add(
             new Label(
-                def?.DisplayName ?? node.DefinitionId,
-                _theme.FontSizeTitle,
-                _theme.OnSurface
+                text: def?.DisplayName ?? node.DefinitionId,
+                fontSize: _theme.FontSizeTitle,
+                color: _theme.OnSurface
             )
         );
         _content.Children.Add(new SizedBox(height: 4f));
@@ -75,9 +75,9 @@ public sealed class GraphInspectorPanel : Widget
         {
             _content.Children.Add(
                 new Label(
-                    $"Definition '{node.DefinitionId}' not found",
-                    _theme.FontSizeBody,
-                    _theme.Error
+                    text: $"Definition '{node.DefinitionId}' not found",
+                    fontSize: _theme.FontSizeBody,
+                    color: _theme.Error
                 )
             );
             return;
@@ -85,13 +85,21 @@ public sealed class GraphInspectorPanel : Widget
 
         // Category + description
         if (!string.IsNullOrWhiteSpace(def.Category))
-            _content.Children.Add(new Label(def.Category, _theme.FontSizeCaption, _theme.Hint));
+        {
+            _content.Children.Add(
+                new Label(text: def.Category, fontSize: _theme.FontSizeCaption, color: _theme.Hint)
+            );
+        }
 
         if (!string.IsNullOrWhiteSpace(def.Description))
         {
             _content.Children.Add(new SizedBox(height: 4f));
             _content.Children.Add(
-                new Label(def.Description, _theme.FontSizeCaption, _theme.OnSurface.WithAlpha(0.7f))
+                new Label(
+                    text: def.Description,
+                    fontSize: _theme.FontSizeCaption,
+                    color: _theme.OnSurface.WithAlpha(0.7f)
+                )
             );
         }
 
@@ -99,32 +107,38 @@ public sealed class GraphInspectorPanel : Widget
         if (def.Properties.Count > 0)
         {
             _content.Children.Add(new SizedBox(height: 8f));
-            _content.Children.Add(new Label("Properties", _theme.FontSizeCaption, _theme.Hint));
+            _content.Children.Add(
+                new Label(text: "Properties", fontSize: _theme.FontSizeCaption, color: _theme.Hint)
+            );
             _content.Children.Add(new Divider());
 
             foreach (var prop in def.Properties)
             {
                 var propDef = prop;
                 var nodeId = node.Id;
-                var propKey = prop.Id;
-                node.Properties.TryGetValue(propKey, out var current);
+                string propKey = prop.Id;
+                node.Properties.TryGetValue(key: propKey, value: out var current);
                 var value = current ?? prop.DefaultValue;
 
                 _content.Children.Add(new SizedBox(height: 4f));
                 _content.Children.Add(
-                    new Label(prop.DisplayName, _theme.FontSizeBody, _theme.OnSurface)
+                    new Label(
+                        text: prop.DisplayName,
+                        fontSize: _theme.FontSizeBody,
+                        color: _theme.OnSurface
+                    )
                 );
 
                 if (propDef.Editor == "gradient" && prop.Type == GraphTypeRef.String)
                 {
                     var grad = ParseGradient(value.IsNull ? "" : value.AsString());
                     var editor = new GradientEditor(
-                        grad,
-                        g =>
+                        gradient: grad,
+                        onChanged: g =>
                         {
                             var node2 = _state.Graph.FindNode(nodeId);
                             var old = node2 is not null &&
-                                      node2.Properties.TryGetValue(propKey, out var o)
+                                      node2.Properties.TryGetValue(key: propKey, value: out var o)
                                 ? o
                                 : propDef.DefaultValue;
                             // Suppress the rebuild this triggers so the stop being dragged is not torn down mid-drag.
@@ -133,10 +147,10 @@ public sealed class GraphInspectorPanel : Widget
                             {
                                 _state.Commands.Execute(
                                     new ChangeNodePropertyCommand(
-                                        nodeId,
-                                        propKey,
-                                        old,
-                                        GraphValue.FromString(SerializeGradient(g))
+                                        nodeId: nodeId,
+                                        propertyKey: propKey,
+                                        oldValue: old,
+                                        newValue: GraphValue.FromString(SerializeGradient(g))
                                     )
                                 );
                             }
@@ -151,22 +165,24 @@ public sealed class GraphInspectorPanel : Widget
                 else if (prop.Type == GraphTypeRef.Int &&
                          propDef.EnumLabels is { Length: > 0 } labels)
                 {
-                    var idx = value.IsNull ? 0 : Math.Clamp(value.AsInt(), 0, labels.Length - 1);
+                    int idx = value.IsNull
+                        ? 0
+                        : Math.Clamp(value: value.AsInt(), min: 0, max: labels.Length - 1);
                     var dd = new Dropdown<string>(
-                        labels,
-                        idx,
-                        s => s,
-                        (i, _) =>
+                        items: labels,
+                        selectedIndex: idx,
+                        displayText: s => s,
+                        onChanged: (i, _) =>
                         {
-                            var old = node.Properties.TryGetValue(propKey, out var o)
+                            var old = node.Properties.TryGetValue(key: propKey, value: out var o)
                                 ? o
                                 : propDef.DefaultValue;
                             _state.Commands.Execute(
                                 new ChangeNodePropertyCommand(
-                                    nodeId,
-                                    propKey,
-                                    old,
-                                    GraphValue.FromInt(i)
+                                    nodeId: nodeId,
+                                    propertyKey: propKey,
+                                    oldValue: old,
+                                    newValue: GraphValue.FromInt(i)
                                 )
                             );
                         }
@@ -175,7 +191,7 @@ public sealed class GraphInspectorPanel : Widget
                 }
                 else if (prop.Type == GraphTypeRef.Float)
                 {
-                    var floatVal = value.IsNull ? 0f : value.AsFloat();
+                    float floatVal = value.IsNull ? 0f : value.AsFloat();
                     var field = new NumberInput(floatVal) {
                         Step = 0.01f,
                         Decimals = 3,
@@ -184,15 +200,15 @@ public sealed class GraphInspectorPanel : Widget
                     };
                     field.OnChanged = v =>
                     {
-                        var old = node.Properties.TryGetValue(propKey, out var o)
+                        var old = node.Properties.TryGetValue(key: propKey, value: out var o)
                             ? o
                             : propDef.DefaultValue;
                         _state.Commands.Execute(
                             new ChangeNodePropertyCommand(
-                                nodeId,
-                                propKey,
-                                old,
-                                GraphValue.FromFloat(v)
+                                nodeId: nodeId,
+                                propertyKey: propKey,
+                                oldValue: old,
+                                newValue: GraphValue.FromFloat(v)
                             )
                         );
                     };
@@ -200,20 +216,20 @@ public sealed class GraphInspectorPanel : Widget
                 }
                 else if (prop.Type == GraphTypeRef.Bool)
                 {
-                    var boolVal = !value.IsNull && value.AsBool();
+                    bool boolVal = !value.IsNull && value.AsBool();
                     var cb = new Checkbox(
-                        boolVal,
-                        v =>
+                        value: boolVal,
+                        onChanged: v =>
                         {
-                            var old = node.Properties.TryGetValue(propKey, out var o)
+                            var old = node.Properties.TryGetValue(key: propKey, value: out var o)
                                 ? o
                                 : propDef.DefaultValue;
                             _state.Commands.Execute(
                                 new ChangeNodePropertyCommand(
-                                    nodeId,
-                                    propKey,
-                                    old,
-                                    GraphValue.FromBool(v)
+                                    nodeId: nodeId,
+                                    propertyKey: propKey,
+                                    oldValue: old,
+                                    newValue: GraphValue.FromBool(v)
                                 )
                             );
                         }
@@ -222,21 +238,21 @@ public sealed class GraphInspectorPanel : Widget
                 }
                 else if (prop.Type == GraphTypeRef.String)
                 {
-                    var strVal = value.IsNull ? "" : value.AsString();
+                    string strVal = value.IsNull ? "" : value.AsString();
                     var tf = new TextField(decoration: new InputDecoration(prop.DisplayName)) {
                         Text = strVal,
                     };
                     tf.OnChanged = v =>
                     {
-                        var old = node.Properties.TryGetValue(propKey, out var o)
+                        var old = node.Properties.TryGetValue(key: propKey, value: out var o)
                             ? o
                             : propDef.DefaultValue;
                         _state.Commands.Execute(
                             new ChangeNodePropertyCommand(
-                                nodeId,
-                                propKey,
-                                old,
-                                GraphValue.FromString(v)
+                                nodeId: nodeId,
+                                propertyKey: propKey,
+                                oldValue: old,
+                                newValue: GraphValue.FromString(v)
                             )
                         );
                     };
@@ -244,15 +260,15 @@ public sealed class GraphInspectorPanel : Widget
                 }
                 else if (prop.Type == GraphTypeRef.Color)
                 {
-                    var rgba = value.IsNull ? [0.8f, 0.8f, 0.8f, 1f] : value.AsFloat4();
+                    float[] rgba = value.IsNull ? [0.8f, 0.8f, 0.8f, 1f] : value.AsFloat4();
                     // Inline editor (swatch + R/G/B sliders). A popover picker is unreliable inside the
                     // modal graph-editor dialog (the scrim can swallow clicks), so edit colour in place.
                     _content.Children.Add(
                         BuildColorEditor(
-                            node.Id,
-                            propDef,
-                            propKey,
-                            rgba
+                            nodeId: node.Id,
+                            propDef: propDef,
+                            propKey: propKey,
+                            rgba: rgba
                         )
                     );
                 }
@@ -260,9 +276,9 @@ public sealed class GraphInspectorPanel : Widget
                 {
                     _content.Children.Add(
                         new Label(
-                            $"({prop.Type.Id}): {value}",
-                            _theme.FontSizeCaption,
-                            _theme.Hint
+                            text: $"({prop.Type.Id}): {value}",
+                            fontSize: _theme.FontSizeCaption,
+                            color: _theme.Hint
                         )
                     );
                 }
@@ -276,7 +292,9 @@ public sealed class GraphInspectorPanel : Widget
         if (diags is { Count: > 0 })
         {
             _content.Children.Add(new SizedBox(height: 8f));
-            _content.Children.Add(new Label("Diagnostics", _theme.FontSizeCaption, _theme.Hint));
+            _content.Children.Add(
+                new Label(text: "Diagnostics", fontSize: _theme.FontSizeCaption, color: _theme.Hint)
+            );
             _content.Children.Add(new Divider());
             foreach (var d in diags)
             {
@@ -286,7 +304,11 @@ public sealed class GraphInspectorPanel : Widget
                     _ => _theme.OnSurface,
                 };
                 _content.Children.Add(
-                    new Label($"[{d.Code}] {d.Message}", _theme.FontSizeCaption, dc)
+                    new Label(
+                        text: $"[{d.Code}] {d.Message}",
+                        fontSize: _theme.FontSizeCaption,
+                        color: dc
+                    )
                 );
             }
         }
@@ -299,19 +321,20 @@ public sealed class GraphInspectorPanel : Widget
     private Widget BuildColorEditor(Guid nodeId, PropertyDefinition propDef, string propKey,
         float[] rgba)
     {
-        var r = rgba[0];
-        var g = rgba[1];
-        var b = rgba[2];
-        var a = rgba.Length > 3 ? rgba[3] : 1f;
+        float r = rgba[0];
+        float g = rgba[1];
+        float b = rgba[2];
+        float a = rgba.Length > 3 ? rgba[3] : 1f;
 
-        var swatch = new ColorSwatch(new Color(r, g, b), _theme);
+        var swatch = new ColorSwatch(value: new Color(r: r, g: g, b: b), theme: _theme);
 
         void Commit()
         {
-            swatch.Value = new Color(r, g, b);
+            swatch.Value = new Color(r: r, g: g, b: b);
             swatch.MarkNeedsPaint();
             var node = _state.Graph.FindNode(nodeId);
-            var old = node is not null && node.Properties.TryGetValue(propKey, out var o)
+            var old = node is not null &&
+                      node.Properties.TryGetValue(key: propKey, value: out var o)
                 ? o
                 : propDef.DefaultValue;
             // Suppress the rebuild this triggers so the slider being dragged is not torn down mid-drag.
@@ -320,14 +343,14 @@ public sealed class GraphInspectorPanel : Widget
             {
                 _state.Commands.Execute(
                     new ChangeNodePropertyCommand(
-                        nodeId,
-                        propKey,
-                        old,
-                        GraphValue.FromFloat4(
-                            r,
-                            g,
-                            b,
-                            a
+                        nodeId: nodeId,
+                        propertyKey: propKey,
+                        oldValue: old,
+                        newValue: GraphValue.FromFloat4(
+                            x: r,
+                            y: g,
+                            z: b,
+                            w: a
                         )
                     )
                 );
@@ -356,8 +379,12 @@ public sealed class GraphInspectorPanel : Widget
                     CrossAxisAlignment = CrossAxisAlignment.Center,
                     Children = {
                         new SizedBox(
-                            14f,
-                            child: new Label(label, _theme.FontSizeCaption, _theme.Hint)
+                            width: 14f,
+                            child: new Label(
+                                text: label,
+                                fontSize: _theme.FontSizeCaption,
+                                color: _theme.Hint
+                            )
                         ),
                         new SizedBox(6f),
                         new Expanded(slider),
@@ -372,9 +399,9 @@ public sealed class GraphInspectorPanel : Widget
             Children = {
                 new SizedBox(height: 22f, child: swatch),
                 new SizedBox(height: 4f),
-                Channel("R", r, v => r = v),
-                Channel("G", g, v => g = v),
-                Channel("B", b, v => b = v),
+                Channel(label: "R", value: r, set: v => r = v),
+                Channel(label: "G", value: g, set: v => g = v),
+                Channel(label: "B", value: b, set: v => b = v),
             },
         };
     }
@@ -386,22 +413,24 @@ public sealed class GraphInspectorPanel : Widget
         var stops = new List<GradientStop>();
         if (!string.IsNullOrWhiteSpace(s))
         {
-            var parts = s.Split(
-                ',',
-                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+            string[] parts = s.Split(
+                separator: ',',
+                options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
             );
-            for (var i = 0; i + 4 < parts.Length; i += 5)
+            for (int i = 0; i + 4 < parts.Length; i += 5)
+            {
                 stops.Add(
                     new GradientStop(
-                        P(parts[i]),
-                        new Color(
-                            P(parts[i + 1]),
-                            P(parts[i + 2]),
-                            P(parts[i + 3]),
-                            P(parts[i + 4])
+                        position: P(parts[i]),
+                        color: new Color(
+                            r: P(parts[i + 1]),
+                            g: P(parts[i + 2]),
+                            b: P(parts[i + 3]),
+                            a: P(parts[i + 4])
                         )
                     )
                 );
+            }
         }
 
         return stops.Count >= 2 ? new ColorGradient(stops) : new ColorGradient();
@@ -409,10 +438,10 @@ public sealed class GraphInspectorPanel : Widget
         static float P(string x)
         {
             return float.TryParse(
-                x,
-                NumberStyles.Float,
-                CultureInfo.InvariantCulture,
-                out var v
+                s: x,
+                style: NumberStyles.Float,
+                provider: CultureInfo.InvariantCulture,
+                result: out float v
             )
                 ? v
                 : 0f;
@@ -431,24 +460,26 @@ public sealed class GraphInspectorPanel : Widget
             fields.Add(C(s.Color.A));
         }
 
-        return string.Join(',', fields);
+        return string.Join(separator: ',', values: fields);
 
-        static string C(float v)
-        {
-            return v.ToString("0.####", CultureInfo.InvariantCulture);
-        }
+        static string C(float v) => v.ToString(
+            format: "0.####",
+            provider: CultureInfo.InvariantCulture
+        );
     }
 
     private void RebuildGraphSummary()
     {
         var g = _state.Graph;
-        _content.Children.Add(new Label("Graph", _theme.FontSizeTitle, _theme.OnSurface));
+        _content.Children.Add(
+            new Label(text: "Graph", fontSize: _theme.FontSizeTitle, color: _theme.OnSurface)
+        );
         _content.Children.Add(new SizedBox(height: 2f));
         _content.Children.Add(
             new Label(
-                g.Name.Length > 0 ? g.Name : "(untitled)",
-                _theme.FontSizeBody,
-                _theme.Hint
+                text: g.Name.Length > 0 ? g.Name : "(untitled)",
+                fontSize: _theme.FontSizeBody,
+                color: _theme.Hint
             )
         );
         _content.Children.Add(new SizedBox(height: 8f));
@@ -456,15 +487,27 @@ public sealed class GraphInspectorPanel : Widget
         _content.Children.Add(new SizedBox(height: 8f));
 
         _content.Children.Add(
-            new Label($"Nodes: {g.Nodes.Count}", _theme.FontSizeBody, _theme.OnSurface)
+            new Label(
+                text: $"Nodes: {g.Nodes.Count}",
+                fontSize: _theme.FontSizeBody,
+                color: _theme.OnSurface
+            )
         );
         _content.Children.Add(new SizedBox(height: 2f));
         _content.Children.Add(
-            new Label($"Edges: {g.Edges.Count}", _theme.FontSizeBody, _theme.OnSurface)
+            new Label(
+                text: $"Edges: {g.Edges.Count}",
+                fontSize: _theme.FontSizeBody,
+                color: _theme.OnSurface
+            )
         );
         _content.Children.Add(new SizedBox(height: 2f));
         _content.Children.Add(
-            new Label($"Domain: {g.DomainId}", _theme.FontSizeCaption, _theme.Hint)
+            new Label(
+                text: $"Domain: {g.DomainId}",
+                fontSize: _theme.FontSizeCaption,
+                color: _theme.Hint
+            )
         );
 
         // Compile output
@@ -472,16 +515,22 @@ public sealed class GraphInspectorPanel : Widget
         if (cr is not null)
         {
             _content.Children.Add(new SizedBox(height: 12f));
-            _content.Children.Add(new Label("Build Output", _theme.FontSizeCaption, _theme.Hint));
+            _content.Children.Add(
+                new Label(
+                    text: "Build Output",
+                    fontSize: _theme.FontSizeCaption,
+                    color: _theme.Hint
+                )
+            );
             _content.Children.Add(new Divider());
             _content.Children.Add(new SizedBox(height: 4f));
 
             var statusColor = cr.Success ? _theme.Success : _theme.Error;
             _content.Children.Add(
                 new Label(
-                    cr.Success ? "✓ Build succeeded" : "✗ Build failed",
-                    _theme.FontSizeBody,
-                    statusColor
+                    text: cr.Success ? "✓ Build succeeded" : "✗ Build failed",
+                    fontSize: _theme.FontSizeBody,
+                    color: statusColor
                 )
             );
 
@@ -489,10 +538,19 @@ public sealed class GraphInspectorPanel : Widget
             {
                 _content.Children.Add(new SizedBox(height: 6f));
                 // Show artifact lines individually so they wrap properly in the narrow panel
-                foreach (var line in artifact.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+                foreach (string line in artifact.Split(
+                             separator: '\n',
+                             options: StringSplitOptions.RemoveEmptyEntries
+                         ))
+                {
                     _content.Children.Add(
-                        new Label(line.TrimEnd(), _theme.FontSizeCaption, _theme.OnSurface)
+                        new Label(
+                            text: line.TrimEnd(),
+                            fontSize: _theme.FontSizeCaption,
+                            color: _theme.OnSurface
+                        )
                     );
+                }
             }
 
             // Show diagnostics
@@ -507,7 +565,11 @@ public sealed class GraphInspectorPanel : Widget
                         _ => _theme.OnSurface,
                     };
                     _content.Children.Add(
-                        new Label($"[{d.Code}] {d.Message}", _theme.FontSizeCaption, dc)
+                        new Label(
+                            text: $"[{d.Code}] {d.Message}",
+                            fontSize: _theme.FontSizeCaption,
+                            color: dc
+                        )
                     );
                 }
             }
@@ -516,9 +578,9 @@ public sealed class GraphInspectorPanel : Widget
         _content.Children.Add(new SizedBox(height: 12f));
         _content.Children.Add(
             new Label(
-                "Click a node to inspect.",
-                _theme.FontSizeCaption,
-                _theme.Hint.WithAlpha(0.5f)
+                text: "Click a node to inspect.",
+                fontSize: _theme.FontSizeCaption,
+                color: _theme.Hint.WithAlpha(0.5f)
             )
         );
     }
@@ -529,44 +591,37 @@ public sealed class GraphInspectorPanel : Widget
         // ScrollView, where c.MaxHeight is ∞ — filling it would report an infinite scroll extent
         // (a drag then drives the offset to ∞, and the scrollbar computes ∞/∞ = NaN → paint crash).
         // A tight-width / loose-height measure lets the Column report its natural stacked height.
-        var width = float.IsFinite(c.MaxWidth) ? c.MaxWidth : c.MinWidth;
+        float width = float.IsFinite(c.MaxWidth) ? c.MaxWidth : c.MinWidth;
         var content = _content.Measure(
             new Constraints(
-                width,
-                width,
-                0f,
-                c.MaxHeight
+                minWidth: width,
+                maxWidth: width,
+                minHeight: 0f,
+                maxHeight: c.MaxHeight
             )
         );
-        _size = c.Constrain(new Size(width, content.Height));
+        _size = c.Constrain(new Size(width: width, height: content.Height));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         _content.Layout(origin);
     }
 
-    public override void Paint(PaintList paint)
-    {
-        _content.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => _content.Paint(paint);
 
-    public override Widget? HitTest(Offset point)
-    {
-        return Bounds.Contains(point.X, point.Y) ? _content.HitTest(point) ?? this : null;
-    }
+    public override Widget? HitTest(Offset point) => Bounds.Contains(px: point.X, py: point.Y)
+        ? _content.HitTest(point) ?? this
+        : null;
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return [_content];
-    }
+    public override IEnumerable<Widget> GetChildren() => [_content];
 
     /// <summary>A non-interactive colour preview bar for the inline colour editor.</summary>
     private sealed class ColorSwatch(Color value, ThemeData theme) : Widget
@@ -576,24 +631,24 @@ public sealed class GraphInspectorPanel : Widget
 
         public override Size Measure(Constraints c)
         {
-            _s = c.Constrain(new Size(c.MaxWidth, 22f));
+            _s = c.Constrain(new Size(width: c.MaxWidth, height: 22f));
             return _s;
         }
 
         public override void Layout(Offset origin)
         {
             Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                _s.Width,
-                _s.Height
+                x: origin.X,
+                y: origin.Y,
+                width: _s.Width,
+                height: _s.Height
             );
         }
 
         public override void Paint(PaintList paint)
         {
-            paint.AddRect(Bounds, Value.WithAlpha(1f), Radii.Sm);
-            paint.AddBorder(Bounds, theme.Separator, Radii.Sm);
+            paint.AddRect(bounds: Bounds, color: Value.WithAlpha(1f), radius: Radii.Sm);
+            paint.AddBorder(bounds: Bounds, color: theme.Separator, radius: Radii.Sm);
         }
     }
 }

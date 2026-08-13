@@ -1,9 +1,9 @@
 using Zigote.Core;
 using Zigote.Core.Paint;
+using Zigote.UI.Host;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.Widgets.DragDrop;
 
@@ -12,10 +12,11 @@ namespace Zigote.UI.Widgets.DragDrop;
 ///     <see cref="DragThreshold" /> the App starts a drag carrying <see cref="Data" /> (see
 ///     <see cref="App.StartDrag" />), paints a feedback ghost that follows the pointer, and — on
 ///     release over a compatible <see cref="DragTarget{T}" /> — hands the payload over.
-///
 ///     <para>
-///         The Draggable intercepts the pointer gesture over its bounds (drag-handle semantics), so wrap
-///         a dedicated handle rather than an interactive control if you need the child to stay clickable.
+///         The Draggable intercepts the pointer gesture over its bounds (drag-handle semantics), so
+///         wrap
+///         a dedicated handle rather than an interactive control if you need the child to stay
+///         clickable.
 ///     </para>
 /// </summary>
 public class Draggable<T> : Widget, IPointerCapture
@@ -46,8 +47,10 @@ public class Draggable<T> : Widget, IPointerCapture
     /// </summary>
     public Func<Widget>? FeedbackBuilder { get; set; }
 
-    /// <summary>Optional plain-text form of the payload — used as the label of the default ghost and as
-    /// the text carried when the drag is routed out to the OS via <c>App.BeginDragOut</c>.</summary>
+    /// <summary>
+    ///     Optional plain-text form of the payload — used as the label of the default ghost and as
+    ///     the text carried when the drag is routed out to the OS via <c>App.BeginDragOut</c>.
+    /// </summary>
     public string? DragText { get; set; }
 
     /// <summary>Invoked when a drag ends; the argument is true if a target accepted the payload.</summary>
@@ -63,7 +66,10 @@ public class Draggable<T> : Widget, IPointerCapture
     /// </summary>
     public bool AllowDragOut { get; set; }
 
-    /// <summary>Absolute file paths to carry when dragging out to the OS (with <see cref="AllowDragOut" />).</summary>
+    /// <summary>
+    ///     Absolute file paths to carry when dragging out to the OS (with <see cref="AllowDragOut" />
+    ///     ).
+    /// </summary>
     public IReadOnlyList<string>? DragOutFiles { get; set; }
 
     public override Size Measure(Constraints c)
@@ -75,23 +81,18 @@ public class Draggable<T> : Widget, IPointerCapture
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         Child.Layout(origin);
     }
 
-    public override void Paint(PaintList paint)
-    {
-        Child.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => Child.Paint(paint);
 
-    public override Widget? HitTest(Offset point)
-    {
-        return Bounds.Contains(point.X, point.Y) ? this : null;
-    }
+    public override Widget? HitTest(Offset point) =>
+        Bounds.Contains(px: point.X, py: point.Y) ? this : null;
 
     public override void OnPointerDown(Offset point)
     {
@@ -109,16 +110,16 @@ public class Draggable<T> : Widget, IPointerCapture
         }
 
         if (!_armed) return;
-        var dx = point.X - _startPoint.X;
-        var dy = point.Y - _startPoint.Y;
-        if (dx * dx + dy * dy >= DragThreshold * DragThreshold) BeginDrag(point);
+        float dx = point.X - _startPoint.X;
+        float dy = point.Y - _startPoint.Y;
+        if ((dx * dx) + (dy * dy) >= DragThreshold * DragThreshold) BeginDrag(point);
     }
 
     public override void OnPointerUp(Offset point)
     {
         if (_dragging)
         {
-            var accepted = Owner?.EndDrag(point) ?? false;
+            bool accepted = Owner?.EndDrag(point) ?? false;
             _dragging = false;
             OnDragCompleted?.Invoke(accepted);
         }
@@ -142,7 +143,7 @@ public class Draggable<T> : Widget, IPointerCapture
     {
         if (_dragging)
         {
-            Owner?.EndDrag(_startPoint, true);
+            Owner?.EndDrag(pointer: _startPoint, cancelled: true);
             _dragging = false;
             OnDragCompleted?.Invoke(false);
         }
@@ -157,37 +158,42 @@ public class Draggable<T> : Widget, IPointerCapture
         // Optionally hand the payload to the OS first. If it takes the drag, the pointer now belongs to
         // the system, so we don't also start an in-app drag.
         if (AllowDragOut && (DragText is not null || DragOutFiles is { Count: > 0 }) &&
-            Owner.Engine.BeginDragOut(DragText, DragOutFiles))
+            Owner.Engine.BeginDragOut(text: DragText, files: DragOutFiles))
         {
             _armed = false;
             return;
         }
 
         var feedback = FeedbackBuilder?.Invoke() ?? BuildDefaultFeedback();
-        var anchor = new Offset(point.X - Bounds.X, point.Y - Bounds.Y);
-        Owner.StartDrag(DragData.ForPayload(Data!, DragText), feedback, anchor);
+        var anchor = new Offset(x: point.X - Bounds.X, y: point.Y - Bounds.Y);
+        Owner.StartDrag(
+            data: DragData.ForPayload(payload: Data!, text: DragText),
+            feedback: feedback,
+            grabAnchor: anchor
+        );
         _dragging = true;
     }
 
     private Opacity BuildDefaultFeedback()
     {
-        var label = DragText ?? Data?.ToString() ?? "Dragging…";
+        string label = DragText ?? Data?.ToString() ?? "Dragging…";
         return new Opacity(
-            0.85,
-            new DecoratedBox {
+            opacity: 0.85,
+            child: new DecoratedBox {
                 Fill = Color.Black.WithAlpha(0.72f),
                 Radius = Radii.Sm,
                 BorderWidth = 0f,
                 Child = new Padding(
-                    EdgeInsets.Symmetric(Spacing.Sm, Spacing.Xs),
-                    new Label(label, Typography.Footnote.Size, Color.White)
+                    padding: EdgeInsets.Symmetric(horizontal: Spacing.Sm, vertical: Spacing.Xs),
+                    child: new Label(
+                        text: label,
+                        fontSize: Typography.Footnote.Size,
+                        color: Color.White
+                    )
                 ),
             }
         );
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(Child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Child);
 }

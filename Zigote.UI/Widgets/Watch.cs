@@ -9,42 +9,44 @@ namespace Zigote.UI.Widgets;
 ///     A reactive subtree: runs <paramref name="build" /> under dependency tracking and rebuilds ONLY
 ///     when a <see cref="Signal{T}" />/<see cref="Computed{T}" /> it read changes — the C# counterpart
 ///     of the F# <c>Ui.bind</c>, and the framework's bridge from a signal to the retained widget tree
-///     (replacing the old <c>BlocBuilder</c>/<c>Cubit</c> pattern). Drop signals straight into any tree:
+///     (replacing the old <c>BlocBuilder</c>/<c>Cubit</c> pattern). Drop signals straight into any
+///     tree:
 ///     <code>
 ///   new Watch(() => new Label($"Count: {count.Value}"))
 /// </code>
 ///     <para>
-///         The builder is wrapped in a <see cref="Computed{T}" /> that auto-tracks whatever it reads, so
+///         The builder is wrapped in a <see cref="Computed{T}" /> that auto-tracks whatever it reads,
+///         so
 ///         there is no dependency list. A change recomputes the subtree; on the UI thread it swaps in
 ///         place, and an off-thread change (a timer/async completion setting a signal) is marshalled —
-///         the loop is woken via <c>RequestLayout</c> and the swap happens in <see cref="Measure" /> on
-///         the UI thread. Like any rebuild in this retained framework, the new subtree replaces the old,
-///         so hoist stateful children (or give them keys via a container) if they must survive a rebuild.
+///         the loop is woken via <c>RequestLayout</c> and the swap happens in <see cref="Measure" />
+///         on
+///         the UI thread. Like any rebuild in this retained framework, the new subtree replaces the
+///         old,
+///         so hoist stateful children (or give them keys via a container) if they must survive a
+///         rebuild.
 ///     </para>
 /// </summary>
 public sealed class Watch : Widget
 {
     private readonly Func<Widget> _build;
-    private Computed<Widget>? _computed;
     private Widget? _child;
-    private IDisposable? _subscription;
-    private Size _size;
-    private bool _started;
+    private Computed<Widget>? _computed;
     private bool _detached;
     private bool _dirty;
     private bool _measuredOnce;
-    private int _uiThread;
 
     // The inherited-widget scope (theme, media query, localisations) this Watch was last measured
     // under. Captured during the walk and re-entered for the out-of-walk rebuild below, which would
     // otherwise build its subtree against an empty scope — see BuildContext.CaptureScope.
     private InheritedWidget[] _scope = [];
     private int _scopeDepth;
+    private Size _size;
+    private bool _started;
+    private IDisposable? _subscription;
+    private int _uiThread;
 
-    public Watch(Func<Widget> build)
-    {
-        _build = build;
-    }
+    public Watch(Func<Widget> build) => _build = build;
 
     /// <summary>
     ///     Subtree swaps applied by every <see cref="Watch" /> since start, excluding first
@@ -75,7 +77,7 @@ public sealed class Watch : Widget
         // invalidates again — the Watch shows its first build forever. In an app that is a screen
         // stuck on its spinner because the load landed while the first layout pass was mounting it
         // (Mahou.Tests.WatchRaceTests reproduced 3232 lost swaps in 5000 with the old order).
-        _subscription = ((ISignal)_computed).Observe(OnChanged);
+        _subscription = _computed.Observe(OnChanged);
         Apply();
     }
 
@@ -99,7 +101,7 @@ public sealed class Watch : Widget
         var size = _child.Measure(LastConstraints);
         if (size != _size) return false; // our size moved — ancestors must re-layout
 
-        _child.Layout(new Offset(Bounds.X, Bounds.Y));
+        _child.Layout(new Offset(x: Bounds.X, y: Bounds.Y));
         MarkNeedsPaint(); // damage is this widget's region only
         return true;
     }
@@ -108,7 +110,7 @@ public sealed class Watch : Widget
     private void Apply(bool inPlace = false)
     {
         var next = _computed!.Value;
-        if (ReferenceEquals(next, _child)) return;
+        if (ReferenceEquals(objA: next, objB: _child)) return;
 
         var previous = _child;
         if (previous is not null)
@@ -118,7 +120,10 @@ public sealed class Watch : Widget
         }
 
         _child = next;
-        SwapChild(previous, _child); // attach-then-detach; see Widget.SwapChild for why that order
+        SwapChild(
+            previous: previous,
+            next: _child
+        ); // attach-then-detach; see Widget.SwapChild for why that order
 
         if (inPlace && TryRelayoutInPlace()) return;
         MarkNeedsLayout();
@@ -138,7 +143,7 @@ public sealed class Watch : Widget
             // to be built and measured has to be given the one this Watch actually sits under. Skip
             // that when nothing was captured yet (never measured): there is nothing to restore.
             var ctx = BuildContext.Current;
-            ctx.EnterScope(_scope, _scopeDepth);
+            ctx.EnterScope(buffer: _scope, count: _scopeDepth);
             try
             {
                 Apply(true);
@@ -162,7 +167,7 @@ public sealed class Watch : Widget
     {
         _detached = false;
         EnsureStarted();
-        base.Attach(owner, parent); // attaches the current _child via GetChildren
+        base.Attach(owner: owner, parent: parent); // attaches the current _child via GetChildren
     }
 
     public override void Detach()
@@ -179,7 +184,7 @@ public sealed class Watch : Widget
         _measuredOnce = false; // a re-attached Watch must not lay out against stale constraints
         // Nor build against a stale scope — and holding the captured ancestors would keep a detached
         // subtree's providers alive. Array.Clear rather than a fresh array: the buffer is reused.
-        Array.Clear(_scope, 0, _scopeDepth);
+        Array.Clear(array: _scope, index: 0, length: _scopeDepth);
         _scopeDepth = 0;
     }
 
@@ -205,18 +210,15 @@ public sealed class Watch : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         _child?.Layout(origin);
     }
 
-    public override void Paint(PaintList paint)
-    {
-        _child?.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => _child?.Paint(paint);
 
     // The child's answer, including "nothing": a Watch is a container, and every other container
     // (Align, Stack, the route transitions) lets a miss fall through to whatever is underneath.
@@ -225,17 +227,11 @@ public sealed class Watch : Widget
     // being non-focusable, dropped keyboard focus with them.
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return _child?.HitTest(point);
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(_child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(_child);
 
-    public override int DebugStateHash()
-    {
-        return _child?.DebugStateHash() ?? 0;
-    }
+    public override int DebugStateHash() => _child?.DebugStateHash() ?? 0;
 }

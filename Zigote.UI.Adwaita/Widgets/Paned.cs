@@ -10,21 +10,20 @@ namespace Zigote.UI.Adwaita;
 /// </summary>
 public sealed class AdwPaned : Widget
 {
-    private Widget? _first;
-    private Widget? _second;
-    private float _position = 0.5f;
-    private bool _vertical;
-    private float _handleWidth = 5f;
-    private float _minPaneSize = 180f;
-
     private bool _compact;
-    private Rect _handleRect;
-    private bool _dragging;
     private float _dragStart;
-    private float _positionAtDrag;
+    private bool _dragging;
+    private Widget? _first;
+    private Rect _handleRect;
+    private float _handleWidth = 5f;
     private bool _hovered;
+    private float _minPaneSize = 180f;
+    private float _position = 0.5f;
+    private float _positionAtDrag;
+    private Widget? _second;
     private Size _size;
     private ThemeData _theme = ThemeData.Dark;
+    private bool _vertical;
 
     public AdwPaned(Widget? first = null, Widget? second = null, bool vertical = false)
     {
@@ -38,13 +37,13 @@ public sealed class AdwPaned : Widget
     public Widget? First
     {
         get => _first;
-        set => SetLayout(ref _first, value);
+        set => SetLayout(field: ref _first, value: value);
     }
 
     public Widget? Second
     {
         get => _second;
-        set => SetLayout(ref _second, value);
+        set => SetLayout(field: ref _second, value: value);
     }
 
     /// <summary>
@@ -54,28 +53,28 @@ public sealed class AdwPaned : Widget
     public float Position
     {
         get => _position;
-        set => SetLayout(ref _position, value);
+        set => SetLayout(field: ref _position, value: value);
     }
 
     /// <summary>Top/bottom split instead of left/right.</summary>
     public bool Vertical
     {
         get => _vertical;
-        set => SetLayout(ref _vertical, value);
+        set => SetLayout(field: ref _vertical, value: value);
     }
 
     /// <summary>Width of the grab gutter. The painted hairline stays 1px inside it.</summary>
     public float HandleWidth
     {
         get => _handleWidth;
-        set => SetLayout(ref _handleWidth, value);
+        set => SetLayout(field: ref _handleWidth, value: value);
     }
 
     /// <summary>Minimum logical size of each pane; constrains how far the handle can travel.</summary>
     public float MinPaneSize
     {
         get => _minPaneSize;
-        set => SetLayout(ref _minPaneSize, value);
+        set => SetLayout(field: ref _minPaneSize, value: value);
     }
 
     /// <summary>Fires with the new <see cref="Position" /> at the end of a drag.</summary>
@@ -85,49 +84,49 @@ public sealed class AdwPaned : Widget
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
         _compact = MediaQuery.Of(BuildContext.Current).SizeClass == WindowSizeClass.Compact;
-        _size = c.Constrain(new Size(c.MaxWidth, c.MaxHeight));
+        _size = c.Constrain(new Size(width: c.MaxWidth, height: c.MaxHeight));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
 
-        var span = (Vertical ? _size.Height : _size.Width) - HandleWidth;
-        var (min, max) = PositionBounds(span);
-        var firstSpan = MathF.Floor(span * Math.Clamp(Position, min, max));
-        var secondSpan = MathF.Max(0f, span - firstSpan);
+        float span = (Vertical ? _size.Height : _size.Width) - HandleWidth;
+        (float min, float max) = PositionBounds(span);
+        float firstSpan = MathF.Floor(span * Math.Clamp(value: Position, min: min, max: max));
+        float secondSpan = MathF.Max(x: 0f, y: span - firstSpan);
 
         if (Vertical)
         {
-            First?.Measure(Constraints.Tight(_size.Width, firstSpan));
+            First?.Measure(Constraints.Tight(width: _size.Width, height: firstSpan));
             First?.Layout(origin);
             _handleRect = new Rect(
-                origin.X,
-                origin.Y + firstSpan,
-                _size.Width,
-                HandleWidth
+                x: origin.X,
+                y: origin.Y + firstSpan,
+                width: _size.Width,
+                height: HandleWidth
             );
-            Second?.Measure(Constraints.Tight(_size.Width, secondSpan));
-            Second?.Layout(new Offset(origin.X, origin.Y + firstSpan + HandleWidth));
+            Second?.Measure(Constraints.Tight(width: _size.Width, height: secondSpan));
+            Second?.Layout(new Offset(x: origin.X, y: origin.Y + firstSpan + HandleWidth));
         }
         else
         {
-            First?.Measure(Constraints.Tight(firstSpan, _size.Height));
+            First?.Measure(Constraints.Tight(width: firstSpan, height: _size.Height));
             First?.Layout(origin);
             _handleRect = new Rect(
-                origin.X + firstSpan,
-                origin.Y,
-                HandleWidth,
-                _size.Height
+                x: origin.X + firstSpan,
+                y: origin.Y,
+                width: HandleWidth,
+                height: _size.Height
             );
-            Second?.Measure(Constraints.Tight(secondSpan, _size.Height));
-            Second?.Layout(new Offset(origin.X + firstSpan + HandleWidth, origin.Y));
+            Second?.Measure(Constraints.Tight(width: secondSpan, height: _size.Height));
+            Second?.Layout(new Offset(x: origin.X + firstSpan + HandleWidth, y: origin.Y));
         }
     }
 
@@ -139,26 +138,29 @@ public sealed class AdwPaned : Widget
         // only tints it while the handle is active.
         var line = Vertical
             ? new Rect(
-                _handleRect.X,
-                MathF.Floor(_handleRect.Y + (HandleWidth - 1f) / 2f),
-                _handleRect.Width,
-                1f
+                x: _handleRect.X,
+                y: MathF.Floor(_handleRect.Y + ((HandleWidth - 1f) / 2f)),
+                width: _handleRect.Width,
+                height: 1f
             )
             : new Rect(
-                MathF.Floor(_handleRect.X + (HandleWidth - 1f) / 2f),
-                _handleRect.Y,
-                1f,
-                _handleRect.Height
+                x: MathF.Floor(_handleRect.X + ((HandleWidth - 1f) / 2f)),
+                y: _handleRect.Y,
+                width: 1f,
+                height: _handleRect.Height
             );
-        paint.AddRect(line, _dragging || _hovered ? _theme.Primary : _theme.Separator);
+        paint.AddRect(
+            bounds: line,
+            color: _dragging || _hovered ? _theme.Primary : _theme.Separator
+        );
 
         Second?.Paint(paint);
     }
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
-        if (Grab().Contains(point.X, point.Y)) return this;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
+        if (Grab().Contains(px: point.X, py: point.Y)) return this;
         return Second?.HitTest(point) ?? First?.HitTest(point) ?? this;
     }
 
@@ -176,7 +178,7 @@ public sealed class AdwPaned : Widget
 
     public override void OnPointerDown(Offset point)
     {
-        if (!Grab().Contains(point.X, point.Y)) return;
+        if (!Grab().Contains(px: point.X, py: point.Y)) return;
         _dragging = true;
         _dragStart = Vertical ? point.Y : point.X;
         _positionAtDrag = _position;
@@ -185,13 +187,13 @@ public sealed class AdwPaned : Widget
     public override void OnPointerMove(Offset point)
     {
         if (!_dragging) return;
-        var span = (Vertical ? _size.Height : _size.Width) - HandleWidth;
+        float span = (Vertical ? _size.Height : _size.Width) - HandleWidth;
         if (span <= 0f) return;
-        var (min, max) = PositionBounds(span);
-        var next = Math.Clamp(
-            _positionAtDrag + ((Vertical ? point.Y : point.X) - _dragStart) / span,
-            min,
-            max
+        (float min, float max) = PositionBounds(span);
+        float next = Math.Clamp(
+            value: _positionAtDrag + (((Vertical ? point.Y : point.X) - _dragStart) / span),
+            min: min,
+            max: max
         );
         if (next == _position) return;
         _position = next;
@@ -206,26 +208,20 @@ public sealed class AdwPaned : Widget
         OnPositionChanged?.Invoke(Position);
     }
 
-    public override void OnPointerCancel()
-    {
-        _dragging = false;
-    }
+    public override void OnPointerCancel() => _dragging = false;
 
     /// <summary>
     ///     A grabbed handle owns the gesture inside a scrolling container. The press only becomes a
     ///     drag when it landed on the handle, so a press anywhere else still leaves the gesture to
     ///     the scroller.
     /// </summary>
-    public override bool CanTouchDrag(bool vertical)
-    {
-        return _dragging;
-    }
+    public override bool CanTouchDrag(bool vertical) => _dragging;
 
     public override MouseCursor? GetCursor(Offset point)
     {
         // Resize cursor while over the handle, and for the whole drag — a pointer that strays off
         // the thin gutter mid-drag is still captured by this widget, so it stays the cursor source.
-        if (_dragging || Grab().Contains(point.X, point.Y))
+        if (_dragging || Grab().Contains(px: point.X, py: point.Y))
             return Vertical ? MouseCursor.ResizeNS : MouseCursor.ResizeEW;
         return null;
     }
@@ -240,7 +236,7 @@ public sealed class AdwPaned : Widget
     private (float Min, float Max) PositionBounds(float span)
     {
         if (span <= MinPaneSize * 2f) return (0.05f, 0.95f);
-        var min = MinPaneSize / span;
+        float min = MinPaneSize / span;
         return (min, 1f - min);
     }
 
@@ -251,19 +247,19 @@ public sealed class AdwPaned : Widget
     private Rect Grab()
     {
         if (!_compact) return _handleRect;
-        var grow = MathF.Max(0f, (ControlMetrics.MinTouchTarget - HandleWidth) / 2f);
+        float grow = MathF.Max(x: 0f, y: (ControlMetrics.MinTouchTarget - HandleWidth) / 2f);
         return Vertical
             ? new Rect(
-                _handleRect.X,
-                _handleRect.Y - grow,
-                _handleRect.Width,
-                _handleRect.Height + grow * 2f
+                x: _handleRect.X,
+                y: _handleRect.Y - grow,
+                width: _handleRect.Width,
+                height: _handleRect.Height + (grow * 2f)
             )
             : new Rect(
-                _handleRect.X - grow,
-                _handleRect.Y,
-                _handleRect.Width + grow * 2f,
-                _handleRect.Height
+                x: _handleRect.X - grow,
+                y: _handleRect.Y,
+                width: _handleRect.Width + (grow * 2f),
+                height: _handleRect.Height
             );
     }
 }

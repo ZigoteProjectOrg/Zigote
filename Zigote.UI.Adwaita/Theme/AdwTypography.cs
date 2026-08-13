@@ -12,35 +12,67 @@ namespace Zigote.UI.Adwaita;
 public static class AdwTypography
 {
     /// <summary>.title-1 — 800 @ 181%.</summary>
-    public static readonly TextStyle Title1 = new(27f, FontWeight.ExtraBold, 1.2f);
+    public static readonly TextStyle Title1 = new(
+        Size: 27f,
+        Weight: FontWeight.ExtraBold,
+        LineHeight: 1.2f
+    );
 
     /// <summary>.title-2 — 800 @ 136%.</summary>
-    public static readonly TextStyle Title2 = new(20f, FontWeight.ExtraBold, 1.2f);
+    public static readonly TextStyle Title2 = new(
+        Size: 20f,
+        Weight: FontWeight.ExtraBold,
+        LineHeight: 1.2f
+    );
 
     /// <summary>.title-3 — 700 @ 136%.</summary>
-    public static readonly TextStyle Title3 = new(20f, FontWeight.Bold, 1.25f);
+    public static readonly TextStyle Title3 = new(
+        Size: 20f,
+        Weight: FontWeight.Bold,
+        LineHeight: 1.25f
+    );
 
     /// <summary>.title-4 — 700 @ 118%.</summary>
-    public static readonly TextStyle Title4 = new(17f, FontWeight.Bold, 1.25f);
+    public static readonly TextStyle Title4 = new(
+        Size: 17f,
+        Weight: FontWeight.Bold,
+        LineHeight: 1.25f
+    );
 
     /// <summary>.heading — 700 at body size. Row titles, group headers, dialog headings.</summary>
-    public static readonly TextStyle Heading = new(14f, FontWeight.Bold, 1.3f);
+    public static readonly TextStyle Heading = new(
+        Size: 14f,
+        Weight: FontWeight.Bold,
+        LineHeight: 1.3f
+    );
 
     /// <summary>.body — 400, 140% line height. The default text size.</summary>
-    public static readonly TextStyle Body = new(14f, FontWeight.Normal, 1.4f);
+    public static readonly TextStyle Body = new(
+        Size: 14f,
+        Weight: FontWeight.Normal,
+        LineHeight: 1.4f
+    );
 
     /// <summary>.caption-heading — 700 @ 82%.</summary>
-    public static readonly TextStyle CaptionHeading = new(12f, FontWeight.Bold, 1.4f);
+    public static readonly TextStyle CaptionHeading = new(
+        Size: 12f,
+        Weight: FontWeight.Bold,
+        LineHeight: 1.4f
+    );
 
     /// <summary>.caption — 400 @ 82%, 140% line height. Row subtitles, secondary detail.</summary>
-    public static readonly TextStyle Caption = new(12f, FontWeight.Normal, 1.4f);
+    public static readonly TextStyle Caption = new(
+        Size: 12f,
+        Weight: FontWeight.Normal,
+        LineHeight: 1.4f
+    );
 
     /// <summary>.monospace — code and numbers, Iosevka face.</summary>
     public static readonly TextStyle Monospace = new(
-        13f,
-        FontWeight.Normal,
-        1.4f,
-        FontStyle.Normal,
-        "code"
+        Size: 13f,
+        Weight: FontWeight.Normal,
+        LineHeight: 1.4f,
+        Style: FontStyle.Normal,
+        FontFamily: "code"
     );
 }

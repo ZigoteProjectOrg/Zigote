@@ -42,16 +42,16 @@ internal sealed class GalleryPage : ComposedWidget
 
         return new SingleChildScrollView {
             Child = new AdwClamp(
-                new Padding(
-                    EdgeInsets.Only(
-                        Spacing.Lg,
-                        Spacing.Xxl,
-                        Spacing.Lg,
-                        Spacing.Xxxl
+                child: new Padding(
+                    padding: EdgeInsets.Only(
+                        left: Spacing.Lg,
+                        top: Spacing.Xxl,
+                        right: Spacing.Lg,
+                        bottom: Spacing.Xxxl
                     ),
-                    column
+                    child: column
                 ),
-                ClampWidth
+                maximumSize: ClampWidth
             ),
         };
     }
@@ -65,14 +65,14 @@ internal sealed class GalleryPage : ComposedWidget
         );
         if (IconName.Length > 0)
         {
-            column.Children.Add(new IconGlyph(IconName, 72f, theme.Label3));
+            column.Children.Add(new IconGlyph(glyph: IconName, size: 72f, color: theme.Label3));
             column.Children.Add(new SizedBox(height: Spacing.Sm));
         }
 
         // No title here: the content header bar above already names the page, and two titles from
         // two sources (the registry's and the page's own) drift apart.
         column.Children.Add(
-            new Label(Description, AdwTypography.Body, theme.TextSecondary) {
+            new Label(text: Description, style: AdwTypography.Body, color: theme.TextSecondary) {
                 Align = TextAlign.Center,
             }
         );
@@ -95,16 +95,14 @@ internal static class Demo
     public static AdwPreferencesGroup Group(string title, string? description,
         params Widget[] rows)
     {
-        var group = new AdwPreferencesGroup(title, description);
+        var group = new AdwPreferencesGroup(title: title, description: description);
         foreach (var row in rows) group.Rows.Add(row);
         return group;
     }
 
     /// <summary>A framed stage for live widgets — the card a specimen sits on.</summary>
-    public static Widget Stage(Widget child, float padding = Spacing.Xl)
-    {
-        return new DemoStage(child) { Padding = padding };
-    }
+    public static Widget Stage(Widget child, float padding = Spacing.Xl) =>
+        new DemoStage(child) { Padding = padding };
 
     /// <summary>
     ///     The common stage: a centered column of a control and the chips and captions that annotate
@@ -140,7 +138,7 @@ internal static class Demo
             ShowEndWindowControls = false,
         };
         if (headerStart is not null) header.Start.Add(headerStart);
-        header.End.Add(IconButton(MaterialIcons.Close, () => dialog?.Close()));
+        header.End.Add(IconButton(icon: MaterialIcons.Close, onPressed: () => dialog?.Close()));
 
         dialog = new AdwDialog(
             new AdwToolbarView(content) {
@@ -155,30 +153,25 @@ internal static class Demo
     }
 
     /// <summary>A stage under a group-style caption: a titled specimen without a boxed list.</summary>
-    public static Widget Titled(string title, string? description, Widget child)
-    {
-        return new DemoTitled(title, description, child);
-    }
+    public static Widget Titled(string title, string? description, Widget child) => new DemoTitled(
+        title: title,
+        description: description,
+        child: child
+    );
 
     /// <summary>Centered controls that wrap onto more rows when the page is narrow.</summary>
     public static Widget Bar(params Widget[] children)
     {
         var wrap = new Wrap(spacing: Spacing.Sm, runSpacing: Spacing.Sm);
         foreach (var child in children) wrap.Children.Add(child);
-        return new Align(Alignment.Center, wrap) { HeightFactor = 1f };
+        return new Align(alignment: Alignment.Center, child: wrap) { HeightFactor = 1f };
     }
 
     /// <summary>A dim caption — the "what you are looking at" line under a specimen.</summary>
-    public static Widget Caption(string text)
-    {
-        return new DemoCaption(text);
-    }
+    public static Widget Caption(string text) => new DemoCaption(text);
 
     /// <summary>A monospace chip for live state — readable at a glance next to a control.</summary>
-    public static Widget Value(string text)
-    {
-        return new DemoValue(text);
-    }
+    public static Widget Value(string text) => new DemoValue(text);
 
     /// <summary>A flat circular toolbar button.</summary>
     public static AdwButton IconButton(string icon, Action onPressed, bool suggested = false)
@@ -204,8 +197,8 @@ internal sealed class DemoStage(Widget child) : ComposedWidget
             BorderColor = p.CardShade,
             BorderWidth = 1f,
             Child = new Padding(
-                EdgeInsets.All(Padding),
-                new Align(Alignment.Center, child) { HeightFactor = 1f }
+                padding: EdgeInsets.All(Padding),
+                child: new Align(alignment: Alignment.Center, child: child) { HeightFactor = 1f }
             ),
         };
     }
@@ -223,23 +216,34 @@ internal sealed class DemoTitled(string title, string? description, Widget child
         ) {
             Children = {
                 new Padding(
-                    EdgeInsets.Only(Spacing.Xs),
-                    new Label(title, AdwTypography.Heading, theme.OnBackground)
+                    padding: EdgeInsets.Only(Spacing.Xs),
+                    child: new Label(
+                        text: title,
+                        style: AdwTypography.Heading,
+                        color: theme.OnBackground
+                    )
                 ),
             },
         };
         if (description is { } text)
+        {
             column.Children.Add(
                 new Padding(
-                    EdgeInsets.Only(
-                        Spacing.Xs,
-                        0f,
-                        Spacing.Xs,
-                        Spacing.Xxs
+                    padding: EdgeInsets.Only(
+                        left: Spacing.Xs,
+                        top: 0f,
+                        right: Spacing.Xs,
+                        bottom: Spacing.Xxs
                     ),
-                    new Label(text, AdwTypography.Caption, theme.TextSecondary)
+                    child: new Label(
+                        text: text,
+                        style: AdwTypography.Caption,
+                        color: theme.TextSecondary
+                    )
                 )
             );
+        }
+
         column.Children.Add(child);
         return column;
     }
@@ -250,9 +254,9 @@ internal sealed class DemoCaption(string text) : ComposedWidget
     protected override Widget Build(BuildContext context)
     {
         return new Label(
-            text,
-            AdwTypography.Caption,
-            ThemeProvider.Of(context).TextSecondary
+            text: text,
+            style: AdwTypography.Caption,
+            color: ThemeProvider.Of(context).TextSecondary
         ) { Align = TextAlign.Center };
     }
 }
@@ -266,8 +270,12 @@ internal sealed class DemoValue(string text) : ComposedWidget
             Fill = theme.Fill2,
             Radius = Radii.Md,
             Child = new Padding(
-                EdgeInsets.Symmetric(Spacing.Sm, Spacing.Xxs),
-                new Label(text, AdwTypography.Monospace, theme.OnBackground)
+                padding: EdgeInsets.Symmetric(horizontal: Spacing.Sm, vertical: Spacing.Xxs),
+                child: new Label(
+                    text: text,
+                    style: AdwTypography.Monospace,
+                    color: theme.OnBackground
+                )
             ),
         };
     }

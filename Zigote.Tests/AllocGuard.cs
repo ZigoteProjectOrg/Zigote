@@ -14,16 +14,16 @@ public static class AllocGuard
 {
     public static void AssertZeroAlloc(Action iteration, int warmup = 200, int iterations = 500)
     {
-        for (var i = 0; i < warmup; i++) iteration();
+        for (int i = 0; i < warmup; i++) iteration();
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var i = 0; i < iterations; i++) iteration();
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < iterations; i++) iteration();
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
         Assert.True(
-            allocated == 0,
-            $"Hot loop allocated {allocated} B over {iterations} iterations " +
-            $"({allocated / (double)iterations:F2} B/iteration); expected 0."
+            condition: allocated == 0,
+            userMessage: $"Hot loop allocated {allocated} B over {iterations} iterations " +
+                         $"({allocated / (double)iterations:F2} B/iteration); expected 0."
         );
     }
 }

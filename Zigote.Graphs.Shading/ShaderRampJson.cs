@@ -16,39 +16,42 @@ public static class ShaderRampJson
 {
     public static readonly IReadOnlyList<ShaderRampStop> Default = [
         new(
-            0f,
-            0f,
-            0f,
-            0f,
-            1f
+            Pos: 0f,
+            R: 0f,
+            G: 0f,
+            B: 0f,
+            A: 1f
         ),
         new(
-            1f,
-            1f,
-            1f,
-            1f,
-            1f
+            Pos: 1f,
+            R: 1f,
+            G: 1f,
+            B: 1f,
+            A: 1f
         ),
     ];
 
     public static IReadOnlyList<ShaderRampStop> Parse(string? s)
     {
         if (string.IsNullOrWhiteSpace(s)) return Default;
-        var parts = s.Split(
-            ',',
-            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+        string[] parts = s.Split(
+            separator: ',',
+            options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
         );
         var stops = new List<ShaderRampStop>();
-        for (var i = 0; i + 4 < parts.Length; i += 5)
+        for (int i = 0; i + 4 < parts.Length; i += 5)
+        {
             stops.Add(
                 new ShaderRampStop(
-                    F(parts[i]),
-                    F(parts[i + 1]),
-                    F(parts[i + 2]),
-                    F(parts[i + 3]),
-                    F(parts[i + 4])
+                    Pos: F(parts[i]),
+                    R: F(parts[i + 1]),
+                    G: F(parts[i + 2]),
+                    B: F(parts[i + 3]),
+                    A: F(parts[i + 4])
                 )
             );
+        }
+
         return stops.Count > 0 ? stops : Default;
     }
 
@@ -64,23 +67,23 @@ public static class ShaderRampJson
             fields.Add(C(s.A));
         }
 
-        return string.Join(',', fields);
+        return string.Join(separator: ',', values: fields);
     }
 
     private static float F(string x)
     {
         return float.TryParse(
-            x,
-            NumberStyles.Float,
-            CultureInfo.InvariantCulture,
-            out var v
+            s: x,
+            style: NumberStyles.Float,
+            provider: CultureInfo.InvariantCulture,
+            result: out float v
         )
             ? v
             : 0f;
     }
 
-    private static string C(float v)
-    {
-        return v.ToString("0.####", CultureInfo.InvariantCulture);
-    }
+    private static string C(float v) => v.ToString(
+        format: "0.####",
+        provider: CultureInfo.InvariantCulture
+    );
 }

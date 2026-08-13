@@ -15,10 +15,7 @@ public readonly struct AssetHandle<T> where T : class
 {
     internal readonly AssetEntry<T>? Entry;
 
-    internal AssetHandle(AssetEntry<T> entry)
-    {
-        Entry = entry;
-    }
+    internal AssetHandle(AssetEntry<T> entry) => Entry = entry;
 
     /// <summary>The empty handle — never resolves; <see cref="IsValid" /> is false.</summary>
     public static AssetHandle<T> None => default;
@@ -47,10 +44,7 @@ public readonly struct AssetHandle<T> where T : class
     public T? Value => IsLoaded ? Entry!.Value : null;
 
     /// <summary>Return the value if resident, else <paramref name="fallback" /> (a placeholder asset).</summary>
-    public T ValueOr(T fallback)
-    {
-        return IsLoaded ? Entry!.Value! : fallback;
-    }
+    public T ValueOr(T fallback) => IsLoaded ? Entry!.Value! : fallback;
 
     /// <summary>Non-allocating try-get for the resident value.</summary>
     public bool TryGet(out T value)

@@ -34,6 +34,10 @@ public sealed class Popover : Widget
     private readonly Widget _child;
 
     private Size _childSize;
+
+    // Resolved at Show(): with secondary OS windows, the window presenting the popover is the one
+    // whose dispatch is running (App.Active), which may differ from the window active at construction.
+    private AppInstance? _host;
     private OverlaySide _resolvedSide = OverlaySide.Below;
     private EdgeInsets _safe;
     private Size _screen;
@@ -53,10 +57,6 @@ public sealed class Popover : Widget
     /// <summary>Side of the anchor to place the surface on. Flips automatically when it would overflow.</summary>
     public OverlaySide PreferredSide { get; set; } = OverlaySide.Below;
 
-    // Resolved at Show(): with secondary OS windows, the window presenting the popover is the one
-    // whose dispatch is running (App.Active), which may differ from the window active at construction.
-    private AppInstance? _host;
-
     /// <summary>Show this popover as an overlay.</summary>
     public void Show()
     {
@@ -65,28 +65,25 @@ public sealed class Popover : Widget
     }
 
     /// <summary>Remove this popover from the overlay stack.</summary>
-    public void Dismiss()
-    {
-        (_host ?? _app).PopOverlay(this);
-    }
+    public void Dismiss() => (_host ?? _app).PopOverlay(this);
 
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
 
         // Capture the whole window so click-outside dismissal works.
-        _screen = new Size(c.MaxWidth, c.MaxHeight);
+        _screen = new Size(width: c.MaxWidth, height: c.MaxHeight);
         // Overlays sit outside any SafeArea, so the device insets have to be honoured here.
         _safe = MediaQuery.Of(BuildContext.Current).Padding;
 
         // Leave room for the inset, the arrow, and the screen margins.
-        var maxW = MathF.Max(
-            0f,
-            _screen.Width - _safe.Horizontal - Margin * 2f - ContentInset * 2f
+        float maxW = MathF.Max(
+            x: 0f,
+            y: _screen.Width - _safe.Horizontal - (Margin * 2f) - (ContentInset * 2f)
         );
-        var maxH = MathF.Max(
-            0f,
-            _screen.Height - _safe.Vertical - Margin * 2f - ContentInset * 2f - ArrowDepth
+        float maxH = MathF.Max(
+            x: 0f,
+            y: _screen.Height - _safe.Vertical - (Margin * 2f) - (ContentInset * 2f) - ArrowDepth
         );
         _childSize = _child.Measure(new Constraints(maxWidth: maxW, maxHeight: maxH));
 
@@ -96,40 +93,40 @@ public sealed class Popover : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _screen.Width,
-            _screen.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _screen.Width,
+            height: _screen.Height
         );
 
         var surfaceSize = new Size(
-            _childSize.Width + ContentInset * 2f,
-            _childSize.Height + ContentInset * 2f
+            width: _childSize.Width + (ContentInset * 2f),
+            height: _childSize.Height + (ContentInset * 2f)
         );
 
         // Anchor relative to the overlay origin so positioning matches the painted coordinate space.
         var anchor = new Rect(
-            Anchor.X + origin.X,
-            Anchor.Y + origin.Y,
-            Anchor.Width,
-            Anchor.Height
+            x: Anchor.X + origin.X,
+            y: Anchor.Y + origin.Y,
+            width: Anchor.Width,
+            height: Anchor.Height
         );
 
         _surface = OverlayPositioning.Anchored(
-            anchor,
-            surfaceSize,
-            _screen,
-            PreferredSide,
-            Gap,
+            anchor: anchor,
+            size: surfaceSize,
+            screen: _screen,
+            side: PreferredSide,
+            gap: Gap,
             safe: _safe
         );
 
-        _resolvedSide = ResolveSide(anchor, _surface);
+        _resolvedSide = ResolveSide(anchor: anchor, surface: _surface);
 
         _child.Layout(
             new Offset(
-                _surface.X + ContentInset,
-                _surface.Y + ContentInset
+                x: _surface.X + ContentInset,
+                y: _surface.Y + ContentInset
             )
         );
     }
@@ -146,10 +143,10 @@ public sealed class Popover : Widget
 
     public override void Paint(PaintList paint)
     {
-        var radius = Radii.Xl;
+        float radius = Radii.Xl;
 
-        paint.AddElevation(_surface, radius, Elevation.Z2);
-        paint.AddRect(_surface, _theme.Surface, radius);
+        paint.AddElevation(bounds: _surface, radius: radius, style: Elevation.Z2);
+        paint.AddRect(bounds: _surface, color: _theme.Surface, radius: radius);
         PaintArrow(paint);
 
         _child.Paint(paint);
@@ -165,96 +162,96 @@ public sealed class Popover : Widget
         var color = _theme.Surface;
 
         // Centre of the arrow along the shared edge, clamped to stay within the surface corners.
-        var anchorCx = Anchor.X + Bounds.X + Anchor.Width / 2f;
-        var anchorCy = Anchor.Y + Bounds.Y + Anchor.Height / 2f;
+        float anchorCx = Anchor.X + Bounds.X + (Anchor.Width / 2f);
+        float anchorCy = Anchor.Y + Bounds.Y + (Anchor.Height / 2f);
 
         const int steps = 7;
-        for (var i = 0; i < steps; i++)
+        for (int i = 0; i < steps; i++)
         {
             // t: 0 at the base (flush with the surface), 1 at the tip.
-            var t = (i + 0.5f) / steps;
-            var half = ArrowHalf * (1f - t);
-            var span = MathF.Max(half * 2f, 1f);
-            var thickness = ArrowDepth / steps + 1f;
+            float t = (i + 0.5f) / steps;
+            float half = ArrowHalf * (1f - t);
+            float span = MathF.Max(x: half * 2f, y: 1f);
+            float thickness = (ArrowDepth / steps) + 1f;
 
             switch (_resolvedSide)
             {
                 case OverlaySide.Below: // surface under anchor → arrow on top edge, tip points up
                 {
-                    var cx = ClampCenter(
-                        anchorCx,
-                        _surface.X + ArrowHalf,
-                        _surface.Right - ArrowHalf
+                    float cx = ClampCenter(
+                        c: anchorCx,
+                        min: _surface.X + ArrowHalf,
+                        max: _surface.Right - ArrowHalf
                     );
-                    var y = _surface.Y - ArrowDepth * t;
+                    float y = _surface.Y - (ArrowDepth * t);
                     paint.AddRect(
-                        new Rect(
-                            cx - half,
-                            y,
-                            span,
-                            thickness
+                        bounds: new Rect(
+                            x: cx - half,
+                            y: y,
+                            width: span,
+                            height: thickness
                         ),
-                        color
+                        color: color
                     );
                     break;
                 }
                 case OverlaySide.Above
                     : // surface above anchor → arrow on bottom edge, tip points down
                 {
-                    var cx = ClampCenter(
-                        anchorCx,
-                        _surface.X + ArrowHalf,
-                        _surface.Right - ArrowHalf
+                    float cx = ClampCenter(
+                        c: anchorCx,
+                        min: _surface.X + ArrowHalf,
+                        max: _surface.Right - ArrowHalf
                     );
-                    var y = _surface.Bottom + ArrowDepth * t - thickness;
+                    float y = _surface.Bottom + (ArrowDepth * t) - thickness;
                     paint.AddRect(
-                        new Rect(
-                            cx - half,
-                            y,
-                            span,
-                            thickness
+                        bounds: new Rect(
+                            x: cx - half,
+                            y: y,
+                            width: span,
+                            height: thickness
                         ),
-                        color
+                        color: color
                     );
                     break;
                 }
                 case OverlaySide.Right
                     : // surface right of anchor → arrow on left edge, tip points left
                 {
-                    var cy = ClampCenter(
-                        anchorCy,
-                        _surface.Y + ArrowHalf,
-                        _surface.Bottom - ArrowHalf
+                    float cy = ClampCenter(
+                        c: anchorCy,
+                        min: _surface.Y + ArrowHalf,
+                        max: _surface.Bottom - ArrowHalf
                     );
-                    var x = _surface.X - ArrowDepth * t;
+                    float x = _surface.X - (ArrowDepth * t);
                     paint.AddRect(
-                        new Rect(
-                            x,
-                            cy - half,
-                            thickness,
-                            span
+                        bounds: new Rect(
+                            x: x,
+                            y: cy - half,
+                            width: thickness,
+                            height: span
                         ),
-                        color
+                        color: color
                     );
                     break;
                 }
                 case OverlaySide.Left
                     : // surface left of anchor → arrow on right edge, tip points right
                 {
-                    var cy = ClampCenter(
-                        anchorCy,
-                        _surface.Y + ArrowHalf,
-                        _surface.Bottom - ArrowHalf
+                    float cy = ClampCenter(
+                        c: anchorCy,
+                        min: _surface.Y + ArrowHalf,
+                        max: _surface.Bottom - ArrowHalf
                     );
-                    var x = _surface.Right + ArrowDepth * t - thickness;
+                    float x = _surface.Right + (ArrowDepth * t) - thickness;
                     paint.AddRect(
-                        new Rect(
-                            x,
-                            cy - half,
-                            thickness,
-                            span
+                        bounds: new Rect(
+                            x: x,
+                            y: cy - half,
+                            width: thickness,
+                            height: span
                         ),
-                        color
+                        color: color
                     );
                     break;
                 }
@@ -265,15 +262,15 @@ public sealed class Popover : Widget
     private static float ClampCenter(float c, float min, float max)
     {
         if (max < min) return (min + max) / 2f;
-        return MathF.Min(MathF.Max(c, min), max);
+        return MathF.Min(x: MathF.Max(x: c, y: min), y: max);
     }
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
 
         // Inside the surface: let the child take the hit so its controls stay interactive.
-        if (_surface.Contains(point.X, point.Y))
+        if (_surface.Contains(px: point.X, py: point.Y))
             return _child.HitTest(point) ?? this;
 
         // Outside the surface but over the screen-spanning overlay: capture so the
@@ -283,12 +280,9 @@ public sealed class Popover : Widget
 
     public override void OnPointerDown(Offset point)
     {
-        if (!_surface.Contains(point.X, point.Y))
+        if (!_surface.Contains(px: point.X, py: point.Y))
             Dismiss();
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(_child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(_child);
 }

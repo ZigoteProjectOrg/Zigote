@@ -2,10 +2,10 @@ using Zigote.Core.Diagnostics;
 using Zigote.Core.Engine;
 using Zigote.Core.Native;
 using Zigote.Core.State;
-using Zigote.UI.Widgets;
 using Zigote.UI.DevTools.Diagnostics;
 using Zigote.UI.DevTools.Panels;
 using Zigote.UI.Host;
+using Zigote.UI.Widgets;
 
 namespace Zigote.UI.DevTools;
 
@@ -15,7 +15,8 @@ namespace Zigote.UI.DevTools;
 ///     <code>DevTools.Install(app, DevToolsProfile.ThreeD);</code>
 ///     It registers the built-in General / 2D·UI / 3D·Render panels (gated by the
 ///     <see cref="DevToolsProfile" />), the diagnostics commands + variables, and wires the App seams
-///     (Shift+D toggle, per-frame refresh, continuous-frame source). <c>Zigote.UI</c> deliberately has no
+///     (Shift+D toggle, per-frame refresh, continuous-frame source). <c>Zigote.UI</c> deliberately has
+///     no
 ///     knowledge of this assembly, so installation is the host's opt-in.
 /// </summary>
 public static class DevTools
@@ -37,7 +38,7 @@ public static class DevTools
 
         DevChartData.Install();
 
-        var controller = new DevToolsController(app, profile);
+        var controller = new DevToolsController(app: app, profile: profile);
         Current = controller;
 
         RegisterBuiltinPanels(controller);
@@ -51,8 +52,8 @@ public static class DevTools
         app.AddContinuousFrameSource(() => controller.WantsContinuousFrame);
         app.PushOverlay(controller.Layer);
 
-        RegisterCommands(app, controller);
-        RegisterVariables(app, controller);
+        RegisterCommands(app: app, c: controller);
+        RegisterVariables(app: app, c: controller);
 
         // Debug affordance: open the panel on boot (e.g. for a screenshot / smoke run) without a keypress.
         if (Environment.GetEnvironmentVariable("ZIGOTE_DEVTOOLS_OPEN") == "1")
@@ -68,10 +69,7 @@ public static class DevTools
     }
 
     /// <summary>Register a host-specific panel (scene, physics, gameplay) into the current overlay.</summary>
-    public static void Register(IDevPanel panel)
-    {
-        Current?.Register(panel);
-    }
+    public static void Register(IDevPanel panel) => Current?.Register(panel);
 
     private static void RegisterBuiltinPanels(DevToolsController c)
     {
@@ -104,70 +102,72 @@ public static class DevTools
         DebugCommands.RegisterCoreDefaults();
 
         DebugCommands.Register(
-            "popout",
-            "Open the devtools in their own window",
-            _ =>
+            name: "popout",
+            description: "Open the devtools in their own window",
+            execute: _ =>
             {
                 c.OpenWindow();
                 return DebugCommandResult.Success("devtools window opened");
             },
-            "app"
+            category: "app"
         );
         DebugCommands.Register(
-            "fullscreen",
-            "Toggle the fullscreen devtools panel",
-            _ =>
+            name: "fullscreen",
+            description: "Toggle the fullscreen devtools panel",
+            execute: _ =>
             {
                 c.ToggleFullscreen();
                 return DebugCommandResult.Success(c.Fullscreen ? "fullscreen" : "docked");
             },
-            "app"
+            category: "app"
         );
 
         DebugCommands.Register(
-            "menu",
-            "Toggle the devtools panel",
-            app.ToggleDebugPanel,
-            "app"
+            name: "menu",
+            description: "Toggle the devtools panel",
+            action: app.ToggleDebugPanel,
+            category: "app"
         );
         DebugCommands.Register(
-            "compact",
-            "Toggle the compact stats overlay",
-            app.ToggleCompactStats,
-            "app"
+            name: "compact",
+            description: "Toggle the compact stats overlay",
+            action: app.ToggleCompactStats,
+            category: "app"
         );
         DebugCommands.Register(
-            "quit",
-            "Exit the application",
-            app.RequestQuit,
-            "app"
+            name: "quit",
+            description: "Exit the application",
+            action: app.RequestQuit,
+            category: "app"
         );
         DebugCommands.Register(
-            "gc",
-            "Force a full GC and report the heap",
-            _ =>
+            name: "gc",
+            description: "Force a full GC and report the heap",
+            execute: _ =>
             {
-                var before = GC.GetTotalMemory(false);
+                long before = GC.GetTotalMemory(false);
                 GC.Collect();
                 GC.WaitForPendingFinalizers();
-                var after = GC.GetTotalMemory(true);
+                long after = GC.GetTotalMemory(true);
                 return DebugCommandResult.Success(
                     $"heap {before / 1048576f:F1} → {after / 1048576f:F1} MB"
                 );
             },
-            "app"
+            category: "app"
         );
         DebugCommands.Register(
-            "profile",
-            "Capture N frames of CPU profiling to profile_capture.json",
-            args =>
+            name: "profile",
+            description: "Capture N frames of CPU profiling to profile_capture.json",
+            execute: args =>
             {
-                var frames = args.Length > 0 && int.TryParse(args[0], out var n) ? n : 120;
-                Profiler.Capture(frames, "profile_capture.json");
+                int frames = args.Length > 0 && int.TryParse(s: args[0], result: out int n)
+                    ? n
+                    : 120;
+                Profiler.Capture(frames: frames, outputPath: "profile_capture.json");
                 return DebugCommandResult.Success($"capturing {frames} frames…");
             },
-            "app",
-            "profile [frames]"
+            category: "app",
+            usage: "profile [frames]"
         );
     }
 
@@ -182,20 +182,24 @@ public static class DevTools
     private static void RegisterReactiveCounters()
     {
         Counter(
-            "reactive.writes",
-            () => Reactive.Writes,
-            "Signal writes + trigger fires committed"
-        );
-        Counter("reactive.runs", () => Reactive.Runs, "Computed recomputes + effect runs");
-        Counter(
-            "reactive.deferred",
-            () => Reactive.PendingDeferred,
-            "Deferred effects parked at the last frame's drain"
+            name: "reactive.writes",
+            get: () => Reactive.Writes,
+            description: "Signal writes + trigger fires committed"
         );
         Counter(
-            "ui.watch_rebuilds",
-            () => Watch.Rebuilds,
-            "Watch subtree swaps (excl. first build)"
+            name: "reactive.runs",
+            get: () => Reactive.Runs,
+            description: "Computed recomputes + effect runs"
+        );
+        Counter(
+            name: "reactive.deferred",
+            get: () => Reactive.PendingDeferred,
+            description: "Deferred effects parked at the last frame's drain"
+        );
+        Counter(
+            name: "ui.watch_rebuilds",
+            get: () => Watch.Rebuilds,
+            description: "Watch subtree swaps (excl. first build)"
         );
 
         static void Counter(string name, Func<long> get, string description)
@@ -224,9 +228,15 @@ public static class DevTools
     /// </summary>
     private static void RegisterTextureCounters()
     {
-        Counter("gpu.textures", "Resident textures (handles the engine still holds)");
-        Counter("gpu.texture_bytes", "GPU bytes held by resident textures");
-        Counter("gpu.texture_cpu_bytes", "CPU-side decoded bytes held by resident textures");
+        Counter(
+            name: "gpu.textures",
+            description: "Resident textures (handles the engine still holds)"
+        );
+        Counter(name: "gpu.texture_bytes", description: "GPU bytes held by resident textures");
+        Counter(
+            name: "gpu.texture_cpu_bytes",
+            description: "CPU-side decoded bytes held by resident textures"
+        );
 
         static void Counter(string name, string description)
         {
@@ -238,7 +248,11 @@ public static class DevTools
                     Type = DebugVarType.Int,
                     Getter = () =>
                     {
-                        ZigoteEngine.GetImageStats(out var count, out var cpu, out var gpu);
+                        ZigoteEngine.GetImageStats(
+                            count: out int count,
+                            cpuBytes: out long cpu,
+                            gpuBytes: out long gpu
+                        );
                         return name switch {
                             "gpu.textures" => count,
                             "gpu.texture_bytes" => gpu,
@@ -256,82 +270,83 @@ public static class DevTools
         RegisterTextureCounters();
 
         DebugVariables.RegisterBool(
-            "app.continuous",
-            () => app.ContinuousUpdate,
-            v => app.ContinuousUpdate = v,
-            "app",
-            "Force the frame loop to render every frame"
+            name: "app.continuous",
+            getter: () => app.ContinuousUpdate,
+            setter: v => app.ContinuousUpdate = v,
+            category: "app",
+            description: "Force the frame loop to render every frame"
         );
         DebugVariables.RegisterBool(
-            "app.force_continuous",
-            () => app.ForceContinuousRender,
-            v => app.ForceContinuousRender = v,
-            "app",
-            "Render every frame for FPS testing (independent of play)"
+            name: "app.force_continuous",
+            getter: () => app.ForceContinuousRender,
+            setter: v => app.ForceContinuousRender = v,
+            category: "app",
+            description: "Render every frame for FPS testing (independent of play)"
         );
         DebugVariables.RegisterInt(
-            "app.fps_limit",
-            () => app.FrameRateLimit,
-            v => app.FrameRateLimit = Math.Max(0, v),
-            0,
-            1000,
-            "app",
-            "Cap the render loop to N fps (0 = unlimited)"
+            name: "app.fps_limit",
+            getter: () => app.FrameRateLimit,
+            setter: v => app.FrameRateLimit = Math.Max(val1: 0, val2: v),
+            min: 0,
+            max: 1000,
+            category: "app",
+            description: "Cap the render loop to N fps (0 = unlimited)"
         );
         DebugVariables.RegisterBool(
-            "app.vsync",
-            () => app.VSync,
-            v => app.VSync = v,
-            "app",
-            "Swapchain vsync (off = uncapped present, wgpu only)"
+            name: "app.vsync",
+            getter: () => app.VSync,
+            setter: v => app.VSync = v,
+            category: "app",
+            description: "Swapchain vsync (off = uncapped present, wgpu only)"
         );
         DebugVariables.RegisterBool(
-            "render.partial_repaint",
-            () => app.PartialRepaintEnabled,
-            v => app.PartialRepaintEnabled = v,
-            "render",
+            name: "render.partial_repaint",
+            getter: () => app.PartialRepaintEnabled,
+            setter: v => app.PartialRepaintEnabled = v,
+            category: "render",
+            description:
             "Sub-rectangle damage repaint (GPU scissor) — off forces a full clear every frame"
         );
 
         DebugVariables.RegisterBool(
-            "ui.repaint_rainbow",
-            () => c.ShowRepaintRainbow,
-            v => c.ShowRepaintRainbow = v,
-            "ui"
+            name: "ui.repaint_rainbow",
+            getter: () => c.ShowRepaintRainbow,
+            setter: v => c.ShowRepaintRainbow = v,
+            category: "ui"
         );
         DebugVariables.RegisterBool(
-            "ui.layout_bounds",
-            () => c.ShowLayoutBounds,
-            v => c.ShowLayoutBounds = v,
-            "ui"
+            name: "ui.layout_bounds",
+            getter: () => c.ShowLayoutBounds,
+            setter: v => c.ShowLayoutBounds = v,
+            category: "ui"
         );
         DebugVariables.RegisterBool(
-            "ui.overflow",
-            () => c.ShowOverflow,
-            v => c.ShowOverflow = v,
-            "ui"
+            name: "ui.overflow",
+            getter: () => c.ShowOverflow,
+            setter: v => c.ShowOverflow = v,
+            category: "ui"
         );
 
         DebugVariables.RegisterEnum(
-            "render.debug_view",
-            () => (DebugView)(int)ReadRender().DebugView,
-            dv => ModifyRender((ref ZgRenderSettings3D s) => s.DebugView = (int)dv),
-            "render",
-            "G-buffer / lighting visualisation channel"
+            name: "render.debug_view",
+            getter: () => (DebugView)(int)ReadRender().DebugView,
+            setter: dv => ModifyRender((ref s) => s.DebugView = (int)dv),
+            category: "render",
+            description: "G-buffer / lighting visualisation channel"
         );
         DebugVariables.RegisterBool(
-            "render.diagnostic",
-            () => ReadRender().DiagnosticMode != 0f,
-            v => ModifyRender((ref ZgRenderSettings3D s) => s.DiagnosticMode = v ? 1f : 0f),
-            "render"
+            name: "render.diagnostic",
+            getter: () => ReadRender().DiagnosticMode != 0f,
+            setter: v => ModifyRender((ref s) => s.DiagnosticMode = v ? 1f : 0f),
+            category: "render"
         );
         DebugVariables.RegisterFloat(
-            "render.exposure",
-            () => ReadRender().Exposure,
-            v => ModifyRender((ref ZgRenderSettings3D s) => s.Exposure = v),
-            0.2f,
-            3f,
-            "render"
+            name: "render.exposure",
+            getter: () => ReadRender().Exposure,
+            setter: v => ModifyRender((ref s) => s.Exposure = v),
+            min: 0.2f,
+            max: 3f,
+            category: "render"
         );
     }
 
@@ -346,8 +361,6 @@ public static class DevTools
             return default;
         }
     }
-
-    private delegate void RenderMutate(ref ZgRenderSettings3D s);
 
     private static void ModifyRender(RenderMutate f)
     {
@@ -364,4 +377,6 @@ public static class DevTools
             /* engine not ready */
         }
     }
+
+    private delegate void RenderMutate(ref ZgRenderSettings3D s);
 }

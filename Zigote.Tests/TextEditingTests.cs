@@ -17,8 +17,8 @@ public class TextEditingTests
 {
     private static string Word(string text, int pos)
     {
-        var (s, e) = TextNavigation.WordAt(text, pos);
-        return text.Substring(s, e - s);
+        (int s, int e) = TextNavigation.WordAt(text: text, pos: pos);
+        return text.Substring(startIndex: s, length: e - s);
     }
 
     [Theory]
@@ -29,10 +29,10 @@ public class TextEditingTests
     [InlineData("a + b", 2, "+")] // lone operator surrounded by spaces
     [InlineData("foo_bar baz", 3, "foo_bar")] // underscore is a word char
     [InlineData("", 0, "")] // empty
-    public void WordAt_SelectsExpectedSpan(string text, int pos, string expected)
-    {
-        Assert.Equal(expected, Word(text, pos));
-    }
+    public void WordAt_SelectsExpectedSpan(string text, int pos, string expected) => Assert.Equal(
+        expected: expected,
+        actual: Word(text: text, pos: pos)
+    );
 
     [Fact]
     public void TextField_ReadOnly_IgnoresTextInputAndBackspace()
@@ -43,12 +43,12 @@ public class TextEditingTests
         };
         tf.OnTextInput("X");
         tf.OnKey(
-            '\0',
-            42,
-            true,
-            Modifiers.None
+            keyChar: '\0',
+            scancode: 42,
+            down: true,
+            mods: Modifiers.None
         ); // backspace scancode
-        Assert.Equal("abc", tf.Text);
+        Assert.Equal(expected: "abc", actual: tf.Text);
     }
 
     [Fact]
@@ -56,7 +56,7 @@ public class TextEditingTests
     {
         var tf = new TextField { Text = "" };
         tf.OnTextInput("hi");
-        Assert.Equal("hi", tf.Text);
+        Assert.Equal(expected: "hi", actual: tf.Text);
     }
 
     /// <summary>
@@ -72,7 +72,7 @@ public class TextEditingTests
         tf.OnTextInput("a long draft message"); // caret now at the end
         tf.Text = ""; // e.g. the app cleared the field after sending
         tf.OnTextInput("x"); // must not throw
-        Assert.Equal("x", tf.Text);
+        Assert.Equal(expected: "x", actual: tf.Text);
     }
 
     [Fact]
@@ -82,7 +82,7 @@ public class TextEditingTests
         tf.OnTextInput("0123456789");
         tf.Text = "abc"; // shorter than the current caret offset
         tf.OnTextInput("!");
-        Assert.Equal("abc!", tf.Text);
+        Assert.Equal(expected: "abc!", actual: tf.Text);
     }
 
     [Fact]
@@ -91,14 +91,14 @@ public class TextEditingTests
         var tf = new TextField { Text = "" };
         tf.OnTextInput("select all of this");
         tf.OnKey(
-            'a',
-            4,
-            true,
-            Modifiers.Cmd
+            keyChar: 'a',
+            scancode: 4,
+            down: true,
+            mods: Modifiers.Cmd
         ); // ⌘A / Ctrl+A
         tf.Text = "hi"; // selection referred to the old, longer text
         tf.OnTextInput("!"); // must not delete a phantom selection or throw
-        Assert.Equal("hi!", tf.Text);
+        Assert.Equal(expected: "hi!", actual: tf.Text);
     }
 
     [Fact]
@@ -106,9 +106,9 @@ public class TextEditingTests
     {
         var tf = new TextField { Text = "abc" };
         tf.Text = null!;
-        Assert.Equal("", tf.Text);
+        Assert.Equal(expected: "", actual: tf.Text);
         tf.OnTextInput("x");
-        Assert.Equal("x", tf.Text);
+        Assert.Equal(expected: "x", actual: tf.Text);
     }
 
     [Fact]
@@ -116,7 +116,7 @@ public class TextEditingTests
     {
         var ce = new CodeEditor("abc") { ReadOnly = true };
         ce.OnTextInput("X");
-        Assert.Equal("abc", ce.Text);
+        Assert.Equal(expected: "abc", actual: ce.Text);
     }
 
     [Fact]
@@ -124,7 +124,7 @@ public class TextEditingTests
     {
         var ce = new CodeEditor();
         ce.OnTextInput("hi");
-        Assert.Equal("hi", ce.Text);
+        Assert.Equal(expected: "hi", actual: ce.Text);
     }
 
     [Fact]
@@ -159,8 +159,14 @@ public class TextEditingTests
     public void GraphemeNavigation_DoesNotEnterTextElements(
         string text, int position, int expectedPrevious, int expectedNext)
     {
-        Assert.Equal(expectedPrevious, TextNavigation.PreviousGraphemeBoundary(text, position));
-        Assert.Equal(expectedNext, TextNavigation.NextGraphemeBoundary(text, 0));
+        Assert.Equal(
+            expected: expectedPrevious,
+            actual: TextNavigation.PreviousGraphemeBoundary(text: text, index: position)
+        );
+        Assert.Equal(
+            expected: expectedNext,
+            actual: TextNavigation.NextGraphemeBoundary(text: text, index: 0)
+        );
     }
 
     [Fact]
@@ -171,12 +177,12 @@ public class TextEditingTests
         var typed = new TextField();
         typed.OnTextInput("abc");
         typed.OnKey(
-            '\0',
-            42,
-            true,
-            Modifiers.None
+            keyChar: '\0',
+            scancode: 42,
+            down: true,
+            mods: Modifiers.None
         );
-        Assert.Equal("ab", typed.Text);
+        Assert.Equal(expected: "ab", actual: typed.Text);
     }
 
     [Fact]
@@ -185,12 +191,12 @@ public class TextEditingTests
         var field = new TextField();
         field.OnTextInput("e\u0301");
         field.OnKey(
-            '\0',
-            42,
-            true,
-            Modifiers.None
+            keyChar: '\0',
+            scancode: 42,
+            down: true,
+            mods: Modifiers.None
         );
-        Assert.Equal(string.Empty, field.Text);
+        Assert.Equal(expected: string.Empty, actual: field.Text);
     }
 
     [Fact]
@@ -199,29 +205,29 @@ public class TextEditingTests
         var editor = new CodeEditor();
         editor.OnTextInput("👍🏽");
         editor.OnKey(
-            '\0',
-            42,
-            true,
-            Modifiers.None
+            keyChar: '\0',
+            scancode: 42,
+            down: true,
+            mods: Modifiers.None
         );
-        Assert.Equal(string.Empty, editor.Text);
+        Assert.Equal(expected: string.Empty, actual: editor.Text);
     }
 
     [Fact]
     public void ImeComposition_IsTransientUntilCommitted()
     {
         var field = new TextField();
-        field.OnTextComposition("に", 1, 0);
-        Assert.Equal(string.Empty, field.Text);
+        field.OnTextComposition(text: "に", selectionStart: 1, selectionLength: 0);
+        Assert.Equal(expected: string.Empty, actual: field.Text);
 
         field.OnTextInput("に");
-        Assert.Equal("に", field.Text);
+        Assert.Equal(expected: "に", actual: field.Text);
 
         var editor = new CodeEditor();
-        editor.OnTextComposition("文", 1, 0);
-        Assert.Equal(string.Empty, editor.Text);
+        editor.OnTextComposition(text: "文", selectionStart: 1, selectionLength: 0);
+        Assert.Equal(expected: string.Empty, actual: editor.Text);
         editor.OnTextInput("文");
-        Assert.Equal("文", editor.Text);
+        Assert.Equal(expected: "文", actual: editor.Text);
     }
 
     // ── Multi-line TextField ────────────────────────────────────────────────────
@@ -232,44 +238,44 @@ public class TextEditingTests
         var ml = new TextField { Multiline = true };
         ml.OnTextInput("ab");
         ml.OnKey(
-            '\0',
-            40,
-            true,
-            Modifiers.None
+            keyChar: '\0',
+            scancode: 40,
+            down: true,
+            mods: Modifiers.None
         ); // Return
         ml.OnTextInput("cd");
-        Assert.Equal("ab\ncd", ml.Text);
+        Assert.Equal(expected: "ab\ncd", actual: ml.Text);
 
-        var submitted = false;
+        bool submitted = false;
         var sl = new TextField { OnSubmitted = _ => submitted = true };
         sl.OnTextInput("ab");
         sl.OnKey(
-            '\0',
-            40,
-            true,
-            Modifiers.None
+            keyChar: '\0',
+            scancode: 40,
+            down: true,
+            mods: Modifiers.None
         );
         Assert.True(submitted);
-        Assert.Equal("ab", sl.Text); // single-line Enter does not insert a break
+        Assert.Equal(expected: "ab", actual: sl.Text); // single-line Enter does not insert a break
     }
 
     [Fact]
     public void Multiline_CommandEnterSubmitsInsteadOfNewline()
     {
-        var submitted = false;
+        bool submitted = false;
         var ml = new TextField {
             Multiline = true,
             OnSubmitted = _ => submitted = true,
         };
         ml.OnTextInput("x");
         ml.OnKey(
-            '\r',
-            40,
-            true,
-            Modifiers.Cmd
+            keyChar: '\r',
+            scancode: 40,
+            down: true,
+            mods: Modifiers.Cmd
         );
         Assert.True(submitted);
-        Assert.Equal("x", ml.Text);
+        Assert.Equal(expected: "x", actual: ml.Text);
     }
 
     [Fact]
@@ -278,36 +284,36 @@ public class TextEditingTests
         var ml = new TextField { Multiline = true };
         ml.OnTextInput("a");
         ml.OnKey(
-            '\0',
-            40,
-            true,
-            Modifiers.None
+            keyChar: '\0',
+            scancode: 40,
+            down: true,
+            mods: Modifiers.None
         ); // newline → "a\n"
         ml.OnTextInput("b"); // "a\nb"
-        Assert.Equal("a\nb", ml.Text);
+        Assert.Equal(expected: "a\nb", actual: ml.Text);
         ml.OnKey(
-            '\0',
-            42,
-            true,
-            Modifiers.None
+            keyChar: '\0',
+            scancode: 42,
+            down: true,
+            mods: Modifiers.None
         ); // backspace deletes 'b'
         ml.OnKey(
-            '\0',
-            42,
-            true,
-            Modifiers.None
+            keyChar: '\0',
+            scancode: 42,
+            down: true,
+            mods: Modifiers.None
         ); // backspace deletes the newline, merging lines
-        Assert.Equal("a", ml.Text);
+        Assert.Equal(expected: "a", actual: ml.Text);
     }
 
     [Fact]
     public void Multiline_MeasureClampsHeightToMaxLines()
     {
         var c = new Constraints(
-            0,
-            200,
-            0,
-            1000
+            minWidth: 0,
+            maxWidth: 200,
+            minHeight: 0,
+            maxHeight: 1000
         );
         var capped = new TextField {
             Multiline = true,
@@ -321,9 +327,12 @@ public class TextEditingTests
             MaxLines = 10,
             Text = "a\nb\nc\nd\ne",
         };
-        var cappedH = capped.Measure(c).Height;
-        var tallH = tall.Measure(c).Height;
-        Assert.True(tallH > cappedH, $"5 visible rows ({tallH}) should exceed 3 ({cappedH})");
+        float cappedH = capped.Measure(c).Height;
+        float tallH = tall.Measure(c).Height;
+        Assert.True(
+            condition: tallH > cappedH,
+            userMessage: $"5 visible rows ({tallH}) should exceed 3 ({cappedH})"
+        );
     }
 
     [Fact]
@@ -332,15 +341,18 @@ public class TextEditingTests
         var ml = new TextField { Multiline = true };
         ml.OnTextInput("a");
         ml.OnKey(
-            '\0',
-            40,
-            true,
-            Modifiers.None
+            keyChar: '\0',
+            scancode: 40,
+            down: true,
+            mods: Modifiers.None
         ); // new line
-        ml.OnTextComposition("に", 1, 0);
-        Assert.Equal("a\n", ml.Text); // composition not committed into the document
+        ml.OnTextComposition(text: "に", selectionStart: 1, selectionLength: 0);
+        Assert.Equal(
+            expected: "a\n",
+            actual: ml.Text
+        ); // composition not committed into the document
         ml.OnTextInput("に");
-        Assert.Equal("a\nに", ml.Text);
+        Assert.Equal(expected: "a\nに", actual: ml.Text);
     }
 
     [Fact]
@@ -351,28 +363,31 @@ public class TextEditingTests
             Text = "one\ntwo\nthree",
             MaxLines = 8,
         };
-        ml.Measure(Constraints.Loose(160f, 300f));
+        ml.Measure(Constraints.Loose(width: 160f, height: 300f));
         ml.Layout(Offset.Zero);
         var paint = new PaintList();
         ml.Paint(paint);
-        var textCommands =
+        int textCommands =
             paint.DebugCommands.Count(cmd => cmd.Kind == (byte)PaintCommandKind.Text);
-        Assert.True(textCommands >= 3, $"expected one draw per visible line, got {textCommands}");
+        Assert.True(
+            condition: textCommands >= 3,
+            userMessage: $"expected one draw per visible line, got {textCommands}"
+        );
     }
 
     [Fact]
     public void CodeEditor_SoftWrapCreatesAdditionalVisualRows()
     {
         var editor = new CodeEditor("alpha beta gamma delta") { SoftWrap = true };
-        editor.Measure(Constraints.Tight(90f, 300f));
+        editor.Measure(Constraints.Tight(width: 90f, height: 300f));
         editor.Layout(Offset.Zero);
         var paint = new PaintList();
         editor.Paint(paint);
 
-        var textCommands = paint.DebugCommands.Count(c => c.Kind == (byte)PaintCommandKind.Text);
+        int textCommands = paint.DebugCommands.Count(c => c.Kind == (byte)PaintCommandKind.Text);
         Assert.True(
-            textCommands >= 3,
-            $"expected wrapped row draws plus gutter, got {textCommands}"
+            condition: textCommands >= 3,
+            userMessage: $"expected wrapped row draws plus gutter, got {textCommands}"
         );
     }
 
@@ -383,13 +398,13 @@ public class TextEditingTests
     {
         var editor = new CodeEditor();
         editor.OnTextInput("hello");
-        Assert.Equal("hello", editor.Text);
+        Assert.Equal(expected: "hello", actual: editor.Text);
 
         editor.Undo();
-        Assert.Equal(string.Empty, editor.Text);
+        Assert.Equal(expected: string.Empty, actual: editor.Text);
 
         editor.Redo();
-        Assert.Equal("hello", editor.Text);
+        Assert.Equal(expected: "hello", actual: editor.Text);
     }
 
     [Fact]
@@ -401,10 +416,10 @@ public class TextEditingTests
         editor.OnTextInput("a");
         editor.OnTextInput("b");
         editor.OnTextInput("c");
-        Assert.Equal("abc", editor.Text);
+        Assert.Equal(expected: "abc", actual: editor.Text);
 
         editor.Undo();
-        Assert.Equal(string.Empty, editor.Text);
+        Assert.Equal(expected: string.Empty, actual: editor.Text);
     }
 
     [Fact]
@@ -413,18 +428,18 @@ public class TextEditingTests
         var editor = new CodeEditor();
         editor.OnTextInput("ab");
         editor.OnKey(
-            '\0',
-            40,
-            true,
-            Modifiers.None
+            keyChar: '\0',
+            scancode: 40,
+            down: true,
+            mods: Modifiers.None
         ); // Return — distinct (Other) edit
         editor.OnTextInput("cd");
-        Assert.Equal("ab\ncd", editor.Text);
+        Assert.Equal(expected: "ab\ncd", actual: editor.Text);
 
         editor.Undo(); // undo the "cd" typing
-        Assert.Equal("ab\n", editor.Text);
+        Assert.Equal(expected: "ab\n", actual: editor.Text);
         editor.Undo(); // undo the newline
-        Assert.Equal("ab", editor.Text);
+        Assert.Equal(expected: "ab", actual: editor.Text);
     }
 
     [Fact]
@@ -432,12 +447,12 @@ public class TextEditingTests
     {
         var editor = new CodeEditor("frozen") { ReadOnly = true };
         editor.OnKey(
-            'z',
-            0,
-            true,
-            Modifiers.Cmd
+            keyChar: 'z',
+            scancode: 0,
+            down: true,
+            mods: Modifiers.Cmd
         ); // ⌘Z
-        Assert.Equal("frozen", editor.Text);
+        Assert.Equal(expected: "frozen", actual: editor.Text);
     }
 
     [Fact]
@@ -447,7 +462,7 @@ public class TextEditingTests
         editor.OnTextInput("draft");
         editor.Text = "loaded from disk"; // setter resets history
         editor.Undo(); // nothing to undo back into the previous document
-        Assert.Equal("loaded from disk", editor.Text);
+        Assert.Equal(expected: "loaded from disk", actual: editor.Text);
     }
 
     [Fact]
@@ -456,41 +471,44 @@ public class TextEditingTests
         var editor = new CodeEditor();
         editor.OnTextInput("x");
         editor.OnKey(
-            'z',
-            0,
-            true,
-            Modifiers.Cmd
+            keyChar: 'z',
+            scancode: 0,
+            down: true,
+            mods: Modifiers.Cmd
         ); // ⌘Z → undo
-        Assert.Equal(string.Empty, editor.Text);
+        Assert.Equal(expected: string.Empty, actual: editor.Text);
         editor.OnKey(
-            'z',
-            0,
-            true,
-            Modifiers.Cmd | Modifiers.Shift
+            keyChar: 'z',
+            scancode: 0,
+            down: true,
+            mods: Modifiers.Cmd | Modifiers.Shift
         ); // ⌘⇧Z → redo
-        Assert.Equal("x", editor.Text);
+        Assert.Equal(expected: "x", actual: editor.Text);
     }
 
     [Fact]
     public void CodeEditor_CommandSInvokesOnSubmit()
     {
-        var saved = 0;
+        int saved = 0;
         var editor = new CodeEditor("contents") { OnSubmit = () => saved++ };
         editor.OnKey(
-            's',
-            0,
-            true,
-            Modifiers.Cmd
+            keyChar: 's',
+            scancode: 0,
+            down: true,
+            mods: Modifiers.Cmd
         ); // ⌘S
-        Assert.Equal(1, saved);
+        Assert.Equal(expected: 1, actual: saved);
     }
 
     [Fact]
     public void CodeEditor_EditFiresOnChangedForDirtyTracking()
     {
-        var changes = 0;
+        int changes = 0;
         var editor = new CodeEditor { OnChanged = _ => changes++ };
         editor.OnTextInput("z");
-        Assert.True(changes >= 1, "an edit must fire OnChanged so a host can flag unsaved changes");
+        Assert.True(
+            condition: changes >= 1,
+            userMessage: "an edit must fire OnChanged so a host can flag unsaved changes"
+        );
     }
 }

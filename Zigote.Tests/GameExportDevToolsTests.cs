@@ -14,10 +14,10 @@ public class GameExportDevToolsTests
 {
     private static string TempDir()
     {
-        var dir = Path.Combine(
-            Path.GetTempPath(),
-            "zigote-export-tests",
-            Guid.NewGuid().ToString("N")
+        string dir = Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: "zigote-export-tests",
+            path3: Guid.NewGuid().ToString("N")
         );
         Directory.CreateDirectory(dir);
         return dir;
@@ -29,52 +29,57 @@ public class GameExportDevToolsTests
             Name = "My Game",
             DevToolsEnabled = devTools,
         };
-        var projPath = Path.Combine(dir, "game.zigoteproj");
+        string projPath = Path.Combine(path1: dir, path2: "game.zigoteproj");
         project.Save(projPath);
         return new ExportInput(
-            projPath,
-            project,
-            new ScriptRegistry(),
-            null
+            ProjectPath: projPath,
+            Project: project,
+            Scripts: new ScriptRegistry(),
+            ScriptAssemblyName: null
         );
     }
 
     [Fact]
     public void GeneratedCsproj_DevToolsDisabled_OmitsDevTools()
     {
-        var dir = TempDir();
+        string dir = TempDir();
         GameExporter.GeneratePlayerProject(
-            Input(dir, false),
-            dir,
-            Path.Combine(dir, "player"),
-            "MyGame"
+            input: Input(dir: dir, devTools: false),
+            sdkRoot: dir,
+            playerDir: Path.Combine(path1: dir, path2: "player"),
+            exeName: "MyGame"
         );
 
-        var csproj = File.ReadAllText(Path.Combine(dir, "player", "Game.csproj"));
-        Assert.DoesNotContain("Zigote.UI.DevTools", csproj);
+        string csproj =
+            File.ReadAllText(Path.Combine(path1: dir, path2: "player", path3: "Game.csproj"));
+        Assert.DoesNotContain(expectedSubstring: "Zigote.UI.DevTools", actualString: csproj);
     }
 
     [Fact]
     public void GeneratedCsproj_DevToolsEnabled_BundlesDevTools()
     {
-        var dir = TempDir();
+        string dir = TempDir();
         GameExporter.GeneratePlayerProject(
-            Input(dir, true),
-            dir,
-            Path.Combine(dir, "player"),
-            "MyGame"
+            input: Input(dir: dir, devTools: true),
+            sdkRoot: dir,
+            playerDir: Path.Combine(path1: dir, path2: "player"),
+            exeName: "MyGame"
         );
 
-        var csproj = File.ReadAllText(Path.Combine(dir, "player", "Game.csproj"));
-        Assert.Contains("Zigote.UI.DevTools.csproj", csproj);
-        Assert.Contains("""<TrimmerRootAssembly Include="Zigote.UI.DevTools" />""", csproj);
+        string csproj =
+            File.ReadAllText(Path.Combine(path1: dir, path2: "player", path3: "Game.csproj"));
+        Assert.Contains(expectedSubstring: "Zigote.UI.DevTools.csproj", actualString: csproj);
+        Assert.Contains(
+            expectedSubstring: """<TrimmerRootAssembly Include="Zigote.UI.DevTools" />""",
+            actualString: csproj
+        );
     }
 
     [Fact]
     public void ZigoteProject_DevToolsEnabled_RoundTripsAndDefaultsOff()
     {
-        var dir = TempDir();
-        var path = Path.Combine(dir, "game.zigoteproj");
+        string dir = TempDir();
+        string path = Path.Combine(path1: dir, path2: "game.zigoteproj");
         new ZigoteProject { DevToolsEnabled = true }.Save(path);
         Assert.True(ZigoteProject.Load(path).DevToolsEnabled);
 

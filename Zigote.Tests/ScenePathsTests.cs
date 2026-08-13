@@ -16,10 +16,10 @@ public class ScenePathsTests
 {
     private static string TempDir()
     {
-        var dir = Path.Combine(
-            Path.GetTempPath(),
-            "zigote-scenepaths",
-            Guid.NewGuid().ToString("N")
+        string dir = Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: "zigote-scenepaths",
+            path3: Guid.NewGuid().ToString("N")
         );
         Directory.CreateDirectory(dir);
         return dir;
@@ -28,16 +28,18 @@ public class ScenePathsTests
     [Fact]
     public void Normalize_RewritesInProjectAbsolutes_AndKeepsForeignOnes()
     {
-        var dir = TempDir();
+        string dir = TempDir();
         var warnings = new List<string>();
-        var scene = new SceneGraph { EnvironmentPath = Path.Combine(dir, "assets", "sky.hdr") };
+        var scene = new SceneGraph {
+            EnvironmentPath = Path.Combine(path1: dir, path2: "assets", path3: "sky.hdr"),
+        };
         scene.Root.Children.Add(
-            new SceneNode("Car", NodeKind.Mesh) {
+            new SceneNode(name: "Car", kind: NodeKind.Mesh) {
                 MeshPath = Path.Combine(
-                    dir,
-                    "assets",
-                    "models",
-                    "car.zmesh"
+                    path1: dir,
+                    path2: "assets",
+                    path3: "models",
+                    path4: "car.zmesh"
                 ),
                 TexturePath = "assets/models/car.png", // already canonical — untouched
                 NormalTexturePath =
@@ -46,58 +48,61 @@ public class ScenePathsTests
             }
         );
 
-        var count = ScenePaths.Normalize(scene, dir, warnings.Add);
+        int count = ScenePaths.Normalize(scene: scene, projectRoot: dir, warn: warnings.Add);
 
-        Assert.Equal(2, count);
-        Assert.Equal("assets/sky.hdr", scene.EnvironmentPath);
+        Assert.Equal(expected: 2, actual: count);
+        Assert.Equal(expected: "assets/sky.hdr", actual: scene.EnvironmentPath);
         var car = scene.Root.Children[0];
-        Assert.Equal("assets/models/car.zmesh", car.MeshPath);
-        Assert.Equal("assets/models/car.png", car.TexturePath);
-        Assert.Equal("/outside/the/project.png", car.NormalTexturePath);
-        Assert.Contains(warnings, w => w.Contains("outside the project"));
+        Assert.Equal(expected: "assets/models/car.zmesh", actual: car.MeshPath);
+        Assert.Equal(expected: "assets/models/car.png", actual: car.TexturePath);
+        Assert.Equal(expected: "/outside/the/project.png", actual: car.NormalTexturePath);
+        Assert.Contains(collection: warnings, filter: w => w.Contains("outside the project"));
     }
 
     [Fact]
     public void Normalize_ConvertsBackslashSeparators()
     {
-        var dir = TempDir();
+        string dir = TempDir();
         var scene = new SceneGraph();
         scene.Root.Children.Add(
-            new SceneNode("A", NodeKind.Mesh) {
+            new SceneNode(name: "A", kind: NodeKind.Mesh) {
                 MeshPath = @"assets\models\a.zmesh",
                 Parent = scene.Root,
             }
         );
 
-        var count = ScenePaths.Normalize(scene, dir);
+        int count = ScenePaths.Normalize(scene: scene, projectRoot: dir);
 
-        Assert.Equal(1, count);
-        Assert.Equal("assets/models/a.zmesh", scene.Root.Children[0].MeshPath);
+        Assert.Equal(expected: 1, actual: count);
+        Assert.Equal(expected: "assets/models/a.zmesh", actual: scene.Root.Children[0].MeshPath);
     }
 
     [Fact]
     public void Normalize_LeavesPrimitivesAndMissingFilesAlone()
     {
-        var dir = TempDir();
+        string dir = TempDir();
         var scene = new SceneGraph();
         scene.Root.Children.Add(
-            new SceneNode("Cube", NodeKind.Mesh) {
+            new SceneNode(name: "Cube", kind: NodeKind.Mesh) {
                 MeshPath = "#cube",
                 Parent = scene.Root,
             }
         );
         scene.Root.Children.Add(
-            new SceneNode("Ghost", NodeKind.Mesh) {
+            new SceneNode(name: "Ghost", kind: NodeKind.Mesh) {
                 MeshPath = "assets/missing/ghost.zmesh",
                 Parent = scene.Root,
             }
         );
 
-        var count = ScenePaths.Normalize(scene, dir);
+        int count = ScenePaths.Normalize(scene: scene, projectRoot: dir);
 
-        Assert.Equal(0, count);
-        Assert.Equal("#cube", scene.Root.Children[0].MeshPath);
-        Assert.Equal("assets/missing/ghost.zmesh", scene.Root.Children[1].MeshPath);
+        Assert.Equal(expected: 0, actual: count);
+        Assert.Equal(expected: "#cube", actual: scene.Root.Children[0].MeshPath);
+        Assert.Equal(
+            expected: "assets/missing/ghost.zmesh",
+            actual: scene.Root.Children[1].MeshPath
+        );
     }
 
     [Fact]
@@ -105,7 +110,7 @@ public class ScenePathsTests
     {
         var registry = new AssetRegistry();
         var id = registry.Register(@"textures\stone.png");
-        Assert.Equal(id, registry.Find("textures/stone.png"));
-        Assert.Equal("textures/stone.png", registry.Resolve(id));
+        Assert.Equal(expected: id, actual: registry.Find("textures/stone.png"));
+        Assert.Equal(expected: "textures/stone.png", actual: registry.Resolve(id));
     }
 }

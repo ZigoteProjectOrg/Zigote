@@ -5,10 +5,14 @@ namespace Zigote.Tests;
 
 /// <summary>
 ///     What the graph does when a body misbehaves — the preact-signals contracts the core was missing.
-///     A computed's exception is cached like a value (delivered on read, recomputed only when a dependency
-///     moves) instead of re-running the failing body on every read, which is what turns a throwing computed
-///     inside a paint binding into a per-frame recompute cliff. A computed read while it is still computing
-///     is a cycle and throws, instead of quietly handing back the previous value. And a reaction that threw
+///     A computed's exception is cached like a value (delivered on read, recomputed only when a
+///     dependency
+///     moves) instead of re-running the failing body on every read, which is what turns a throwing
+///     computed
+///     inside a paint binding into a per-frame recompute cliff. A computed read while it is still
+///     computing
+///     is a cycle and throws, instead of quietly handing back the previous value. And a reaction that
+///     threw
 ///     is still rescheduled by the next change — one failure must not silence it forever.
 /// </summary>
 [Collection("Reactive-serial")]
@@ -17,7 +21,7 @@ public class ReactiveFailureTests
     [Fact]
     public void A_failing_computed_is_delivered_on_read_not_at_construction()
     {
-        var runs = 0;
+        int runs = 0;
         var c = Computed.From<int>(() =>
             {
                 runs++;
@@ -25,7 +29,7 @@ public class ReactiveFailureTests
             }
         );
 
-        Assert.Equal(1, runs); // eager first compute still happened
+        Assert.Equal(expected: 1, actual: runs); // eager first compute still happened
         Assert.Throws<InvalidOperationException>(() => c.Value);
         c.Dispose();
     }
@@ -34,7 +38,7 @@ public class ReactiveFailureTests
     public void A_throwing_computed_runs_once_and_rethrows_the_cached_error_on_later_reads()
     {
         var s = new Signal<int>(1);
-        var runs = 0;
+        int runs = 0;
         using var c = Computed.From(() =>
             {
                 runs++;
@@ -43,17 +47,17 @@ public class ReactiveFailureTests
             }
         );
 
-        Assert.Equal(1, runs);
-        for (var i = 0; i < 5; i++) Assert.Throws<InvalidOperationException>(() => c.Value);
+        Assert.Equal(expected: 1, actual: runs);
+        for (int i = 0; i < 5; i++) Assert.Throws<InvalidOperationException>(() => c.Value);
         Assert.Throws<InvalidOperationException>(() => c.Peek());
-        Assert.Equal(1, runs); // six reads, zero extra runs of the failing body
+        Assert.Equal(expected: 1, actual: runs); // six reads, zero extra runs of the failing body
     }
 
     [Fact]
     public void A_dependency_change_retries_a_failed_computed_and_it_recovers()
     {
         var s = new Signal<int>(1);
-        var runs = 0;
+        int runs = 0;
         using var c = Computed.From(() =>
             {
                 runs++;
@@ -63,15 +67,15 @@ public class ReactiveFailureTests
         );
 
         Assert.Throws<InvalidOperationException>(() => c.Value);
-        Assert.Equal(1, runs);
+        Assert.Equal(expected: 1, actual: runs);
 
         s.Value = 2; // still failing, but a dependency moved → exactly one retry
         Assert.Throws<InvalidOperationException>(() => c.Value);
-        Assert.Equal(2, runs);
+        Assert.Equal(expected: 2, actual: runs);
 
         s.Value = 20; // now it succeeds
-        Assert.Equal(40, c.Value);
-        Assert.Equal(3, runs);
+        Assert.Equal(expected: 40, actual: c.Value);
+        Assert.Equal(expected: 3, actual: runs);
     }
 
     [Fact]
@@ -85,17 +89,17 @@ public class ReactiveFailureTests
             fail.Value ? throw new InvalidOperationException("boom") : s.Value
         );
 
-        var fires = 0;
+        int fires = 0;
         using var sub = c.Observe(() => fires++);
-        Assert.Equal(5, c.Value);
+        Assert.Equal(expected: 5, actual: c.Value);
 
         fail.Value = true;
-        Assert.Equal(1, fires);
+        Assert.Equal(expected: 1, actual: fires);
         Assert.Throws<InvalidOperationException>(() => c.Value);
 
         fail.Value = false; // same value as before the failure
-        Assert.Equal(2, fires);
-        Assert.Equal(5, c.Value);
+        Assert.Equal(expected: 2, actual: fires);
+        Assert.Equal(expected: 5, actual: c.Value);
     }
 
     [Fact]
@@ -104,8 +108,8 @@ public class ReactiveFailureTests
         // Regression: a failed run left the reaction Dirty-but-unscheduled, so MarkStale's "already stale"
         // bail meant it never ran again — one throw silenced the effect for the rest of the process.
         var s = new Signal<int>(0);
-        var runs = 0;
-        var seen = -1;
+        int runs = 0;
+        int seen = -1;
         var previous = Reactive.OnError;
         Reactive.OnError = _ => { };
         try
@@ -113,19 +117,19 @@ public class ReactiveFailureTests
             using var e = new Effect(() =>
                 {
                     runs++;
-                    var v = s.Value;
+                    int v = s.Value;
                     if (v == 1) throw new InvalidOperationException("boom");
                     seen = v;
                 }
             );
-            Assert.Equal(1, runs);
+            Assert.Equal(expected: 1, actual: runs);
 
             s.Value = 1; // throws
-            Assert.Equal(2, runs);
+            Assert.Equal(expected: 2, actual: runs);
 
             s.Value = 2; // must still be scheduled
-            Assert.Equal(3, runs);
-            Assert.Equal(2, seen);
+            Assert.Equal(expected: 3, actual: runs);
+            Assert.Equal(expected: 2, actual: seen);
         }
         finally
         {
@@ -142,22 +146,22 @@ public class ReactiveFailureTests
             fail.Value ? throw new InvalidOperationException("boom") : s.Value
         );
 
-        var errors = 0;
+        int errors = 0;
         var previous = Reactive.OnError;
         Reactive.OnError = _ => errors++;
         try
         {
-            var seen = -1;
+            int seen = -1;
             using var e = new Effect(() => seen = c.Value);
-            Assert.Equal(0, seen);
+            Assert.Equal(expected: 0, actual: seen);
 
             fail.Value = true; // the effect's read rethrows → reported, not unwound into the writer
-            Assert.Equal(1, errors);
+            Assert.Equal(expected: 1, actual: errors);
 
             fail.Value = false;
             s.Value = 7;
-            Assert.Equal(7, seen);
-            Assert.Equal(1, errors);
+            Assert.Equal(expected: 7, actual: seen);
+            Assert.Equal(expected: 1, actual: errors);
         }
         finally
         {
@@ -176,7 +180,11 @@ public class ReactiveFailureTests
 
         s.Value = 1;
         var ex = Assert.Throws<InvalidOperationException>(() => self.Value);
-        Assert.Contains("cycle", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            expectedSubstring: "cycle",
+            actualString: ex.Message,
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        );
         self.Dispose();
     }
 
@@ -190,7 +198,11 @@ public class ReactiveFailureTests
 
         s.Value = 1; // invalidates both → the next read walks a → b → a
         var ex = Assert.Throws<InvalidOperationException>(() => a.Value);
-        Assert.Contains("cycle", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            expectedSubstring: "cycle",
+            actualString: ex.Message,
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        );
         a.Dispose();
     }
 
@@ -204,9 +216,10 @@ public class ReactiveFailureTests
     public void A_wide_fan_out_is_not_mistaken_for_a_cycle()
     {
         var s = new Signal<int>(0);
-        var runs = 0;
+        int runs = 0;
         var effects = new List<Effect>(500);
-        for (var i = 0; i < 500; i++)
+        for (int i = 0; i < 500; i++)
+        {
             effects.Add(
                 new Effect(() =>
                     {
@@ -215,10 +228,11 @@ public class ReactiveFailureTests
                     }
                 )
             );
+        }
 
         runs = 0;
         s.Value = 1;
-        Assert.Equal(500, runs);
+        Assert.Equal(expected: 500, actual: runs);
 
         foreach (var e in effects) e.Dispose();
     }

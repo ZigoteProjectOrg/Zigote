@@ -37,11 +37,11 @@ public sealed class SafeArea : ComposedWidget
     {
         var p = MediaQuery.Of(context).Padding;
         var insets = new EdgeInsets(
-            Left ? MathF.Max(p.Left, Minimum.Left) : Minimum.Left,
-            Top ? MathF.Max(p.Top, Minimum.Top) : Minimum.Top,
-            Right ? MathF.Max(p.Right, Minimum.Right) : Minimum.Right,
-            Bottom ? MathF.Max(p.Bottom, Minimum.Bottom) : Minimum.Bottom
+            left: Left ? MathF.Max(x: p.Left, y: Minimum.Left) : Minimum.Left,
+            top: Top ? MathF.Max(x: p.Top, y: Minimum.Top) : Minimum.Top,
+            right: Right ? MathF.Max(x: p.Right, y: Minimum.Right) : Minimum.Right,
+            bottom: Bottom ? MathF.Max(x: p.Bottom, y: Minimum.Bottom) : Minimum.Bottom
         );
-        return new Padding(insets, Child ?? new SizedBox());
+        return new Padding(padding: insets, child: Child ?? new SizedBox());
     }
 }

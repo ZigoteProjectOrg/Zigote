@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Zigote.Core.Engine;
 
 namespace Zigote.UI.Host;
@@ -22,6 +23,19 @@ namespace Zigote.UI.Host;
 public static class SystemFonts
 {
     /// <summary>
+    ///     The scripts worth asking fontconfig about, in fallback priority order. CJK first, both
+    ///     because it is the most common gap and because its faces carry the widest coverage.
+    /// </summary>
+    private static readonly string[] Languages =
+        ["ja", "ko", "zh-cn", "zh-tw", "ar", "he", "th", "hi"];
+
+    /// <summary>
+    ///     How many fallback faces were found on this machine. Zero means anything outside the
+    ///     bundled font's coverage will render as boxes — worth surfacing in a diagnostics view.
+    /// </summary>
+    public static int Registered { get; private set; }
+
+    /// <summary>
     ///     Candidate files per platform, in the order they should be tried.
     ///     <para>
     ///         Ordering matters twice over: it is the order a missing glyph is searched in, so the
@@ -33,6 +47,7 @@ public static class SystemFonts
     private static IEnumerable<string> Candidates()
     {
         if (OperatingSystem.IsMacOS())
+        {
             return [
                 // Apple's own UI faces. Hiragino Sans is what macOS sets Japanese in; PingFang is
                 // the Chinese counterpart and Apple SD Gothic Neo the Korean one. All three are
@@ -44,12 +59,13 @@ public static class SystemFonts
                 "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
                 "/Library/Fonts/Arial Unicode.ttf",
             ];
+        }
 
         if (OperatingSystem.IsWindows())
         {
-            var fonts = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.Windows),
-                "Fonts"
+            string fonts = Path.Combine(
+                path1: Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                path2: "Fonts"
             );
             return new[] {
                 // The UI variants, not the text ones: they are the faces Windows itself sets menus
@@ -60,7 +76,7 @@ public static class SystemFonts
                 "msjh.ttc", // Microsoft JhengHei — Traditional Chinese
                 "malgun.ttf", // Malgun Gothic — Korean
                 "segoeui.ttf", // Segoe UI — Arabic, Hebrew, Thai and the rest
-            }.Select(name => Path.Combine(fonts, name));
+            }.Select(name => Path.Combine(path1: fonts, path2: name));
         }
 
         // Linux and the BSDs have no fixed layout — the same Noto CJK ships as
@@ -86,13 +102,6 @@ public static class SystemFonts
     }
 
     /// <summary>
-    ///     The scripts worth asking fontconfig about, in fallback priority order. CJK first, both
-    ///     because it is the most common gap and because its faces carry the widest coverage.
-    /// </summary>
-    private static readonly string[] Languages =
-        ["ja", "ko", "zh-cn", "zh-tw", "ar", "he", "th", "hi"];
-
-    /// <summary>
     ///     Ask <c>fc-match</c> for the system's preferred face per script.
     ///     <para>
     ///         Run in parallel: each query is a process spawn costing ~10 ms, and eight of them in
@@ -106,7 +115,7 @@ public static class SystemFonts
         {
             var queries = Languages.Select(lang => Task.Run(() => Match(lang))).ToArray();
             // Bounded so a wedged fontconfig cannot hold up the whole application start.
-            if (!Task.WaitAll(queries, TimeSpan.FromSeconds(2))) return [];
+            if (!Task.WaitAll(tasks: queries, timeout: TimeSpan.FromSeconds(2))) return [];
 
             return queries
                 .Select(query => query.Result)
@@ -125,8 +134,8 @@ public static class SystemFonts
     {
         try
         {
-            using var process = System.Diagnostics.Process.Start(
-                new System.Diagnostics.ProcessStartInfo {
+            using var process = Process.Start(
+                new ProcessStartInfo {
                     FileName = "fc-match",
                     ArgumentList = {
                         "-f",
@@ -140,7 +149,7 @@ public static class SystemFonts
             );
 
             if (process is null) return null;
-            var path = process.StandardOutput.ReadToEnd().Trim();
+            string path = process.StandardOutput.ReadToEnd().Trim();
             process.WaitForExit(2000);
             return path.Length > 0 ? path : null;
         }
@@ -157,25 +166,21 @@ public static class SystemFonts
     /// </summary>
     public static void Register(ZigoteEngine engine)
     {
-        var index = 0;
-        foreach (var path in Candidates().Distinct(StringComparer.Ordinal))
+        int index = 0;
+        foreach (string path in Candidates().Distinct(StringComparer.Ordinal))
         {
             if (!SafeExists(path)) continue;
 
             // Named by slot rather than by file, so the family name is stable and cannot collide
             // with a font the app registered itself.
-            var family = $"fallback-{index}";
-            if (!engine.LoadFont(family, path)) continue;
+            string family = $"fallback-{index}";
+            if (!engine.LoadFont(name: family, path: path)) continue;
             engine.AddFallbackFont(family);
             index++;
         }
 
         Registered = index;
     }
-
-    /// <summary>How many fallback faces were found on this machine. Zero means anything outside the
-    ///     bundled font's coverage will render as boxes — worth surfacing in a diagnostics view.</summary>
-    public static int Registered { get; private set; }
 
     /// <summary>A font directory can be a dangling symlink or on a mount that has gone away.</summary>
     private static bool SafeExists(string path)

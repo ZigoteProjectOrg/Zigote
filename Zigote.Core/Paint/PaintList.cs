@@ -45,8 +45,6 @@ public sealed unsafe class PaintList
     // parallel List<byte[]?> per command, because the vast majority (Rect/Border/Clip/Opacity) carry
     // neither. This turns PinAndCall from O(commands) into O(blobs) and drops ~16 B of null slots per
     // command from the per-frame working set.
-    private readonly List<(int Index, byte[] Blob, bool Pinned)> _pixelBlobs = [];
-    private readonly List<(int Index, byte[] Blob)> _textBlobs = [];
 
     // ── Glyph run temporary storage ───────────────────────────────────────────
     private readonly List<GCHandle> _quadHandles = [];
@@ -73,30 +71,9 @@ public sealed unsafe class PaintList
     internal ReadOnlySpan<ZgPaintCommand> CommandSpan =>
         CollectionsMarshal.AsSpan(_commands);
 
-    internal List<(int Index, byte[] Blob)> TextBlobs => _textBlobs;
+    internal List<(int Index, byte[] Blob)> TextBlobs { get; } = [];
 
-    internal List<(int Index, byte[] Blob, bool Pinned)> PixelBlobs => _pixelBlobs;
-
-    internal byte[]? FindTextBlob(int index)
-    {
-        return PaintSnapshot.Lookup(_textBlobs, index);
-    }
-
-    internal byte[]? FindPixelBlob(int index)
-    {
-        // Same ascending-index layout as the text table; the Pinned flag is irrelevant to content.
-        int lo = 0, hi = _pixelBlobs.Count - 1;
-        while (lo <= hi)
-        {
-            var mid = (lo + hi) >> 1;
-            var midIndex = _pixelBlobs[mid].Index;
-            if (midIndex == index) return _pixelBlobs[mid].Blob;
-            if (midIndex < index) lo = mid + 1;
-            else hi = mid - 1;
-        }
-
-        return null;
-    }
+    internal List<(int Index, byte[] Blob, bool Pinned)> PixelBlobs { get; } = [];
 
     // ── Clip stack API ────────────────────────────────────────────────────────
 
@@ -105,6 +82,25 @@ public sealed unsafe class PaintList
     ///     when there is no active clip (entire window is visible).
     /// </summary>
     public Rect? CurrentClip => _clipStack.Count > 0 ? _clipStack.Peek() : null;
+
+    internal byte[]? FindTextBlob(int index) =>
+        PaintSnapshot.Lookup(blobs: TextBlobs, index: index);
+
+    internal byte[]? FindPixelBlob(int index)
+    {
+        // Same ascending-index layout as the text table; the Pinned flag is irrelevant to content.
+        int lo = 0, hi = PixelBlobs.Count - 1;
+        while (lo <= hi)
+        {
+            int mid = (lo + hi) >> 1;
+            int midIndex = PixelBlobs[mid].Index;
+            if (midIndex == index) return PixelBlobs[mid].Blob;
+            if (midIndex < index) lo = mid + 1;
+            else hi = mid - 1;
+        }
+
+        return null;
+    }
 
     /// <summary>
     ///     Returns <c>true</c> when <paramref name="bounds" /> (in layout/local coordinates)
@@ -140,9 +136,7 @@ public sealed unsafe class PaintList
             _offsetY = prev.Y;
         }
         else
-        {
             _offsetX = _offsetY = 0;
-        }
     }
 
     /// <summary>
@@ -166,8 +160,10 @@ public sealed unsafe class PaintList
         // that shifted space: conjugate by the current offset (T(o) ∘ M ∘ T(-o)).
         var m = matrix;
         if (_offsetX != 0f || _offsetY != 0f)
-            m = Matrix2D.Translation(_offsetX, _offsetY) * matrix *
-                Matrix2D.Translation(-_offsetX, -_offsetY);
+        {
+            m = Matrix2D.Translation(dx: _offsetX, dy: _offsetY) * matrix *
+                Matrix2D.Translation(dx: -_offsetX, dy: -_offsetY);
+        }
 
         var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.TransformPush };
         // 2×3 affine rides existing float slots — a/b/c/d in the rect fields, tx/ty in
@@ -178,14 +174,18 @@ public sealed unsafe class PaintList
         cmd.RectH = m.D;
         cmd.Radius = m.Tx;
         cmd.BorderWidth = m.Ty;
-        Push(cmd, null, null);
+        Push(cmd: cmd, text: null, pixels: null);
     }
 
     /// <summary>Restore the transform that was active before the matching <see cref="PushTransform" />.</summary>
     public void PopTransform()
     {
-        _transformDepth = Math.Max(0, _transformDepth - 1);
-        Push(new ZgPaintCommand { Kind = (byte)PaintCommandKind.TransformPop }, null, null);
+        _transformDepth = Math.Max(val1: 0, val2: _transformDepth - 1);
+        Push(
+            cmd: new ZgPaintCommand { Kind = (byte)PaintCommandKind.TransformPop },
+            text: null,
+            pixels: null
+        );
     }
 
     // ── Alpha stack ───────────────────────────────────────────────────────────
@@ -194,20 +194,17 @@ public sealed unsafe class PaintList
     public void PushAlpha(float alpha)
     {
         _alphaStack.Push(_currentAlpha);
-        _currentAlpha = Math.Clamp(_currentAlpha * alpha, 0f, 1f);
+        _currentAlpha = Math.Clamp(value: _currentAlpha * alpha, min: 0f, max: 1f);
     }
 
     /// <summary>Restore the alpha multiplier that was active before the matching PushAlpha.</summary>
-    public void PopAlpha()
-    {
-        _currentAlpha = _alphaStack.Count > 0 ? _alphaStack.Pop() : 1f;
-    }
+    public void PopAlpha() => _currentAlpha = _alphaStack.Count > 0 ? _alphaStack.Pop() : 1f;
 
     public void Clear()
     {
         _commands.Clear();
-        _textBlobs.Clear();
-        _pixelBlobs.Clear();
+        TextBlobs.Clear();
+        PixelBlobs.Clear();
         _alphaStack.Clear();
         _currentAlpha = 1f;
         _clipStack.Clear();
@@ -217,10 +214,8 @@ public sealed unsafe class PaintList
         FreeQuadHandles();
     }
 
-    private Color ScaleAlpha(Color c)
-    {
-        return _currentAlpha < 0.9999f ? c.WithAlpha(c.A * _currentAlpha) : c;
-    }
+    private Color ScaleAlpha(Color c) =>
+        _currentAlpha < 0.9999f ? c.WithAlpha(c.A * _currentAlpha) : c;
 
     // ── Coordinate helpers ────────────────────────────────────────────────────
 
@@ -229,10 +224,10 @@ public sealed unsafe class PaintList
         return _offsetX == 0f && _offsetY == 0f
             ? r
             : new Rect(
-                r.X + _offsetX,
-                r.Y + _offsetY,
-                r.Width,
-                r.Height
+                x: r.X + _offsetX,
+                y: r.Y + _offsetY,
+                width: r.Width,
+                height: r.Height
             );
     }
 
@@ -242,11 +237,13 @@ public sealed unsafe class PaintList
     {
         if (float.IsNaN(bounds.X) || float.IsNaN(bounds.Y) ||
             float.IsNaN(bounds.Width) || float.IsNaN(bounds.Height))
+        {
             throw new ArgumentException(
                 $"NaN in bounds: {bounds}. Usual cause: a widget measured to a non-finite size — e.g. " +
                 "CrossAxisAlignment.Stretch or a fill widget on an unbounded (scrolling) axis. Bound " +
                 "that axis, or size the child to its content."
             );
+        }
     }
 
     private static void CheckColor(Color c)
@@ -271,7 +268,7 @@ public sealed unsafe class PaintList
     private static float ClampRadius(float radius, Rect bounds)
     {
         if (radius <= 0f) return 0f;
-        return MathF.Min(radius, MathF.Min(bounds.Width, bounds.Height) * 0.5f);
+        return MathF.Min(x: radius, y: MathF.Min(x: bounds.Width, y: bounds.Height) * 0.5f);
     }
 
     public void AddRect(Rect bounds, Color color, float radius = 0f)
@@ -279,10 +276,10 @@ public sealed unsafe class PaintList
         CheckBounds(bounds);
         CheckColor(color);
         var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.Rect };
-        SetBounds(ref cmd, ApplyOffset(bounds));
-        SetColor(ref cmd, ScaleAlpha(color));
-        cmd.Radius = ClampRadius(radius, bounds);
-        Push(cmd, null, null);
+        SetBounds(cmd: ref cmd, r: ApplyOffset(bounds));
+        SetColor(cmd: ref cmd, c: ScaleAlpha(color));
+        cmd.Radius = ClampRadius(radius: radius, bounds: bounds);
+        Push(cmd: cmd, text: null, pixels: null);
     }
 
     public void AddBorder(Rect bounds, Color color, float radius = 0f, float width = 1f)
@@ -290,11 +287,11 @@ public sealed unsafe class PaintList
         CheckBounds(bounds);
         CheckColor(color);
         var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.Border };
-        SetBounds(ref cmd, ApplyOffset(bounds));
-        SetColor(ref cmd, ScaleAlpha(color));
-        cmd.Radius = ClampRadius(radius, bounds);
+        SetBounds(cmd: ref cmd, r: ApplyOffset(bounds));
+        SetColor(cmd: ref cmd, c: ScaleAlpha(color));
+        cmd.Radius = ClampRadius(radius: radius, bounds: bounds);
         cmd.BorderWidth = width;
-        Push(cmd, null, null);
+        Push(cmd: cmd, text: null, pixels: null);
     }
 
     public void AddText(
@@ -312,10 +309,10 @@ public sealed unsafe class PaintList
     {
         CheckColor(color);
         CheckFontSize(fontSize);
-        fontFamily = FontFaces.Resolve(fontWeight, fontFamily);
-        var textBytes = EncodeUtf8(text);
+        fontFamily = FontFaces.Resolve(weight: fontWeight, requested: fontFamily);
+        byte[] textBytes = EncodeUtf8(text);
         var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.Text };
-        SetColor(ref cmd, ScaleAlpha(color));
+        SetColor(cmd: ref cmd, c: ScaleAlpha(color));
         cmd.BaselineX = baselineX + _offsetX;
         cmd.BaselineY = baselineY + _offsetY;
         cmd.FontSize = fontSize;
@@ -337,10 +334,10 @@ public sealed unsafe class PaintList
         }
 
         Push(
-            cmd,
-            textBytes,
-            fontBytes,
-            true
+            cmd: cmd,
+            text: textBytes,
+            pixels: fontBytes,
+            pixelsPinned: true
         );
     }
 
@@ -350,8 +347,8 @@ public sealed unsafe class PaintList
     {
         CheckBounds(bounds);
         var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.Image };
-        SetBounds(ref cmd, ApplyOffset(bounds));
-        SetColor(ref cmd, ScaleAlpha(tint ?? Color.White));
+        SetBounds(cmd: ref cmd, r: ApplyOffset(bounds));
+        SetColor(cmd: ref cmd, c: ScaleAlpha(tint ?? Color.White));
         cmd.ImgPixelW = (uint)pixelWidth;
         cmd.ImgPixelH = (uint)pixelHeight;
         cmd.U0 = u0;
@@ -366,7 +363,7 @@ public sealed unsafe class PaintList
             cmd.CacheKeyHi = (uint)((cacheKey.Value >> 32) & 0xFFFFFFFF);
         }
 
-        Push(cmd, null, pixels);
+        Push(cmd: cmd, text: null, pixels: pixels);
     }
 
     /// <param name="radius">
@@ -381,23 +378,27 @@ public sealed unsafe class PaintList
 
         // C# shadow: intersect for culling queries
         var clipped = _clipStack.Count > 0
-            ? Rect.Intersect(_clipStack.Peek(), screenBounds)
+            ? Rect.Intersect(a: _clipStack.Peek(), b: screenBounds)
             : screenBounds;
         _clipStack.Push(clipped);
         _clipDepth++;
 
         // Zig always receives the raw (un-pre-intersected) bounds; it runs its own intersection.
         var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.ClipStart };
-        SetBounds(ref cmd, screenBounds);
-        cmd.Radius = ClampRadius(radius, bounds);
-        Push(cmd, null, null);
+        SetBounds(cmd: ref cmd, r: screenBounds);
+        cmd.Radius = ClampRadius(radius: radius, bounds: bounds);
+        Push(cmd: cmd, text: null, pixels: null);
     }
 
     public void AddClipEnd()
     {
         if (_clipStack.Count > 0) _clipStack.Pop();
-        _clipDepth = Math.Max(0, _clipDepth - 1);
-        Push(new ZgPaintCommand { Kind = (byte)PaintCommandKind.ClipEnd }, null, null);
+        _clipDepth = Math.Max(val1: 0, val2: _clipDepth - 1);
+        Push(
+            cmd: new ZgPaintCommand { Kind = (byte)PaintCommandKind.ClipEnd },
+            text: null,
+            pixels: null
+        );
     }
 
     public void AddPushOpacity(Rect bounds, float alpha)
@@ -405,23 +406,27 @@ public sealed unsafe class PaintList
         CheckBounds(bounds);
         _opacityDepth++;
         var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.PushOpacity };
-        SetBounds(ref cmd, ApplyOffset(bounds));
+        SetBounds(cmd: ref cmd, r: ApplyOffset(bounds));
         SetColor(
-            ref cmd,
-            new Color(
-                0,
-                0,
-                0,
-                alpha
+            cmd: ref cmd,
+            c: new Color(
+                r: 0,
+                g: 0,
+                b: 0,
+                a: alpha
             )
         );
-        Push(cmd, null, null);
+        Push(cmd: cmd, text: null, pixels: null);
     }
 
     public void AddPopOpacity()
     {
-        _opacityDepth = Math.Max(0, _opacityDepth - 1);
-        Push(new ZgPaintCommand { Kind = (byte)PaintCommandKind.PopOpacity }, null, null);
+        _opacityDepth = Math.Max(val1: 0, val2: _opacityDepth - 1);
+        Push(
+            cmd: new ZgPaintCommand { Kind = (byte)PaintCommandKind.PopOpacity },
+            text: null,
+            pixels: null
+        );
     }
 
     public void AddShadow(Rect bounds, Color color, float borderRadius, float blurRadius,
@@ -430,12 +435,12 @@ public sealed unsafe class PaintList
         CheckBounds(bounds);
         CheckColor(color);
         var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.Shadow };
-        SetBounds(ref cmd, ApplyOffset(bounds));
-        SetColor(ref cmd, color);
-        cmd.Radius = ClampRadius(borderRadius, bounds);
+        SetBounds(cmd: ref cmd, r: ApplyOffset(bounds));
+        SetColor(cmd: ref cmd, c: color);
+        cmd.Radius = ClampRadius(radius: borderRadius, bounds: bounds);
         cmd.BorderWidth = blurRadius;
         cmd.BaselineX = spread; // directional — NOT offset-shifted
-        Push(cmd, null, null);
+        Push(cmd: cmd, text: null, pixels: null);
     }
 
     /// <summary>
@@ -469,9 +474,9 @@ public sealed unsafe class PaintList
         cmd.BorderWidth = y2 + _offsetY;
         cmd.BaselineX = x3 + _offsetX;
         cmd.BaselineY = y3 + _offsetY;
-        SetColor(ref cmd, ScaleAlpha(color));
-        cmd.FontSize = MathF.Max(width, 0f);
-        Push(cmd, null, null);
+        SetColor(cmd: ref cmd, c: ScaleAlpha(color));
+        cmd.FontSize = MathF.Max(x: width, y: 0f);
+        Push(cmd: cmd, text: null, pixels: null);
     }
 
     /// <summary>
@@ -486,22 +491,28 @@ public sealed unsafe class PaintList
         if (points.Length < 3) return;
         CheckColor(color);
 
-        var bytes = new byte[points.Length * 8];
-        for (var i = 0; i < points.Length; i++)
+        byte[] bytes = new byte[points.Length * 8];
+        for (int i = 0; i < points.Length; i++)
         {
-            var x = points[i].X + _offsetX;
-            var y = points[i].Y + _offsetY;
+            float x = points[i].X + _offsetX;
+            float y = points[i].Y + _offsetY;
             if (float.IsNaN(x) || float.IsNaN(y))
                 throw new ArgumentException("NaN in polygon point");
-            BitConverter.TryWriteBytes(bytes.AsSpan(i * 8, 4), x);
-            BitConverter.TryWriteBytes(bytes.AsSpan(i * 8 + 4, 4), y);
+            BitConverter.TryWriteBytes(
+                destination: bytes.AsSpan(start: i * 8, length: 4),
+                value: x
+            );
+            BitConverter.TryWriteBytes(
+                destination: bytes.AsSpan(start: (i * 8) + 4, length: 4),
+                value: y
+            );
         }
 
         var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.Polygon };
-        SetColor(ref cmd, ScaleAlpha(color));
+        SetColor(cmd: ref cmd, c: ScaleAlpha(color));
         cmd.ImgPixelW = (uint)points.Length;
         cmd.PixelsLen = (uint)bytes.Length;
-        Push(cmd, null, bytes);
+        Push(cmd: cmd, text: null, pixels: bytes);
     }
 
     public void AddLiquidGlass(Rect bounds, Color color, float radius, float thickness, float glowX,
@@ -511,14 +522,14 @@ public sealed unsafe class PaintList
         CheckBounds(bounds);
         CheckColor(color);
         var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.LiquidGlass };
-        SetBounds(ref cmd, ApplyOffset(bounds));
-        SetColor(ref cmd, color);
-        cmd.Radius = ClampRadius(radius, bounds);
+        SetBounds(cmd: ref cmd, r: ApplyOffset(bounds));
+        SetColor(cmd: ref cmd, c: color);
+        cmd.Radius = ClampRadius(radius: radius, bounds: bounds);
         cmd.BorderWidth = thickness;
         cmd.BaselineX = glowX; // directional — NOT offset-shifted
         cmd.BaselineY = glowY;
         cmd.FontSize = pinch;
-        Push(cmd, null, null);
+        Push(cmd: cmd, text: null, pixels: null);
     }
 
     public void AddShaderEffect(Rect bounds, uint shaderId,
@@ -527,7 +538,7 @@ public sealed unsafe class PaintList
     {
         CheckBounds(bounds);
         var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.ShaderEffect };
-        SetBounds(ref cmd, ApplyOffset(bounds));
+        SetBounds(cmd: ref cmd, r: ApplyOffset(bounds));
         cmd.ShaderId = shaderId;
         cmd.ColorR = p0;
         cmd.ColorG = p1;
@@ -537,7 +548,7 @@ public sealed unsafe class PaintList
         cmd.BaselineX = p5;
         cmd.BaselineY = p6;
         cmd.FontSize = p7;
-        Push(cmd, null, null);
+        Push(cmd: cmd, text: null, pixels: null);
     }
 
     // ── Text layout handle draw command ───────────────────────────────────────
@@ -552,13 +563,13 @@ public sealed unsafe class PaintList
         if (handle == 0) return;
         CheckColor(color);
         var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.TextLayout };
-        SetColor(ref cmd, ScaleAlpha(color));
+        SetColor(cmd: ref cmd, c: ScaleAlpha(color));
         cmd.BaselineX = x + _offsetX;
         cmd.BaselineY = y + _offsetY;
         cmd.CacheKeyLo = (uint)(handle & 0xFFFFFFFF);
         cmd.CacheKeyHi = (uint)((handle >> 32) & 0xFFFFFFFF);
         cmd.HasCacheKey = 1;
-        Push(cmd, null, null);
+        Push(cmd: cmd, text: null, pixels: null);
     }
 
     // ── Glyph run draw command ────────────────────────────────────────────────
@@ -578,23 +589,25 @@ public sealed unsafe class PaintList
         // Copy quads into a pinned managed array so the pointer stays valid past PinAndCall.
         var quadArr = quads.ToArray();
         if (_offsetX != 0f || _offsetY != 0f)
-            for (var i = 0; i < quadArr.Length; i++)
+        {
+            for (int i = 0; i < quadArr.Length; i++)
             {
                 quadArr[i].X += _offsetX;
                 quadArr[i].Y += _offsetY;
             }
+        }
 
-        var h = GCHandle.Alloc(quadArr, GCHandleType.Pinned);
+        var h = GCHandle.Alloc(value: quadArr, type: GCHandleType.Pinned);
         _quadHandles.Add(h);
 
         var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.GlyphRun };
-        SetColor(ref cmd, ScaleAlpha(tint));
+        SetColor(cmd: ref cmd, c: ScaleAlpha(tint));
         cmd.CacheKeyLo = (uint)(atlasHandle & 0xFFFFFFFF);
         cmd.CacheKeyHi = (uint)((atlasHandle >> 32) & 0xFFFFFFFF);
         cmd.HasCacheKey = 1;
         cmd.TextLen = (uint)quads.Length;
         cmd.TextPtr = (byte*)h.AddrOfPinnedObject();
-        Push(cmd, null, null);
+        Push(cmd: cmd, text: null, pixels: null);
     }
 
     // ── Render texture API ────────────────────────────────────────────────────
@@ -612,14 +625,18 @@ public sealed unsafe class PaintList
         cmd.HasCacheKey = 1;
         cmd.CacheKeyLo = (uint)(rtHandle & 0xFFFFFFFF);
         cmd.CacheKeyHi = (uint)((rtHandle >> 32) & 0xFFFFFFFF);
-        Push(cmd, null, null);
+        Push(cmd: cmd, text: null, pixels: null);
     }
 
     /// <summary>Restore the target list to the state before the matching <see cref="PushRenderTexture" />.</summary>
     public void PopRenderTexture()
     {
-        _rtDepth = Math.Max(0, _rtDepth - 1);
-        Push(new ZgPaintCommand { Kind = (byte)PaintCommandKind.RenderTextureEnd }, null, null);
+        _rtDepth = Math.Max(val1: 0, val2: _rtDepth - 1);
+        Push(
+            cmd: new ZgPaintCommand { Kind = (byte)PaintCommandKind.RenderTextureEnd },
+            text: null,
+            pixels: null
+        );
     }
 
     /// <summary>
@@ -635,7 +652,7 @@ public sealed unsafe class PaintList
         cmd.HasCacheKey = 1;
         cmd.CacheKeyLo = (uint)(srcRtHandle & 0xFFFFFFFF);
         cmd.CacheKeyHi = (uint)((srcRtHandle >> 32) & 0xFFFFFFFF);
-        Push(cmd, null, null);
+        Push(cmd: cmd, text: null, pixels: null);
     }
 
     // ── Validation ────────────────────────────────────────────────────────────
@@ -647,21 +664,32 @@ public sealed unsafe class PaintList
     public void Validate()
     {
         if (_clipDepth != 0)
+        {
             throw new InvalidOperationException(
                 $"Unbalanced clip stack: {_clipDepth} unclosed AddClipStart calls."
             );
+        }
+
         if (_opacityDepth != 0)
+        {
             throw new InvalidOperationException(
                 $"Unbalanced opacity stack: {_opacityDepth} unclosed AddPushOpacity calls."
             );
+        }
+
         if (_rtDepth != 0)
+        {
             throw new InvalidOperationException(
                 $"Unbalanced render texture stack: {_rtDepth} unclosed PushRenderTexture calls."
             );
+        }
+
         if (_transformDepth != 0)
+        {
             throw new InvalidOperationException(
                 $"Unbalanced transform stack: {_transformDepth} unclosed PushTransform calls."
             );
+        }
     }
 
     /// <summary>
@@ -682,31 +710,28 @@ public sealed unsafe class PaintList
             // (via _quadHandles) and never appear here, so their pointer survives untouched. Text
             // blobs always come from the EncodeUtf8 cache, whose arrays never move (pinned object
             // heap) — the address outlives the fixed block, and the list entry keeps the array alive.
-            foreach (var (index, blob) in _textBlobs)
+            foreach ((int index, byte[] blob) in TextBlobs)
+            {
                 fixed (byte* p = blob)
-                {
                     cmds[index].TextPtr = p;
-                }
+            }
 
-            foreach (var (index, blob, pinned) in _pixelBlobs)
+            foreach ((int index, byte[] blob, bool pinned) in PixelBlobs)
+            {
                 if (pinned)
                 {
                     fixed (byte* p = blob)
-                    {
                         cmds[index].PixelsPtr = p;
-                    }
                 }
                 else
                 {
-                    var h = GCHandle.Alloc(blob, GCHandleType.Pinned);
+                    var h = GCHandle.Alloc(value: blob, type: GCHandleType.Pinned);
                     handles.Add(h);
                     cmds[index].PixelsPtr = (byte*)h.AddrOfPinnedObject();
                 }
-
-            fixed (ZgPaintCommand* ptr = cmds)
-            {
-                callback(ptr, (uint)cmds.Length);
             }
+
+            fixed (ZgPaintCommand* ptr = cmds) callback(commands: ptr, count: (uint)cmds.Length);
         }
         finally
         {
@@ -723,12 +748,13 @@ public sealed unsafe class PaintList
     /// </summary>
     public void AppendFrom(PaintList other)
     {
-        var offset = _commands.Count;
+        int offset = _commands.Count;
         _commands.AddRange(other._commands);
         // Offsetting preserves the ascending order FindTextBlob/FindPixelBlob binary-search over.
-        foreach (var (index, blob) in other._textBlobs) _textBlobs.Add((index + offset, blob));
-        foreach (var (index, blob, pinned) in other._pixelBlobs)
-            _pixelBlobs.Add((index + offset, blob, pinned));
+        foreach ((int index, byte[] blob) in other.TextBlobs)
+            TextBlobs.Add((index + offset, blob));
+        foreach ((int index, byte[] blob, bool pinned) in other.PixelBlobs)
+            PixelBlobs.Add((index + offset, blob, pinned));
     }
 
     private void FreeQuadHandles()
@@ -741,20 +767,23 @@ public sealed unsafe class PaintList
 
     private void Push(ZgPaintCommand cmd, byte[]? text, byte[]? pixels, bool pixelsPinned = false)
     {
-        var index = _commands.Count;
+        int index = _commands.Count;
         _commands.Add(cmd);
-        if (text is not null) _textBlobs.Add((index, text));
-        if (pixels is not null) _pixelBlobs.Add((index, pixels, pixelsPinned));
+        if (text is not null) TextBlobs.Add((index, text));
+        if (pixels is not null) PixelBlobs.Add((index, pixels, pixelsPinned));
     }
 
     private static byte[] EncodeUtf8(string text)
     {
         var cache = _utf8Cache ??= new Dictionary<string, byte[]>(StringComparer.Ordinal);
-        if (cache.TryGetValue(text, out var bytes)) return bytes;
+        if (cache.TryGetValue(key: text, value: out byte[]? bytes)) return bytes;
         // Pinned object heap: the array never moves, so submit can embed its address in a command
         // without a per-frame GCHandle pin (see PinAndCall).
-        bytes = GC.AllocateUninitializedArray<byte>(Encoding.UTF8.GetByteCount(text), true);
-        Encoding.UTF8.GetBytes(text, bytes);
+        bytes = GC.AllocateUninitializedArray<byte>(
+            length: Encoding.UTF8.GetByteCount(text),
+            pinned: true
+        );
+        Encoding.UTF8.GetBytes(chars: text, bytes: bytes);
         if (cache.Count >= Utf8CacheMax) cache.Clear();
         cache[text] = bytes;
         return bytes;

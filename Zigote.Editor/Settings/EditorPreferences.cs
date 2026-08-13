@@ -41,12 +41,13 @@ public sealed class EditorPreferences(App app, EditorSettings settings, ProjectH
     public bool IsDarkResolved => settings.ThemeMode.Peek() switch {
         EditorThemeMode.Dark => true,
         EditorThemeMode.Light => false,
-        var _ when app.Engine.GetSystemTheme() is var sdl && sdl != SystemTheme.Unknown =>
+        _ when app.Engine.GetSystemTheme() is var sdl && sdl != SystemTheme.Unknown =>
             sdl == SystemTheme.Dark,
         _ => !GnomeDesktop.IsGnome || GnomeDesktop.PrefersDark,
     };
 
-    private float UiFontScale => Math.Clamp(settings.UiFontSize.Peek(), 9f, 26f) / 13f;
+    private float UiFontScale =>
+        Math.Clamp(value: settings.UiFontSize.Peek(), min: 9f, max: 26f) / 13f;
 
     /// <summary>The resolved theme must be re-derived and the UI rebuilt (mode/scale change).</summary>
     public event Action? ThemeChanged;
@@ -60,10 +61,8 @@ public sealed class EditorPreferences(App app, EditorSettings settings, ProjectH
     ///     UI font-size preference. Adwaita is the editor's design system — there is no Material
     ///     appearance to fall back to.
     /// </summary>
-    public ThemeData ResolveTheme()
-    {
-        return AdwTheme.Create(GnomeDesktop.Accent, IsDarkResolved).WithFontScale(UiFontScale);
-    }
+    public ThemeData ResolveTheme() => AdwTheme
+        .Create(accent: GnomeDesktop.Accent, dark: IsDarkResolved).WithFontScale(UiFontScale);
 
     /// <summary>Re-resolve a "system" theme after the OS switched appearance.</summary>
     public void OnSystemThemeChanged()
@@ -99,15 +98,15 @@ public sealed class EditorPreferences(App app, EditorSettings settings, ProjectH
     /// </summary>
     public void ApplyAtBoot()
     {
-        var boot = true;
+        bool boot = true;
 
-        var appliedUiSize = settings.UiFontSize.Peek();
-        var appliedNativeBar = settings.NativeMenuBar.Peek();
+        float appliedUiSize = settings.UiFontSize.Peek();
+        bool appliedNativeBar = settings.NativeMenuBar.Peek();
         _themeApplier = new Effect(() =>
             {
                 _ = settings.ThemeMode.Value; // tracked: a mode swap rebuilds the shell
-                var uiSize = settings.UiFontSize.Value;
-                var nativeBar = settings.NativeMenuBar.Value;
+                float uiSize = settings.UiFontSize.Value;
+                bool nativeBar = settings.NativeMenuBar.Value;
                 NativeMenuBar.Enabled = nativeBar;
                 if (boot) return;
                 if (nativeBar != appliedNativeBar)
@@ -132,16 +131,16 @@ public sealed class EditorPreferences(App app, EditorSettings settings, ProjectH
 
         _uiFontApplier = new Effect(() =>
             {
-                var path = settings.UiFontPath.Value;
+                string? path = settings.UiFontPath.Value;
                 if (boot && path is null) return;
                 ApplyUiFontFace(path);
             }
         );
 
-        var appliedEditorFont = settings.EditorFontPath.Peek();
+        string? appliedEditorFont = settings.EditorFontPath.Peek();
         _editorFontApplier = new Effect(() =>
             {
-                var path = settings.EditorFontPath.Value;
+                string? path = settings.EditorFontPath.Value;
                 _ = settings.EditorFontSize.Value;
                 _ = settings.ConsoleFontSize.Value;
                 if (boot)
@@ -150,7 +149,11 @@ public sealed class EditorPreferences(App app, EditorSettings settings, ProjectH
                     return;
                 }
 
-                if (!string.Equals(path, appliedEditorFont, StringComparison.Ordinal))
+                if (!string.Equals(
+                        a: path,
+                        b: appliedEditorFont,
+                        comparisonType: StringComparison.Ordinal
+                    ))
                 {
                     appliedEditorFont = path;
                     ApplyEditorFontFace(path);
@@ -163,7 +166,7 @@ public sealed class EditorPreferences(App app, EditorSettings settings, ProjectH
 
         _vsyncApplier = new Effect(() =>
             {
-                var on = settings.VSync.Value;
+                bool on = settings.VSync.Value;
                 if (boot && on) return; // swapchains start vsync-on; only a persisted "off" applies
                 app.VSync = on;
             }
@@ -212,19 +215,19 @@ public sealed class EditorPreferences(App app, EditorSettings settings, ProjectH
 
     private void ApplyUiFontFace(string? configured)
     {
-        var path = configured ?? BundledFontPath("Inter-Regular.ttf");
-        if (path is not null) app.SetFontFace("Inter", path);
+        string? path = configured ?? BundledFontPath("Inter-Regular.ttf");
+        if (path is not null) app.SetFontFace(family: "Inter", path: path);
     }
 
     private void ApplyEditorFontFace(string? configured)
     {
-        var path = configured ?? BundledFontPath("Iosevka-Regular.ttc");
-        if (path is not null) app.SetFontFace("code", path);
+        string? path = configured ?? BundledFontPath("Iosevka-Regular.ttc");
+        if (path is not null) app.SetFontFace(family: "code", path: path);
     }
 
     private static string? BundledFontPath(string file)
     {
-        var p = Path.Combine(AppContext.BaseDirectory, "Fonts", file);
+        string p = Path.Combine(path1: AppContext.BaseDirectory, path2: "Fonts", path3: file);
         return File.Exists(p) ? p : null;
     }
 
@@ -250,15 +253,21 @@ public sealed class EditorPreferences(App app, EditorSettings settings, ProjectH
     /// </summary>
     public static IReadOnlyList<(string Name, string Path)> AvailableFonts()
     {
-        var dir = Path.Combine(AppContext.BaseDirectory, "Fonts");
+        string dir = Path.Combine(path1: AppContext.BaseDirectory, path2: "Fonts");
         if (!Directory.Exists(dir)) return [];
         return Directory.EnumerateFiles(dir)
             .Where(f => Path.GetExtension(f).ToLowerInvariant() is ".ttf" or ".ttc" or ".otf")
             .Where(f =>
                 {
-                    var name = Path.GetFileNameWithoutExtension(f);
-                    return !name.Contains("MaterialIcons", StringComparison.OrdinalIgnoreCase) &&
-                           !name.Contains("Emoji", StringComparison.OrdinalIgnoreCase);
+                    string name = Path.GetFileNameWithoutExtension(f);
+                    return !name.Contains(
+                               value: "MaterialIcons",
+                               comparisonType: StringComparison.OrdinalIgnoreCase
+                           ) &&
+                           !name.Contains(
+                               value: "Emoji",
+                               comparisonType: StringComparison.OrdinalIgnoreCase
+                           );
                 }
             )
             .OrderBy(Path.GetFileNameWithoutExtension)

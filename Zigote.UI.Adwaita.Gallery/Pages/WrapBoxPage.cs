@@ -17,33 +17,34 @@ public sealed class WrapBoxPage : ComposedWidget
     protected override Widget Build(BuildContext context)
     {
         return new GalleryPage(
-            "Wrap Box",
+            title: "Wrap Box",
+            description:
             "A row that becomes rows: chips, tags and filters that cannot know their own width.",
-            MaterialIcons.WrapText
+            iconName: MaterialIcons.WrapText
         ) {
             ClampWidth = 680f,
             Children = {
                 Demo.Group(
-                    "Children",
-                    null,
+                    title: "Children",
+                    description: null,
                     new AdwSpinRow(
-                        "Count",
-                        null,
-                        10,
-                        1,
-                        Tags.Length,
-                        1,
-                        v => _count.Value = v
+                        title: "Count",
+                        subtitle: null,
+                        value: 10,
+                        min: 1,
+                        max: Tags.Length,
+                        step: 1,
+                        onChanged: v => _count.Value = v
                     ),
                     new AdwActionRow("Spacing") {
                         Suffixes = {
                             new SizedBox(
-                                180f,
+                                width: 180f,
                                 child: new AdwSlider(
-                                    Spacing.Sm,
-                                    0f,
-                                    Spacing.Xl,
-                                    v => _spacing.Value = MathF.Round(v)
+                                    value: Spacing.Sm,
+                                    min: 0f,
+                                    max: Spacing.Xl,
+                                    onChanged: v => _spacing.Value = MathF.Round(v)
                                 )
                             ),
                         },
@@ -53,7 +54,7 @@ public sealed class WrapBoxPage : ComposedWidget
                         }
                     )
                 ),
-                new Watch(() => Demo.Stage(Chips(), Spacing.Md)),
+                new Watch(() => Demo.Stage(child: Chips(), padding: Spacing.Md)),
                 Demo.Caption(
                     "Resize the window: the runs reflow without any of the chips resizing."
                 ),
@@ -63,9 +64,9 @@ public sealed class WrapBoxPage : ComposedWidget
 
     private Widget Chips()
     {
-        var gap = _spacing.Value;
+        float gap = _spacing.Value;
         var wrap = new Wrap(spacing: gap, runSpacing: gap);
-        for (var i = 0; i < (int)_count.Value; i++) wrap.Children.Add(new Chip(Tags[i]));
+        for (int i = 0; i < (int)_count.Value; i++) wrap.Children.Add(new Chip(Tags[i]));
         return wrap;
     }
 }
@@ -80,8 +81,10 @@ internal sealed class Chip(string text) : ComposedWidget
             Fill = theme.Fill2,
             Radius = AdwMetrics.Pill,
             Child = new Padding(
-                EdgeInsets.Symmetric(Spacing.Md, Spacing.Xs),
-                new Label(text, AdwTypography.Body, theme.OnBackground) { MaxLines = 1 }
+                padding: EdgeInsets.Symmetric(horizontal: Spacing.Md, vertical: Spacing.Xs),
+                child: new Label(text: text, style: AdwTypography.Body, color: theme.OnBackground) {
+                    MaxLines = 1,
+                }
             ),
         };
     }

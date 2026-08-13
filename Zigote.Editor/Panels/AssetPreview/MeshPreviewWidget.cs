@@ -24,8 +24,8 @@ internal sealed class MeshPreviewWidget : Widget
     private readonly float _radius;
     private float[]? _depth;
     private bool _dirty = true;
-    private bool _dragging;
     private float _dragX, _dragY;
+    private bool _dragging;
     private float _pitch = 0.5f;
 
     private byte[]? _pixels;
@@ -45,18 +45,18 @@ internal sealed class MeshPreviewWidget : Widget
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        var w = float.IsInfinity(c.MaxWidth) ? 240f : c.MaxWidth;
-        _size = c.Constrain(new Size(w, 200f));
+        float w = float.IsInfinity(c.MaxWidth) ? 240f : c.MaxWidth;
+        _size = c.Constrain(new Size(width: w, height: 200f));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
@@ -64,22 +64,23 @@ internal sealed class MeshPreviewWidget : Widget
     {
         if (!paint.IsVisible(Bounds)) return;
 
-        paint.AddRect(Bounds, _theme.Surface, 6f);
+        paint.AddRect(bounds: Bounds, color: _theme.Surface, radius: 6f);
         EnsureRendered();
         if (_pixels is not null && _pw > 0 && _ph > 0)
+        {
             paint.AddImage(
-                Bounds,
-                _pw,
-                _ph,
-                _pixels
+                bounds: Bounds,
+                pixelWidth: _pw,
+                pixelHeight: _ph,
+                pixels: _pixels
             );
-        paint.AddBorder(Bounds, _theme.Separator, 6f);
+        }
+
+        paint.AddBorder(bounds: Bounds, color: _theme.Separator, radius: 6f);
     }
 
-    public override Widget? HitTest(Offset point)
-    {
-        return Bounds.Contains(point.X, point.Y) ? this : null;
-    }
+    public override Widget? HitTest(Offset point) =>
+        Bounds.Contains(px: point.X, py: point.Y) ? this : null;
 
     public override void OnPointerDown(Offset point)
     {
@@ -93,7 +94,7 @@ internal sealed class MeshPreviewWidget : Widget
         if (!_dragging) return;
         _yaw -= (point.X - _dragX) * 0.012f;
         _pitch += (point.Y - _dragY) * 0.012f;
-        _pitch = Math.Clamp(_pitch, -1.4f, 1.4f);
+        _pitch = Math.Clamp(value: _pitch, min: -1.4f, max: 1.4f);
         _dragX = point.X;
         _dragY = point.Y;
         _dirty = true;
@@ -130,20 +131,20 @@ internal sealed class MeshPreviewWidget : Widget
 
     private void Render()
     {
-        var px = _pixels!;
-        var depth = _depth!;
+        byte[] px = _pixels!;
+        float[] depth = _depth!;
         int pw = _pw, ph = _ph;
 
         // Background: subtle vertical gradient on the theme surface.
-        var bgTop = ToLin(_theme.Surface, 1.06f);
-        var bgBot = ToLin(_theme.Surface, 0.82f);
-        for (var y = 0; y < ph; y++)
+        var bgTop = ToLin(c: _theme.Surface, scale: 1.06f);
+        var bgBot = ToLin(c: _theme.Surface, scale: 0.82f);
+        for (int y = 0; y < ph; y++)
         {
-            var t = ph > 1 ? (float)y / (ph - 1) : 0f;
-            var c = bgTop.Lerp(bgBot, t);
-            for (var x = 0; x < pw; x++)
+            float t = ph > 1 ? (float)y / (ph - 1) : 0f;
+            var c = bgTop.Lerp(b: bgBot, t: t);
+            for (int x = 0; x < pw; x++)
             {
-                var i = (y * pw + x) * 4;
+                int i = ((y * pw) + x) * 4;
                 px[i + 0] = ToByte(c.X);
                 px[i + 1] = ToByte(c.Y);
                 px[i + 2] = ToByte(c.Z);
@@ -151,38 +152,41 @@ internal sealed class MeshPreviewWidget : Widget
             }
         }
 
-        for (var i = 0; i < depth.Length; i++) depth[i] = float.PositiveInfinity;
+        for (int i = 0; i < depth.Length; i++) depth[i] = float.PositiveInfinity;
 
         // Orbit camera auto-fit to the mesh AABB.
-        var r = MathF.Max(_radius, 1e-3f);
-        var dist = 2.4f * r;
-        var cp = MathF.Cos(_pitch);
-        var sp = MathF.Sin(_pitch);
-        var cy = MathF.Cos(_yaw);
-        var sy = MathF.Sin(_yaw);
-        var camOff = new Vec3(cp * sy, sp, cp * cy) * dist;
+        float r = MathF.Max(x: _radius, y: 1e-3f);
+        float dist = 2.4f * r;
+        float cp = MathF.Cos(_pitch);
+        float sp = MathF.Sin(_pitch);
+        float cy = MathF.Cos(_yaw);
+        float sy = MathF.Sin(_yaw);
+        var camOff = new Vec3(x: cp * sy, y: sp, z: cp * cy) * dist;
         var eye = _center + camOff;
 
-        var near = MathF.Max(dist - r * 1.5f, r * 0.05f);
-        var far = dist + r * 3f;
-        var view = Mat4.LookAt(eye, _center, new Vec3(0f, 1f, 0f));
+        float near = MathF.Max(x: dist - (r * 1.5f), y: r * 0.05f);
+        float far = dist + (r * 3f);
+        var view = Mat4.LookAt(eye: eye, center: _center, worldUp: new Vec3(x: 0f, y: 1f, z: 0f));
         var proj = Mat4.PerspectiveRhZo(
-            Fov,
-            (float)pw / ph,
-            near,
-            far
+            fovyRadians: Fov,
+            aspect: (float)pw / ph,
+            near: near,
+            far: far
         );
         var viewProj = proj * view;
 
         // Head-light from the camera, plus a soft ambient floor.
         var lightDir = (-camOff).Normalize();
-        var baseLin = ToLin(new Color(0.62f, 0.64f, 0.68f), 1f); // neutral mid-grey
+        var baseLin = ToLin(
+            c: new Color(r: 0.62f, g: 0.64f, b: 0.68f),
+            scale: 1f
+        ); // neutral mid-grey
         const float ambient = 0.28f;
 
-        var pos = _mesh.Positions;
-        var nrm = _mesh.Normals;
-        var idx = _mesh.Indices;
-        var triCount = idx.Length / 3;
+        float[] pos = _mesh.Positions;
+        float[] nrm = _mesh.Normals;
+        int[] idx = _mesh.Indices;
+        int triCount = idx.Length / 3;
 
         // Per-vertex clip/screen scratch reused per triangle.
         Span<float> sx = stackalloc float[3];
@@ -190,45 +194,45 @@ internal sealed class MeshPreviewWidget : Widget
         Span<float> sz = stackalloc float[3];
         Span<bool> ok = stackalloc bool[3];
 
-        for (var t = 0; t < triCount; t++)
+        for (int t = 0; t < triCount; t++)
         {
-            var i0 = idx[t * 3 + 0];
-            var i1 = idx[t * 3 + 1];
-            var i2 = idx[t * 3 + 2];
+            int i0 = idx[(t * 3) + 0];
+            int i1 = idx[(t * 3) + 1];
+            int i2 = idx[(t * 3) + 2];
 
-            var p0 = new Vec3(pos[i0 * 3], pos[i0 * 3 + 1], pos[i0 * 3 + 2]);
-            var p1 = new Vec3(pos[i1 * 3], pos[i1 * 3 + 1], pos[i1 * 3 + 2]);
-            var p2 = new Vec3(pos[i2 * 3], pos[i2 * 3 + 1], pos[i2 * 3 + 2]);
+            var p0 = new Vec3(x: pos[i0 * 3], y: pos[(i0 * 3) + 1], z: pos[(i0 * 3) + 2]);
+            var p1 = new Vec3(x: pos[i1 * 3], y: pos[(i1 * 3) + 1], z: pos[(i1 * 3) + 2]);
+            var p2 = new Vec3(x: pos[i2 * 3], y: pos[(i2 * 3) + 1], z: pos[(i2 * 3) + 2]);
 
             ProjectVertex(
-                p0,
-                viewProj,
-                pw,
-                ph,
-                out sx[0],
-                out sy2[0],
-                out sz[0],
-                out ok[0]
+                p: p0,
+                viewProj: viewProj,
+                pw: pw,
+                ph: ph,
+                sx: out sx[0],
+                sy: out sy2[0],
+                sz: out sz[0],
+                ok: out ok[0]
             );
             ProjectVertex(
-                p1,
-                viewProj,
-                pw,
-                ph,
-                out sx[1],
-                out sy2[1],
-                out sz[1],
-                out ok[1]
+                p: p1,
+                viewProj: viewProj,
+                pw: pw,
+                ph: ph,
+                sx: out sx[1],
+                sy: out sy2[1],
+                sz: out sz[1],
+                ok: out ok[1]
             );
             ProjectVertex(
-                p2,
-                viewProj,
-                pw,
-                ph,
-                out sx[2],
-                out sy2[2],
-                out sz[2],
-                out ok[2]
+                p: p2,
+                viewProj: viewProj,
+                pw: pw,
+                ph: ph,
+                sx: out sx[2],
+                sy: out sy2[2],
+                sz: out sz[2],
+                ok: out ok[2]
             );
             if (!ok[0] || !ok[1] || !ok[2]) continue;
 
@@ -237,40 +241,40 @@ internal sealed class MeshPreviewWidget : Widget
             if (faceN.LengthSq() < 1e-12f) continue;
             faceN = faceN.Normalize();
 
-            var n0 = VertexNormal(nrm, i0, faceN);
-            var n1 = VertexNormal(nrm, i1, faceN);
-            var n2 = VertexNormal(nrm, i2, faceN);
+            var n0 = VertexNormal(nrm: nrm, i: i0, fallback: faceN);
+            var n1 = VertexNormal(nrm: nrm, i: i1, fallback: faceN);
+            var n2 = VertexNormal(nrm: nrm, i: i2, fallback: faceN);
             var triN = (n0 + n1 + n2).Normalize();
             if (triN.LengthSq() < 1e-6f) triN = faceN;
 
             // Two-sided: face the normal toward the camera so back faces still light up.
             if (triN.Dot(lightDir) < 0f) triN = -triN;
-            var diff = MathF.Max(triN.Dot(lightDir), 0f);
-            var shade = ambient + (1f - ambient) * diff;
+            float diff = MathF.Max(x: triN.Dot(lightDir), y: 0f);
+            float shade = ambient + ((1f - ambient) * diff);
             var color = baseLin * shade;
 
             RasterTriangle(
-                px,
-                depth,
-                pw,
-                ph,
-                sx[0],
-                sy2[0],
-                sz[0],
-                sx[1],
-                sy2[1],
-                sz[1],
-                sx[2],
-                sy2[2],
-                sz[2],
-                color
+                px: px,
+                depth: depth,
+                pw: pw,
+                ph: ph,
+                x0: sx[0],
+                y0: sy2[0],
+                z0: sz[0],
+                x1: sx[1],
+                y1: sy2[1],
+                z1: sz[1],
+                x2: sx[2],
+                y2: sy2[2],
+                z2: sz[2],
+                color: color
             );
         }
     }
 
     private static Vec3 VertexNormal(float[] nrm, int i, Vec3 fallback)
     {
-        var n = new Vec3(nrm[i * 3], nrm[i * 3 + 1], nrm[i * 3 + 2]);
+        var n = new Vec3(x: nrm[i * 3], y: nrm[(i * 3) + 1], z: nrm[(i * 3) + 2]);
         return n.LengthSq() < 1e-8f ? fallback : n.Normalize();
     }
 
@@ -282,13 +286,13 @@ internal sealed class MeshPreviewWidget : Widget
         ok = false;
         if (clip.W <= 1e-5f) return; // behind / at the camera
 
-        var invW = 1f / clip.W;
-        var ndcX = clip.X * invW;
-        var ndcY = clip.Y * invW;
-        var ndcZ = clip.Z * invW; // 0..1 in RhZo
+        float invW = 1f / clip.W;
+        float ndcX = clip.X * invW;
+        float ndcY = clip.Y * invW;
+        float ndcZ = clip.Z * invW; // 0..1 in RhZo
 
-        sx = (ndcX * 0.5f + 0.5f) * pw;
-        sy = (1f - (ndcY * 0.5f + 0.5f)) * ph; // flip Y for top-left origin
+        sx = ((ndcX * 0.5f) + 0.5f) * pw;
+        sy = (1f - ((ndcY * 0.5f) + 0.5f)) * ph; // flip Y for top-left origin
         sz = ndcZ;
         ok = true;
     }
@@ -300,70 +304,70 @@ internal sealed class MeshPreviewWidget : Widget
         float x2, float y2, float z2,
         Vec3 color)
     {
-        var minX = (int)MathF.Floor(Math.Min(x0, Math.Min(x1, x2)));
-        var maxX = (int)MathF.Ceiling(Math.Max(x0, Math.Max(x1, x2)));
-        var minY = (int)MathF.Floor(Math.Min(y0, Math.Min(y1, y2)));
-        var maxY = (int)MathF.Ceiling(Math.Max(y0, Math.Max(y1, y2)));
+        int minX = (int)MathF.Floor(Math.Min(val1: x0, val2: Math.Min(val1: x1, val2: x2)));
+        int maxX = (int)MathF.Ceiling(Math.Max(val1: x0, val2: Math.Max(val1: x1, val2: x2)));
+        int minY = (int)MathF.Floor(Math.Min(val1: y0, val2: Math.Min(val1: y1, val2: y2)));
+        int maxY = (int)MathF.Ceiling(Math.Max(val1: y0, val2: Math.Max(val1: y1, val2: y2)));
 
-        minX = Math.Max(minX, 0);
-        minY = Math.Max(minY, 0);
-        maxX = Math.Min(maxX, pw - 1);
-        maxY = Math.Min(maxY, ph - 1);
+        minX = Math.Max(val1: minX, val2: 0);
+        minY = Math.Max(val1: minY, val2: 0);
+        maxX = Math.Min(val1: maxX, val2: pw - 1);
+        maxY = Math.Min(val1: maxY, val2: ph - 1);
         if (minX > maxX || minY > maxY) return;
 
-        var area = Edge(
-            x0,
-            y0,
-            x1,
-            y1,
-            x2,
-            y2
+        float area = Edge(
+            ax: x0,
+            ay: y0,
+            bx: x1,
+            by: y1,
+            cx: x2,
+            cy: y2
         );
         if (MathF.Abs(area) < 1e-7f) return;
-        var invArea = 1f / area;
+        float invArea = 1f / area;
 
-        var rb = ToByte(color.X);
-        var gb = ToByte(color.Y);
-        var bb = ToByte(color.Z);
+        byte rb = ToByte(color.X);
+        byte gb = ToByte(color.Y);
+        byte bb = ToByte(color.Z);
 
-        for (var y = minY; y <= maxY; y++)
+        for (int y = minY; y <= maxY; y++)
         {
-            var pcy = y + 0.5f;
-            for (var x = minX; x <= maxX; x++)
+            float pcy = y + 0.5f;
+            for (int x = minX; x <= maxX; x++)
             {
-                var pcx = x + 0.5f;
-                var w0 = Edge(
-                    x1,
-                    y1,
-                    x2,
-                    y2,
-                    pcx,
-                    pcy
+                float pcx = x + 0.5f;
+                float w0 = Edge(
+                    ax: x1,
+                    ay: y1,
+                    bx: x2,
+                    by: y2,
+                    cx: pcx,
+                    cy: pcy
                 ) * invArea;
-                var w1 = Edge(
-                    x2,
-                    y2,
-                    x0,
-                    y0,
-                    pcx,
-                    pcy
+                float w1 = Edge(
+                    ax: x2,
+                    ay: y2,
+                    bx: x0,
+                    by: y0,
+                    cx: pcx,
+                    cy: pcy
                 ) * invArea;
-                var w2 = Edge(
-                    x0,
-                    y0,
-                    x1,
-                    y1,
-                    pcx,
-                    pcy
+                float w2 = Edge(
+                    ax: x0,
+                    ay: y0,
+                    bx: x1,
+                    by: y1,
+                    cx: pcx,
+                    cy: pcy
                 ) * invArea;
                 if (w0 < 0f || w1 < 0f || w2 < 0f) continue; // outside (CCW or CW handled by sign)
 
-                var z = w0 * z0 + w1 * z1 + w2 * z2;
-                var di = y * pw + x;
+                float z = (w0 * z0) + (w1 * z1) + (w2 * z2);
+                int di = (y * pw) + x;
                 if (z >= depth[di]) continue;
                 depth[di] = z;
 
-                var pi = di * 4;
+                int pi = di * 4;
                 px[pi + 0] = rb;
                 px[pi + 1] = gb;
                 px[pi + 2] = bb;
@@ -372,10 +376,8 @@ internal sealed class MeshPreviewWidget : Widget
         }
     }
 
-    private static float Edge(float ax, float ay, float bx, float by, float cx, float cy)
-    {
-        return (cx - ax) * (by - ay) - (cy - ay) * (bx - ax);
-    }
+    private static float Edge(float ax, float ay, float bx, float by, float cx, float cy) =>
+        ((cx - ax) * (by - ay)) - ((cy - ay) * (bx - ax));
 
     // ── Bounds / encoding ─────────────────────────────────────────────────────
 
@@ -385,11 +387,11 @@ internal sealed class MeshPreviewWidget : Widget
 
         float minX = float.MaxValue, minY = float.MaxValue, minZ = float.MaxValue;
         float maxX = float.MinValue, maxY = float.MinValue, maxZ = float.MinValue;
-        for (var i = 0; i + 2 < positions.Length; i += 3)
+        for (int i = 0; i + 2 < positions.Length; i += 3)
         {
-            var x = positions[i];
-            var y = positions[i + 1];
-            var z = positions[i + 2];
+            float x = positions[i];
+            float y = positions[i + 1];
+            float z = positions[i + 2];
             if (x < minX) minX = x;
             if (y < minY) minY = y;
             if (z < minZ) minZ = z;
@@ -398,9 +400,13 @@ internal sealed class MeshPreviewWidget : Widget
             if (z > maxZ) maxZ = z;
         }
 
-        var center = new Vec3((minX + maxX) * 0.5f, (minY + maxY) * 0.5f, (minZ + maxZ) * 0.5f);
-        var extent = new Vec3(maxX - minX, maxY - minY, maxZ - minZ) * 0.5f;
-        var radius = MathF.Max(extent.Length(), 1e-3f);
+        var center = new Vec3(
+            x: (minX + maxX) * 0.5f,
+            y: (minY + maxY) * 0.5f,
+            z: (minZ + maxZ) * 0.5f
+        );
+        var extent = new Vec3(x: maxX - minX, y: maxY - minY, z: maxZ - minZ) * 0.5f;
+        float radius = MathF.Max(x: extent.Length(), y: 1e-3f);
         return (center, radius);
     }
 
@@ -408,16 +414,18 @@ internal sealed class MeshPreviewWidget : Widget
     {
         // Approximate sRGB→linear (gamma 2.2) so shading composes, then re-encode on write.
         return new Vec3(
-            MathF.Pow(c.R, 2.2f) * scale,
-            MathF.Pow(c.G, 2.2f) * scale,
-            MathF.Pow(c.B, 2.2f) * scale
+            x: MathF.Pow(x: c.R, y: 2.2f) * scale,
+            y: MathF.Pow(x: c.G, y: 2.2f) * scale,
+            z: MathF.Pow(x: c.B, y: 2.2f) * scale
         );
     }
 
     private static byte ToByte(float linear)
     {
-        var c = linear < 0f ? 0f : linear > 1f ? 1f : linear;
-        var srgb = c <= 0.0031308f ? c * 12.92f : 1.055f * MathF.Pow(c, 1f / 2.4f) - 0.055f;
-        return (byte)(srgb * 255f + 0.5f);
+        float c = linear < 0f ? 0f : linear > 1f ? 1f : linear;
+        float srgb = c <= 0.0031308f
+            ? c * 12.92f
+            : (1.055f * MathF.Pow(x: c, y: 1f / 2.4f)) - 0.055f;
+        return (byte)((srgb * 255f) + 0.5f);
     }
 }

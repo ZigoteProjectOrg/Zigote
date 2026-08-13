@@ -18,9 +18,9 @@ public class AdwRetainedModeTests
 {
     private static void Lay(Widget w, float width = 600f, float height = 400f)
     {
-        var wrapper = new ThemeProvider(ThemeData.Dark, w);
-        wrapper.Measure(Constraints.Tight(width, height));
-        wrapper.Layout(new Offset(0f, 0f));
+        var wrapper = new ThemeProvider(data: ThemeData.Dark, child: w);
+        wrapper.Measure(Constraints.Tight(width: width, height: height));
+        wrapper.Layout(new Offset(x: 0f, y: 0f));
     }
 
     /// <summary>
@@ -30,9 +30,16 @@ public class AdwRetainedModeTests
     /// </summary>
     private static void LayLoose(Widget w, float maxWidth = 600f, float maxHeight = 400f)
     {
-        var wrapper = new ThemeProvider(ThemeData.Dark, w);
-        wrapper.Measure(new Constraints(0f, maxWidth, 0f, maxHeight));
-        wrapper.Layout(new Offset(0f, 0f));
+        var wrapper = new ThemeProvider(data: ThemeData.Dark, child: w);
+        wrapper.Measure(
+            new Constraints(
+                minWidth: 0f,
+                maxWidth: maxWidth,
+                minHeight: 0f,
+                maxHeight: maxHeight
+            )
+        );
+        wrapper.Layout(new Offset(x: 0f, y: 0f));
     }
 
     [Fact]
@@ -40,9 +47,9 @@ public class AdwRetainedModeTests
     {
         var first = new SizedBox();
         var second = new SizedBox();
-        var paned = new AdwPaned(first, second) { Position = 0.5f };
+        var paned = new AdwPaned(first: first, second: second) { Position = 0.5f };
         Lay(paned);
-        var half = first.Bounds.Width;
+        float half = first.Bounds.Width;
 
         paned.Position = 0.25f;
         Lay(paned);
@@ -51,52 +58,55 @@ public class AdwRetainedModeTests
         paned.Vertical = true;
         Lay(paned);
         // Vertical splits height and gives both panes the full width.
-        Assert.Equal(600f, first.Bounds.Width, 3);
+        Assert.Equal(expected: 600f, actual: first.Bounds.Width, precision: 3);
         Assert.True(first.Bounds.Height < 400f);
 
         paned.HandleWidth = 20f;
         Lay(paned);
-        Assert.Equal(first.Bounds.Bottom + 20f, second.Bounds.Y, 3);
+        Assert.Equal(expected: first.Bounds.Bottom + 20f, actual: second.Bounds.Y, precision: 3);
     }
 
     [Fact]
     public void PanedMinPaneSizeAppliesToAnAlreadyLaidOutSplit()
     {
         var first = new SizedBox();
-        var paned = new AdwPaned(first, new SizedBox()) { Position = 0.05f, MinPaneSize = 50f };
+        var paned = new AdwPaned(first: first, second: new SizedBox()) {
+            Position = 0.05f,
+            MinPaneSize = 50f,
+        };
         Lay(paned);
-        Assert.InRange(first.Bounds.Width, 49f, 51f);
+        Assert.InRange(actual: first.Bounds.Width, low: 49f, high: 51f);
 
         paned.MinPaneSize = 200f;
         Lay(paned);
-        Assert.InRange(first.Bounds.Width, 199f, 201f);
+        Assert.InRange(actual: first.Bounds.Width, low: 199f, high: 201f);
     }
 
     [Fact]
     public void ColorButtonResizesWhenItsWidthChanges()
     {
         // Constructible with no running app: the popover resolves its window when opened.
-        var button = new AdwColorButton(Color.Rgb(255, 0, 0));
+        var button = new AdwColorButton(Color.Rgb(r: 255, g: 0, b: 0));
         LayLoose(button);
-        Assert.Equal(52f, button.Bounds.Width, 3);
+        Assert.Equal(expected: 52f, actual: button.Bounds.Width, precision: 3);
 
         button.Width = 96f;
         LayLoose(button);
-        Assert.Equal(96f, button.Bounds.Width, 3);
+        Assert.Equal(expected: 96f, actual: button.Bounds.Width, precision: 3);
     }
 
     [Fact]
     public void SeparatorFollowsItsLengthAndOrientation()
     {
         var sep = new AdwSeparator();
-        LayLoose(sep, 300f, 300f);
-        Assert.Equal(1f, sep.Bounds.Height, 3);
+        LayLoose(w: sep, maxWidth: 300f, maxHeight: 300f);
+        Assert.Equal(expected: 1f, actual: sep.Bounds.Height, precision: 3);
 
         sep.Vertical = true;
         sep.Length = 40f;
-        LayLoose(sep, 300f, 300f);
-        Assert.Equal(1f, sep.Bounds.Width, 3);
-        Assert.Equal(40f, sep.Bounds.Height, 3);
+        LayLoose(w: sep, maxWidth: 300f, maxHeight: 300f);
+        Assert.Equal(expected: 1f, actual: sep.Bounds.Width, precision: 3);
+        Assert.Equal(expected: 40f, actual: sep.Bounds.Height, precision: 3);
     }
 
     [Fact]
@@ -104,7 +114,7 @@ public class AdwRetainedModeTests
     {
         var label = new AdwShortcutLabel("<Primary>s");
         LayLoose(label);
-        var narrow = label.Bounds.Width;
+        float narrow = label.Bounds.Width;
 
         label.Accelerator = "<Primary><Shift><Alt>s";
         LayLoose(label);
@@ -124,16 +134,16 @@ public class AdwRetainedModeTests
     public void ViewSwitcherSidebarMovesSelectionWithoutRebuildingRows()
     {
         var stack = new AdwViewStack(
-            new AdwViewStackPage("a", "Alpha", new SizedBox()),
-            new AdwViewStackPage("b", "Beta", new SizedBox())
+            new AdwViewStackPage(name: "a", title: "Alpha", child: new SizedBox()),
+            new AdwViewStackPage(name: "b", title: "Beta", child: new SizedBox())
         );
         var sidebar = new AdwViewSwitcherSidebar(stack);
-        Lay(sidebar, 260f, 300f);
+        Lay(w: sidebar, width: 260f, height: 300f);
 
-        var before = sidebar.RebuildCount;
+        int before = sidebar.RebuildCount;
         stack.VisibleName = "b";
-        Lay(sidebar, 260f, 300f);
+        Lay(w: sidebar, width: 260f, height: 300f);
 
-        Assert.Equal(before, sidebar.RebuildCount);
+        Assert.Equal(expected: before, actual: sidebar.RebuildCount);
     }
 }

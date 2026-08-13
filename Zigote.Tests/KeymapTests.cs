@@ -18,20 +18,20 @@ public class KeymapTests
     public void KeyEvent_DecodesPhysicalKeyAndRepeat()
     {
         var held = new KeyEvent(
-            true,
-            'a',
-            (uint)KeyCode.A,
-            Modifiers.None,
-            true
+            down: true,
+            keyChar: 'a',
+            scancode: (uint)KeyCode.A,
+            modifiers: Modifiers.None,
+            repeat: true
         );
-        Assert.Equal(KeyCode.A, held.Key);
+        Assert.Equal(expected: KeyCode.A, actual: held.Key);
         Assert.True(held.Repeat);
 
         var press = new KeyEvent(
-            true,
-            'a',
-            (uint)KeyCode.A,
-            Modifiers.None
+            down: true,
+            keyChar: 'a',
+            scancode: (uint)KeyCode.A,
+            modifiers: Modifiers.None
         );
         Assert.False(press.Repeat); // defaults to false
     }
@@ -45,9 +45,9 @@ public class KeymapTests
     [InlineData("3", KeyCode.Digit3, Modifiers.None)]
     public void Chord_Parses(string text, KeyCode key, Modifiers mods)
     {
-        Assert.True(KeyChord.TryParse(text, out var c));
-        Assert.Equal(key, c.Key);
-        Assert.Equal(mods, c.Modifiers);
+        Assert.True(KeyChord.TryParse(text: text, chord: out var c));
+        Assert.Equal(expected: key, actual: c.Key);
+        Assert.Equal(expected: mods, actual: c.Modifiers);
     }
 
     [Theory]
@@ -55,34 +55,32 @@ public class KeymapTests
     [InlineData("Ctrl+")]
     [InlineData("Foo+Z")]
     [InlineData("NotAKey")]
-    public void Chord_RejectsGarbage(string text)
-    {
-        Assert.False(KeyChord.TryParse(text, out _));
-    }
+    public void Chord_RejectsGarbage(string text) =>
+        Assert.False(KeyChord.TryParse(text: text, chord: out _));
 
     [Fact]
     public void Chord_RoundTripsThroughString()
     {
-        var c = new KeyChord(KeyCode.P, Modifiers.Cmd | Modifiers.Shift);
-        Assert.True(KeyChord.TryParse(c.ToString(), out var back));
-        Assert.Equal(c, back);
+        var c = new KeyChord(Key: KeyCode.P, Modifiers: Modifiers.Cmd | Modifiers.Shift);
+        Assert.True(KeyChord.TryParse(text: c.ToString(), chord: out var back));
+        Assert.Equal(expected: c, actual: back);
     }
 
     [Fact]
     public void Chord_MatchesModifiersExactly()
     {
-        var c = new KeyChord(KeyCode.S, Modifiers.Ctrl);
-        Assert.True(c.Matches(KeyCode.S, Modifiers.Ctrl));
-        Assert.False(c.Matches(KeyCode.S, Modifiers.Ctrl | Modifiers.Shift));
-        Assert.False(c.Matches(KeyCode.S, Modifiers.None));
+        var c = new KeyChord(Key: KeyCode.S, Modifiers: Modifiers.Ctrl);
+        Assert.True(c.Matches(key: KeyCode.S, modifiers: Modifiers.Ctrl));
+        Assert.False(c.Matches(key: KeyCode.S, modifiers: Modifiers.Ctrl | Modifiers.Shift));
+        Assert.False(c.Matches(key: KeyCode.S, modifiers: Modifiers.None));
     }
 
     [Fact]
     public void Command_UsesPlatformModifier()
     {
         var c = KeyChord.Command(KeyCode.C);
-        Assert.Equal(KeyChord.PlatformCommand, c.Modifiers);
-        Assert.True(c.Matches(KeyCode.C, KeyChord.PlatformCommand));
+        Assert.Equal(expected: KeyChord.PlatformCommand, actual: c.Modifiers);
+        Assert.True(c.Matches(key: KeyCode.C, modifiers: KeyChord.PlatformCommand));
     }
 
     [Fact]
@@ -90,38 +88,44 @@ public class KeymapTests
     {
         var cmd = KeyChord.PlatformCommand;
         var km = new Keymap();
-        km.Bind("edit.copy", KeyChord.Command(KeyCode.C));
+        km.Bind(action: "edit.copy", chord: KeyChord.Command(KeyCode.C));
 
-        Assert.Equal("edit.copy", km.Resolve(KeyCode.C, cmd));
-        Assert.True(km.IsBound("edit.copy", KeyCode.C, cmd));
+        Assert.Equal(expected: "edit.copy", actual: km.Resolve(key: KeyCode.C, modifiers: cmd));
+        Assert.True(km.IsBound(action: "edit.copy", key: KeyCode.C, modifiers: cmd));
 
-        km.Rebind("edit.copy", new KeyChord(KeyCode.Y, Modifiers.Ctrl));
-        Assert.Null(km.Resolve(KeyCode.C, cmd)); // old chord gone
-        Assert.Equal("edit.copy", km.Resolve(KeyCode.Y, Modifiers.Ctrl));
+        km.Rebind(
+            action: "edit.copy",
+            chord: new KeyChord(Key: KeyCode.Y, Modifiers: Modifiers.Ctrl)
+        );
+        Assert.Null(km.Resolve(key: KeyCode.C, modifiers: cmd)); // old chord gone
+        Assert.Equal(
+            expected: "edit.copy",
+            actual: km.Resolve(key: KeyCode.Y, modifiers: Modifiers.Ctrl)
+        );
 
         km.Unbind("edit.copy");
-        Assert.Null(km.Resolve(KeyCode.Y, Modifiers.Ctrl));
+        Assert.Null(km.Resolve(key: KeyCode.Y, modifiers: Modifiers.Ctrl));
     }
 
     [Fact]
     public void Keymap_ResolvesKeyEvent_DownOnly()
     {
         var km = new Keymap();
-        km.Bind("app.save", new KeyChord(KeyCode.S, Modifiers.Ctrl));
+        km.Bind(action: "app.save", chord: new KeyChord(Key: KeyCode.S, Modifiers: Modifiers.Ctrl));
 
         var down = new KeyEvent(
-            true,
-            's',
-            (uint)KeyCode.S,
-            Modifiers.Ctrl
+            down: true,
+            keyChar: 's',
+            scancode: (uint)KeyCode.S,
+            modifiers: Modifiers.Ctrl
         );
         var up = new KeyEvent(
-            false,
-            's',
-            (uint)KeyCode.S,
-            Modifiers.Ctrl
+            down: false,
+            keyChar: 's',
+            scancode: (uint)KeyCode.S,
+            modifiers: Modifiers.Ctrl
         );
-        Assert.Equal("app.save", km.Resolve(down));
+        Assert.Equal(expected: "app.save", actual: km.Resolve(down));
         Assert.Null(km.Resolve(up)); // key-up never resolves
     }
 
@@ -129,17 +133,21 @@ public class KeymapTests
     public void Keymap_ExportLoad_RoundTrips()
     {
         var km = new Keymap();
-        km.Bind("a.x", new KeyChord(KeyCode.X, Modifiers.Ctrl));
-        km.Bind("a.y", new KeyChord(KeyCode.F2));
+        km.Bind(action: "a.x", chord: new KeyChord(Key: KeyCode.X, Modifiers: Modifiers.Ctrl));
+        km.Bind(action: "a.y", chord: new KeyChord(KeyCode.F2));
         var dump = km.Export().ToList();
 
         var restored = new Keymap();
         restored.Load(dump);
-        Assert.Equal("a.x", restored.Resolve(KeyCode.X, Modifiers.Ctrl));
-        Assert.Equal("a.y", restored.Resolve(KeyCode.F2, Modifiers.None));
+        Assert.Equal(
+            expected: "a.x",
+            actual: restored.Resolve(key: KeyCode.X, modifiers: Modifiers.Ctrl)
+        );
+        Assert.Equal(
+            expected: "a.y",
+            actual: restored.Resolve(key: KeyCode.F2, modifiers: Modifiers.None)
+        );
     }
-
-    private sealed class Editor : SizedBox, ITextInputClient;
 
     [Theory]
     [InlineData(Modifiers.None, true, false)] // Space while typing in a search box is a space
@@ -150,7 +158,12 @@ public class KeymapTests
     public void Shortcut_YieldsToFocusedEditor_OnlyWhenUnmodified(
         Modifiers mods, bool editorFocused, bool expected)
     {
-        Widget? focused = editorFocused ? new Editor() : new SizedBox(1f, 1f);
-        Assert.Equal(expected, App.ShortcutOutranksFocus(mods, focused));
+        Widget? focused = editorFocused ? new Editor() : new SizedBox(width: 1f, height: 1f);
+        Assert.Equal(
+            expected: expected,
+            actual: App.ShortcutOutranksFocus(modifiers: mods, focused: focused)
+        );
     }
+
+    private sealed class Editor : SizedBox, ITextInputClient;
 }

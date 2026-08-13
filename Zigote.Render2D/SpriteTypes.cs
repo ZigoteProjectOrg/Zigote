@@ -38,11 +38,11 @@ public readonly record struct SpriteFrame(
     int PixelHeight)
 {
     public static readonly SpriteFrame Full = new(
-        0f,
-        0f,
-        1f,
-        1f,
-        0,
-        0
+        U0: 0f,
+        V0: 0f,
+        U1: 1f,
+        V1: 1f,
+        PixelWidth: 0,
+        PixelHeight: 0
     );
 }

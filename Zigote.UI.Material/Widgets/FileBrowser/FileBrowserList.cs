@@ -32,10 +32,7 @@ internal sealed class FileBrowserList : Widget
     private string _typeAhead = "";
     private float _typeAheadTime = -10f;
 
-    public FileBrowserList(FileBrowserModel model)
-    {
-        _model = model;
-    }
+    public FileBrowserList(FileBrowserModel model) => _model = model;
 
     /// <summary>Double-click / Enter: open a directory or confirm a file.</summary>
     public Action<FileBrowserEntry>? OnActivate { get; set; }
@@ -53,7 +50,7 @@ internal sealed class FileBrowserList : Widget
 
     /// <summary>Row height: the dense 26pt file row on a pointer, a finger target on a phone.</summary>
     private float RowH =>
-        _compact ? MathF.Max(PointerRowHeight, TouchMetrics.MinTarget) : PointerRowHeight;
+        _compact ? MathF.Max(x: PointerRowHeight, y: TouchMetrics.MinTarget) : PointerRowHeight;
 
     public override bool Focusable => true;
     public override bool HandlesDirectionalKeys => true;
@@ -69,7 +66,7 @@ internal sealed class FileBrowserList : Widget
         const float size = 76f;
         const float modified = 128f;
         if (width < MinThreeColumnWidth) return (width, 0f, 0f);
-        return (MathF.Max(120f, width - size - modified), size, modified);
+        return (MathF.Max(x: 120f, y: width - size - modified), size, modified);
     }
 
     /// <summary>After navigation: cursor cleared, scrolled back to the top.</summary>
@@ -85,20 +82,20 @@ internal sealed class FileBrowserList : Widget
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
         _compact = TouchMetrics.IsCompact;
-        var w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 560f;
+        float w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 560f;
         // Keep some height even when empty so the "empty folder" message has a canvas.
-        var h = MathF.Max(_model.Visible.Count * RowH, 120f);
-        _size = c.Constrain(new Size(w, h));
+        float h = MathF.Max(x: _model.Visible.Count * RowH, y: 120f);
+        _size = c.Constrain(new Size(width: w, height: h));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
@@ -114,89 +111,94 @@ internal sealed class FileBrowserList : Widget
         }
 
         var clip = paint.CurrentClip;
-        var first = 0;
-        var last = rows.Count - 1;
+        int first = 0;
+        int last = rows.Count - 1;
         if (clip is { } cl)
         {
-            first = Math.Max(0, (int)((cl.Y - Bounds.Y) / RowH));
-            last = Math.Min(last, (int)((cl.Bottom - Bounds.Y) / RowH));
-            _pageRows = Math.Max(3, (int)(cl.Height / RowH) - 1);
+            first = Math.Max(val1: 0, val2: (int)((cl.Y - Bounds.Y) / RowH));
+            last = Math.Min(val1: last, val2: (int)((cl.Bottom - Bounds.Y) / RowH));
+            _pageRows = Math.Max(val1: 3, val2: (int)(cl.Height / RowH) - 1);
         }
 
-        var (nameW, sizeW, _) = Columns(_size.Width);
-        var fs = _theme.FontSizeCaption;
+        (float nameW, float sizeW, _) = Columns(_size.Width);
+        float fs = _theme.FontSizeCaption;
         var now = DateTime.Now;
-        for (var i = first; i <= last; i++)
+        for (int i = first; i <= last; i++)
         {
             var entry = rows[i];
-            var rowY = Bounds.Y + i * RowH;
-            var selected = _model.IsSelected(entry);
+            float rowY = Bounds.Y + (i * RowH);
+            bool selected = _model.IsSelected(entry);
             var bg = selected ? _theme.Primary.WithAlpha(0.26f)
                 : i == _hover ? _theme.OnSurface.WithAlpha(0.06f)
                 : default;
             if (bg.A > 0f)
+            {
                 paint.AddRect(
-                    new Rect(
-                        Bounds.X + 4f,
-                        rowY + 1f,
-                        _size.Width - 8f,
-                        RowH - 2f
+                    bounds: new Rect(
+                        x: Bounds.X + 4f,
+                        y: rowY + 1f,
+                        width: _size.Width - 8f,
+                        height: RowH - 2f
                     ),
-                    bg,
-                    Radii.Sm
+                    color: bg,
+                    radius: Radii.Sm
                 );
+            }
 
-            var (icon, iconColor) = IconFor(entry);
+            (string icon, var iconColor) = IconFor(entry);
             Icons.Draw(
-                paint,
-                icon,
-                new Rect(
-                    Bounds.X + 10f,
-                    rowY,
-                    16f,
-                    RowH
+                paint: paint,
+                glyph: icon,
+                box: new Rect(
+                    x: Bounds.X + 10f,
+                    y: rowY,
+                    width: 16f,
+                    height: RowH
                 ),
-                iconColor,
-                15f
+                color: iconColor,
+                size: 15f
             );
 
-            var textY = rowY + (RowH - fs) / 2f + fs * 0.8f;
+            float textY = rowY + ((RowH - fs) / 2f) + (fs * 0.8f);
             var fg = entry.IsHidden ? _theme.TextMuted : _theme.OnSurface;
 
             // Clip the name to its column so long names never bleed into Size/Modified.
             paint.AddClipStart(
                 new Rect(
-                    Bounds.X,
-                    rowY,
-                    nameW - 6f,
-                    RowH
+                    x: Bounds.X,
+                    y: rowY,
+                    width: nameW - 6f,
+                    height: RowH
                 )
             );
             paint.AddText(
-                entry.Name,
-                Bounds.X + 32f,
-                textY,
-                fg,
-                fs
+                text: entry.Name,
+                baselineX: Bounds.X + 32f,
+                baselineY: textY,
+                color: fg,
+                fontSize: fs
             );
             paint.AddClipEnd();
 
             if (sizeW <= 0f) continue; // narrow layout: name is the only column
 
             if (!entry.IsDirectory)
+            {
                 paint.AddText(
-                    FormatSize(entry.Size),
-                    Bounds.X + nameW,
-                    textY,
-                    _theme.TextSecondary,
-                    fs
+                    text: FormatSize(entry.Size),
+                    baselineX: Bounds.X + nameW,
+                    baselineY: textY,
+                    color: _theme.TextSecondary,
+                    fontSize: fs
                 );
+            }
+
             paint.AddText(
-                FormatDate(entry.Modified, now),
-                Bounds.X + nameW + sizeW,
-                textY,
-                _theme.TextSecondary,
-                fs
+                text: FormatDate(modified: entry.Modified, now: now),
+                baselineX: Bounds.X + nameW + sizeW,
+                baselineY: textY,
+                color: _theme.TextSecondary,
+                fontSize: fs
             );
         }
 
@@ -205,15 +207,15 @@ internal sealed class FileBrowserList : Widget
 
     private void PaintEmptyMessage(PaintList paint)
     {
-        var message = _model.LastError ??
-                      (_model.SearchText.Length > 0 ? "No matching items" : "Empty folder");
-        var fs = _theme.FontSizeCaption;
+        string message = _model.LastError ??
+                         (_model.SearchText.Length > 0 ? "No matching items" : "Empty folder");
+        float fs = _theme.FontSizeCaption;
         paint.AddText(
-            message,
-            Bounds.X + 16f,
-            Bounds.Y + 28f,
-            _model.LastError is null ? _theme.TextMuted : _theme.Warning,
-            fs
+            text: message,
+            baselineX: Bounds.X + 16f,
+            baselineY: Bounds.Y + 28f,
+            color: _model.LastError is null ? _theme.TextMuted : _theme.Warning,
+            fontSize: fs
         );
     }
 
@@ -221,14 +223,14 @@ internal sealed class FileBrowserList : Widget
 
     private int RowIndexAt(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return -1;
-        var idx = (int)((point.Y - Bounds.Y) / RowH);
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return -1;
+        int idx = (int)((point.Y - Bounds.Y) / RowH);
         return idx >= 0 && idx < _model.Visible.Count ? idx : -1;
     }
 
     public override void OnPointerMove(Offset point)
     {
-        var idx = RowIndexAt(point);
+        int idx = RowIndexAt(point);
         if (idx == _hover) return;
         _hover = idx;
         MarkNeedsPaint();
@@ -244,7 +246,7 @@ internal sealed class FileBrowserList : Widget
     public override void OnPointerDown(Offset point)
     {
         App.Active?.RequestFocus(this);
-        var idx = RowIndexAt(point);
+        int idx = RowIndexAt(point);
         if (idx < 0)
         {
             _model.ClearSelection();
@@ -255,22 +257,22 @@ internal sealed class FileBrowserList : Widget
         }
 
         var mods = App.Active?.CurrentModifiers ?? Modifiers.None;
-        var toggle = mods.HasCommand();
-        var range = (mods & Modifiers.Shift) != 0;
+        bool toggle = mods.HasCommand();
+        bool range = (mods & Modifiers.Shift) != 0;
 
-        var time = App.Active?.Time ?? 0f;
+        float time = App.Active?.Time ?? 0f;
         // Double-tap-to-open is a mouse idiom with no phone equivalent, and it is the only way into
         // a directory. On a phone a single tap activates — except in multi-select, where tapping
         // must keep building a selection rather than confirming the first file touched.
-        var singleTapOpens = _compact &&
-                             (_model.Visible[idx].IsDirectory || !_model.AllowMultiSelect);
-        var isDoubleClick = !toggle && !range &&
-                            (singleTapOpens || (idx == _lastClickIndex &&
-                                                time - _lastClickTime < DoubleClickSeconds));
+        bool singleTapOpens = _compact &&
+                              (_model.Visible[idx].IsDirectory || !_model.AllowMultiSelect);
+        bool isDoubleClick = !toggle && !range &&
+                             (singleTapOpens || (idx == _lastClickIndex &&
+                                                 time - _lastClickTime < DoubleClickSeconds));
         _lastClickIndex = idx;
         _lastClickTime = time;
 
-        _model.SelectIndex(idx, toggle, range);
+        _model.SelectIndex(index: idx, toggle: toggle, range: range);
         _cursor = idx;
         OnSelectionChanged?.Invoke();
         MarkNeedsPaint();
@@ -281,10 +283,10 @@ internal sealed class FileBrowserList : Widget
     public override void OnRightClick(Offset point)
     {
         App.Active?.RequestFocus(this);
-        var idx = RowIndexAt(point);
+        int idx = RowIndexAt(point);
         if (idx < 0)
         {
-            OnContextMenu?.Invoke(null, point);
+            OnContextMenu?.Invoke(arg1: null, arg2: point);
             return;
         }
 
@@ -299,7 +301,7 @@ internal sealed class FileBrowserList : Widget
             MarkNeedsPaint();
         }
 
-        OnContextMenu?.Invoke(entry, point);
+        OnContextMenu?.Invoke(arg1: entry, arg2: point);
     }
 
     // ── Keyboard ──────────────────────────────────────────────────────────────
@@ -307,26 +309,26 @@ internal sealed class FileBrowserList : Widget
     public override void OnKey(char keyChar, uint scancode, bool down, Modifiers mods)
     {
         if (!down) return;
-        var extend = (mods & Modifiers.Shift) != 0;
+        bool extend = (mods & Modifiers.Shift) != 0;
         switch ((KeyCode)scancode)
         {
             case KeyCode.Up:
-                MoveCursor(-1, extend);
+                MoveCursor(delta: -1, extend: extend);
                 break;
             case KeyCode.Down:
-                MoveCursor(1, extend);
+                MoveCursor(delta: 1, extend: extend);
                 break;
             case KeyCode.Home:
-                MoveCursorTo(0, extend);
+                MoveCursorTo(index: 0, extend: extend);
                 break;
             case KeyCode.End:
-                MoveCursorTo(_model.Visible.Count - 1, extend);
+                MoveCursorTo(index: _model.Visible.Count - 1, extend: extend);
                 break;
             case KeyCode.PageUp:
-                MoveCursor(-_pageRows, extend);
+                MoveCursor(delta: -_pageRows, extend: extend);
                 break;
             case KeyCode.PageDown:
-                MoveCursor(_pageRows, extend);
+                MoveCursor(delta: _pageRows, extend: extend);
                 break;
             case KeyCode.Enter or KeyCode.KpEnter:
                 if (_cursor >= 0 && _cursor < _model.Visible.Count)
@@ -338,7 +340,7 @@ internal sealed class FileBrowserList : Widget
             case KeyCode.Space:
                 if (_model.AllowMultiSelect && _cursor >= 0)
                 {
-                    _model.SelectIndex(_cursor, true);
+                    _model.SelectIndex(index: _cursor, toggle: true);
                     OnSelectionChanged?.Invoke();
                     MarkNeedsPaint();
                 }
@@ -351,32 +353,32 @@ internal sealed class FileBrowserList : Widget
     public override void OnTextInput(string text)
     {
         if (string.IsNullOrEmpty(text) || _model.Visible.Count == 0) return;
-        var time = App.Active?.Time ?? 0f;
+        float time = App.Active?.Time ?? 0f;
         if (time - _typeAheadTime > TypeAheadResetSeconds) _typeAhead = "";
         _typeAheadTime = time;
         _typeAhead += text;
 
         // A growing prefix should keep matching the current row; a fresh single letter scans on.
-        var from = _typeAhead.Length > text.Length ? _cursor - 1 : _cursor;
-        var idx = _model.TypeAheadIndex(_typeAhead, from);
-        if (idx >= 0) MoveCursorTo(idx, false);
+        int from = _typeAhead.Length > text.Length ? _cursor - 1 : _cursor;
+        int idx = _model.TypeAheadIndex(prefix: _typeAhead, from: from);
+        if (idx >= 0) MoveCursorTo(index: idx, extend: false);
     }
 
     private void MoveCursor(int delta, bool extend)
     {
         if (_model.Visible.Count == 0) return;
-        var target = _cursor < 0
+        int target = _cursor < 0
             ? delta > 0 ? 0 : _model.Visible.Count - 1
-            : Math.Clamp(_cursor + delta, 0, _model.Visible.Count - 1);
-        MoveCursorTo(target, extend);
+            : Math.Clamp(value: _cursor + delta, min: 0, max: _model.Visible.Count - 1);
+        MoveCursorTo(index: target, extend: extend);
     }
 
     private void MoveCursorTo(int index, bool extend)
     {
         if ((uint)index >= (uint)_model.Visible.Count) return;
         _cursor = index;
-        _model.SelectIndex(index, range: extend);
-        Scroll?.EnsureVisible(index * RowH, RowH);
+        _model.SelectIndex(index: index, range: extend);
+        Scroll?.EnsureVisible(top: index * RowH, height: RowH);
         OnSelectionChanged?.Invoke();
         MarkNeedsPaint();
     }
@@ -386,7 +388,7 @@ internal sealed class FileBrowserList : Widget
     private (string Glyph, Color Color) IconFor(in FileBrowserEntry entry)
     {
         if (entry.IsDirectory) return (Icons.Folder, _theme.Info);
-        var ext = Path.GetExtension(entry.Name).TrimStart('.').ToLowerInvariant();
+        string ext = Path.GetExtension(entry.Name).TrimStart('.').ToLowerInvariant();
         return ext switch {
             "png" or "jpg" or "jpeg" or "webp" or "gif" or "bmp" or "tga" or "hdr" or "ktx2" =>
                 (Icons.Image, _theme.Success),
@@ -406,10 +408,17 @@ internal sealed class FileBrowserList : Widget
             < 0 => "",
             < 1024 => bytes.ToString(CultureInfo.InvariantCulture) + " B",
             < 1024 * 1024 =>
-                (bytes / 1024.0).ToString("0.#", CultureInfo.InvariantCulture) + " KB",
+                (bytes / 1024.0).ToString(format: "0.#", provider: CultureInfo.InvariantCulture) +
+                " KB",
             < 1024L * 1024 * 1024 =>
-                (bytes / (1024.0 * 1024)).ToString("0.#", CultureInfo.InvariantCulture) + " MB",
-            _ => (bytes / (1024.0 * 1024 * 1024)).ToString("0.##", CultureInfo.InvariantCulture) +
+                (bytes / (1024.0 * 1024)).ToString(
+                    format: "0.#",
+                    provider: CultureInfo.InvariantCulture
+                ) + " MB",
+            _ => (bytes / (1024.0 * 1024 * 1024)).ToString(
+                     format: "0.##",
+                     provider: CultureInfo.InvariantCulture
+                 ) +
                  " GB",
         };
     }
@@ -417,20 +426,26 @@ internal sealed class FileBrowserList : Widget
     internal static string FormatDate(DateTime modified, DateTime now)
     {
         if (modified.Date == now.Date)
-            return "Today " + modified.ToString("HH:mm", CultureInfo.InvariantCulture);
+        {
+            return "Today " + modified.ToString(
+                format: "HH:mm",
+                provider: CultureInfo.InvariantCulture
+            );
+        }
+
         return modified.ToString(
-            modified.Year == now.Year ? "MMM d HH:mm" : "MMM d, yyyy",
-            CultureInfo.InvariantCulture
+            format: modified.Year == now.Year ? "MMM d HH:mm" : "MMM d, yyyy",
+            provider: CultureInfo.InvariantCulture
         );
     }
 
     public override int DebugStateHash()
     {
         return HashCode.Combine(
-            _model.Visible.Count,
-            _model.SelectedPaths.Count,
-            _cursor,
-            _hover
+            value1: _model.Visible.Count,
+            value2: _model.SelectedPaths.Count,
+            value3: _cursor,
+            value4: _hover
         );
     }
 }
@@ -447,13 +462,10 @@ internal sealed class FileBrowserHeader : Widget
     private Size _size;
     private ThemeData _theme = ThemeData.Dark;
 
-    /// <summary>Sort targets are the whole strip height, so it grows with the finger.</summary>
-    private float BarHeight => _compact ? MathF.Max(Height, TouchMetrics.MinTarget) : Height;
+    public FileBrowserHeader(FileBrowserModel model) => _model = model;
 
-    public FileBrowserHeader(FileBrowserModel model)
-    {
-        _model = model;
-    }
+    /// <summary>Sort targets are the whole strip height, so it grows with the finger.</summary>
+    private float BarHeight => _compact ? MathF.Max(x: Height, y: TouchMetrics.MinTarget) : Height;
 
     public Action<FileSortColumn>? OnSort { get; set; }
 
@@ -461,95 +473,97 @@ internal sealed class FileBrowserHeader : Widget
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
         _compact = TouchMetrics.IsCompact;
-        var w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 560f;
-        _size = c.Constrain(new Size(w, BarHeight));
+        float w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 560f;
+        _size = c.Constrain(new Size(width: w, height: BarHeight));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
     public override void Paint(PaintList paint)
     {
-        var (nameW, sizeW, _) = FileBrowserList.Columns(_size.Width);
-        var fs = _theme.FontSizeCaption - 1f;
-        var textY = Bounds.Y + (Bounds.Height - fs) / 2f + fs * 0.8f;
+        (float nameW, float sizeW, _) = FileBrowserList.Columns(_size.Width);
+        float fs = _theme.FontSizeCaption - 1f;
+        float textY = Bounds.Y + ((Bounds.Height - fs) / 2f) + (fs * 0.8f);
 
         DrawLabel(
-            paint,
-            "Name",
-            FileSortColumn.Name,
-            Bounds.X + 32f,
-            textY,
-            fs
+            paint: paint,
+            label: "Name",
+            column: FileSortColumn.Name,
+            x: Bounds.X + 32f,
+            textY: textY,
+            fs: fs
         );
         if (sizeW > 0f)
         {
             DrawLabel(
-                paint,
-                "Size",
-                FileSortColumn.Size,
-                Bounds.X + nameW,
-                textY,
-                fs
+                paint: paint,
+                label: "Size",
+                column: FileSortColumn.Size,
+                x: Bounds.X + nameW,
+                textY: textY,
+                fs: fs
             );
             DrawLabel(
-                paint,
-                "Modified",
-                FileSortColumn.Modified,
-                Bounds.X + nameW + sizeW,
-                textY,
-                fs
+                paint: paint,
+                label: "Modified",
+                column: FileSortColumn.Modified,
+                x: Bounds.X + nameW + sizeW,
+                textY: textY,
+                fs: fs
             );
         }
 
         paint.AddRect(
-            new Rect(
-                Bounds.X,
-                Bounds.Bottom - 1f,
-                _size.Width,
-                1f
+            bounds: new Rect(
+                x: Bounds.X,
+                y: Bounds.Bottom - 1f,
+                width: _size.Width,
+                height: 1f
             ),
-            _theme.Separator
+            color: _theme.Separator
         );
     }
 
     private void DrawLabel(PaintList paint, string label, FileSortColumn column, float x,
         float textY, float fs)
     {
-        var active = _model.SortColumn == column;
+        bool active = _model.SortColumn == column;
         paint.AddText(
-            label,
-            x,
-            textY,
-            active ? _theme.OnSurface : _theme.TextMuted,
-            fs
+            text: label,
+            baselineX: x,
+            baselineY: textY,
+            color: active ? _theme.OnSurface : _theme.TextMuted,
+            fontSize: fs
         );
         if (active)
+        {
             Icons.Draw(
-                paint,
-                _model.SortAscending ? Icons.DropUp : Icons.DropDown,
-                new Rect(
-                    x + label.Length * fs * 0.62f + 2f,
-                    Bounds.Y,
-                    12f,
-                    Bounds.Height
+                paint: paint,
+                glyph: _model.SortAscending ? Icons.DropUp : Icons.DropDown,
+                box: new Rect(
+                    x: x + (label.Length * fs * 0.62f) + 2f,
+                    y: Bounds.Y,
+                    width: 12f,
+                    height: Bounds.Height
                 ),
-                _theme.TextSecondary,
-                12f
+                color: _theme.TextSecondary,
+                size: 12f
             );
+        }
     }
 
     public override void OnPointerDown(Offset point)
     {
-        var (nameW, sizeW, _) = FileBrowserList.Columns(_size.Width);
+        (float nameW, float sizeW, _) = FileBrowserList.Columns(_size.Width);
         if (sizeW <= 0f)
         {
             // Narrow layout: Name is the only column, so every tap re-sorts (and flips) by name.
@@ -557,15 +571,12 @@ internal sealed class FileBrowserHeader : Widget
             return;
         }
 
-        var x = point.X - Bounds.X;
+        float x = point.X - Bounds.X;
         var column = x < nameW ? FileSortColumn.Name
             : x < nameW + sizeW ? FileSortColumn.Size
             : FileSortColumn.Modified;
         OnSort?.Invoke(column);
     }
 
-    public override MouseCursor? GetCursor(Offset point)
-    {
-        return MouseCursor.Pointer;
-    }
+    public override MouseCursor? GetCursor(Offset point) => MouseCursor.Pointer;
 }

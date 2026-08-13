@@ -50,7 +50,11 @@ public static class NetworkCache
     public const string UserAgent = "Zigote/1.0 (+https://github.com/ZigoteProjectOrg/Zigote)";
 
     private static readonly HttpClient Http = CreateClient();
-    private static readonly SemaphoreSlim Gate = new(MaxConcurrentFetches, MaxConcurrentFetches);
+
+    private static readonly SemaphoreSlim Gate = new(
+        initialCount: MaxConcurrentFetches,
+        maxCount: MaxConcurrentFetches
+    );
 
     private static readonly ConcurrentDictionary<string, Task<byte[]>> InFlight =
         new(StringComparer.Ordinal);
@@ -61,7 +65,7 @@ public static class NetworkCache
     ///     reboot. Set it before the first fetch.
     /// </summary>
     public static string CacheDirectory { get; set; } =
-        Path.Combine(Path.GetTempPath(), "zigote-network-cache");
+        Path.Combine(path1: Path.GetTempPath(), path2: "zigote-network-cache");
 
     /// <summary>
     ///     The bytes at <paramref name="url" />: from disk when they are already there, from the
@@ -81,12 +85,15 @@ public static class NetworkCache
     public static async Task<byte[]> FetchAsync(string url, CancellationToken ct = default,
         string? cacheKey = null)
     {
-        var key = cacheKey ?? url;
+        string key = cacheKey ?? url;
 
         // Coalesced: a screenful of tiles asking for one URL share one fetch. The shared task runs
         // untied to any caller's token — one caller walking away must not cancel it for the rest —
         // and WaitAsync gives each caller its own cancellation without touching the work.
-        var shared = InFlight.GetOrAdd(key, _ => Observed(FetchUncachedAsync(url, key)));
+        var shared = InFlight.GetOrAdd(
+            key: key,
+            valueFactory: _ => Observed(FetchUncachedAsync(url: url, key: key))
+        );
         return await shared.WaitAsync(ct).ConfigureAwait(false);
     }
 
@@ -94,10 +101,8 @@ public static class NetworkCache
     ///     Whether the entry is already on disk — no request, no I/O wait, no exception. For a
     ///     "cached / downloaded" readout, or to decide whether a placeholder is worth showing.
     /// </summary>
-    public static bool IsCached(string url, string? cacheKey = null)
-    {
-        return File.Exists(CachePath(cacheKey ?? url));
-    }
+    public static bool IsCached(string url, string? cacheKey = null) =>
+        File.Exists(CachePath(cacheKey ?? url));
 
     private static HttpClient CreateClient()
     {
@@ -108,7 +113,7 @@ public static class NetworkCache
 
     private static async Task<byte[]> FetchUncachedAsync(string url, string key)
     {
-        var path = CachePath(key);
+        string path = CachePath(key);
         try
         {
             // The gate covers the disk read as well as the request. A thousand cached tiles read at
@@ -118,6 +123,7 @@ public static class NetworkCache
             try
             {
                 if (File.Exists(path))
+                {
                     try
                     {
                         return await File.ReadAllBytesAsync(path).ConfigureAwait(false);
@@ -126,9 +132,10 @@ public static class NetworkCache
                     {
                         // Vanished or locked between the check and the read: fall through and refetch.
                     }
+                }
 
-                var bytes = await Http.GetByteArrayAsync(url).ConfigureAwait(false);
-                await StoreAsync(path, bytes).ConfigureAwait(false);
+                byte[] bytes = await Http.GetByteArrayAsync(url).ConfigureAwait(false);
+                await StoreAsync(path: path, bytes: bytes).ConfigureAwait(false);
                 return bytes;
             }
             finally
@@ -140,7 +147,7 @@ public static class NetworkCache
         {
             // Dropped on completion, not on success: a failed fetch must be retryable, and by the
             // time this runs the bytes are on disk anyway, so the next caller reads them from there.
-            InFlight.TryRemove(key, out _);
+            InFlight.TryRemove(key: key, value: out _);
         }
     }
 
@@ -151,9 +158,9 @@ public static class NetworkCache
         try
         {
             Directory.CreateDirectory(CacheDirectory);
-            var partial = $"{path}.{Environment.CurrentManagedThreadId}.part";
-            await File.WriteAllBytesAsync(partial, bytes).ConfigureAwait(false);
-            File.Move(partial, path, true);
+            string partial = $"{path}.{Environment.CurrentManagedThreadId}.part";
+            await File.WriteAllBytesAsync(path: partial, bytes: bytes).ConfigureAwait(false);
+            File.Move(sourceFileName: partial, destFileName: path, overwrite: true);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
@@ -166,10 +173,11 @@ public static class NetworkCache
         // Every caller can cancel before a shared fetch faults, and an exception no one ever awaits
         // resurfaces as TaskScheduler.UnobservedTaskException at the next GC. Look at it here.
         _ = task.ContinueWith(
-            static t => _ = t.Exception,
-            CancellationToken.None,
-            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-            TaskScheduler.Default
+            continuationFunction: static t => _ = t.Exception,
+            cancellationToken: CancellationToken.None,
+            continuationOptions: TaskContinuationOptions.OnlyOnFaulted |
+                                 TaskContinuationOptions.ExecuteSynchronously,
+            scheduler: TaskScheduler.Default
         );
         return task;
     }
@@ -178,7 +186,10 @@ public static class NetworkCache
     {
         // Hashed, not sanitised: a URL is not a filename (length limits, '/', case-insensitive
         // volumes), and half a SHA-256 is far past collision territory for a per-machine cache.
-        var digest = SHA256.HashData(Encoding.UTF8.GetBytes(key));
-        return Path.Combine(CacheDirectory, $"{Convert.ToHexStringLower(digest.AsSpan(0, 16))}.bin");
+        byte[] digest = SHA256.HashData(Encoding.UTF8.GetBytes(key));
+        return Path.Combine(
+            path1: CacheDirectory,
+            path2: $"{Convert.ToHexStringLower(digest.AsSpan(start: 0, length: 16))}.bin"
+        );
     }
 }

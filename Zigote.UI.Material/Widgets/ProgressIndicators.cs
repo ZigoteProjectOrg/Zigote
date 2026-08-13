@@ -32,7 +32,7 @@ public sealed class CircularProgressIndicator : Spinner
         Color? color = null,
         double strokeWidth = 4.0,
         double? size = null)
-        : base((float)(size ?? 24.0), color)
+        : base(size: (float)(size ?? 24.0), color: color)
     {
         _ = value;
         _ = strokeWidth;

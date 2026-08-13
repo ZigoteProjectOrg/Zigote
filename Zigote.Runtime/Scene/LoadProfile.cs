@@ -22,18 +22,9 @@ internal static class LoadProfile
         MeshCount = NormalCount = 0;
     }
 
-    public static long Mark()
-    {
-        return Stopwatch.GetTimestamp();
-    }
+    public static long Mark() => Stopwatch.GetTimestamp();
 
-    public static long Since(long t0)
-    {
-        return Stopwatch.GetTimestamp() - t0;
-    }
+    public static long Since(long t0) => Stopwatch.GetTimestamp() - t0;
 
-    public static double Ms(long ticks)
-    {
-        return ticks * 1000.0 / Stopwatch.Frequency;
-    }
+    public static double Ms(long ticks) => ticks * 1000.0 / Stopwatch.Frequency;
 }

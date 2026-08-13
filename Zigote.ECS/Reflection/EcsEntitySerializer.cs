@@ -24,13 +24,18 @@ public static class EcsEntitySerializer
     {
         var views = new List<EcsComponentView>();
         foreach (var ct in registry.Types)
-            if (world.Has(entity, ct.Type) && world.GetBoxed(entity, ct.Type) is { } boxed)
+        {
+            if (world.Has(e: entity, t: ct.Type) &&
+                world.GetBoxed(e: entity, t: ct.Type) is { } boxed)
+            {
                 views.Add(
                     new EcsComponentView {
                         Type = ct,
                         Boxed = boxed,
                     }
                 );
+            }
+        }
 
         return views;
     }
@@ -42,9 +47,9 @@ public static class EcsEntitySerializer
     public static void SetField(EcsWorld world, Entity entity, EcsComponentType type,
         EcsField field, object? value)
     {
-        if (world.GetBoxed(entity, type.Type) is not { } boxed) return;
-        field.Set(boxed, value);
-        world.SetBoxed(entity, type.Type, boxed);
+        if (world.GetBoxed(e: entity, t: type.Type) is not { } boxed) return;
+        field.Set(boxedComponent: boxed, value: value);
+        world.SetBoxed(e: entity, t: type.Type, value: boxed);
     }
 
     /// <summary>Serialize all of an entity's registered components to a portable JSON object.</summary>
@@ -52,8 +57,11 @@ public static class EcsEntitySerializer
     {
         var components = new JsonArray();
         foreach (var ct in registry.Types)
-            if (world.Has(entity, ct.Type) && world.GetBoxed(entity, ct.Type) is { } boxed)
-                components.Add(ComponentNode(ct, boxed));
+        {
+            if (world.Has(e: entity, t: ct.Type) &&
+                world.GetBoxed(e: entity, t: ct.Type) is { } boxed)
+                components.Add(ComponentNode(ct: ct, boxed: boxed));
+        }
 
         return new JsonObject { ["components"] = components };
     }
@@ -66,7 +74,12 @@ public static class EcsEntitySerializer
     {
         var fields = new JsonObject();
         foreach (var f in ct.Fields)
-            fields[f.Name] = JsonSerializer.SerializeToNode(f.Get(boxed), f.FieldType);
+        {
+            fields[f.Name] = JsonSerializer.SerializeToNode(
+                value: f.Get(boxed),
+                inputType: f.FieldType
+            );
+        }
 
         return new JsonObject {
             ["type"] = ct.Name,
@@ -82,8 +95,10 @@ public static class EcsEntitySerializer
     {
         if (component["fields"] is not JsonObject fields) return;
         foreach (var f in ct.Fields)
+        {
             if (fields[f.Name] is { } fv)
-                f.Set(boxed, fv.Deserialize(f.FieldType));
+                f.Set(boxedComponent: boxed, value: fv.Deserialize(f.FieldType));
+        }
     }
 
     /// <summary>Create a fresh entity and apply the serialized component data.</summary>
@@ -91,10 +106,10 @@ public static class EcsEntitySerializer
     {
         var e = world.CreateEntity();
         Apply(
-            world,
-            registry,
-            e,
-            data
+            world: world,
+            registry: registry,
+            entity: e,
+            data: data
         );
         return e;
     }
@@ -110,9 +125,10 @@ public static class EcsEntitySerializer
             if (node is not JsonObject co || (string?)co["type"] is not { } typeName) continue;
             if (registry.ByName(typeName) is not { } ct) continue;
 
-            var boxed = world.GetBoxed(entity, ct.Type) ?? Activator.CreateInstance(ct.Type)!;
-            ApplyFields(ct, co, boxed);
-            world.SetBoxed(entity, ct.Type, boxed);
+            object boxed = world.GetBoxed(e: entity, t: ct.Type) ??
+                           Activator.CreateInstance(ct.Type)!;
+            ApplyFields(ct: ct, component: co, boxed: boxed);
+            world.SetBoxed(e: entity, t: ct.Type, value: boxed);
         }
     }
 }

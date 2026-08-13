@@ -24,7 +24,7 @@ public static class VfxGraphCompiler
         var output = graph.Nodes.FirstOrDefault(n => n.DefinitionId == VfxNodeLibrary.Output);
         if (output is null)
         {
-            diags.Add(Error("VFX0001", "Graph has no VFX Output node."));
+            diags.Add(Error(code: "VFX0001", message: "Graph has no VFX Output node."));
             return new CompiledVfxGraph {
                 Success = false,
                 Asset = asset,
@@ -33,105 +33,120 @@ public static class VfxGraphCompiler
         }
 
         // ── Emitter ──────────────────────────────────────────────────────────
-        asset.Capacity = Math.Max(1, IntProp(output, "capacity", 1024));
-        asset.Looping = BoolProp(output, "looping", true);
-        asset.Duration = MathF.Max(0f, FloatProp(output, "duration", 0f));
-        asset.Space = (SimulationSpace)IntProp(output, "space", 0);
-        asset.Seed = unchecked((uint)IntProp(output, "seed", 12345));
+        asset.Capacity = Math.Max(
+            val1: 1,
+            val2: IntProp(node: output, id: "capacity", fallback: 1024)
+        );
+        asset.Looping = BoolProp(node: output, id: "looping", fallback: true);
+        asset.Duration = MathF.Max(x: 0f, y: FloatProp(node: output, id: "duration", fallback: 0f));
+        asset.Space = (SimulationSpace)IntProp(node: output, id: "space", fallback: 0);
+        asset.Seed = unchecked((uint)IntProp(node: output, id: "seed", fallback: 12345));
 
         // ── Spawn ────────────────────────────────────────────────────────────
-        var hasSpawn = false;
-        var sawRate = false;
-        foreach (var node in Sources(graph, output.Id, "in.spawn"))
+        bool hasSpawn = false;
+        bool sawRate = false;
+        foreach (var node in Sources(graph: graph, nodeId: output.Id, pinId: "in.spawn"))
+        {
             switch (node.DefinitionId)
             {
                 case VfxNodeLibrary.SpawnRate:
-                    asset.SpawnRate = FloatProp(node, "rate", 24f);
+                    asset.SpawnRate = FloatProp(node: node, id: "rate", fallback: 24f);
                     sawRate = hasSpawn = true;
                     break;
                 case VfxNodeLibrary.Burst:
                     asset.Bursts.Add(
-                        new VfxBurst(FloatProp(node, "time", 0f), IntProp(node, "count", 30))
+                        new VfxBurst(
+                            time: FloatProp(node: node, id: "time", fallback: 0f),
+                            count: IntProp(node: node, id: "count", fallback: 30)
+                        )
                     );
                     hasSpawn = true;
                     break;
             }
+        }
 
         if (!sawRate) asset.SpawnRate = 0f; // no Spawn Rate node → bursts only
 
         // ── Emission shape ─────────────────────────────────────────────────────
-        var shapeNode = Sources(graph, output.Id, "in.shape").FirstOrDefault();
+        var shapeNode = Sources(graph: graph, nodeId: output.Id, pinId: "in.shape")
+            .FirstOrDefault();
         if (shapeNode is not null)
         {
-            asset.Shape = (EmissionShape)IntProp(shapeNode, "shape", 4);
-            asset.ShapeRadius = FloatProp(shapeNode, "radius", 0.25f);
-            asset.ConeAngleDegrees = FloatProp(shapeNode, "cone_angle", 25f);
+            asset.Shape = (EmissionShape)IntProp(node: shapeNode, id: "shape", fallback: 4);
+            asset.ShapeRadius = FloatProp(node: shapeNode, id: "radius", fallback: 0.25f);
+            asset.ConeAngleDegrees = FloatProp(node: shapeNode, id: "cone_angle", fallback: 25f);
             asset.ShapeBoxHalfExtents = Vec3Prop(
-                shapeNode,
-                "box",
-                0.5f,
-                0.5f,
-                0.5f
+                node: shapeNode,
+                id: "box",
+                dx: 0.5f,
+                dy: 0.5f,
+                dz: 0.5f
             );
             asset.EmitDirection = Vec3Prop(
-                shapeNode,
-                "direction",
-                0f,
-                1f,
-                0f
+                node: shapeNode,
+                id: "direction",
+                dx: 0f,
+                dy: 1f,
+                dz: 0f
             );
         }
 
         // ── Initialize ─────────────────────────────────────────────────────────
-        foreach (var node in Sources(graph, output.Id, "in.init"))
+        foreach (var node in Sources(graph: graph, nodeId: output.Id, pinId: "in.init"))
+        {
             switch (node.DefinitionId)
             {
                 case VfxNodeLibrary.InitVelocity:
                 {
-                    var driven = EvalFloat(graph, node, "in.speed");
+                    float? driven = EvalFloat(graph: graph, node: node, pin: "in.speed");
                     asset.StartSpeed = driven is { } s
                         ? FloatRange.Constant(s)
                         : new FloatRange(
-                            FloatProp(node, "speed_min", 2f),
-                            FloatProp(node, "speed_max", 4f)
+                            min: FloatProp(node: node, id: "speed_min", fallback: 2f),
+                            max: FloatProp(node: node, id: "speed_max", fallback: 4f)
                         );
                     break;
                 }
                 case VfxNodeLibrary.InitSize:
                     asset.StartSize = new FloatRange(
-                        FloatProp(node, "size_min", 0.15f),
-                        FloatProp(node, "size_max", 0.3f)
+                        min: FloatProp(node: node, id: "size_min", fallback: 0.15f),
+                        max: FloatProp(node: node, id: "size_max", fallback: 0.3f)
                     );
                     break;
                 case VfxNodeLibrary.InitColor:
-                    asset.StartColor = EvalColor(graph, node, "in.color") ??
-                                       ColorProp(node, "color", Color.White);
-                    asset.StartColorVariation = ColorProp(node, "variation", Color.White);
+                    asset.StartColor = EvalColor(graph: graph, node: node, pin: "in.color") ??
+                                       ColorProp(node: node, id: "color", fallback: Color.White);
+                    asset.StartColorVariation = ColorProp(
+                        node: node,
+                        id: "variation",
+                        fallback: Color.White
+                    );
                     break;
                 case VfxNodeLibrary.InitLifetime:
                     asset.StartLifetime =
                         new FloatRange(
-                            FloatProp(node, "life_min", 1.5f),
-                            FloatProp(node, "life_max", 2.5f)
+                            min: FloatProp(node: node, id: "life_min", fallback: 1.5f),
+                            max: FloatProp(node: node, id: "life_max", fallback: 2.5f)
                         );
                     break;
                 case VfxNodeLibrary.InitRotation:
                     asset.StartRotation = new FloatRange(
-                        FloatProp(node, "rot_min", 0f) * Deg2Rad,
-                        FloatProp(node, "rot_max", 0f) * Deg2Rad
+                        min: FloatProp(node: node, id: "rot_min", fallback: 0f) * Deg2Rad,
+                        max: FloatProp(node: node, id: "rot_max", fallback: 0f) * Deg2Rad
                     );
                     asset.StartAngularVelocity = new FloatRange(
-                        FloatProp(node, "spin_min", 0f) * Deg2Rad,
-                        FloatProp(node, "spin_max", 0f) * Deg2Rad
+                        min: FloatProp(node: node, id: "spin_min", fallback: 0f) * Deg2Rad,
+                        max: FloatProp(node: node, id: "spin_max", fallback: 0f) * Deg2Rad
                     );
                     break;
             }
+        }
 
         // ── Update modules (sorted by canonical priority) ────────────────────────
         var modules = new List<(int priority, VfxUpdateModule module)>();
-        foreach (var node in Sources(graph, output.Id, "in.update"))
+        foreach (var node in Sources(graph: graph, nodeId: output.Id, pinId: "in.update"))
         {
-            var built = BuildUpdateModule(graph, node);
+            var built = BuildUpdateModule(graph: graph, node: node);
             if (built is not null) modules.Add(built.Value);
         }
 
@@ -139,23 +154,26 @@ public static class VfxGraphCompiler
             asset.UpdateModules.Add(module);
 
         // ── Render ─────────────────────────────────────────────────────────────
-        var renderNode = Sources(graph, output.Id, "in.render").FirstOrDefault();
+        var renderNode = Sources(graph: graph, nodeId: output.Id, pinId: "in.render")
+            .FirstOrDefault();
         if (renderNode is not null)
         {
-            asset.Blend = (VfxBlendMode)IntProp(renderNode, "blend", 0);
-            var tex = StringProp(renderNode, "texture");
+            asset.Blend = (VfxBlendMode)IntProp(node: renderNode, id: "blend", fallback: 0);
+            string? tex = StringProp(node: renderNode, id: "texture");
             asset.TexturePath = string.IsNullOrWhiteSpace(tex) ? null : tex;
-            asset.SoftParticles = BoolProp(renderNode, "soft", true);
+            asset.SoftParticles = BoolProp(node: renderNode, id: "soft", fallback: true);
         }
 
         if (!hasSpawn)
+        {
             diags.Add(
                 Warn(
-                    "VFX0002",
-                    "Emitter has no Spawn Rate or Burst — nothing will spawn.",
-                    output.Id
+                    code: "VFX0002",
+                    message: "Emitter has no Spawn Rate or Burst — nothing will spawn.",
+                    node: output.Id
                 )
             );
+        }
 
         return new CompiledVfxGraph {
             Success = !diags.Any(d => d.Severity == GraphDiagnosticSeverity.Error),
@@ -171,50 +189,51 @@ public static class VfxGraphCompiler
         {
             case VfxNodeLibrary.Gravity:
             {
-                var g = EvalVec3(graph, node, "in.gravity") ?? Vec3Prop(
-                    node,
-                    "gravity",
-                    0f,
-                    -9.8f,
-                    0f
+                var g = EvalVec3(graph: graph, node: node, pin: "in.gravity") ?? Vec3Prop(
+                    node: node,
+                    id: "gravity",
+                    dx: 0f,
+                    dy: -9.8f,
+                    dz: 0f
                 );
                 return (0, new GravityModule(g));
             }
             case VfxNodeLibrary.Drag:
-                return (1, new DragModule(FloatProp(node, "drag", 0.5f)));
+                return (1, new DragModule(FloatProp(node: node, id: "drag", fallback: 0.5f)));
             case VfxNodeLibrary.Turbulence:
                 return (2,
                     new TurbulenceModule(
-                        FloatProp(node, "strength", 1f),
-                        FloatProp(node, "frequency", 1f)
+                        strength: FloatProp(node: node, id: "strength", fallback: 1f),
+                        frequency: FloatProp(node: node, id: "frequency", fallback: 1f)
                     ));
             case VfxNodeLibrary.Vortex:
                 return (3, new VortexModule(
-                    Vec3Prop(
-                        node,
-                        "axis",
-                        0f,
-                        1f,
-                        0f
+                    axis: Vec3Prop(
+                        node: node,
+                        id: "axis",
+                        dx: 0f,
+                        dy: 1f,
+                        dz: 0f
                     ),
-                    FloatProp(node, "strength", 2f)
+                    strength: FloatProp(node: node, id: "strength", fallback: 2f)
                 ));
             case VfxNodeLibrary.ColorOverLife:
-                return (10, new ColorOverLifeModule(VfxRampJson.Parse(StringProp(node, "ramp"))));
+                return (10,
+                    new ColorOverLifeModule(VfxRampJson.Parse(StringProp(node: node, id: "ramp"))));
             case VfxNodeLibrary.SizeOverLife:
                 return (11,
                     new SizeOverLifeModule(
                         LifeCurve(
-                            (LifeProfile)IntProp(node, "profile", 5),
-                            FloatProp(node, "scale", 1f)
+                            profile: (LifeProfile)IntProp(node: node, id: "profile", fallback: 5),
+                            scale: FloatProp(node: node, id: "scale", fallback: 1f)
                         )
                     ));
             case VfxNodeLibrary.AlphaOverLife:
                 return (12,
                     new AlphaOverLifeModule(
                         LifeCurve(
-                            (LifeProfile)IntProp(node, "profile", 2),
-                            FloatProp(node, "scale", 1f)
+                            profile: (LifeProfile)IntProp(node: node, id: "profile", fallback: 2),
+                            scale: FloatProp(node: node, id: "scale", fallback: 1f)
                         )
                     ));
             default:
@@ -226,10 +245,14 @@ public static class VfxGraphCompiler
     {
         return profile switch {
             LifeProfile.Constant => FloatCurve.Constant(scale),
-            LifeProfile.FadeIn or LifeProfile.Grow => FloatCurve.Linear(0f, scale),
-            LifeProfile.FadeOut or LifeProfile.Shrink => FloatCurve.Linear(scale, 0f),
+            LifeProfile.FadeIn or LifeProfile.Grow => FloatCurve.Linear(from: 0f, to: scale),
+            LifeProfile.FadeOut or LifeProfile.Shrink => FloatCurve.Linear(from: scale, to: 0f),
             _ => new FloatCurve(
-                [new CurveKey(0f, 0f), new CurveKey(0.5f, scale), new CurveKey(1f, 0f)]
+                [
+                    new CurveKey(position: 0f, value: 0f),
+                    new CurveKey(position: 0.5f, value: scale),
+                    new CurveKey(position: 1f, value: 0f),
+                ]
             ),
         };
     }
@@ -249,35 +272,40 @@ public static class VfxGraphCompiler
     private static GraphNode? Source(GraphDocument graph, Guid nodeId, string pinId)
     {
         foreach (var e in graph.Edges)
+        {
             if (e.To.NodeId == nodeId && e.To.PinId == pinId)
                 return graph.FindNode(e.From.NodeId);
+        }
+
         return null;
     }
 
     private static float? EvalFloat(GraphDocument graph, GraphNode node, string pin)
     {
-        var src = Source(graph, node.Id, pin);
-        return src?.DefinitionId == VfxNodeLibrary.FloatValue ? FloatProp(src, "value", 0f) : null;
+        var src = Source(graph: graph, nodeId: node.Id, pinId: pin);
+        return src?.DefinitionId == VfxNodeLibrary.FloatValue
+            ? FloatProp(node: src, id: "value", fallback: 0f)
+            : null;
     }
 
     private static Color? EvalColor(GraphDocument graph, GraphNode node, string pin)
     {
-        var src = Source(graph, node.Id, pin);
+        var src = Source(graph: graph, nodeId: node.Id, pinId: pin);
         return src?.DefinitionId == VfxNodeLibrary.ColorValue
-            ? ColorProp(src, "color", Color.White)
+            ? ColorProp(node: src, id: "color", fallback: Color.White)
             : null;
     }
 
     private static Vec3? EvalVec3(GraphDocument graph, GraphNode node, string pin)
     {
-        var src = Source(graph, node.Id, pin);
+        var src = Source(graph: graph, nodeId: node.Id, pinId: pin);
         return src?.DefinitionId == VfxNodeLibrary.VectorValue
             ? Vec3Prop(
-                src,
-                "vector",
-                0f,
-                0f,
-                0f
+                node: src,
+                id: "vector",
+                dx: 0f,
+                dy: 0f,
+                dz: 0f
             )
             : null;
     }
@@ -286,35 +314,39 @@ public static class VfxGraphCompiler
 
     private static float FloatProp(GraphNode node, string id, float fallback)
     {
-        return node.Properties.TryGetValue(id, out var v) && v.Kind == GraphValueKind.Float
+        return node.Properties.TryGetValue(key: id, value: out var v) &&
+               v.Kind == GraphValueKind.Float
             ? v.AsFloat()
             : fallback;
     }
 
     private static int IntProp(GraphNode node, string id, int fallback)
     {
-        return node.Properties.TryGetValue(id, out var v) && v.Kind == GraphValueKind.Int
+        return node.Properties.TryGetValue(key: id, value: out var v) &&
+               v.Kind == GraphValueKind.Int
             ? v.AsInt()
             : fallback;
     }
 
     private static bool BoolProp(GraphNode node, string id, bool fallback)
     {
-        return node.Properties.TryGetValue(id, out var v) && v.Kind == GraphValueKind.Bool
+        return node.Properties.TryGetValue(key: id, value: out var v) &&
+               v.Kind == GraphValueKind.Bool
             ? v.AsBool()
             : fallback;
     }
 
     private static Color ColorProp(GraphNode node, string id, Color fallback)
     {
-        if (node.Properties.TryGetValue(id, out var v) && v.Kind == GraphValueKind.Float4)
+        if (node.Properties.TryGetValue(key: id, value: out var v) &&
+            v.Kind == GraphValueKind.Float4)
         {
-            var c = v.AsFloat4();
+            float[] c = v.AsFloat4();
             return new Color(
-                c[0],
-                c[1],
-                c[2],
-                c[3]
+                r: c[0],
+                g: c[1],
+                b: c[2],
+                a: c[3]
             );
         }
 
@@ -323,18 +355,20 @@ public static class VfxGraphCompiler
 
     private static Vec3 Vec3Prop(GraphNode node, string id, float dx, float dy, float dz)
     {
-        if (node.Properties.TryGetValue(id, out var v) && v.Kind == GraphValueKind.Float3)
+        if (node.Properties.TryGetValue(key: id, value: out var v) &&
+            v.Kind == GraphValueKind.Float3)
         {
-            var a = v.AsFloat3();
-            return new Vec3(a[0], a[1], a[2]);
+            float[] a = v.AsFloat3();
+            return new Vec3(x: a[0], y: a[1], z: a[2]);
         }
 
-        return new Vec3(dx, dy, dz);
+        return new Vec3(x: dx, y: dy, z: dz);
     }
 
     private static string? StringProp(GraphNode node, string id)
     {
-        return node.Properties.TryGetValue(id, out var v) && v.Kind == GraphValueKind.String
+        return node.Properties.TryGetValue(key: id, value: out var v) &&
+               v.Kind == GraphValueKind.String
             ? v.AsString()
             : null;
     }

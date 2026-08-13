@@ -16,45 +16,66 @@ public class ReviewRegressionTests
     public void Romance_many_at_exact_millions(string lang)
     {
         Assert.Equal(
-            PluralCategory.Many,
-            PluralRules.Cardinal(lang, PluralOperands.FromLong(1_000_000))
+            expected: PluralCategory.Many,
+            actual: PluralRules.Cardinal(language: lang, op: PluralOperands.FromLong(1_000_000))
         );
         Assert.Equal(
-            PluralCategory.Many,
-            PluralRules.Cardinal(lang, PluralOperands.FromLong(2_000_000))
+            expected: PluralCategory.Many,
+            actual: PluralRules.Cardinal(language: lang, op: PluralOperands.FromLong(2_000_000))
         );
         Assert.Equal(
-            PluralCategory.Other,
-            PluralRules.Cardinal(lang, PluralOperands.FromLong(1_500_000))
+            expected: PluralCategory.Other,
+            actual: PluralRules.Cardinal(language: lang, op: PluralOperands.FromLong(1_500_000))
         );
-        Assert.Equal(PluralCategory.Other, PluralRules.Cardinal(lang, PluralOperands.FromLong(5)));
+        Assert.Equal(
+            expected: PluralCategory.Other,
+            actual: PluralRules.Cardinal(language: lang, op: PluralOperands.FromLong(5))
+        );
     }
 
     [Fact]
     public void Romance_one_rules_unchanged()
     {
-        Assert.Equal(PluralCategory.One, PluralRules.Cardinal("es", PluralOperands.FromLong(1)));
-        Assert.Equal(PluralCategory.One, PluralRules.Cardinal("fr", PluralOperands.FromLong(0)));
-        Assert.Equal(PluralCategory.One, PluralRules.Cardinal("it", PluralOperands.FromLong(1)));
-        Assert.Equal(PluralCategory.Other, PluralRules.Cardinal("es", PluralOperands.FromLong(2)));
+        Assert.Equal(
+            expected: PluralCategory.One,
+            actual: PluralRules.Cardinal(language: "es", op: PluralOperands.FromLong(1))
+        );
+        Assert.Equal(
+            expected: PluralCategory.One,
+            actual: PluralRules.Cardinal(language: "fr", op: PluralOperands.FromLong(0))
+        );
+        Assert.Equal(
+            expected: PluralCategory.One,
+            actual: PluralRules.Cardinal(language: "it", op: PluralOperands.FromLong(1))
+        );
+        Assert.Equal(
+            expected: PluralCategory.Other,
+            actual: PluralRules.Cardinal(language: "es", op: PluralOperands.FromLong(2))
+        );
     }
 
     // Finding: Finnish has no ordinal rule — must be 'other', not Swedish's 'one'.
     [Fact]
     public void Finnish_ordinal_is_other()
     {
-        foreach (var n in new[] {
+        foreach (int n in new[] {
                      1,
                      2,
                      21,
                      22,
                  })
+        {
             Assert.Equal(
-                PluralCategory.Other,
-                PluralRules.Ordinal("fi", PluralOperands.FromLong(n))
+                expected: PluralCategory.Other,
+                actual: PluralRules.Ordinal(language: "fi", op: PluralOperands.FromLong(n))
             );
+        }
+
         // Swedish keeps its rule.
-        Assert.Equal(PluralCategory.One, PluralRules.Ordinal("sv", PluralOperands.FromLong(1)));
+        Assert.Equal(
+            expected: PluralCategory.One,
+            actual: PluralRules.Ordinal(language: "sv", op: PluralOperands.FromLong(1))
+        );
     }
 
     // Finding: huge integers with all-zero low digits must not collapse i to 0.
@@ -63,13 +84,13 @@ public class ReviewRegressionTests
     {
         // hi: one iff i==0 or n==1. 1e19 has i != 0 and n != 1 -> other.
         Assert.Equal(
-            PluralCategory.Other,
-            PluralRules.Cardinal("hi", PluralOperands.FromDouble(1e19))
+            expected: PluralCategory.Other,
+            actual: PluralRules.Cardinal(language: "hi", op: PluralOperands.FromDouble(1e19))
         );
         // fr Romance many: i % 1e6 == 0 and i != 0 -> many.
         Assert.Equal(
-            PluralCategory.Many,
-            PluralRules.Cardinal("fr", PluralOperands.FromDouble(1e19))
+            expected: PluralCategory.Many,
+            actual: PluralRules.Cardinal(language: "fr", op: PluralOperands.FromDouble(1e19))
         );
     }
 
@@ -77,11 +98,11 @@ public class ReviewRegressionTests
     [Fact]
     public void Hausa_and_Kurdish_default_ltr()
     {
-        Assert.Equal(TextDirection.Ltr, Locale.Parse("ha").TextDirection);
-        Assert.Equal(TextDirection.Ltr, Locale.Parse("ku").TextDirection);
+        Assert.Equal(expected: TextDirection.Ltr, actual: Locale.Parse("ha").TextDirection);
+        Assert.Equal(expected: TextDirection.Ltr, actual: Locale.Parse("ku").TextDirection);
         // RTL variants still resolve via script / Sorani.
-        Assert.Equal(TextDirection.Rtl, Locale.Parse("ha-Arab").TextDirection);
-        Assert.Equal(TextDirection.Rtl, Locale.Parse("ckb").TextDirection);
+        Assert.Equal(expected: TextDirection.Rtl, actual: Locale.Parse("ha-Arab").TextDirection);
+        Assert.Equal(expected: TextDirection.Rtl, actual: Locale.Parse("ckb").TextDirection);
     }
 
     // Finding: a script subtag appearing after a region was silently dropped.
@@ -102,9 +123,9 @@ public class ReviewRegressionTests
         string country)
     {
         var l = Locale.Parse(tag);
-        Assert.Equal(lang, l.Language);
-        Assert.Equal(script, l.Script);
-        Assert.Equal(country, l.Country);
+        Assert.Equal(expected: lang, actual: l.Language);
+        Assert.Equal(expected: script, actual: l.Script);
+        Assert.Equal(expected: country, actual: l.Country);
     }
 
     // Finding: formatting a default(Locale) returned null (NRE risk).
@@ -112,9 +133,9 @@ public class ReviewRegressionTests
     public void Default_locale_formats_to_empty_string_not_null()
     {
         Locale empty = default;
-        Assert.Equal("", empty.ToBcp47());
-        Assert.Equal("", empty.ToUnderscore());
-        Assert.Equal(0, empty.ToBcp47().Length); // no NRE
+        Assert.Equal(expected: "", actual: empty.ToBcp47());
+        Assert.Equal(expected: "", actual: empty.ToUnderscore());
+        Assert.Equal(expected: 0, actual: empty.ToBcp47().Length); // no NRE
     }
 
     // Finding: a region match must not beat a requested script.
@@ -126,8 +147,12 @@ public class ReviewRegressionTests
             Locale.Parse("zh-Hant-TW"),
         };
         Assert.Equal(
-            Locale.Parse("zh-Hant-TW"),
-            LocaleResolution.Resolve(Locale.Parse("zh-Hant-CN"), supported, Locale.En)
+            expected: Locale.Parse("zh-Hant-TW"),
+            actual: LocaleResolution.Resolve(
+                preferred: Locale.Parse("zh-Hant-CN"),
+                supported: supported,
+                fallback: Locale.En
+            )
         );
 
         var supported2 = new[] {
@@ -135,8 +160,12 @@ public class ReviewRegressionTests
             Locale.Parse("zh-Hans-CN"),
         };
         Assert.Equal(
-            Locale.Parse("zh-Hans-CN"),
-            LocaleResolution.Resolve(Locale.Parse("zh-Hans-TW"), supported2, Locale.En)
+            expected: Locale.Parse("zh-Hans-CN"),
+            actual: LocaleResolution.Resolve(
+                preferred: Locale.Parse("zh-Hans-TW"),
+                supported: supported2,
+                fallback: Locale.En
+            )
         );
     }
 }
@@ -160,9 +189,9 @@ public class LocalizationsScopeTests
             },
             InitialLocale = Locale.Es,
             UseSystemLocale = false,
-            Child = new SizedBox(10f, 10f),
+            Child = new SizedBox(width: 10f, height: 10f),
         };
-        scope.Measure(Constraints.Tight(100f, 100f)); // triggers one-time build
+        scope.Measure(Constraints.Tight(width: 100f, height: 100f)); // triggers one-time build
         return scope;
     }
 
@@ -171,7 +200,7 @@ public class LocalizationsScopeTests
     {
         var scope = BuildScope();
         Assert.NotNull(scope.Controller);
-        Assert.Equal(Locale.Es, scope.Controller!.Locale);
+        Assert.Equal(expected: Locale.Es, actual: scope.Controller!.Locale);
         Assert.Single(scope.GetChildren());
     }
 
@@ -180,9 +209,12 @@ public class LocalizationsScopeTests
     {
         var scope = BuildScope();
         var es = scope.Controller!.Load(Locale.Es);
-        Assert.Equal("Hola", es.Get<StringLocalizations>()!["hi"]);
-        Assert.Equal(TextDirection.Ltr, es.TextDirection);
-        Assert.Equal(TextDirection.Rtl, scope.Controller.Load(Locale.Ar).TextDirection);
+        Assert.Equal(expected: "Hola", actual: es.Get<StringLocalizations>()!["hi"]);
+        Assert.Equal(expected: TextDirection.Ltr, actual: es.TextDirection);
+        Assert.Equal(
+            expected: TextDirection.Rtl,
+            actual: scope.Controller.Load(Locale.Ar).TextDirection
+        );
     }
 
     [Fact]
@@ -194,9 +226,9 @@ public class LocalizationsScopeTests
         c.LocaleChanged += l => observed = l;
 
         Assert.True(c.SetLocale(Locale.En));
-        Assert.Equal(Locale.En, c.Locale);
-        Assert.Equal(Locale.En, observed);
-        Assert.Equal(Locale.En, c.Current.Value);
+        Assert.Equal(expected: Locale.En, actual: c.Locale);
+        Assert.Equal(expected: Locale.En, actual: observed);
+        Assert.Equal(expected: Locale.En, actual: c.Current.Value);
 
         Assert.False(c.SetLocale(Locale.En)); // no-op
     }
@@ -208,8 +240,8 @@ public class LocalizationsScopeTests
         // ja is unsupported -> resolves within {en, es}, fallback es.
         scope.Controller!.SetLocale(Locale.Ja);
         Assert.Contains(
-            scope.Controller.Locale,
-            new[] {
+            expected: scope.Controller.Locale,
+            collection: new[] {
                 Locale.En,
                 Locale.Es,
             }

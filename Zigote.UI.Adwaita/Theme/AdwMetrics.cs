@@ -62,8 +62,12 @@ public static class AdwMetrics
 
     /// <summary>
     ///     What a headerbar stands at when it IS the window's titlebar under client-side
-    ///     decorations — <c>window:not(.ssd-frame) > headerbar.titlebar { min-height: 46px;
-    ///     padding-bottom: 6px }</c>. One pixel shorter than an inline bar, because the window's own
+    ///     decorations —
+    ///     <c>
+    ///         window:not(.ssd-frame) > headerbar.titlebar { min-height: 46px;
+    ///         padding-bottom: 6px }
+    ///     </c>
+    ///     . One pixel shorter than an inline bar, because the window's own
     ///     1px outline supplies the missing edge; matching 47 there leaves a CSD window visibly
     ///     taller in the chrome than a real GNOME one beside it.
     /// </summary>
@@ -85,8 +89,12 @@ public static class AdwMetrics
     public const float HeaderBarPaddingX = 7f;
 
     /// <summary>
-    ///     A window-control button's hit target: <c>windowcontrols > button { min-width: 24px;
-    ///     padding: 5px }</c>, i.e. the full height of the bar's content box. The visible circle is
+    ///     A window-control button's hit target:
+    ///     <c>
+    ///         windowcontrols > button { min-width: 24px;
+    ///         padding: 5px }
+    ///     </c>
+    ///     , i.e. the full height of the bar's content box. The visible circle is
     ///     <see cref="FrameButtonCircle" /> — the padding is target, not decoration, and dropping it
     ///     leaves the close button a 24px square in a 34px bar.
     /// </summary>
@@ -232,19 +240,37 @@ public static class AdwMetrics
     // ── Elevation ──────────────────────────────────────────────────────────────
     /// <summary>
     ///     The popover shadow, matching libadwaita's three-layer stack
-    ///     (<c>0 0 0 1px rgb(0 0 0 / 5%), 0 1px 5px 1px rgb(0 0 0 / 9%),
-    ///     0 2px 14px 3px rgb(0 0 0 / 5%)</c>) as the single soft shadow this renderer paints: the
+    ///     (
+    ///     <c>
+    ///         0 0 0 1px rgb(0 0 0 / 5%), 0 1px 5px 1px rgb(0 0 0 / 9%),
+    ///         0 2px 14px 3px rgb(0 0 0 / 5%)
+    ///     </c>
+    ///     ) as the single soft shadow this renderer paints: the
     ///     hairline ring is drawn separately as a border, so what is left is a wide, low-opacity
     ///     lift. The shared <c>Elevation.Z2</c> token is a macOS-weight shadow — a third darker and
     ///     sitting twice as low — which reads as a drop shadow rather than GNOME's float.
     /// </summary>
-    public static readonly ShadowStyle PopoverShadow = new(14f, 2f, 0.09f, 2f);
+    public static readonly ShadowStyle PopoverShadow = new(
+        Blur: 14f,
+        OffsetY: 2f,
+        Alpha: 0.09f,
+        Spread: 2f
+    );
 
     /// <summary>
-    ///     The card shadow — <c>0 0 0 1px rgb(0 0 6 / 3%), 0 1px 3px 1px rgb(0 0 6 / 7%),
-    ///     0 2px 6px 2px rgb(0 0 6 / 3%)</c>, collapsed to this renderer's one soft layer. Tighter
+    ///     The card shadow —
+    ///     <c>
+    ///         0 0 0 1px rgb(0 0 6 / 3%), 0 1px 3px 1px rgb(0 0 6 / 7%),
+    ///         0 2px 6px 2px rgb(0 0 6 / 3%)
+    ///     </c>
+    ///     , collapsed to this renderer's one soft layer. Tighter
     ///     and fainter than <see cref="PopoverShadow" />: a card sits on the page, a popover floats
     ///     over it. Also what a checked toggle-group segment lifts with.
     /// </summary>
-    public static readonly ShadowStyle CardShadow = new(6f, 2f, 0.07f, 1f);
+    public static readonly ShadowStyle CardShadow = new(
+        Blur: 6f,
+        OffsetY: 2f,
+        Alpha: 0.07f,
+        Spread: 1f
+    );
 }

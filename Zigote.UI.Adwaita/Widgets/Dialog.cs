@@ -18,18 +18,18 @@ public class AdwDialog : Widget, IDismissableOverlay
     private readonly DecoratedBox _card;
     private readonly ClipRRect _clip;
     private bool _closing;
+    private float? _contentHeight;
     private Size _contentSize;
     private float? _contentWidth;
-    private float? _contentHeight;
+    private App? _host;
     private Size _size;
     private ThemeData _theme = ThemeData.Dark;
-    private App? _host;
 
     public AdwDialog(Widget? child = null)
     {
         // `floating-sheet > sheet { border-radius: $dialog_radius }`; an alert overrides it to the
         // rounder $alert_radius, which is why this reads a virtual rather than the constant.
-        _clip = new ClipRRect(Radius, child);
+        _clip = new ClipRRect(radius: Radius, child: child);
         _card = new DecoratedBox {
             Radius = Radius,
             Elevation = Elevation.Z3,
@@ -37,19 +37,11 @@ public class AdwDialog : Widget, IDismissableOverlay
         };
         // Adwaita dialog presentation: ~150ms ease-out; scrim fades, sheet fades + rises 8px.
         // Reverse plays the same motion out; the overlay pops when the reverse completes.
-        _anim = new AnimationController(0.15f, this) { Curve = Curves.EaseOut };
+        _anim = new AnimationController(durationSeconds: 0.15f, vsync: this) {
+            Curve = Curves.EaseOut,
+        };
         _anim.OnTick += MarkNeedsPaint;
         _anim.OnDismissed += FinishClose;
-    }
-
-    // ── Ticker plumbing (Toast.cs pattern: rebind on every Attach) ─────────────
-
-
-    // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
-    // re-attach rebinds instead of leaking one per attach cascade.
-    protected override void OnMount()
-    {
-        _anim.AttachTicker(this);
     }
 
 
@@ -78,18 +70,32 @@ public class AdwDialog : Widget, IDismissableOverlay
     public float? ContentWidth
     {
         get => _contentWidth;
-        set => SetLayout(ref _contentWidth, value);
+        set => SetLayout(field: ref _contentWidth, value: value);
     }
 
     /// <summary>Fixed content height; null hugs the content under 85% of the window. Re-lays out.</summary>
     public float? ContentHeight
     {
         get => _contentHeight;
-        set => SetLayout(ref _contentHeight, value);
+        set => SetLayout(field: ref _contentHeight, value: value);
     }
 
     /// <summary>Invoked whenever the dialog leaves the overlay stack, whatever closed it.</summary>
     public Action? OnClosed { get; set; }
+
+    /// <summary>Escape: close when closable; always consume (modal barrier).</summary>
+    public bool RequestDismiss()
+    {
+        if (CanClose) Close();
+        return true;
+    }
+
+    // ── Ticker plumbing (Toast.cs pattern: rebind on every Attach) ─────────────
+
+
+    // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
+    // re-attach rebinds instead of leaking one per attach cascade.
+    protected override void OnMount() => _anim.AttachTicker(this);
 
     /// <summary>Show this dialog as an overlay on the active App.</summary>
     public void Show()
@@ -145,13 +151,6 @@ public class AdwDialog : Widget, IDismissableOverlay
         return dlg;
     }
 
-    /// <summary>Escape: close when closable; always consume (modal barrier).</summary>
-    public bool RequestDismiss()
-    {
-        if (CanClose) Close();
-        return true;
-    }
-
     public override void DescribeSemantics(SemanticsConfiguration config)
     {
         config.Role = SemanticsRole.Dialog;
@@ -164,23 +163,23 @@ public class AdwDialog : Widget, IDismissableOverlay
         _theme = ThemeProvider.Of(BuildContext.Current);
         _card.Fill = AdwPalette.For(_theme).DialogBg;
 
-        _size = c.Constrain(new Size(c.MaxWidth, c.MaxHeight));
+        _size = c.Constrain(new Size(width: c.MaxWidth, height: c.MaxHeight));
 
         // Edge margin the card can never eat into (also the phone-width fallback, like the base).
-        var margin = Spacing.Xl * 2f;
-        var maxW = ContentWidth ?? (_size.Width < WindowSize.CompactMax
-            ? MathF.Max(0f, _size.Width - margin)
-            : MathF.Min(_size.Width * 0.8f, 560f));
-        maxW = MathF.Min(maxW, MathF.Max(0f, _size.Width - margin));
-        var maxH = ContentHeight ?? _size.Height * 0.85f;
-        maxH = MathF.Min(maxH, MathF.Max(0f, _size.Height - margin));
+        float margin = Spacing.Xl * 2f;
+        float maxW = ContentWidth ?? (_size.Width < WindowSize.CompactMax
+            ? MathF.Max(x: 0f, y: _size.Width - margin)
+            : MathF.Min(x: _size.Width * 0.8f, y: 560f));
+        maxW = MathF.Min(x: maxW, y: MathF.Max(x: 0f, y: _size.Width - margin));
+        float maxH = ContentHeight ?? _size.Height * 0.85f;
+        maxH = MathF.Min(x: maxH, y: MathF.Max(x: 0f, y: _size.Height - margin));
 
         _contentSize = _card.Measure(
             new Constraints(
-                ContentWidth.HasValue ? maxW : 0f,
-                maxW,
-                ContentHeight.HasValue ? maxH : 0f,
-                maxH
+                minWidth: ContentWidth.HasValue ? maxW : 0f,
+                maxWidth: maxW,
+                minHeight: ContentHeight.HasValue ? maxH : 0f,
+                maxHeight: maxH
             )
         );
         return _size;
@@ -189,32 +188,32 @@ public class AdwDialog : Widget, IDismissableOverlay
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         _card.Layout(
             new Offset(
-                origin.X + (_size.Width - _contentSize.Width) / 2f,
-                origin.Y + (_size.Height - _contentSize.Height) / 2f
+                x: origin.X + ((_size.Width - _contentSize.Width) / 2f),
+                y: origin.Y + ((_size.Height - _contentSize.Height) / 2f)
             )
         );
     }
 
     public override void Paint(PaintList paint)
     {
-        var t = _anim.Value;
+        float t = _anim.Value;
 
         // Scrim fades with the transition.
         var scrim = _theme.OverlayBackground;
-        paint.AddRect(Bounds, scrim.WithAlpha(scrim.A * t));
+        paint.AddRect(bounds: Bounds, color: scrim.WithAlpha(scrim.A * t));
 
         // The sheet fades in while rising 8px into place (and back out on close).
-        var rise = (1f - t) * 8f;
-        var fade = t < 0.999f;
+        float rise = (1f - t) * 8f;
+        bool fade = t < 0.999f;
         if (fade) paint.PushAlpha(t);
-        if (rise > 0.01f) paint.PushTranslate(0f, rise);
+        if (rise > 0.01f) paint.PushTranslate(dx: 0f, dy: rise);
         _card.Paint(paint);
         if (rise > 0.01f) paint.PopTranslate();
         if (fade) paint.PopAlpha();
@@ -223,7 +222,7 @@ public class AdwDialog : Widget, IDismissableOverlay
     // Modal barrier: consume everything inside the window; the card gets first pick.
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return _card.HitTest(point) ?? this;
     }
 
@@ -234,8 +233,5 @@ public class AdwDialog : Widget, IDismissableOverlay
             Close();
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(_card);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(_card);
 }

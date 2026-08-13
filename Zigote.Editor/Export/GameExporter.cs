@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
+using System.Security;
 using System.Text;
 using Zigote.Editor.Prefab;
 using Zigote.Editor.Vfx;
@@ -23,13 +24,13 @@ public static class GameExporter
         IProgress<string> log,
         IProgress<ExportJobUpdate>? jobs = null)
     {
-        var projDir = Path.GetDirectoryName(Path.GetFullPath(input.ProjectPath))!;
-        var name = string.IsNullOrWhiteSpace(input.Project.Name)
+        string projDir = Path.GetDirectoryName(Path.GetFullPath(input.ProjectPath))!;
+        string name = string.IsNullOrWhiteSpace(input.Project.Name)
             ? "ZigoteGame"
             : input.Project.Name.Trim();
-        var exeName = SanitizeExeName(name);
+        string exeName = SanitizeExeName(name);
 
-        var sdkRoot = FindSdkRoot();
+        string? sdkRoot = FindSdkRoot();
         if (sdkRoot is null)
         {
             log.Report(
@@ -42,44 +43,44 @@ public static class GameExporter
         // doing that inside the project tree spams IDE/file watchers (and pollutes the project).
         // macOS TMPDIR is a /var → /private/var symlink; MSBuild resolves project-reference relative
         // paths across it incorrectly, so pin the real path.
-        var tempRoot = Path.GetTempPath();
+        string tempRoot = Path.GetTempPath();
         if (OperatingSystem.IsMacOS() && tempRoot.StartsWith("/var/"))
             tempRoot = "/private" + tempRoot;
-        var staging = Path.Combine(tempRoot, "zigote-export", exeName);
-        if (Directory.Exists(staging)) Directory.Delete(staging, true);
+        string staging = Path.Combine(path1: tempRoot, path2: "zigote-export", path3: exeName);
+        if (Directory.Exists(staging)) Directory.Delete(path: staging, recursive: true);
         Directory.CreateDirectory(staging);
 
         log.Report($"Staging content from {input.Project.AssetRoot}/ …");
-        var contentDir = Path.Combine(staging, "Content");
+        string contentDir = Path.Combine(path1: staging, path2: "Content");
         var stagedScene = StageContent(
-            input,
-            projDir,
-            contentDir,
-            log
+            input: input,
+            projDir: projDir,
+            contentDir: contentDir,
+            log: log
         );
 
         log.Report("Generating player project …");
         var sceneScripts = CollectScriptClasses(stagedScene);
 
         Directory.CreateDirectory(options.OutputDir);
-        var ok = true;
-        foreach (var rid in options.Rids)
+        bool ok = true;
+        foreach (string rid in options.Rids)
         foreach (var mode in options.Modes)
         {
             // Regenerated per RID: mobile heads need a platform target framework and
             // SDK-specific items (the iOS static-link native references), which desktop must not
             // carry. Writing the project is a few hundred lines of text — cheap to redo.
             GeneratePlayerProject(
-                input,
-                sdkRoot,
-                Path.Combine(staging, "player"),
-                exeName,
-                sceneScripts,
-                rid
+                input: input,
+                sdkRoot: sdkRoot,
+                playerDir: Path.Combine(path1: staging, path2: "player"),
+                exeName: exeName,
+                sceneScriptClasses: sceneScripts,
+                rid: rid
             );
 
-            var job = new ExportJob(rid, mode);
-            if (IsMobile(rid) && !MobileHostAvailable(rid, out var why))
+            var job = new ExportJob(Rid: rid, Mode: mode);
+            if (IsMobile(rid) && !MobileHostAvailable(rid: rid, reason: out string why))
             {
                 log.Report($"[{rid}] {why} — skipped.");
                 continue;
@@ -95,7 +96,11 @@ public static class GameExporter
                         $"[{rid}] NativeAOT needs a {RidOs(rid)} host — skipped (JIT build covers this platform)."
                     );
                     jobs?.Report(
-                        new ExportJobUpdate(job, ExportJobState.Skipped, "needs matching host OS")
+                        new ExportJobUpdate(
+                            Job: job,
+                            State: ExportJobState.Skipped,
+                            Detail: "needs matching host OS"
+                        )
                     );
                     continue;
                 }
@@ -105,19 +110,22 @@ public static class GameExporter
                 );
             }
 
-            jobs?.Report(new ExportJobUpdate(job, ExportJobState.Running));
-            var aot = mode == ExportMode.NativeAot && CanAotFor(rid);
-            var jobOk = await PublishAndPackageAsync(
-                options,
-                staging,
-                rid,
-                exeName,
-                name,
-                aot,
-                log
+            jobs?.Report(new ExportJobUpdate(Job: job, State: ExportJobState.Running));
+            bool aot = mode == ExportMode.NativeAot && CanAotFor(rid);
+            bool jobOk = await PublishAndPackageAsync(
+                options: options,
+                staging: staging,
+                rid: rid,
+                exeName: exeName,
+                name: name,
+                aot: aot,
+                log: log
             );
             jobs?.Report(
-                new ExportJobUpdate(job, jobOk ? ExportJobState.Succeeded : ExportJobState.Failed)
+                new ExportJobUpdate(
+                    Job: job,
+                    State: jobOk ? ExportJobState.Succeeded : ExportJobState.Failed
+                )
             );
             ok &= jobOk;
         }
@@ -135,12 +143,11 @@ public static class GameExporter
         return "Linux";
     }
 
-    /// <summary>A mobile RID — the app is packaged by the platform SDK, not by copying a publish
-    /// directory, and the managed head targets a platform TFM rather than plain net10.0.</summary>
-    private static bool IsMobile(string rid)
-    {
-        return rid.StartsWith("ios") || rid.StartsWith("android");
-    }
+    /// <summary>
+    ///     A mobile RID — the app is packaged by the platform SDK, not by copying a publish
+    ///     directory, and the managed head targets a platform TFM rather than plain net10.0.
+    /// </summary>
+    private static bool IsMobile(string rid) => rid.StartsWith("ios") || rid.StartsWith("android");
 
     /// <summary>
     ///     Target framework for the generated player project. Mobile needs the platform TFM so the
@@ -170,8 +177,8 @@ public static class GameExporter
 
         if (rid.StartsWith("android"))
         {
-            var ndk = Environment.GetEnvironmentVariable("ANDROID_NDK_ROOT");
-            var fallback = Path.Combine(
+            string? ndk = Environment.GetEnvironmentVariable("ANDROID_NDK_ROOT");
+            string fallback = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 "Library",
                 "Android",
@@ -204,13 +211,13 @@ public static class GameExporter
         Directory.CreateDirectory(contentDir);
         var shipped = ZigoteProject.Load(input.ProjectPath);
         shipped.ScriptProject = null;
-        shipped.Save(Path.Combine(contentDir, "game.zigoteproj"));
+        shipped.Save(Path.Combine(path1: contentDir, path2: "game.zigoteproj"));
 
-        var sceneSrc = Path.Combine(projDir, shipped.StartupScene);
-        var sceneDst = Path.Combine(contentDir, shipped.StartupScene);
+        string sceneSrc = Path.Combine(path1: projDir, path2: shipped.StartupScene);
+        string sceneDst = Path.Combine(path1: contentDir, path2: shipped.StartupScene);
         Directory.CreateDirectory(Path.GetDirectoryName(sceneDst)!);
-        File.Copy(sceneSrc, sceneDst);
-        BakeVfxGraphs(sceneDst, log);
+        File.Copy(sourceFileName: sceneSrc, destFileName: sceneDst);
+        BakeVfxGraphs(scenePath: sceneDst, log: log);
 
         // Reachability-based staging: everything the (baked) scene references, nothing else.
         // Paths are canonical (project-relative, '/') since import writes them that way; the rooted
@@ -221,30 +228,33 @@ public static class GameExporter
         // Runtime-spawnable prefabs: ship every .prefab under assets/prefabs — World.Spawn loads them
         // by path at play time, so reachability can't be derived from the scene (the reference lives
         // in script code) — and fold their templates' asset references into the staging graph.
-        var prefabRoot = Path.Combine(projDir, PrefabService.PrefabDir);
-        var prefabs = 0;
+        string prefabRoot = Path.Combine(path1: projDir, path2: PrefabService.PrefabDir);
+        int prefabs = 0;
         if (Directory.Exists(prefabRoot))
-            foreach (var prefabSrc in Directory.EnumerateFiles(
-                         prefabRoot,
-                         "*" + PrefabDocument.Extension,
-                         SearchOption.AllDirectories
+        {
+            foreach (string prefabSrc in Directory.EnumerateFiles(
+                         path: prefabRoot,
+                         searchPattern: "*" + PrefabDocument.Extension,
+                         searchOption: SearchOption.AllDirectories
                      ))
             {
-                var rel = Path.GetRelativePath(projDir, prefabSrc).Replace('\\', '/');
-                var prefabDst = Path.Combine(contentDir, rel);
+                string rel = Path.GetRelativePath(relativeTo: projDir, path: prefabSrc)
+                    .Replace(oldChar: '\\', newChar: '/');
+                string prefabDst = Path.Combine(path1: contentDir, path2: rel);
                 Directory.CreateDirectory(Path.GetDirectoryName(prefabDst)!);
-                CopyShared(prefabSrc, prefabDst);
+                CopyShared(src: prefabSrc, dst: prefabDst);
                 if (PrefabDocument.Load(prefabSrc) is { } prefabDoc)
                     graph.AddTree(prefabDoc.Template);
                 prefabs++;
             }
+        }
 
         if (prefabs > 0) log.Report($"Staged {prefabs} prefab(s) for runtime spawning.");
 
         long stagedBytes = 0;
-        var staged = 0;
-        var missing = 0;
-        foreach (var path in graph.Files)
+        int staged = 0;
+        int missing = 0;
+        foreach (string path in graph.Files)
         {
             if (Path.IsPathRooted(path))
             {
@@ -254,7 +264,7 @@ public static class GameExporter
                 continue;
             }
 
-            var src = Path.Combine(projDir, path);
+            string src = Path.Combine(path1: projDir, path2: path);
             if (!File.Exists(src))
             {
                 // Missing on disk = already broken in the editor; surface it rather than fail the export.
@@ -265,20 +275,21 @@ public static class GameExporter
 
             // Keep the scene's own spelling for the destination: the runtime opens files by that string,
             // and source filesystems may be case-insensitive while the target machine's is not.
-            var dst = Path.Combine(contentDir, path);
+            string dst = Path.Combine(path1: contentDir, path2: path);
             Directory.CreateDirectory(Path.GetDirectoryName(dst)!);
 
             // Engine-native binaries the C# runtime reads itself ship zstd-compressed (ContentFiles
             // resolves '<file>.zst' transparently). Textures/audio are opened natively by path — and
             // are already-compressed formats — so they stay loose.
-            var ext = Path.GetExtension(path).ToLowerInvariant();
+            string ext = Path.GetExtension(path).ToLowerInvariant();
             stagedBytes += ext is ".zmesh" or ".hdr"
-                ? ContentFiles.WriteCompressed(src, dst)
-                : CopyShared(src, dst);
+                ? ContentFiles.WriteCompressed(src: src, dst: dst)
+                : CopyShared(src: src, dst: dst);
             staged++;
         }
 
-        var totalBytes = DirectorySize(Path.Combine(projDir, input.Project.AssetRoot));
+        long totalBytes =
+            DirectorySize(Path.Combine(path1: projDir, path2: input.Project.AssetRoot));
         log.Report(
             $"Staged {staged} reachable asset file(s), {stagedBytes / (1024.0 * 1024.0):F1} MB " +
             $"(asset tree is {totalBytes / (1024.0 * 1024.0):F1} MB" +
@@ -286,8 +297,14 @@ public static class GameExporter
         );
 
         // Registry travels with the content (asset-id lookups stay valid for future streaming use).
-        var registry = Path.Combine(projDir, "assets.registry");
-        if (File.Exists(registry)) File.Copy(registry, Path.Combine(contentDir, "assets.registry"));
+        string registry = Path.Combine(path1: projDir, path2: "assets.registry");
+        if (File.Exists(registry))
+        {
+            File.Copy(
+                sourceFileName: registry,
+                destFileName: Path.Combine(path1: contentDir, path2: "assets.registry")
+            );
+        }
 
         return scene;
     }
@@ -314,20 +331,21 @@ public static class GameExporter
     private static long CopyShared(string src, string dst)
     {
         const int maxAttempts = 10;
-        for (var attempt = 1;; attempt++)
+        for (int attempt = 1;; attempt++)
+        {
             try
             {
                 using var s = new FileStream(
-                    src,
-                    FileMode.Open,
-                    FileAccess.Read,
-                    FileShare.ReadWrite | FileShare.Delete
+                    path: src,
+                    mode: FileMode.Open,
+                    access: FileAccess.Read,
+                    share: FileShare.ReadWrite | FileShare.Delete
                 );
                 using var d = new FileStream(
-                    dst,
-                    FileMode.Create,
-                    FileAccess.Write,
-                    FileShare.None
+                    path: dst,
+                    mode: FileMode.Create,
+                    access: FileAccess.Write,
+                    share: FileShare.None
                 );
                 s.CopyTo(d);
                 return s.Length;
@@ -336,12 +354,17 @@ public static class GameExporter
             {
                 Thread.Sleep(100 * attempt);
             }
+        }
     }
 
     private static long DirectorySize(string dir)
     {
         return Directory.Exists(dir)
-            ? Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories)
+            ? Directory.EnumerateFiles(
+                    path: dir,
+                    searchPattern: "*",
+                    searchOption: SearchOption.AllDirectories
+                )
                 .Sum(f => new FileInfo(f).Length)
             : 0;
     }
@@ -354,7 +377,7 @@ public static class GameExporter
     {
         if (!File.Exists(scenePath)) return;
         var scene = SceneGraph.Load(scenePath);
-        var baked = 0;
+        int baked = 0;
 
         void Walk(SceneNode node)
         {
@@ -385,15 +408,17 @@ public static class GameExporter
     {
         Directory.CreateDirectory(playerDir);
 
-        var scriptCsproj = input.Project.ScriptProject is { Length: > 0 } sp
-            ? Path.GetFullPath(Path.Combine(Path.GetDirectoryName(input.ProjectPath)!, sp))
+        string? scriptCsproj = input.Project.ScriptProject is { Length: > 0 } sp
+            ? Path.GetFullPath(
+                Path.Combine(path1: Path.GetDirectoryName(input.ProjectPath)!, path2: sp)
+            )
             : null;
-        var scriptAsm = input.ScriptAssemblyName
-                        ?? (scriptCsproj is null
-                            ? null
-                            : Path.GetFileNameWithoutExtension(scriptCsproj));
+        string? scriptAsm = input.ScriptAssemblyName
+                            ?? (scriptCsproj is null
+                                ? null
+                                : Path.GetFileNameWithoutExtension(scriptCsproj));
 
-        var name = string.IsNullOrWhiteSpace(input.Project.Name) ? exeName : input.Project.Name;
+        string name = string.IsNullOrWhiteSpace(input.Project.Name) ? exeName : input.Project.Name;
         var csproj = new StringBuilder();
         csproj.AppendLine("""<Project Sdk="Microsoft.NET.Sdk">""");
         csproj.AppendLine("    <PropertyGroup>");
@@ -482,7 +507,10 @@ public static class GameExporter
         // Mobile resource pipelines do not lift referenced-project Content into the package, so
         // the fonts Zigote.UI ships as Content — and the staged game Content — are declared here
         // (same set + layout as the Gallery mobile heads; App probes Fonts/ under the base dir).
-        var contentDir = Path.Combine(Path.GetDirectoryName(playerDir)!, "Content");
+        string contentDir = Path.Combine(
+            path1: Path.GetDirectoryName(playerDir)!,
+            path2: "Content"
+        );
         (string Src, string Dst)[] fonts = [
             (@"Fonts\Inter\static\Inter_18pt-Regular.ttf", @"Fonts\Inter-Regular.ttf"),
             (@"Fonts\PkgTTC-SGr-Iosevka-34\SGr-Iosevka-Regular.ttc", @"Fonts\Iosevka-Regular.ttc"),
@@ -495,10 +523,13 @@ public static class GameExporter
         if (rid.StartsWith("ios"))
         {
             csproj.AppendLine("    <ItemGroup>");
-            foreach (var (src, dst) in fonts)
+            foreach ((string src, string dst) in fonts)
+            {
                 csproj.AppendLine(
-                    $"""        <BundleResource Include="{Path.Combine(sdkRoot, "Zigote.UI", src)}" Link="{dst}" />"""
+                    $"""        <BundleResource Include="{Path.Combine(path1: sdkRoot, path2: "Zigote.UI", path3: src)}" Link="{dst}" />"""
                 );
+            }
+
             csproj.AppendLine(
                 $"""        <BundleResource Include="{contentDir}\**\*" Link="Content\%(RecursiveDir)%(Filename)%(Extension)" />"""
             );
@@ -513,18 +544,18 @@ public static class GameExporter
             // the linker sees no reference to any of them. The archives are produced by the
             // engine's `static-lib` step during this same publish (see Zigote.Native.targets).
             // Simulator builds keep the bundled dylib instead.
-            var zigOut = Path.Combine(
-                sdkRoot,
-                "Zigote.Engine",
-                "zig-out",
-                "lib"
+            string zigOut = Path.Combine(
+                path1: sdkRoot,
+                path2: "Zigote.Engine",
+                path3: "zig-out",
+                path4: "lib"
             );
             csproj.AppendLine("    <ItemGroup>");
             csproj.AppendLine(
-                $"""        <NativeReference Include="{Path.Combine(zigOut, "libzigote.a")}" Kind="Static" IsCxx="True" ForceLoad="True" Frameworks="UIKit Metal QuartzCore Foundation CoreGraphics CoreVideo CoreMotion GameController CoreAudio AudioToolbox AVFoundation" WeakFrameworks="CoreHaptics" LinkerFlags="-liconv -Wl,-export_dynamic" />"""
+                $"""        <NativeReference Include="{Path.Combine(path1: zigOut, path2: "libzigote.a")}" Kind="Static" IsCxx="True" ForceLoad="True" Frameworks="UIKit Metal QuartzCore Foundation CoreGraphics CoreVideo CoreMotion GameController CoreAudio AudioToolbox AVFoundation" WeakFrameworks="CoreHaptics" LinkerFlags="-liconv -Wl,-export_dynamic" />"""
             );
             csproj.AppendLine(
-                $"""        <_ZigoteDepArchive Include="{Path.Combine(zigOut, "*.a")}" Exclude="{Path.Combine(zigOut, "libzigote.a")}" />"""
+                $"""        <_ZigoteDepArchive Include="{Path.Combine(path1: zigOut, path2: "*.a")}" Exclude="{Path.Combine(path1: zigOut, path2: "libzigote.a")}" />"""
             );
             csproj.AppendLine(
                 """        <NativeReference Include="@(_ZigoteDepArchive)" Kind="Static" IsCxx="True" />"""
@@ -534,20 +565,23 @@ public static class GameExporter
 
         if (rid.StartsWith("android"))
         {
-            var abi = rid.EndsWith("x64") ? "x86_64" : "arm64-v8a";
+            string abi = rid.EndsWith("x64") ? "x86_64" : "arm64-v8a";
             csproj.AppendLine("    <ItemGroup>");
             // SDL's Java half + our SDLActivity subclass; all of SDL's JNI-registered classes
             // must reach the dex or the first JNI lookup throws.
             csproj.AppendLine(
-                $"""        <AndroidJavaSource Include="{Path.Combine(sdkRoot, "mobile", "android", "JavaSources")}\**\*.java" Bind="false" />"""
+                $"""        <AndroidJavaSource Include="{Path.Combine(path1: sdkRoot, path2: "mobile", path3: "android", path4: "JavaSources")}\**\*.java" Bind="false" />"""
             );
             csproj.AppendLine(
                 $"""        <AndroidNativeLibrary Include="{Path.Combine(sdkRoot, "Zigote.Engine", "zig-out", "lib", "libzigote.so")}" Abi="{abi}" />"""
             );
-            foreach (var (src, dst) in fonts)
+            foreach ((string src, string dst) in fonts)
+            {
                 csproj.AppendLine(
-                    $"""        <AndroidAsset Include="{Path.Combine(sdkRoot, "Zigote.UI", src)}" Link="{dst}" />"""
+                    $"""        <AndroidAsset Include="{Path.Combine(path1: sdkRoot, path2: "Zigote.UI", path3: src)}" Link="{dst}" />"""
                 );
+            }
+
             csproj.AppendLine(
                 $"""        <AndroidAsset Include="{contentDir}\**\*" Link="Content\%(RecursiveDir)%(Filename)%(Extension)" />"""
             );
@@ -556,26 +590,30 @@ public static class GameExporter
 
         csproj.AppendLine("    <ItemGroup>");
         csproj.AppendLine(
-            $"""        <ProjectReference Include="{Path.Combine(sdkRoot, "Zigote.Player", "Zigote.Player.csproj")}" />"""
+            $"""        <ProjectReference Include="{Path.Combine(path1: sdkRoot, path2: "Zigote.Player", path3: "Zigote.Player.csproj")}" />"""
         );
         // The DevTools overlay is opt-in per project: only an enabled export bundles the assemblies
         // (PlayerMain late-binds the install, so their absence is a clean no-op).
         if (input.Project.DevToolsEnabled)
+        {
             csproj.AppendLine(
-                $"""        <ProjectReference Include="{Path.Combine(sdkRoot, "Zigote.UI.DevTools", "Zigote.UI.DevTools.csproj")}" />"""
+                $"""        <ProjectReference Include="{Path.Combine(path1: sdkRoot, path2: "Zigote.UI.DevTools", path3: "Zigote.UI.DevTools.csproj")}" />"""
             );
+        }
+
         if (scriptCsproj is not null)
             csproj.AppendLine($"""        <ProjectReference Include="{scriptCsproj}" />""");
         csproj.AppendLine("    </ItemGroup>");
         // Subset the bundled text fonts at publish (Iosevka alone is ~10 MB unsubset); skips
         // gracefully when no subsetter is installed.
         csproj.AppendLine(
-            $"""    <Import Project="{Path.Combine(sdkRoot, "build", "Zigote.Fonts.targets")}" />"""
+            $"""    <Import Project="{Path.Combine(path1: sdkRoot, path2: "build", path3: "Zigote.Fonts.targets")}" />"""
         );
         if (rid.StartsWith("ios"))
             // libzigote.dylib flows as Content from Zigote.Core through EVERY referencing project;
             // the iOS SDK keeps each copy and the parallel install_name_tool runs then race on the
             // same output file. Collapse the duplicates before the tool runs (see the Gallery head).
+        {
             csproj.AppendLine(
                 """
                     <Target Name="DedupeNativeLibrariesToReidentify"
@@ -591,13 +629,18 @@ public static class GameExporter
                     </Target>
                 """
             );
+        }
+
         csproj.AppendLine("</Project>");
-        File.WriteAllText(Path.Combine(playerDir, "Game.csproj"), csproj.ToString());
+        File.WriteAllText(
+            path: Path.Combine(path1: playerDir, path2: "Game.csproj"),
+            contents: csproj.ToString()
+        );
         WriteMobilePlatformFiles(
-            playerDir,
-            rid,
-            name,
-            input.Project.Name
+            playerDir: playerDir,
+            rid: rid,
+            name: name,
+            projectName: input.Project.Name
         );
 
         var reg = new StringBuilder();
@@ -611,8 +654,8 @@ public static class GameExporter
         reg.AppendLine("{");
         reg.AppendLine("    public static void Register(ScriptRegistry r)");
         reg.AppendLine("    {");
-        var kept = 0;
-        var dropped = 0;
+        int kept = 0;
+        int dropped = 0;
         foreach (var meta in input.Scripts.All.OrderBy(m => m.FullName))
         {
             // Nested/generic component types can't be spelled via typeof(global::…) — none exist today.
@@ -620,8 +663,8 @@ public static class GameExporter
 
             // Keep the game's own components wholesale (its assembly is statically linked, and game code
             // may attach them at runtime by name); engine samples ship only if the scene references them.
-            var fromGameAssembly = scriptAsm is not null &&
-                                   meta.Type.Assembly.GetName().Name == scriptAsm;
+            bool fromGameAssembly = scriptAsm is not null &&
+                                    meta.Type.Assembly.GetName().Name == scriptAsm;
             if (!fromGameAssembly && sceneScriptClasses is not null &&
                 !sceneScriptClasses.Contains(meta.FullName))
             {
@@ -639,22 +682,25 @@ public static class GameExporter
 
         reg.AppendLine("    }");
         reg.AppendLine("}");
-        File.WriteAllText(Path.Combine(playerDir, "ScriptRegistration.g.cs"), reg.ToString());
+        File.WriteAllText(
+            path: Path.Combine(path1: playerDir, path2: "ScriptRegistration.g.cs"),
+            contents: reg.ToString()
+        );
 
         // A class-based Main, not top-level statements: the Android SDK compiles the app as a
         // Library under the hood (Java owns the process), where top-level statements are illegal.
         // On Android this Main is never called — MainApplication registers the game body instead.
         File.WriteAllText(
-            Path.Combine(playerDir, "Program.g.cs"),
-            """
-            static class Program
-            {
-                public static int Main()
-                {
-                    return Zigote.Player.PlayerMain.Run(GameScripts.Register);
-                }
-            }
-            """ + "\n"
+            path: Path.Combine(path1: playerDir, path2: "Program.g.cs"),
+            contents: """
+                      static class Program
+                      {
+                          public static int Main()
+                          {
+                              return Zigote.Player.PlayerMain.Run(GameScripts.Register);
+                          }
+                      }
+                      """ + "\n"
         );
     }
 
@@ -664,19 +710,25 @@ public static class GameExporter
         string staging, string rid, string exeName, string name, bool aot, IProgress<string> log)
     {
         // AOT artifacts carry an explicit suffix so a single pass can ship both flavors side by side.
-        var artifact = aot ? $"{exeName}-{rid}-aot" : $"{exeName}-{rid}";
-        var publishDir = Path.Combine(staging, "publish", aot ? $"{rid}-aot" : rid);
+        string artifact = aot ? $"{exeName}-{rid}-aot" : $"{exeName}-{rid}";
+        string publishDir = Path.Combine(
+            path1: staging,
+            path2: "publish",
+            path3: aot ? $"{rid}-aot" : rid
+        );
         // JIT bundles ship single-file on Windows/Linux: the ~230 managed assemblies fold into the
         // exe (memory-mapped at runtime, compressed on disk) leaving exe + native lib + Fonts +
         // Content. Native libs and content stay loose — the engine loads both by path. macOS stays
         // multi-file: the .app hides the file count and appended-bundle Mach-Os complicate signing.
-        var singleFile = !aot && !rid.StartsWith("osx") && !IsMobile(rid);
+        bool singleFile = !aot && !rid.StartsWith("osx") && !IsMobile(rid);
         // The iOS SDK hard-refuses `publish` for simulator architectures ("a device architecture
         // must be specified") — simulator apps are a `build` product. Same output shape: the .app
         // lands in the -o directory either way.
-        var verb = rid.StartsWith("iossimulator") ? "build" : "publish";
+        string verb = rid.StartsWith("iossimulator") ? "build" : "publish";
         var args =
-            new StringBuilder($"{verb} \"{Path.Combine(staging, "player", "Game.csproj")}\"")
+            new StringBuilder(
+                    $"{verb} \"{Path.Combine(path1: staging, path2: "player", path3: "Game.csproj")}\""
+                )
                 // Mobile heads are self-contained by construction (the platform SDK decides the
                 // runtime packaging), and passing --self-contained derails that pipeline.
                 .Append(IsMobile(rid) ? " -c Release" : " -c Release --self-contained true")
@@ -706,11 +758,11 @@ public static class GameExporter
                 .Append($" -o \"{publishDir}\"");
 
         log.Report($"[{artifact}] dotnet publish ({(aot ? "NativeAOT" : "self-contained JIT")}) …");
-        var exit = await RunAsync(
-            "dotnet",
-            args.ToString(),
-            staging,
-            log
+        int exit = await RunAsync(
+            exe: "dotnet",
+            args: args.ToString(),
+            workDir: staging,
+            log: log
         );
         if (exit != 0)
         {
@@ -718,16 +770,16 @@ public static class GameExporter
             return false;
         }
 
-        var outDir = Path.Combine(options.OutputDir, artifact);
-        if (Directory.Exists(outDir)) Directory.Delete(outDir, true);
+        string outDir = Path.Combine(path1: options.OutputDir, path2: artifact);
+        if (Directory.Exists(outDir)) Directory.Delete(path: outDir, recursive: true);
 
         if (IsMobile(rid))
         {
             // The platform SDK produced the installable artifact itself (a signed .app for iOS,
             // an .apk for Android). Copy the whole publish output — it holds that artifact plus
             // the symbols and manifests — and point the log at the package.
-            CopyTree(publishDir, outDir);
-            var package = Directory.EnumerateFileSystemEntries(outDir)
+            CopyTree(src: publishDir, dst: outDir);
+            string? package = Directory.EnumerateFileSystemEntries(outDir)
                 .FirstOrDefault(e => e.EndsWith(".apk") || e.EndsWith(".ipa") || e.EndsWith(".app")
                 );
             log.Report($"[{artifact}] → {package ?? outDir}");
@@ -736,35 +788,38 @@ public static class GameExporter
 
         if (rid.StartsWith("osx"))
         {
-            var app = Path.Combine(outDir, $"{exeName}.app");
+            string app = Path.Combine(path1: outDir, path2: $"{exeName}.app");
             PackageMacApp(
-                app,
-                publishDir,
-                Path.Combine(staging, "Content"),
-                name,
-                exeName
+                appDir: app,
+                publishDir: publishDir,
+                contentDir: Path.Combine(path1: staging, path2: "Content"),
+                name: name,
+                exeName: exeName
             );
-            await BundleHomebrewDylibs(app, exeName, log);
+            await BundleHomebrewDylibs(appDir: app, exeName: exeName, log: log);
             log.Report($"[{artifact}] codesigning (ad-hoc) …");
             await RunAsync(
-                "codesign",
-                $"--force --deep --sign - \"{app}\"",
-                outDir,
-                log
+                exe: "codesign",
+                args: $"--force --deep --sign - \"{app}\"",
+                workDir: outDir,
+                log: log
             );
             log.Report($"[{artifact}] → {app}");
         }
         else
         {
-            CopyTree(publishDir, outDir);
-            CopyTree(Path.Combine(staging, "Content"), Path.Combine(outDir, "Content"));
-            var zip = Path.Combine(options.OutputDir, $"{artifact}.zip");
+            CopyTree(src: publishDir, dst: outDir);
+            CopyTree(
+                src: Path.Combine(path1: staging, path2: "Content"),
+                dst: Path.Combine(path1: outDir, path2: "Content")
+            );
+            string zip = Path.Combine(path1: options.OutputDir, path2: $"{artifact}.zip");
             File.Delete(zip);
             ZipFile.CreateFromDirectory(
-                outDir,
-                zip,
-                CompressionLevel.Optimal,
-                true
+                sourceDirectoryName: outDir,
+                destinationArchiveFileName: zip,
+                compressionLevel: CompressionLevel.Optimal,
+                includeBaseDirectory: true
             );
             log.Report($"[{artifact}] → {zip}");
         }
@@ -782,51 +837,51 @@ public static class GameExporter
     private static async Task BundleHomebrewDylibs(string appDir, string exeName,
         IProgress<string> log)
     {
-        var macos = Path.Combine(appDir, "Contents", "MacOS");
+        string macos = Path.Combine(path1: appDir, path2: "Contents", path3: "MacOS");
         var queue = new Queue<string>();
-        queue.Enqueue(Path.Combine(macos, exeName));
+        queue.Enqueue(Path.Combine(path1: macos, path2: exeName));
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        var bundled = 0;
+        int bundled = 0;
 
         while (queue.Count > 0)
         {
-            var binary = queue.Dequeue();
-            foreach (var dep in await MachODependencies(binary))
+            string binary = queue.Dequeue();
+            foreach (string dep in await MachODependencies(binary))
             {
                 // Two shapes need rewriting: absolute Homebrew paths, and @rpath/ deps between the
                 // Homebrew dylibs themselves (nothing sets an rpath in the shipped app).
-                var isHomebrew = dep.StartsWith("/opt/homebrew/") || dep.StartsWith("/usr/local/");
-                var isRpath = dep.StartsWith("@rpath/");
+                bool isHomebrew = dep.StartsWith("/opt/homebrew/") || dep.StartsWith("/usr/local/");
+                bool isRpath = dep.StartsWith("@rpath/");
                 if (!isHomebrew && !isRpath) continue;
 
-                var leaf = Path.GetFileName(dep);
-                var local = Path.Combine(macos, leaf);
+                string leaf = Path.GetFileName(dep);
+                string local = Path.Combine(path1: macos, path2: leaf);
                 if (seen.Add(leaf) && !File.Exists(local))
                 {
-                    var src = isHomebrew ? dep : ResolveHomebrewLeaf(leaf);
+                    string? src = isHomebrew ? dep : ResolveHomebrewLeaf(leaf);
                     if (src is null)
                     {
                         log.Report($"  ! unresolvable dylib dependency (left as-is): {dep}");
                         continue;
                     }
 
-                    File.Copy(src, local, true);
+                    File.Copy(sourceFileName: src, destFileName: local, overwrite: true);
                     // The copied dylib advertises itself and its own deps by absolute path too.
                     await RunAsync(
-                        "install_name_tool",
-                        $"-id @executable_path/{leaf} \"{local}\"",
-                        macos,
-                        log
+                        exe: "install_name_tool",
+                        args: $"-id @executable_path/{leaf} \"{local}\"",
+                        workDir: macos,
+                        log: log
                     );
                     queue.Enqueue(local);
                     bundled++;
                 }
 
                 await RunAsync(
-                    "install_name_tool",
-                    $"-change \"{dep}\" @executable_path/{leaf} \"{binary}\"",
-                    macos,
-                    log
+                    exe: "install_name_tool",
+                    args: $"-change \"{dep}\" @executable_path/{leaf} \"{binary}\"",
+                    workDir: macos,
+                    log: log
                 );
             }
         }
@@ -847,18 +902,25 @@ public static class GameExporter
     private static async Task<List<string>> MachODependencies(string binary)
     {
         var deps = new List<string>();
-        var psi = new ProcessStartInfo("otool", $"-L \"{binary}\"") {
+        var psi = new ProcessStartInfo(fileName: "otool", arguments: $"-L \"{binary}\"") {
             RedirectStandardOutput = true,
         };
         using var proc = Process.Start(psi)!;
         while (await proc.StandardOutput.ReadLineAsync() is { } line)
         {
-            var trimmed = line.Trim();
+            string trimmed = line.Trim();
             // Absolute paths AND @rpath/ entries — Homebrew dylibs reference each other via @rpath.
             // (A dylib's own install-name ID also matches; downstream handling is a no-op for it.)
             if ((trimmed.StartsWith('/') || trimmed.StartsWith("@rpath/")) &&
                 trimmed.Contains(" (compatibility"))
-                deps.Add(trimmed[..trimmed.IndexOf(" (compatibility", StringComparison.Ordinal)]);
+            {
+                deps.Add(
+                    trimmed[..trimmed.IndexOf(
+                        value: " (compatibility",
+                        comparisonType: StringComparison.Ordinal
+                    )]
+                );
+            }
         }
 
         await proc.WaitForExitAsync();
@@ -868,34 +930,34 @@ public static class GameExporter
     private static void PackageMacApp(string appDir, string publishDir, string contentDir,
         string name, string exeName)
     {
-        var macos = Path.Combine(appDir, "Contents", "MacOS");
-        var resources = Path.Combine(appDir, "Contents", "Resources");
-        CopyTree(publishDir, macos);
-        CopyTree(contentDir, Path.Combine(resources, "Content"));
+        string macos = Path.Combine(path1: appDir, path2: "Contents", path3: "MacOS");
+        string resources = Path.Combine(path1: appDir, path2: "Contents", path3: "Resources");
+        CopyTree(src: publishDir, dst: macos);
+        CopyTree(src: contentDir, dst: Path.Combine(path1: resources, path2: "Content"));
 
         // NativeAOT publish drops a dSYM debug bundle next to the binary — dev-only, ~20 MB.
-        foreach (var dsym in Directory.GetDirectories(macos, "*.dSYM"))
-            Directory.Delete(dsym, true);
+        foreach (string dsym in Directory.GetDirectories(path: macos, searchPattern: "*.dSYM"))
+            Directory.Delete(path: dsym, recursive: true);
 
         File.WriteAllText(
-            Path.Combine(appDir, "Contents", "Info.plist"),
-            $"""
-             <?xml version="1.0" encoding="UTF-8"?>
-             <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-             <plist version="1.0">
-             <dict>
-                 <key>CFBundleName</key><string>{name}</string>
-                 <key>CFBundleDisplayName</key><string>{name}</string>
-                 <key>CFBundleExecutable</key><string>{exeName}</string>
-                 <key>CFBundleIdentifier</key><string>com.zigote.{exeName.ToLowerInvariant()}</string>
-                 <key>CFBundlePackageType</key><string>APPL</string>
-                 <key>CFBundleShortVersionString</key><string>1.0</string>
-                 <key>CFBundleVersion</key><string>1</string>
-                 <key>NSHighResolutionCapable</key><true/>
-                 <key>LSMinimumSystemVersion</key><string>12.0</string>
-             </dict>
-             </plist>
-             """
+            path: Path.Combine(path1: appDir, path2: "Contents", path3: "Info.plist"),
+            contents: $"""
+                       <?xml version="1.0" encoding="UTF-8"?>
+                       <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+                       <plist version="1.0">
+                       <dict>
+                           <key>CFBundleName</key><string>{name}</string>
+                           <key>CFBundleDisplayName</key><string>{name}</string>
+                           <key>CFBundleExecutable</key><string>{exeName}</string>
+                           <key>CFBundleIdentifier</key><string>com.zigote.{exeName.ToLowerInvariant()}</string>
+                           <key>CFBundlePackageType</key><string>APPL</string>
+                           <key>CFBundleShortVersionString</key><string>1.0</string>
+                           <key>CFBundleVersion</key><string>1</string>
+                           <key>NSHighResolutionCapable</key><true/>
+                           <key>LSMinimumSystemVersion</key><string>12.0</string>
+                       </dict>
+                       </plist>
+                       """
         );
     }
 
@@ -908,12 +970,17 @@ public static class GameExporter
     private static string? FindSdkRoot()
     {
         if (Environment.GetEnvironmentVariable("ZIGOTE_SDK") is { Length: > 0 } env &&
-            File.Exists(Path.Combine(env, "Zigote.sln")))
+            File.Exists(Path.Combine(path1: env, path2: "Zigote.sln")))
             return Path.GetFullPath(env);
 
-        for (var dir = AppContext.BaseDirectory; dir is not null; dir = Path.GetDirectoryName(dir))
-            if (File.Exists(Path.Combine(dir, "Zigote.sln")))
+        for (string? dir = AppContext.BaseDirectory;
+             dir is not null;
+             dir = Path.GetDirectoryName(dir))
+        {
+            if (File.Exists(Path.Combine(path1: dir, path2: "Zigote.sln")))
                 return dir;
+        }
+
         return null;
     }
 
@@ -949,117 +1016,119 @@ public static class GameExporter
     private static void WriteMobilePlatformFiles(string playerDir, string rid, string name,
         string? projectName)
     {
-        File.Delete(Path.Combine(playerDir, "MainApplication.g.cs"));
+        File.Delete(Path.Combine(path1: playerDir, path2: "MainApplication.g.cs"));
 
         if (rid.StartsWith("ios"))
             // Same plist as the Gallery head: modern launch screen (without ANY launch-screen key
             // UIKit letterboxes the app at legacy resolutions), all orientations, indirect input.
+        {
             File.WriteAllText(
-                Path.Combine(playerDir, "Info.plist"),
-                """
-                <?xml version="1.0" encoding="UTF-8"?>
-                <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-                <plist version="1.0">
-                <dict>
-                    <key>UILaunchScreen</key>
-                    <dict/>
-                    <key>UISupportedInterfaceOrientations</key>
-                    <array>
-                        <string>UIInterfaceOrientationPortrait</string>
-                        <string>UIInterfaceOrientationLandscapeLeft</string>
-                        <string>UIInterfaceOrientationLandscapeRight</string>
-                    </array>
-                    <key>UIRequiresFullScreen</key>
-                    <false/>
-                    <key>UIApplicationSupportsIndirectInputEvents</key>
-                    <true/>
-                </dict>
-                </plist>
-                """
+                path: Path.Combine(path1: playerDir, path2: "Info.plist"),
+                contents: """
+                          <?xml version="1.0" encoding="UTF-8"?>
+                          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+                          <plist version="1.0">
+                          <dict>
+                              <key>UILaunchScreen</key>
+                              <dict/>
+                              <key>UISupportedInterfaceOrientations</key>
+                              <array>
+                                  <string>UIInterfaceOrientationPortrait</string>
+                                  <string>UIInterfaceOrientationLandscapeLeft</string>
+                                  <string>UIInterfaceOrientationLandscapeRight</string>
+                              </array>
+                              <key>UIRequiresFullScreen</key>
+                              <false/>
+                              <key>UIApplicationSupportsIndirectInputEvents</key>
+                              <true/>
+                          </dict>
+                          </plist>
+                          """
             );
+        }
 
         if (!rid.StartsWith("android")) return;
 
-        var label = System.Security.SecurityElement.Escape(name);
+        string label = SecurityElement.Escape(name);
         File.WriteAllText(
-            Path.Combine(playerDir, "AndroidManifest.xml"),
-            $"""
-             <?xml version="1.0" encoding="utf-8"?>
-             <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="{BundleId(projectName)}">
-                 <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
-                 <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
-                 <application android:label="{label}" android:hardwareAccelerated="true">
-                     <!-- SDL's activity (pure Java) owns the window and surface; the managed runtime
-                          is already up by then — MainApplication registered the game body. -->
-                     <activity android:name="com.zigote.app.ZigoteActivity"
-                               android:label="{label}"
-                               android:exported="true"
-                               android:launchMode="singleInstance"
-                               android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density">
-                         <intent-filter>
-                             <action android:name="android.intent.action.MAIN" />
-                             <category android:name="android.intent.category.LAUNCHER" />
-                         </intent-filter>
-                     </activity>
-                 </application>
-             </manifest>
-             """
+            path: Path.Combine(path1: playerDir, path2: "AndroidManifest.xml"),
+            contents: $"""
+                       <?xml version="1.0" encoding="utf-8"?>
+                       <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="{BundleId(projectName)}">
+                           <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
+                           <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+                           <application android:label="{label}" android:hardwareAccelerated="true">
+                               <!-- SDL's activity (pure Java) owns the window and surface; the managed runtime
+                                    is already up by then — MainApplication registered the game body. -->
+                               <activity android:name="com.zigote.app.ZigoteActivity"
+                                         android:label="{label}"
+                                         android:exported="true"
+                                         android:launchMode="singleInstance"
+                                         android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density">
+                                   <intent-filter>
+                                       <action android:name="android.intent.action.MAIN" />
+                                       <category android:name="android.intent.category.LAUNCHER" />
+                                   </intent-filter>
+                               </activity>
+                           </application>
+                       </manifest>
+                       """
         );
 
         File.WriteAllText(
-            Path.Combine(playerDir, "MainApplication.g.cs"),
-            """
-            // Generated by Zigote game export — Android head. Java owns the process (SDLActivity
-            // starts the SDL thread and calls zigote_android_main), so the game body is registered
-            // here, in the one managed place guaranteed to run before the launcher activity.
-            using Zigote.Core.Native;
+            path: Path.Combine(path1: playerDir, path2: "MainApplication.g.cs"),
+            contents: """
+                      // Generated by Zigote game export — Android head. Java owns the process (SDLActivity
+                      // starts the SDL thread and calls zigote_android_main), so the game body is registered
+                      // here, in the one managed place guaranteed to run before the launcher activity.
+                      using Zigote.Core.Native;
 
-            [global::Android.App.Application]
-            public class MainApplication : global::Android.App.Application
-            {
-                public MainApplication(IntPtr handle, global::Android.Runtime.JniHandleOwnership ownership)
-                    : base(handle, ownership)
-                {
-                }
+                      [global::Android.App.Application]
+                      public class MainApplication : global::Android.App.Application
+                      {
+                          public MainApplication(IntPtr handle, global::Android.Runtime.JniHandleOwnership ownership)
+                              : base(handle, ownership)
+                          {
+                          }
 
-                public override void OnCreate()
-                {
-                    base.OnCreate();
-                    // The engine opens fonts and content natively by plain file path; an APK asset
-                    // has no path, so both trees are copied out at launch. Always overwritten:
-                    // an app update keeps the files dir, and stale content is worse than
-                    // re-copying a few MB at startup.
-                    foreach (var root in new[] { "Fonts", "Content" })
-                        try
-                        {
-                            Stage(root);
-                        }
-                        catch (Exception ex)
-                        {
-                            global::Android.Util.Log.Error("zigote", $"asset staging failed ({root}): {ex}");
-                        }
+                          public override void OnCreate()
+                          {
+                              base.OnCreate();
+                              // The engine opens fonts and content natively by plain file path; an APK asset
+                              // has no path, so both trees are copied out at launch. Always overwritten:
+                              // an app update keeps the files dir, and stale content is worse than
+                              // re-copying a few MB at startup.
+                              foreach (var root in new[] { "Fonts", "Content" })
+                                  try
+                                  {
+                                      Stage(root);
+                                  }
+                                  catch (Exception ex)
+                                  {
+                                      global::Android.Util.Log.Error("zigote", $"asset staging failed ({root}): {ex}");
+                                  }
 
-                    MobileHost.SetAndroidMain(() => Zigote.Player.PlayerMain.Run(GameScripts.Register));
-                }
+                              MobileHost.SetAndroidMain(() => Zigote.Player.PlayerMain.Run(GameScripts.Register));
+                          }
 
-                private void Stage(string rel)
-                {
-                    // AssetManager has no is-directory query: a non-empty List means directory.
-                    var children = Assets?.List(rel) ?? [];
-                    if (children.Length == 0)
-                    {
-                        var target = Path.Combine(AppContext.BaseDirectory, rel);
-                        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                        using var src = Assets!.Open(rel);
-                        using var dst = File.Create(target);
-                        src.CopyTo(dst);
-                        return;
-                    }
+                          private void Stage(string rel)
+                          {
+                              // AssetManager has no is-directory query: a non-empty List means directory.
+                              var children = Assets?.List(rel) ?? [];
+                              if (children.Length == 0)
+                              {
+                                  var target = Path.Combine(AppContext.BaseDirectory, rel);
+                                  Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                                  using var src = Assets!.Open(rel);
+                                  using var dst = File.Create(target);
+                                  src.CopyTo(dst);
+                                  return;
+                              }
 
-                    foreach (var child in children) Stage($"{rel}/{child}");
-                }
-            }
-            """
+                              foreach (var child in children) Stage($"{rel}/{child}");
+                          }
+                      }
+                      """
         );
     }
 
@@ -1069,32 +1138,42 @@ public static class GameExporter
     /// </summary>
     private static string BundleId(string? projectName)
     {
-        var slug = new string(
+        string slug = new string(
             (projectName ?? "game").ToLowerInvariant()
             .Select(ch => char.IsLetterOrDigit(ch) ? ch : '.')
             .ToArray()
         ).Trim('.');
-        while (slug.Contains("..")) slug = slug.Replace("..", ".");
+        while (slug.Contains("..")) slug = slug.Replace(oldValue: "..", newValue: ".");
         return $"com.zigote.{(slug.Length == 0 ? "game" : slug)}";
     }
 
     private static string SanitizeExeName(string name)
     {
         var sb = new StringBuilder();
-        foreach (var c in name)
+        foreach (char c in name)
+        {
             if (char.IsLetterOrDigit(c))
                 sb.Append(c);
+        }
+
         return sb.Length > 0 ? sb.ToString() : "ZigoteGame";
     }
 
     private static void CopyTree(string src, string dst)
     {
         Directory.CreateDirectory(dst);
-        foreach (var file in Directory.EnumerateFiles(src, "*", SearchOption.AllDirectories))
+        foreach (string file in Directory.EnumerateFiles(
+                     path: src,
+                     searchPattern: "*",
+                     searchOption: SearchOption.AllDirectories
+                 ))
         {
-            var target = Path.Combine(dst, Path.GetRelativePath(src, file));
+            string target = Path.Combine(
+                path1: dst,
+                path2: Path.GetRelativePath(relativeTo: src, path: file)
+            );
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-            File.Copy(file, target);
+            File.Copy(sourceFileName: file, destFileName: target);
         }
     }
 
@@ -1102,7 +1181,7 @@ public static class GameExporter
         IProgress<string> log)
     {
         using var proc = new Process();
-        proc.StartInfo = new ProcessStartInfo(exe, args) {
+        proc.StartInfo = new ProcessStartInfo(fileName: exe, arguments: args) {
             WorkingDirectory = workDir,
             RedirectStandardOutput = true,
             RedirectStandardError = true,

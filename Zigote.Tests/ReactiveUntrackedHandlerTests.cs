@@ -17,7 +17,7 @@ public class ReactiveUntrackedHandlerTests
     {
         var a = new Signal<int>(1);
         var other = new Signal<int>(100);
-        var runs = 0;
+        int runs = 0;
         using var doubled = Computed.From(() =>
             {
                 runs++;
@@ -28,14 +28,14 @@ public class ReactiveUntrackedHandlerTests
         using var live = doubled.Observe(() => { });
 
         a.Value = 2;
-        Assert.Equal(2, runs);
+        Assert.Equal(expected: 2, actual: runs);
 
         other.Value = 101; // must not recompute doubled — that would be a phantom dependency
-        Assert.Equal(2, runs);
+        Assert.Equal(expected: 2, actual: runs);
 
         a.Value = 3; // the real dependency still reacts
-        Assert.Equal(3, runs);
-        Assert.Equal(6, doubled.Value);
+        Assert.Equal(expected: 3, actual: runs);
+        Assert.Equal(expected: 6, actual: doubled.Value);
     }
 
     [Fact]
@@ -46,7 +46,7 @@ public class ReactiveUntrackedHandlerTests
         var other = new Signal<int>(0);
         target.Changed += _ => { _ = other.Value; };
 
-        var runs = 0;
+        int runs = 0;
         using var eff = new Effect(() =>
             {
                 runs++;
@@ -54,13 +54,13 @@ public class ReactiveUntrackedHandlerTests
                     trigger.Value; // the write fires Changed inside the effect's tracked body
             }
         );
-        Assert.Equal(1, runs);
+        Assert.Equal(expected: 1, actual: runs);
 
         trigger.Value = 1;
-        Assert.Equal(2, runs);
+        Assert.Equal(expected: 2, actual: runs);
 
         other.Value = 5; // the handler's read must not have subscribed the effect
-        Assert.Equal(2, runs);
+        Assert.Equal(expected: 2, actual: runs);
     }
 
     [Fact]
@@ -68,7 +68,7 @@ public class ReactiveUntrackedHandlerTests
     {
         var s = new Signal<int>(0);
         var other = new Signal<int>(0);
-        var fires = 0;
+        int fires = 0;
         using var sub = s.Observe(() =>
             {
                 fires++;
@@ -77,12 +77,12 @@ public class ReactiveUntrackedHandlerTests
         );
 
         s.Value = 1;
-        Assert.Equal(1, fires);
+        Assert.Equal(expected: 1, actual: fires);
 
         other.Value = 7; // the callback's read must not have become a dependency of the observer
-        Assert.Equal(1, fires);
+        Assert.Equal(expected: 1, actual: fires);
 
         s.Value = 2;
-        Assert.Equal(2, fires);
+        Assert.Equal(expected: 2, actual: fires);
     }
 }

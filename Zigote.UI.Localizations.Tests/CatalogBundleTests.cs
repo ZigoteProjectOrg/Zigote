@@ -11,49 +11,49 @@ public class LocalizationCatalogTests
     }
 
     [Fact]
-    public void Translate_with_placeholder()
-    {
-        Assert.Equal("Hello, Alex!", En().Translate("greeting", ("name", "Alex")));
-    }
+    public void Translate_with_placeholder() => Assert.Equal(
+        expected: "Hello, Alex!",
+        actual: En().Translate(key: "greeting", ("name", "Alex"))
+    );
 
     [Theory]
     [InlineData(1, "1 item")]
     [InlineData(4, "4 items")]
-    public void Translate_with_plural(int count, string expected)
-    {
-        Assert.Equal(expected, En().Translate("items", ("count", count)));
-    }
+    public void Translate_with_plural(int count, string expected) => Assert.Equal(
+        expected: expected,
+        actual: En().Translate(key: "items", ("count", count))
+    );
 
     [Fact]
-    public void Missing_key_returns_null()
-    {
-        Assert.Null(En().Translate("nope"));
-    }
+    public void Missing_key_returns_null() => Assert.Null(En().Translate("nope"));
 
     [Fact]
     public void Indexer_set_replaces_and_invalidates_compiled_form()
     {
         var c = En();
-        Assert.Equal("Hello, Alex!", c.Translate("greeting", ("name", "Alex")));
+        Assert.Equal(
+            expected: "Hello, Alex!",
+            actual: c.Translate(key: "greeting", ("name", "Alex"))
+        );
         c["greeting"] = "Hi {name}";
-        Assert.Equal("Hi Alex", c.Translate("greeting", ("name", "Alex")));
+        Assert.Equal(expected: "Hi Alex", actual: c.Translate(key: "greeting", ("name", "Alex")));
     }
 
     [Fact]
     public void Malformed_template_falls_back_to_raw_text()
     {
         var c = new LocalizationCatalog(Locale.En) { ["bad"] = "{oops" };
-        Assert.Equal("{oops", c.Translate("bad"));
+        Assert.Equal(expected: "{oops", actual: c.Translate("bad"));
     }
 
     [Fact]
     public void Enumerates_and_counts()
     {
         var c = En();
-        Assert.Equal(2, c.Count);
-        Assert.Contains("greeting", c.Keys);
+        Assert.Equal(expected: 2, actual: c.Count);
+        Assert.Contains(expected: "greeting", collection: c.Keys);
 #pragma warning disable CA1829 // deliberately exercises IEnumerable enumeration, not the property
-        Assert.Equal(2, c.Count());
+        Assert.Equal(expected: 2, actual: c.Count());
 #pragma warning restore CA1829
     }
 }
@@ -71,41 +71,41 @@ public class LocalizationBundleTests
     }
 
     [Fact]
-    public void First_catalog_becomes_default_fallback()
-    {
-        Assert.Equal(Locale.En, Build().FallbackLocale);
-    }
+    public void First_catalog_becomes_default_fallback() => Assert.Equal(
+        expected: Locale.En,
+        actual: Build().FallbackLocale
+    );
 
     [Fact]
-    public void Translate_uses_requested_locale()
-    {
-        Assert.Equal("Hola", Build().Translate(Locale.Es, "greeting"));
-    }
+    public void Translate_uses_requested_locale() => Assert.Equal(
+        expected: "Hola",
+        actual: Build().Translate(locale: Locale.Es, key: "greeting")
+    );
 
     [Fact]
-    public void Missing_key_falls_back_to_fallback_locale()
-    {
-        Assert.Equal("English only", Build().Translate(Locale.Es, "only_en"));
-    }
+    public void Missing_key_falls_back_to_fallback_locale() => Assert.Equal(
+        expected: "English only",
+        actual: Build().Translate(locale: Locale.Es, key: "only_en")
+    );
 
     [Fact]
-    public void Same_language_region_variant_resolves()
-    {
-        Assert.Equal("Hola", Build().Translate(Locale.Parse("es-MX"), "greeting"));
-    }
+    public void Same_language_region_variant_resolves() => Assert.Equal(
+        expected: "Hola",
+        actual: Build().Translate(locale: Locale.Parse("es-MX"), key: "greeting")
+    );
 
     [Fact]
-    public void Total_miss_returns_key_by_default()
-    {
-        Assert.Equal("absent", Build().Translate(Locale.Es, "absent"));
-    }
+    public void Total_miss_returns_key_by_default() => Assert.Equal(
+        expected: "absent",
+        actual: Build().Translate(locale: Locale.Es, key: "absent")
+    );
 
     [Fact]
     public void Total_miss_empty_policy()
     {
         var b = Build();
         b.MissingPolicy = MissingTranslationPolicy.Empty;
-        Assert.Equal("", b.Translate(Locale.Es, "absent"));
+        Assert.Equal(expected: "", actual: b.Translate(locale: Locale.Es, key: "absent"));
     }
 
     [Fact]
@@ -113,7 +113,7 @@ public class LocalizationBundleTests
     {
         var b = Build();
         b.MissingPolicy = MissingTranslationPolicy.Throw;
-        Assert.Throws<KeyNotFoundException>(() => b.Translate(Locale.Es, "absent"));
+        Assert.Throws<KeyNotFoundException>(() => b.Translate(locale: Locale.Es, key: "absent"));
     }
 
     [Fact]
@@ -121,7 +121,7 @@ public class LocalizationBundleTests
     {
         var b = Build();
         b.OnMissing = (key, _) => $"<{key}>";
-        Assert.Equal("<absent>", b.Translate(Locale.Es, "absent"));
+        Assert.Equal(expected: "<absent>", actual: b.Translate(locale: Locale.Es, key: "absent"));
     }
 
     [Fact]
@@ -137,7 +137,7 @@ public class LocalizationBundleTests
     public void StringLocalizations_payload_translates_and_contains()
     {
         var strings = Build().For(Locale.Es);
-        Assert.Equal("Hola", strings["greeting"]);
+        Assert.Equal(expected: "Hola", actual: strings["greeting"]);
         Assert.True(strings.Contains("only_en")); // via fallback
         Assert.False(strings.Contains("absent"));
     }

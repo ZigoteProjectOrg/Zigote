@@ -36,21 +36,24 @@ public class VfxScriptingTests
         try
         {
             Assert.True(ScriptVfx.IsAvailable);
-            var h = ScriptVfx.Create(new VfxEmitterAsset(), new Vec3(1f, 2f, 3f));
+            var h = ScriptVfx.Create(
+                asset: new VfxEmitterAsset(),
+                position: new Vec3(x: 1f, y: 2f, z: 3f)
+            );
             Assert.True(h.IsValid);
-            Assert.Equal(1, fake.Created);
+            Assert.Equal(expected: 1, actual: fake.Created);
 
-            ScriptVfx.SetPosition(h, new Vec3(4f, 5f, 6f));
-            Assert.Equal(new Vec3(4f, 5f, 6f), fake.LastPos);
+            ScriptVfx.SetPosition(handle: h, position: new Vec3(x: 4f, y: 5f, z: 6f));
+            Assert.Equal(expected: new Vec3(x: 4f, y: 5f, z: 6f), actual: fake.LastPos);
 
-            ScriptVfx.SetEmitting(h, false);
+            ScriptVfx.SetEmitting(handle: h, emitting: false);
             Assert.False(fake.LastEmitting);
 
-            ScriptVfx.Burst(h, 25);
-            Assert.Equal(25, fake.Bursts);
+            ScriptVfx.Burst(handle: h, count: 25);
+            Assert.Equal(expected: 25, actual: fake.Bursts);
 
             ScriptVfx.Destroy(h);
-            Assert.Equal(1, fake.Destroyed);
+            Assert.Equal(expected: 1, actual: fake.Destroyed);
         }
         finally
         {
@@ -63,11 +66,11 @@ public class VfxScriptingTests
     {
         ScriptVfx.Backend = null;
         Assert.False(ScriptVfx.IsAvailable);
-        Assert.False(ScriptVfx.Create(new VfxEmitterAsset(), Vec3.Zero).IsValid);
+        Assert.False(ScriptVfx.Create(asset: new VfxEmitterAsset(), position: Vec3.Zero).IsValid);
         // None of these should throw.
-        ScriptVfx.SetPosition(VfxHandle.None, Vec3.Zero);
-        ScriptVfx.SetEmitting(VfxHandle.None, true);
-        ScriptVfx.Burst(VfxHandle.None, 10);
+        ScriptVfx.SetPosition(handle: VfxHandle.None, position: Vec3.Zero);
+        ScriptVfx.SetEmitting(handle: VfxHandle.None, emitting: true);
+        ScriptVfx.Burst(handle: VfxHandle.None, count: 10);
         ScriptVfx.Destroy(VfxHandle.None);
     }
 
@@ -75,26 +78,32 @@ public class VfxScriptingTests
     public void EditorBackend_CreatesAndSimulates()
     {
         var backend = new RuntimeVfxBackend();
-        var h = backend.Create(LoopingPoint(40f), new Vec3(2f, 0f, 0f));
+        var h = backend.Create(asset: LoopingPoint(40f), position: new Vec3(x: 2f, y: 0f, z: 0f));
         Assert.True(h.IsValid);
         Assert.Single(backend.Emitters);
 
-        for (var i = 0; i < 60; i++) backend.Step(1f / 60f);
+        for (int i = 0; i < 60; i++) backend.Step(1f / 60f);
         Assert.True(backend.Emitters[h.Id].Pool.Count > 0);
-        Assert.Equal(new Vec3(2f, 0f, 0f), backend.Emitters[h.Id].Position);
+        Assert.Equal(
+            expected: new Vec3(x: 2f, y: 0f, z: 0f),
+            actual: backend.Emitters[h.Id].Position
+        );
     }
 
     [Fact]
     public void EditorBackend_BurstAndPositionAndDestroy()
     {
         var backend = new RuntimeVfxBackend();
-        var h = backend.Create(LoopingPoint(0f), Vec3.Zero); // no continuous spawn
+        var h = backend.Create(asset: LoopingPoint(0f), position: Vec3.Zero); // no continuous spawn
 
-        backend.Burst(h, 30);
-        Assert.Equal(30, backend.Emitters[h.Id].Pool.Count);
+        backend.Burst(handle: h, count: 30);
+        Assert.Equal(expected: 30, actual: backend.Emitters[h.Id].Pool.Count);
 
-        backend.SetPosition(h, new Vec3(5f, 1f, 0f));
-        Assert.Equal(new Vec3(5f, 1f, 0f), backend.Emitters[h.Id].Position);
+        backend.SetPosition(handle: h, position: new Vec3(x: 5f, y: 1f, z: 0f));
+        Assert.Equal(
+            expected: new Vec3(x: 5f, y: 1f, z: 0f),
+            actual: backend.Emitters[h.Id].Position
+        );
 
         backend.Destroy(h);
         Assert.Empty(backend.Emitters);
@@ -104,13 +113,13 @@ public class VfxScriptingTests
     public void EditorBackend_ReapsFinishedFireAndForget()
     {
         var backend = new RuntimeVfxBackend();
-        var asset = LoopingPoint(60f, 0.2f);
+        var asset = LoopingPoint(rate: 60f, lifetime: 0.2f);
         asset.Looping = false;
         asset.Duration = 0.15f;
-        backend.Create(asset, Vec3.Zero);
+        backend.Create(asset: asset, position: Vec3.Zero);
         Assert.Single(backend.Emitters);
 
-        for (var i = 0; i < 120; i++) backend.Step(1f / 60f); // 2s — past duration + lifetime
+        for (int i = 0; i < 120; i++) backend.Step(1f / 60f); // 2s — past duration + lifetime
         Assert.Empty(backend.Emitters); // auto-reaped once finished + emptied
     }
 
@@ -129,24 +138,12 @@ public class VfxScriptingTests
             return new VfxHandle((uint)Created);
         }
 
-        public void SetPosition(VfxHandle handle, Vec3 position)
-        {
-            LastPos = position;
-        }
+        public void SetPosition(VfxHandle handle, Vec3 position) => LastPos = position;
 
-        public void SetEmitting(VfxHandle handle, bool emitting)
-        {
-            LastEmitting = emitting;
-        }
+        public void SetEmitting(VfxHandle handle, bool emitting) => LastEmitting = emitting;
 
-        public void Burst(VfxHandle handle, int count)
-        {
-            Bursts += count;
-        }
+        public void Burst(VfxHandle handle, int count) => Bursts += count;
 
-        public void Destroy(VfxHandle handle)
-        {
-            Destroyed++;
-        }
+        public void Destroy(VfxHandle handle) => Destroyed++;
     }
 }

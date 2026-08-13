@@ -38,7 +38,7 @@ public sealed class FloatingActionButton : ComposedWidget
     protected override Widget Build(BuildContext context)
     {
         var theme = ThemeProvider.Of(context);
-        var d = Mini ? 40f : 56f;
+        float d = Mini ? 40f : 56f;
 
         if (_child is Icon ic && ic.Color is null)
             ic.Color = ForegroundColor ?? theme.OnPrimary;
@@ -47,7 +47,7 @@ public sealed class FloatingActionButton : ComposedWidget
             Fill = BackgroundColor ?? theme.Primary,
             Radius = d / 2f,
             Elevation = Elevation.Z2,
-            Child = new SizedBox(d, d, new Center(_child)),
+            Child = new SizedBox(width: d, height: d, child: new Center(_child)),
         };
 
         Widget result = new Pressable {
@@ -58,7 +58,7 @@ public sealed class FloatingActionButton : ComposedWidget
             SemanticsLabel = Tooltip,
         };
 
-        if (Tooltip is { } t) result = new Tooltip(t, result);
+        if (Tooltip is { } t) result = new Tooltip(message: t, child: result);
         return result;
     }
 }

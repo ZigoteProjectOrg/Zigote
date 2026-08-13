@@ -11,18 +11,24 @@ using Zigote.Core.State;
 ///     <para>
 ///         Both sides do identical work: take an event, build a new state record, write it to a
 ///         <see cref="Signal{T}" /> through <see cref="Reactive.Sync" />. The only difference is who
-///         runs the handler and when. The baseline is <see cref="Channel{T}" /> rather than a package —
+///         runs the handler and when. The baseline is <see cref="Channel{T}" /> rather than a package
+///         —
 ///         it is the in-box shape of "producer writes, a reader loop consumes", which is what a
 ///         stream-based pump is once the Rx vocabulary is stripped off, and a baseline that needed a
 ///         dependency would be measuring that dependency.
 ///     </para>
 ///     <para>
-///         <b>Read the rows as "event accepted → state actually readable".</b> The channel rows include
+///         <b>Read the rows as "event accepted → state actually readable".</b> The channel rows
+///         include
 ///         a wait because that is where the work finishes; the Zigote rows include no synchronisation
-///         because there is nothing to wait for — by the time <c>Add</c> returns, the state is written.
+///         because there is nothing to wait for — by the time <c>Add</c> returns, the state is
+///         written.
 ///         That asymmetry is the measurement, not a thumb on the scale.
 ///     </para>
-///     <para>Run: <c>dotnet run -c Release --project Zigote.Bloc.Benchmark -- --filter *DispatchComparison*</c></para>
+///     <para>
+///         Run:
+///         <c>dotnet run -c Release --project Zigote.Bloc.Benchmark -- --filter *DispatchComparison*</c>
+///     </para>
 /// </summary>
 [MemoryDiagnoser]
 [Config(typeof(BlocComparisonConfig))]
@@ -52,7 +58,7 @@ public class DispatchComparison
     [Benchmark(Baseline = true, OperationsPerInvoke = Burst)]
     public int ZigoteBurst()
     {
-        for (var i = 0; i < Burst; i++) _zigote.Add(Bump.One);
+        for (int i = 0; i < Burst; i++) _zigote.Add(Bump.One);
         return _zigote.Current.Value; // already true — Add ran the handler
     }
 
@@ -61,7 +67,7 @@ public class DispatchComparison
     public int ChannelBurst()
     {
         _channel.Expect(Burst);
-        for (var i = 0; i < Burst; i++) _channel.Add(Bump.One);
+        for (int i = 0; i < Burst; i++) _channel.Add(Bump.One);
         if (!_channel.AwaitExpected(Budget)) throw new TimeoutException("channel pump stalled");
         return _channel.Current.Value;
     }
@@ -95,8 +101,9 @@ public class DispatchComparison
 ///     under contention only one caller wins the pump and the rest enqueue and leave, so a benchmark
 ///     that stopped timing at the last <c>Add</c> would be timing the queue, not the handling.
 /// </summary>
-public sealed class DrainCounter() : SyncBloc<CounterEvent, CounterState>(new CounterState(0, false)),
-    IDisposable
+public sealed class DrainCounter()
+    : SyncBloc<CounterEvent, CounterState>(new CounterState(Value: 0, Busy: false)),
+        IDisposable
 {
     private readonly ManualResetEventSlim _reached = new();
     private int _handled;
@@ -106,13 +113,10 @@ public sealed class DrainCounter() : SyncBloc<CounterEvent, CounterState>(new Co
     public void Expect(int count)
     {
         _reached.Reset();
-        Volatile.Write(ref _target, Volatile.Read(ref _handled) + count);
+        Volatile.Write(location: ref _target, value: Volatile.Read(ref _handled) + count);
     }
 
-    public bool AwaitExpected(TimeSpan budget)
-    {
-        return _reached.Wait(budget);
-    }
+    public bool AwaitExpected(TimeSpan budget) => _reached.Wait(budget);
 
     protected override void OnEvent(CounterEvent @event)
     {
@@ -120,17 +124,15 @@ public sealed class DrainCounter() : SyncBloc<CounterEvent, CounterState>(new Co
         if (Interlocked.Increment(ref _handled) >= Volatile.Read(ref _target)) _reached.Set();
     }
 
-    protected override void OnDispose()
-    {
-        _reached.Dispose();
-    }
+    protected override void OnDispose() => _reached.Dispose();
 }
 
 /// <summary>
 ///     The baseline pump: an unbounded channel and one reader loop. Same handler body, same signal
 ///     write — the event just reaches it through a scheduler instead of a call.
 ///     <para>
-///         <c>AllowSynchronousContinuations</c> stays off deliberately. Turning it on lets the writer's
+///         <c>AllowSynchronousContinuations</c> stays off deliberately. Turning it on lets the
+///         writer's
 ///         thread run the reader's continuation, which is a way of half-becoming the inline dispatch
 ///         this is the baseline for.
 ///     </para>
@@ -138,19 +140,19 @@ public sealed class DrainCounter() : SyncBloc<CounterEvent, CounterState>(new Co
 public sealed class ChannelCounter : IDisposable
 {
     private readonly Channel<CounterEvent> _events = Channel.CreateUnbounded<CounterEvent>(
-        new UnboundedChannelOptions { SingleReader = true, AllowSynchronousContinuations = false }
+        new UnboundedChannelOptions {
+            SingleReader = true,
+            AllowSynchronousContinuations = false,
+        }
     );
 
     private readonly Task _pump;
     private readonly ManualResetEventSlim _reached = new();
-    private readonly Signal<CounterState> _state = new(new CounterState(0, false));
+    private readonly Signal<CounterState> _state = new(new CounterState(Value: 0, Busy: false));
     private int _handled;
     private int _target = int.MaxValue;
 
-    public ChannelCounter()
-    {
-        _pump = Task.Run(PumpAsync);
-    }
+    public ChannelCounter() => _pump = Task.Run(PumpAsync);
 
     public CounterState Current => _state.Peek();
 
@@ -161,22 +163,16 @@ public sealed class ChannelCounter : IDisposable
         _reached.Dispose();
     }
 
-    public void Add(CounterEvent @event)
-    {
-        _events.Writer.TryWrite(@event);
-    }
+    public void Add(CounterEvent @event) => _events.Writer.TryWrite(@event);
 
     /// <inheritdoc cref="DrainCounter.Expect" />
     public void Expect(int count)
     {
         _reached.Reset();
-        Volatile.Write(ref _target, Volatile.Read(ref _handled) + count);
+        Volatile.Write(location: ref _target, value: Volatile.Read(ref _handled) + count);
     }
 
-    public bool AwaitExpected(TimeSpan budget)
-    {
-        return _reached.Wait(budget);
-    }
+    public bool AwaitExpected(TimeSpan budget) => _reached.Wait(budget);
 
     private async Task PumpAsync()
     {

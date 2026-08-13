@@ -1,5 +1,6 @@
 using Zigote.Core;
 using Zigote.Core.Paint;
+using Zigote.UI.Host;
 
 namespace Zigote.UI.Theme;
 
@@ -21,20 +22,20 @@ public static class FocusRing
     public static void AddFocusRing(this PaintList paint, Rect bounds, float radius,
         ThemeData theme)
     {
-        if (Host.App.Active is { FocusRingVisible: false }) return;
+        if (App.Active is { FocusRingVisible: false }) return;
 
-        var o = theme.FocusRingOffset;
+        float o = theme.FocusRingOffset;
         var ring = new Rect(
-            bounds.X - o,
-            bounds.Y - o,
-            bounds.Width + 2f * o,
-            bounds.Height + 2f * o
+            x: bounds.X - o,
+            y: bounds.Y - o,
+            width: bounds.Width + (2f * o),
+            height: bounds.Height + (2f * o)
         );
         paint.AddBorder(
-            ring,
-            theme.FocusRing,
-            radius + o,
-            theme.FocusRingWidth
+            bounds: ring,
+            color: theme.FocusRing,
+            radius: radius + o,
+            width: theme.FocusRingWidth
         );
     }
 }

@@ -1,6 +1,7 @@
 using Zigote.Editor.History;
 using Zigote.Editor.Prefab;
 using Zigote.Runtime.Scene;
+
 // Dropdown<T> must be referenced with a concrete type — alias for clarity:
 
 namespace Zigote.Editor.Panels;
@@ -26,23 +27,32 @@ public sealed partial class InspectorPanel
         if (_prefabDoc is not { } doc)
         {
             _rows.Add(
-                PropRow.StatusLine("◆ Prefab instance (template missing)", _theme.Hint, _theme)
+                PropRow.StatusLine(
+                    text: "◆ Prefab instance (template missing)",
+                    color: _theme.Hint,
+                    theme: _theme
+                )
             );
             _rows.Add(PropRow.Spacer(6f));
             return;
         }
 
         var overridden = PrefabOverrides.ApplicableTo(node)
-            .Where(c => PrefabOverrides.IsOverridden(c, node, doc.Template))
+            .Where(c => PrefabOverrides.IsOverridden(
+                    component: c,
+                    instance: node,
+                    template: doc.Template
+                )
+            )
             .ToList();
 
         _rows.Add(
             PropRow.StatusLine(
-                overridden.Count == 0
+                text: overridden.Count == 0
                     ? $"◆ Prefab · {doc.Name}"
                     : $"◆ Prefab · {doc.Name}  ({overridden.Count} overridden)",
-                _theme.Accent,
-                _theme
+                color: _theme.Accent,
+                theme: _theme
             )
         );
 
@@ -51,22 +61,25 @@ public sealed partial class InspectorPanel
             var component = c;
             _rows.Add(
                 PropRow.ActionButton(
-                    $"Revert {component}",
-                    () => RevertPrefabComponent(node, component)
+                    label: $"Revert {component}",
+                    onClick: () => RevertPrefabComponent(node: node, component: component)
                 )
             );
         }
 
         if (overridden.Count > 1)
+        {
             _rows.Add(
                 PropRow.ActionButton(
-                    "Revert All",
-                    () =>
+                    label: "Revert All",
+                    onClick: () =>
                     {
-                        foreach (var c in overridden) RevertPrefabComponent(node, c);
+                        foreach (var c in overridden)
+                            RevertPrefabComponent(node: node, component: c);
                     }
                 )
             );
+        }
 
         _rows.Add(PropRow.Spacer(6f));
     }
@@ -74,12 +87,20 @@ public sealed partial class InspectorPanel
     private void RevertPrefabComponent(SceneNode node, PrefabComponent component)
     {
         if (_prefabDoc is not { } doc) return;
-        var before = PrefabOverrides.Capture(component, node);
+        object before = PrefabOverrides.Capture(component: component, node: node);
         _state.History.Execute(
             new CompositeCommand(
-                _state,
-                () => PrefabOverrides.Revert(component, node, doc.Template),
-                () => PrefabOverrides.Restore(component, node, before)
+                state: _state,
+                apply: () => PrefabOverrides.Revert(
+                    component: component,
+                    instance: node,
+                    template: doc.Template
+                ),
+                revert: () => PrefabOverrides.Restore(
+                    component: component,
+                    node: node,
+                    snapshot: before
+                )
             )
         );
         Rebuild(); // refresh the override indicators

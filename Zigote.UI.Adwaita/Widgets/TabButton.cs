@@ -1,4 +1,4 @@
-using Zigote.Core.State;
+using Zigote.UI.TextShaping;
 
 namespace Zigote.UI.Adwaita;
 
@@ -26,7 +26,7 @@ public sealed class AdwTabButton : ComposedWidget
     protected override Widget Build(BuildContext context)
     {
         // Watch: the count has to follow tabs opening and closing without the host rebuilding.
-        return new Watch(() => new AdwButton("Tabs", () => OnPressed?.Invoke()) {
+        return new Watch(() => new AdwButton(label: "Tabs", onPressed: () => OnPressed?.Invoke()) {
                 Style = AdwButtonStyle.Flat,
                 Circular = true,
                 Content = new CountGlyph(_view.Pages.Count),
@@ -42,16 +42,16 @@ public sealed class AdwTabButton : ComposedWidget
         public override Size Measure(Constraints c)
         {
             _theme = ThemeProvider.Of(BuildContext.Current);
-            return c.Constrain(new Size(GlyphBox, GlyphBox));
+            return c.Constrain(new Size(width: GlyphBox, height: GlyphBox));
         }
 
         public override void Layout(Offset origin)
         {
             Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                GlyphBox,
-                GlyphBox
+                x: origin.X,
+                y: origin.Y,
+                width: GlyphBox,
+                height: GlyphBox
             );
         }
 
@@ -61,25 +61,25 @@ public sealed class AdwTabButton : ComposedWidget
             // needs no tint plumbing from AdwButton.
             var fg = _theme.OnBackground;
             paint.AddBorder(
-                Bounds,
-                fg,
-                6f,
-                1.6f
+                bounds: Bounds,
+                color: fg,
+                radius: 6f,
+                width: 1.6f
             );
 
             // Past two digits the number stops fitting the 20px box; GNOME shows ∞ rather than
             // letting the glyph shrink into illegibility or the button grow.
             // `tabbutton label { font-weight: 800; font-size: 10.5px }` — the count is part of the
             // icon, so the stylesheet pins it in pixels rather than letting the type ramp move it.
-            var text = count > 99 ? "∞" : count.ToString();
+            string text = count > 99 ? "∞" : count.ToString();
             const float fs = 10.5f;
-            var w = TextShaping.TextMeasure.Width(text, fs);
+            float w = TextMeasure.Width(text: text, fontSize: fs);
             paint.AddText(
-                text,
-                Bounds.X + (GlyphBox - w) / 2f,
-                Bounds.Y + (GlyphBox - fs) / 2f + fs * 0.82f,
-                fg,
-                fs,
+                text: text,
+                baselineX: Bounds.X + ((GlyphBox - w) / 2f),
+                baselineY: Bounds.Y + ((GlyphBox - fs) / 2f) + (fs * 0.82f),
+                color: fg,
+                fontSize: fs,
                 fontWeight: FontWeight.ExtraBold
             );
         }
@@ -94,13 +94,10 @@ public sealed class AdwTabButton : ComposedWidget
 /// </summary>
 public sealed class AdwWrapBox : ComposedWidget
 {
-    private float _lineSpacing = Spacing.Sm;
     private float _childSpacing = Spacing.Sm;
+    private float _lineSpacing = Spacing.Sm;
 
-    public AdwWrapBox(params Widget[] children)
-    {
-        Children = [.. children];
-    }
+    public AdwWrapBox(params Widget[] children) => Children = [.. children];
 
     public List<Widget> Children { get; }
 
@@ -108,14 +105,14 @@ public sealed class AdwWrapBox : ComposedWidget
     public float ChildSpacing
     {
         get => _childSpacing;
-        set => this.Set(ref _childSpacing, value);
+        set => this.Set(field: ref _childSpacing, value: value);
     }
 
     /// <summary>Gap between lines.</summary>
     public float LineSpacing
     {
         get => _lineSpacing;
-        set => this.Set(ref _lineSpacing, value);
+        set => this.Set(field: ref _lineSpacing, value: value);
     }
 
     protected override Widget Build(BuildContext context)

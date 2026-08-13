@@ -64,7 +64,7 @@ public sealed class AdwSuggestionEntry : AdwEntry
             return;
         }
 
-        _popup ??= new CompletionPopup(() => Bounds, Commit);
+        _popup ??= new CompletionPopup(anchor: () => Bounds, onPick: Commit);
         _popup.SetItems(items);
         if (_popup.Shown) _popup.MarkNeedsPaint();
         else if (Owner is { } owner)
@@ -110,9 +110,9 @@ public sealed class AdwSuggestionEntry : AdwEntry
         public override Size Measure(Constraints c)
         {
             _theme = ThemeProvider.Of(BuildContext.Current);
-            _screen = new Size(c.MaxWidth, c.MaxHeight);
+            _screen = new Size(width: c.MaxWidth, height: c.MaxHeight);
             _rowH = MediaQuery.Of(BuildContext.Current).SizeClass == WindowSizeClass.Compact
-                ? MathF.Max(PointerRowH, ControlMetrics.MinTouchTarget)
+                ? MathF.Max(x: PointerRowH, y: ControlMetrics.MinTouchTarget)
                 : PointerRowH;
             return _screen;
         }
@@ -120,10 +120,10 @@ public sealed class AdwSuggestionEntry : AdwEntry
         public override void Layout(Offset origin)
         {
             Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                _screen.Width,
-                _screen.Height
+                x: origin.X,
+                y: origin.Y,
+                width: _screen.Width,
+                height: _screen.Height
             );
         }
 
@@ -135,20 +135,26 @@ public sealed class AdwSuggestionEntry : AdwEntry
         private int VisibleRows()
         {
             var a = anchor();
-            var room = MathF.Max(a.Y, _screen.Height - a.Bottom) - 8f;
-            var fits = _rowH > 0f ? (int)MathF.Floor((room - Pad * 2f) / _rowH) : MaxRows;
-            return Math.Max(1, Math.Min(Math.Min(Items.Count, MaxRows), fits));
+            float room = MathF.Max(x: a.Y, y: _screen.Height - a.Bottom) - 8f;
+            int fits = _rowH > 0f ? (int)MathF.Floor((room - (Pad * 2f)) / _rowH) : MaxRows;
+            return Math.Max(
+                val1: 1,
+                val2: Math.Min(val1: Math.Min(val1: Items.Count, val2: MaxRows), val2: fits)
+            );
         }
 
         private Rect CardRect()
         {
             var a = anchor();
             return OverlayPositioning.Anchored(
-                a,
-                new Size(MathF.Max(a.Width, 180f), VisibleRows() * _rowH + Pad * 2f),
-                _screen,
-                OverlaySide.Below,
-                4f
+                anchor: a,
+                size: new Size(
+                    width: MathF.Max(x: a.Width, y: 180f),
+                    height: (VisibleRows() * _rowH) + (Pad * 2f)
+                ),
+                screen: _screen,
+                side: OverlaySide.Below,
+                gap: 4f
             );
         }
 
@@ -157,44 +163,62 @@ public sealed class AdwSuggestionEntry : AdwEntry
             if (Items.Count == 0) return;
             var card = CardRect();
             // The suggestion list is a popover, so it takes the popover radius, not the card one.
-            paint.AddElevation(card, AdwMetrics.PopoverRadius, AdwMetrics.PopoverShadow);
-            paint.AddRect(card, AdwPalette.For(_theme).PopoverBg, AdwMetrics.PopoverRadius);
-            paint.AddBorder(card, _theme.Border, AdwMetrics.PopoverRadius);
+            paint.AddElevation(
+                bounds: card,
+                radius: AdwMetrics.PopoverRadius,
+                style: AdwMetrics.PopoverShadow
+            );
+            paint.AddRect(
+                bounds: card,
+                color: AdwPalette.For(_theme).PopoverBg,
+                radius: AdwMetrics.PopoverRadius
+            );
+            paint.AddBorder(bounds: card, color: _theme.Border, radius: AdwMetrics.PopoverRadius);
 
-            var fs = _theme.FontSizeBody;
+            float fs = _theme.FontSizeBody;
             var dim = AdwPalette.For(_theme).DimLabel;
             paint.AddClipStart(card);
-            for (var i = 0; i < VisibleRows(); i++)
+            for (int i = 0; i < VisibleRows(); i++)
             {
                 var row = new Rect(
-                    card.X + Pad,
-                    card.Y + Pad + i * _rowH,
-                    card.Width - Pad * 2f,
-                    _rowH
+                    x: card.X + Pad,
+                    y: card.Y + Pad + (i * _rowH),
+                    width: card.Width - (Pad * 2f),
+                    height: _rowH
                 );
                 // GNOME rounds the row highlight and insets it from the card edge; the row keeps
                 // the normal label colour under it rather than inverting, as menus do.
-                var wash = AdwStyle.MenuRowFill(_theme, i == _hover, false);
-                if (wash.A > 0f) paint.AddRect(row, wash, AdwMetrics.MenuRadius);
+                var wash = AdwStyle.MenuRowFill(
+                    theme: _theme,
+                    hovered: i == _hover,
+                    pressed: false
+                );
+                if (wash.A > 0f)
+                    paint.AddRect(bounds: row, color: wash, radius: AdwMetrics.MenuRadius);
 
-                var (val, disp) = Items[i];
-                var baseline = row.Y + (_rowH - fs) / 2f + fs * 0.8f;
+                (string val, string disp) = Items[i];
+                float baseline = row.Y + ((_rowH - fs) / 2f) + (fs * 0.8f);
                 paint.AddText(
-                    disp,
-                    row.X + Pad,
-                    baseline,
-                    _theme.OnSurface,
-                    fs
+                    text: disp,
+                    baselineX: row.X + Pad,
+                    baselineY: baseline,
+                    color: _theme.OnSurface,
+                    fontSize: fs
                 );
 
                 // The full value trails the display name, dimmed, when they differ.
-                if (string.Equals(val, disp, StringComparison.Ordinal)) continue;
+                if (string.Equals(
+                        a: val,
+                        b: disp,
+                        comparisonType: StringComparison.Ordinal
+                    )) continue;
                 paint.AddText(
-                    val,
-                    row.X + Pad + TextMeasure.Width(disp, fs) + Spacing.Sm,
-                    baseline,
-                    dim,
-                    fs - 1f
+                    text: val,
+                    baselineX: row.X + Pad + TextMeasure.Width(text: disp, fontSize: fs) +
+                               Spacing.Sm,
+                    baselineY: baseline,
+                    color: dim,
+                    fontSize: fs - 1f
                 );
             }
 
@@ -204,19 +228,17 @@ public sealed class AdwSuggestionEntry : AdwEntry
         private int RowAt(Offset p)
         {
             var card = CardRect();
-            if (!card.Contains(p.X, p.Y)) return -1;
-            var idx = (int)((p.Y - card.Y - Pad) / _rowH);
+            if (!card.Contains(px: p.X, py: p.Y)) return -1;
+            int idx = (int)((p.Y - card.Y - Pad) / _rowH);
             return idx >= 0 && idx < VisibleRows() ? idx : -1;
         }
 
-        public override Widget? HitTest(Offset point)
-        {
-            return CardRect().Contains(point.X, point.Y) ? this : null;
-        }
+        public override Widget? HitTest(Offset point) =>
+            CardRect().Contains(px: point.X, py: point.Y) ? this : null;
 
         public override void OnPointerMove(Offset point)
         {
-            var idx = RowAt(point);
+            int idx = RowAt(point);
             if (idx == _hover) return;
             _hover = idx;
             MarkNeedsPaint();
@@ -231,13 +253,11 @@ public sealed class AdwSuggestionEntry : AdwEntry
 
         public override void OnPointerDown(Offset point)
         {
-            var idx = RowAt(point);
+            int idx = RowAt(point);
             if (idx >= 0) onPick(Items[idx].Value);
         }
 
-        public override MouseCursor? GetCursor(Offset point)
-        {
-            return RowAt(point) >= 0 ? MouseCursor.Pointer : null;
-        }
+        public override MouseCursor? GetCursor(Offset point) =>
+            RowAt(point) >= 0 ? MouseCursor.Pointer : null;
     }
 }

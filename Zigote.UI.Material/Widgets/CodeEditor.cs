@@ -2,9 +2,9 @@ using System.Text;
 using Zigote.Core.Animation;
 using Zigote.Core.Engine;
 using Zigote.Core.Events;
+using Zigote.UI.Host;
 using Zigote.UI.Semantics;
 using Zigote.UI.TextShaping;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.Material;
 
@@ -56,12 +56,12 @@ public sealed class CodeEditor : Widget, ITextInputClient
     // allocate a string per visible line per frame.
     private readonly List<string> _lineNoCache = [];
 
-    private readonly List<string> _lines = [""];
-
     // Entering tokenizer state per line (index = line). Cached across frames, rebuilt lazily by
     // EnsureLineStates, and cleared on any content edit — so a focused editor no longer re-lexes from
     // line 0 every frame while scrolled down.
     private readonly List<int> _lineStates = [];
+
+    private readonly List<string> _lines = [""];
     private readonly List<DocSnapshot> _redo = [];
     private readonly List<Token> _tokenBuffer = []; // reused per painted line — no per-frame alloc
     private readonly Dictionary<int, CachedLineTokens> _tokenCache = [];
@@ -111,14 +111,11 @@ public sealed class CodeEditor : Widget, ITextInputClient
     private ThemeData _theme = ThemeData.Dark;
     private ILineTokenizer? _tokenizer;
 
-    public CodeEditor(string text = "")
-    {
-        SetTextInternal(text);
-    }
+    public CodeEditor(string text = "") => SetTextInternal(text);
 
     public string Text
     {
-        get => string.Join('\n', _lines);
+        get => string.Join(separator: '\n', values: _lines);
         set => SetTextInternal(value);
     }
 
@@ -131,7 +128,7 @@ public sealed class CodeEditor : Widget, ITextInputClient
         get => _tokenizer;
         set
         {
-            if (ReferenceEquals(_tokenizer, value)) return;
+            if (ReferenceEquals(objA: _tokenizer, objB: value)) return;
             _tokenizer = value;
             _lineStates.Clear();
             _tokenCache.Clear();
@@ -149,16 +146,11 @@ public sealed class CodeEditor : Widget, ITextInputClient
 
     public bool ReadOnly { get; set; }
 
-    public override MouseCursor? GetCursor(Offset point)
-    {
-        return MouseCursor.Text;
-    }
-
     /// <summary>Wrap long physical lines into viewport-width visual rows without changing the document.</summary>
     public bool SoftWrap
     {
         get => _softWrap;
-        set => SetLayout(ref _softWrap, value);
+        set => SetLayout(field: ref _softWrap, value: value);
     }
 
     public override bool Focusable => true;
@@ -179,9 +171,26 @@ public sealed class CodeEditor : Widget, ITextInputClient
 
     private float TextTop => Bounds.Y + Pad;
 
+    /// <summary>
+    ///     Editor font size in points; null (the default) uses the <see cref="Typography.Code" />
+    ///     ramp size. Setting it drops cached native text layouts and relayouts.
+    /// </summary>
+    public float? FontSize
+    {
+        get => _fontSizeOverride;
+        set
+        {
+            if (Nullable.Equals(n1: _fontSizeOverride, n2: value)) return;
+            _fontSizeOverride = value;
+            InvalidateTextLayouts();
+        }
+    }
+
     // Only an editable, focused editor blinks a caret; a read-only docked viewer doesn't, so the frame
     // loop can stop repainting it every frame (see App's focus repaint gate / ITextInputClient).
     public bool WantsCaretBlink => Focused && !ReadOnly;
+
+    public override MouseCursor? GetCursor(Offset point) => MouseCursor.Text;
 
     public override void DescribeSemantics(SemanticsConfiguration config)
     {
@@ -191,16 +200,17 @@ public sealed class CodeEditor : Widget, ITextInputClient
         config.Actions = SemanticsAction.Focus |
                          (ReadOnly ? SemanticsAction.None : SemanticsAction.SetValue);
         config.AddFlag(SemanticsFlags.Focusable)
-            .AddFlag(SemanticsFlags.Focused, Focused)
+            .AddFlag(flag: SemanticsFlags.Focused, on: Focused)
             .AddFlag(SemanticsFlags.Multiline)
-            .AddFlag(SemanticsFlags.ReadOnly, ReadOnly);
+            .AddFlag(flag: SemanticsFlags.ReadOnly, on: ReadOnly);
     }
 
     private void SetTextInternal(string text)
     {
         _lines.Clear();
-        var split = (text ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
-        foreach (var l in split) _lines.Add(l);
+        string[] split = (text ?? string.Empty).Replace(oldValue: "\r\n", newValue: "\n")
+            .Replace(oldChar: '\r', newChar: '\n').Split('\n');
+        foreach (string l in split) _lines.Add(l);
         if (_lines.Count == 0) _lines.Add("");
         _lineStates.Clear(); // whole document changed — drop the entering-state cache
         _tokenCache.Clear();
@@ -215,30 +225,25 @@ public sealed class CodeEditor : Widget, ITextInputClient
         MarkNeedsPaint();
     }
 
-    private void ClearSelection()
-    {
-        _anchorLine = -1;
-    }
+    private void ClearSelection() => _anchorLine = -1;
 
     /// <summary>Ordered (start, end) selection bounds as (line, col), start &lt;= end.</summary>
     private ((int Line, int Col) Start, (int Line, int Col) End) OrderedSelection()
     {
         var a = (_anchorLine, _anchorCol);
         var b = (_caretLine, _caretCol);
-        return Before(a, b) ? (a, b) : (b, a);
+        return Before(a: a, b: b) ? (a, b) : (b, a);
     }
 
-    private static bool Before((int Line, int Col) a, (int Line, int Col) b)
-    {
-        return a.Line < b.Line || (a.Line == b.Line && a.Col <= b.Col);
-    }
+    private static bool Before((int Line, int Col) a, (int Line, int Col) b) =>
+        a.Line < b.Line || (a.Line == b.Line && a.Col <= b.Col);
 
     private void ClampCaret()
     {
-        _caretLine = Math.Clamp(_caretLine, 0, _lines.Count - 1);
+        _caretLine = Math.Clamp(value: _caretLine, min: 0, max: _lines.Count - 1);
         _caretCol = TextNavigation.GraphemeBoundaryAtOrBefore(
-            _lines[_caretLine],
-            Math.Clamp(_caretCol, 0, _lines[_caretLine].Length)
+            text: _lines[_caretLine],
+            index: Math.Clamp(value: _caretCol, min: 0, max: _lines[_caretLine].Length)
         );
     }
 
@@ -253,9 +258,7 @@ public sealed class CodeEditor : Widget, ITextInputClient
             }
         }
         else
-        {
             ClearSelection();
-        }
     }
 
     // ── Edit primitives ───────────────────────────────────────────────────────
@@ -265,15 +268,13 @@ public sealed class CodeEditor : Widget, ITextInputClient
         if (!HasSelection) return;
         var (s, e) = OrderedSelection();
         if (s.Line == e.Line)
-        {
             _lines[s.Line] = _lines[s.Line][..s.Col] + _lines[s.Line][e.Col..];
-        }
         else
         {
-            var head = _lines[s.Line][..s.Col];
-            var tail = _lines[e.Line][e.Col..];
+            string head = _lines[s.Line][..s.Col];
+            string tail = _lines[e.Line][e.Col..];
             _lines[s.Line] = head + tail;
-            _lines.RemoveRange(s.Line + 1, e.Line - s.Line);
+            _lines.RemoveRange(index: s.Line + 1, count: e.Line - s.Line);
         }
 
         _caretLine = s.Line;
@@ -287,10 +288,10 @@ public sealed class CodeEditor : Widget, ITextInputClient
         RecordEdit(kind);
         if (HasSelection) DeleteSelection();
 
-        text = text.Replace("\r\n", "\n").Replace('\r', '\n');
-        var cur = _lines[_caretLine];
-        var before = cur[.._caretCol];
-        var after = cur[_caretCol..];
+        text = text.Replace(oldValue: "\r\n", newValue: "\n").Replace(oldChar: '\r', newChar: '\n');
+        string cur = _lines[_caretLine];
+        string before = cur[.._caretCol];
+        string after = cur[_caretCol..];
 
         if (!text.Contains('\n'))
         {
@@ -299,13 +300,13 @@ public sealed class CodeEditor : Widget, ITextInputClient
         }
         else
         {
-            var parts = text.Split('\n');
+            string[] parts = text.Split('\n');
             _lines[_caretLine] = before + parts[0];
-            var insertAt = _caretLine + 1;
-            for (var k = 1; k < parts.Length - 1; k++)
-                _lines.Insert(insertAt++, parts[k]);
-            var last = parts[^1];
-            _lines.Insert(insertAt, last + after);
+            int insertAt = _caretLine + 1;
+            for (int k = 1; k < parts.Length - 1; k++)
+                _lines.Insert(index: insertAt++, item: parts[k]);
+            string last = parts[^1];
+            _lines.Insert(index: insertAt, item: last + after);
             _caretLine = insertAt;
             _caretCol = last.Length;
         }
@@ -320,9 +321,12 @@ public sealed class CodeEditor : Widget, ITextInputClient
         _tokenCache.Clear();
         if (Bounds.Width > 0f)
         {
-            RebuildVisualRows(MathF.Max(_charWidth, Bounds.Width - _gutterWidth - Pad * 2f));
+            RebuildVisualRows(
+                MathF.Max(x: _charWidth, y: Bounds.Width - _gutterWidth - (Pad * 2f))
+            );
             _contentWidth = 0f;
-            foreach (var row in _visualRows) _contentWidth = MathF.Max(_contentWidth, row.Width);
+            foreach (var row in _visualRows)
+                _contentWidth = MathF.Max(x: _contentWidth, y: row.Width);
         }
 
         OnChanged?.Invoke(Text);
@@ -340,10 +344,10 @@ public sealed class CodeEditor : Widget, ITextInputClient
     /// </summary>
     private void RecordEdit(EditKind kind)
     {
-        var now = App.Active?.Time ?? 0f;
-        var coalesce = kind != EditKind.Other && kind == _lastEditKind
-                                              && _undo.Count > 0 && now - _lastEditTime <
-                                              UndoCoalesceSeconds;
+        float now = App.Active?.Time ?? 0f;
+        bool coalesce = kind != EditKind.Other && kind == _lastEditKind
+                                               && _undo.Count > 0 && now - _lastEditTime <
+                                               UndoCoalesceSeconds;
         if (!coalesce)
         {
             _undo.Add(CaptureSnapshot());
@@ -358,11 +362,11 @@ public sealed class CodeEditor : Widget, ITextInputClient
     private DocSnapshot CaptureSnapshot()
     {
         return new DocSnapshot(
-            _lines.ToArray(),
-            _caretLine,
-            _caretCol,
-            _anchorLine,
-            _anchorCol
+            Lines: _lines.ToArray(),
+            CaretLine: _caretLine,
+            CaretCol: _caretCol,
+            AnchorLine: _anchorLine,
+            AnchorCol: _anchorCol
         );
     }
 
@@ -406,7 +410,7 @@ public sealed class CodeEditor : Widget, ITextInputClient
         if (s.Line == e.Line) return _lines[s.Line][s.Col..e.Col];
         var sb = new StringBuilder();
         sb.Append(_lines[s.Line][s.Col..]).Append('\n');
-        for (var l = s.Line + 1; l < e.Line; l++) sb.Append(_lines[l]).Append('\n');
+        for (int l = s.Line + 1; l < e.Line; l++) sb.Append(_lines[l]).Append('\n');
         sb.Append(_lines[e.Line][..e.Col]);
         return sb.ToString();
     }
@@ -435,7 +439,7 @@ public sealed class CodeEditor : Widget, ITextInputClient
 
     private void PasteAction()
     {
-        var pasted = ZigoteEngine.Instance?.GetClipboard() ?? string.Empty;
+        string pasted = ZigoteEngine.Instance?.GetClipboard() ?? string.Empty;
         if (pasted.Length > 0) InsertText(pasted);
     }
 
@@ -454,63 +458,86 @@ public sealed class CodeEditor : Widget, ITextInputClient
     private int RowForCaret(int line, int col)
     {
         if (_visualRows.Count == 0)
-            for (var i = 0; i < _lines.Count; i++)
+        {
+            for (int i = 0; i < _lines.Count; i++)
+            {
                 _visualRows.Add(
                     new VisualRow(
-                        i,
-                        0,
-                        _lines[i].Length,
-                        0f,
-                        IsFastGridText(_lines[i])
+                        Line: i,
+                        Start: 0,
+                        End: _lines[i].Length,
+                        Width: 0f,
+                        FastGrid: IsFastGridText(_lines[i])
                     )
                 );
-        for (var i = 0; i < _visualRows.Count; i++)
+            }
+        }
+
+        for (int i = 0; i < _visualRows.Count; i++)
         {
             var row = _visualRows[i];
             if (row.Line == line && col >= row.Start && col <= row.End) return i;
         }
 
-        return Math.Clamp(line, 0, Math.Max(0, _visualRows.Count - 1));
+        return Math.Clamp(value: line, min: 0, max: Math.Max(val1: 0, val2: _visualRows.Count - 1));
     }
 
     private float ColToX(int line, int col)
     {
         if (_visualRows.Count == 0) return 0f;
-        return ColToX(_visualRows[RowForCaret(line, col)], col);
+        return ColToX(row: _visualRows[RowForCaret(line: line, col: col)], col: col);
     }
 
     private float ColToX(VisualRow row, int col)
     {
-        var line = _lines[row.Line];
-        col = TextNavigation.GraphemeBoundaryAtOrBefore(line, Math.Clamp(col, row.Start, row.End));
+        string line = _lines[row.Line];
+        col = TextNavigation.GraphemeBoundaryAtOrBefore(
+            text: line,
+            index: Math.Clamp(value: col, min: row.Start, max: row.End)
+        );
         if (row.FastGrid) return (col - row.Start) * _charWidth;
-        var segment = line[row.Start..row.End];
+        string segment = line[row.Start..row.End];
         var layout = LayoutFor(segment);
         if (layout is not null &&
-            layout.TryGetCaretPosition(col - row.Start, out var position, out _))
+            layout.TryGetCaretPosition(
+                textOffset: col - row.Start,
+                position: out var position,
+                height: out _
+            ))
             return position.X;
-        return TextMeasure.Width(line[row.Start..col], _fontSize, fontFamily: "code");
+        return TextMeasure.Width(
+            text: line[row.Start..col],
+            fontSize: _fontSize,
+            fontFamily: "code"
+        );
     }
 
     private int XToCol(VisualRow row, float localX)
     {
-        var line = _lines[row.Line];
+        string line = _lines[row.Line];
         if (localX <= 0f || row.Start == row.End) return row.Start;
         if (row.FastGrid)
+        {
             return Math.Clamp(
-                row.Start + (int)MathF.Round(localX / _charWidth),
-                row.Start,
-                row.End
+                value: row.Start + (int)MathF.Round(localX / _charWidth),
+                min: row.Start,
+                max: row.End
             );
-        var segment = line[row.Start..row.End];
+        }
+
+        string segment = line[row.Start..row.End];
         var layout = LayoutFor(segment);
         if (layout is not null) return row.Start + layout.HitTest(localX);
 
-        var boundaries = TextNavigation.GraphemeBoundaries(segment);
-        var previousWidth = 0f;
-        for (var i = 1; i < boundaries.Length; i++)
+        int[] boundaries = TextNavigation.GraphemeBoundaries(segment);
+        float previousWidth = 0f;
+        for (int i = 1; i < boundaries.Length; i++)
         {
-            var width = TextMeasure.Width(segment[..boundaries[i]], _fontSize, fontFamily: "code");
+            float width = TextMeasure.Width(
+                text: segment[..boundaries[i]],
+                fontSize: _fontSize,
+                fontFamily: "code"
+            );
             if (localX < (previousWidth + width) / 2f) return row.Start + boundaries[i - 1];
             previousWidth = width;
         }
@@ -521,43 +548,49 @@ public sealed class CodeEditor : Widget, ITextInputClient
     private void RebuildVisualRows(float availableWidth)
     {
         _visualRows.Clear();
-        var wrapWidth = MathF.Max(_charWidth, availableWidth);
-        for (var lineIndex = 0; lineIndex < _lines.Count; lineIndex++)
+        float wrapWidth = MathF.Max(x: _charWidth, y: availableWidth);
+        for (int lineIndex = 0; lineIndex < _lines.Count; lineIndex++)
         {
-            var line = _lines[lineIndex];
-            var fastGrid = IsFastGridText(line);
+            string line = _lines[lineIndex];
+            bool fastGrid = IsFastGridText(line);
             if (!SoftWrap || line.Length == 0)
             {
                 // Unwrapped mode only needs a conservative scrollbar extent here. Precise caret and
                 // hit geometry comes from the HarfBuzz layout on demand for visible rows.
-                var width = line.Length * _charWidth;
+                float width = line.Length * _charWidth;
                 _visualRows.Add(
                     new VisualRow(
-                        lineIndex,
-                        0,
-                        line.Length,
-                        width,
-                        fastGrid
+                        Line: lineIndex,
+                        Start: 0,
+                        End: line.Length,
+                        Width: width,
+                        FastGrid: fastGrid
                     )
                 );
                 continue;
             }
 
-            var boundaries = TextNavigation.GraphemeBoundaries(line);
-            var prefixWidths = new float[boundaries.Length];
-            for (var i = 1; i < boundaries.Length; i++)
+            int[] boundaries = TextNavigation.GraphemeBoundaries(line);
+            float[] prefixWidths = new float[boundaries.Length];
+            for (int i = 1; i < boundaries.Length; i++)
+            {
                 prefixWidths[i] = prefixWidths[i - 1] +
-                                  GraphemeAdvance(line, boundaries[i - 1], boundaries[i]);
+                                  GraphemeAdvance(
+                                      text: line,
+                                      start: boundaries[i - 1],
+                                      end: boundaries[i]
+                                  );
+            }
 
-            var startBoundary = 0;
+            int startBoundary = 0;
             while (startBoundary < boundaries.Length - 1)
             {
-                var endBoundary = startBoundary + 1;
-                var accepted = endBoundary;
-                var lastBreak = -1;
+                int endBoundary = startBoundary + 1;
+                int accepted = endBoundary;
+                int lastBreak = -1;
                 while (endBoundary < boundaries.Length)
                 {
-                    var candidateWidth = prefixWidths[endBoundary] - prefixWidths[startBoundary];
+                    float candidateWidth = prefixWidths[endBoundary] - prefixWidths[startBoundary];
                     if (candidateWidth > wrapWidth && endBoundary > startBoundary + 1) break;
                     accepted = endBoundary;
                     if (char.IsWhiteSpace(line[boundaries[endBoundary - 1]]))
@@ -568,16 +601,16 @@ public sealed class CodeEditor : Widget, ITextInputClient
                 if (endBoundary < boundaries.Length && lastBreak > startBoundary)
                     accepted = lastBreak;
 
-                var rowStart = boundaries[startBoundary];
-                var rowEnd = boundaries[accepted];
-                var width = prefixWidths[accepted] - prefixWidths[startBoundary];
+                int rowStart = boundaries[startBoundary];
+                int rowEnd = boundaries[accepted];
+                float width = prefixWidths[accepted] - prefixWidths[startBoundary];
                 _visualRows.Add(
                     new VisualRow(
-                        lineIndex,
-                        rowStart,
-                        rowEnd,
-                        width,
-                        fastGrid
+                        Line: lineIndex,
+                        Start: rowStart,
+                        End: rowEnd,
+                        Width: width,
+                        FastGrid: fastGrid
                     )
                 );
                 startBoundary = accepted;
@@ -585,22 +618,27 @@ public sealed class CodeEditor : Widget, ITextInputClient
         }
 
         if (_visualRows.Count == 0)
+        {
             _visualRows.Add(
                 new VisualRow(
-                    0,
-                    0,
-                    0,
-                    0f,
-                    true
+                    Line: 0,
+                    Start: 0,
+                    End: 0,
+                    Width: 0f,
+                    FastGrid: true
                 )
             );
+        }
     }
 
     private static bool IsFastGridText(string text)
     {
-        foreach (var c in text)
+        foreach (char c in text)
+        {
             if (c is < ' ' or > '~')
                 return false;
+        }
+
         return true;
     }
 
@@ -611,27 +649,27 @@ public sealed class CodeEditor : Widget, ITextInputClient
         // receive their actual advance.
         if (end == start + 1)
         {
-            var c = text[start];
+            char c = text[start];
             if (c == '\t') return _charWidth * TabWidth;
             if (c <= 0x7f) return _charWidth;
         }
 
-        return TextMeasure.Width(text[start..end], _fontSize, fontFamily: "code");
+        return TextMeasure.Width(text: text[start..end], fontSize: _fontSize, fontFamily: "code");
     }
 
     private void EnsureCaretVisible()
     {
         if (Bounds.Width <= 0f || _lineHeight <= 0f) return;
 
-        var innerW = Bounds.Width - _gutterWidth - Pad * 2f;
-        var innerH = Bounds.Height - Pad * 2f;
+        float innerW = Bounds.Width - _gutterWidth - (Pad * 2f);
+        float innerH = Bounds.Height - (Pad * 2f);
 
-        var caretRow = RowForCaret(_caretLine, _caretCol);
-        var caretX = ColToX(_caretLine, _caretCol);
+        int caretRow = RowForCaret(line: _caretLine, col: _caretCol);
+        float caretX = ColToX(line: _caretLine, col: _caretCol);
         if (caretX - _targetX > innerW - 2f) _targetX = caretX - innerW + 2f;
         else if (caretX - _targetX < 0f) _targetX = caretX;
 
-        var caretY = caretRow * _lineHeight;
+        float caretY = caretRow * _lineHeight;
         if (caretY - _targetY > innerH - _lineHeight) _targetY = caretY - innerH + _lineHeight;
         else if (caretY - _targetY < 0f) _targetY = caretY;
 
@@ -644,11 +682,19 @@ public sealed class CodeEditor : Widget, ITextInputClient
     private void ClampTargets()
     {
         if (_lineHeight <= 0f) return;
-        var innerW = Bounds.Width - _gutterWidth - Pad * 2f;
-        var innerH = Bounds.Height - Pad * 2f;
-        _targetX = Math.Clamp(_targetX, 0f, Math.Max(0f, _contentWidth + _charWidth * 2f - innerW));
-        var total = _visualRows.Count * _lineHeight;
-        _targetY = Math.Clamp(_targetY, 0f, Math.Max(0f, total - innerH));
+        float innerW = Bounds.Width - _gutterWidth - (Pad * 2f);
+        float innerH = Bounds.Height - (Pad * 2f);
+        _targetX = Math.Clamp(
+            value: _targetX,
+            min: 0f,
+            max: Math.Max(val1: 0f, val2: _contentWidth + (_charWidth * 2f) - innerW)
+        );
+        float total = _visualRows.Count * _lineHeight;
+        _targetY = Math.Clamp(
+            value: _targetY,
+            min: 0f,
+            max: Math.Max(val1: 0f, val2: total - innerH)
+        );
     }
 
     /// <summary>
@@ -663,7 +709,7 @@ public sealed class CodeEditor : Widget, ITextInputClient
 
     private void TickScroll(float dt)
     {
-        var k = 1f - MathF.Exp(-dt * ScrollEase); // frame-rate independent ease
+        float k = 1f - MathF.Exp(-dt * ScrollEase); // frame-rate independent ease
         _scrollX += (_targetX - _scrollX) * k;
         _scrollY += (_targetY - _scrollY) * k;
         if (MathF.Abs(_targetX - _scrollX) < 0.4f && MathF.Abs(_targetY - _scrollY) < 0.4f)
@@ -687,24 +733,24 @@ public sealed class CodeEditor : Widget, ITextInputClient
     // Scrollbar geometry (start, length, thumb length, max scroll, present?) — shared by Paint + drag.
     private (float Start, float Len, float Thumb, float Max, bool On) VBar()
     {
-        var innerH = Bounds.Height - Pad * 2f;
-        var total = _visualRows.Count * _lineHeight;
-        var max = MathF.Max(0f, total - innerH);
+        float innerH = Bounds.Height - (Pad * 2f);
+        float total = _visualRows.Count * _lineHeight;
+        float max = MathF.Max(x: 0f, y: total - innerH);
         if (max <= 0f || total <= 0f) return (0f, 0f, 0f, 0f, false);
-        var len = Bounds.Height - 4f;
-        var thumb = MathF.Max(24f, len * (innerH / total));
+        float len = Bounds.Height - 4f;
+        float thumb = MathF.Max(x: 24f, y: len * (innerH / total));
         return (Bounds.Y + 2f, len, thumb, max, true);
     }
 
     private (float Start, float Len, float Thumb, float Max, bool On) HBar()
     {
         if (SoftWrap) return (0f, 0f, 0f, 0f, false);
-        var innerW = Bounds.Width - _gutterWidth - Pad * 2f;
-        var extent = _contentWidth + _charWidth * 2f;
-        var max = MathF.Max(0f, extent - innerW);
+        float innerW = Bounds.Width - _gutterWidth - (Pad * 2f);
+        float extent = _contentWidth + (_charWidth * 2f);
+        float max = MathF.Max(x: 0f, y: extent - innerW);
         if (max <= 0f || extent <= 0f) return (0f, 0f, 0f, 0f, false);
-        var len = Bounds.Width - _gutterWidth - 4f;
-        var thumb = MathF.Max(24f, len * (innerW / extent));
+        float len = Bounds.Width - _gutterWidth - 4f;
+        float thumb = MathF.Max(x: 24f, y: len * (innerW / extent));
         return (Bounds.X + _gutterWidth + 2f, len, thumb, max, true);
     }
 
@@ -712,9 +758,9 @@ public sealed class CodeEditor : Widget, ITextInputClient
     {
         var bar = VBar();
         if (!bar.On) return;
-        var travel = bar.Len - bar.Thumb;
-        var frac = travel > 0f ? (pointerY - bar.Start - _barGrab) / travel : 0f;
-        _targetY = Math.Clamp(frac, 0f, 1f) * bar.Max;
+        float travel = bar.Len - bar.Thumb;
+        float frac = travel > 0f ? (pointerY - bar.Start - _barGrab) / travel : 0f;
+        _targetY = Math.Clamp(value: frac, min: 0f, max: 1f) * bar.Max;
         SnapScroll();
         MarkNeedsPaint();
     }
@@ -723,9 +769,9 @@ public sealed class CodeEditor : Widget, ITextInputClient
     {
         var bar = HBar();
         if (!bar.On) return;
-        var travel = bar.Len - bar.Thumb;
-        var frac = travel > 0f ? (pointerX - bar.Start - _barGrab) / travel : 0f;
-        _targetX = Math.Clamp(frac, 0f, 1f) * bar.Max;
+        float travel = bar.Len - bar.Thumb;
+        float frac = travel > 0f ? (pointerX - bar.Start - _barGrab) / travel : 0f;
+        _targetX = Math.Clamp(value: frac, min: 0f, max: 1f) * bar.Max;
         SnapScroll();
         MarkNeedsPaint();
     }
@@ -743,30 +789,15 @@ public sealed class CodeEditor : Widget, ITextInputClient
     public override int DebugStateHash()
     {
         return HashCode.Combine(
-            _lines.Count,
-            _caretLine,
-            _caretCol,
-            _anchorLine,
-            _anchorCol,
-            Focused,
-            (int)(_scrollY * 0.1f),
-            _barDrag
+            value1: _lines.Count,
+            value2: _caretLine,
+            value3: _caretCol,
+            value4: _anchorLine,
+            value5: _anchorCol,
+            value6: Focused,
+            value7: (int)(_scrollY * 0.1f),
+            value8: _barDrag
         );
-    }
-
-    /// <summary>
-    ///     Editor font size in points; null (the default) uses the <see cref="Typography.Code" />
-    ///     ramp size. Setting it drops cached native text layouts and relayouts.
-    /// </summary>
-    public float? FontSize
-    {
-        get => _fontSizeOverride;
-        set
-        {
-            if (Nullable.Equals(_fontSizeOverride, value)) return;
-            _fontSizeOverride = value;
-            InvalidateTextLayouts();
-        }
     }
 
     /// <summary>
@@ -788,17 +819,17 @@ public sealed class CodeEditor : Widget, ITextInputClient
         _lineHeight = _fontSize * Typography.Code.LineHeight;
 
         // Monospace advance drives every horizontal measurement (one cached measure, not per line).
-        _charWidth = TextMeasure.Width("0", _fontSize, fontFamily: "code");
+        _charWidth = TextMeasure.Width(text: "0", fontSize: _fontSize, fontFamily: "code");
 
         // Gutter sized to the widest line number; digits are monospace, so width = digits × advance.
-        var digits = Math.Max(2, _lines.Count.ToString().Length);
-        _gutterWidth = GutterPadLeft + digits * _charWidth + GutterPadRight;
+        int digits = Math.Max(val1: 2, val2: _lines.Count.ToString().Length);
+        _gutterWidth = GutterPadLeft + (digits * _charWidth) + GutterPadRight;
 
-        _size = c.Constrain(new Size(c.MaxWidth, c.MaxHeight));
-        var availableWidth = MathF.Max(_charWidth, _size.Width - _gutterWidth - Pad * 2f);
+        _size = c.Constrain(new Size(width: c.MaxWidth, height: c.MaxHeight));
+        float availableWidth = MathF.Max(x: _charWidth, y: _size.Width - _gutterWidth - (Pad * 2f));
         RebuildVisualRows(availableWidth);
         _contentWidth = 0f;
-        foreach (var row in _visualRows) _contentWidth = MathF.Max(_contentWidth, row.Width);
+        foreach (var row in _visualRows) _contentWidth = MathF.Max(x: _contentWidth, y: row.Width);
         if (SoftWrap) _scrollX = _targetX = 0f;
         return _size;
     }
@@ -806,10 +837,10 @@ public sealed class CodeEditor : Widget, ITextInputClient
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
@@ -835,23 +866,26 @@ public sealed class CodeEditor : Widget, ITextInputClient
     /// </summary>
     private int EnsureLineStates(ILineTokenizer tokenizer, int target)
     {
-        target = Math.Min(target, _lines.Count - 1);
+        target = Math.Min(val1: target, val2: _lines.Count - 1);
         if (_lineStates.Count == 0)
             _lineStates.Add(ILineTokenizer.StateDefault); // entering state of line 0
         while (_lineStates.Count <= target)
         {
-            var l = _lineStates.Count - 1; // last line whose entering state is known
-            var entering = _lineStates[l];
+            int l = _lineStates.Count - 1; // last line whose entering state is known
+            int entering = _lineStates[l];
             int exiting;
-            if (_tokenCache.TryGetValue(l, out var cached) && cached.EnteringState == entering)
-            {
+            if (_tokenCache.TryGetValue(key: l, value: out var cached) &&
+                cached.EnteringState == entering)
                 exiting = cached.ExitingState;
-            }
             else
             {
                 _tokenBuffer.Clear();
-                exiting = tokenizer.Tokenize(_lines[l], entering, _tokenBuffer);
-                _tokenCache[l] = CacheLineTokens(l, entering, exiting);
+                exiting = tokenizer.Tokenize(
+                    line: _lines[l],
+                    state: entering,
+                    output: _tokenBuffer
+                );
+                _tokenCache[l] = CacheLineTokens(line: l, entering: entering, exiting: exiting);
             }
 
             _lineStates.Add(exiting);
@@ -862,13 +896,14 @@ public sealed class CodeEditor : Widget, ITextInputClient
 
     private CachedLineTokens TokensForLine(ILineTokenizer tokenizer, int line)
     {
-        var entering = EnsureLineStates(tokenizer, line);
-        if (_tokenCache.TryGetValue(line, out var cached) && cached.EnteringState == entering)
+        int entering = EnsureLineStates(tokenizer: tokenizer, target: line);
+        if (_tokenCache.TryGetValue(key: line, value: out var cached) &&
+            cached.EnteringState == entering)
             return cached;
 
         _tokenBuffer.Clear();
-        var exiting = tokenizer.Tokenize(_lines[line], entering, _tokenBuffer);
-        cached = CacheLineTokens(line, entering, exiting);
+        int exiting = tokenizer.Tokenize(line: _lines[line], state: entering, output: _tokenBuffer);
+        cached = CacheLineTokens(line: line, entering: entering, exiting: exiting);
         _tokenCache[line] = cached;
         return cached;
     }
@@ -877,20 +912,25 @@ public sealed class CodeEditor : Widget, ITextInputClient
     {
         var tokens = _tokenBuffer.ToArray();
         var colored = new List<ColoredRun>();
-        var text = _lines[line];
+        string text = _lines[line];
         foreach (var token in tokens)
         {
             if (token.Kind == TokenKind.Default || token.Length <= 0 ||
                 token.Start >= text.Length) continue;
-            var length = Math.Min(token.Length, text.Length - token.Start);
-            colored.Add(new ColoredRun(token, text.Substring(token.Start, length)));
+            int length = Math.Min(val1: token.Length, val2: text.Length - token.Start);
+            colored.Add(
+                new ColoredRun(
+                    Token: token,
+                    Text: text.Substring(startIndex: token.Start, length: length)
+                )
+            );
         }
 
         return new CachedLineTokens(
-            entering,
-            exiting,
-            tokens,
-            colored.ToArray()
+            EnteringState: entering,
+            ExitingState: exiting,
+            Tokens: tokens,
+            ColoredRuns: colored.ToArray()
         );
     }
 
@@ -910,22 +950,26 @@ public sealed class CodeEditor : Widget, ITextInputClient
     {
         var layout = LayoutFor(s);
         if (layout is { IsValid: true })
+        {
             paint.AddTextLayout(
-                layout.Handle,
-                x,
-                baseline,
-                color
+                handle: layout.Handle,
+                x: x,
+                y: baseline,
+                color: color
             );
+        }
         else
+        {
             paint.AddText(
-                s,
-                x,
-                baseline,
-                color,
-                _fontSize,
-                Typography.Code.LineHeight,
+                text: s,
+                baselineX: x,
+                baselineY: baseline,
+                color: color,
+                fontSize: _fontSize,
+                lineHeight: Typography.Code.LineHeight,
                 fontFamily: "code"
             );
+        }
     }
 
     /// Resolve (creating + caching on first use) the native layout for a single-line code-face
@@ -936,7 +980,7 @@ public sealed class CodeEditor : Widget, ITextInputClient
         // Native text layouts belong to the MAIN window's glyph atlas — in a secondary OS window
         // they resolve against the wrong GpuUi (nothing renders). AddText fallback there.
         if (Owner is { NativeWindow: not null }) return null;
-        if (_layouts.TryGetValue(s, out var existing)) return existing;
+        if (_layouts.TryGetValue(key: s, value: out var existing)) return existing;
 
         var engine = ZigoteEngine.Instance;
         if (engine is null || engine.Handle == 0)
@@ -947,8 +991,8 @@ public sealed class CodeEditor : Widget, ITextInputClient
         {
             // Single-line segments never contain '\n', so lineHeight is immaterial here.
             layout = engine.CreateTextLayout(
-                s,
-                _fontSize,
+                text: s,
+                fontSize: _fontSize,
                 lineHeight: _lineHeight,
                 fontFamily: "code"
             );
@@ -975,33 +1019,36 @@ public sealed class CodeEditor : Widget, ITextInputClient
 
     public override void Paint(PaintList paint)
     {
-        var radius = Radii.Sm;
-        paint.AddRect(Bounds, _theme.Surface, radius);
-        paint.AddBorder(Bounds, _theme.Separator, radius);
+        float radius = Radii.Sm;
+        paint.AddRect(bounds: Bounds, color: _theme.Surface, radius: radius);
+        paint.AddBorder(bounds: Bounds, color: _theme.Separator, radius: radius);
 
         // Gutter background.
         var gutterRect = new Rect(
-            Bounds.X,
-            Bounds.Y,
-            _gutterWidth,
-            Bounds.Height
+            x: Bounds.X,
+            y: Bounds.Y,
+            width: _gutterWidth,
+            height: Bounds.Height
         );
-        paint.AddRect(gutterRect, _theme.Background);
+        paint.AddRect(bounds: gutterRect, color: _theme.Background);
         paint.AddRect(
-            new Rect(
-                Bounds.X + _gutterWidth - 0.5f,
-                Bounds.Y,
-                1f,
-                Bounds.Height
+            bounds: new Rect(
+                x: Bounds.X + _gutterWidth - 0.5f,
+                y: Bounds.Y,
+                width: 1f,
+                height: Bounds.Height
             ),
-            _theme.Separator
+            color: _theme.Separator
         );
 
-        var innerH = Bounds.Height - Pad * 2f;
+        float innerH = Bounds.Height - (Pad * 2f);
 
         // Visible visual-row window (a physical line may occupy several rows when soft-wrapped).
-        var first = Math.Max(0, (int)(_scrollY / _lineHeight));
-        var last = Math.Min(_visualRows.Count - 1, (int)((_scrollY + innerH) / _lineHeight) + 1);
+        int first = Math.Max(val1: 0, val2: (int)(_scrollY / _lineHeight));
+        int last = Math.Min(
+            val1: _visualRows.Count - 1,
+            val2: (int)((_scrollY + innerH) / _lineHeight) + 1
+        );
 
         // Carried multi-line lexer state entering the first visible line — read from the cross-frame
         // cache (rebuilt lazily, cleared on edit) instead of re-lexing from line 0 every frame.
@@ -1009,61 +1056,63 @@ public sealed class CodeEditor : Widget, ITextInputClient
         // ── Selection highlight (clipped to the text area) ────────────────────
         paint.AddClipStart(
             new Rect(
-                Bounds.X + _gutterWidth,
-                Bounds.Y,
-                Bounds.Width - _gutterWidth,
-                Bounds.Height
+                x: Bounds.X + _gutterWidth,
+                y: Bounds.Y,
+                width: Bounds.Width - _gutterWidth,
+                height: Bounds.Height
             )
         );
 
         if (HasSelection)
         {
             var (s, e) = OrderedSelection();
-            for (var visual = first; visual <= last; visual++)
+            for (int visual = first; visual <= last; visual++)
             {
                 var row = _visualRows[visual];
                 if (row.Line < s.Line || row.Line > e.Line) continue;
-                var c0 = Math.Max(row.Start, row.Line == s.Line ? s.Col : row.Start);
-                var c1 = Math.Min(row.End, row.Line == e.Line ? e.Col : row.End);
+                int c0 = Math.Max(val1: row.Start, val2: row.Line == s.Line ? s.Col : row.Start);
+                int c1 = Math.Min(val1: row.End, val2: row.Line == e.Line ? e.Col : row.End);
                 if (c1 < c0) continue;
-                var x0 = TextLeft - _scrollX + ColToX(row, c0);
-                var x1 = TextLeft - _scrollX + ColToX(row, c1);
+                float x0 = TextLeft - _scrollX + ColToX(row: row, col: c0);
+                float x1 = TextLeft - _scrollX + ColToX(row: row, col: c1);
                 // Trailing newline selected lines get a small caret-width sliver.
                 if (row.Line < e.Line && row.End == _lines[row.Line].Length) x1 += _fontSize * 0.4f;
-                var y = TextTop - _scrollY + visual * _lineHeight;
+                float y = TextTop - _scrollY + (visual * _lineHeight);
                 paint.AddRect(
-                    new Rect(
-                        MathF.Min(x0, x1),
-                        y,
-                        MathF.Max(2f, MathF.Abs(x1 - x0)),
-                        _lineHeight
+                    bounds: new Rect(
+                        x: MathF.Min(x: x0, y: x1),
+                        y: y,
+                        width: MathF.Max(x: 2f, y: MathF.Abs(x1 - x0)),
+                        height: _lineHeight
                     ),
-                    _theme.Selection.WithAlpha(0.3f)
+                    color: _theme.Selection.WithAlpha(0.3f)
                 );
             }
         }
 
         // ── Text per visible row ──────────────────────────────────────────────
-        for (var visual = first; visual <= last; visual++)
+        for (int visual = first; visual <= last; visual++)
         {
             var row = _visualRows[visual];
-            var l = row.Line;
-            var line = _lines[l];
-            var cachedTokens = tokenizer is not null ? TokensForLine(tokenizer, l) : default;
+            int l = row.Line;
+            string line = _lines[l];
+            var cachedTokens = tokenizer is not null
+                ? TokensForLine(tokenizer: tokenizer, line: l)
+                : default;
             var tokens = cachedTokens.Tokens ?? [];
-            var y = TextTop - _scrollY + visual * _lineHeight;
-            var baseline = y + _fontSize * 0.8f;
+            float y = TextTop - _scrollY + (visual * _lineHeight);
+            float baseline = y + (_fontSize * 0.8f);
 
             if (row.Start == row.End) continue;
 
             if (tokens.Length == 0)
             {
                 DrawSegment(
-                    paint,
-                    line[row.Start..row.End],
-                    TextLeft - _scrollX,
-                    baseline,
-                    _theme.OnSurface
+                    paint: paint,
+                    s: line[row.Start..row.End],
+                    x: TextLeft - _scrollX,
+                    baseline: baseline,
+                    color: _theme.OnSurface
                 );
                 continue;
             }
@@ -1073,30 +1122,30 @@ public sealed class CodeEditor : Widget, ITextInputClient
             // tokens are overpainted below; common keywords/operators then reuse tiny shared layouts
             // instead of creating a native layout for every identifier while scrolling.
             DrawSegment(
-                paint,
-                line[row.Start..row.End],
-                TextLeft - _scrollX,
-                baseline,
-                _theme.OnSurface
+                paint: paint,
+                s: line[row.Start..row.End],
+                x: TextLeft - _scrollX,
+                baseline: baseline,
+                color: _theme.OnSurface
             );
             foreach (var coloredRun in cachedTokens.ColoredRuns ?? [])
             {
                 var tok = coloredRun.Token;
-                var tokenEnd = Math.Min(line.Length, tok.Start + tok.Length);
-                var start = Math.Max(row.Start, tok.Start);
-                var end = Math.Min(row.End, tokenEnd);
+                int tokenEnd = Math.Min(val1: line.Length, val2: tok.Start + tok.Length);
+                int start = Math.Max(val1: row.Start, val2: tok.Start);
+                int end = Math.Min(val1: row.End, val2: tokenEnd);
                 if (end <= start) continue;
-                var slice = start == tok.Start && end == tokenEnd
+                string slice = start == tok.Start && end == tokenEnd
                     ? coloredRun.Text
                     : line[start..end];
                 if (slice.Length == 0) continue;
-                var x = TextLeft - _scrollX + ColToX(row, start);
+                float x = TextLeft - _scrollX + ColToX(row: row, col: start);
                 DrawSegment(
-                    paint,
-                    slice,
-                    x,
-                    baseline,
-                    ColorFor(tok.Kind)
+                    paint: paint,
+                    s: slice,
+                    x: x,
+                    baseline: baseline,
+                    color: ColorFor(tok.Kind)
                 );
             }
         }
@@ -1104,79 +1153,79 @@ public sealed class CodeEditor : Widget, ITextInputClient
         // ── Caret ──────────────────────────────────────────────────────────────
         if (Focused && !ReadOnly)
         {
-            var time = App.Active?.Time ?? 0f;
+            float time = App.Active?.Time ?? 0f;
             if (time % 1.06f < 0.6f || _isDragging)
             {
-                var caretRow = RowForCaret(_caretLine, _caretCol);
-                var cx = TextLeft - _scrollX + ColToX(_caretLine, _caretCol);
-                var cy = TextTop - _scrollY + caretRow * _lineHeight;
+                int caretRow = RowForCaret(line: _caretLine, col: _caretCol);
+                float cx = TextLeft - _scrollX + ColToX(line: _caretLine, col: _caretCol);
+                float cy = TextTop - _scrollY + (caretRow * _lineHeight);
                 if (_compositionText.Length > 0)
                 {
                     DrawSegment(
-                        paint,
-                        _compositionText,
-                        cx,
-                        cy + _fontSize * 0.8f,
-                        _theme.OnSurface
+                        paint: paint,
+                        s: _compositionText,
+                        x: cx,
+                        baseline: cy + (_fontSize * 0.8f),
+                        color: _theme.OnSurface
                     );
-                    var compositionWidth = TextMeasure.Width(
-                        _compositionText,
-                        _fontSize,
+                    float compositionWidth = TextMeasure.Width(
+                        text: _compositionText,
+                        fontSize: _fontSize,
                         fontFamily: "code"
                     );
                     paint.AddRect(
-                        new Rect(
-                            cx,
-                            cy + _lineHeight - 2f,
-                            MathF.Max(1f, compositionWidth),
-                            1f
+                        bounds: new Rect(
+                            x: cx,
+                            y: cy + _lineHeight - 2f,
+                            width: MathF.Max(x: 1f, y: compositionWidth),
+                            height: 1f
                         ),
-                        _theme.Primary
+                        color: _theme.Primary
                     );
-                    var compositionCaret = TextNavigation.GraphemeBoundaryAtOrBefore(
-                        _compositionText,
-                        _compositionSelectionStart + _compositionSelectionLength
+                    int compositionCaret = TextNavigation.GraphemeBoundaryAtOrBefore(
+                        text: _compositionText,
+                        index: _compositionSelectionStart + _compositionSelectionLength
                     );
                     cx += TextMeasure.Width(
-                        _compositionText[..compositionCaret],
-                        _fontSize,
+                        text: _compositionText[..compositionCaret],
+                        fontSize: _fontSize,
                         fontFamily: "code"
                     );
                 }
 
                 paint.AddRect(
-                    new Rect(
-                        cx,
-                        cy,
-                        1.5f,
-                        _lineHeight
+                    bounds: new Rect(
+                        x: cx,
+                        y: cy,
+                        width: 1.5f,
+                        height: _lineHeight
                     ),
-                    _theme.Primary
+                    color: _theme.Primary
                 );
             }
 
-            var imeRow = RowForCaret(_caretLine, _caretCol);
-            var imeX = TextLeft - _scrollX + ColToX(_caretLine, _caretCol);
-            var imeY = TextTop - _scrollY + imeRow * _lineHeight;
+            int imeRow = RowForCaret(line: _caretLine, col: _caretCol);
+            float imeX = TextLeft - _scrollX + ColToX(line: _caretLine, col: _caretCol);
+            float imeY = TextTop - _scrollY + (imeRow * _lineHeight);
             if (_compositionText.Length > 0)
             {
-                var compositionCaret = TextNavigation.GraphemeBoundaryAtOrBefore(
-                    _compositionText,
-                    _compositionSelectionStart + _compositionSelectionLength
+                int compositionCaret = TextNavigation.GraphemeBoundaryAtOrBefore(
+                    text: _compositionText,
+                    index: _compositionSelectionStart + _compositionSelectionLength
                 );
                 imeX += TextMeasure.Width(
-                    _compositionText[..compositionCaret],
-                    _fontSize,
+                    text: _compositionText[..compositionCaret],
+                    fontSize: _fontSize,
                     fontFamily: "code"
                 );
             }
 
             ZigoteEngine.Instance?.SetTextInputArea(
                 new Rect(
-                    imeX,
-                    imeY,
-                    1.5f,
-                    _lineHeight
+                    x: imeX,
+                    y: imeY,
+                    width: 1.5f,
+                    height: _lineHeight
                 )
             );
         }
@@ -1185,22 +1234,22 @@ public sealed class CodeEditor : Widget, ITextInputClient
 
         // ── Line numbers ────────────────────────────────────────────────────────
         paint.AddClipStart(gutterRect);
-        for (var visual = first; visual <= last; visual++)
+        for (int visual = first; visual <= last; visual++)
         {
             var row = _visualRows[visual];
             if (row.Start != 0) continue;
-            var l = row.Line;
-            var num = LineNo(l);
-            var w = num.Length * _charWidth; // monospace
-            var nx = Bounds.X + _gutterWidth - GutterPadRight - w;
-            var ny = TextTop - _scrollY + visual * _lineHeight + _fontSize * 0.8f;
+            int l = row.Line;
+            string num = LineNo(l);
+            float w = num.Length * _charWidth; // monospace
+            float nx = Bounds.X + _gutterWidth - GutterPadRight - w;
+            float ny = TextTop - _scrollY + (visual * _lineHeight) + (_fontSize * 0.8f);
             var col = l == _caretLine ? _theme.Label2 : _theme.Label3;
             DrawSegment(
-                paint,
-                num,
-                nx,
-                ny,
-                col
+                paint: paint,
+                s: num,
+                x: nx,
+                baseline: ny,
+                color: col
             );
         }
 
@@ -1210,50 +1259,50 @@ public sealed class CodeEditor : Widget, ITextInputClient
         var hbar = HBar();
         if (hbar.On)
         {
-            var thumbX = hbar.Start + (hbar.Len - hbar.Thumb) * (_scrollX / hbar.Max);
-            var h = _barDrag == 2 ? 4f : 3f;
+            float thumbX = hbar.Start + ((hbar.Len - hbar.Thumb) * (_scrollX / hbar.Max));
+            float h = _barDrag == 2 ? 4f : 3f;
             paint.AddRect(
-                new Rect(
-                    thumbX,
-                    Bounds.Bottom - h - 2f,
-                    hbar.Thumb,
-                    h
+                bounds: new Rect(
+                    x: thumbX,
+                    y: Bounds.Bottom - h - 2f,
+                    width: hbar.Thumb,
+                    height: h
                 ),
-                _theme.OnSurface.WithAlpha(_barDrag == 2 ? 0.55f : 0.25f),
-                h / 2f
+                color: _theme.OnSurface.WithAlpha(_barDrag == 2 ? 0.55f : 0.25f),
+                radius: h / 2f
             );
         }
 
         var vbar = VBar();
         if (vbar.On)
         {
-            var thumbY = vbar.Start + (vbar.Len - vbar.Thumb) * (_scrollY / vbar.Max);
-            var w = _barDrag == 1 ? 4f : 3f;
+            float thumbY = vbar.Start + ((vbar.Len - vbar.Thumb) * (_scrollY / vbar.Max));
+            float w = _barDrag == 1 ? 4f : 3f;
             paint.AddRect(
-                new Rect(
-                    Bounds.Right - w - 2f,
-                    thumbY,
-                    w,
-                    vbar.Thumb
+                bounds: new Rect(
+                    x: Bounds.Right - w - 2f,
+                    y: thumbY,
+                    width: w,
+                    height: vbar.Thumb
                 ),
-                _theme.OnSurface.WithAlpha(_barDrag == 1 ? 0.55f : 0.25f),
-                w / 2f
+                color: _theme.OnSurface.WithAlpha(_barDrag == 1 ? 0.55f : 0.25f),
+                radius: w / 2f
             );
         }
 
         if (Focused)
-            paint.AddFocusRing(Bounds, radius, _theme);
+            paint.AddFocusRing(bounds: Bounds, radius: radius, theme: _theme);
     }
 
     // ── Pointer input ─────────────────────────────────────────────────────────
 
     private (int Line, int Col) HitPosition(Offset point)
     {
-        var visual = (int)((point.Y - (TextTop - _scrollY)) / _lineHeight);
-        visual = Math.Clamp(visual, 0, _visualRows.Count - 1);
+        int visual = (int)((point.Y - (TextTop - _scrollY)) / _lineHeight);
+        visual = Math.Clamp(value: visual, min: 0, max: _visualRows.Count - 1);
         var row = _visualRows[visual];
-        var localX = point.X - (TextLeft - _scrollX);
-        var col = XToCol(row, localX);
+        float localX = point.X - (TextLeft - _scrollX);
+        int col = XToCol(row: row, localX: localX);
         return (row.Line, col);
     }
 
@@ -1265,7 +1314,7 @@ public sealed class CodeEditor : Widget, ITextInputClient
         var vbar = VBar();
         if (vbar.On && point.X >= Bounds.Right - BarHitWidth)
         {
-            var thumbY = vbar.Start + (vbar.Len - vbar.Thumb) * (_scrollY / vbar.Max);
+            float thumbY = vbar.Start + ((vbar.Len - vbar.Thumb) * (_scrollY / vbar.Max));
             _barGrab = point.Y >= thumbY && point.Y <= thumbY + vbar.Thumb
                 ? point.Y - thumbY
                 : vbar.Thumb / 2f;
@@ -1277,7 +1326,7 @@ public sealed class CodeEditor : Widget, ITextInputClient
         var hbar = HBar();
         if (hbar.On && point.Y >= Bounds.Bottom - BarHitWidth && point.X >= Bounds.X + _gutterWidth)
         {
-            var thumbX = hbar.Start + (hbar.Len - hbar.Thumb) * (_scrollX / hbar.Max);
+            float thumbX = hbar.Start + ((hbar.Len - hbar.Thumb) * (_scrollX / hbar.Max));
             _barGrab = point.X >= thumbX && point.X <= thumbX + hbar.Thumb
                 ? point.X - thumbX
                 : hbar.Thumb / 2f;
@@ -1286,15 +1335,15 @@ public sealed class CodeEditor : Widget, ITextInputClient
             return;
         }
 
-        var (l, col) = HitPosition(point);
+        (int l, int col) = HitPosition(point);
 
         // Double-click selects the word under the cursor.
-        var now = App.Active?.Time ?? 0f;
+        float now = App.Active?.Time ?? 0f;
         if (now - _lastClickTime < DoubleClickSeconds && l == _lastClickLine &&
             Math.Abs(col - _lastClickCol) <= 1)
         {
             _lastClickTime = -1f; // consume so a third click doesn't chain
-            SelectWordAt(l, col);
+            SelectWordAt(line: l, col: col);
             return;
         }
 
@@ -1313,9 +1362,9 @@ public sealed class CodeEditor : Widget, ITextInputClient
     /// <summary>Select the word (or single non-word char) at the given position.</summary>
     private void SelectWordAt(int line, int col)
     {
-        var s = _lines[Math.Clamp(line, 0, _lines.Count - 1)];
-        var (start, end) = TextNavigation.WordAt(s, col);
-        col = Math.Clamp(col, 0, s.Length);
+        string s = _lines[Math.Clamp(value: line, min: 0, max: _lines.Count - 1)];
+        (int start, int end) = TextNavigation.WordAt(text: s, pos: col);
+        col = Math.Clamp(value: col, min: 0, max: s.Length);
 
         _isDragging = false;
         if (start == end)
@@ -1350,7 +1399,7 @@ public sealed class CodeEditor : Widget, ITextInputClient
         }
 
         if (!_isDragging) return;
-        var (l, col) = HitPosition(point);
+        (int l, int col) = HitPosition(point);
         _caretLine = l;
         _caretCol = col;
         EnsureCaretVisible();
@@ -1373,7 +1422,7 @@ public sealed class CodeEditor : Widget, ITextInputClient
     public override void OnScroll(float dx, float dy)
     {
         // Shift+wheel scrolls horizontally — mice without a horizontal wheel emit only dy.
-        var shift = App.Active?.CurrentModifiers.HasFlag(Modifiers.Shift) ?? false;
+        bool shift = App.Active?.CurrentModifiers.HasFlag(Modifiers.Shift) ?? false;
         if (shift && dx == 0f)
         {
             dx = dy;
@@ -1389,10 +1438,7 @@ public sealed class CodeEditor : Widget, ITextInputClient
     // Touch scrolling. Without these the editor is wheel-only: a finger drag inside it runs
     // OnPointerMove (text selection) and the document never moves. Deltas are already in logical
     // px — no wheel-tick conversion — and the drag tracks the finger 1:1.
-    public override bool CanTouchScroll(bool vertical)
-    {
-        return vertical ? VBar().On : HBar().On;
-    }
+    public override bool CanTouchScroll(bool vertical) => vertical ? VBar().On : HBar().On;
 
     public override void OnTouchScroll(float dx, float dy)
     {
@@ -1416,21 +1462,34 @@ public sealed class CodeEditor : Widget, ITextInputClient
     {
         var menu = new ContextMenu();
         menu.Items.Add(
-            new ContextMenuItem("Cut", HasSelection && !ReadOnly ? CutAction : null, Shortcut: "⌘X")
+            new ContextMenuItem(
+                Label: "Cut",
+                OnSelect: HasSelection && !ReadOnly ? CutAction : null,
+                Shortcut: "⌘X"
+            )
         );
         menu.Items.Add(
-            new ContextMenuItem("Copy", HasSelection ? CopyAction : null, Shortcut: "⌘C")
+            new ContextMenuItem(
+                Label: "Copy",
+                OnSelect: HasSelection ? CopyAction : null,
+                Shortcut: "⌘C"
+            )
         );
-        menu.Items.Add(new ContextMenuItem("Paste", ReadOnly ? null : PasteAction, Shortcut: "⌘V"));
-        menu.Items.Add(new ContextMenuItem("", null, true));
-        menu.Items.Add(new ContextMenuItem("Select All", SelectAll, Shortcut: "⌘A"));
+        menu.Items.Add(
+            new ContextMenuItem(
+                Label: "Paste",
+                OnSelect: ReadOnly ? null : PasteAction,
+                Shortcut: "⌘V"
+            )
+        );
+        menu.Items.Add(new ContextMenuItem(Label: "", OnSelect: null, Separator: true));
+        menu.Items.Add(
+            new ContextMenuItem(Label: "Select All", OnSelect: SelectAll, Shortcut: "⌘A")
+        );
         menu.ShowAt(point);
     }
 
-    protected override void OnFocusChanged(bool focused)
-    {
-        MarkNeedsPaint();
-    }
+    protected override void OnFocusChanged(bool focused) => MarkNeedsPaint();
 
     // ── Keyboard input ────────────────────────────────────────────────────────
 
@@ -1438,18 +1497,18 @@ public sealed class CodeEditor : Widget, ITextInputClient
     {
         if (ReadOnly) return;
         _compositionText = string.Empty;
-        InsertText(text, EditKind.Typing);
+        InsertText(text: text, kind: EditKind.Typing);
     }
 
     public override void OnTextComposition(string text, int selectionStart, int selectionLength)
     {
         if (ReadOnly) return;
         _compositionText = text;
-        _compositionSelectionStart = Math.Clamp(selectionStart, 0, text.Length);
+        _compositionSelectionStart = Math.Clamp(value: selectionStart, min: 0, max: text.Length);
         _compositionSelectionLength = Math.Clamp(
-            selectionLength,
-            0,
-            text.Length - _compositionSelectionStart
+            value: selectionLength,
+            min: 0,
+            max: text.Length - _compositionSelectionStart
         );
         EnsureCaretVisible();
         MarkNeedsPaint();
@@ -1471,10 +1530,11 @@ public sealed class CodeEditor : Widget, ITextInputClient
         const uint scKpEnter = 88;
         const uint scTab = 43;
 
-        var shift = mods.HasFlag(Modifiers.Shift);
-        var cmd = mods.HasCommand(); // Ctrl or ⌘
+        bool shift = mods.HasFlag(Modifiers.Shift);
+        bool cmd = mods.HasCommand(); // Ctrl or ⌘
 
         if (cmd)
+        {
             switch (char.ToLowerInvariant(keyChar))
             {
                 case 'a':
@@ -1500,31 +1560,34 @@ public sealed class CodeEditor : Widget, ITextInputClient
                     Redo();
                     return;
             }
+        }
 
         switch (scancode)
         {
             case scLeft:
-                MoveCaret(shift, -1);
+                MoveCaret(extend: shift, dCol: -1);
                 return;
             case scRight:
-                MoveCaret(shift, +1);
+                MoveCaret(extend: shift, dCol: +1);
                 return;
             case scUp:
-                MoveCaretVertical(shift, -1);
+                MoveCaretVertical(extend: shift, dLine: -1);
                 return;
             case scDown:
-                MoveCaretVertical(shift, +1);
+                MoveCaretVertical(extend: shift, dLine: +1);
                 return;
             case scHome:
                 StartOrExtendSelection(shift);
-                _caretCol = SoftWrap ? _visualRows[RowForCaret(_caretLine, _caretCol)].Start : 0;
+                _caretCol = SoftWrap
+                    ? _visualRows[RowForCaret(line: _caretLine, col: _caretCol)].Start
+                    : 0;
                 EnsureCaretVisible();
                 MarkNeedsPaint();
                 return;
             case scEnd:
                 StartOrExtendSelection(shift);
                 _caretCol = SoftWrap
-                    ? _visualRows[RowForCaret(_caretLine, _caretCol)].End
+                    ? _visualRows[RowForCaret(line: _caretLine, col: _caretCol)].End
                     : _lines[_caretLine].Length;
                 EnsureCaretVisible();
                 MarkNeedsPaint();
@@ -1540,12 +1603,12 @@ public sealed class CodeEditor : Widget, ITextInputClient
             {
                 RecordEdit(EditKind.Other);
                 if (HasSelection) DeleteSelection();
-                var cur = _lines[_caretLine];
-                var indent = LeadingWhitespace(cur);
-                var before = cur[.._caretCol];
-                var after = cur[_caretCol..];
+                string cur = _lines[_caretLine];
+                string indent = LeadingWhitespace(cur);
+                string before = cur[.._caretCol];
+                string after = cur[_caretCol..];
                 _lines[_caretLine] = before;
-                _lines.Insert(_caretLine + 1, indent + after);
+                _lines.Insert(index: _caretLine + 1, item: indent + after);
                 _caretLine++;
                 _caretCol = indent.Length;
                 ClearSelection();
@@ -1554,7 +1617,7 @@ public sealed class CodeEditor : Widget, ITextInputClient
             }
 
             case scTab:
-                InsertText(new string(' ', TabWidth));
+                InsertText(new string(c: ' ', count: TabWidth));
                 return;
 
             case scBackspace:
@@ -1568,9 +1631,9 @@ public sealed class CodeEditor : Widget, ITextInputClient
 
                 if (_caretCol > 0)
                 {
-                    var previous = TextNavigation.PreviousGraphemeBoundary(
-                        _lines[_caretLine],
-                        _caretCol
+                    int previous = TextNavigation.PreviousGraphemeBoundary(
+                        text: _lines[_caretLine],
+                        index: _caretCol
                     );
                     _lines[_caretLine] =
                         _lines[_caretLine][..previous] + _lines[_caretLine][_caretCol..];
@@ -1578,7 +1641,7 @@ public sealed class CodeEditor : Widget, ITextInputClient
                 }
                 else if (_caretLine > 0)
                 {
-                    var prevLen = _lines[_caretLine - 1].Length;
+                    int prevLen = _lines[_caretLine - 1].Length;
                     _lines[_caretLine - 1] += _lines[_caretLine];
                     _lines.RemoveAt(_caretLine);
                     _caretLine--;
@@ -1599,7 +1662,10 @@ public sealed class CodeEditor : Widget, ITextInputClient
 
                 if (_caretCol < _lines[_caretLine].Length)
                 {
-                    var next = TextNavigation.NextGraphemeBoundary(_lines[_caretLine], _caretCol);
+                    int next = TextNavigation.NextGraphemeBoundary(
+                        text: _lines[_caretLine],
+                        index: _caretCol
+                    );
                     _lines[_caretLine] =
                         _lines[_caretLine][.._caretCol] + _lines[_caretLine][next..];
                 }
@@ -1616,7 +1682,7 @@ public sealed class CodeEditor : Widget, ITextInputClient
 
     private static string LeadingWhitespace(string s)
     {
-        var i = 0;
+        int i = 0;
         while (i < s.Length && (s[i] == ' ' || s[i] == '\t')) i++;
         return s[..i];
     }
@@ -1635,19 +1701,23 @@ public sealed class CodeEditor : Widget, ITextInputClient
             return;
         }
 
-        var currentRowIndex = RowForCaret(_caretLine, _caretCol);
+        int currentRowIndex = RowForCaret(line: _caretLine, col: _caretCol);
         var currentRow = _visualRows[currentRowIndex];
-        var rowText = _lines[_caretLine][currentRow.Start..currentRow.End];
+        string rowText = _lines[_caretLine][currentRow.Start..currentRow.End];
         var rowLayout = currentRow.FastGrid ? null : LayoutFor(rowText);
-        var relative = _caretCol - currentRow.Start;
-        var visualMoved = rowLayout?.MoveCaretVisual(relative, dCol) ??
+        int relative = _caretCol - currentRow.Start;
+        int visualMoved = rowLayout?.MoveCaretVisual(textOffset: relative, direction: dCol) ??
                           (dCol < 0
-                              ? TextNavigation.PreviousGraphemeBoundary(rowText, relative)
-                              : TextNavigation.NextGraphemeBoundary(rowText, relative));
+                              ? TextNavigation.PreviousGraphemeBoundary(
+                                  text: rowText,
+                                  index: relative
+                              )
+                              : TextNavigation.NextGraphemeBoundary(
+                                  text: rowText,
+                                  index: relative
+                              ));
         if (visualMoved != relative)
-        {
             _caretCol = currentRow.Start + visualMoved;
-        }
         else if (dCol < 0)
         {
             if (currentRowIndex > 0)
@@ -1658,7 +1728,10 @@ public sealed class CodeEditor : Widget, ITextInputClient
             }
             else if (_caretCol > 0)
             {
-                _caretCol = TextNavigation.PreviousGraphemeBoundary(_lines[_caretLine], _caretCol);
+                _caretCol = TextNavigation.PreviousGraphemeBoundary(
+                    text: _lines[_caretLine],
+                    index: _caretCol
+                );
             }
         }
         else
@@ -1671,7 +1744,10 @@ public sealed class CodeEditor : Widget, ITextInputClient
             }
             else if (_caretCol < _lines[_caretLine].Length)
             {
-                _caretCol = TextNavigation.NextGraphemeBoundary(_lines[_caretLine], _caretCol);
+                _caretCol = TextNavigation.NextGraphemeBoundary(
+                    text: _lines[_caretLine],
+                    index: _caretCol
+                );
             }
         }
 
@@ -1682,13 +1758,13 @@ public sealed class CodeEditor : Widget, ITextInputClient
     private void MoveCaretVertical(bool extend, int dLine)
     {
         StartOrExtendSelection(extend);
-        var current = RowForCaret(_caretLine, _caretCol);
-        var target = Math.Clamp(current + dLine, 0, _visualRows.Count - 1);
+        int current = RowForCaret(line: _caretLine, col: _caretCol);
+        int target = Math.Clamp(value: current + dLine, min: 0, max: _visualRows.Count - 1);
         if (target == current) return;
-        var desiredX = ColToX(_visualRows[current], _caretCol);
+        float desiredX = ColToX(row: _visualRows[current], col: _caretCol);
         var targetRow = _visualRows[target];
         _caretLine = targetRow.Line;
-        _caretCol = XToCol(targetRow, desiredX);
+        _caretCol = XToCol(row: targetRow, localX: desiredX);
         EnsureCaretVisible();
         MarkNeedsPaint();
     }

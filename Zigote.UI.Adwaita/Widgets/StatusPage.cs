@@ -8,43 +8,46 @@ namespace Zigote.UI.Adwaita;
 /// </summary>
 public sealed class AdwStatusPage : ComposedWidget
 {
-    private string? _iconName;
-    private string _title = "";
-    private string? _description;
     private Widget? _child;
     private bool _compact;
+    private string? _description;
+    private string? _iconName;
+    private string _title = "";
 
-    /// <summary>Icon glyph (a <see cref="MaterialIcons" /> / <see cref="Icons" /> constant), or null for none.</summary>
+    /// <summary>
+    ///     Icon glyph (a <see cref="MaterialIcons" /> / <see cref="Icons" /> constant), or null for
+    ///     none.
+    /// </summary>
     public string? IconName
     {
         get => _iconName;
-        set => this.Set(ref _iconName, value);
+        set => this.Set(field: ref _iconName, value: value);
     }
 
     public string Title
     {
         get => _title;
-        set => this.Set(ref _title, value);
+        set => this.Set(field: ref _title, value: value);
     }
 
     public string? Description
     {
         get => _description;
-        set => this.Set(ref _description, value);
+        set => this.Set(field: ref _description, value: value);
     }
 
     /// <summary>Optional widget under the description — typically a pill suggested AdwButton.</summary>
     public Widget? Child
     {
         get => _child;
-        set => this.Set(ref _child, value);
+        set => this.Set(field: ref _child, value: value);
     }
 
     /// <summary>Smaller icon and title with tighter spacing, for embedding in panes.</summary>
     public bool Compact
     {
         get => _compact;
-        set => this.Set(ref _compact, value);
+        set => this.Set(field: ref _compact, value: value);
     }
 
     protected override Widget Build(BuildContext context)
@@ -63,9 +66,9 @@ public sealed class AdwStatusPage : ComposedWidget
         {
             col.Children.Add(
                 new IconGlyph(
-                    IconName!,
-                    Compact ? 96f : 128f,
-                    AdwPalette.Fill(theme, AdwStyle.DimOpacity)
+                    glyph: IconName!,
+                    size: Compact ? 96f : 128f,
+                    color: AdwPalette.Fill(theme: theme, percent: AdwStyle.DimOpacity)
                 )
             );
             col.Children.Add(new SizedBox(height: Compact ? Spacing.Md : Spacing.Xxl));
@@ -73,20 +76,26 @@ public sealed class AdwStatusPage : ComposedWidget
 
         col.Children.Add(
             new Label(
-                Title,
-                Compact ? AdwTypography.Title2 : AdwTypography.Title1,
-                theme.OnBackground
+                text: Title,
+                style: Compact ? AdwTypography.Title2 : AdwTypography.Title1,
+                color: theme.OnBackground
             ) {
                 Align = TextAlign.Center,
             }
         );
 
         if (!string.IsNullOrEmpty(Description))
+        {
             col.Children.Add(
-                new Label(Description!, AdwTypography.Body, theme.TextSecondary) {
+                new Label(
+                    text: Description!,
+                    style: AdwTypography.Body,
+                    color: theme.TextSecondary
+                ) {
                     Align = TextAlign.Center,
                 }
             );
+        }
 
         if (Child is not null) col.Children.Add(Child);
 
@@ -94,19 +103,19 @@ public sealed class AdwStatusPage : ComposedWidget
         // vertically centered too, like the GNOME status page.
         return new Center {
             Child = new ConstrainedBox(
-                new Constraints(
-                    0f,
-                    420f,
-                    0f,
-                    float.PositiveInfinity
+                constraints: new Constraints(
+                    minWidth: 0f,
+                    maxWidth: 420f,
+                    minHeight: 0f,
+                    maxHeight: float.PositiveInfinity
                 ),
                 // `> box { margin: 36px 12px }`, 24px on the compact variant.
-                new Padding(
-                    EdgeInsets.Symmetric(
-                        AdwMetrics.PageMarginX,
-                        Compact ? Spacing.Xxl : 36f
+                child: new Padding(
+                    padding: EdgeInsets.Symmetric(
+                        horizontal: AdwMetrics.PageMarginX,
+                        vertical: Compact ? Spacing.Xxl : 36f
                     ),
-                    col
+                    child: col
                 )
             ),
         };

@@ -42,10 +42,10 @@ public sealed class DecoratedBox : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         Child?.Layout(origin);
     }
@@ -53,39 +53,38 @@ public sealed class DecoratedBox : Widget
     public override void Paint(PaintList paint)
     {
         if (Elevation is { } e)
-            paint.AddElevation(Bounds, Radius, e);
+            paint.AddElevation(bounds: Bounds, radius: Radius, style: e);
         if (Fill.A > 0f)
-            paint.AddRect(Bounds, Fill, Radius);
+            paint.AddRect(bounds: Bounds, color: Fill, radius: Radius);
         if (BorderColor.A > 0f)
+        {
             paint.AddBorder(
-                Bounds,
-                BorderColor,
-                Radius,
-                BorderWidth
+                bounds: Bounds,
+                color: BorderColor,
+                radius: Radius,
+                width: BorderWidth
             );
+        }
 
         Child?.Paint(paint);
     }
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return Child?.HitTest(point) ?? this;
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(Child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Child);
 
     public override int DebugStateHash()
     {
         return HashCode.Combine(
-            Fill,
-            BorderColor,
-            Radius,
-            Elevation,
-            Child?.DebugStateHash() ?? 0
+            value1: Fill,
+            value2: BorderColor,
+            value3: Radius,
+            value4: Elevation,
+            value5: Child?.DebugStateHash() ?? 0
         );
     }
 }

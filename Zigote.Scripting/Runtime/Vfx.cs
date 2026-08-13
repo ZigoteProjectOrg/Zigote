@@ -11,30 +11,15 @@ public readonly struct VfxHandle(uint id) : IEquatable<VfxHandle>
     public uint Id { get; } = id;
     public bool IsValid => Id != 0;
 
-    public bool Equals(VfxHandle other)
-    {
-        return Id == other.Id;
-    }
+    public bool Equals(VfxHandle other) => Id == other.Id;
 
-    public override bool Equals(object? obj)
-    {
-        return obj is VfxHandle h && Equals(h);
-    }
+    public override bool Equals(object? obj) => obj is VfxHandle h && Equals(h);
 
-    public override int GetHashCode()
-    {
-        return (int)Id;
-    }
+    public override int GetHashCode() => (int)Id;
 
-    public static bool operator ==(VfxHandle a, VfxHandle b)
-    {
-        return a.Id == b.Id;
-    }
+    public static bool operator ==(VfxHandle a, VfxHandle b) => a.Id == b.Id;
 
-    public static bool operator !=(VfxHandle a, VfxHandle b)
-    {
-        return a.Id != b.Id;
-    }
+    public static bool operator !=(VfxHandle a, VfxHandle b) => a.Id != b.Id;
 }
 
 /// <summary>
@@ -61,13 +46,18 @@ public interface IVfxBackend
 }
 
 /// <summary>
-///     Generic particle/VFX access for scripts: a game <see cref="Component" /> spawns and drives emitters
-///     from a <see cref="VfxEmitterAsset" /> (build one in code, or load one your game ships). Engine-generic
-///     — it knows nothing about the editor. The host assigns <see cref="Backend" /> in play mode (and clears
-///     it on stop); outside play every call is a safe no-op. Mirrors <see cref="Input" />/<see cref="Audio" />.
+///     Generic particle/VFX access for scripts: a game <see cref="Component" /> spawns and drives
+///     emitters
+///     from a <see cref="VfxEmitterAsset" /> (build one in code, or load one your game ships).
+///     Engine-generic
+///     — it knows nothing about the editor. The host assigns <see cref="Backend" /> in play mode (and
+///     clears
+///     it on stop); outside play every call is a safe no-op. Mirrors <see cref="Input" />/
+///     <see cref="Audio" />.
 ///     <para>
 ///         Emitters are load-once / control-explicitly — the script owns their lifetime and should
-///         <see cref="Destroy" /> them in <c>OnDestroy</c>. The host simulates them on the CPU and renders
+///         <see cref="Destroy" /> them in <c>OnDestroy</c>. The host simulates them on the CPU and
+///         renders
 ///         them (2D overlay or the native GPU billboard pass).
 ///     </para>
 /// </summary>
@@ -78,28 +68,17 @@ public static class Vfx
 
     public static bool IsAvailable => Backend != null;
 
-    public static VfxHandle Create(VfxEmitterAsset asset, Vec3 position)
-    {
-        return Backend?.Create(asset, position) ?? VfxHandle.None;
-    }
+    public static VfxHandle Create(VfxEmitterAsset asset, Vec3 position) =>
+        Backend?.Create(asset: asset, position: position) ?? VfxHandle.None;
 
-    public static void SetPosition(VfxHandle handle, Vec3 position)
-    {
-        Backend?.SetPosition(handle, position);
-    }
+    public static void SetPosition(VfxHandle handle, Vec3 position) =>
+        Backend?.SetPosition(handle: handle, position: position);
 
-    public static void SetEmitting(VfxHandle handle, bool emitting)
-    {
-        Backend?.SetEmitting(handle, emitting);
-    }
+    public static void SetEmitting(VfxHandle handle, bool emitting) =>
+        Backend?.SetEmitting(handle: handle, emitting: emitting);
 
-    public static void Burst(VfxHandle handle, int count)
-    {
-        Backend?.Burst(handle, count);
-    }
+    public static void Burst(VfxHandle handle, int count) =>
+        Backend?.Burst(handle: handle, count: count);
 
-    public static void Destroy(VfxHandle handle)
-    {
-        Backend?.Destroy(handle);
-    }
+    public static void Destroy(VfxHandle handle) => Backend?.Destroy(handle);
 }

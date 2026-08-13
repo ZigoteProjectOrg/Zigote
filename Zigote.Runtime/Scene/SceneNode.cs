@@ -61,13 +61,6 @@ public sealed class SceneNode : IEcsSceneNode
 
     private RenderEffect _pEffect;
 
-    // Absolute paths queued for the parallel batch loader (set by CollectTextureJobs, consumed by
-    // SyncToNativeBatched, cleared by MarkTexturesUploaded). Null = nothing queued for that slot.
-    private string? _pendingBasePath;
-    private string? _pendingEmissivePath;
-    private string? _pendingMrPath;
-    private string? _pendingNormalPath;
-
     private bool _pLightCastShadows;
     private LightType _pLightKind;
 
@@ -90,14 +83,19 @@ public sealed class SceneNode : IEcsSceneNode
 
     private Vec3 _pPos, _pScaleEff, _pColor, _pEmissive, _pLightColorEff;
     private Quat _pRot;
+
+    // Absolute paths queued for the parallel batch loader (set by CollectTextureJobs, consumed by
+    // SyncToNativeBatched, cleared by MarkTexturesUploaded). Null = nothing queued for that slot.
+    private string? _pendingBasePath;
+    private string? _pendingEmissivePath;
+    private string? _pendingMrPath;
+    private string? _pendingNormalPath;
     private string? _texturePath;
 
     // Parameterless constructor used by System.Text.Json so that ReferenceHandler.Preserve
     // can use property setters instead of matching constructor parameters (which rejects $ref).
     [JsonConstructor]
-    public SceneNode()
-    {
-    }
+    public SceneNode() { }
 
     public SceneNode(string name, NodeKind kind = NodeKind.Empty)
     {
@@ -177,7 +175,7 @@ public sealed class SceneNode : IEcsSceneNode
     public Vec3 EffectiveLightColor => LightColor * ColorTemperature.KelvinToRgb(LightTemperature);
 
     /// <summary>Reflection-probe box half-extents (local). Only meaningful when Kind == ReflectionProbe.</summary>
-    public Vec3 ProbeExtents { get; set; } = new(5f, 5f, 5f);
+    public Vec3 ProbeExtents { get; set; } = new(x: 5f, y: 5f, z: 5f);
 
     // ── Camera (only meaningful when Kind == Camera) ───────────────────────────
     // Plain projection fills the pre-existing authoring gap (native defaulted to 45/0.1/4000). The
@@ -200,7 +198,7 @@ public sealed class SceneNode : IEcsSceneNode
     /// </summary>
     public int CameraProjection { get; set; }
 
-    public Vec2 CameraOrthoSize { get; set; } = new(2f, 2f);
+    public Vec2 CameraOrthoSize { get; set; } = new(x: 2f, y: 2f);
 
     // Physical camera — a photographic model resolved to FOV + DoF + exposure + film grade each frame.
     // Enums stored as int for clean JSON under ReferenceHandler.Preserve (map to Zigote.Cinematics enums).
@@ -250,7 +248,7 @@ public sealed class SceneNode : IEcsSceneNode
         }
     }
 
-    public Vec3 MeshColor { get; set; } = new(0.8f, 0.8f, 0.8f);
+    public Vec3 MeshColor { get; set; } = new(x: 0.8f, y: 0.8f, z: 0.8f);
     public float MeshMetallic { get; set; }
 
     public float MeshRoughness { get; set; } = 0.5f;
@@ -293,7 +291,12 @@ public sealed class SceneNode : IEcsSceneNode
         {
             _meshEffect = value;
             if (Handle != 0 && Kind == NodeKind.Mesh)
-                ZigoteEngine.Instance?.SceneSetMeshEffect(Handle, (uint)_meshEffect);
+            {
+                ZigoteEngine.Instance?.SceneSetMeshEffect(
+                    nodeHandle: Handle,
+                    effect: (uint)_meshEffect
+                );
+            }
         }
     }
 
@@ -305,11 +308,13 @@ public sealed class SceneNode : IEcsSceneNode
         {
             _meshAlphaMode = value;
             if (Handle != 0 && Kind == NodeKind.Mesh)
+            {
                 ZigoteEngine.Instance?.SceneSetMeshAlphaMode(
-                    Handle,
-                    _meshAlphaMode,
-                    MeshAlphaCutoff
+                    nodeHandle: Handle,
+                    mode: _meshAlphaMode,
+                    cutoff: MeshAlphaCutoff
                 );
+            }
         }
     }
 
@@ -381,7 +386,7 @@ public sealed class SceneNode : IEcsSceneNode
     public string? PrefabSourceId
     {
         get => PrefabSource.IsEmpty ? null : PrefabSource.ToString();
-        set => PrefabSource = AssetId.TryParse(value, out var id) ? id : AssetId.Empty;
+        set => PrefabSource = AssetId.TryParse(s: value, id: out var id) ? id : AssetId.Empty;
     }
 
     // Physics (play mode)
@@ -389,7 +394,7 @@ public sealed class SceneNode : IEcsSceneNode
     public bool UseGravity { get; set; } = true;
     public bool IsStatic { get; set; }
     public PhysicsShapeType PhysicsShape { get; set; } = PhysicsShapeType.Box;
-    public Vec3 PhysicsHalfExtents { get; set; } = new(0.5f, 0.5f, 0.5f);
+    public Vec3 PhysicsHalfExtents { get; set; } = new(x: 0.5f, y: 0.5f, z: 0.5f);
     public float PhysicsMass { get; set; } = 1f;
     public float PhysicsFriction { get; set; } = 0.2f;
     public float PhysicsRestitution { get; set; }
@@ -466,10 +471,10 @@ public sealed class SceneNode : IEcsSceneNode
 
     /// <summary>Tint (straight alpha), multiplied with the texture.</summary>
     public Vec4 SpriteColor { get; set; } = new(
-        1f,
-        1f,
-        1f,
-        1f
+        x: 1f,
+        y: 1f,
+        z: 1f,
+        w: 1f
     );
 
     public bool SpriteFlipX { get; set; }
@@ -529,10 +534,10 @@ public sealed class SceneNode : IEcsSceneNode
 
     /// <summary>Tint applied to every tile (straight alpha), multiplied with the texture.</summary>
     public Vec4 TilemapColor { get; set; } = new(
-        1f,
-        1f,
-        1f,
-        1f
+        x: 1f,
+        y: 1f,
+        z: 1f,
+        w: 1f
     );
 
     /// <summary>Material blend: 0 alpha, 1 additive, 2 opaque (Zigote.Render2D.Blend2D).</summary>
@@ -558,7 +563,7 @@ public sealed class SceneNode : IEcsSceneNode
     public Vec2 Collider2DOffset { get; set; }
 
     /// <summary>Box half-extents in world units.</summary>
-    public Vec2 Collider2DSize { get; set; } = new(0.5f, 0.5f);
+    public Vec2 Collider2DSize { get; set; } = new(x: 0.5f, y: 0.5f);
 
     public float Collider2DRadius { get; set; } = 0.5f;
 
@@ -609,17 +614,15 @@ public sealed class SceneNode : IEcsSceneNode
         {
             if (string.IsNullOrEmpty(_texturePath) || !File.Exists(_texturePath))
             {
-                ZigoteEngine.Instance?.SceneSetMeshTextureFile(Handle, null);
+                ZigoteEngine.Instance?.SceneSetMeshTextureFile(nodeHandle: Handle, pathC: null);
                 _lastUploadedTexturePath = _texturePath;
                 return;
             }
 
-            var absPath = Path.GetFullPath(_texturePath);
-            var pathBytes = Encoding.UTF8.GetBytes(absPath + "\0");
+            string absPath = Path.GetFullPath(_texturePath);
+            byte[] pathBytes = Encoding.UTF8.GetBytes(absPath + "\0");
             fixed (byte* pathPtr = pathBytes)
-            {
-                ZigoteEngine.Instance?.SceneSetMeshTextureFile(Handle, pathPtr);
-            }
+                ZigoteEngine.Instance?.SceneSetMeshTextureFile(nodeHandle: Handle, pathC: pathPtr);
 
             _lastUploadedTexturePath = _texturePath;
         }
@@ -638,16 +641,19 @@ public sealed class SceneNode : IEcsSceneNode
         {
             if (string.IsNullOrEmpty(_mrTexturePath) || !File.Exists(_mrTexturePath))
             {
-                ZigoteEngine.Instance?.SceneSetMeshMrTextureFile(Handle, null);
+                ZigoteEngine.Instance?.SceneSetMeshMrTextureFile(nodeHandle: Handle, pathC: null);
                 _lastUploadedMrTexturePath = _mrTexturePath;
                 return;
             }
 
-            var absPath = Path.GetFullPath(_mrTexturePath);
-            var pathBytes = Encoding.UTF8.GetBytes(absPath + "\0");
+            string absPath = Path.GetFullPath(_mrTexturePath);
+            byte[] pathBytes = Encoding.UTF8.GetBytes(absPath + "\0");
             fixed (byte* pathPtr = pathBytes)
             {
-                ZigoteEngine.Instance?.SceneSetMeshMrTextureFile(Handle, pathPtr);
+                ZigoteEngine.Instance?.SceneSetMeshMrTextureFile(
+                    nodeHandle: Handle,
+                    pathC: pathPtr
+                );
             }
 
             _lastUploadedMrTexturePath = _mrTexturePath;
@@ -667,17 +673,23 @@ public sealed class SceneNode : IEcsSceneNode
         {
             if (string.IsNullOrEmpty(_normalTexturePath) || !File.Exists(_normalTexturePath))
             {
-                ZigoteEngine.Instance?.SceneSetMeshNormalTextureFile(Handle, null);
+                ZigoteEngine.Instance?.SceneSetMeshNormalTextureFile(
+                    nodeHandle: Handle,
+                    pathC: null
+                );
                 _lastUploadedNormalTexturePath = _normalTexturePath;
                 return;
             }
 
-            var t0 = LoadProfile.Mark();
-            var absPath = Path.GetFullPath(_normalTexturePath);
-            var pathBytes = Encoding.UTF8.GetBytes(absPath + "\0");
+            long t0 = LoadProfile.Mark();
+            string absPath = Path.GetFullPath(_normalTexturePath);
+            byte[] pathBytes = Encoding.UTF8.GetBytes(absPath + "\0");
             fixed (byte* pathPtr = pathBytes)
             {
-                ZigoteEngine.Instance?.SceneSetMeshNormalTextureFile(Handle, pathPtr);
+                ZigoteEngine.Instance?.SceneSetMeshNormalTextureFile(
+                    nodeHandle: Handle,
+                    pathC: pathPtr
+                );
             }
 
             LoadProfile.NormalTicks += LoadProfile.Since(t0);
@@ -700,16 +712,22 @@ public sealed class SceneNode : IEcsSceneNode
         {
             if (string.IsNullOrEmpty(_emissiveTexturePath) || !File.Exists(_emissiveTexturePath))
             {
-                ZigoteEngine.Instance?.SceneSetMeshEmissiveTextureFile(Handle, null);
+                ZigoteEngine.Instance?.SceneSetMeshEmissiveTextureFile(
+                    nodeHandle: Handle,
+                    pathC: null
+                );
                 _lastUploadedEmissiveTexturePath = _emissiveTexturePath;
                 return;
             }
 
-            var absPath = Path.GetFullPath(_emissiveTexturePath);
-            var pathBytes = Encoding.UTF8.GetBytes(absPath + "\0");
+            string absPath = Path.GetFullPath(_emissiveTexturePath);
+            byte[] pathBytes = Encoding.UTF8.GetBytes(absPath + "\0");
             fixed (byte* pathPtr = pathBytes)
             {
-                ZigoteEngine.Instance?.SceneSetMeshEmissiveTextureFile(Handle, pathPtr);
+                ZigoteEngine.Instance?.SceneSetMeshEmissiveTextureFile(
+                    nodeHandle: Handle,
+                    pathC: pathPtr
+                );
             }
 
             _lastUploadedEmissiveTexturePath = _emissiveTexturePath;
@@ -750,7 +768,7 @@ public sealed class SceneNode : IEcsSceneNode
     /// </summary>
     public SceneNode DeepClone(string? nameOverride = null)
     {
-        var c = new SceneNode(nameOverride ?? Name, Kind);
+        var c = new SceneNode(name: nameOverride ?? Name, kind: Kind);
         c.Position = Position;
         c.Rotation = Rotation;
         c.Scale = Scale;
@@ -893,13 +911,13 @@ public sealed class SceneNode : IEcsSceneNode
                 "#cylinder" => 3,
                 _ => 0,
             };
-            engine.SceneSetMeshPrimitive(Handle, primType);
+            engine.SceneSetMeshPrimitive(nodeHandle: Handle, primType: primType);
         }
         else if (ContentFiles.Exists(_meshPath))
         {
-            var t0 = LoadProfile.Mark();
-            var data = ContentFiles.ReadAllBytes(_meshPath);
-            engine.SceneSetMeshBlob(Handle, data);
+            long t0 = LoadProfile.Mark();
+            byte[] data = ContentFiles.ReadAllBytes(_meshPath);
+            engine.SceneSetMeshBlob(nodeHandle: Handle, data: data);
             LoadProfile.MeshTicks += LoadProfile.Since(t0);
             LoadProfile.MeshBytes += data.Length;
             LoadProfile.MeshCount++;
@@ -916,8 +934,12 @@ public sealed class SceneNode : IEcsSceneNode
     {
         if (Handle == 0 && ZigoteEngine.Instance != null)
         {
-            var parentHandle = Parent?.Handle ?? 0;
-            Handle = ZigoteEngine.Instance.SceneAddChildNode(parentHandle, Name, (byte)Kind);
+            ulong parentHandle = Parent?.Handle ?? 0;
+            Handle = ZigoteEngine.Instance.SceneAddChildNode(
+                parentHandle: parentHandle,
+                name: Name,
+                kind: (byte)Kind
+            );
             _lastUploadedTexturePath = null;
             _lastUploadedMrTexturePath = null;
             _lastUploadedNormalTexturePath = null;
@@ -929,7 +951,7 @@ public sealed class SceneNode : IEcsSceneNode
         if (Handle != 0 && ZigoteEngine.Instance != null)
         {
             var engine = ZigoteEngine.Instance;
-            var first = !_nativePushed; // first push after (re)creation must send everything
+            bool first = !_nativePushed; // first push after (re)creation must send everything
 
             // When not visible, push zero scale so the GPU discards all triangles.
             var s = Visible ? Scale : Vec3.Zero;
@@ -939,17 +961,17 @@ public sealed class SceneNode : IEcsSceneNode
                 !_pScaleEff.ApproxEquals(s))
             {
                 engine.SceneUpdateNode(
-                    Handle,
-                    Position.X,
-                    Position.Y,
-                    Position.Z,
-                    Rotation.X,
-                    Rotation.Y,
-                    Rotation.Z,
-                    Rotation.W,
-                    s.X,
-                    s.Y,
-                    s.Z
+                    nodeHandle: Handle,
+                    x: Position.X,
+                    y: Position.Y,
+                    z: Position.Z,
+                    qx: Rotation.X,
+                    qy: Rotation.Y,
+                    qz: Rotation.Z,
+                    qw: Rotation.W,
+                    sx: s.X,
+                    sy: s.Y,
+                    sz: s.Z
                 );
                 _pPos = Position;
                 _pRot = Rotation;
@@ -969,16 +991,16 @@ public sealed class SceneNode : IEcsSceneNode
                 {
                     const float deg2Rad = MathF.PI / 180f;
                     engine.SceneSetLightProperties(
-                        Handle,
-                        (byte)LightKind,
-                        eff.X,
-                        eff.Y,
-                        eff.Z,
-                        LightIntensity,
-                        LightRange,
-                        SpotInnerAngleDeg * deg2Rad,
-                        SpotOuterAngleDeg * deg2Rad,
-                        LightCastShadows
+                        nodeHandle: Handle,
+                        kind: (byte)LightKind,
+                        r: eff.X,
+                        g: eff.Y,
+                        b: eff.Z,
+                        intensity: LightIntensity,
+                        range: LightRange,
+                        innerAngle: SpotInnerAngleDeg * deg2Rad,
+                        outerAngle: SpotOuterAngleDeg * deg2Rad,
+                        castShadows: LightCastShadows
                     );
                     _pLightKind = LightKind;
                     _pLightColorEff = eff;
@@ -992,15 +1014,15 @@ public sealed class SceneNode : IEcsSceneNode
 
             if (Kind == NodeKind.Camera)
             {
-                var fovDeg = EffectiveFovDegrees();
+                float fovDeg = EffectiveFovDegrees();
                 if (first || _pCameraFovDeg != fovDeg || _pCameraNear != CameraNear ||
                     _pCameraFar != CameraFar)
                 {
                     engine.SceneSetCameraParams(
-                        Handle,
-                        fovDeg,
-                        CameraNear,
-                        CameraFar
+                        nodeHandle: Handle,
+                        fovyDegrees: fovDeg,
+                        near: CameraNear,
+                        far: CameraFar
                     );
                     _pCameraFovDeg = fovDeg;
                     _pCameraNear = CameraNear;
@@ -1010,14 +1032,14 @@ public sealed class SceneNode : IEcsSceneNode
 
             if (Kind == NodeKind.Mesh)
             {
-                var colorPushed = false;
+                bool colorPushed = false;
                 if (first || _pColor != MeshColor)
                 {
                     engine.SceneSetMeshColor(
-                        Handle,
-                        MeshColor.X,
-                        MeshColor.Y,
-                        MeshColor.Z
+                        nodeHandle: Handle,
+                        r: MeshColor.X,
+                        g: MeshColor.Y,
+                        b: MeshColor.Z
                     );
                     _pColor = MeshColor;
                     colorPushed = true;
@@ -1025,7 +1047,11 @@ public sealed class SceneNode : IEcsSceneNode
 
                 if (first || _pMetallic != MeshMetallic || _pRoughness != MeshRoughness)
                 {
-                    engine.SceneSetMeshRoughness(Handle, MeshMetallic, MeshRoughness);
+                    engine.SceneSetMeshRoughness(
+                        nodeHandle: Handle,
+                        metallic: MeshMetallic,
+                        roughness: MeshRoughness
+                    );
                     _pMetallic = MeshMetallic;
                     _pRoughness = MeshRoughness;
                 }
@@ -1035,10 +1061,10 @@ public sealed class SceneNode : IEcsSceneNode
                     _pSpecular != MeshSpecular)
                 {
                     engine.SceneSetMeshSurface(
-                        Handle,
-                        MeshClearcoat,
-                        MeshClearcoatRoughness,
-                        MeshSpecular
+                        nodeHandle: Handle,
+                        clearcoat: MeshClearcoat,
+                        clearcoatRoughness: MeshClearcoatRoughness,
+                        specular: MeshSpecular
                     );
                     _pClearcoat = MeshClearcoat;
                     _pClearcoatRoughness = MeshClearcoatRoughness;
@@ -1047,37 +1073,47 @@ public sealed class SceneNode : IEcsSceneNode
 
                 if (first || _pIor != MeshIor || _pTransmission != MeshTransmission)
                 {
-                    engine.SceneSetMeshVolume(Handle, MeshIor, MeshTransmission);
+                    engine.SceneSetMeshVolume(
+                        nodeHandle: Handle,
+                        ior: MeshIor,
+                        transmission: MeshTransmission
+                    );
                     _pIor = MeshIor;
                     _pTransmission = MeshTransmission;
                 }
 
                 if (first || _pDoubleSided != MeshDoubleSided)
                 {
-                    engine.SceneSetMeshDoubleSided(Handle, MeshDoubleSided);
+                    engine.SceneSetMeshDoubleSided(
+                        nodeHandle: Handle,
+                        doubleSided: MeshDoubleSided
+                    );
                     _pDoubleSided = MeshDoubleSided;
                 }
 
                 if (first || _pOcclusionStrength != MeshOcclusionStrength)
                 {
-                    engine.SceneSetMeshOcclusionStrength(Handle, MeshOcclusionStrength);
+                    engine.SceneSetMeshOcclusionStrength(
+                        nodeHandle: Handle,
+                        strength: MeshOcclusionStrength
+                    );
                     _pOcclusionStrength = MeshOcclusionStrength;
                 }
 
                 if (first || _pEmissive != MeshEmissive)
                 {
                     engine.SceneSetMeshEmissive(
-                        Handle,
-                        MeshEmissive.X,
-                        MeshEmissive.Y,
-                        MeshEmissive.Z
+                        nodeHandle: Handle,
+                        r: MeshEmissive.X,
+                        g: MeshEmissive.Y,
+                        b: MeshEmissive.Z
                     );
                     _pEmissive = MeshEmissive;
                 }
 
                 if (first || _pEffect != MeshEffect)
                 {
-                    engine.SceneSetMeshEffect(Handle, (uint)MeshEffect);
+                    engine.SceneSetMeshEffect(nodeHandle: Handle, effect: (uint)MeshEffect);
                     _pEffect = MeshEffect;
                 }
 
@@ -1086,15 +1122,17 @@ public sealed class SceneNode : IEcsSceneNode
                 if (first || colorPushed || _pAlphaMode != MeshAlphaMode ||
                     _pAlphaCutoff != MeshAlphaCutoff)
                 {
-                    engine.SceneSetMeshAlphaMode(Handle, MeshAlphaMode, MeshAlphaCutoff);
+                    engine.SceneSetMeshAlphaMode(
+                        nodeHandle: Handle,
+                        mode: MeshAlphaMode,
+                        cutoff: MeshAlphaCutoff
+                    );
                     _pAlphaMode = MeshAlphaMode;
                     _pAlphaCutoff = MeshAlphaCutoff;
                 }
 
                 if (texBatch != null)
-                {
                     CollectTextureJobs(texBatch);
-                }
                 else
                 {
                     UpdateTexture();
@@ -1117,10 +1155,13 @@ public sealed class SceneNode : IEcsSceneNode
     public float EffectiveFovDegrees()
     {
         if (!PhysEnabled) return CameraFovDegrees;
-        var sensorH = PhysSensorPreset == (int)SensorPreset.Custom
+        float sensorH = PhysSensorPreset == (int)SensorPreset.Custom
             ? PhysSensorHeightMm
             : SensorFormat.Of((SensorPreset)PhysSensorPreset).HeightMm;
-        return PhysicalCameraResolver.VerticalFov(PhysFocalLengthMm, sensorH) * (180f / MathF.PI);
+        return PhysicalCameraResolver.VerticalFov(
+            focalLengthMm: PhysFocalLengthMm,
+            sensorHeightMm: sensorH
+        ) * (180f / MathF.PI);
     }
 
     /// <summary>
@@ -1131,12 +1172,12 @@ public sealed class SceneNode : IEcsSceneNode
     public void PushCameraParams()
     {
         if (Handle == 0 || Kind != NodeKind.Camera) return;
-        var fovDeg = EffectiveFovDegrees();
+        float fovDeg = EffectiveFovDegrees();
         ZigoteEngine.Instance?.SceneSetCameraParams(
-            Handle,
-            fovDeg,
-            CameraNear,
-            CameraFar
+            nodeHandle: Handle,
+            fovyDegrees: fovDeg,
+            near: CameraNear,
+            far: CameraFar
         );
         _pCameraFovDeg = fovDeg;
         _pCameraNear = CameraNear;
@@ -1188,13 +1229,13 @@ public sealed class SceneNode : IEcsSceneNode
         var allocated = new List<IntPtr>(pending.Count * 2);
         try
         {
-            for (var i = 0; i < pending.Count; i++)
+            for (int i = 0; i < pending.Count; i++)
             {
                 var n = pending[i];
-                var basePtr = IntPtr.Zero;
-                var mrPtr = IntPtr.Zero;
-                var normalPtr = IntPtr.Zero;
-                var emissivePtr = IntPtr.Zero;
+                IntPtr basePtr = IntPtr.Zero;
+                IntPtr mrPtr = IntPtr.Zero;
+                IntPtr normalPtr = IntPtr.Zero;
+                IntPtr emissivePtr = IntPtr.Zero;
                 if (n._pendingBasePath is { } b)
                 {
                     basePtr = Marshal.StringToCoTaskMemUTF8(b);
@@ -1228,13 +1269,13 @@ public sealed class SceneNode : IEcsSceneNode
                 };
             }
 
-            var t0 = LoadProfile.Mark();
+            long t0 = LoadProfile.Mark();
             ZigoteEngine.Instance.SceneLoadTexturesBatch(items);
             LoadProfile.TexBatchTicks += LoadProfile.Since(t0);
         }
         finally
         {
-            foreach (var p in allocated) Marshal.FreeCoTaskMem(p);
+            foreach (IntPtr p in allocated) Marshal.FreeCoTaskMem(p);
         }
 
         foreach (var n in pending) n.MarkTexturesUploaded();
@@ -1250,7 +1291,7 @@ public sealed class SceneNode : IEcsSceneNode
     {
         if (Handle == 0 || Kind != NodeKind.Mesh) return;
 
-        var queued = false;
+        bool queued = false;
         _pendingBasePath = null;
         _pendingMrPath = null;
         _pendingNormalPath = null;
@@ -1259,9 +1300,7 @@ public sealed class SceneNode : IEcsSceneNode
         if (_texturePath != _lastUploadedTexturePath)
         {
             if (string.IsNullOrEmpty(_texturePath) || !File.Exists(_texturePath))
-            {
                 UpdateTexture(); // clear / missing — handled inline (no decode)
-            }
             else
             {
                 _pendingBasePath = Path.GetFullPath(_texturePath);
@@ -1272,9 +1311,7 @@ public sealed class SceneNode : IEcsSceneNode
         if (_mrTexturePath != _lastUploadedMrTexturePath)
         {
             if (string.IsNullOrEmpty(_mrTexturePath) || !File.Exists(_mrTexturePath))
-            {
                 UpdateMrTexture(); // clear / missing — handled inline (no decode)
-            }
             else
             {
                 _pendingMrPath = Path.GetFullPath(_mrTexturePath);
@@ -1285,9 +1322,7 @@ public sealed class SceneNode : IEcsSceneNode
         if (_normalTexturePath != _lastUploadedNormalTexturePath)
         {
             if (string.IsNullOrEmpty(_normalTexturePath) || !File.Exists(_normalTexturePath))
-            {
                 UpdateNormalTexture(); // clear / missing — handled inline (no decode)
-            }
             else
             {
                 _pendingNormalPath = Path.GetFullPath(_normalTexturePath);
@@ -1298,9 +1333,7 @@ public sealed class SceneNode : IEcsSceneNode
         if (_emissiveTexturePath != _lastUploadedEmissiveTexturePath)
         {
             if (string.IsNullOrEmpty(_emissiveTexturePath) || !File.Exists(_emissiveTexturePath))
-            {
                 UpdateEmissiveTexture(); // clear / missing — handled inline (no decode)
-            }
             else
             {
                 _pendingEmissivePath = Path.GetFullPath(_emissiveTexturePath);

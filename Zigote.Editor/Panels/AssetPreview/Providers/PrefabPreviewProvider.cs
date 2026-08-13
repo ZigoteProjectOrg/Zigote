@@ -11,15 +11,10 @@ namespace Zigote.Editor.Panels.AssetPreview.Providers;
 /// </summary>
 public sealed class PrefabPreviewProvider : IAssetPreviewProvider
 {
-    public bool CanHandle(string ext)
-    {
-        return ext == ".prefab";
-    }
+    public bool CanHandle(string ext) => ext == ".prefab";
 
-    public Widget BuildPreview(string path, ThemeData theme)
-    {
-        return new CodeTextPreviewProvider().BuildPreview(path, theme);
-    }
+    public Widget BuildPreview(string path, ThemeData theme) =>
+        new CodeTextPreviewProvider().BuildPreview(path: path, theme: theme);
 
     public IEnumerable<(string Key, string Value)> ExtraMetadata(string path)
     {
@@ -29,13 +24,15 @@ public sealed class PrefabPreviewProvider : IAssetPreviewProvider
             using var doc = JsonDocument.Parse(File.ReadAllText(path));
             var root = doc.RootElement;
 
-            if (root.TryGetProperty("Name", out var n) && n.ValueKind == JsonValueKind.String)
+            if (root.TryGetProperty(propertyName: "Name", value: out var n) &&
+                n.ValueKind == JsonValueKind.String)
                 rows.Add(("Prefab", n.GetString()!));
 
-            if (root.TryGetProperty("Template", out var tmpl) &&
+            if (root.TryGetProperty(propertyName: "Template", value: out var tmpl) &&
                 tmpl.ValueKind == JsonValueKind.Object)
             {
-                if (tmpl.TryGetProperty("Name", out var rn) && rn.ValueKind == JsonValueKind.String)
+                if (tmpl.TryGetProperty(propertyName: "Name", value: out var rn) &&
+                    rn.ValueKind == JsonValueKind.String)
                     rows.Add(("Root", rn.GetString()!));
                 rows.Add(("Nodes", CountNodes(tmpl).ToString()));
             }
@@ -50,19 +47,23 @@ public sealed class PrefabPreviewProvider : IAssetPreviewProvider
 
     private static int CountNodes(JsonElement node)
     {
-        var count = 1; // this node
-        if (!node.TryGetProperty("Children", out var children)) return count;
+        int count = 1; // this node
+        if (!node.TryGetProperty(propertyName: "Children", value: out var children)) return count;
 
         // Preserve wraps arrays as { "$values": [...] }; accept a raw array too.
         var arr = children.ValueKind == JsonValueKind.Array ? children
             : children.ValueKind == JsonValueKind.Object &&
-              children.TryGetProperty("$values", out var v) ? v
+              children.TryGetProperty(propertyName: "$values", value: out var v) ? v
             : default;
 
         if (arr.ValueKind == JsonValueKind.Array)
+        {
             foreach (var c in arr.EnumerateArray())
+            {
                 if (c.ValueKind == JsonValueKind.Object)
                     count += CountNodes(c);
+            }
+        }
 
         return count;
     }

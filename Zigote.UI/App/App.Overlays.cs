@@ -1,25 +1,5 @@
-using System.Diagnostics;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using System.Text;
-using Zigote.Core;
-using Zigote.Core.Animation;
-using Zigote.Core.Diagnostics;
-using Zigote.Core.Engine;
-using Zigote.Core.Events;
-using Zigote.Core.Native;
-using Zigote.Core.Paint;
-using Zigote.Core.Rendering;
-using Zigote.Core.State;
-using Zigote.UI.Debug;
-using Zigote.UI.Licensing;
-using Zigote.UI.Semantics;
-using Zigote.UI.TextShaping;
-using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
-using Zigote.UI.Widgets.Focus;
-using MediaQueryData = Zigote.UI.Widgets.MediaQueryData;
 
 namespace Zigote.UI.Host;
 
@@ -37,9 +17,11 @@ public partial class App
         // Snapshot: applying an op can queue another (a popped overlay closing its child).
         var ops = _deferredOverlayOps.ToArray();
         _deferredOverlayOps.Clear();
-        foreach (var (overlay, push) in ops)
+        foreach ((var overlay, bool push) in ops)
+        {
             if (push) PushOverlay(overlay);
             else PopOverlay(overlay);
+        }
     }
 
     public void PushOverlay(Widget overlay)
@@ -55,7 +37,7 @@ public partial class App
         }
 
         _overlays.Add(overlay);
-        overlay.Attach(this, null);
+        overlay.Attach(owner: this, parent: null);
         // Auto-focus the first focusable inside a newly-pushed overlay (modal forms/dialogs) once it has
         // been laid out — deferred to Frame so Bounds are valid for the visibility check.
         _pendingAutoFocus.Add(overlay);
@@ -76,15 +58,17 @@ public partial class App
         _pendingAutoFocus.Remove(overlay);
 
         // If focus lived inside this overlay, drop it before detaching (Parent links go away on Detach).
-        var focusedInside = FocusedWidget != null && IsDescendant(FocusedWidget, overlay);
+        bool focusedInside = FocusedWidget != null &&
+                             IsDescendant(node: FocusedWidget, ancestor: overlay);
 
         overlay.Detach();
         RequestLayout();
 
         // Restore the focus that was active before this overlay auto-focused (if it's still in the tree).
-        var restored = false;
-        for (var i = _focusRestore.Count - 1; i >= 0; i--)
-            if (ReferenceEquals(_focusRestore[i].Overlay, overlay))
+        bool restored = false;
+        for (int i = _focusRestore.Count - 1; i >= 0; i--)
+        {
+            if (ReferenceEquals(objA: _focusRestore[i].Overlay, objB: overlay))
             {
                 var prev = _focusRestore[i].PrevFocus;
                 _focusRestore.RemoveAt(i);
@@ -92,6 +76,7 @@ public partial class App
                 restored = true;
                 break;
             }
+        }
 
         if (!restored && focusedInside) ClearFocus();
     }
@@ -100,7 +85,7 @@ public partial class App
     {
         while (node != null)
         {
-            if (ReferenceEquals(node, ancestor)) return true;
+            if (ReferenceEquals(objA: node, objB: ancestor)) return true;
             node = node.Parent;
         }
 
@@ -132,14 +117,14 @@ public partial class App
     /// </summary>
     internal void NotifyDetached(Widget w)
     {
-        if (ReferenceEquals(FocusedWidget, w)) RequestFocus(null);
-        if (ReferenceEquals(_hoveredWidget, w))
+        if (ReferenceEquals(objA: FocusedWidget, objB: w)) RequestFocus(null);
+        if (ReferenceEquals(objA: _hoveredWidget, objB: w))
         {
             _hoveredWidget = null;
             HideTooltip();
         }
 
-        if (ReferenceEquals(_capturedWidget, w))
+        if (ReferenceEquals(objA: _capturedWidget, objB: w))
         {
             _capturedWidget = null;
             // The captured widget is the one that would deliver the pointer-up that ends a drag. If
@@ -148,14 +133,16 @@ public partial class App
             // every later page. Cancel it instead. Deferred to the top of the next frame because
             // this can run mid-walk, and ending a drag pops an overlay off the list being iterated.
             if (IsDragging)
+            {
                 Post(() =>
                     {
-                        if (IsDragging) EndDrag(_mousePos, true);
+                        if (IsDragging) EndDrag(pointer: _mousePos, cancelled: true);
                     }
                 );
+            }
         }
 
-        if (ReferenceEquals(_rightCapturedWidget, w)) _rightCapturedWidget = null;
+        if (ReferenceEquals(objA: _rightCapturedWidget, objB: w)) _rightCapturedWidget = null;
     }
 
     // ── Snackbar ──────────────────────────────────────────────────────────────
@@ -164,11 +151,11 @@ public partial class App
         string? actionLabel = null, Action? onAction = null)
     {
         var snack = new Snackbar(
-            this,
-            message,
-            duration,
-            actionLabel,
-            onAction
+            app: this,
+            message: message,
+            duration: duration,
+            actionLabel: actionLabel,
+            onAction: onAction
         );
         _snackbars.Add(snack);
         PushOverlay(snack);

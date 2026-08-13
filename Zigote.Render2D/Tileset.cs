@@ -62,28 +62,22 @@ public sealed class Tileset
 
     /// <summary>Total tiles in the grid.</summary>
     [JsonIgnore]
-    public int TileCount => Math.Max(0, Columns) * Math.Max(0, Rows);
+    public int TileCount => Math.Max(val1: 0, val2: Columns) * Math.Max(val1: 0, val2: Rows);
 
     /// <summary>Texture width to slice against — the stored size, or the size the grid implies.</summary>
     [JsonIgnore]
     public int EffectiveTextureWidth => TextureWidth > 0
         ? TextureWidth
-        : 2 * MarginX + Columns * TileWidth + Math.Max(0, Columns - 1) * SpacingX;
+        : (2 * MarginX) + (Columns * TileWidth) + (Math.Max(val1: 0, val2: Columns - 1) * SpacingX);
 
     [JsonIgnore]
     public int EffectiveTextureHeight => TextureHeight > 0
         ? TextureHeight
-        : 2 * MarginY + Rows * TileHeight + Math.Max(0, Rows - 1) * SpacingY;
+        : (2 * MarginY) + (Rows * TileHeight) + (Math.Max(val1: 0, val2: Rows - 1) * SpacingY);
 
-    public bool IsSolid(int tile)
-    {
-        return tile >= 0 && tile < Solid.Length && Solid[tile];
-    }
+    public bool IsSolid(int tile) => tile >= 0 && tile < Solid.Length && Solid[tile];
 
-    public bool IsOneWay(int tile)
-    {
-        return tile >= 0 && tile < OneWay.Length && OneWay[tile];
-    }
+    public bool IsOneWay(int tile) => tile >= 0 && tile < OneWay.Length && OneWay[tile];
 
     /// <summary>
     ///     Grow <see cref="Solid" />/<see cref="OneWay" /> to cover every tile so the editor can write
@@ -91,18 +85,18 @@ public sealed class Tileset
     /// </summary>
     public void EnsureFlagCapacity()
     {
-        var n = TileCount;
+        int n = TileCount;
         if (Solid.Length < n)
         {
-            var solid = Solid;
-            Array.Resize(ref solid, n);
+            bool[] solid = Solid;
+            Array.Resize(array: ref solid, newSize: n);
             Solid = solid;
         }
 
         if (OneWay.Length < n)
         {
-            var oneWay = OneWay;
-            Array.Resize(ref oneWay, n);
+            bool[] oneWay = OneWay;
+            Array.Resize(array: ref oneWay, newSize: n);
             OneWay = oneWay;
         }
     }
@@ -115,14 +109,14 @@ public sealed class Tileset
     public SpriteFrame[] BuildFrames()
     {
         return SpriteSheet.GridFrames(
-            EffectiveTextureWidth,
-            EffectiveTextureHeight,
-            Math.Max(1, Columns),
-            Math.Max(1, Rows),
-            MarginX,
-            MarginY,
-            SpacingX,
-            SpacingY
+            texWidth: EffectiveTextureWidth,
+            texHeight: EffectiveTextureHeight,
+            cols: Math.Max(val1: 1, val2: Columns),
+            rows: Math.Max(val1: 1, val2: Rows),
+            marginX: MarginX,
+            marginY: MarginY,
+            spacingX: SpacingX,
+            spacingY: SpacingY
         );
     }
 
@@ -133,8 +127,8 @@ public sealed class Tileset
     public bool FitToTexture(int texWidth, int texHeight)
     {
         if (texWidth <= 0 || texHeight <= 0 || TileWidth <= 0 || TileHeight <= 0) return false;
-        var cols = (texWidth - 2 * MarginX + SpacingX) / (TileWidth + SpacingX);
-        var rows = (texHeight - 2 * MarginY + SpacingY) / (TileHeight + SpacingY);
+        int cols = (texWidth - (2 * MarginX) + SpacingX) / (TileWidth + SpacingX);
+        int rows = (texHeight - (2 * MarginY) + SpacingY) / (TileHeight + SpacingY);
         if (cols <= 0 || rows <= 0) return false;
 
         TextureWidth = texWidth;
@@ -147,7 +141,10 @@ public sealed class Tileset
 
     public static Tileset Load(string path)
     {
-        var set = JsonSerializer.Deserialize(File.ReadAllText(path), TilesetJson.Default.Tileset)
+        var set = JsonSerializer.Deserialize(
+                      json: File.ReadAllText(path),
+                      jsonTypeInfo: TilesetJson.Default.Tileset
+                  )
                   ?? new Tileset();
         set.EnsureFlagCapacity();
         return set;
@@ -156,9 +153,15 @@ public sealed class Tileset
     public void Save(string path)
     {
         EnsureFlagCapacity();
-        var dir = Path.GetDirectoryName(path);
+        string? dir = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-        File.WriteAllText(path, JsonSerializer.Serialize(this, TilesetJson.Indented.Tileset));
+        File.WriteAllText(
+            path: path,
+            contents: JsonSerializer.Serialize(
+                value: this,
+                jsonTypeInfo: TilesetJson.Indented.Tileset
+            )
+        );
     }
 }
 

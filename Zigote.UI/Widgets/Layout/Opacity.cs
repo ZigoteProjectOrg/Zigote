@@ -33,10 +33,10 @@ public class Opacity : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         Child?.Layout(origin);
     }
@@ -46,14 +46,12 @@ public class Opacity : Widget
     ///     focusable or announced either — otherwise Tab lands on invisible controls (a hidden
     ///     tab-close button, a collapsed row's suffix) and screen readers read them out.
     /// </summary>
-    public override IEnumerable<Widget> GetVisibleChildren()
-    {
-        return Value <= 0.001f ? [] : GetChildren();
-    }
+    public override IEnumerable<Widget> GetVisibleChildren() =>
+        Value <= 0.001f ? [] : GetChildren();
 
     public override void Paint(PaintList paint)
     {
-        var a = Math.Clamp(Value, 0f, 1f);
+        float a = Math.Clamp(value: Value, min: 0f, max: 1f);
         if (a <= 0.001f) return;
         if (a >= 0.999f)
         {
@@ -69,11 +67,8 @@ public class Opacity : Widget
     public override Widget? HitTest(Offset point)
     {
         if (Value <= 0.001f) return null;
-        return Bounds.Contains(point.X, point.Y) ? Child?.HitTest(point) : null;
+        return Bounds.Contains(px: point.X, py: point.Y) ? Child?.HitTest(point) : null;
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(Child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Child);
 }

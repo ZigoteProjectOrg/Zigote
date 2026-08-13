@@ -17,66 +17,81 @@ public class EqualityContractTests
     public void Equal_Values_HaveEqualHashCodes()
     {
         // The contract: a.Equals(b) ⟹ a.GetHashCode() == b.GetHashCode().
-        Assert.Equal(new Vec2(1.5f, -2.5f).GetHashCode(), new Vec2(1.5f, -2.5f).GetHashCode());
-        Assert.Equal(new Vec3(1f, 2f, 3f).GetHashCode(), new Vec3(1f, 2f, 3f).GetHashCode());
         Assert.Equal(
-            new Vec4(
-                1f,
-                2f,
-                3f,
-                4f
+            expected: new Vec2(x: 1.5f, y: -2.5f).GetHashCode(),
+            actual: new Vec2(x: 1.5f, y: -2.5f).GetHashCode()
+        );
+        Assert.Equal(
+            expected: new Vec3(x: 1f, y: 2f, z: 3f).GetHashCode(),
+            actual: new Vec3(x: 1f, y: 2f, z: 3f).GetHashCode()
+        );
+        Assert.Equal(
+            expected: new Vec4(
+                x: 1f,
+                y: 2f,
+                z: 3f,
+                w: 4f
             ).GetHashCode(),
-            new Vec4(
-                1f,
-                2f,
-                3f,
-                4f
+            actual: new Vec4(
+                x: 1f,
+                y: 2f,
+                z: 3f,
+                w: 4f
             ).GetHashCode()
         );
         Assert.Equal(
-            new Color(
-                0.2f,
-                0.4f,
-                0.6f,
-                0.8f
+            expected: new Color(
+                r: 0.2f,
+                g: 0.4f,
+                b: 0.6f,
+                a: 0.8f
             ).GetHashCode(),
-            new Color(
-                0.2f,
-                0.4f,
-                0.6f,
-                0.8f
+            actual: new Color(
+                r: 0.2f,
+                g: 0.4f,
+                b: 0.6f,
+                a: 0.8f
             ).GetHashCode()
         );
         Assert.Equal(
-            new Rect(
-                1f,
-                2f,
-                3f,
-                4f
+            expected: new Rect(
+                x: 1f,
+                y: 2f,
+                width: 3f,
+                height: 4f
             ).GetHashCode(),
-            new Rect(
-                1f,
-                2f,
-                3f,
-                4f
+            actual: new Rect(
+                x: 1f,
+                y: 2f,
+                width: 3f,
+                height: 4f
             ).GetHashCode()
         );
-        Assert.Equal(new Size(3f, 4f).GetHashCode(), new Size(3f, 4f).GetHashCode());
-        Assert.Equal(new Offset(3f, 4f).GetHashCode(), new Offset(3f, 4f).GetHashCode());
-        Assert.Equal(EdgeInsets.All(6f).GetHashCode(), EdgeInsets.All(6f).GetHashCode());
+        Assert.Equal(
+            expected: new Size(width: 3f, height: 4f).GetHashCode(),
+            actual: new Size(width: 3f, height: 4f).GetHashCode()
+        );
+        Assert.Equal(
+            expected: new Offset(x: 3f, y: 4f).GetHashCode(),
+            actual: new Offset(x: 3f, y: 4f).GetHashCode()
+        );
+        Assert.Equal(
+            expected: EdgeInsets.All(6f).GetHashCode(),
+            actual: EdgeInsets.All(6f).GetHashCode()
+        );
 
-        Assert.True(new Vec3(1f, 2f, 3f).Equals(new Vec3(1f, 2f, 3f)));
+        Assert.True(new Vec3(x: 1f, y: 2f, z: 3f).Equals(new Vec3(x: 1f, y: 2f, z: 3f)));
         Assert.True(
             new Color(
-                0.2f,
-                0.4f,
-                0.6f,
-                0.8f
+                r: 0.2f,
+                g: 0.4f,
+                b: 0.6f,
+                a: 0.8f
             ) == new Color(
-                0.2f,
-                0.4f,
-                0.6f,
-                0.8f
+                r: 0.2f,
+                g: 0.4f,
+                b: 0.6f,
+                a: 0.8f
             )
         );
     }
@@ -86,22 +101,22 @@ public class EqualityContractTests
     {
         // A difference smaller than the old tolerance is now NOT equal (exact), so the type is a sound
         // hash key. (Under the old tolerance-Equals this returned true while the hashes differed.)
-        var a = new Vec3(1f, 2f, 3f);
-        var b = new Vec3(1f + 1e-6f, 2f, 3f); // below the 1e-5 physics tolerance
+        var a = new Vec3(x: 1f, y: 2f, z: 3f);
+        var b = new Vec3(x: 1f + 1e-6f, y: 2f, z: 3f); // below the 1e-5 physics tolerance
         Assert.False(a.Equals(b));
-        Assert.NotEqual(a.GetHashCode(), b.GetHashCode());
+        Assert.NotEqual(expected: a.GetHashCode(), actual: b.GetHashCode());
 
         var c = new Color(
-            0.2f,
-            0.4f,
-            0.6f,
-            0.8f
+            r: 0.2f,
+            g: 0.4f,
+            b: 0.6f,
+            a: 0.8f
         );
         var d = new Color(
-            0.2f + 1e-8f,
-            0.4f,
-            0.6f,
-            0.8f
+            r: 0.2f + 1e-8f,
+            g: 0.4f,
+            b: 0.6f,
+            a: 0.8f
         ); // below the 1e-7 standard tolerance
         Assert.False(c.Equals(d));
     }
@@ -110,70 +125,75 @@ public class EqualityContractTests
     public void ApproxEquals_PreservesTolerantComparison()
     {
         // The tolerant behaviour the sync gates / editors rely on now lives on ApproxEquals.
-        Assert.True(new Vec3(1f, 2f, 3f).ApproxEquals(new Vec3(1f + 1e-6f, 2f, 3f)));
-        Assert.False(new Vec3(1f, 2f, 3f).ApproxEquals(new Vec3(1.5f, 2f, 3f)));
+        Assert.True(
+            new Vec3(x: 1f, y: 2f, z: 3f).ApproxEquals(new Vec3(x: 1f + 1e-6f, y: 2f, z: 3f))
+        );
+        Assert.False(new Vec3(x: 1f, y: 2f, z: 3f).ApproxEquals(new Vec3(x: 1.5f, y: 2f, z: 3f)));
 
-        Assert.True(new Vec2(1f, 2f).ApproxEquals(new Vec2(1f + 1e-6f, 2f)));
+        Assert.True(new Vec2(x: 1f, y: 2f).ApproxEquals(new Vec2(x: 1f + 1e-6f, y: 2f)));
         Assert.True(
             new Vec4(
-                1f,
-                2f,
-                3f,
-                4f
+                x: 1f,
+                y: 2f,
+                z: 3f,
+                w: 4f
             ).ApproxEquals(
                 new Vec4(
-                    1f,
-                    2f,
-                    3f,
-                    4f + 1e-6f
+                    x: 1f,
+                    y: 2f,
+                    z: 3f,
+                    w: 4f + 1e-6f
                 )
             )
         );
 
         Assert.True(
             new Color(
-                0.2f,
-                0.4f,
-                0.6f,
-                0.8f
+                r: 0.2f,
+                g: 0.4f,
+                b: 0.6f,
+                a: 0.8f
             ).ApproxEquals(
                 new Color(
-                    0.2f + 1e-8f,
-                    0.4f,
-                    0.6f,
-                    0.8f
+                    r: 0.2f + 1e-8f,
+                    g: 0.4f,
+                    b: 0.6f,
+                    a: 0.8f
                 )
             )
         );
         Assert.True(
             new Rect(
-                1f,
-                2f,
-                3f,
-                4f
+                x: 1f,
+                y: 2f,
+                width: 3f,
+                height: 4f
             ).ApproxEquals(
                 new Rect(
-                    1f + 1e-8f,
-                    2f,
-                    3f,
-                    4f
+                    x: 1f + 1e-8f,
+                    y: 2f,
+                    width: 3f,
+                    height: 4f
                 )
             )
         );
-        Assert.True(new Size(3f, 4f).ApproxEquals(new Size(3f + 1e-8f, 4f)));
-        Assert.True(new Offset(3f, 4f).ApproxEquals(new Offset(3f + 1e-8f, 4f)));
+        Assert.True(
+            new Size(width: 3f, height: 4f).ApproxEquals(new Size(width: 3f + 1e-8f, height: 4f))
+        );
+        Assert.True(new Offset(x: 3f, y: 4f).ApproxEquals(new Offset(x: 3f + 1e-8f, y: 4f)));
         Assert.True(
             EdgeInsets.All(6f).ApproxEquals(
                 new EdgeInsets(
-                    6f + 1e-8f,
-                    6f,
-                    6f,
-                    6f
+                    left: 6f + 1e-8f,
+                    top: 6f,
+                    right: 6f,
+                    bottom: 6f
                 )
             )
         );
         Assert.True(
-            Constraints.Tight(100f, 200f).ApproxEquals(Constraints.Tight(100f + 1e-8f, 200f))
+            Constraints.Tight(width: 100f, height: 200f)
+                .ApproxEquals(Constraints.Tight(width: 100f + 1e-8f, height: 200f))
         );
     }
 
@@ -181,8 +201,8 @@ public class EqualityContractTests
     public void UsableAsDictionaryKey()
     {
         // The concrete payoff: exact-equal keys resolve to the same bucket.
-        var map = new Dictionary<Vec3, string> { [new Vec3(1f, 2f, 3f)] = "a" };
-        Assert.Equal("a", map[new Vec3(1f, 2f, 3f)]);
-        Assert.False(map.ContainsKey(new Vec3(1f, 2f, 3.0001f)));
+        var map = new Dictionary<Vec3, string> { [new Vec3(x: 1f, y: 2f, z: 3f)] = "a" };
+        Assert.Equal(expected: "a", actual: map[new Vec3(x: 1f, y: 2f, z: 3f)]);
+        Assert.False(map.ContainsKey(new Vec3(x: 1f, y: 2f, z: 3.0001f)));
     }
 }

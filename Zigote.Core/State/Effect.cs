@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace Zigote.Core.State;
 
 /// <summary>Which thread an effect's body is allowed to run on — see <see cref="Effect" />.</summary>
@@ -26,53 +28,59 @@ public enum EffectAffinity
 ///     A side effect wired into the reactive graph: runs immediately and re-runs whenever a
 ///     <see cref="Signal{T}" />/<see cref="Computed{T}" /> it read while running changes — the same
 ///     auto-tracking as <see cref="Computed{T}" />, but for effects instead of a derived value. An
-///     effect is a graph <b>root</b> (always watched), so it drives the subscription of the computeds it
+///     effect is a graph <b>root</b> (always watched), so it drives the subscription of the computeds
+///     it
 ///     reads and settles glitch-free — it runs at most once per change cascade.
 ///     <para>
 ///         The body returns a cleanup <see cref="Action" /> run before each re-run and on
-///         <see cref="Dispose" /> (React-<c>useEffect</c> style) — use it to release the previous run's
+///         <see cref="Dispose" /> (React-<c>useEffect</c> style) — use it to release the previous
+///         run's
 ///         resources (timer, subscription, …). <see cref="Dispose" /> stops the effect, detaches from
 ///         all sources, and runs the final cleanup.
 ///     </para>
 ///     <para>
-///         <b>Which thread the body runs on</b> is <see cref="EffectAffinity" />: <c>Inline</c> (default)
+///         <b>Which thread the body runs on</b> is <see cref="EffectAffinity" />: <c>Inline</c>
+///         (default)
 ///         is the writer's thread; <c>Deferred</c> is the host's <see cref="Reactive.DrainDeferred" />
 ///         pass. A body that touches the UI or takes another lock belongs on <c>Deferred</c>.
 ///     </para>
 /// </summary>
 public sealed class Effect : Reaction, IDisposable
 {
+#if DEBUG
+    private const double SlowCrossThreadUs = 1000;
+#endif
     private static readonly Action Noop = () => { };
 
     private readonly Func<Action> _body;
-    private readonly Delegate _named;
     private readonly int _homeThread;
-    private Action _cleanup = Noop;
+    private readonly Delegate _named;
 
-    /// <summary>Already queued for <see cref="Reactive.DrainDeferred" /> — a second write must not queue it twice.</summary>
+    /// <summary>
+    ///     Already queued for <see cref="Reactive.DrainDeferred" /> — a second write must not queue
+    ///     it twice.
+    /// </summary>
     internal bool QueuedDeferred;
+
+    private Action _cleanup = Noop;
 
     /// <summary>An effect with no cleanup.</summary>
     public Effect(Action body, EffectAffinity affinity = EffectAffinity.Inline) : this(
-        () =>
+        body: () =>
         {
             body();
             return Noop;
         },
-        affinity,
-        body // name the effect after the caller's body, not the wrapper declared right here
-    )
-    {
-    }
+        affinity: affinity,
+        named: body // name the effect after the caller's body, not the wrapper declared right here
+    ) { }
 
     /// <summary>An effect whose body returns a cleanup thunk (run before each re-run and on dispose).</summary>
     public Effect(Func<Action> body, EffectAffinity affinity = EffectAffinity.Inline) : this(
-        body,
-        affinity,
-        body
-    )
-    {
-    }
+        body: body,
+        affinity: affinity,
+        named: body
+    ) { }
 
     private Effect(Func<Action> body, EffectAffinity affinity, Delegate named)
     {
@@ -90,6 +98,8 @@ public sealed class Effect : Reaction, IDisposable
     /// <summary>Which thread this effect's body may run on. Fixed at construction.</summary>
     public EffectAffinity Affinity { get; }
 
+    internal override bool IsWatched => true;
+
     public void Dispose()
     {
         using (Reactive.Hold())
@@ -102,17 +112,9 @@ public sealed class Effect : Reaction, IDisposable
         }
     }
 
-    internal override bool IsWatched => true;
+    private protected override void OnScheduled() => Reactive.ScheduleEffect(this);
 
-    private protected override void OnScheduled()
-    {
-        Reactive.ScheduleEffect(this);
-    }
-
-    private protected override string DescribeBody()
-    {
-        return Reactive.Describe(_named);
-    }
+    private protected override string DescribeBody() => Reactive.Describe(_named);
 
     private protected override void BeforeExecute()
     {
@@ -128,29 +130,28 @@ public sealed class Effect : Reaction, IDisposable
         // Cheap is fine; slow stalls every other thread — and a blocking one deadlocks the graph.
         if (Affinity == EffectAffinity.Inline && Environment.CurrentManagedThreadId != _homeThread)
         {
-            var t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            long t0 = Stopwatch.GetTimestamp();
             _cleanup = _body() ?? Noop;
-            var us = (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1e6 /
-                     System.Diagnostics.Stopwatch.Frequency;
+            double us = (Stopwatch.GetTimestamp() - t0) * 1e6 /
+                        Stopwatch.Frequency;
             if (us > SlowCrossThreadUs)
-                System.Diagnostics.Debug.WriteLine(
+            {
+                Debug.WriteLine(
                     $"Reactive: Inline effect body ran {us:F0}us on thread " +
                     $"{Environment.CurrentManagedThreadId} (created on {_homeThread}) while holding the " +
                     "graph lock — use EffectAffinity.Deferred for cross-thread or UI-touching work."
                 );
+            }
+
             return;
         }
 #endif
         _cleanup = _body() ?? Noop;
     }
 
-    /// <summary>Invoked by the batch drain: resolve (Check → recompute-if-dirty) and re-run the body if dirty.</summary>
-    internal void RunFromQueue()
-    {
-        Refresh();
-    }
-
-#if DEBUG
-    private const double SlowCrossThreadUs = 1000;
-#endif
+    /// <summary>
+    ///     Invoked by the batch drain: resolve (Check → recompute-if-dirty) and re-run the body if
+    ///     dirty.
+    /// </summary>
+    internal void RunFromQueue() => Refresh();
 }

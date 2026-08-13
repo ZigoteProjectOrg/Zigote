@@ -13,8 +13,10 @@ using ZReactive = Zigote.Core.State.Reactive;
 using ZSignal = Zigote.Core.State.Signal<int>;
 
 /// <summary>
-///     Head-to-head against SignalsDotnet (github.com/fedeAlterio/SignalsDotnet, the Angular-Signals port
-///     built on R3), the closest .NET equivalent of this core. Same graph shape, same machine, same job —
+///     Head-to-head against SignalsDotnet (github.com/fedeAlterio/SignalsDotnet, the Angular-Signals
+///     port
+///     built on R3), the closest .NET equivalent of this core. Same graph shape, same machine, same
+///     job —
 ///     each pair is one category, with Zigote as that category's baseline, so the Ratio column reads
 ///     directly as "how many times the Zigote cost". <c>ComputedRoundTrip</c> is their own benchmark,
 ///     ported verbatim on both sides.
@@ -41,78 +43,78 @@ public class SignalsDotnetComparison
         new() { MaxDegreeOfParallelism = ContendedThreads };
 
     private readonly List<IDisposable> _roots = [];
-
-    // ── Zigote graph ─────────────────────────────────────────────────────────────
-    private readonly ZSignal _zSignal = new(0);
-    private readonly ZComputed _zComputed;
-    private readonly ZSignal _zEffectSource = new(0);
-    private readonly ZSignal _zDiamondRoot = new(0);
-    private readonly ZComputed _zDiamond;
-    private readonly ZSignal _zChainRoot = new(0);
-    private readonly ZComputed _zChain;
-    private readonly ZSignal _zFanSource = new(0);
-    private readonly ZComputed[] _zFan = new ZComputed[FanOut];
-    private readonly ZSignal _zContended = new(0);
-    private readonly ZSignal _zBatchA = new(0);
-    private readonly ZSignal _zBatchB = new(0);
-    private readonly Action _zBatchBody;
-    private int _zEffectSink;
-
-    // ── SignalsDotnet graph ──────────────────────────────────────────────────────
-    private readonly SdSignal _sdSignal = new(0);
-    private readonly SdReadOnly _sdComputed;
-    private readonly SdSignal _sdEffectSource = new(0);
-    private readonly SdSignal _sdDiamondRoot = new(0);
-    private readonly SdReadOnly _sdDiamond;
-    private readonly SdSignal _sdChainRoot = new(0);
-    private readonly SdReadOnly _sdChain;
-    private readonly SdSignal _sdFanSource = new(0);
-    private readonly SdReadOnly[] _sdFan = new SdReadOnly[FanOut];
-    private readonly SdSignal _sdContended = new(0);
     private readonly SdSignal _sdBatchA = new(0);
     private readonly SdSignal _sdBatchB = new(0);
     private readonly Action _sdBatchBody;
-    private int _sdEffectSink;
+    private readonly SdReadOnly _sdChain;
+    private readonly SdSignal _sdChainRoot = new(0);
+    private readonly SdReadOnly _sdComputed;
+    private readonly SdSignal _sdContended = new(0);
+    private readonly SdReadOnly _sdDiamond;
+    private readonly SdSignal _sdDiamondRoot = new(0);
+    private readonly SdSignal _sdEffectSource = new(0);
+    private readonly SdReadOnly[] _sdFan = new SdReadOnly[FanOut];
+    private readonly SdSignal _sdFanSource = new(0);
+
+    // ── SignalsDotnet graph ──────────────────────────────────────────────────────
+    private readonly SdSignal _sdSignal = new(0);
+    private readonly ZSignal _zBatchA = new(0);
+    private readonly ZSignal _zBatchB = new(0);
+    private readonly Action _zBatchBody;
+    private readonly ZComputed _zChain;
+    private readonly ZSignal _zChainRoot = new(0);
+    private readonly ZComputed _zComputed;
+    private readonly ZSignal _zContended = new(0);
+    private readonly ZComputed _zDiamond;
+    private readonly ZSignal _zDiamondRoot = new(0);
+    private readonly ZSignal _zEffectSource = new(0);
+    private readonly ZComputed[] _zFan = new ZComputed[FanOut];
+    private readonly ZSignal _zFanSource = new(0);
+
+    // ── Zigote graph ─────────────────────────────────────────────────────────────
+    private readonly ZSignal _zSignal = new(0);
 
     private int _batchValue;
     private int _flip;
+    private int _sdEffectSink;
+    private int _zEffectSink;
 
     public SignalsDotnetComparison()
     {
         // ── Zigote ──
         _zComputed = ZComputeds.From(() => _zSignal.Value);
-        _roots.Add(ZExt.Observe(_zComputed, () => { }));
+        _roots.Add(ZExt.Observe(source: _zComputed, onChanged: () => { }));
 
         _zDiamond = ZComputeds.From(() =>
             {
-                var left = _zDiamondRoot.Value + 1;
-                var right = _zDiamondRoot.Value * 2;
+                int left = _zDiamondRoot.Value + 1;
+                int right = _zDiamondRoot.Value * 2;
                 return left + right;
             }
         );
-        _roots.Add(ZExt.Observe(_zDiamond, () => { }));
+        _roots.Add(ZExt.Observe(source: _zDiamond, onChanged: () => { }));
 
         var zNode = ZComputeds.From(() => _zChainRoot.Value + 1);
-        for (var i = 1; i < ChainDepth; i++)
+        for (int i = 1; i < ChainDepth; i++)
         {
             var prev = zNode;
             zNode = ZComputeds.From(() => prev.Value + 1);
         }
 
         _zChain = zNode;
-        _roots.Add(ZExt.Observe(_zChain, () => { }));
+        _roots.Add(ZExt.Observe(source: _zChain, onChanged: () => { }));
 
-        for (var i = 0; i < FanOut; i++)
+        for (int i = 0; i < FanOut; i++)
         {
             _zFan[i] = ZComputeds.From(() => _zFanSource.Value + 1);
-            _roots.Add(ZExt.Observe(_zFan[i], () => { }));
+            _roots.Add(ZExt.Observe(source: _zFan[i], onChanged: () => { }));
         }
 
         _roots.Add(new ZEffect(() => _zEffectSink = _zEffectSource.Value));
 
         // Contended pair: a live computed on each side, so a write actually cascades.
         var zc = ZComputeds.From(() => _zContended.Value + 1);
-        _roots.Add(ZExt.Observe(zc, () => { }));
+        _roots.Add(ZExt.Observe(source: zc, onChanged: () => { }));
         _zBatchBody = () =>
         {
             _zBatchA.Value = _batchValue;
@@ -125,15 +127,15 @@ public class SignalsDotnetComparison
         _sdDiamond = Live(
             SdSignals.Computed(() =>
                 {
-                    var left = _sdDiamondRoot.Value + 1;
-                    var right = _sdDiamondRoot.Value * 2;
+                    int left = _sdDiamondRoot.Value + 1;
+                    int right = _sdDiamondRoot.Value * 2;
                     return left + right;
                 }
             )
         );
 
         var sdNode = SdSignals.Computed(() => _sdChainRoot.Value + 1);
-        for (var i = 1; i < ChainDepth; i++)
+        for (int i = 1; i < ChainDepth; i++)
         {
             var prev = sdNode;
             sdNode = SdSignals.Computed(() => prev.Value + 1);
@@ -141,7 +143,7 @@ public class SignalsDotnetComparison
 
         _sdChain = Live(sdNode);
 
-        for (var i = 0; i < FanOut; i++)
+        for (int i = 0; i < FanOut; i++)
             _sdFan[i] = Live(SdSignals.Computed(() => _sdFanSource.Value + 1));
 
         _roots.Add(new SdEffect(() => _sdEffectSink = _sdEffectSource.Value));
@@ -157,17 +159,11 @@ public class SignalsDotnetComparison
 
     [Benchmark(Baseline = true)]
     [BenchmarkCategory("Read")]
-    public int Zigote_Read()
-    {
-        return _zSignal.Value;
-    }
+    public int Zigote_Read() => _zSignal.Value;
 
     [Benchmark]
     [BenchmarkCategory("Read")]
-    public int SignalsDotnet_Read()
-    {
-        return _sdSignal.Value;
-    }
+    public int SignalsDotnet_Read() => _sdSignal.Value;
 
     // ── their own benchmark: write, write, read an observed computed ─────────────
 
@@ -295,8 +291,8 @@ public class SignalsDotnetComparison
     {
         Fan(t =>
             {
-                var offset = t << 20;
-                for (var i = 0; i < ContendedOps / ContendedThreads; i++)
+                int offset = t << 20;
+                for (int i = 0; i < ContendedOps / ContendedThreads; i++)
                     _zContended.Value = offset | i;
             }
         );
@@ -308,8 +304,8 @@ public class SignalsDotnetComparison
     {
         Fan(t =>
             {
-                var offset = t << 20;
-                for (var i = 0; i < ContendedOps / ContendedThreads; i++)
+                int offset = t << 20;
+                for (int i = 0; i < ContendedOps / ContendedThreads; i++)
                     _sdContended.Value = offset | i;
             }
         );
@@ -319,12 +315,13 @@ public class SignalsDotnetComparison
     [BenchmarkCategory("ContendedReads")]
     public int Zigote_ContendedReads()
     {
-        var sink = 0;
+        int sink = 0;
         Fan(_ =>
             {
-                var local = 0;
-                for (var i = 0; i < ContendedOps / ContendedThreads; i++) local += _zContended.Value;
-                Interlocked.Add(ref sink, local);
+                int local = 0;
+                for (int i = 0; i < ContendedOps / ContendedThreads; i++)
+                    local += _zContended.Value;
+                Interlocked.Add(location1: ref sink, value: local);
             }
         );
         return sink;
@@ -334,12 +331,13 @@ public class SignalsDotnetComparison
     [BenchmarkCategory("ContendedReads")]
     public int SignalsDotnet_ContendedReads()
     {
-        var sink = 0;
+        int sink = 0;
         Fan(_ =>
             {
-                var local = 0;
-                for (var i = 0; i < ContendedOps / ContendedThreads; i++) local += _sdContended.Value;
-                Interlocked.Add(ref sink, local);
+                int local = 0;
+                for (int i = 0; i < ContendedOps / ContendedThreads; i++)
+                    local += _sdContended.Value;
+                Interlocked.Add(location1: ref sink, value: local);
             }
         );
         return sink;
@@ -348,10 +346,12 @@ public class SignalsDotnetComparison
     // ponytail: Parallel.For, not barrier-synced dedicated threads — the pool is warm after warmup and
     // its dispatch amortises to ~1ns over 16k ops. Swap in a Barrier if the two sides ever disagree on
     // thread count mid-run.
-    private void Fan(Action<int> body)
-    {
-        Parallel.For(0, ContendedThreads, ParallelOptions, body);
-    }
+    private void Fan(Action<int> body) => Parallel.For(
+        fromInclusive: 0,
+        toExclusive: ContendedThreads,
+        parallelOptions: ParallelOptions,
+        body: body
+    );
 
     /// <summary>Keep a SignalsDotnet computed live (the counterpart of an observed Zigote computed).</summary>
     private SdReadOnly Live(SdReadOnly computed)
@@ -368,26 +368,44 @@ public class SignalsDotnetComparison
     public static void SelfCheck()
     {
         var b = new SignalsDotnetComparison();
-        Check("Read", b.Zigote_Read(), b.SignalsDotnet_Read());
+        Check(name: "Read", zigote: b.Zigote_Read(), signalsDotnet: b.SignalsDotnet_Read());
         Check(
-            "ComputedRoundTrip",
-            b.Zigote_ComputedRoundTrip(),
-            b.SignalsDotnet_ComputedRoundTrip()
+            name: "ComputedRoundTrip",
+            zigote: b.Zigote_ComputedRoundTrip(),
+            signalsDotnet: b.SignalsDotnet_ComputedRoundTrip()
         );
 
         // The rest write ++_flip, so both sides must start from the same counter to write the same value.
-        Check("Effect", Same(b.Zigote_EffectRoundTrip), Same(b.SignalsDotnet_EffectRoundTrip));
-        Check("Diamond", Same(b.Zigote_Diamond), Same(b.SignalsDotnet_Diamond));
-        Check("Chain10", Same(b.Zigote_Chain10), Same(b.SignalsDotnet_Chain10));
-        Check("FanOut32", Same(b.Zigote_FanOut32), Same(b.SignalsDotnet_FanOut32));
+        Check(
+            name: "Effect",
+            zigote: Same(b.Zigote_EffectRoundTrip),
+            signalsDotnet: Same(b.SignalsDotnet_EffectRoundTrip)
+        );
+        Check(
+            name: "Diamond",
+            zigote: Same(b.Zigote_Diamond),
+            signalsDotnet: Same(b.SignalsDotnet_Diamond)
+        );
+        Check(
+            name: "Chain10",
+            zigote: Same(b.Zigote_Chain10),
+            signalsDotnet: Same(b.SignalsDotnet_Chain10)
+        );
+        Check(
+            name: "FanOut32",
+            zigote: Same(b.Zigote_FanOut32),
+            signalsDotnet: Same(b.SignalsDotnet_FanOut32)
+        );
 
         // The effect sinks must have moved off their initial 0 on both sides.
         Same(b.Zigote_EffectRoundTrip);
         Same(b.SignalsDotnet_EffectRoundTrip);
         if (b._zEffectSink == 0 || b._sdEffectSink == 0)
+        {
             throw new InvalidOperationException(
                 $"effect sink never moved (zigote={b._zEffectSink}, signalsdotnet={b._sdEffectSink})"
             );
+        }
 
         b.Zigote_Batch();
         b.SignalsDotnet_Batch();
@@ -404,10 +422,12 @@ public class SignalsDotnetComparison
         {
             Console.WriteLine($"  {name,-20} zigote={zigote,-8} signalsdotnet={signalsDotnet}");
             if (zigote != signalsDotnet)
+            {
                 throw new InvalidOperationException(
                     $"{name}: the two graphs disagree (zigote={zigote}, signalsdotnet={signalsDotnet}) — " +
                     "the benchmark pair is not measuring the same thing."
                 );
+            }
         }
     }
 }

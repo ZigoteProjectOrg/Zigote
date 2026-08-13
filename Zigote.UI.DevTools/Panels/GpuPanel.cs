@@ -5,45 +5,48 @@ using Zigote.UI.Charts.Marks;
 using Zigote.UI.Debug;
 using Zigote.UI.DevTools.Diagnostics;
 using Zigote.UI.DevTools.Widgets;
+using Zigote.UI.Host;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Layout;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.DevTools.Panels;
 
 /// <summary>
 ///     GPU memory + load. Shows tracked wgpu buffer/texture memory over time (populated by the native
-///     accounting in <c>ZgEngineStats</c>), the buffer-vs-texture split, and the live per-frame pipeline
+///     accounting in <c>ZgEngineStats</c>), the buffer-vs-texture split, and the live per-frame
+///     pipeline
 ///     load (draw calls / triangles / passes / visible) that is the real GPU-work signal. Available in
-///     both 2D and 3D apps — a 2D app still allocates GPU atlases + vertex buffers; its pipeline counters
-///     just sit idle. Honest about gaps: unpopulated counters read "not instrumented", not a fake zero.
+///     both 2D and 3D apps — a 2D app still allocates GPU atlases + vertex buffers; its pipeline
+///     counters
+///     just sit idle. Honest about gaps: unpopulated counters read "not instrumented", not a fake
+///     zero.
 /// </summary>
 public sealed class GpuPanel : IDevPanel
 {
-    private static readonly Color Blue = Color.Rgb(10, 132, 255);
-    private static readonly Color Cyan = Color.Rgb(100, 210, 255);
-    private static readonly Color Green = Color.Rgb(48, 209, 88);
-    private static readonly Color Purple = Color.Rgb(191, 90, 242);
+    private static readonly Color Blue = Color.Rgb(r: 10, g: 132, b: 255);
+    private static readonly Color Cyan = Color.Rgb(r: 100, g: 210, b: 255);
+    private static readonly Color Green = Color.Rgb(r: 48, g: 209, b: 88);
+    private static readonly Color Purple = Color.Rgb(r: 191, g: 90, b: 242);
 
     private readonly DevKeyValue _backend = new("Backend");
+    private readonly DevMeter _buffers = new(key: "Buffers", color: Blue);
+    private readonly DevKeyValue _draws = new(key: "Draw calls", valueColor: Blue);
     private readonly DevChartCard _memCard;
-    private readonly DevMeter _buffers = new("Buffers", Blue);
-    private readonly DevKeyValue _draws = new("Draw calls", valueColor: Blue);
-    private readonly DevKeyValue _passes = new("Render passes", valueColor: Purple);
-    private readonly DevKeyValue _surface = new("Surface");
-    private readonly DevMeter _textures = new("Textures", Cyan);
-    private readonly DevKeyValue _total = new("Tracked total");
-    private readonly DevKeyValue _tris = new("Triangles", valueColor: Cyan);
-    private readonly DevKeyValue _visible = new("Visible", valueColor: Green);
     private readonly DevNote _memNote = new("");
+    private readonly DevKeyValue _passes = new(key: "Render passes", valueColor: Purple);
+    private readonly DevKeyValue _surface = new("Surface");
+    private readonly CachedText _tDraws = new();
+    private readonly CachedText _tPasses = new();
 
     // Per-readout caches: Refresh runs every frame while the panel is open, so all formatting goes
     // through CachedText (zero-alloc while the rendered text is unchanged).
     private readonly CachedText _tSurface = new();
-    private readonly CachedText _tDraws = new();
     private readonly CachedText _tVisible = new();
-    private readonly CachedText _tPasses = new();
+    private readonly DevMeter _textures = new(key: "Textures", color: Cyan);
+    private readonly DevKeyValue _total = new("Tracked total");
+    private readonly DevKeyValue _tris = new(key: "Triangles", valueColor: Cyan);
+    private readonly DevKeyValue _visible = new(key: "Visible", valueColor: Green);
     private RenderBackend? _backendKey;
     private string _backendText = "—";
     private ulong _bufKey = ulong.MaxValue;
@@ -58,16 +61,16 @@ public sealed class GpuPanel : IDevPanel
     public GpuPanel()
     {
         var mem = DevChart.Sparkline();
-        var m = AreaMark.Of(DevChartData.GpuTotalMb, s => s.Time, s => s.Value);
+        var m = AreaMark.Of(data: DevChartData.GpuTotalMb, x: s => s.Time, y: s => s.Value);
         m.Name = "GPU MB";
         m.Color = Purple;
         m.Opacity = 0.22f;
         mem.Marks.Add(m);
         _memCard = new DevChartCard(
-            mem,
-            74f,
-            120f,
-            "GPU memory — 2 min"
+            chart: mem,
+            height: 74f,
+            windowSeconds: 120f,
+            title: "GPU memory — 2 min"
         );
     }
 
@@ -102,7 +105,7 @@ public sealed class GpuPanel : IDevPanel
     public void Refresh(float dt)
     {
         var t = App.Active?.Theme ?? ThemeData.Dark;
-        _memCard.Sync(DevChartData.Revision, DevChartData.Time, t);
+        _memCard.Sync(revision: DevChartData.Revision, now: DevChartData.Time, theme: t);
 
         var engine = ZigoteEngine.Instance;
         // Enum.ToString allocates each call, so re-run it only when the backend changed.
@@ -130,9 +133,9 @@ public sealed class GpuPanel : IDevPanel
         }
 
         var s = DebugStats.Engine;
-        var buf = s.GpuBufferMemory;
-        var tex = s.GpuTextureMemory;
-        var total = buf + tex;
+        ulong buf = s.GpuBufferMemory;
+        ulong tex = s.GpuTextureMemory;
+        ulong total = buf + tex;
 
         if (total == 0)
         {

@@ -8,17 +8,17 @@ namespace Zigote.UI.Widgets.Layout;
 /// </summary>
 public sealed class Container : Widget
 {
-    private Size _childSize;
-    private Size _totalSize;
-    private Widget? _child;
     private Color _background = Color.Transparent;
-    private EdgeInsets _padding = EdgeInsets.Zero;
-    private EdgeInsets _margin = EdgeInsets.Zero;
-    private float? _width;
-    private float? _height;
-    private float _cornerRadius;
     private Color _borderColor = Color.Transparent;
     private float _borderWidth = 1f;
+    private Widget? _child;
+    private Size _childSize;
+    private float _cornerRadius;
+    private float? _height;
+    private EdgeInsets _margin = EdgeInsets.Zero;
+    private EdgeInsets _padding = EdgeInsets.Zero;
+    private Size _totalSize;
+    private float? _width;
 
     /// <summary>
     ///     Named-argument constructor:
@@ -46,8 +46,9 @@ public sealed class Container : Widget
         Alignment? alignment = null,
         BoxConstraints? constraints = null)
     {
-        if (alignment is { } a && child is not null) child = new Align(a, child);
-        if (constraints is { } bc && child is not null) child = new ConstrainedBox(bc, child);
+        if (alignment is { } a && child is not null) child = new Align(alignment: a, child: child);
+        if (constraints is { } bc && child is not null)
+            child = new ConstrainedBox(constraints: bc, child: child);
 
         _child = child;
         if (padding is { } p) _padding = p;
@@ -59,7 +60,7 @@ public sealed class Container : Widget
         if (decoration is { } d)
         {
             if (d.Color is { } dc) _background = dc;
-            var r = d.BorderRadius.Uniform;
+            float r = d.BorderRadius.Uniform;
             if (r > 0f) _cornerRadius = r;
             if (d.Border is { } b)
             {
@@ -72,83 +73,83 @@ public sealed class Container : Widget
     public Widget? Child
     {
         get => _child;
-        set => SetLayout(ref _child, value);
+        set => SetLayout(field: ref _child, value: value);
     }
 
     public Color Background
     {
         get => _background;
-        set => SetPaint(ref _background, value);
+        set => SetPaint(field: ref _background, value: value);
     }
 
     public EdgeInsets Padding
     {
         get => _padding;
-        set => SetLayout(ref _padding, value);
+        set => SetLayout(field: ref _padding, value: value);
     }
 
     public EdgeInsets Margin
     {
         get => _margin;
-        set => SetLayout(ref _margin, value);
+        set => SetLayout(field: ref _margin, value: value);
     }
 
     public float? Width
     {
         get => _width;
-        set => SetLayout(ref _width, value);
+        set => SetLayout(field: ref _width, value: value);
     }
 
     public float? Height
     {
         get => _height;
-        set => SetLayout(ref _height, value);
+        set => SetLayout(field: ref _height, value: value);
     }
 
     public float CornerRadius
     {
         get => _cornerRadius;
-        set => SetPaint(ref _cornerRadius, value);
+        set => SetPaint(field: ref _cornerRadius, value: value);
     }
 
     public Color BorderColor
     {
         get => _borderColor;
-        set => SetPaint(ref _borderColor, value);
+        set => SetPaint(field: ref _borderColor, value: value);
     }
 
     public float BorderWidth
     {
         get => _borderWidth;
-        set => SetPaint(ref _borderWidth, value);
+        set => SetPaint(field: ref _borderWidth, value: value);
     }
 
     public override Size Measure(Constraints c)
     {
         var inner = c.Deflate(Margin);
 
-        var targetW = Width.HasValue
-            ? Math.Clamp(Width.Value, inner.MinWidth, inner.MaxWidth)
+        float targetW = Width.HasValue
+            ? Math.Clamp(value: Width.Value, min: inner.MinWidth, max: inner.MaxWidth)
             : inner.MaxWidth;
-        var targetH = Height.HasValue
-            ? Math.Clamp(Height.Value, inner.MinHeight, inner.MaxHeight)
+        float targetH = Height.HasValue
+            ? Math.Clamp(value: Height.Value, min: inner.MinHeight, max: inner.MaxHeight)
             : inner.MaxHeight;
 
         if (Child != null)
         {
             var childC = new Constraints(
-                0,
-                Math.Max(0, targetW - Padding.Left - Padding.Right),
-                0,
-                Math.Max(0, targetH - Padding.Top - Padding.Bottom)
+                minWidth: 0,
+                maxWidth: Math.Max(val1: 0, val2: targetW - Padding.Left - Padding.Right),
+                minHeight: 0,
+                maxHeight: Math.Max(val1: 0, val2: targetH - Padding.Top - Padding.Bottom)
             );
             _childSize = Child.Measure(childC);
 
-            var w = Width.HasValue ? targetW : _childSize.Width + Padding.Left + Padding.Right;
-            var h = Height.HasValue ? targetH : _childSize.Height + Padding.Top + Padding.Bottom;
+            float w = Width.HasValue ? targetW : _childSize.Width + Padding.Left + Padding.Right;
+            float h = Height.HasValue ? targetH : _childSize.Height + Padding.Top + Padding.Bottom;
             _totalSize = new Size(
-                w + Margin.Left + Margin.Right,
-                h + Margin.Top + Margin.Bottom
+                width: w + Margin.Left + Margin.Right,
+                height: h + Margin.Top + Margin.Bottom
             );
         }
         else
@@ -156,11 +157,11 @@ public sealed class Container : Widget
             _childSize = Size.Zero;
 
             // Childless in unbounded space: fall back to the constraint minimum instead of Infinity.
-            var fillW = float.IsFinite(targetW) ? targetW : inner.MinWidth;
-            var fillH = float.IsFinite(targetH) ? targetH : inner.MinHeight;
+            float fillW = float.IsFinite(targetW) ? targetW : inner.MinWidth;
+            float fillH = float.IsFinite(targetH) ? targetH : inner.MinHeight;
             _totalSize = new Size(
-                fillW + Margin.Left + Margin.Right,
-                fillH + Margin.Top + Margin.Bottom
+                width: fillW + Margin.Left + Margin.Right,
+                height: fillH + Margin.Top + Margin.Bottom
             );
         }
 
@@ -171,15 +172,15 @@ public sealed class Container : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _totalSize.Width,
-            _totalSize.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _totalSize.Width,
+            height: _totalSize.Height
         );
         Child?.Layout(
             new Offset(
-                origin.X + Margin.Left + Padding.Left,
-                origin.Y + Margin.Top + Padding.Top
+                x: origin.X + Margin.Left + Padding.Left,
+                y: origin.Y + Margin.Top + Padding.Top
             )
         );
     }
@@ -187,34 +188,33 @@ public sealed class Container : Widget
     public override void Paint(PaintList paint)
     {
         var inner = new Rect(
-            Bounds.X + Margin.Left,
-            Bounds.Y + Margin.Top,
-            Bounds.Width - Margin.Left - Margin.Right,
-            Bounds.Height - Margin.Top - Margin.Bottom
+            x: Bounds.X + Margin.Left,
+            y: Bounds.Y + Margin.Top,
+            width: Bounds.Width - Margin.Left - Margin.Right,
+            height: Bounds.Height - Margin.Top - Margin.Bottom
         );
 
         if (Background.A > 0f)
-            paint.AddRect(inner, Background, CornerRadius);
+            paint.AddRect(bounds: inner, color: Background, radius: CornerRadius);
 
         if (BorderColor.A > 0f)
+        {
             paint.AddBorder(
-                inner,
-                BorderColor,
-                CornerRadius,
-                BorderWidth
+                bounds: inner,
+                color: BorderColor,
+                radius: CornerRadius,
+                width: BorderWidth
             );
+        }
 
         Child?.Paint(paint);
     }
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return Child?.HitTest(point) ?? this;
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(Child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Child);
 }

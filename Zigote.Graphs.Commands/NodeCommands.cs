@@ -38,7 +38,7 @@ public sealed class DeleteNodeCommand(Guid nodeId) : IGraphCommand
         if (_removed is null) return;
 
         graph.Nodes.Remove(_removed);
-        graph.EditorData.NodeLayouts.TryGetValue(nodeId, out _removedLayout);
+        graph.EditorData.NodeLayouts.TryGetValue(key: nodeId, value: out _removedLayout);
         graph.EditorData.NodeLayouts.Remove(nodeId);
 
         _removedEdges.Clear();
@@ -63,7 +63,7 @@ public sealed class MoveNodeCommand(Guid nodeId, float newX, float newY) : IGrap
 
     public void Execute(GraphDocument graph)
     {
-        if (!graph.EditorData.NodeLayouts.TryGetValue(nodeId, out var layout)) return;
+        if (!graph.EditorData.NodeLayouts.TryGetValue(key: nodeId, value: out var layout)) return;
         _oldX = layout.X;
         _oldY = layout.Y;
         layout.X = newX;
@@ -72,7 +72,7 @@ public sealed class MoveNodeCommand(Guid nodeId, float newX, float newY) : IGrap
 
     public void Undo(GraphDocument graph)
     {
-        if (graph.EditorData.NodeLayouts.TryGetValue(nodeId, out var layout))
+        if (graph.EditorData.NodeLayouts.TryGetValue(key: nodeId, value: out var layout))
         {
             layout.X = _oldX;
             layout.Y = _oldY;
@@ -90,7 +90,7 @@ public sealed class ResizeNodeCommand(
 {
     public void Execute(GraphDocument graph)
     {
-        if (graph.EditorData.NodeLayouts.TryGetValue(nodeId, out var layout))
+        if (graph.EditorData.NodeLayouts.TryGetValue(key: nodeId, value: out var layout))
         {
             layout.Width = newWidth;
             layout.Height = newHeight;
@@ -99,7 +99,7 @@ public sealed class ResizeNodeCommand(
 
     public void Undo(GraphDocument graph)
     {
-        if (graph.EditorData.NodeLayouts.TryGetValue(nodeId, out var layout))
+        if (graph.EditorData.NodeLayouts.TryGetValue(key: nodeId, value: out var layout))
         {
             layout.Width = oldWidth;
             layout.Height = oldHeight;

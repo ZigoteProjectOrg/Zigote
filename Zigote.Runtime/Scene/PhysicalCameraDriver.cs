@@ -40,13 +40,17 @@ public sealed class PhysicalCameraDriver
             return null;
         }
 
-        PhysicalCameraMapping.Apply(camera, _cam);
-        var subjectDist = SubjectDistance(camera, cameraWorldPos, findNode);
+        PhysicalCameraMapping.Apply(node: camera, into: _cam);
+        float subjectDist = SubjectDistance(
+            camera: camera,
+            cameraWorldPos: cameraWorldPos,
+            findNode: findNode
+        );
         var grade = PhysicalCameraResolver.Resolve(
-            _cam,
-            subjectDist,
-            viewportHeightPx,
-            dt
+            cam: _cam,
+            subjectDistanceM: subjectDist,
+            viewportHeightPx: viewportHeightPx,
+            dtSeconds: dt
         );
 
         var s = engine.GetRenderSettings3D();
@@ -102,7 +106,7 @@ public sealed class PhysicalCameraDriver
             if (target != null)
             {
                 var diff = WorldPosition(target) - cameraWorldPos;
-                return MathF.Max(diff.Length(), 0.01f);
+                return MathF.Max(x: diff.Length(), y: 0.01f);
             }
         }
 
@@ -113,9 +117,19 @@ public sealed class PhysicalCameraDriver
 
     private static Vec3 WorldPosition(SceneNode node)
     {
-        var t = new Transform3D(node.Position, node.Rotation, node.Scale);
+        var t = new Transform3D(
+            position: node.Position,
+            rotation: node.Rotation,
+            scale: node.Scale
+        );
         for (var p = node.Parent; p != null; p = p.Parent)
-            t = Transform3D.Combine(new Transform3D(p.Position, p.Rotation, p.Scale), t);
+        {
+            t = Transform3D.Combine(
+                parent: new Transform3D(position: p.Position, rotation: p.Rotation, scale: p.Scale),
+                child: t
+            );
+        }
+
         return t.Position;
     }
 }

@@ -68,10 +68,7 @@ public readonly record struct RendererCaps(
     bool RayTracingFromRender)
 {
     /// <summary>True if the given upscaler family is available on the active backend.</summary>
-    public bool Supports(UpscalerKinds kind)
-    {
-        return (Upscalers & kind) != 0;
-    }
+    public bool Supports(UpscalerKinds kind) => (Upscalers & kind) != 0;
 
     /// <summary>True if the selected upscaler family is available (Off is always "supported").</summary>
     public bool Supports(UpscalerSelection sel)
@@ -98,10 +95,10 @@ public readonly record struct RendererCaps(
     internal static RendererCaps From(ZgRendererCaps c)
     {
         return new RendererCaps(
-            (RenderBackend)c.ActiveBackend,
-            (UpscalerKinds)c.Upscalers,
-            c.RayTracing != 0,
-            c.RayTracingFromRender != 0
+            ActiveBackend: (RenderBackend)c.ActiveBackend,
+            Upscalers: (UpscalerKinds)c.Upscalers,
+            RayTracing: c.RayTracing != 0,
+            RayTracingFromRender: c.RayTracingFromRender != 0
         );
     }
 }

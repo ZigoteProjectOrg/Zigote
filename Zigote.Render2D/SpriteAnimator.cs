@@ -15,9 +15,7 @@ public sealed class SpriteAnimator
     private int _direction = 1;
     private float _timeInFrame;
 
-    public SpriteAnimator()
-    {
-    }
+    public SpriteAnimator() { }
 
     public SpriteAnimator(IEnumerable<SpriteClip> clips)
     {
@@ -58,16 +56,19 @@ public sealed class SpriteAnimator
     /// </summary>
     public event Action<string>? FrameEvent;
 
-    public void AddClip(SpriteClip clip)
-    {
-        _clips[clip.Name] = clip;
-    }
+    public void AddClip(SpriteClip clip) => _clips[clip.Name] = clip;
 
     public void Play(string name, bool restartIfSame = false)
     {
-        if (!_clips.TryGetValue(name, out var clip))
-            throw new ArgumentException($"Unknown clip '{name}'.", nameof(name));
-        if (!restartIfSame && ReferenceEquals(_clip, clip)) return;
+        if (!_clips.TryGetValue(key: name, value: out var clip))
+        {
+            throw new ArgumentException(
+                message: $"Unknown clip '{name}'.",
+                paramName: nameof(name)
+            );
+        }
+
+        if (!restartIfSame && ReferenceEquals(objA: _clip, objB: clip)) return;
         Start(clip);
     }
 
@@ -91,8 +92,8 @@ public sealed class SpriteAnimator
     public int ConsumeEvents(List<string> results)
     {
         results.Clear();
-        var count = _pending.Count;
-        for (var i = 0; i < count; i++) results.Add(_pending[i]);
+        int count = _pending.Count;
+        for (int i = 0; i < count; i++) results.Add(_pending[i]);
         _pending.Clear();
         return count;
     }
@@ -114,7 +115,7 @@ public sealed class SpriteAnimator
     private bool Advance()
     {
         var clip = _clip!;
-        var last = clip.FrameCount - 1;
+        int last = clip.FrameCount - 1;
 
         switch (clip.Loop)
         {
@@ -131,7 +132,10 @@ public sealed class SpriteAnimator
                     return true;
                 }
 
-                if (clip.NextClip != null && _clips.TryGetValue(clip.NextClip, out var next))
+                if (clip.NextClip != null && _clips.TryGetValue(
+                        key: clip.NextClip,
+                        value: out var next
+                    ))
                 {
                     // The residual time carries into the next clip so chained clips stay frame-exact.
                     _clip = next;
@@ -173,9 +177,9 @@ public sealed class SpriteAnimator
     {
         var events = _clip!.EventsAt(frame);
         if (events == null) return;
-        for (var i = 0; i < events.Count; i++)
+        for (int i = 0; i < events.Count; i++)
         {
-            var name = events[i];
+            string name = events[i];
             _pending.Add(name);
             FrameEvent?.Invoke(name);
         }

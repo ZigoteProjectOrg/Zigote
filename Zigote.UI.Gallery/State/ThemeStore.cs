@@ -11,7 +11,8 @@ internal enum ThemeMode
 
 /// <summary>
 ///     App-wide appearance state as a <see cref="Signal{T}" />. <see cref="GalleryApp" /> watches
-///     <see cref="Mode" /> and pushes the resolved <see cref="ThemeData" /> into the framework; widgets
+///     <see cref="Mode" /> and pushes the resolved <see cref="ThemeData" /> into the framework;
+///     widgets
 ///     only ever talk to the store.
 /// </summary>
 internal sealed class ThemeStore
@@ -20,8 +21,5 @@ internal sealed class ThemeStore
 
     public ThemeData Data => Mode.Value == ThemeMode.Dark ? ThemeData.Dark : ThemeData.Light;
 
-    public void Set(ThemeMode mode)
-    {
-        Mode.Value = mode;
-    }
+    public void Set(ThemeMode mode) => Mode.Value = mode;
 }

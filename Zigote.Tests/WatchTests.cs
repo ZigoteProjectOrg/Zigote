@@ -8,7 +8,8 @@ namespace Zigote.Tests;
 
 /// <summary>
 ///     The <see cref="Watch" /> widget — the C# signal→rebuild bridge (counterpart of the F#
-///     <c>Ui.bind</c>). Built headlessly: attach, measure, mutate a signal, assert the subtree rebuilt.
+///     <c>Ui.bind</c>). Built headlessly: attach, measure, mutate a signal, assert the subtree
+///     rebuilt.
 /// </summary>
 // Serialized with the other reactive tests: exact rebuild-count assertions are sensitive to the
 // process-global Reactive.GlobalVersion, which a parallel reactive stress test would otherwise bump.
@@ -19,7 +20,7 @@ public class WatchTests
     public void Watch_rebuilds_its_subtree_when_a_read_signal_changes()
     {
         var count = new Signal<int>(0);
-        var builds = 0;
+        int builds = 0;
         var root = new Watch(() =>
             {
                 builds++;
@@ -27,16 +28,16 @@ public class WatchTests
             }
         );
 
-        root.Attach(null!, null);
-        root.Measure(Constraints.Tight(200f, 100f));
+        root.Attach(owner: null!, parent: null);
+        root.Measure(Constraints.Tight(width: 200f, height: 100f));
 
-        Assert.Equal("count: 0", Find<Label>(root)!.Text);
-        Assert.Equal(1, builds); // eager first build
+        Assert.Equal(expected: "count: 0", actual: Find<Label>(root)!.Text);
+        Assert.Equal(expected: 1, actual: builds); // eager first build
 
         count.Value = 3;
-        root.Measure(Constraints.Tight(200f, 100f));
-        Assert.Equal("count: 3", Find<Label>(root)!.Text);
-        Assert.Equal(2, builds); // rebuilt exactly once
+        root.Measure(Constraints.Tight(width: 200f, height: 100f));
+        Assert.Equal(expected: "count: 3", actual: Find<Label>(root)!.Text);
+        Assert.Equal(expected: 2, actual: builds); // rebuilt exactly once
     }
 
     [Fact]
@@ -44,42 +45,42 @@ public class WatchTests
     {
         var shown = new Signal<int>(0);
         var unrelated = new Signal<int>(0);
-        var builds = 0;
+        int builds = 0;
         var root = new Watch(() =>
             {
                 builds++;
                 return new Label($"{shown.Value}");
             }
         );
-        root.Attach(null!, null);
-        root.Measure(Constraints.Tight(200f, 100f));
-        Assert.Equal(1, builds);
+        root.Attach(owner: null!, parent: null);
+        root.Measure(Constraints.Tight(width: 200f, height: 100f));
+        Assert.Equal(expected: 1, actual: builds);
 
         unrelated.Value = 99; // not read by the builder → no rebuild
-        Assert.Equal(1, builds);
+        Assert.Equal(expected: 1, actual: builds);
 
         shown.Value = 7;
-        Assert.Equal(2, builds);
+        Assert.Equal(expected: 2, actual: builds);
     }
 
     [Fact]
     public void Watch_stops_rebuilding_after_detach()
     {
         var count = new Signal<int>(0);
-        var builds = 0;
+        int builds = 0;
         var root = new Watch(() =>
             {
                 builds++;
                 return new Label($"{count.Value}");
             }
         );
-        root.Attach(null!, null);
-        root.Measure(Constraints.Tight(200f, 100f));
-        Assert.Equal(1, builds);
+        root.Attach(owner: null!, parent: null);
+        root.Measure(Constraints.Tight(width: 200f, height: 100f));
+        Assert.Equal(expected: 1, actual: builds);
 
         root.Detach();
         count.Value = 5; // detached → the internal computed is disposed → no rebuild
-        Assert.Equal(1, builds);
+        Assert.Equal(expected: 1, actual: builds);
     }
 
     private static T? Find<T>(Widget w) where T : Widget

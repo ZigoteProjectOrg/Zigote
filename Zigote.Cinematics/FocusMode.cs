@@ -40,13 +40,11 @@ public readonly struct FocusSettings : IEquatable<FocusSettings>
                SpeedPerSec.Equals(other.SpeedPerSec);
     }
 
-    public override bool Equals(object? obj)
-    {
-        return obj is FocusSettings o && Equals(o);
-    }
+    public override bool Equals(object? obj) => obj is FocusSettings o && Equals(o);
 
-    public override int GetHashCode()
-    {
-        return HashCode.Combine((int)Kind, ManualDistanceM, SpeedPerSec);
-    }
+    public override int GetHashCode() => HashCode.Combine(
+        value1: (int)Kind,
+        value2: ManualDistanceM,
+        value3: SpeedPerSec
+    );
 }

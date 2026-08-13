@@ -50,7 +50,7 @@ public sealed class DebugVariable
 
     public string Display()
     {
-        var v = Value;
+        object v = Value;
         if (Type == DebugVarType.Enum && EnumNames is { } names && v is int ei &&
             (uint)ei < names.Length)
             return names[ei];
@@ -74,15 +74,16 @@ public sealed class DebugVariable
                     Setter(ParseBool(text));
                     break;
                 case DebugVarType.Int:
-                    if (!int.TryParse(text, out var iv)) return $"'{text}' is not an integer";
+                    if (!int.TryParse(s: text, result: out int iv))
+                        return $"'{text}' is not an integer";
                     Setter(Clamp(iv));
                     break;
                 case DebugVarType.Float:
                     if (!float.TryParse(
-                            text,
-                            NumberStyles.Float,
-                            CultureInfo.InvariantCulture,
-                            out var fv
+                            s: text,
+                            style: NumberStyles.Float,
+                            provider: CultureInfo.InvariantCulture,
+                            result: out float fv
                         ))
                         return $"'{text}' is not a number";
                     Setter(Clamp(fv));
@@ -105,31 +106,37 @@ public sealed class DebugVariable
 
     private int Clamp(int v)
     {
-        if (Min is int mn) v = Math.Max(mn, v);
-        if (Max is int mx) v = Math.Min(mx, v);
+        if (Min is int mn) v = Math.Max(val1: mn, val2: v);
+        if (Max is int mx) v = Math.Min(val1: mx, val2: v);
         return v;
     }
 
     private float Clamp(float v)
     {
-        if (Min is float mn) v = MathF.Max(mn, v);
-        if (Max is float mx) v = MathF.Min(mx, v);
+        if (Min is float mn) v = MathF.Max(x: mn, y: v);
+        if (Max is float mx) v = MathF.Min(x: mx, y: v);
         return v;
     }
 
-    private static bool ParseBool(string s)
-    {
-        return s is "1" or "true" or "on" or "yes" || (bool.TryParse(s, out var b) && b);
-    }
+    private static bool ParseBool(string s) => s is "1" or "true" or "on" or "yes" ||
+                                               (bool.TryParse(value: s, result: out bool b) && b);
 
     private int ParseEnum(string text)
     {
         if (EnumNames is { } names)
-            for (var i = 0; i < names.Length; i++)
-                if (string.Equals(names[i], text, StringComparison.OrdinalIgnoreCase))
+        {
+            for (int i = 0; i < names.Length; i++)
+            {
+                if (string.Equals(
+                        a: names[i],
+                        b: text,
+                        comparisonType: StringComparison.OrdinalIgnoreCase
+                    ))
                     return i;
+            }
+        }
 
-        return int.TryParse(text, out var v) ? v : 0;
+        return int.TryParse(s: text, result: out int v) ? v : 0;
     }
 }
 
@@ -149,14 +156,11 @@ public static class DebugVariables
 
     public static IReadOnlyList<DebugVariable> All => Ordered;
 
-    public static DebugVariable? Find(string name)
-    {
-        return Map.GetValueOrDefault(name);
-    }
+    public static DebugVariable? Find(string name) => Map.GetValueOrDefault(name);
 
     public static void Register(DebugVariable v)
     {
-        if (Map.TryGetValue(v.Name, out var existing)) Ordered.Remove(existing);
+        if (Map.TryGetValue(key: v.Name, value: out var existing)) Ordered.Remove(existing);
         Map[v.Name] = v;
         Ordered.Add(v);
         Version++;
@@ -223,7 +227,9 @@ public static class DebugVariables
                 Type = DebugVarType.Enum,
                 EnumNames = Enum.GetNames(typeof(T)),
                 Getter = () => Convert.ToInt32(getter()),
-                Setter = setter is null ? null : o => setter((T)Enum.ToObject(typeof(T), (int)o)),
+                Setter = setter is null
+                    ? null
+                    : o => setter((T)Enum.ToObject(enumType: typeof(T), value: (int)o)),
             }
         );
     }

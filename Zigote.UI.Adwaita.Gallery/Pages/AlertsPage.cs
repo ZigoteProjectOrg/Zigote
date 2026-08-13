@@ -11,35 +11,58 @@ public sealed class AlertsPage : ComposedWidget
         var host = GalleryHost.Of(context);
 
         return new GalleryPage(
-            "Alert Dialogs",
+            title: "Alert Dialogs",
+            description:
             "A decision that has to be made now — heading, body, and two or three responses.",
-            MaterialIcons.WebAsset
+            iconName: MaterialIcons.WebAsset
         ) {
             Children = {
                 Demo.Group(
-                    "Alerts",
+                    title: "Alerts",
+                    description:
                     "The response you want people to take is suggested; the one that loses work is destructive.",
-                    new AdwActionRow("Unsaved Changes", "Cancel · Discard · Save") {
-                        Suffixes = { new AdwButton("Show", () => ShowSave(host)) },
-                    },
-                    new AdwActionRow("Destructive", "One way out, and it is the loud one") {
-                        Suffixes = { new AdwButton("Show", () => ShowDelete(host)) },
-                    },
-                    new AdwActionRow("Plain", "Body text and a single acknowledgement") {
-                        Suffixes = { new AdwButton("Show", () => ShowPlain(host)) },
+                    new AdwActionRow(
+                        title: "Unsaved Changes",
+                        subtitle: "Cancel · Discard · Save"
+                    ) {
+                        Suffixes = {
+                            new AdwButton(label: "Show", onPressed: () => ShowSave(host)),
+                        },
                     },
                     new AdwActionRow(
-                        "With an Extra Child",
-                        "A check button between the body and the responses"
+                        title: "Destructive",
+                        subtitle: "One way out, and it is the loud one"
                     ) {
-                        Suffixes = { new AdwButton("Show", () => ShowExtraChild(host)) },
+                        Suffixes = {
+                            new AdwButton(label: "Show", onPressed: () => ShowDelete(host)),
+                        },
+                    },
+                    new AdwActionRow(
+                        title: "Plain",
+                        subtitle: "Body text and a single acknowledgement"
+                    ) {
+                        Suffixes = {
+                            new AdwButton(label: "Show", onPressed: () => ShowPlain(host)),
+                        },
+                    },
+                    new AdwActionRow(
+                        title: "With an Extra Child",
+                        subtitle: "A check button between the body and the responses"
+                    ) {
+                        Suffixes = {
+                            new AdwButton(label: "Show", onPressed: () => ShowExtraChild(host)),
+                        },
                     }
                 ),
                 Demo.Group(
-                    "Dialogs",
+                    title: "Dialogs",
+                    description:
                     "The same presenter without the alert layout — anything can be the content.",
-                    new AdwActionRow("Custom Dialog", "A toolbar view inside a dialog") {
-                        Suffixes = { new AdwButton("Show", ShowCustom) },
+                    new AdwActionRow(
+                        title: "Custom Dialog",
+                        subtitle: "A toolbar view inside a dialog"
+                    ) {
+                        Suffixes = { new AdwButton(label: "Show", onPressed: ShowCustom) },
                     }
                 ),
                 Demo.Caption("Escape or a click on the scrim closes any of them."),
@@ -50,7 +73,8 @@ public sealed class AlertsPage : ComposedWidget
     private static void ShowSave(GalleryHost host)
     {
         var dialog = new AdwAlertDialog(
-            "Save Changes?",
+            heading: "Save Changes?",
+            body:
             "“Untitled Document” contains unsaved changes. Changes which are not saved will be permanently lost."
         ) {
             OnResponse = id => host.Toast($"Response: {id}"),
@@ -59,25 +83,33 @@ public sealed class AlertsPage : ComposedWidget
             // default would be Cancel — GNOME points it at the suggested response.
             DefaultResponse = "save",
         };
-        dialog.AddResponse("cancel", "Cancel");
-        dialog.AddResponse("discard", "Discard", AdwResponseAppearance.Destructive);
-        dialog.AddResponse("save", "Save", AdwResponseAppearance.Suggested);
+        dialog.AddResponse(id: "cancel", label: "Cancel");
+        dialog.AddResponse(
+            id: "discard",
+            label: "Discard",
+            appearance: AdwResponseAppearance.Destructive
+        );
+        dialog.AddResponse(id: "save", label: "Save", appearance: AdwResponseAppearance.Suggested);
         dialog.Show();
     }
 
     private static void ShowDelete(GalleryHost host)
     {
         var dialog = new AdwAlertDialog(
-            "Delete Project?",
-            "This removes the project and everything in it. There is no undo."
+            heading: "Delete Project?",
+            body: "This removes the project and everything in it. There is no undo."
         ) {
             OnResponse = id => host.Toast($"Response: {id}"),
             CloseResponse = "cancel",
             // A destructive alert defaults to the safe response: Enter must not delete.
             DefaultResponse = "cancel",
         };
-        dialog.AddResponse("cancel", "Cancel");
-        dialog.AddResponse("delete", "Delete", AdwResponseAppearance.Destructive);
+        dialog.AddResponse(id: "cancel", label: "Cancel");
+        dialog.AddResponse(
+            id: "delete",
+            label: "Delete",
+            appearance: AdwResponseAppearance.Destructive
+        );
         dialog.Show();
     }
 
@@ -90,50 +122,55 @@ public sealed class AlertsPage : ComposedWidget
     {
         var dontAsk = new AdwCheckButton("Don't ask again");
         var dialog = new AdwAlertDialog(
-            "Empty Trash?",
-            "All items in the trash will be permanently deleted."
+            heading: "Empty Trash?",
+            body: "All items in the trash will be permanently deleted."
         ) {
-            ExtraChild = new Align(Alignment.Center, dontAsk) { HeightFactor = 1f },
+            ExtraChild =
+                new Align(alignment: Alignment.Center, child: dontAsk) { HeightFactor = 1f },
             OnResponse = id => host.Toast(
                 dontAsk.Value ? $"Response: {id} · won't ask again" : $"Response: {id}"
             ),
             CloseResponse = "cancel",
             DefaultResponse = "cancel",
         };
-        dialog.AddResponse("cancel", "Cancel");
-        dialog.AddResponse("empty", "Empty Trash", AdwResponseAppearance.Destructive);
+        dialog.AddResponse(id: "cancel", label: "Cancel");
+        dialog.AddResponse(
+            id: "empty",
+            label: "Empty Trash",
+            appearance: AdwResponseAppearance.Destructive
+        );
         dialog.Show();
     }
 
     private static void ShowPlain(GalleryHost host)
     {
         var dialog = new AdwAlertDialog(
-            "Update Installed",
-            "Adwaita Demo will use the new version the next time it starts."
+            heading: "Update Installed",
+            body: "Adwaita Demo will use the new version the next time it starts."
         ) {
             OnResponse = _ => host.Toast("Acknowledged"),
             CloseResponse = "ok",
         };
-        dialog.AddResponse("ok", "OK", AdwResponseAppearance.Suggested);
+        dialog.AddResponse(id: "ok", label: "OK", appearance: AdwResponseAppearance.Suggested);
         dialog.Show();
     }
 
     private static void ShowCustom()
     {
         Demo.ShowDialog(
-            "Custom Dialog",
-            new Padding(
-                EdgeInsets.All(Spacing.Lg),
-                new AdwPreferencesGroup("Anything Goes") {
+            title: "Custom Dialog",
+            content: new Padding(
+                padding: EdgeInsets.All(Spacing.Lg),
+                child: new AdwPreferencesGroup("Anything Goes") {
                     Rows = {
-                        new AdwEntryRow("Name", "Untitled"),
-                        new AdwComboRow("Format", ["PNG", "SVG", "PDF"]),
-                        new AdwSwitchRow("Open when finished", value: true),
+                        new AdwEntryRow(title: "Name", text: "Untitled"),
+                        new AdwComboRow(title: "Format", items: ["PNG", "SVG", "PDF"]),
+                        new AdwSwitchRow(title: "Open when finished", value: true),
                     },
                 }
             ),
-            420f,
-            320f
+            width: 420f,
+            height: 320f
         );
     }
 }

@@ -20,15 +20,15 @@ public static class GltfAnimationImporter
 
             foreach (var ch in anim.Channels)
             {
-                if (!TryPath(ch.Path, out var path)) continue;
+                if (!TryPath(s: ch.Path, path: out var path)) continue;
 
-                var stride = path == AnimationPath.Rotation ? 4 : 3;
+                int stride = path == AnimationPath.Rotation ? 4 : 3;
                 if (ch.Times.Length == 0 || ch.Values.Length < ch.Times.Length * stride) continue;
 
                 var interp = string.Equals(
-                    ch.Interpolation,
-                    "STEP",
-                    StringComparison.OrdinalIgnoreCase
+                    a: ch.Interpolation,
+                    b: "STEP",
+                    comparisonType: StringComparison.OrdinalIgnoreCase
                 )
                     ? AnimationInterp.Step
                     : AnimationInterp.Linear;
@@ -39,17 +39,17 @@ public static class GltfAnimationImporter
                     Interpolation = interp,
                 };
 
-                for (var k = 0; k < ch.Times.Length; k++)
+                for (int k = 0; k < ch.Times.Length; k++)
                 {
-                    var value = new float[stride];
+                    float[] value = new float[stride];
                     Array.Copy(
-                        ch.Values,
-                        k * stride,
-                        value,
-                        0,
-                        stride
+                        sourceArray: ch.Values,
+                        sourceIndex: k * stride,
+                        destinationArray: value,
+                        destinationIndex: 0,
+                        length: stride
                     );
-                    channel.Keys.Add(new AnimationKeyframe(ch.Times[k], value));
+                    channel.Keys.Add(new AnimationKeyframe(time: ch.Times[k], value: value));
                 }
 
                 clip.Channels.Add(channel);

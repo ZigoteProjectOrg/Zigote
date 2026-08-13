@@ -32,12 +32,10 @@ public struct PhysicsBodySettings
     // args, never stored/mutated across calls — so a struct removes the per-body heap allocation with
     // no reference-semantics risk. The explicit parameterless ctor makes the property initialisers run
     // under `new PhysicsBodySettings { ... }` object-initialiser syntax (the only way it is built).
-    public PhysicsBodySettings()
-    {
-    }
+    public PhysicsBodySettings() { }
 
     public PhysicsShapeType ShapeType { get; set; } = PhysicsShapeType.Box;
-    public Vec3 HalfExtents { get; set; } = new(0.5f, 0.5f, 0.5f);
+    public Vec3 HalfExtents { get; set; } = new(x: 0.5f, y: 0.5f, z: 0.5f);
     public Vec3 Position { get; set; } = Vec3.Zero;
     public Vec3 Rotation { get; set; } = Vec3.Zero;
     public PhysicsMotionType MotionType { get; set; } = PhysicsMotionType.Dynamic;

@@ -20,10 +20,7 @@ public sealed class FocusScope : Widget
 {
     private Size _size;
 
-    public FocusScope(Widget child)
-    {
-        Child = child;
-    }
+    public FocusScope(Widget child) => Child = child;
 
     public Widget Child { get; }
 
@@ -45,26 +42,17 @@ public sealed class FocusScope : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         Child.Layout(origin);
     }
 
-    public override void Paint(PaintList paint)
-    {
-        Child.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => Child.Paint(paint);
 
-    public override Widget? HitTest(Offset point)
-    {
-        return Child.HitTest(point);
-    }
+    public override Widget? HitTest(Offset point) => Child.HitTest(point);
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(Child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Child);
 }

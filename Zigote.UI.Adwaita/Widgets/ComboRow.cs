@@ -9,12 +9,12 @@ namespace Zigote.UI.Adwaita;
 /// </summary>
 public sealed class AdwComboRow : ComposedWidget
 {
-    private Label? _valueLabel;
-    private int _selectedIndex;
-    private string _title;
-    private string? _subtitle;
-    private IReadOnlyList<string> _items;
     private bool _enabled = true;
+    private IReadOnlyList<string> _items;
+    private int _selectedIndex;
+    private string? _subtitle;
+    private string _title;
+    private Label? _valueLabel;
 
     public AdwComboRow(
         string title = "",
@@ -33,19 +33,19 @@ public sealed class AdwComboRow : ComposedWidget
     public string Title
     {
         get => _title;
-        set => this.Set(ref _title, value);
+        set => this.Set(field: ref _title, value: value);
     }
 
     public string? Subtitle
     {
         get => _subtitle;
-        set => this.Set(ref _subtitle, value);
+        set => this.Set(field: ref _subtitle, value: value);
     }
 
     public IReadOnlyList<string> Items
     {
         get => _items;
-        set => this.Set(ref _items, value);
+        set => this.Set(field: ref _items, value: value);
     }
 
     public Action<int>? OnSelected { get; set; }
@@ -53,7 +53,7 @@ public sealed class AdwComboRow : ComposedWidget
     public bool Enabled
     {
         get => _enabled;
-        set => this.Set(ref _enabled, value);
+        set => this.Set(field: ref _enabled, value: value);
     }
 
     public int SelectedIndex
@@ -75,20 +75,20 @@ public sealed class AdwComboRow : ComposedWidget
         var theme = ThemeProvider.Of(context);
         var p = AdwPalette.For(theme);
 
-        _valueLabel = new Label(SelectedText, AdwTypography.Body, p.DimLabel) {
+        _valueLabel = new Label(text: SelectedText, style: AdwTypography.Body, color: p.DimLabel) {
             MaxLines = 1,
             Overflow = TextOverflow.Ellipsis,
         };
 
-        Widget row = new AdwActionRow(Title, Subtitle) {
+        Widget row = new AdwActionRow(title: Title, subtitle: Subtitle) {
             Suffixes = {
                 _valueLabel,
-                new IconGlyph(Icons.DropDown, AdwMetrics.IconSize, p.DimLabel),
+                new IconGlyph(glyph: Icons.DropDown, size: AdwMetrics.IconSize, color: p.DimLabel),
             },
             OnActivated = Enabled ? OpenPopup : null,
         };
         // Adwaita disabled rows dim wholesale.
-        return Enabled ? row : new Opacity(AdwStyle.DisabledOpacity, row);
+        return Enabled ? row : new Opacity(opacity: AdwStyle.DisabledOpacity, child: row);
     }
 
     private void OpenPopup()
@@ -96,17 +96,17 @@ public sealed class AdwComboRow : ComposedWidget
         var app = App.Active;
         if (app is null || Items.Count == 0) return;
         new AdwPopover(
-            app,
-            Items,
-            Bounds,
-            i =>
+            app: app,
+            items: Items,
+            anchor: Bounds,
+            onPick: i =>
             {
                 SelectedIndex = i;
                 OnSelected?.Invoke(i);
             },
-            _selectedIndex,
-            true,
-            140f
+            selected: _selectedIndex,
+            showCheck: true,
+            minWidth: 140f
         ).Show();
     }
 }

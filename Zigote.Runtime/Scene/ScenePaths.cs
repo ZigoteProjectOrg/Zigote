@@ -15,12 +15,12 @@ public static class ScenePaths
     /// </summary>
     public static int Normalize(SceneNode root, string projectRoot, Action<string>? warn = null)
     {
-        var count = 0;
+        int count = 0;
         Walk(
-            root,
-            projectRoot,
-            warn,
-            ref count
+            n: root,
+            projectRoot: projectRoot,
+            warn: warn,
+            count: ref count
         );
         return count;
     }
@@ -28,19 +28,19 @@ public static class ScenePaths
     /// <summary>Scene-level overload: also covers <see cref="SceneGraph.EnvironmentPath" />.</summary>
     public static int Normalize(SceneGraph scene, string projectRoot, Action<string>? warn = null)
     {
-        var count = 0;
+        int count = 0;
         scene.EnvironmentPath = Fix(
-            scene.EnvironmentPath,
-            "EnvironmentPath",
-            projectRoot,
-            warn,
-            ref count
+            p: scene.EnvironmentPath,
+            what: "EnvironmentPath",
+            projectRoot: projectRoot,
+            warn: warn,
+            count: ref count
         );
         Walk(
-            scene.Root,
-            projectRoot,
-            warn,
-            ref count
+            n: scene.Root,
+            projectRoot: projectRoot,
+            warn: warn,
+            count: ref count
         );
         return count;
     }
@@ -48,48 +48,50 @@ public static class ScenePaths
     private static void Walk(SceneNode n, string projectRoot, Action<string>? warn, ref int count)
     {
         n.MeshPath = Fix(
-            n.MeshPath,
-            $"{n.Name}.MeshPath",
-            projectRoot,
-            warn,
-            ref count
+            p: n.MeshPath,
+            what: $"{n.Name}.MeshPath",
+            projectRoot: projectRoot,
+            warn: warn,
+            count: ref count
         );
         n.TexturePath = Fix(
-            n.TexturePath,
-            $"{n.Name}.TexturePath",
-            projectRoot,
-            warn,
-            ref count
+            p: n.TexturePath,
+            what: $"{n.Name}.TexturePath",
+            projectRoot: projectRoot,
+            warn: warn,
+            count: ref count
         );
         n.MetallicRoughnessTexturePath =
             Fix(
-                n.MetallicRoughnessTexturePath,
-                $"{n.Name}.MetallicRoughnessTexturePath",
-                projectRoot,
-                warn,
-                ref count
+                p: n.MetallicRoughnessTexturePath,
+                what: $"{n.Name}.MetallicRoughnessTexturePath",
+                projectRoot: projectRoot,
+                warn: warn,
+                count: ref count
             );
         n.NormalTexturePath = Fix(
-            n.NormalTexturePath,
-            $"{n.Name}.NormalTexturePath",
-            projectRoot,
-            warn,
-            ref count
+            p: n.NormalTexturePath,
+            what: $"{n.Name}.NormalTexturePath",
+            projectRoot: projectRoot,
+            warn: warn,
+            count: ref count
         );
         n.AudioClipPath = Fix(
-            n.AudioClipPath,
-            $"{n.Name}.AudioClipPath",
-            projectRoot,
-            warn,
-            ref count
+            p: n.AudioClipPath,
+            what: $"{n.Name}.AudioClipPath",
+            projectRoot: projectRoot,
+            warn: warn,
+            count: ref count
         );
         foreach (var c in n.Children)
+        {
             Walk(
-                c,
-                projectRoot,
-                warn,
-                ref count
+                n: c,
+                projectRoot: projectRoot,
+                warn: warn,
+                count: ref count
             );
+        }
     }
 
     private static string? Fix(string? p, string what, string projectRoot, Action<string>? warn,
@@ -101,11 +103,11 @@ public static class ScenePaths
         // which would silently "relativize" a path that points outside the project.
         if (Path.IsPathRooted(p))
         {
-            var full = Path.GetFullPath(p);
-            var root = Path.GetFullPath(projectRoot).TrimEnd(Path.DirectorySeparatorChar);
+            string full = Path.GetFullPath(p);
+            string root = Path.GetFullPath(projectRoot).TrimEnd(Path.DirectorySeparatorChar);
             if (!full.StartsWith(
-                    root + Path.DirectorySeparatorChar,
-                    StringComparison.OrdinalIgnoreCase
+                    value: root + Path.DirectorySeparatorChar,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
                 ))
             {
                 warn?.Invoke(
@@ -115,8 +117,8 @@ public static class ScenePaths
             }
         }
 
-        var relative = AssetPath.ToRelative(p, projectRoot);
-        if (!string.Equals(relative, p, StringComparison.Ordinal)) count++;
+        string relative = AssetPath.ToRelative(path: p, contentRoot: projectRoot);
+        if (!string.Equals(a: relative, b: p, comparisonType: StringComparison.Ordinal)) count++;
         return relative;
     }
 }

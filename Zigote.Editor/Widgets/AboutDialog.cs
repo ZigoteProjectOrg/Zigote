@@ -19,32 +19,36 @@ public static class AboutDialog
     {
         var theme = app.Theme;
         var asm = typeof(AboutDialog).Assembly;
-        var version = asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-                          ?.InformationalVersion
-                      ?? asm.GetName().Version?.ToString()
-                      ?? "dev";
+        string version = asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+                             ?.InformationalVersion
+                         ?? asm.GetName().Version?.ToString()
+                         ?? "dev";
 
         var content = new Column {
             MainAxisAlignment = MainAxisAlignment.Start,
             CrossAxisAlignment = CrossAxisAlignment.Start,
             MainAxisSize = MainAxisSize.Max,
             Children = {
-                new Label("Zigote Editor", Typography.Title1, theme.OnSurface),
+                new Label(text: "Zigote Editor", style: Typography.Title1, color: theme.OnSurface),
                 new SizedBox(height: Spacing.Xs),
-                new Label($"Version {version}", Typography.Callout, theme.Hint),
+                new Label(text: $"Version {version}", style: Typography.Callout, color: theme.Hint),
                 new Label(
-                    "© 2026 Zigote Project Developers — MIT License",
-                    Typography.Callout,
-                    theme.Hint
+                    text: "© 2026 Zigote Project Developers — MIT License",
+                    style: Typography.Callout,
+                    color: theme.Hint
                 ),
                 new SizedBox(height: Spacing.Lg),
-                new Label("Open-source licenses", Typography.Headline, theme.OnSurface),
+                new Label(
+                    text: "Open-source licenses",
+                    style: Typography.Headline,
+                    color: theme.OnSurface
+                ),
                 new SizedBox(height: Spacing.Xs),
                 new Expanded(new LicensesView()),
             },
         };
 
-        new Dialog(content, app) {
+        new Dialog(content: content, app: app) {
             WidthFraction = 0.55f,
             HeightFraction = 0.75f,
         }.Show();

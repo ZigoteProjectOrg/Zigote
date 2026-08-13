@@ -13,8 +13,9 @@ public sealed class ReactivityPage : ComposedWidget
         ("Filter", 3.60f),
     ];
 
-    private readonly Signal<int>[] _quantities = [new(1), new(0), new(2)];
     private readonly Signal<bool> _member = new(false);
+
+    private readonly Signal<int>[] _quantities = [new(1), new(0), new(2)];
 
     private readonly Computed<float> _subtotal;
     private readonly Computed<float> _total;
@@ -30,8 +31,8 @@ public sealed class ReactivityPage : ComposedWidget
         _subtotal = Computed.From(() =>
             {
                 _recomputes++;
-                var sum = 0f;
-                for (var i = 0; i < Catalogue.Length; i++)
+                float sum = 0f;
+                for (int i = 0; i < Catalogue.Length; i++)
                     sum += _quantities[i].Value * Catalogue[i].Price;
                 return sum;
             }
@@ -41,7 +42,7 @@ public sealed class ReactivityPage : ComposedWidget
 
     public override void Attach(App owner, Widget? parent)
     {
-        base.Attach(owner, parent);
+        base.Attach(owner: owner, parent: parent);
         // An effect re-runs whenever its reads change — the seam for the work that is not UI
         // (persisting, logging, talking to a service).
         _effect ??= new Effect(() => _ = _total.Value);
@@ -57,22 +58,22 @@ public sealed class ReactivityPage : ComposedWidget
     protected override Widget Build(BuildContext context)
     {
         var order = new AdwPreferencesGroup(
-            "Order",
-            "Each row writes one signal. Nothing here knows about the total."
+            title: "Order",
+            description: "Each row writes one signal. Nothing here knows about the total."
         );
-        for (var i = 0; i < Catalogue.Length; i++)
+        for (int i = 0; i < Catalogue.Length; i++)
         {
-            var index = i;
-            var (name, price) = Catalogue[i];
+            int index = i;
+            (string name, float price) = Catalogue[i];
             order.Rows.Add(
-                new AdwActionRow(name, $"{price:0.00} each") {
+                new AdwActionRow(title: name, subtitle: $"{price:0.00} each") {
                     Suffixes = {
                         new AdwSpinButton(
-                            _quantities[index].Peek(),
-                            0,
-                            9,
-                            1,
-                            v => _quantities[index].Value = (int)v
+                            value: _quantities[index].Peek(),
+                            min: 0,
+                            max: 9,
+                            step: 1,
+                            onChanged: v => _quantities[index].Value = (int)v
                         ),
                     },
                 }
@@ -80,9 +81,10 @@ public sealed class ReactivityPage : ComposedWidget
         }
 
         return new GalleryPage(
-            "Reactivity",
+            title: "Reactivity",
+            description:
             "Signals in, derived values out, and a widget tree that subscribes to exactly what it reads.",
-            MaterialIcons.Bolt
+            iconName: MaterialIcons.Bolt
         ) {
             ClampWidth = 680f,
             Children = {
@@ -90,18 +92,19 @@ public sealed class ReactivityPage : ComposedWidget
                 new AdwPreferencesGroup("Discount") {
                     Rows = {
                         new Watch(() => new AdwSwitchRow(
-                                "Member",
-                                "Takes 10% off the subtotal",
-                                _member.Value,
-                                v => _member.Value = v
+                                title: "Member",
+                                subtitle: "Takes 10% off the subtotal",
+                                value: _member.Value,
+                                onChanged: v => _member.Value = v
                             )
                         ),
                     },
                 },
                 Demo.Titled(
-                    "Derived",
+                    title: "Derived",
+                    description:
                     "A Computed caches: the counter only moves when a quantity actually changes.",
-                    Demo.Stage(
+                    child: Demo.Stage(
                         new Column(
                             spacing: Spacing.Md,
                             mainAxisSize: MainAxisSize.Min,
@@ -123,9 +126,10 @@ public sealed class ReactivityPage : ComposedWidget
                     )
                 ),
                 Demo.Titled(
-                    "The Same State, Three Ways",
+                    title: "The Same State, Three Ways",
+                    description:
                     "One signal, three unrelated widgets — no shared parent, no callbacks between them.",
-                    Demo.Stage(
+                    child: Demo.Stage(
                         new Column(
                             spacing: Spacing.Lg,
                             mainAxisSize: MainAxisSize.Min,
@@ -133,16 +137,16 @@ public sealed class ReactivityPage : ComposedWidget
                         ) {
                             Children = {
                                 new Watch(() => new AdwProgressBar(
-                                        Math.Clamp(_total.Value / 20f, 0f, 1f)
+                                        Math.Clamp(value: _total.Value / 20f, min: 0f, max: 1f)
                                     )
                                 ),
                                 new Watch(() => new AdwLevelBar(
-                                        Math.Clamp(_total.Value / 20f, 0f, 1f)
+                                        Math.Clamp(value: _total.Value / 20f, min: 0f, max: 1f)
                                     )
                                 ),
                                 new Watch(() => new Align(
-                                        Alignment.Center,
-                                        new AdwButton(
+                                        alignment: Alignment.Center,
+                                        child: new AdwButton(
                                             _total.Value > 0f ? $"Pay {_total.Value:0.00}" : "Empty"
                                         ) {
                                             Style = AdwButtonStyle.Suggested,
@@ -156,14 +160,23 @@ public sealed class ReactivityPage : ComposedWidget
                     )
                 ),
                 Demo.Group(
-                    "The Pieces",
-                    null,
-                    new AdwActionRow("Signal<T>", "Mutable state that records who read it"),
-                    new AdwActionRow("Computed<T>", "Derived, cached, invalidated by its sources"),
-                    new AdwActionRow("Watch", "A subtree rebuilt from the signals it read"),
+                    title: "The Pieces",
+                    description: null,
                     new AdwActionRow(
-                        "Effect",
-                        "Side effects, re-run on change and disposed with the widget"
+                        title: "Signal<T>",
+                        subtitle: "Mutable state that records who read it"
+                    ),
+                    new AdwActionRow(
+                        title: "Computed<T>",
+                        subtitle: "Derived, cached, invalidated by its sources"
+                    ),
+                    new AdwActionRow(
+                        title: "Watch",
+                        subtitle: "A subtree rebuilt from the signals it read"
+                    ),
+                    new AdwActionRow(
+                        title: "Effect",
+                        subtitle: "Side effects, re-run on change and disposed with the widget"
                     )
                 ),
             },

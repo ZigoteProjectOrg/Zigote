@@ -28,12 +28,15 @@ namespace Zigote.UI.Host;
 ///             preserved
 ///         </b>
 ///         — only <c>Build()</c> re-runs. Edits to constructors, field initialisers, or
-///         <see cref="Widget.OnMount" /> do not take effect until a full restart (those run once per mount).
-///         Adding/removing fields or changing a type's shape is a "rude" edit the runtime rejects, also
+///         <see cref="Widget.OnMount" /> do not take effect until a full restart (those run once per
+///         mount).
+///         Adding/removing fields or changing a type's shape is a "rude" edit the runtime rejects,
+///         also
 ///         requiring a restart.
 ///     </para>
 ///     <para>
-///         This is the framework-level metadata hot reload for editing the engine/app's own code while it
+///         This is the framework-level metadata hot reload for editing the engine/app's own code while
+///         it
 ///         runs under <c>dotnet watch</c> / an IDE. It is independent of the editor's
 ///         <c>ScriptDomain</c> (collectible <c>AssemblyLoadContext</c>) reload of user game scripts.
 ///     </para>
@@ -65,10 +68,7 @@ public static class HotReload
     ///     Manually request a full UI rebuild on the next frame, taking the exact path a hot-reload delta
     ///     takes. Handy for a debug command or for tests.
     /// </summary>
-    public static void TriggerReload()
-    {
-        Request(null);
-    }
+    public static void TriggerReload() => Request(null);
 
     // Called by the metadata-update handler — possibly off the UI thread. Only flips a flag and stashes
     // the changed types; the real work (native + tree mutation) stays single-threaded on the UI thread.
@@ -76,18 +76,18 @@ public static class HotReload
     {
         if (!Enabled) return;
         if (updatedTypes is { Length: > 0 })
+        {
             lock (Gate)
-            {
                 (_pendingTypes ??= []).UnionWith(updatedTypes);
-            }
+        }
 
-        Volatile.Write(ref _pending, 1);
+        Volatile.Write(location: ref _pending, value: 1);
     }
 
     // Atomically clear the pending flag and return the accumulated changed types. UI thread only.
     internal static bool TryTakePending(out Type[]? updatedTypes)
     {
-        if (Interlocked.Exchange(ref _pending, 0) == 0)
+        if (Interlocked.Exchange(location1: ref _pending, value: 0) == 0)
         {
             updatedTypes = null;
             return false;
@@ -102,14 +102,12 @@ public static class HotReload
         return true;
     }
 
-    internal static void RaiseReloaded(Type[]? updatedTypes)
-    {
-        Reloaded?.Invoke(updatedTypes);
-    }
+    internal static void RaiseReloaded(Type[]? updatedTypes) => Reloaded?.Invoke(updatedTypes);
 
     /// <summary>
     ///     Force every <see cref="ComposedWidget" /> in the subtree rooted
-    ///     at <paramref name="root" /> to re-run its <c>Build()</c> on the next Measure pass, while keeping
+    ///     at <paramref name="root" /> to re-run its <c>Build()</c> on the next Measure pass, while
+    ///     keeping
     ///     widget instances, and with them every field they hold.
     ///     Plain leaf widgets ignore the build flag but are re-measured (so size/colour changes show).
     ///     Static and allocation-free so it is unit-testable without a running <see cref="UI.App" />.
@@ -125,21 +123,18 @@ public static class HotReload
 }
 
 /// <summary>
-///     Hot-reload callback target referenced by the assembly-level <see cref="MetadataUpdateHandler" />
-///     attribute. The runtime discovers <c>ClearCache</c>/<c>UpdateApplication</c> by convention (name +
+///     Hot-reload callback target referenced by the assembly-level
+///     <see cref="MetadataUpdateHandler" />
+///     attribute. The runtime discovers <c>ClearCache</c>/<c>UpdateApplication</c> by convention (name
+///     +
 ///     signature), not via an interface.
 /// </summary>
 internal static class ZigoteHotReloadHandler
 {
     // Called before a delta is applied. The new IL is not live yet, so we defer all work to
     // UpdateApplication and rebuild against the updated code.
-    internal static void ClearCache(Type[]? updatedTypes)
-    {
-    }
+    internal static void ClearCache(Type[]? updatedTypes) { }
 
     // Called after the host (dotnet-watch / Rider / VS) has applied the delta — the new code is live.
-    internal static void UpdateApplication(Type[]? updatedTypes)
-    {
-        HotReload.Request(updatedTypes);
-    }
+    internal static void UpdateApplication(Type[]? updatedTypes) => HotReload.Request(updatedTypes);
 }

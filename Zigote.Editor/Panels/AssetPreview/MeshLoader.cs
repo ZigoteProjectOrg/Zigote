@@ -18,7 +18,7 @@ public static class MeshLoader
         try
         {
             if (string.IsNullOrEmpty(path)) return null;
-            var ext = Path.GetExtension(path).ToLowerInvariant();
+            string ext = Path.GetExtension(path).ToLowerInvariant();
 
             var result = ext switch {
                 ".zmesh" => LoadZMesh(path),
@@ -47,57 +47,57 @@ public static class MeshLoader
     {
         using var br = new BinaryReader(stream);
         // Header: magic 'Z','M','S','H' | version | vertexCount | indexCount (all u32, LE).
-        var b0 = br.ReadByte();
-        var b1 = br.ReadByte();
-        var b2 = br.ReadByte();
-        var b3 = br.ReadByte();
+        byte b0 = br.ReadByte();
+        byte b1 = br.ReadByte();
+        byte b2 = br.ReadByte();
+        byte b3 = br.ReadByte();
         if (b0 != 0x5A || b1 != 0x4D || b2 != 0x53 || b3 != 0x48) return null; // not "ZMSH"
 
-        var version = br.ReadUInt32();
+        uint version = br.ReadUInt32();
         // v1 = 48 B full-float Vertex (pos f32[3]@0, normal f32[3]@12, uv@24, tangent@32);
         // v2 = 28 B GpuVertex (pos f32[3]@0, normal snorm8[4]@12, uv@16, tangent snorm8[4]@24).
         if (version != 1 && version != 2) return null;
-        var vertexCount = br.ReadUInt32();
-        var indexCount = br.ReadUInt32();
+        uint vertexCount = br.ReadUInt32();
+        uint indexCount = br.ReadUInt32();
         if (vertexCount == 0 || indexCount == 0) return null;
         if (vertexCount > 50_000_000 || indexCount > 200_000_000) return null; // sanity
 
-        var positions = new float[vertexCount * 3];
-        var normals = new float[vertexCount * 3];
+        float[] positions = new float[vertexCount * 3];
+        float[] normals = new float[vertexCount * 3];
 
-        var stride = version == 1 ? 48 : 28;
-        var vbytes = checked((int)(vertexCount * stride));
-        var buf = br.ReadBytes(vbytes);
+        int stride = version == 1 ? 48 : 28;
+        int vbytes = checked((int)(vertexCount * stride));
+        byte[] buf = br.ReadBytes(vbytes);
         if (buf.Length < vbytes) return null;
 
-        for (var i = 0; i < vertexCount; i++)
+        for (int i = 0; i < vertexCount; i++)
         {
-            var o = i * stride;
-            positions[i * 3 + 0] = BitConverter.ToSingle(buf, o + 0);
-            positions[i * 3 + 1] = BitConverter.ToSingle(buf, o + 4);
-            positions[i * 3 + 2] = BitConverter.ToSingle(buf, o + 8);
+            int o = i * stride;
+            positions[(i * 3) + 0] = BitConverter.ToSingle(value: buf, startIndex: o + 0);
+            positions[(i * 3) + 1] = BitConverter.ToSingle(value: buf, startIndex: o + 4);
+            positions[(i * 3) + 2] = BitConverter.ToSingle(value: buf, startIndex: o + 8);
             if (version == 1)
             {
-                normals[i * 3 + 0] = BitConverter.ToSingle(buf, o + 12);
-                normals[i * 3 + 1] = BitConverter.ToSingle(buf, o + 16);
-                normals[i * 3 + 2] = BitConverter.ToSingle(buf, o + 20);
+                normals[(i * 3) + 0] = BitConverter.ToSingle(value: buf, startIndex: o + 12);
+                normals[(i * 3) + 1] = BitConverter.ToSingle(value: buf, startIndex: o + 16);
+                normals[(i * 3) + 2] = BitConverter.ToSingle(value: buf, startIndex: o + 20);
             }
             else
             {
                 // snorm8 → [-1, 1] (matches the GPU's hardware normalize on fetch).
-                normals[i * 3 + 0] = (sbyte)buf[o + 12] / 127f;
-                normals[i * 3 + 1] = (sbyte)buf[o + 13] / 127f;
-                normals[i * 3 + 2] = (sbyte)buf[o + 14] / 127f;
+                normals[(i * 3) + 0] = (sbyte)buf[o + 12] / 127f;
+                normals[(i * 3) + 1] = (sbyte)buf[o + 13] / 127f;
+                normals[(i * 3) + 2] = (sbyte)buf[o + 14] / 127f;
             }
         }
 
-        var indices = new int[indexCount];
-        var ibytes = checked((int)(indexCount * 4));
-        var ibuf = br.ReadBytes(ibytes);
+        int[] indices = new int[indexCount];
+        int ibytes = checked((int)(indexCount * 4));
+        byte[] ibuf = br.ReadBytes(ibytes);
         if (ibuf.Length < ibytes) return null;
-        for (var i = 0; i < indexCount; i++)
+        for (int i = 0; i < indexCount; i++)
         {
-            var idx = BitConverter.ToUInt32(ibuf, i * 4);
+            uint idx = BitConverter.ToUInt32(value: ibuf, startIndex: i * 4);
             if (idx >= vertexCount) return null;
             indices[i] = (int)idx;
         }
@@ -118,11 +118,11 @@ public static class MeshLoader
         var outPos = new List<float>();
         var outNorm = new List<float>();
         var outIdx = new List<int>();
-        var hasAnyNormal = false;
+        bool hasAnyNormal = false;
 
         using var reader = new StreamReader(path);
         string? line;
-        var sep = new[] {
+        char[] sep = new[] {
             ' ',
             '\t',
         };
@@ -132,42 +132,53 @@ public static class MeshLoader
             if (line.Length == 0) continue;
             if (line[0] == '#') continue;
 
-            if (line.StartsWith("v ", StringComparison.Ordinal))
+            if (line.StartsWith(value: "v ", comparisonType: StringComparison.Ordinal))
             {
-                var p = line.Split(sep, StringSplitOptions.RemoveEmptyEntries);
+                string[] p = line.Split(
+                    separator: sep,
+                    options: StringSplitOptions.RemoveEmptyEntries
+                );
                 if (p.Length >= 4 &&
-                    TryF(p[1], out var x) && TryF(p[2], out var y) && TryF(p[3], out var z))
+                    TryF(s: p[1], f: out float x) && TryF(s: p[2], f: out float y) &&
+                    TryF(s: p[3], f: out float z))
                 {
                     positions.Add(x);
                     positions.Add(y);
                     positions.Add(z);
                 }
             }
-            else if (line.StartsWith("vn ", StringComparison.Ordinal))
+            else if (line.StartsWith(value: "vn ", comparisonType: StringComparison.Ordinal))
             {
-                var p = line.Split(sep, StringSplitOptions.RemoveEmptyEntries);
+                string[] p = line.Split(
+                    separator: sep,
+                    options: StringSplitOptions.RemoveEmptyEntries
+                );
                 if (p.Length >= 4 &&
-                    TryF(p[1], out var x) && TryF(p[2], out var y) && TryF(p[3], out var z))
+                    TryF(s: p[1], f: out float x) && TryF(s: p[2], f: out float y) &&
+                    TryF(s: p[3], f: out float z))
                 {
                     normalsSrc.Add(x);
                     normalsSrc.Add(y);
                     normalsSrc.Add(z);
                 }
             }
-            else if (line.StartsWith("f ", StringComparison.Ordinal))
+            else if (line.StartsWith(value: "f ", comparisonType: StringComparison.Ordinal))
             {
-                var p = line.Split(sep, StringSplitOptions.RemoveEmptyEntries);
+                string[] p = line.Split(
+                    separator: sep,
+                    options: StringSplitOptions.RemoveEmptyEntries
+                );
                 // Build the polygon's vertex/normal indices, then fan-triangulate.
                 var faceV = new List<int>(p.Length - 1);
                 var faceN = new List<int>(p.Length - 1);
-                for (var i = 1; i < p.Length; i++)
+                for (int i = 1; i < p.Length; i++)
                 {
                     if (!ParseObjVertex(
-                            p[i],
-                            positions.Count / 3,
-                            normalsSrc.Count / 3,
-                            out var vi,
-                            out var ni
+                            token: p[i],
+                            vCount: positions.Count / 3,
+                            nCount: normalsSrc.Count / 3,
+                            vi: out int vi,
+                            ni: out int ni
                         ))
                     {
                         faceV.Clear();
@@ -180,37 +191,37 @@ public static class MeshLoader
 
                 if (faceV.Count < 3) continue;
 
-                for (var i = 1; i + 1 < faceV.Count; i++)
+                for (int i = 1; i + 1 < faceV.Count; i++)
                 {
                     EmitObjVertex(
-                        positions,
-                        normalsSrc,
-                        faceV[0],
-                        faceN[0],
-                        outPos,
-                        outNorm,
-                        outIdx,
-                        ref hasAnyNormal
+                        srcPos: positions,
+                        srcNorm: normalsSrc,
+                        vi: faceV[0],
+                        ni: faceN[0],
+                        outPos: outPos,
+                        outNorm: outNorm,
+                        outIdx: outIdx,
+                        hasAnyNormal: ref hasAnyNormal
                     );
                     EmitObjVertex(
-                        positions,
-                        normalsSrc,
-                        faceV[i],
-                        faceN[i],
-                        outPos,
-                        outNorm,
-                        outIdx,
-                        ref hasAnyNormal
+                        srcPos: positions,
+                        srcNorm: normalsSrc,
+                        vi: faceV[i],
+                        ni: faceN[i],
+                        outPos: outPos,
+                        outNorm: outNorm,
+                        outIdx: outIdx,
+                        hasAnyNormal: ref hasAnyNormal
                     );
                     EmitObjVertex(
-                        positions,
-                        normalsSrc,
-                        faceV[i + 1],
-                        faceN[i + 1],
-                        outPos,
-                        outNorm,
-                        outIdx,
-                        ref hasAnyNormal
+                        srcPos: positions,
+                        srcNorm: normalsSrc,
+                        vi: faceV[i + 1],
+                        ni: faceN[i + 1],
+                        outPos: outPos,
+                        outNorm: outNorm,
+                        outIdx: outIdx,
+                        hasAnyNormal: ref hasAnyNormal
                     );
                 }
             }
@@ -230,15 +241,15 @@ public static class MeshLoader
         List<float> outPos, List<float> outNorm, List<int> outIdx, ref bool hasAnyNormal)
     {
         outIdx.Add(outPos.Count / 3);
-        outPos.Add(srcPos[vi * 3 + 0]);
-        outPos.Add(srcPos[vi * 3 + 1]);
-        outPos.Add(srcPos[vi * 3 + 2]);
+        outPos.Add(srcPos[(vi * 3) + 0]);
+        outPos.Add(srcPos[(vi * 3) + 1]);
+        outPos.Add(srcPos[(vi * 3) + 2]);
 
-        if (ni >= 0 && ni * 3 + 2 < srcNorm.Count)
+        if (ni >= 0 && (ni * 3) + 2 < srcNorm.Count)
         {
-            outNorm.Add(srcNorm[ni * 3 + 0]);
-            outNorm.Add(srcNorm[ni * 3 + 1]);
-            outNorm.Add(srcNorm[ni * 3 + 2]);
+            outNorm.Add(srcNorm[(ni * 3) + 0]);
+            outNorm.Add(srcNorm[(ni * 3) + 1]);
+            outNorm.Add(srcNorm[(ni * 3) + 2]);
             hasAnyNormal = true;
         }
         else
@@ -254,14 +265,15 @@ public static class MeshLoader
     {
         vi = -1;
         ni = -1;
-        var parts = token.Split('/');
+        string[] parts = token.Split('/');
         if (parts.Length == 0) return false;
 
-        if (!int.TryParse(parts[0], out var v)) return false;
+        if (!int.TryParse(s: parts[0], result: out int v)) return false;
         vi = v > 0 ? v - 1 : vCount + v; // negative = relative to end
         if (vi < 0 || vi >= vCount) return false;
 
-        if (parts.Length >= 3 && parts[2].Length > 0 && int.TryParse(parts[2], out var n))
+        if (parts.Length >= 3 && parts[2].Length > 0 &&
+            int.TryParse(s: parts[2], result: out int n))
             ni = n > 0 ? n - 1 : nCount + n;
 
         return true;
@@ -270,10 +282,10 @@ public static class MeshLoader
     private static bool TryF(string s, out float f)
     {
         return float.TryParse(
-            s,
-            NumberStyles.Float,
-            CultureInfo.InvariantCulture,
-            out f
+            s: s,
+            style: NumberStyles.Float,
+            provider: CultureInfo.InvariantCulture,
+            result: out f
         );
     }
 
@@ -281,20 +293,20 @@ public static class MeshLoader
 
     private static MeshData? LoadFromMeshCache(string path)
     {
-        var dir = Path.GetDirectoryName(path);
+        string? dir = Path.GetDirectoryName(path);
         if (string.IsNullOrEmpty(dir)) return null;
 
-        var cacheDir = Path.Combine(dir, ".mesh_cache");
+        string cacheDir = Path.Combine(path1: dir, path2: ".mesh_cache");
         if (!Directory.Exists(cacheDir)) return null;
 
-        var files = Directory.GetFiles(cacheDir, "*.zmesh");
+        string[] files = Directory.GetFiles(path: cacheDir, searchPattern: "*.zmesh");
         if (files.Length == 0) return null;
 
         var allPos = new List<float>();
         var allNorm = new List<float>();
         var allIdx = new List<int>();
 
-        foreach (var f in files)
+        foreach (string f in files)
         {
             MeshData? part;
             try
@@ -308,10 +320,10 @@ public static class MeshLoader
 
             if (part is not { } m) continue;
 
-            var baseVert = allPos.Count / 3;
+            int baseVert = allPos.Count / 3;
             allPos.AddRange(m.Positions);
             allNorm.AddRange(m.Normals);
-            foreach (var idx in m.Indices) allIdx.Add(idx + baseVert);
+            foreach (int idx in m.Indices) allIdx.Add(idx + baseVert);
 
             // Don't merge an unbounded number of submeshes into a giant buffer.
             if (allIdx.Count / 3 > MaxTriangles) break;
@@ -329,15 +341,15 @@ public static class MeshLoader
 
     private static MeshData Subsample(MeshData m)
     {
-        var tris = m.TriangleCount;
+        int tris = m.TriangleCount;
         if (tris <= MaxTriangles) return m;
 
         // Keep every Nth triangle so the thumbnail stays representative but bounded.
-        var stride = (tris + MaxTriangles - 1) / MaxTriangles; // ceil
+        int stride = (tris + MaxTriangles - 1) / MaxTriangles; // ceil
         var kept = new List<int>(MaxTriangles * 3);
-        for (var t = 0; t < tris; t += stride)
+        for (int t = 0; t < tris; t += stride)
         {
-            var b = t * 3;
+            int b = t * 3;
             kept.Add(m.Indices[b + 0]);
             kept.Add(m.Indices[b + 1]);
             kept.Add(m.Indices[b + 2]);

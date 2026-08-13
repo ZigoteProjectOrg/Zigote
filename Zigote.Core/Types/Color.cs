@@ -20,95 +20,90 @@ public readonly struct Color(float r, float g, float b, float a = 1f) : IEquatab
     ///     hex literal binds here, three floats bind there.
     /// </summary>
     public Color(uint argb) : this(
-        ((argb >> 16) & 0xFF) / 255f,
-        ((argb >> 8) & 0xFF) / 255f,
-        (argb & 0xFF) / 255f,
-        ((argb >> 24) & 0xFF) / 255f
-    )
-    {
-    }
+        r: ((argb >> 16) & 0xFF) / 255f,
+        g: ((argb >> 8) & 0xFF) / 255f,
+        b: (argb & 0xFF) / 255f,
+        a: ((argb >> 24) & 0xFF) / 255f
+    ) { }
 
     private static Color FromBytes(byte r, byte g, byte b, byte a = 255)
     {
         return new Color(
-            r / 255f,
-            g / 255f,
-            b / 255f,
-            a / 255f
+            r: r / 255f,
+            g: g / 255f,
+            b: b / 255f,
+            a: a / 255f
         );
     }
 
     public static Color FromHex(uint argb)
     {
-        var a = (byte)((argb >> 24) & 0xFF);
-        var r = (byte)((argb >> 16) & 0xFF);
-        var g = (byte)((argb >> 8) & 0xFF);
-        var b = (byte)(argb & 0xFF);
+        byte a = (byte)((argb >> 24) & 0xFF);
+        byte r = (byte)((argb >> 16) & 0xFF);
+        byte g = (byte)((argb >> 8) & 0xFF);
+        byte b = (byte)(argb & 0xFF);
         return FromBytes(
-            r,
-            g,
-            b,
-            a
+            r: r,
+            g: g,
+            b: b,
+            a: a
         );
     }
 
     /// <summary>Opaque colour from 0–255 integer channels — e.g. <c>Color.Rgb(16, 18, 22)</c>.</summary>
-    public static Color Rgb(int r, int g, int b)
-    {
-        return new Color(r / 255f, g / 255f, b / 255f);
-    }
+    public static Color Rgb(int r, int g, int b) => new(r: r / 255f, g: g / 255f, b: b / 255f);
 
     /// <summary>Colour from 0–255 integer channels with a 0–1 <paramref name="a" /> alpha.</summary>
     public static Color Rgba(int r, int g, int b, float a)
     {
         return new Color(
-            r / 255f,
-            g / 255f,
-            b / 255f,
-            a
+            r: r / 255f,
+            g: g / 255f,
+            b: b / 255f,
+            a: a
         );
     }
 
     public Color WithAlpha(float alpha)
     {
         return new Color(
-            R,
-            G,
-            B,
-            alpha
+            r: R,
+            g: G,
+            b: B,
+            a: alpha
         );
     }
 
     /// <summary>Darken toward black by <paramref name="t" /> (0..1), preserving alpha.</summary>
     public Color Darken(float t)
     {
-        var k = Math.Clamp(1f - t, 0f, 1f);
+        float k = Math.Clamp(value: 1f - t, min: 0f, max: 1f);
         return new Color(
-            R * k,
-            G * k,
-            B * k,
-            A
+            r: R * k,
+            g: G * k,
+            b: B * k,
+            a: A
         );
     }
 
     /// <summary>Lighten toward white by <paramref name="t" /> (0..1), preserving alpha.</summary>
     public Color Lighten(float t)
     {
-        t = Math.Clamp(t, 0f, 1f);
+        t = Math.Clamp(value: t, min: 0f, max: 1f);
         return new Color(
-            R + (1f - R) * t,
-            G + (1f - G) * t,
-            B + (1f - B) * t,
-            A
+            r: R + ((1f - R) * t),
+            g: G + ((1f - G) * t),
+            b: B + ((1f - B) * t),
+            a: A
         );
     }
 
     // Material palette — most used subset
     public static readonly Color Transparent = new(
-        0,
-        0,
-        0,
-        0
+        r: 0,
+        g: 0,
+        b: 0,
+        a: 0
     );
 
     public static readonly Color Black = FromHex(0xFF000000);
@@ -133,10 +128,8 @@ public readonly struct Color(float r, float g, float b, float a = 1f) : IEquatab
 
     // Exact value equality — consistent with GetHashCode, so Color is safe as a dictionary/set key.
     // For tolerant comparison use ApproxEquals.
-    public bool Equals(Color other)
-    {
-        return R.Equals(other.R) && G.Equals(other.G) && B.Equals(other.B) && A.Equals(other.A);
-    }
+    public bool Equals(Color other) => R.Equals(other.R) && G.Equals(other.G) &&
+                                       B.Equals(other.B) && A.Equals(other.A);
 
     /// <summary>Tolerant component-wise comparison.</summary>
     public bool ApproxEquals(Color other, float tolerance = Tolerance.StandardValue)
@@ -147,33 +140,21 @@ public readonly struct Color(float r, float g, float b, float a = 1f) : IEquatab
                Math.Abs(A - other.A) < tolerance;
     }
 
-    public override bool Equals(object? obj)
-    {
-        return obj is Color c && Equals(c);
-    }
+    public override bool Equals(object? obj) => obj is Color c && Equals(c);
 
     public override int GetHashCode()
     {
         return HashCode.Combine(
-            R,
-            G,
-            B,
-            A
+            value1: R,
+            value2: G,
+            value3: B,
+            value4: A
         );
     }
 
-    public static bool operator ==(Color a, Color b)
-    {
-        return a.Equals(b);
-    }
+    public static bool operator ==(Color a, Color b) => a.Equals(b);
 
-    public static bool operator !=(Color a, Color b)
-    {
-        return !a.Equals(b);
-    }
+    public static bool operator !=(Color a, Color b) => !a.Equals(b);
 
-    public override string ToString()
-    {
-        return $"Color({R:F2}, {G:F2}, {B:F2}, {A:F2})";
-    }
+    public override string ToString() => $"Color({R:F2}, {G:F2}, {B:F2}, {A:F2})";
 }

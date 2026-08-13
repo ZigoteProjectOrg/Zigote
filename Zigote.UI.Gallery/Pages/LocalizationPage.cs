@@ -27,17 +27,17 @@ internal sealed class LocalizationPage : ComposedWidget
     {
         var l = GalleryL10n.Of(context);
         var direction = context.TextDirectionOf();
-        var count = (int)_count;
+        int count = (int)_count;
 
         return Sections(
             Section(
-                l.SectionLocale,
+                title: l.SectionLocale,
                 // One chip per string, each single-script: the engine shapes one run per string
                 // (direction guessed from its first strong character), so mixing scripts in one
                 // string would render the embedded run in the wrong order.
                 // Wrap, not Row: a single run on desktop, but the Arabic labels are wider than a
                 // phone card and a Row would paint the overflow outside it.
-                new Wrap(
+                child: new Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: [
@@ -48,61 +48,72 @@ internal sealed class LocalizationPage : ComposedWidget
                 )
             ),
             Section(
-                l.SectionMessages,
+                title: l.SectionMessages,
                 // A parameterized message is a generated method; the name argument is itself a
                 // translated message, so it matches the script.
-                new Text(l.Greeting(l.GreetingName), new TextStyle(17))
+                child: new Text(data: l.Greeting(l.GreetingName), style: new TextStyle(17))
             ),
             Section(
-                l.SectionPlural,
-                CounterRow(l.FilesLabel, l.Files(count))
+                title: l.SectionPlural,
+                child: CounterRow(label: l.FilesLabel, message: l.Files(count))
             ),
             Section(
-                l.SectionOrdinal,
-                CounterRow(l.RankLabel, l.Rank(count))
+                title: l.SectionOrdinal,
+                child: CounterRow(label: l.RankLabel, message: l.Rank(count))
             ),
             Section(
-                l.SectionSelect,
-                new Column(
+                title: l.SectionSelect,
+                child: new Column(
                     crossAxisAlignment: CrossAxisAlignment.Start,
                     children: [
                         new SegmentedControl(
-                            [l.GenderMale, l.GenderFemale, l.GenderOther],
-                            _gender,
-                            i => { _gender = i; MarkNeedsBuild(); }
+                            segments: [l.GenderMale, l.GenderFemale, l.GenderOther],
+                            selected: _gender,
+                            onChanged: i =>
+                            {
+                                _gender = i;
+                                MarkNeedsBuild();
+                            }
                         ),
                         new SizedBox(height: 12),
-                        new Text(l.Invite(Genders[_gender]), new TextStyle(15)),
+                        new Text(data: l.Invite(Genders[_gender]), style: new TextStyle(15)),
                     ]
                 )
             ),
             Section(
-                l.SectionFormatting,
-                new Column(
+                title: l.SectionFormatting,
+                child: new Column(
                     crossAxisAlignment: CrossAxisAlignment.Stretch,
                     children: [
-                        FormatRow(l.FmtNumber, context.FormatNumber(1234567.89)),
+                        FormatRow(label: l.FmtNumber, value: context.FormatNumber(1234567.89)),
                         FormatRow(
-                            l.FmtCurrency,
-                            $"{context.FormatCurrency(1234.56m, "USD")}   ·   " +
-                            $"{context.FormatCurrency(1234.56m, "EUR")}   ·   " +
-                            $"{context.FormatCurrency(1234.56m, "JPY")}"
-                        ),
-                        FormatRow(l.FmtPercent, context.FormatPercent(0.734, 1)),
-                        FormatRow(
-                            l.FmtDate,
-                            context.FormatDate(new DateTime(2026, 7, 5), DateStyle.Full)
+                            label: l.FmtCurrency,
+                            value:
+                            $"{context.FormatCurrency(value: 1234.56m, currencyCode: "USD")}   ·   " +
+                            $"{context.FormatCurrency(value: 1234.56m, currencyCode: "EUR")}   ·   " +
+                            $"{context.FormatCurrency(value: 1234.56m, currencyCode: "JPY")}"
                         ),
                         FormatRow(
-                            l.FmtTime,
-                            context.FormatTime(
+                            label: l.FmtPercent,
+                            value: context.FormatPercent(value: 0.734, decimals: 1)
+                        ),
+                        FormatRow(
+                            label: l.FmtDate,
+                            value: context.FormatDate(
+                                value: new DateTime(year: 2026, month: 7, day: 5),
+                                style: DateStyle.Full
+                            )
+                        ),
+                        FormatRow(
+                            label: l.FmtTime,
+                            value: context.FormatTime(
                                 new DateTime(
-                                    2026,
-                                    7,
-                                    5,
-                                    16,
-                                    45,
-                                    0
+                                    year: 2026,
+                                    month: 7,
+                                    day: 5,
+                                    hour: 16,
+                                    minute: 45,
+                                    second: 0
                                 )
                             )
                         ),
@@ -110,29 +121,29 @@ internal sealed class LocalizationPage : ComposedWidget
                 )
             ),
             Section(
-                l.SectionDirection,
-                new Column(
+                title: l.SectionDirection,
+                child: new Column(
                     crossAxisAlignment: CrossAxisAlignment.Stretch,
                     children: [
                         new Text(
-                            l.DirectionNote,
-                            new TextStyle(12, color: Colors.Grey[500])
+                            data: l.DirectionNote,
+                            style: new TextStyle(fontSize: 12, color: Colors.Grey[500])
                         ),
                         new SizedBox(height: 12),
                         DirectionStrip(
-                            context,
-                            l,
-                            l.StripAmbient,
-                            null
+                            context: context,
+                            l: l,
+                            label: l.StripAmbient,
+                            force: null
                         ),
                         new SizedBox(height: 8),
                         // An explicit Directionality overrides the ambient direction for a subtree —
                         // the same mechanism the LocalizationsScope installs app-wide from the locale.
                         DirectionStrip(
-                            context,
-                            l,
-                            l.StripRtl,
-                            TextDirection.Rtl
+                            context: context,
+                            l: l,
+                            label: l.StripRtl,
+                            force: TextDirection.Rtl
                         ),
                     ]
                 )
@@ -143,17 +154,24 @@ internal sealed class LocalizationPage : ComposedWidget
     private Widget CounterRow(string label, string message)
     {
         var stepper = new Stepper(
-            _count,
-            1,
-            0,
-            111,
-            v => { _count = v; MarkNeedsBuild(); }
+            value: _count,
+            step: 1,
+            min: 0,
+            max: 111,
+            onChanged: v =>
+            {
+                _count = v;
+                MarkNeedsBuild();
+            }
         );
         var counter = new Text(
-            $"{label}: {(int)_count}",
-            new TextStyle(12, color: Colors.Grey[500])
+            data: $"{label}: {(int)_count}",
+            style: new TextStyle(fontSize: 12, color: Colors.Grey[500])
         );
-        var result = new Text(message, new TextStyle(15, fontWeight: FontWeight.Medium));
+        var result = new Text(
+            data: message,
+            style: new TextStyle(fontSize: 15, fontWeight: FontWeight.Medium)
+        );
 
         // On a phone the translated label and the plural message can each fill the card on their
         // own, so the message drops below the stepper instead of sharing its line.
@@ -175,19 +193,22 @@ internal sealed class LocalizationPage : ComposedWidget
 
     private static Widget FormatRow(string label, string value)
     {
-        var labelText = new Text(label, new TextStyle(12, color: Colors.Grey[500]));
-        var valueText = new Text(value, new TextStyle(14));
+        var labelText = new Text(
+            data: label,
+            style: new TextStyle(fontSize: 12, color: Colors.Grey[500])
+        );
+        var valueText = new Text(data: value, style: new TextStyle(14));
 
         // The 120px label column costs 40% of a phone card's width, wrapping the long values (a
         // full date, three currencies) over several lines — stack them there instead.
         return new Padding(
-            EdgeInsets.Only(bottom: 6),
-            new AdaptiveBuilder((_, size) => size == WindowSizeClass.Compact
+            padding: EdgeInsets.Only(bottom: 6),
+            child: new AdaptiveBuilder((_, size) => size == WindowSizeClass.Compact
                 ? new Column(
                     crossAxisAlignment: CrossAxisAlignment.Start,
                     children: [labelText, valueText]
                 )
-                : new Row([new SizedBox(120, child: labelText), valueText])
+                : new Row([new SizedBox(width: 120, child: labelText), valueText])
             )
         );
     }
@@ -197,14 +218,18 @@ internal sealed class LocalizationPage : ComposedWidget
     {
         var onSurface = ThemeProvider.Of(context).OnSurface;
         var chips = new List<Widget>();
-        for (var i = 1; i <= 4; i++) chips.Add(StepChip(l.ChipStep(i), i == 1, onSurface));
+        for (int i = 1; i <= 4; i++)
+            chips.Add(StepChip(label: l.ChipStep(i), accent: i == 1, onSurface: onSurface));
 
         // Wrap mirrors under Directionality exactly like the Row did, but reflows the chips
         // instead of painting them past the card once the translated labels grow.
-        Widget strip = new Wrap(chips, spacing: 8, runSpacing: 8);
-        if (force is { } dir) strip = new Directionality(dir, strip);
+        Widget strip = new Wrap(children: chips, spacing: 8, runSpacing: 8);
+        if (force is { } dir) strip = new Directionality(direction: dir, child: strip);
 
-        var labelText = new Text(label, new TextStyle(12, color: Colors.Grey[500]));
+        var labelText = new Text(
+            data: label,
+            style: new TextStyle(fontSize: 12, color: Colors.Grey[500])
+        );
 
         // Label column (140) plus four chips (272) needs more width than a phone card has, so the
         // label takes its own line there.
@@ -213,7 +238,7 @@ internal sealed class LocalizationPage : ComposedWidget
                 crossAxisAlignment: CrossAxisAlignment.Start,
                 children: [labelText, new SizedBox(height: 6), strip]
             )
-            : new Row([new SizedBox(140, child: labelText), strip])
+            : new Row([new SizedBox(width: 140, child: labelText), strip])
         );
     }
 
@@ -223,16 +248,16 @@ internal sealed class LocalizationPage : ComposedWidget
             Fill = accent
                 ? Color.Blue.WithAlpha(0.85f)
                 : new Color(
-                    0.5f,
-                    0.5f,
-                    0.5f,
-                    0.18f
+                    r: 0.5f,
+                    g: 0.5f,
+                    b: 0.5f,
+                    a: 0.18f
                 ),
             Radius = Radii.Capsule,
             BorderWidth = 0f,
             Child = new Padding(
-                EdgeInsets.Symmetric(Spacing.Md, Spacing.Xs),
-                new Label(label, 12, accent ? Color.White : onSurface)
+                padding: EdgeInsets.Symmetric(horizontal: Spacing.Md, vertical: Spacing.Xs),
+                child: new Label(text: label, fontSize: 12, color: accent ? Color.White : onSurface)
             ),
         };
     }

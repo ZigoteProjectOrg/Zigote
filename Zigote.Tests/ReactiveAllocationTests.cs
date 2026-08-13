@@ -4,13 +4,18 @@ using Zigote.Core.State;
 namespace Zigote.Tests;
 
 /// <summary>
-///     Steady-state allocation gates for the reactive core. Each test warms up a repeated operation on a
-///     STABLE graph (same deps, same observers — no construction/subscribe/dep-change churn) and asserts
+///     Steady-state allocation gates for the reactive core. Each test warms up a repeated operation on
+///     a
+///     STABLE graph (same deps, same observers — no construction/subscribe/dep-change churn) and
+///     asserts
 ///     it allocates exactly zero managed bytes. This is the ground truth for "is Signal/Computed
 ///     zero-allocation on the hot path" (e.g. a signal driving a per-frame UI update). Construction,
-///     first run, subscribe/dispose, and Batch/Observe closure creation are cold paths and may allocate.
-///     <para>Delegates passed to the measured loop are created ONCE (before the loop) so the measurement
-///     reflects the core, not caller-side closure creation.</para>
+///     first run, subscribe/dispose, and Batch/Observe closure creation are cold paths and may
+///     allocate.
+///     <para>
+///         Delegates passed to the measured loop are created ONCE (before the loop) so the measurement
+///         reflects the core, not caller-side closure creation.
+///     </para>
 /// </summary>
 [Collection("Reactive-serial")]
 public class ReactiveAllocationTests
@@ -35,7 +40,7 @@ public class ReactiveAllocationTests
     public void Signal_write_with_no_observers_is_zero_alloc()
     {
         var s = new Signal<int>(0);
-        var toggle = 0;
+        int toggle = 0;
         AllocGuard.AssertZeroAlloc(() =>
             {
                 toggle ^= 1;
@@ -58,7 +63,7 @@ public class ReactiveAllocationTests
         // The core hot path: write → cascade marks observer → batch drains → effect body runs.
         var s = new Signal<int>(0);
         using var e = new Effect(() => _sink = s.Value);
-        var toggle = 0;
+        int toggle = 0;
         AllocGuard.AssertZeroAlloc(() =>
             {
                 toggle ^= 1;
@@ -73,7 +78,7 @@ public class ReactiveAllocationTests
         var s = new Signal<int>(0);
         using var doubled = Computed.From(() => s.Value * 2);
         using var e = new Effect(() => _sink = doubled.Value); // makes `doubled` watched
-        var toggle = 0;
+        int toggle = 0;
         AllocGuard.AssertZeroAlloc(() =>
             {
                 toggle ^= 1;
@@ -89,7 +94,7 @@ public class ReactiveAllocationTests
         using var b = Computed.From(() => a.Value + 1);
         using var c = Computed.From(() => a.Value + 2);
         using var e = new Effect(() => _sink = b.Value + c.Value);
-        var toggle = 0;
+        int toggle = 0;
         AllocGuard.AssertZeroAlloc(() =>
             {
                 toggle ^= 1;
@@ -106,7 +111,7 @@ public class ReactiveAllocationTests
         using var c2 = Computed.From(() => c1.Value + 1);
         using var c3 = Computed.From(() => c2.Value + 1);
         using var e = new Effect(() => _sink = c3.Value);
-        var toggle = 0;
+        int toggle = 0;
         AllocGuard.AssertZeroAlloc(() =>
             {
                 toggle ^= 1;
@@ -121,7 +126,7 @@ public class ReactiveAllocationTests
         var a = new Signal<int>(0);
         var b = new Signal<int>(0);
         using var e = new Effect(() => _sink = a.Value + b.Value);
-        var toggle = 0;
+        int toggle = 0;
         var body = () =>
         {
             toggle ^= 1;
@@ -145,7 +150,7 @@ public class ReactiveAllocationTests
                 return cleanup;
             }
         );
-        var toggle = 0;
+        int toggle = 0;
         AllocGuard.AssertZeroAlloc(() =>
             {
                 toggle ^= 1;
@@ -160,8 +165,8 @@ public class ReactiveAllocationTests
         // The EffectAffinity.Deferred path: the write parks the effect in the shared queue and
         // DrainDeferred runs it. Steady state must reuse the queue's capacity, not grow a list per frame.
         var s = new Signal<int>(0);
-        using var e = new Effect(() => _sink = s.Value, EffectAffinity.Deferred);
-        var toggle = 0;
+        using var e = new Effect(body: () => _sink = s.Value, affinity: EffectAffinity.Deferred);
+        int toggle = 0;
         AllocGuard.AssertZeroAlloc(() =>
             {
                 toggle ^= 1;
@@ -185,7 +190,7 @@ public class ReactiveAllocationTests
         // The unobserved (version-sum) refresh path: change the source, then read the lazy computed.
         var s = new Signal<int>(0);
         using var c = Computed.From(() => s.Value * 2);
-        var toggle = 0;
+        int toggle = 0;
         AllocGuard.AssertZeroAlloc(() =>
             {
                 toggle ^= 1;

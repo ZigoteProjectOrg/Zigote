@@ -15,57 +15,53 @@ public readonly struct Rect(float x, float y, float width, float height) : IEqua
     public static Rect FromLtrb(float left, float top, float right, float bottom)
     {
         return new Rect(
-            left,
-            top,
-            right - left,
-            bottom - top
+            x: left,
+            y: top,
+            width: right - left,
+            height: bottom - top
         );
     }
 
-    public bool Contains(float px, float py)
-    {
-        return px >= X && py >= Y && px < X + Width && py < Y + Height;
-    }
+    public bool Contains(float px, float py) =>
+        px >= X && py >= Y && px < X + Width && py < Y + Height;
 
     public Rect Inset(EdgeInsets e)
     {
         return new Rect(
-            X + e.Left,
-            Y + e.Top,
-            MathF.Max(0, Width - e.Left - e.Right),
-            MathF.Max(0, Height - e.Top - e.Bottom)
+            x: X + e.Left,
+            y: Y + e.Top,
+            width: MathF.Max(x: 0, y: Width - e.Left - e.Right),
+            height: MathF.Max(x: 0, y: Height - e.Top - e.Bottom)
         );
     }
 
     public Rect Translate(float dx, float dy)
     {
         return new Rect(
-            X + dx,
-            Y + dy,
-            Width,
-            Height
+            x: X + dx,
+            y: Y + dy,
+            width: Width,
+            height: Height
         );
     }
 
     public bool IsEmpty => Width <= 0 || Height <= 0;
 
-    public bool Overlaps(Rect other)
-    {
-        return X < other.Right && Right > other.X && Y < other.Bottom && Bottom > other.Y;
-    }
+    public bool Overlaps(Rect other) =>
+        X < other.Right && Right > other.X && Y < other.Bottom && Bottom > other.Y;
 
     public static Rect Intersect(Rect a, Rect b)
     {
-        var x = MathF.Max(a.X, b.X);
-        var y = MathF.Max(a.Y, b.Y);
-        var right = MathF.Min(a.Right, b.Right);
-        var bottom = MathF.Min(a.Bottom, b.Bottom);
+        float x = MathF.Max(x: a.X, y: b.X);
+        float y = MathF.Max(x: a.Y, y: b.Y);
+        float right = MathF.Min(x: a.Right, y: b.Right);
+        float bottom = MathF.Min(x: a.Bottom, y: b.Bottom);
         return right > x && bottom > y
             ? new Rect(
-                x,
-                y,
-                right - x,
-                bottom - y
+                x: x,
+                y: y,
+                width: right - x,
+                height: bottom - y
             )
             : Zero;
     }
@@ -78,15 +74,15 @@ public readonly struct Rect(float x, float y, float width, float height) : IEqua
     {
         if (a.IsEmpty) return b;
         if (b.IsEmpty) return a;
-        var x = MathF.Min(a.X, b.X);
-        var y = MathF.Min(a.Y, b.Y);
-        var right = MathF.Max(a.Right, b.Right);
-        var bottom = MathF.Max(a.Bottom, b.Bottom);
+        float x = MathF.Min(x: a.X, y: b.X);
+        float y = MathF.Min(x: a.Y, y: b.Y);
+        float right = MathF.Max(x: a.Right, y: b.Right);
+        float bottom = MathF.Max(x: a.Bottom, y: b.Bottom);
         return new Rect(
-            x,
-            y,
-            right - x,
-            bottom - y
+            x: x,
+            y: y,
+            width: right - x,
+            height: bottom - y
         );
     }
 
@@ -97,18 +93,18 @@ public readonly struct Rect(float x, float y, float width, float height) : IEqua
     public Rect Inflate(float margin)
     {
         return new Rect(
-            X - margin,
-            Y - margin,
-            MathF.Max(0, Width + 2 * margin),
-            MathF.Max(0, Height + 2 * margin)
+            x: X - margin,
+            y: Y - margin,
+            width: MathF.Max(x: 0, y: Width + (2 * margin)),
+            height: MathF.Max(x: 0, y: Height + (2 * margin))
         );
     }
 
     public static readonly Rect Zero = new(
-        0,
-        0,
-        0,
-        0
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0
     );
 
     public bool Equals(Rect other)
@@ -127,33 +123,21 @@ public readonly struct Rect(float x, float y, float width, float height) : IEqua
                Math.Abs(Height - other.Height) < tolerance;
     }
 
-    public override bool Equals(object? obj)
-    {
-        return obj is Rect r && Equals(r);
-    }
+    public override bool Equals(object? obj) => obj is Rect r && Equals(r);
 
     public override int GetHashCode()
     {
         return HashCode.Combine(
-            X,
-            Y,
-            Width,
-            Height
+            value1: X,
+            value2: Y,
+            value3: Width,
+            value4: Height
         );
     }
 
-    public static bool operator ==(Rect a, Rect b)
-    {
-        return a.Equals(b);
-    }
+    public static bool operator ==(Rect a, Rect b) => a.Equals(b);
 
-    public static bool operator !=(Rect a, Rect b)
-    {
-        return !a.Equals(b);
-    }
+    public static bool operator !=(Rect a, Rect b) => !a.Equals(b);
 
-    public override string ToString()
-    {
-        return $"Rect({X}, {Y}, {Width}×{Height})";
-    }
+    public override string ToString() => $"Rect({X}, {Y}, {Width}×{Height})";
 }

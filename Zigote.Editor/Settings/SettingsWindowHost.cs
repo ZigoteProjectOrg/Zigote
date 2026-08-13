@@ -28,10 +28,10 @@ public sealed class SettingsWindowHost(EditorPreferences prefs)
         }
 
         var theme = prefs.ResolveTheme();
-        var win = prefs.App.CreateWindow("Settings", 860, 620);
+        var win = prefs.App.CreateWindow(title: "Settings", width: 860, height: 620);
         win.Theme = theme;
-        _content = new SettingsWindow(prefs, () => LayoutProvider(), theme);
-        _themeScope = new ThemeProvider(theme, _content);
+        _content = new SettingsWindow(prefs: prefs, layout: () => LayoutProvider(), theme: theme);
+        _themeScope = new ThemeProvider(data: theme, child: _content);
         // No top inset under MacUnified: this window leads with an AdwHeaderBar, which reserves
         // the traffic lights' band at its own start — padding the whole tree down as well would
         // both waste a strip of window and leave that reserve stranded below the buttons.

@@ -16,29 +16,29 @@ public readonly struct Constraints
         float minHeight = 0,
         float maxHeight = float.PositiveInfinity)
     {
-        MinWidth = MathF.Max(0f, minWidth);
-        MaxWidth = MathF.Max(MinWidth, maxWidth);
-        MinHeight = MathF.Max(0f, minHeight);
-        MaxHeight = MathF.Max(MinHeight, maxHeight);
+        MinWidth = MathF.Max(x: 0f, y: minWidth);
+        MaxWidth = MathF.Max(x: MinWidth, y: maxWidth);
+        MinHeight = MathF.Max(x: 0f, y: minHeight);
+        MaxHeight = MathF.Max(x: MinHeight, y: maxHeight);
     }
 
     public static Constraints Tight(float width, float height)
     {
         return new Constraints(
-            width,
-            width,
-            height,
-            height
+            minWidth: width,
+            maxWidth: width,
+            minHeight: height,
+            maxHeight: height
         );
     }
 
     public static Constraints Loose(float width, float height)
     {
         return new Constraints(
-            0,
-            width,
-            0,
-            height
+            minWidth: 0,
+            maxWidth: width,
+            minHeight: 0,
+            maxHeight: height
         );
     }
 
@@ -47,18 +47,18 @@ public readonly struct Constraints
     public Size Constrain(Size size)
     {
         return new Size(
-            Math.Clamp(size.Width, MinWidth, MaxWidth),
-            Math.Clamp(size.Height, MinHeight, MaxHeight)
+            width: Math.Clamp(value: size.Width, min: MinWidth, max: MaxWidth),
+            height: Math.Clamp(value: size.Height, min: MinHeight, max: MaxHeight)
         );
     }
 
     public Constraints Deflate(EdgeInsets e)
     {
         return new Constraints(
-            MathF.Max(0, MinWidth - e.Horizontal),
-            MathF.Max(0, MaxWidth - e.Horizontal),
-            MathF.Max(0, MinHeight - e.Vertical),
-            MathF.Max(0, MaxHeight - e.Vertical)
+            minWidth: MathF.Max(x: 0, y: MinWidth - e.Horizontal),
+            maxWidth: MathF.Max(x: 0, y: MaxWidth - e.Horizontal),
+            minHeight: MathF.Max(x: 0, y: MinHeight - e.Vertical),
+            maxHeight: MathF.Max(x: 0, y: MaxHeight - e.Vertical)
         );
     }
 
@@ -80,33 +80,22 @@ public readonly struct Constraints
                Math.Abs(MaxHeight - other.MaxHeight) < tolerance;
     }
 
-    public override bool Equals(object? obj)
-    {
-        return obj is Constraints c && Equals(c);
-    }
+    public override bool Equals(object? obj) => obj is Constraints c && Equals(c);
 
     public override int GetHashCode()
     {
         return HashCode.Combine(
-            MinWidth,
-            MaxWidth,
-            MinHeight,
-            MaxHeight
+            value1: MinWidth,
+            value2: MaxWidth,
+            value3: MinHeight,
+            value4: MaxHeight
         );
     }
 
-    public static bool operator ==(Constraints a, Constraints b)
-    {
-        return a.Equals(b);
-    }
+    public static bool operator ==(Constraints a, Constraints b) => a.Equals(b);
 
-    public static bool operator !=(Constraints a, Constraints b)
-    {
-        return !a.Equals(b);
-    }
+    public static bool operator !=(Constraints a, Constraints b) => !a.Equals(b);
 
-    public override string ToString()
-    {
-        return $"Constraints(w=[{MinWidth},{MaxWidth}] h=[{MinHeight},{MaxHeight}])";
-    }
+    public override string ToString() =>
+        $"Constraints(w=[{MinWidth},{MaxWidth}] h=[{MinHeight},{MaxHeight}])";
 }

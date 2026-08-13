@@ -8,31 +8,50 @@ internal static class GalleryMenu
 {
     public static Widget Build(GalleryApp app, Shell shell)
     {
-        var follow = app.FollowSystem.Value;
-        var dark = app.Dark.Value;
+        bool follow = app.FollowSystem.Value;
+        bool dark = app.Dark.Value;
 
         var button = new AdwMenuButton {
             MenuWidth = 240f,
             Sections = [
                 [
                     AdwMenuItem.Header("Appearance"),
-                    AdwMenuItem.Radio("Follow System", follow, () => app.FollowSystem.Value = true),
-                    AdwMenuItem.Radio("Light", !follow && !dark, () => SetStyle(app, false)),
-                    AdwMenuItem.Radio("Dark", !follow && dark, () => SetStyle(app, true)),
+                    AdwMenuItem.Radio(
+                        label: "Follow System",
+                        selected: follow,
+                        onActivated: () => app.FollowSystem.Value = true
+                    ),
+                    AdwMenuItem.Radio(
+                        label: "Light",
+                        selected: !follow && !dark,
+                        onActivated: () => SetStyle(app: app, dark: false)
+                    ),
+                    AdwMenuItem.Radio(
+                        label: "Dark",
+                        selected: !follow && dark,
+                        onActivated: () => SetStyle(app: app, dark: true)
+                    ),
                 ],
                 [
-                    new AdwMenuItem("New Window", app.NewWindow) { Accel = "Ctrl+N" },
+                    new AdwMenuItem(label: "New Window", onActivated: app.NewWindow) {
+                        Accel = "Ctrl+N",
+                    },
                 ],
                 [
-                    new AdwMenuItem("Preferences", shell.ShowPreferences) { Accel = "Ctrl+," },
-                    new AdwMenuItem("Keyboard Shortcuts", GalleryShortcuts.Show) {
+                    new AdwMenuItem(label: "Preferences", onActivated: shell.ShowPreferences) {
+                        Accel = "Ctrl+,",
+                    },
+                    new AdwMenuItem(
+                        label: "Keyboard Shortcuts",
+                        onActivated: GalleryShortcuts.Show
+                    ) {
                         Accel = "Ctrl+?",
                     },
-                    new AdwMenuItem("About Adwaita Demo", GalleryAbout.Show),
+                    new AdwMenuItem(label: "About Adwaita Demo", onActivated: GalleryAbout.Show),
                 ],
             ],
         };
-        return new Tooltip("Main Menu", button);
+        return new Tooltip(message: "Main Menu", child: button);
     }
 
     private static void SetStyle(GalleryApp app, bool dark)
@@ -61,23 +80,25 @@ internal static class GalleryAbout
             License = "LGPL-2.1-or-later",
             Links = {
                 new AdwAboutLink(
-                    "Report an issue",
-                    null,
-                    () => { },
-                    MaterialIcons.BugReport
+                    Label: "Report an issue",
+                    Subtitle: null,
+                    OnActivated: () => { },
+                    IconName: MaterialIcons.BugReport
                 ),
                 new AdwAboutLink(
-                    "Open-source licenses",
-                    null,
-                    ShowLicenses,
-                    MaterialIcons.Gavel
+                    Label: "Open-source licenses",
+                    Subtitle: null,
+                    OnActivated: ShowLicenses,
+                    IconName: MaterialIcons.Gavel
                 ),
             },
         }.Show();
     }
 
-    /// <summary>Everything <see cref="Zigote.Core.Licenses.LicenseRegistry" /> knows about — the
-    ///     engine's own bundled components, plus anything the app registered.</summary>
+    /// <summary>
+    ///     Everything <see cref="Zigote.Core.Licenses.LicenseRegistry" /> knows about — the
+    ///     engine's own bundled components, plus anything the app registered.
+    /// </summary>
     private static void ShowLicenses()
     {
         new AdwDialog {
@@ -116,21 +137,21 @@ internal static class GalleryShortcuts
             crossAxisAlignment: CrossAxisAlignment.Stretch,
             mainAxisSize: MainAxisSize.Min
         );
-        foreach (var (title, rows) in Groups)
+        foreach ((string title, var rows) in Groups)
         {
             var group = new AdwPreferencesGroup(title);
-            foreach (var (action, chord) in rows)
+            foreach ((string action, string chord) in rows)
                 group.Rows.Add(new AdwActionRow(action) { Suffixes = { Demo.Value(chord) } });
             column.Children.Add(group);
         }
 
         Demo.ShowDialog(
-            "Keyboard Shortcuts",
-            new SingleChildScrollView {
-                Child = new Padding(EdgeInsets.All(Spacing.Lg), column),
+            title: "Keyboard Shortcuts",
+            content: new SingleChildScrollView {
+                Child = new Padding(padding: EdgeInsets.All(Spacing.Lg), child: column),
             },
-            460f,
-            520f
+            width: 460f,
+            height: 520f
         );
     }
 }

@@ -30,8 +30,9 @@ public static class ScriptCompiler
     // MSBuild error format: "path(line,col): error CS0000: message"
     private static readonly Regex DiagPattern =
         new(
+            pattern:
             @"^(?<file>[^(]+)\((?<line>\d+),(?<col>\d+)\):\s+(?<sev>error|warning)\s+\w+:\s*(?<msg>.+)$",
-            RegexOptions.Compiled | RegexOptions.Multiline
+            options: RegexOptions.Compiled | RegexOptions.Multiline
         );
 
     public static async Task<ScriptBuildResult> BuildAsync(
@@ -43,16 +44,20 @@ public static class ScriptCompiler
         if (!File.Exists(projectPath))
             return ScriptBuildResult.Failure($"Project not found: {projectPath}");
 
-        var config = release ? "Release" : "Debug";
-        var outputDir = Path.Combine(Path.GetDirectoryName(projectPath)!, "bin", config);
+        string config = release ? "Release" : "Debug";
+        string outputDir = Path.Combine(
+            path1: Path.GetDirectoryName(projectPath)!,
+            path2: "bin",
+            path3: config
+        );
 
         // Incremental cache: skip the dotnet build when the inputs are unchanged since the last success.
         // A hashing failure (unreadable file, etc.) leaves `fingerprint` null → always build (safe default).
-        var cachePath = CachePath(projectPath, config);
+        string cachePath = CachePath(projectPath: projectPath, config: config);
         string? fingerprint = null;
         try
         {
-            fingerprint = ComputeBuildFingerprint(projectPath, config);
+            fingerprint = ComputeBuildFingerprint(projectPath: projectPath, config: config);
         }
         catch
         {
@@ -61,13 +66,18 @@ public static class ScriptCompiler
 
         if (!force && fingerprint != null && ReadCache(cachePath) is { } cached &&
             cached.Fingerprint == fingerprint && cached.Dll is { } dll && File.Exists(dll))
+        {
             return new ScriptBuildResult {
                 Success = true,
                 Cached = true,
                 OutputAssemblyPath = dll,
             };
+        }
 
-        var psi = new ProcessStartInfo("dotnet", $"build \"{projectPath}\" -c {config} --nologo") {
+        var psi = new ProcessStartInfo(
+            fileName: "dotnet",
+            arguments: $"build \"{projectPath}\" -c {config} --nologo"
+        ) {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -93,48 +103,63 @@ public static class ScriptCompiler
 
         await proc.WaitForExitAsync(ct);
 
-        var raw = stdout.ToString() + stderr;
+        string raw = stdout.ToString() + stderr;
         var diagnostics = ParseDiagnostics(raw);
-        var succeeded = proc.ExitCode == 0;
+        bool succeeded = proc.ExitCode == 0;
 
         if (!succeeded)
+        {
             return new ScriptBuildResult {
                 Success = false,
                 RawOutput = raw,
                 Diagnostics = diagnostics,
             };
+        }
 
         // Find the built DLL. Pick the project's OWN assembly by name (csproj name == assembly name
         // by convention) — not just the first .dll, since ProjectReferences (e.g. Zigote.ECS) copy
         // their own DLLs into the same output folder and enumeration order is not guaranteed.
-        var expectedDll = Path.GetFileNameWithoutExtension(projectPath) + ".dll";
+        string expectedDll = Path.GetFileNameWithoutExtension(projectPath) + ".dll";
 
-        bool NotRef(string f)
-        {
-            return !f.Contains("ref" + Path.DirectorySeparatorChar);
-        }
+        bool NotRef(string f) => !f.Contains("ref" + Path.DirectorySeparatorChar);
 
-        var dllPath =
-            Directory.GetFiles(outputDir, expectedDll, SearchOption.AllDirectories)
+        string? dllPath =
+            Directory.GetFiles(
+                    path: outputDir,
+                    searchPattern: expectedDll,
+                    searchOption: SearchOption.AllDirectories
+                )
                 .FirstOrDefault(NotRef)
-            ?? Directory.GetFiles(outputDir, "*.dll", SearchOption.AllDirectories)
+            ?? Directory.GetFiles(
+                    path: outputDir,
+                    searchPattern: "*.dll",
+                    searchOption: SearchOption.AllDirectories
+                )
                 .FirstOrDefault(NotRef);
 
         // Record the fingerprint of the inputs that produced this assembly so the next build can skip
         // dotnet entirely if nothing changed. Recompute it here (after the build): MSBuild may have
         // restored packages / regenerated obj artefacts, which we want reflected. Best-effort.
         if (fingerprint != null && dllPath != null)
+        {
             try
             {
                 WriteCache(
-                    cachePath,
-                    new BuildCache(ComputeBuildFingerprint(projectPath, config), dllPath)
+                    path: cachePath,
+                    cache: new BuildCache(
+                        Fingerprint: ComputeBuildFingerprint(
+                            projectPath: projectPath,
+                            config: config
+                        ),
+                        Dll: dllPath
+                    )
                 );
             }
             catch
             {
                 // ignore — a missing cache just means the next build runs in full
             }
+        }
 
         return new ScriptBuildResult {
             Success = true,
@@ -154,22 +179,27 @@ public static class ScriptCompiler
     /// </summary>
     public static string ComputeBuildFingerprint(string projectPath, string config = "Debug")
     {
-        var projDir = Path.GetDirectoryName(Path.GetFullPath(projectPath))!;
+        string projDir = Path.GetDirectoryName(Path.GetFullPath(projectPath))!;
         var sb = new StringBuilder();
 
         // 1. Source + project files under the project (content-hashed; obj/ and bin/ excluded).
-        foreach (var file in EnumerateInputFiles(projDir))
+        foreach (string file in EnumerateInputFiles(projDir))
         {
-            var rel = Path.GetRelativePath(projDir, file).Replace('\\', '/');
+            string rel = Path.GetRelativePath(relativeTo: projDir, path: file)
+                .Replace(oldChar: '\\', newChar: '/');
             sb.Append(rel).Append('=').Append(HashFileContent(file)).Append('\n');
         }
 
         // 2. Referenced projects' built assemblies (timestamp+size) — rebuilding the engine bumps these.
-        foreach (var dll in ResolveProjectReferenceAssemblies(projectPath, projDir, config))
+        foreach (var dll in ResolveProjectReferenceAssemblies(
+                     projectPath: projectPath,
+                     projDir: projDir,
+                     config: config
+                 ))
             sb.Append("ref:").Append(dll.Key).Append('=').Append(dll.Value).Append('\n');
 
         // 3. NuGet restore / package graph state.
-        var assets = Path.Combine(projDir, "obj", "project.assets.json");
+        string assets = Path.Combine(path1: projDir, path2: "obj", path3: "project.assets.json");
         if (File.Exists(assets)) sb.Append("assets=").Append(Stamp(assets)).Append('\n');
 
         sb.Append("config=").Append(config);
@@ -180,19 +210,22 @@ public static class ScriptCompiler
     private static IEnumerable<string> EnumerateInputFiles(string projDir)
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var pattern in new[] {
+        foreach (string pattern in new[] {
                      "*.cs",
                      "*.csproj",
                      "*.props",
                      "*.targets",
                  })
-        foreach (var file in Directory.EnumerateFiles(
-                     projDir,
-                     pattern,
-                     SearchOption.AllDirectories
+        foreach (string file in Directory.EnumerateFiles(
+                     path: projDir,
+                     searchPattern: pattern,
+                     searchOption: SearchOption.AllDirectories
                  ))
-            if (!IsGeneratedDir(projDir, file))
+        {
+            if (!IsGeneratedDir(projDir: projDir, file: file))
                 seen.Add(Path.GetFullPath(file));
+        }
+
         var ordered = seen.ToList();
         ordered.Sort(StringComparer.Ordinal); // stable order → deterministic hash
         return ordered;
@@ -201,19 +234,21 @@ public static class ScriptCompiler
     // Skip MSBuild's intermediate (obj/) and output (bin/) trees — those are build products, not inputs.
     private static bool IsGeneratedDir(string projDir, string file)
     {
-        var rel = Path.GetRelativePath(projDir, file).Replace('\\', '/');
-        return rel.StartsWith("obj/", StringComparison.Ordinal) || rel.Contains(
-                                                                    "/obj/",
-                                                                    StringComparison.Ordinal
-                                                                )
-                                                                || rel.StartsWith(
-                                                                    "bin/",
-                                                                    StringComparison.Ordinal
-                                                                ) ||
-                                                                rel.Contains(
-                                                                    "/bin/",
-                                                                    StringComparison.Ordinal
-                                                                );
+        string rel = Path.GetRelativePath(relativeTo: projDir, path: file)
+            .Replace(oldChar: '\\', newChar: '/');
+        return rel.StartsWith(value: "obj/", comparisonType: StringComparison.Ordinal) ||
+               rel.Contains(
+                   value: "/obj/",
+                   comparisonType: StringComparison.Ordinal
+               )
+               || rel.StartsWith(
+                   value: "bin/",
+                   comparisonType: StringComparison.Ordinal
+               ) ||
+               rel.Contains(
+                   value: "/bin/",
+                   comparisonType: StringComparison.Ordinal
+               );
     }
 
     private static string HashFileContent(string path)
@@ -249,22 +284,27 @@ public static class ScriptCompiler
 
         foreach (var pr in doc.Descendants().Where(e => e.Name.LocalName == "ProjectReference"))
         {
-            var include = pr.Attribute("Include")?.Value;
+            string? include = pr.Attribute("Include")?.Value;
             if (string.IsNullOrWhiteSpace(include)) continue;
 
-            var refProjPath = Path.GetFullPath(Path.Combine(projDir, include.Replace('\\', '/')));
-            var refDir = Path.GetDirectoryName(refProjPath);
+            string refProjPath = Path.GetFullPath(
+                Path.Combine(path1: projDir, path2: include.Replace(oldChar: '\\', newChar: '/'))
+            );
+            string? refDir = Path.GetDirectoryName(refProjPath);
             if (refDir == null) continue;
-            var refName = Path.GetFileNameWithoutExtension(refProjPath);
-            var binDir = Path.Combine(refDir, "bin", config);
+            string refName = Path.GetFileNameWithoutExtension(refProjPath);
+            string binDir = Path.Combine(path1: refDir, path2: "bin", path3: config);
             if (!Directory.Exists(binDir)) continue;
 
-            foreach (var asm in Directory.EnumerateFiles(
-                         binDir,
-                         refName + ".dll",
-                         SearchOption.AllDirectories
+            foreach (string asm in Directory.EnumerateFiles(
+                         path: binDir,
+                         searchPattern: refName + ".dll",
+                         searchOption: SearchOption.AllDirectories
                      ))
-                result[Path.GetRelativePath(refDir, asm).Replace('\\', '/')] = Stamp(asm);
+            {
+                result[Path.GetRelativePath(relativeTo: refDir, path: asm)
+                    .Replace(oldChar: '\\', newChar: '/')] = Stamp(asm);
+            }
         }
 
         return result;
@@ -272,8 +312,12 @@ public static class ScriptCompiler
 
     private static string CachePath(string projectPath, string config)
     {
-        var projDir = Path.GetDirectoryName(Path.GetFullPath(projectPath))!;
-        return Path.Combine(projDir, "obj", $".zigote-scriptbuild-{config}.json");
+        string projDir = Path.GetDirectoryName(Path.GetFullPath(projectPath))!;
+        return Path.Combine(
+            path1: projDir,
+            path2: "obj",
+            path3: $".zigote-scriptbuild-{config}.json"
+        );
     }
 
     private static BuildCache? ReadCache(string path)
@@ -293,7 +337,7 @@ public static class ScriptCompiler
     private static void WriteCache(string path, BuildCache cache)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, JsonSerializer.Serialize(cache));
+        File.WriteAllText(path: path, contents: JsonSerializer.Serialize(cache));
     }
 
     private static IReadOnlyList<ScriptDiagnostic> ParseDiagnostics(string output)
@@ -301,7 +345,7 @@ public static class ScriptCompiler
         var list = new List<ScriptDiagnostic>();
         foreach (Match m in DiagPattern.Matches(output))
         {
-            var sevStr = m.Groups["sev"].Value;
+            string sevStr = m.Groups["sev"].Value;
             var severity = sevStr == "error"
                 ? DiagnosticSeverity.Error
                 : DiagnosticSeverity.Warning;

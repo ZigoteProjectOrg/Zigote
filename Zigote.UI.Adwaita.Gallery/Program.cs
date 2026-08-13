@@ -1,3 +1,5 @@
+using AdwaitaGallery.Pages;
+
 namespace AdwaitaGallery;
 
 public static class Program
@@ -22,7 +24,7 @@ public static class Program
         if (flattened.Length != GalleryRegistry.Entries.Length)
             failures.Add("Entries is not the flattening of Sections");
 
-        var sidebarTitles = GalleryRegistry.SidebarSections()
+        string[] sidebarTitles = GalleryRegistry.SidebarSections()
             .SelectMany(s => s.Items)
             .Select(i => i.Title)
             .ToArray();
@@ -30,7 +32,7 @@ public static class Program
             failures.Add("Sidebar row order does not match the Entries index space");
 
         var seen = new HashSet<string>();
-        for (var i = 0; i < GalleryRegistry.Entries.Length; i++)
+        for (int i = 0; i < GalleryRegistry.Entries.Length; i++)
         {
             var entry = GalleryRegistry.Entries[i];
             if (!seen.Add(entry.Title)) failures.Add($"duplicate page title: {entry.Title}");
@@ -50,10 +52,10 @@ public static class Program
         }
 
         // The one page whose point is not visual: concurrent signal writes have to be exact.
-        if (Pages.ConcurrencyPage.SelfCheck() is { } concurrency)
+        if (ConcurrencyPage.SelfCheck() is { } concurrency)
             failures.Add($"Concurrency: {concurrency}");
 
-        foreach (var failure in failures) Console.Error.WriteLine($"FAIL {failure}");
+        foreach (string failure in failures) Console.Error.WriteLine($"FAIL {failure}");
         Console.WriteLine(
             failures.Count == 0
                 ? $"Adwaita gallery self-test: {GalleryRegistry.Entries.Length} pages, all checks passed"
@@ -110,7 +112,7 @@ internal sealed class GalleryApp : AdwaitaApp
     protected override void OnInit()
     {
         base.OnInit();
-        if (App is { } app) InstallShortcuts(app, _shell);
+        if (App is { } app) InstallShortcuts(window: app, shell: _shell);
     }
 
     /// <summary>Open another gallery window — an independent Shell on its own OS window.</summary>
@@ -118,12 +120,12 @@ internal sealed class GalleryApp : AdwaitaApp
     {
         var shell = new Shell(this);
         if (OpenWindow(
-                new SafeArea(shell),
-                "Adwaita Demo",
-                1100,
-                760
+                content: new SafeArea(shell),
+                title: "Adwaita Demo",
+                width: 1100,
+                height: 760
             ) is { } win)
-            InstallShortcuts(win, shell);
+            InstallShortcuts(window: win, shell: shell);
     }
 
     /// <summary>
@@ -133,12 +135,15 @@ internal sealed class GalleryApp : AdwaitaApp
     /// </summary>
     private void InstallShortcuts(App window, Shell shell)
     {
-        window.Keymap.Bind(ActionSearch, KeyChord.Command(KeyCode.F));
-        window.Keymap.Bind(ActionNewWindow, KeyChord.Command(KeyCode.N));
-        window.Keymap.Bind(ActionPreferences, KeyChord.Command(KeyCode.Comma));
-        window.Keymap.Bind(ActionAbout, KeyChord.Command(KeyCode.Slash, true));
-        window.Keymap.Bind(ActionToggleDark, KeyChord.Command(KeyCode.D));
-        window.Keymap.Bind(ActionCloseWindow, KeyChord.Command(KeyCode.W));
+        window.Keymap.Bind(action: ActionSearch, chord: KeyChord.Command(KeyCode.F));
+        window.Keymap.Bind(action: ActionNewWindow, chord: KeyChord.Command(KeyCode.N));
+        window.Keymap.Bind(action: ActionPreferences, chord: KeyChord.Command(KeyCode.Comma));
+        window.Keymap.Bind(
+            action: ActionAbout,
+            chord: KeyChord.Command(key: KeyCode.Slash, shift: true)
+        );
+        window.Keymap.Bind(action: ActionToggleDark, chord: KeyChord.Command(KeyCode.D));
+        window.Keymap.Bind(action: ActionCloseWindow, chord: KeyChord.Command(KeyCode.W));
 
         window.OnShortcut = action =>
         {
@@ -186,7 +191,7 @@ internal sealed class GalleryApp : AdwaitaApp
                 Accent.Value = SystemAccent;
             }
 
-            Theme = AdwTheme.Create(Accent.Value, Dark.Value);
+            Theme = AdwTheme.Create(accent: Accent.Value, dark: Dark.Value);
         }
         finally
         {

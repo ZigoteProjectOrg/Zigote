@@ -24,10 +24,7 @@ public static class MathJson
     /// </summary>
     public static IJsonTypeInfoResolver? ExtraResolver { get; set; }
 
-    private static float ReadComponent(ref Utf8JsonReader reader)
-    {
-        return reader.GetSingle();
-    }
+    private static float ReadComponent(ref Utf8JsonReader reader) => reader.GetSingle();
 
     private static (float, float, float, float) ReadObject(ref Utf8JsonReader reader)
     {
@@ -37,7 +34,7 @@ public static class MathJson
         while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
         {
             if (reader.TokenType != JsonTokenType.PropertyName) continue;
-            var name = reader.GetString();
+            string? name = reader.GetString();
             reader.Read();
             switch (name)
             {
@@ -76,15 +73,15 @@ public static class MathJson
     {
         public override Vec2 Read(ref Utf8JsonReader reader, Type t, JsonSerializerOptions o)
         {
-            var (x, y, _, _) = ReadObject(ref reader);
-            return new Vec2(x, y);
+            (float x, float y, _, _) = ReadObject(ref reader);
+            return new Vec2(x: x, y: y);
         }
 
         public override void Write(Utf8JsonWriter w, Vec2 v, JsonSerializerOptions o)
         {
             w.WriteStartObject();
-            w.WriteNumber("X", v.X);
-            w.WriteNumber("Y", v.Y);
+            w.WriteNumber(propertyName: "X", value: v.X);
+            w.WriteNumber(propertyName: "Y", value: v.Y);
             w.WriteEndObject();
         }
     }
@@ -93,16 +90,16 @@ public static class MathJson
     {
         public override Vec3 Read(ref Utf8JsonReader reader, Type t, JsonSerializerOptions o)
         {
-            var (x, y, z, _) = ReadObject(ref reader);
-            return new Vec3(x, y, z);
+            (float x, float y, float z, _) = ReadObject(ref reader);
+            return new Vec3(x: x, y: y, z: z);
         }
 
         public override void Write(Utf8JsonWriter w, Vec3 v, JsonSerializerOptions o)
         {
             w.WriteStartObject();
-            w.WriteNumber("X", v.X);
-            w.WriteNumber("Y", v.Y);
-            w.WriteNumber("Z", v.Z);
+            w.WriteNumber(propertyName: "X", value: v.X);
+            w.WriteNumber(propertyName: "Y", value: v.Y);
+            w.WriteNumber(propertyName: "Z", value: v.Z);
             w.WriteEndObject();
         }
     }
@@ -111,22 +108,22 @@ public static class MathJson
     {
         public override Vec4 Read(ref Utf8JsonReader reader, Type t, JsonSerializerOptions o)
         {
-            var (x, y, z, w) = ReadObject(ref reader);
+            (float x, float y, float z, float w) = ReadObject(ref reader);
             return new Vec4(
-                x,
-                y,
-                z,
-                w
+                x: x,
+                y: y,
+                z: z,
+                w: w
             );
         }
 
         public override void Write(Utf8JsonWriter writer, Vec4 v, JsonSerializerOptions o)
         {
             writer.WriteStartObject();
-            writer.WriteNumber("X", v.X);
-            writer.WriteNumber("Y", v.Y);
-            writer.WriteNumber("Z", v.Z);
-            writer.WriteNumber("W", v.W);
+            writer.WriteNumber(propertyName: "X", value: v.X);
+            writer.WriteNumber(propertyName: "Y", value: v.Y);
+            writer.WriteNumber(propertyName: "Z", value: v.Z);
+            writer.WriteNumber(propertyName: "W", value: v.W);
             writer.WriteEndObject();
         }
     }
@@ -135,22 +132,22 @@ public static class MathJson
     {
         public override Quat Read(ref Utf8JsonReader reader, Type t, JsonSerializerOptions o)
         {
-            var (x, y, z, w) = ReadObject(ref reader);
+            (float x, float y, float z, float w) = ReadObject(ref reader);
             return new Quat(
-                x,
-                y,
-                z,
-                w
+                x: x,
+                y: y,
+                z: z,
+                w: w
             );
         }
 
         public override void Write(Utf8JsonWriter writer, Quat v, JsonSerializerOptions o)
         {
             writer.WriteStartObject();
-            writer.WriteNumber("X", v.X);
-            writer.WriteNumber("Y", v.Y);
-            writer.WriteNumber("Z", v.Z);
-            writer.WriteNumber("W", v.W);
+            writer.WriteNumber(propertyName: "X", value: v.X);
+            writer.WriteNumber(propertyName: "Y", value: v.Y);
+            writer.WriteNumber(propertyName: "Z", value: v.Z);
+            writer.WriteNumber(propertyName: "W", value: v.W);
             writer.WriteEndObject();
         }
     }

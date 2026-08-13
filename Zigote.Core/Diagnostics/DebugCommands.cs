@@ -3,15 +3,10 @@ namespace Zigote.Core.Diagnostics;
 /// <summary>Outcome of a <see cref="DebugCommand" />. <see cref="Message" /> is echoed to the console.</summary>
 public readonly record struct DebugCommandResult(bool Ok, string Message)
 {
-    public static DebugCommandResult Success(string message = "")
-    {
-        return new DebugCommandResult(true, message);
-    }
+    public static DebugCommandResult Success(string message = "") =>
+        new(Ok: true, Message: message);
 
-    public static DebugCommandResult Failure(string message)
-    {
-        return new DebugCommandResult(false, message);
-    }
+    public static DebugCommandResult Failure(string message) => new(Ok: false, Message: message);
 }
 
 /// <summary>
@@ -53,7 +48,7 @@ public static class DebugCommands
 
     public static void Register(DebugCommand cmd)
     {
-        if (Map.TryGetValue(cmd.Name, out var existing)) Ordered.Remove(existing);
+        if (Map.TryGetValue(key: cmd.Name, value: out var existing)) Ordered.Remove(existing);
         Map[cmd.Name] = cmd;
         Ordered.Add(cmd);
         Version++;
@@ -92,18 +87,21 @@ public static class DebugCommands
         );
     }
 
-    public static DebugCommand? Find(string name)
-    {
-        return Map.GetValueOrDefault(name);
-    }
+    public static DebugCommand? Find(string name) => Map.GetValueOrDefault(name);
 
     /// <summary>Command names beginning with <paramref name="prefix" /> (for auto-complete), sorted.</summary>
     public static List<string> Complete(string prefix)
     {
         var list = new List<string>();
         foreach (var c in Ordered)
-            if (c.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            if (c.Name.StartsWith(
+                    value: prefix,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                ))
                 list.Add(c.Name);
+        }
+
         list.Sort(StringComparer.OrdinalIgnoreCase);
         return list;
     }
@@ -116,31 +114,35 @@ public static class DebugCommands
         if (HistoryList.Count == 0 || HistoryList[^1] != input)
         {
             HistoryList.Add(input);
-            if (HistoryList.Count > 200) HistoryList.RemoveRange(0, HistoryList.Count - 200);
+            if (HistoryList.Count > 200)
+                HistoryList.RemoveRange(index: 0, count: HistoryList.Count - 200);
         }
 
         var tokens = Tokenize(input);
         if (tokens.Count == 0) return DebugCommandResult.Success();
 
-        var name = tokens[0];
+        string name = tokens[0];
         var cmd = Find(name);
         DebugCommandResult result;
         if (cmd is null)
             result = DebugCommandResult.Failure($"Unknown command '{name}'. Type 'help'.");
         else
+        {
             try
             {
-                result = cmd.Execute(tokens.GetRange(1, tokens.Count - 1).ToArray());
+                result = cmd.Execute(tokens.GetRange(index: 1, count: tokens.Count - 1).ToArray());
             }
             catch (Exception ex)
             {
                 result = DebugCommandResult.Failure($"{name}: {ex.Message}");
             }
+        }
 
         DebugLog.Add(
-            result.Ok ? DebugLogLevel.Info : DebugLogLevel.Error,
-            $"> {input}" + (string.IsNullOrEmpty(result.Message) ? "" : $"  →  {result.Message}"),
-            "console"
+            level: result.Ok ? DebugLogLevel.Info : DebugLogLevel.Error,
+            message: $"> {input}" +
+                     (string.IsNullOrEmpty(result.Message) ? "" : $"  →  {result.Message}"),
+            category: "console"
         );
         return result;
     }
@@ -148,7 +150,7 @@ public static class DebugCommands
     private static List<string> Tokenize(string input)
     {
         var tokens = new List<string>();
-        var i = 0;
+        int i = 0;
         while (i < input.Length)
         {
             while (i < input.Length && char.IsWhiteSpace(input[i])) i++;
@@ -156,14 +158,14 @@ public static class DebugCommands
             if (input[i] == '"')
             {
                 i++;
-                var start = i;
+                int start = i;
                 while (i < input.Length && input[i] != '"') i++;
                 tokens.Add(input[start..i]);
                 if (i < input.Length) i++; // closing quote
             }
             else
             {
-                var start = i;
+                int start = i;
                 while (i < input.Length && !char.IsWhiteSpace(input[i])) i++;
                 tokens.Add(input[start..i]);
             }
@@ -179,9 +181,9 @@ public static class DebugCommands
     public static void RegisterCoreDefaults()
     {
         Register(
-            "help",
-            "List commands, or show usage for one",
-            args =>
+            name: "help",
+            description: "List commands, or show usage for one",
+            execute: args =>
             {
                 if (args.Length > 0)
                 {
@@ -196,16 +198,16 @@ public static class DebugCommands
                 var names = new List<string>();
                 foreach (var c in Ordered) names.Add(c.Name);
                 names.Sort(StringComparer.OrdinalIgnoreCase);
-                return DebugCommandResult.Success(string.Join(", ", names));
+                return DebugCommandResult.Success(string.Join(separator: ", ", values: names));
             },
-            "console",
-            "help [command]"
+            category: "console",
+            usage: "help [command]"
         );
 
         Register(
-            "get",
-            "Read a debug variable",
-            args =>
+            name: "get",
+            description: "Read a debug variable",
+            execute: args =>
             {
                 if (args.Length < 1) return DebugCommandResult.Failure("usage: get <name>");
                 var v = DebugVariables.Find(args[0]);
@@ -213,72 +215,78 @@ public static class DebugCommands
                     ? DebugCommandResult.Failure($"No variable '{args[0]}'")
                     : DebugCommandResult.Success($"{v.Name} = {v.Display()}");
             },
-            "console",
-            "get <name>"
+            category: "console",
+            usage: "get <name>"
         );
 
         Register(
-            "set",
-            "Write a debug variable",
-            args =>
+            name: "set",
+            description: "Write a debug variable",
+            execute: args =>
             {
                 if (args.Length < 2) return DebugCommandResult.Failure("usage: set <name> <value>");
                 var v = DebugVariables.Find(args[0]);
                 if (v is null) return DebugCommandResult.Failure($"No variable '{args[0]}'");
-                var err = v.TrySet(
+                string? err = v.TrySet(
                     string.Join(
-                        ' ',
-                        args,
-                        1,
-                        args.Length - 1
+                        separator: ' ',
+                        value: args,
+                        startIndex: 1,
+                        count: args.Length - 1
                     )
                 );
                 return err is null
                     ? DebugCommandResult.Success($"{v.Name} = {v.Display()}")
                     : DebugCommandResult.Failure(err);
             },
-            "console",
-            "set <name> <value>"
+            category: "console",
+            usage: "set <name> <value>"
         );
 
         Register(
-            "vars",
-            "List debug variables (optionally filtered)",
-            args =>
+            name: "vars",
+            description: "List debug variables (optionally filtered)",
+            execute: args =>
             {
-                var filter = args.Length > 0 ? args[0] : null;
+                string? filter = args.Length > 0 ? args[0] : null;
                 var lines = new List<string>();
                 foreach (var v in DebugVariables.All)
+                {
                     if (filter is null || v.Name.Contains(
-                            filter,
-                            StringComparison.OrdinalIgnoreCase
+                            value: filter,
+                            comparisonType: StringComparison.OrdinalIgnoreCase
                         ))
                         lines.Add($"{v.Name} = {v.Display()}");
+                }
+
                 return DebugCommandResult.Success(
-                    lines.Count == 0 ? "(none)" : string.Join(", ", lines)
+                    lines.Count == 0 ? "(none)" : string.Join(separator: ", ", values: lines)
                 );
             },
-            "console",
-            "vars [filter]"
+            category: "console",
+            usage: "vars [filter]"
         );
 
         Register(
-            "clear",
-            "Clear the log buffer",
-            DebugLog.Clear,
-            "console"
+            name: "clear",
+            description: "Clear the log buffer",
+            action: DebugLog.Clear,
+            category: "console"
         );
 
         Register(
-            "log",
-            "Append a line to the log",
-            args =>
+            name: "log",
+            description: "Append a line to the log",
+            execute: args =>
             {
-                DebugLog.Info(string.Join(' ', args), "console");
+                DebugLog.Info(
+                    message: string.Join(separator: ' ', value: args),
+                    category: "console"
+                );
                 return DebugCommandResult.Success();
             },
-            "console",
-            "log <message>"
+            category: "console",
+            usage: "log <message>"
         );
     }
 }

@@ -4,14 +4,19 @@ using Zigote.Core.State;
 namespace Zigote.Tests;
 
 /// <summary>
-///     Model-based fuzzing of the dependency graph: build a random DAG of signals and computeds (including
+///     Model-based fuzzing of the dependency graph: build a random DAG of signals and computeds
+///     (including
 ///     conditional nodes, whose dependency set changes as branches flip), then hammer it with random
-///     writes, batches, reads, subscriptions and disposals — checking every read against a dumb reference
+///     writes, batches, reads, subscriptions and disposals — checking every read against a dumb
+///     reference
 ///     evaluator that just recomputes from the current signal values.
 ///     <para>
-///         This is the cover the hand-written tests can't give: the positional dependency reconcile, the
-///         tri-colour push/pull, the watched/unwatched transitions and the observer edges only go wrong on
-///         shapes and orderings nobody thought to write down. Seeds are fixed, so a failure reproduces.
+///         This is the cover the hand-written tests can't give: the positional dependency reconcile,
+///         the
+///         tri-colour push/pull, the watched/unwatched transitions and the observer edges only go
+///         wrong on
+///         shapes and orderings nobody thought to write down. Seeds are fixed, so a failure
+///         reproduces.
 ///     </para>
 /// </summary>
 [Collection("Reactive-serial")]
@@ -31,7 +36,7 @@ public class ReactiveModelFuzzTests
         var graph = new Graph(rnd);
         try
         {
-            for (var step = 0; step < 500; step++)
+            for (int step = 0; step < 500; step++)
             {
                 switch (rnd.Next(8))
                 {
@@ -73,55 +78,56 @@ public class ReactiveModelFuzzTests
     {
         private readonly List<(int node, int seen)> _effectSlots = [];
         private readonly List<Effect> _effects = [];
-        private readonly int[] _model = new int[SignalCount];
-        private readonly Node[] _nodes = new Node[SignalCount + ComputedCount];
+        private readonly int[] _lastSeen = new int[4];
 
         private readonly IReadableSignal<int>[] _live =
             new IReadableSignal<int>[SignalCount + ComputedCount];
 
+        private readonly int[] _model = new int[SignalCount];
+        private readonly Node[] _nodes = new Node[SignalCount + ComputedCount];
+
         private readonly Signal<int>[] _signals = new Signal<int>[SignalCount];
         private readonly List<IDisposable> _watchers = [];
-        private readonly int[] _lastSeen = new int[4];
 
         public Graph(Random rnd)
         {
-            for (var i = 0; i < SignalCount; i++)
+            for (int i = 0; i < SignalCount; i++)
             {
-                _model[i] = rnd.Next(0, 10);
+                _model[i] = rnd.Next(minValue: 0, maxValue: 10);
                 _signals[i] = new Signal<int>(_model[i]);
                 _nodes[i] = new Node(
-                    NodeKind.Signal,
-                    i,
-                    0,
-                    0,
-                    0
+                    Kind: NodeKind.Signal,
+                    A: i,
+                    B: 0,
+                    C: 0,
+                    K: 0
                 );
                 _live[i] = _signals[i];
             }
 
-            for (var i = SignalCount; i < _nodes.Length; i++)
+            for (int i = SignalCount; i < _nodes.Length; i++)
             {
-                var kind = (NodeKind)rnd.Next(1, 4);
-                var a = rnd.Next(i);
-                var b = rnd.Next(i);
-                var c = rnd.Next(i);
+                var kind = (NodeKind)rnd.Next(minValue: 1, maxValue: 4);
+                int a = rnd.Next(i);
+                int b = rnd.Next(i);
+                int c = rnd.Next(i);
                 _nodes[i] = new Node(
-                    kind,
-                    a,
-                    b,
-                    c,
-                    rnd.Next(1, 4)
+                    Kind: kind,
+                    A: a,
+                    B: b,
+                    C: c,
+                    K: rnd.Next(minValue: 1, maxValue: 4)
                 );
-                var index = i; // capture
+                int index = i; // capture
                 _live[i] = Computed.From(() => EvalLive(index));
             }
 
             // A handful of effects, each watching one computed: they must always end a cascade holding the
             // reference value (glitch-free, settled, exactly once per change).
-            for (var k = 0; k < _lastSeen.Length; k++)
+            for (int k = 0; k < _lastSeen.Length; k++)
             {
-                var node = SignalCount + rnd.Next(ComputedCount);
-                var slot = k;
+                int node = SignalCount + rnd.Next(ComputedCount);
+                int slot = k;
                 _effectSlots.Add((node, slot));
                 _effects.Add(new Effect(() => _lastSeen[slot] = _live[node].Value));
             }
@@ -131,13 +137,13 @@ public class ReactiveModelFuzzTests
         {
             foreach (var w in _watchers) w.Dispose();
             foreach (var e in _effects) e.Dispose();
-            for (var i = SignalCount; i < _live.Length; i++) (_live[i] as IDisposable)?.Dispose();
+            for (int i = SignalCount; i < _live.Length; i++) (_live[i] as IDisposable)?.Dispose();
         }
 
         public void Write(Random rnd)
         {
-            var i = rnd.Next(SignalCount);
-            var v = rnd.Next(0, 20);
+            int i = rnd.Next(SignalCount);
+            int v = rnd.Next(minValue: 0, maxValue: 20);
             _model[i] = v;
             _signals[i].Value = v;
         }
@@ -145,34 +151,36 @@ public class ReactiveModelFuzzTests
         public void BatchWrite(Random rnd)
         {
             var writes = new List<(int index, int value)>();
-            var count = rnd.Next(2, 5);
-            for (var k = 0; k < count; k++) writes.Add((rnd.Next(SignalCount), rnd.Next(0, 20)));
+            int count = rnd.Next(minValue: 2, maxValue: 5);
+            for (int k = 0; k < count; k++)
+                writes.Add((rnd.Next(SignalCount), rnd.Next(minValue: 0, maxValue: 20)));
 
             Reactive.Batch(() =>
                 {
-                    foreach (var (index, value) in writes) _signals[index].Value = value;
+                    foreach ((int index, int value) in writes) _signals[index].Value = value;
                 }
             );
-            foreach (var (index, value) in writes) _model[index] = value;
+            foreach ((int index, int value) in writes) _model[index] = value;
         }
 
         public void AssertRead(Random rnd)
         {
-            var i = SignalCount + rnd.Next(ComputedCount);
-            Assert.Equal(EvalModel(i), _live[i].Value);
-            Assert.Equal(EvalModel(i), ((Computed<int>)_live[i]).Peek());
+            int i = SignalCount + rnd.Next(ComputedCount);
+            Assert.Equal(expected: EvalModel(i), actual: _live[i].Value);
+            Assert.Equal(expected: EvalModel(i), actual: ((Computed<int>)_live[i]).Peek());
         }
 
         public void AssertAllReads()
         {
-            for (var i = 0; i < _live.Length; i++) Assert.Equal(EvalModel(i), _live[i].Value);
+            for (int i = 0; i < _live.Length; i++)
+                Assert.Equal(expected: EvalModel(i), actual: _live[i].Value);
         }
 
         /// <summary>Observing makes a computed watched — the push path and the edge bookkeeping.</summary>
         public void AddWatcher(Random rnd)
         {
             if (_watchers.Count > 6) return;
-            var i = SignalCount + rnd.Next(ComputedCount);
+            int i = SignalCount + rnd.Next(ComputedCount);
             _watchers.Add(_live[i].Observe(() => { }));
         }
 
@@ -180,18 +188,21 @@ public class ReactiveModelFuzzTests
         public void DropWatcher(Random rnd)
         {
             if (_watchers.Count == 0) return;
-            var k = rnd.Next(_watchers.Count);
+            int k = rnd.Next(_watchers.Count);
             _watchers[k].Dispose();
             _watchers.RemoveAt(k);
         }
 
         public void AssertEffectsSettled(int step)
         {
-            foreach (var (node, slot) in _effectSlots)
+            foreach ((int node, int slot) in _effectSlots)
+            {
                 Assert.True(
-                    _lastSeen[slot] == EvalModel(node),
+                    condition: _lastSeen[slot] == EvalModel(node),
+                    userMessage:
                     $"step {step}: effect on node {node} settled at {_lastSeen[slot]}, reference says {EvalModel(node)}"
                 );
+            }
         }
 
         // Reads the REAL graph (this is what a computed body runs).

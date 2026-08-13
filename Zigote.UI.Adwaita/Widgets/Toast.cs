@@ -1,6 +1,5 @@
 using Zigote.Core.Animation;
 using Zigote.Core.State;
-using Zigote.UI.Host;
 using Zigote.UI.Semantics;
 
 namespace Zigote.UI.Adwaita;
@@ -11,10 +10,7 @@ namespace Zigote.UI.Adwaita;
 /// </summary>
 public sealed class AdwToast
 {
-    public AdwToast(string title)
-    {
-        Title = title;
-    }
+    public AdwToast(string title) => Title = title;
 
     /// <summary>
     ///     Settable so the canonical GNOME undo counter works: re-adding the toast that is already
@@ -40,20 +36,21 @@ public sealed class AdwToast
 /// </summary>
 public sealed class AdwToastOverlay : ComposedWidget
 {
+    private const float EnterDuration = 0.2f;
+
+    private const float ExitDuration = 0.15f;
+
     // The toast surface is always dark, whatever the appearance — fixed colors, not theme reads.
     // `$toast_bg_color: #505053` — an opaque mid-grey, not a black wash: a translucent toast picks
     // up whatever it happens to be floating over, which is exactly what a notification must not do.
-    private static readonly Color Surface = Color.Rgb(80, 80, 83);
+    private static readonly Color Surface = Color.Rgb(r: 80, g: 80, b: 83);
 
-    private static readonly Color Fg = Color.Rgb(255, 255, 255);
-
-    private const float EnterDuration = 0.2f;
-    private const float ExitDuration = 0.15f;
+    private static readonly Color Fg = Color.Rgb(r: 255, g: 255, b: 255);
+    private readonly Signal<AdwToast?> _current = new(null);
+    private readonly AnimationController _present;
 
     private readonly Queue<AdwToast> _queue = new();
-    private readonly Signal<AdwToast?> _current = new(null);
     private readonly AnimationController _timer;
-    private readonly AnimationController _present;
     private Widget _child;
     private ThemeData _theme = AdwTheme.Light;
 
@@ -64,10 +61,15 @@ public sealed class AdwToastOverlay : ComposedWidget
     public AdwToastOverlay(Widget child)
     {
         _child = child;
-        _timer = new AnimationController(5f, this) { Curve = Curves.Linear };
+        _timer = new AnimationController(durationSeconds: 5f, vsync: this) {
+            Curve = Curves.Linear,
+        };
         _timer.OnCompleted += BeginExit;
         // Presentation: slide up + fade in on show, fade out before advancing the queue.
-        _present = new AnimationController(EnterDuration, this) { Curve = Curves.EaseOut };
+        _present =
+            new AnimationController(durationSeconds: EnterDuration, vsync: this) {
+                Curve = Curves.EaseOut,
+            };
         _present.OnTick += MarkNeedsLayout;
         _present.OnDismissed += ShowNext;
     }
@@ -75,7 +77,7 @@ public sealed class AdwToastOverlay : ComposedWidget
     public Widget Child
     {
         get => _child;
-        set => this.Set(ref _child, value);
+        set => this.Set(field: ref _child, value: value);
     }
 
     /// <summary>
@@ -91,7 +93,7 @@ public sealed class AdwToastOverlay : ComposedWidget
     /// </summary>
     public void AddToast(AdwToast toast)
     {
-        if (ReferenceEquals(toast, _current.Peek()))
+        if (ReferenceEquals(objA: toast, objB: _current.Peek()))
         {
             if (_titleLabel is not null) _titleLabel.Text = toast.Title;
             RestartTimeout(toast);
@@ -163,7 +165,9 @@ public sealed class AdwToastOverlay : ComposedWidget
     {
         var toast = _current.Value;
         return new Align(Alignment.BottomCenter) {
-            Child = toast is null ? null : new PresentLayer(_present, toast, BuildToast(toast)),
+            Child = toast is null
+                ? null
+                : new PresentLayer(anim: _present, toast: toast, child: BuildToast(toast)),
         };
     }
 
@@ -176,7 +180,7 @@ public sealed class AdwToastOverlay : ComposedWidget
         ) {
             Children = {
                 new Flexible(
-                    _titleLabel = new Label(toast.Title, 14f, Fg) {
+                    _titleLabel = new Label(text: toast.Title, fontSize: 14f, color: Fg) {
                         MaxLines = 1,
                         Overflow = TextOverflow.Ellipsis,
                     }
@@ -185,37 +189,46 @@ public sealed class AdwToastOverlay : ComposedWidget
         };
 
         if (!string.IsNullOrEmpty(toast.ButtonLabel))
+        {
             row.Children.Add(
                 FlatButton(
-                    new Padding(
-                        EdgeInsets.Symmetric(10f, 4f),
+                    content: new Padding(
+                        padding: EdgeInsets.Symmetric(horizontal: 10f, vertical: 4f),
                         // The accent-background variant, not the standalone one: the pill is always
                         // dark, and libadwaita's .osd scope likewise falls back to accent_bg_color
                         // because the on-light standalone accent is unreadable on it.
-                        new Label(toast.ButtonLabel!, 14f, _theme.Accent) {
+                        child: new Label(
+                            text: toast.ButtonLabel!,
+                            fontSize: 14f,
+                            color: _theme.Accent
+                        ) {
                             FontWeight = FontWeight.Bold,
                             MaxLines = 1,
                         }
                     ),
+                    radius:
                     13f, // half the ~26px button height — a pill that the focus ring can follow
-                    toast.ButtonLabel!,
-                    () =>
+                    label: toast.ButtonLabel!,
+                    onPressed: () =>
                     {
                         toast.OnButtonClicked?.Invoke();
                         BeginExit();
                     }
                 )
             );
+        }
 
         row.Children.Add(
             FlatButton(
-                SizedBox.Square(
-                    32f,
-                    new Center { Child = new IconGlyph(Icons.Close, 16f, Fg) }
+                content: SizedBox.Square(
+                    size: 32f,
+                    child: new Center {
+                        Child = new IconGlyph(glyph: Icons.Close, size: 16f, color: Fg),
+                    }
                 ),
-                16f,
-                "Dismiss",
-                BeginExit
+                radius: 16f,
+                label: "Dismiss",
+                onPressed: BeginExit
             )
         );
 
@@ -225,27 +238,27 @@ public sealed class AdwToastOverlay : ComposedWidget
             Elevation = Elevation.Z3,
             // `toast { padding: 6px; &:dir(ltr) { padding-left: 12px } }`.
             Child = new Padding(
-                EdgeInsets.Only(
-                    AdwMetrics.RowPaddingX,
-                    AdwMetrics.RowSpacing,
-                    AdwMetrics.RowSpacing,
-                    AdwMetrics.RowSpacing
+                padding: EdgeInsets.Only(
+                    left: AdwMetrics.RowPaddingX,
+                    top: AdwMetrics.RowSpacing,
+                    right: AdwMetrics.RowSpacing,
+                    bottom: AdwMetrics.RowSpacing
                 ),
-                row
+                child: row
             ),
         };
 
         // `toast { margin: 12px; margin-bottom: 24px }`.
         return new Padding(
-            EdgeInsets.Only(bottom: Spacing.Xxl),
-            new ConstrainedBox(
-                new Constraints(
-                    0f,
-                    450f,
-                    0f,
-                    float.PositiveInfinity
+            padding: EdgeInsets.Only(bottom: Spacing.Xxl),
+            child: new ConstrainedBox(
+                constraints: new Constraints(
+                    minWidth: 0f,
+                    maxWidth: 450f,
+                    minHeight: 0f,
+                    maxHeight: float.PositiveInfinity
                 ),
-                pill
+                child: pill
             )
         );
     }
@@ -268,7 +281,7 @@ public sealed class AdwToastOverlay : ComposedWidget
             OnPressed = onPressed,
             SemanticsLabel = label,
         };
-        press.WireFill(box, AdwTheme.Dark);
+        press.WireFill(box: box, theme: AdwTheme.Dark);
         return press;
     }
 
@@ -307,19 +320,19 @@ public sealed class AdwToastOverlay : ComposedWidget
         public override void Layout(Offset origin)
         {
             Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                _size.Width,
-                _size.Height
+                x: origin.X,
+                y: origin.Y,
+                width: _size.Width,
+                height: _size.Height
             );
             // Slide only on the way in; the exit is a pure fade.
-            var dy = anim.Status is AnimationStatus.Reverse ? 0f : Rise * (1f - anim.Value);
-            child.Layout(new Offset(origin.X, origin.Y + dy));
+            float dy = anim.Status is AnimationStatus.Reverse ? 0f : Rise * (1f - anim.Value);
+            child.Layout(new Offset(x: origin.X, y: origin.Y + dy));
         }
 
         public override void Paint(PaintList paint)
         {
-            var a = anim.Value;
+            float a = anim.Value;
             if (a <= 0.001f) return;
             if (a >= 0.999f)
             {
@@ -335,12 +348,9 @@ public sealed class AdwToastOverlay : ComposedWidget
         public override Widget? HitTest(Offset point)
         {
             if (anim.Value <= 0.001f) return null;
-            return Bounds.Contains(point.X, point.Y) ? child.HitTest(point) : null;
+            return Bounds.Contains(px: point.X, py: point.Y) ? child.HitTest(point) : null;
         }
 
-        public override IEnumerable<Widget> GetChildren()
-        {
-            return ChildOrEmpty(child);
-        }
+        public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(child);
     }
 }

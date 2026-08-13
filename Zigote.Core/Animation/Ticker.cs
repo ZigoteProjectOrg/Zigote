@@ -26,10 +26,7 @@ public sealed class Ticker : IDisposable
     private bool _disposed;
     private bool _running;
 
-    public Ticker(Action<float> onTick)
-    {
-        _onTick = onTick;
-    }
+    public Ticker(Action<float> onTick) => _onTick = onTick;
 
     /// <summary>When true the ticker does not fire its callback even while running.</summary>
     public bool Muted { get; set; }
@@ -40,8 +37,11 @@ public sealed class Ticker : IDisposable
         get
         {
             foreach (var t in Active)
+            {
                 if (t is { _running: true, Muted: false })
                     return true;
+            }
+
             return false;
         }
     }
@@ -56,18 +56,18 @@ public sealed class Ticker : IDisposable
     /// <summary>Advance all currently running, non-muted tickers by <paramref name="dt" /> seconds.</summary>
     public static void AdvanceAll(float dt)
     {
-        var count = Active.Count;
+        int count = Active.Count;
         if (count == 0) return;
         // Copy into a reusable buffer so callbacks can safely call Stop() on themselves.
         if (_advanceBuffer.Length < count)
             _advanceBuffer = new Ticker[count * 2];
         Active.CopyTo(
-            0,
-            _advanceBuffer,
-            0,
-            count
+            index: 0,
+            array: _advanceBuffer,
+            arrayIndex: 0,
+            count: count
         );
-        for (var i = 0; i < count; i++)
+        for (int i = 0; i < count; i++)
         {
             var t = _advanceBuffer[i];
             if (t is { _running: true, Muted: false })

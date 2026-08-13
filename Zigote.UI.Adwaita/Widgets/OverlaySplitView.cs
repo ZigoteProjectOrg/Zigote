@@ -1,5 +1,4 @@
 using Zigote.Core.Animation;
-using Zigote.UI.Host;
 using Zigote.UI.Widgets.Transitions;
 
 namespace Zigote.UI.Adwaita;
@@ -14,11 +13,12 @@ namespace Zigote.UI.Adwaita;
 public sealed class AdwOverlaySplitView : ComposedWidget
 {
     private readonly AnimationController _anim;
-    private bool _autoCollapsed;
     private float _autoCollapseBelow;
+    private bool _autoCollapsed;
     private bool _collapsed;
     private Widget? _content;
     private bool _entrancePlayed;
+    private SidebarReveal? _reveal;
     private Container? _scrim;
     private Color _scrimColor;
     private bool _showSidebar = true;
@@ -30,12 +30,13 @@ public sealed class AdwOverlaySplitView : ComposedWidget
     // during a resize drag means doing that every frame.
     private Container? _sidebarBox;
     private Positioned? _sidebarSlot;
-    private SidebarReveal? _reveal;
     private float _sidebarWidth = 260f;
 
     public AdwOverlaySplitView()
     {
-        _anim = new AnimationController(0.25f, this) { Curve = Curves.EaseOut };
+        _anim = new AnimationController(durationSeconds: 0.25f, vsync: this) {
+            Curve = Curves.EaseOut,
+        };
         _anim.OnTick += OnAnimTick;
         _anim.OnDismissed += OnHidden;
         _anim.Complete(); // sidebar starts shown
@@ -44,13 +45,13 @@ public sealed class AdwOverlaySplitView : ComposedWidget
     public Widget? Sidebar
     {
         get => _sidebar;
-        set => this.Set(ref _sidebar, value);
+        set => this.Set(field: ref _sidebar, value: value);
     }
 
     public Widget? Content
     {
         get => _content;
-        set => this.Set(ref _content, value);
+        set => this.Set(field: ref _content, value: value);
     }
 
     /// <summary>Whether the sidebar is visible (side-by-side uncollapsed, overlaid collapsed).</summary>
@@ -77,9 +78,7 @@ public sealed class AdwOverlaySplitView : ComposedWidget
                 _anim.Forward();
             }
             else
-            {
                 _anim.Reverse(); // overlay stays in the tree until OnHidden rebuilds without it
-            }
         }
     }
 
@@ -89,7 +88,7 @@ public sealed class AdwOverlaySplitView : ComposedWidget
     public bool Collapsed
     {
         get => _collapsed;
-        set => this.Set(ref _collapsed, value);
+        set => this.Set(field: ref _collapsed, value: value);
     }
 
     /// <summary>
@@ -100,7 +99,7 @@ public sealed class AdwOverlaySplitView : ComposedWidget
     public float AutoCollapseBelow
     {
         get => _autoCollapseBelow;
-        set => this.Set(ref _autoCollapseBelow, value);
+        set => this.Set(field: ref _autoCollapseBelow, value: value);
     }
 
     /// <summary>
@@ -126,7 +125,7 @@ public sealed class AdwOverlaySplitView : ComposedWidget
 
             // Adjust the built tree in place where possible; only a tree that does not exist yet
             // needs building.
-            var adjusted = false;
+            bool adjusted = false;
             if (_sidebarBox is not null)
             {
                 _sidebarBox.Width = value;
@@ -196,7 +195,7 @@ public sealed class AdwOverlaySplitView : ComposedWidget
         if (AutoCollapseBelow <= 0f)
         {
             _autoCollapsed = false;
-            return BuildPanes(theme, p);
+            return BuildPanes(theme: theme, p: p);
         }
 
         // One retained tree for the branch currently in force: the builder runs on every constraint
@@ -205,15 +204,15 @@ public sealed class AdwOverlaySplitView : ComposedWidget
         // crossing the breakpoint rebuilds — which also keeps _reveal/_scrim/_sidebarSlot pointing
         // at the live tree, so a SidebarWidth change still lands.
         Widget? branch = null;
-        var branchCollapsed = false;
+        bool branchCollapsed = false;
         return new LayoutBuilder((_, c) =>
             {
-                var auto = c.MaxWidth < AutoCollapseBelow;
+                bool auto = c.MaxWidth < AutoCollapseBelow;
                 if (branch is null || auto != branchCollapsed)
                 {
                     _autoCollapsed = auto;
                     branchCollapsed = auto;
-                    branch = BuildPanes(theme, p);
+                    branch = BuildPanes(theme: theme, p: p);
                 }
 
                 return branch;
@@ -238,9 +237,9 @@ public sealed class AdwOverlaySplitView : ComposedWidget
                 Child = Sidebar,
             };
             _reveal = new SidebarReveal(
-                _anim,
-                SidebarWidth + 1f,
-                new Row(crossAxisAlignment: CrossAxisAlignment.Stretch) {
+                anim: _anim,
+                fullWidth: SidebarWidth + 1f,
+                child: new Row(crossAxisAlignment: CrossAxisAlignment.Stretch) {
                     Children = {
                         _sidebarBox,
                         // `.sidebar-pane { box-shadow: inset -1px 0 var(--sidebar-border-color) }`.
@@ -278,16 +277,16 @@ public sealed class AdwOverlaySplitView : ComposedWidget
             Background = _scrimColor.WithAlpha(_scrimColor.A * _anim.Value),
         };
         _sidebarSlot = new Positioned(
-            new SlideTransition(
-                _anim,
-                new DecoratedBox {
+            child: new SlideTransition(
+                controller: _anim,
+                child: new DecoratedBox {
                     Fill = p.SidebarBg,
                     Elevation = Elevation.Z3,
                     Child = Sidebar,
                 }
-            ) { BeginOffset = new Offset(-SidebarWidth, 0f) },
-            0,
-            0,
+            ) { BeginOffset = new Offset(x: -SidebarWidth, y: 0f) },
+            left: 0,
+            top: 0,
             bottom: 0,
             width: SidebarWidth
         );
@@ -295,7 +294,7 @@ public sealed class AdwOverlaySplitView : ComposedWidget
             new Stack {
                 Children = {
                     content,
-                    Positioned.Fill(new GestureDetector(_scrim, CloseSidebar)),
+                    Positioned.Fill(new GestureDetector(child: _scrim, onTap: CloseSidebar)),
                     _sidebarSlot,
                 },
             }
@@ -325,26 +324,26 @@ public sealed class AdwOverlaySplitView : ComposedWidget
         {
             var childSize = child.Measure(
                 new Constraints(
-                    FullWidth,
-                    FullWidth,
-                    c.MinHeight,
-                    c.MaxHeight
+                    minWidth: FullWidth,
+                    maxWidth: FullWidth,
+                    minHeight: c.MinHeight,
+                    maxHeight: c.MaxHeight
                 )
             );
-            _size = new Size(MathF.Round(FullWidth * anim.Value), childSize.Height);
+            _size = new Size(width: MathF.Round(FullWidth * anim.Value), height: childSize.Height);
             return _size;
         }
 
         public override void Layout(Offset origin)
         {
             Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                _size.Width,
-                _size.Height
+                x: origin.X,
+                y: origin.Y,
+                width: _size.Width,
+                height: _size.Height
             );
             // Right-anchored: the hidden part hangs off to the left, clipped in Paint.
-            child.Layout(new Offset(origin.X + _size.Width - FullWidth, origin.Y));
+            child.Layout(new Offset(x: origin.X + _size.Width - FullWidth, y: origin.Y));
         }
 
         public override void Paint(PaintList paint)
@@ -355,14 +354,10 @@ public sealed class AdwOverlaySplitView : ComposedWidget
             paint.AddClipEnd();
         }
 
-        public override Widget? HitTest(Offset point)
-        {
-            return Bounds.Contains(point.X, point.Y) ? child.HitTest(point) : null;
-        }
+        public override Widget? HitTest(Offset point) => Bounds.Contains(px: point.X, py: point.Y)
+            ? child.HitTest(point)
+            : null;
 
-        public override IEnumerable<Widget> GetChildren()
-        {
-            return ChildOrEmpty(child);
-        }
+        public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(child);
     }
 }

@@ -6,48 +6,48 @@ public class PluralOperandsTests
     public void Integer_operands()
     {
         var op = PluralOperands.FromLong(11);
-        Assert.Equal(11, op.I);
-        Assert.Equal(0, op.V);
-        Assert.Equal(0, op.F);
-        Assert.Equal(11d, op.N);
+        Assert.Equal(expected: 11, actual: op.I);
+        Assert.Equal(expected: 0, actual: op.V);
+        Assert.Equal(expected: 0, actual: op.F);
+        Assert.Equal(expected: 11d, actual: op.N);
     }
 
     [Fact]
     public void Fraction_operands_trim_trailing_zeros_for_w_t()
     {
-        var op = PluralOperands.FromDouble(1.50, 2); // "1.50"
-        Assert.Equal(1, op.I);
-        Assert.Equal(2, op.V); // visible fraction digits WITH trailing zeros
-        Assert.Equal(1, op.W); // WITHOUT trailing zeros
-        Assert.Equal(50, op.F);
-        Assert.Equal(5, op.T);
+        var op = PluralOperands.FromDouble(value: 1.50, fractionDigits: 2); // "1.50"
+        Assert.Equal(expected: 1, actual: op.I);
+        Assert.Equal(expected: 2, actual: op.V); // visible fraction digits WITH trailing zeros
+        Assert.Equal(expected: 1, actual: op.W); // WITHOUT trailing zeros
+        Assert.Equal(expected: 50, actual: op.F);
+        Assert.Equal(expected: 5, actual: op.T);
     }
 
     [Fact]
     public void Bare_double_has_no_visible_fraction_when_integral()
     {
         var op = PluralOperands.FromDouble(2.0);
-        Assert.Equal(2, op.I);
-        Assert.Equal(0, op.V);
+        Assert.Equal(expected: 2, actual: op.I);
+        Assert.Equal(expected: 0, actual: op.V);
     }
 
     [Fact]
     public void Negative_values_use_absolute_operands()
     {
         var op = PluralOperands.FromDouble(-3.5);
-        Assert.Equal(3, op.I);
-        Assert.Equal(3.5d, op.N);
-        Assert.Equal(1, op.V);
-        Assert.Equal(5, op.F);
+        Assert.Equal(expected: 3, actual: op.I);
+        Assert.Equal(expected: 3.5d, actual: op.N);
+        Assert.Equal(expected: 1, actual: op.V);
+        Assert.Equal(expected: 5, actual: op.F);
     }
 }
 
 public class PluralRulesCardinalTests
 {
-    private static PluralCategory Card(string lang, double n)
-    {
-        return PluralRules.Cardinal(lang, PluralOperands.FromDouble(n));
-    }
+    private static PluralCategory Card(string lang, double n) => PluralRules.Cardinal(
+        language: lang,
+        op: PluralOperands.FromDouble(n)
+    );
 
     [Theory]
     [InlineData(0, PluralCategory.Other)]
@@ -57,16 +57,19 @@ public class PluralRulesCardinalTests
     [InlineData(100, PluralCategory.Other)]
     public void English(int n, PluralCategory expected)
     {
-        Assert.Equal(expected, Card("en", n));
-        Assert.Equal(expected, Card("de", n)); // same rule family
+        Assert.Equal(expected: expected, actual: Card(lang: "en", n: n));
+        Assert.Equal(expected: expected, actual: Card(lang: "de", n: n)); // same rule family
     }
 
     [Fact]
     public void English_displayed_fraction_is_other()
     {
         Assert.Equal(
-            PluralCategory.Other,
-            PluralRules.Cardinal("en", PluralOperands.FromDouble(1.0, 1))
+            expected: PluralCategory.Other,
+            actual: PluralRules.Cardinal(
+                language: "en",
+                op: PluralOperands.FromDouble(value: 1.0, fractionDigits: 1)
+            )
         );
     }
 
@@ -83,15 +86,15 @@ public class PluralRulesCardinalTests
     [InlineData(0, PluralCategory.Many)]
     public void Russian(int n, PluralCategory expected)
     {
-        Assert.Equal(expected, Card("ru", n));
-        Assert.Equal(expected, Card("uk", n));
+        Assert.Equal(expected: expected, actual: Card(lang: "ru", n: n));
+        Assert.Equal(expected: expected, actual: Card(lang: "uk", n: n));
     }
 
     [Fact]
-    public void Russian_fraction_is_other()
-    {
-        Assert.Equal(PluralCategory.Other, Card("ru", 1.5));
-    }
+    public void Russian_fraction_is_other() => Assert.Equal(
+        expected: PluralCategory.Other,
+        actual: Card(lang: "ru", n: 1.5)
+    );
 
     [Theory]
     [InlineData(1, PluralCategory.One)]
@@ -102,10 +105,10 @@ public class PluralRulesCardinalTests
     [InlineData(12, PluralCategory.Many)]
     [InlineData(22, PluralCategory.Few)]
     [InlineData(0, PluralCategory.Many)]
-    public void Polish(int n, PluralCategory expected)
-    {
-        Assert.Equal(expected, Card("pl", n));
-    }
+    public void Polish(int n, PluralCategory expected) => Assert.Equal(
+        expected: expected,
+        actual: Card(lang: "pl", n: n)
+    );
 
     [Theory]
     [InlineData(1, PluralCategory.One)]
@@ -115,15 +118,15 @@ public class PluralRulesCardinalTests
     [InlineData(0, PluralCategory.Other)]
     public void Czech(int n, PluralCategory expected)
     {
-        Assert.Equal(expected, Card("cs", n));
-        Assert.Equal(expected, Card("sk", n));
+        Assert.Equal(expected: expected, actual: Card(lang: "cs", n: n));
+        Assert.Equal(expected: expected, actual: Card(lang: "sk", n: n));
     }
 
     [Fact]
-    public void Czech_fraction_is_many()
-    {
-        Assert.Equal(PluralCategory.Many, Card("cs", 1.5));
-    }
+    public void Czech_fraction_is_many() => Assert.Equal(
+        expected: PluralCategory.Many,
+        actual: Card(lang: "cs", n: 1.5)
+    );
 
     [Theory]
     [InlineData(0, PluralCategory.Zero)]
@@ -135,10 +138,10 @@ public class PluralRulesCardinalTests
     [InlineData(99, PluralCategory.Many)]
     [InlineData(100, PluralCategory.Other)]
     [InlineData(103, PluralCategory.Few)]
-    public void Arabic(int n, PluralCategory expected)
-    {
-        Assert.Equal(expected, Card("ar", n));
-    }
+    public void Arabic(int n, PluralCategory expected) => Assert.Equal(
+        expected: expected,
+        actual: Card(lang: "ar", n: n)
+    );
 
     [Theory]
     [InlineData(1, PluralCategory.One)]
@@ -147,10 +150,10 @@ public class PluralRulesCardinalTests
     [InlineData(10, PluralCategory.Other)]
     [InlineData(20, PluralCategory.Many)]
     [InlineData(30, PluralCategory.Many)]
-    public void Hebrew(int n, PluralCategory expected)
-    {
-        Assert.Equal(expected, Card("he", n));
-    }
+    public void Hebrew(int n, PluralCategory expected) => Assert.Equal(
+        expected: expected,
+        actual: Card(lang: "he", n: n)
+    );
 
     [Theory]
     [InlineData(1, PluralCategory.One)]
@@ -160,16 +163,16 @@ public class PluralRulesCardinalTests
     [InlineData(9, PluralCategory.Few)]
     [InlineData(12, PluralCategory.Other)]
     [InlineData(10, PluralCategory.Other)]
-    public void Lithuanian(int n, PluralCategory expected)
-    {
-        Assert.Equal(expected, Card("lt", n));
-    }
+    public void Lithuanian(int n, PluralCategory expected) => Assert.Equal(
+        expected: expected,
+        actual: Card(lang: "lt", n: n)
+    );
 
     [Fact]
-    public void Lithuanian_fraction_is_many()
-    {
-        Assert.Equal(PluralCategory.Many, Card("lt", 1.5));
-    }
+    public void Lithuanian_fraction_is_many() => Assert.Equal(
+        expected: PluralCategory.Many,
+        actual: Card(lang: "lt", n: 1.5)
+    );
 
     [Theory]
     [InlineData(1, PluralCategory.One)]
@@ -178,10 +181,10 @@ public class PluralRulesCardinalTests
     [InlineData(20, PluralCategory.Other)]
     [InlineData(101, PluralCategory.Other)]
     [InlineData(0, PluralCategory.Few)]
-    public void Romanian(int n, PluralCategory expected)
-    {
-        Assert.Equal(expected, Card("ro", n));
-    }
+    public void Romanian(int n, PluralCategory expected) => Assert.Equal(
+        expected: expected,
+        actual: Card(lang: "ro", n: n)
+    );
 
     [Theory]
     [InlineData(0, PluralCategory.One)]
@@ -189,15 +192,15 @@ public class PluralRulesCardinalTests
     [InlineData(2, PluralCategory.Other)]
     public void French_and_Portuguese(int n, PluralCategory expected)
     {
-        Assert.Equal(expected, Card("fr", n));
-        Assert.Equal(expected, Card("pt", n));
+        Assert.Equal(expected: expected, actual: Card(lang: "fr", n: n));
+        Assert.Equal(expected: expected, actual: Card(lang: "pt", n: n));
     }
 
     [Fact]
-    public void French_fraction_with_integer_one_is_one()
-    {
-        Assert.Equal(PluralCategory.One, Card("fr", 1.5)); // i = 1 -> one
-    }
+    public void French_fraction_with_integer_one_is_one() => Assert.Equal(
+        expected: PluralCategory.One,
+        actual: Card(lang: "fr", n: 1.5)
+    ); // i = 1 -> one
 
     [Theory]
     [InlineData(0, PluralCategory.Other)]
@@ -205,18 +208,18 @@ public class PluralRulesCardinalTests
     [InlineData(2, PluralCategory.Other)]
     public void Spanish_and_Turkish(int n, PluralCategory expected)
     {
-        Assert.Equal(expected, Card("es", n));
-        Assert.Equal(expected, Card("tr", n));
+        Assert.Equal(expected: expected, actual: Card(lang: "es", n: n));
+        Assert.Equal(expected: expected, actual: Card(lang: "tr", n: n));
     }
 
     [Theory]
     [InlineData(0, PluralCategory.One)] // i = 0 -> one
     [InlineData(1, PluralCategory.One)]
     [InlineData(2, PluralCategory.Other)]
-    public void Hindi(int n, PluralCategory expected)
-    {
-        Assert.Equal(expected, Card("hi", n));
-    }
+    public void Hindi(int n, PluralCategory expected) => Assert.Equal(
+        expected: expected,
+        actual: Card(lang: "hi", n: n)
+    );
 
     [Theory]
     [InlineData("ja")]
@@ -226,7 +229,7 @@ public class PluralRulesCardinalTests
     [InlineData("th")]
     public void No_plural_languages_are_always_other(string lang)
     {
-        foreach (var n in new[] {
+        foreach (int n in new[] {
                      0,
                      1,
                      2,
@@ -234,24 +237,22 @@ public class PluralRulesCardinalTests
                      11,
                      100,
                  })
-            Assert.Equal(PluralCategory.Other, Card(lang, n));
+            Assert.Equal(expected: PluralCategory.Other, actual: Card(lang: lang, n: n));
     }
 
     [Theory]
     [InlineData(1, PluralCategory.One)]
     [InlineData(2, PluralCategory.Other)]
-    public void Unknown_language_defaults_to_english_like(int n, PluralCategory expected)
-    {
-        Assert.Equal(expected, Card("xyz", n));
-    }
+    public void Unknown_language_defaults_to_english_like(int n, PluralCategory expected) =>
+        Assert.Equal(expected: expected, actual: Card(lang: "xyz", n: n));
 }
 
 public class PluralRulesOrdinalTests
 {
-    private static PluralCategory Ord(string lang, long n)
-    {
-        return PluralRules.Ordinal(lang, PluralOperands.FromLong(n));
-    }
+    private static PluralCategory Ord(string lang, long n) => PluralRules.Ordinal(
+        language: lang,
+        op: PluralOperands.FromLong(n)
+    );
 
     [Theory]
     [InlineData(1, PluralCategory.One)] // 1st
@@ -266,15 +267,15 @@ public class PluralRulesOrdinalTests
     [InlineData(23, PluralCategory.Few)]
     [InlineData(101, PluralCategory.One)]
     [InlineData(111, PluralCategory.Other)]
-    public void English_ordinal(int n, PluralCategory expected)
-    {
-        Assert.Equal(expected, Ord("en", n));
-    }
+    public void English_ordinal(int n, PluralCategory expected) => Assert.Equal(
+        expected: expected,
+        actual: Ord(lang: "en", n: n)
+    );
 
     [Fact]
     public void Default_ordinal_is_other()
     {
-        foreach (var n in new[] {
+        foreach (int n in new[] {
                      1,
                      2,
                      3,
@@ -282,6 +283,6 @@ public class PluralRulesOrdinalTests
                      11,
                      21,
                  })
-            Assert.Equal(PluralCategory.Other, Ord("ru", n));
+            Assert.Equal(expected: PluralCategory.Other, actual: Ord(lang: "ru", n: n));
     }
 }

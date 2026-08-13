@@ -47,7 +47,7 @@ public sealed class SmoothScroller(Action onChanged) : IDisposable
     public bool MoveBy(float delta, bool animate)
     {
         _flingVelocity = 0f; // direct input overrides inertia
-        var clamped = Math.Clamp(Target + delta, 0f, MathF.Max(0f, Max));
+        float clamped = Math.Clamp(value: Target + delta, min: 0f, max: MathF.Max(x: 0f, y: Max));
         if (MathF.Abs(clamped - Offset) < 0.05f && MathF.Abs(clamped - Target) < 0.05f)
             return false;
         Target = clamped;
@@ -60,14 +60,14 @@ public sealed class SmoothScroller(Action onChanged) : IDisposable
     public void JumpTo(float offset)
     {
         _flingVelocity = 0f;
-        Settle(Math.Clamp(offset, 0f, MathF.Max(0f, Max)));
+        Settle(Math.Clamp(value: offset, min: 0f, max: MathF.Max(x: 0f, y: Max)));
     }
 
     /// <summary>Ease toward an absolute offset (reveal-into-view). No-op if already there.</summary>
     public void AnimateTo(float offset)
     {
         _flingVelocity = 0f;
-        var clamped = Math.Clamp(offset, 0f, MathF.Max(0f, Max));
+        float clamped = Math.Clamp(value: offset, min: 0f, max: MathF.Max(x: 0f, y: Max));
         if (MathF.Abs(clamped - Target) < 0.05f && MathF.Abs(clamped - Offset) < 0.05f) return;
         Target = clamped;
         (_ticker ??= new Ticker(Tick)).Start();
@@ -81,7 +81,7 @@ public sealed class SmoothScroller(Action onChanged) : IDisposable
     /// </summary>
     public bool Fling(float velocity)
     {
-        var max = MathF.Max(0f, Max);
+        float max = MathF.Max(x: 0f, y: Max);
         if (MathF.Abs(velocity) < MinFlingSpeed) return false;
         if (velocity < 0f && Offset <= 0f) return false;
         if (velocity > 0f && Offset >= max) return false;
@@ -94,9 +94,9 @@ public sealed class SmoothScroller(Action onChanged) : IDisposable
     /// <summary>Re-clamp current + target after a content/viewport size change (call in Layout).</summary>
     public void Reclamp()
     {
-        var max = MathF.Max(0f, Max);
-        Target = Math.Clamp(Target, 0f, max);
-        Offset = Math.Clamp(Offset, 0f, max);
+        float max = MathF.Max(x: 0f, y: Max);
+        Target = Math.Clamp(value: Target, min: 0f, max: max);
+        Offset = Math.Clamp(value: Offset, min: 0f, max: max);
     }
 
     private void Settle(float v)
@@ -110,13 +110,13 @@ public sealed class SmoothScroller(Action onChanged) : IDisposable
     {
         if (_flingVelocity != 0f)
         {
-            var max = MathF.Max(0f, Max);
-            var next = Offset + _flingVelocity * dt;
+            float max = MathF.Max(x: 0f, y: Max);
+            float next = Offset + (_flingVelocity * dt);
             _flingVelocity *= MathF.Exp(-dt * FlingFriction);
             if (next <= 0f || next >= max || MathF.Abs(_flingVelocity) < MinFlingSpeed)
             {
                 _flingVelocity = 0f;
-                Settle(Math.Clamp(next, 0f, max));
+                Settle(Math.Clamp(value: next, min: 0f, max: max));
                 return;
             }
 
@@ -125,7 +125,7 @@ public sealed class SmoothScroller(Action onChanged) : IDisposable
             return;
         }
 
-        var k = 1f - MathF.Exp(-dt * Ease); // frame-rate independent
+        float k = 1f - MathF.Exp(-dt * Ease); // frame-rate independent
         Offset += (Target - Offset) * k;
         if (MathF.Abs(Target - Offset) < 0.4f)
         {

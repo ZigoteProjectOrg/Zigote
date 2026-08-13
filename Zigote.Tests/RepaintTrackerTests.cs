@@ -28,8 +28,8 @@ public class RepaintTrackerTests
         Assert.True(t.AnyDirty);
 
         PaintFrame(t);
-        Assert.Equal(1, t.RootPaints);
-        Assert.Equal(1, t.OverlayPaints);
+        Assert.Equal(expected: 1, actual: t.RootPaints);
+        Assert.Equal(expected: 1, actual: t.OverlayPaints);
         Assert.False(t.AnyDirty); // settled — a subsequent idle frame paints nothing
     }
 
@@ -40,7 +40,7 @@ public class RepaintTrackerTests
         PaintFrame(t); // settle at (1, 1)
 
         // e.g. debug-overlay live metrics / tooltip / snackbar ticking every frame
-        for (var i = 0; i < 10; i++)
+        for (int i = 0; i < 10; i++)
         {
             t.MarkOverlay();
             Assert.True(t.AnyDirty);
@@ -48,8 +48,14 @@ public class RepaintTrackerTests
             PaintFrame(t);
         }
 
-        Assert.Equal(1, t.RootPaints); // the (potentially large) root tree is walked exactly once
-        Assert.Equal(11, t.OverlayPaints); // overlay re-walked each tick (+ the initial frame)
+        Assert.Equal(
+            expected: 1,
+            actual: t.RootPaints
+        ); // the (potentially large) root tree is walked exactly once
+        Assert.Equal(
+            expected: 11,
+            actual: t.OverlayPaints
+        ); // overlay re-walked each tick (+ the initial frame)
     }
 
     [Fact]
@@ -58,7 +64,7 @@ public class RepaintTrackerTests
         var t = new RepaintTracker();
         PaintFrame(t); // settle
 
-        for (var i = 0; i < 10; i++)
+        for (int i = 0; i < 10; i++)
         {
             t.MarkRoot(); // e.g. dragging a root slider
             Assert.True(t.RootDirty);
@@ -66,8 +72,11 @@ public class RepaintTrackerTests
             PaintFrame(t);
         }
 
-        Assert.Equal(11, t.RootPaints);
-        Assert.Equal(1, t.OverlayPaints); // overlay never re-walked during the drag
+        Assert.Equal(expected: 11, actual: t.RootPaints);
+        Assert.Equal(
+            expected: 1,
+            actual: t.OverlayPaints
+        ); // overlay never re-walked during the drag
     }
 
     [Fact]
@@ -78,8 +87,8 @@ public class RepaintTrackerTests
         Assert.False(t.AnyDirty);
 
         PaintFrame(t); // idle frame — no layer dirty
-        Assert.Equal(1, t.RootPaints);
-        Assert.Equal(1, t.OverlayPaints);
+        Assert.Equal(expected: 1, actual: t.RootPaints);
+        Assert.Equal(expected: 1, actual: t.OverlayPaints);
     }
 
     [Fact]
@@ -91,8 +100,8 @@ public class RepaintTrackerTests
         t.MarkAll();
         Assert.True(t.RootDirty && t.OverlayDirty);
         PaintFrame(t);
-        Assert.Equal(2, t.RootPaints);
-        Assert.Equal(2, t.OverlayPaints);
+        Assert.Equal(expected: 2, actual: t.RootPaints);
+        Assert.Equal(expected: 2, actual: t.OverlayPaints);
     }
 
     // ── Sub-rectangle damage accumulation (partial repaint) ─────────────────────
@@ -102,7 +111,7 @@ public class RepaintTrackerTests
     {
         var t = new RepaintTracker();
         Assert.True(t.FullDamage); // nothing preserved yet — the first frame must clear everything
-        Assert.Equal(0, t.DamageCount);
+        Assert.Equal(expected: 0, actual: t.DamageCount);
         Assert.True(t.Damage.IsEmpty);
     }
 
@@ -112,7 +121,7 @@ public class RepaintTrackerTests
         var t = new RepaintTracker();
         t.ResetDamage();
         Assert.False(t.FullDamage);
-        Assert.Equal(0, t.DamageCount);
+        Assert.Equal(expected: 0, actual: t.DamageCount);
     }
 
     [Fact]
@@ -123,18 +132,18 @@ public class RepaintTrackerTests
         t.ResetDamage();
 
         var region = new Rect(
-            10,
-            20,
-            30,
-            40
+            x: 10,
+            y: 20,
+            width: 30,
+            height: 40
         );
         t.AddDamageRoot(region);
 
         Assert.True(t.RootDirty);
         Assert.False(t.OverlayDirty);
         Assert.False(t.FullDamage);
-        Assert.Equal(1, t.DamageCount);
-        Assert.Equal(region, t.Damage[0]);
+        Assert.Equal(expected: 1, actual: t.DamageCount);
+        Assert.Equal(expected: region, actual: t.Damage[0]);
     }
 
     [Fact]
@@ -146,15 +155,15 @@ public class RepaintTrackerTests
 
         t.AddDamageOverlay(
             new Rect(
-                0,
-                0,
-                5,
-                5
+                x: 0,
+                y: 0,
+                width: 5,
+                height: 5
             )
         );
         Assert.True(t.OverlayDirty);
         Assert.False(t.RootDirty);
-        Assert.Equal(1, t.DamageCount);
+        Assert.Equal(expected: 1, actual: t.DamageCount);
     }
 
     [Fact]
@@ -165,21 +174,21 @@ public class RepaintTrackerTests
 
         t.AddDamageRoot(
             new Rect(
-                0,
-                0,
-                10,
-                10
+                x: 0,
+                y: 0,
+                width: 10,
+                height: 10
             )
         );
         t.AddDamageRoot(
             new Rect(
-                100,
-                100,
-                10,
-                10
+                x: 100,
+                y: 100,
+                width: 10,
+                height: 10
             )
         );
-        Assert.Equal(2, t.DamageCount);
+        Assert.Equal(expected: 2, actual: t.DamageCount);
     }
 
     [Fact]
@@ -191,21 +200,21 @@ public class RepaintTrackerTests
 
         t.AddDamageRoot(
             new Rect(
-                0,
-                0,
-                10,
-                10
+                x: 0,
+                y: 0,
+                width: 10,
+                height: 10
             )
         );
         t.AddDamageRoot(
             new Rect(
-                10,
-                0,
-                10,
-                10
+                x: 10,
+                y: 0,
+                width: 10,
+                height: 10
             )
         );
-        Assert.Equal(2, t.DamageCount);
+        Assert.Equal(expected: 2, actual: t.DamageCount);
     }
 
     [Fact]
@@ -216,29 +225,29 @@ public class RepaintTrackerTests
 
         t.AddDamageRoot(
             new Rect(
-                0,
-                0,
-                10,
-                10
+                x: 0,
+                y: 0,
+                width: 10,
+                height: 10
             )
         );
         t.AddDamageRoot(
             new Rect(
-                5,
-                5,
-                10,
-                10
+                x: 5,
+                y: 5,
+                width: 10,
+                height: 10
             )
         ); // overlaps the first
-        Assert.Equal(1, t.DamageCount);
+        Assert.Equal(expected: 1, actual: t.DamageCount);
         Assert.Equal(
-            new Rect(
-                0,
-                0,
-                15,
-                15
+            expected: new Rect(
+                x: 0,
+                y: 0,
+                width: 15,
+                height: 15
             ),
-            t.Damage[0]
+            actual: t.Damage[0]
         );
     }
 
@@ -251,39 +260,39 @@ public class RepaintTrackerTests
 
         t.AddDamageRoot(
             new Rect(
-                0,
-                0,
-                10,
-                10
+                x: 0,
+                y: 0,
+                width: 10,
+                height: 10
             )
         );
         t.AddDamageRoot(
             new Rect(
-                20,
-                0,
-                10,
-                10
+                x: 20,
+                y: 0,
+                width: 10,
+                height: 10
             )
         );
-        Assert.Equal(2, t.DamageCount);
+        Assert.Equal(expected: 2, actual: t.DamageCount);
 
         t.AddDamageRoot(
             new Rect(
-                8,
-                0,
-                14,
-                10
+                x: 8,
+                y: 0,
+                width: 14,
+                height: 10
             )
         ); // overlaps both -> all three collapse
-        Assert.Equal(1, t.DamageCount);
+        Assert.Equal(expected: 1, actual: t.DamageCount);
         Assert.Equal(
-            new Rect(
-                0,
-                0,
-                30,
-                10
+            expected: new Rect(
+                x: 0,
+                y: 0,
+                width: 30,
+                height: 10
             ),
-            t.Damage[0]
+            actual: t.Damage[0]
         );
     }
 
@@ -297,7 +306,7 @@ public class RepaintTrackerTests
         t.AddDamageRoot(Rect.Zero);
         Assert.True(t.RootDirty);
         Assert.True(t.FullDamage);
-        Assert.Equal(0, t.DamageCount);
+        Assert.Equal(expected: 0, actual: t.DamageCount);
     }
 
     [Fact]
@@ -308,10 +317,10 @@ public class RepaintTrackerTests
 
         t.AddDamageRoot(
             new Rect(
-                0,
-                0,
-                10,
-                10
+                x: 0,
+                y: 0,
+                width: 10,
+                height: 10
             )
         );
         t.MarkAll();
@@ -330,14 +339,14 @@ public class RepaintTrackerTests
         t.MarkAll();
         t.AddDamageRoot(
             new Rect(
-                0,
-                0,
-                10,
-                10
+                x: 0,
+                y: 0,
+                width: 10,
+                height: 10
             )
         ); // full already won — no partial regions
         Assert.True(t.FullDamage);
-        Assert.Equal(0, t.DamageCount);
+        Assert.Equal(expected: 0, actual: t.DamageCount);
     }
 
     [Fact]
@@ -347,18 +356,20 @@ public class RepaintTrackerTests
         t.ResetDamage();
 
         // One more than the cap, all disjoint, so none merge.
-        for (var i = 0; i <= RepaintTracker.MaxDamageRects; i++)
+        for (int i = 0; i <= RepaintTracker.MaxDamageRects; i++)
+        {
             t.AddDamageRoot(
                 new Rect(
-                    i * 20,
-                    0,
-                    10,
-                    10
+                    x: i * 20,
+                    y: 0,
+                    width: 10,
+                    height: 10
                 )
             );
+        }
 
         Assert.True(t.FullDamage);
-        Assert.Equal(0, t.DamageCount);
+        Assert.Equal(expected: 0, actual: t.DamageCount);
     }
 
     [Fact]
@@ -379,17 +390,17 @@ public class RepaintTrackerTests
         t.ResetDamage();
         t.AddDamageRoot(
             new Rect(
-                0,
-                0,
-                10,
-                10
+                x: 0,
+                y: 0,
+                width: 10,
+                height: 10
             )
         );
-        Assert.Equal(1, t.DamageCount);
+        Assert.Equal(expected: 1, actual: t.DamageCount);
 
         t.ResetDamage();
         Assert.False(t.FullDamage);
-        Assert.Equal(0, t.DamageCount);
+        Assert.Equal(expected: 0, actual: t.DamageCount);
     }
 
     // ── App-routing scenarios (model MarkPaintFor / RequestPaintFor call sites) ──
@@ -405,21 +416,21 @@ public class RepaintTrackerTests
         // used to route through MarkAll, clobbering the precise damage and re-walking both layers).
         var t = new RepaintTracker();
         var thumb = new Rect(
-            40,
-            10,
-            24,
-            24
+            x: 40,
+            y: 10,
+            width: 24,
+            height: 24
         );
         PaintFrame(t); // first frame settles both layers
         t.ResetDamage(); // enter partial mode
 
-        for (var frame = 0; frame < 30; frame++)
+        for (int frame = 0; frame < 30; frame++)
         {
             t.AddDamageRoot(thumb); // the widget's own MarkNeedsPaint
             t.AddDamageRoot(thumb); // App.MarkPaintFor(_capturedWidget) — merges, idempotent
 
             Assert.False(t.FullDamage);
-            Assert.Equal(1, t.DamageCount); // one merged region, not a full clear
+            Assert.Equal(expected: 1, actual: t.DamageCount); // one merged region, not a full clear
             Assert.True(t.RootDirty);
             Assert.False(
                 t.OverlayDirty
@@ -429,8 +440,8 @@ public class RepaintTrackerTests
         }
 
         Assert.Equal(
-            1,
-            t.OverlayPaints
+            expected: 1,
+            actual: t.OverlayPaints
         ); // overlay painted only once (the settle) — never during the drag
     }
 
@@ -444,22 +455,22 @@ public class RepaintTrackerTests
         t.ResetDamage();
 
         var buttonA = new Rect(
-            0,
-            0,
-            80,
-            30
+            x: 0,
+            y: 0,
+            width: 80,
+            height: 30
         );
         var buttonB = new Rect(
-            120,
-            0,
-            80,
-            30
+            x: 120,
+            y: 0,
+            width: 80,
+            height: 30
         );
         t.AddDamageRoot(buttonA); // exited
         t.AddDamageRoot(buttonB); // entered
 
         Assert.False(t.FullDamage);
-        Assert.Equal(2, t.DamageCount);
+        Assert.Equal(expected: 2, actual: t.DamageCount);
         Assert.False(t.OverlayDirty);
     }
 
@@ -473,14 +484,14 @@ public class RepaintTrackerTests
 
         t.AddDamageRoot(
             new Rect(
-                0,
-                0,
-                80,
-                30
+                x: 0,
+                y: 0,
+                width: 80,
+                height: 30
             )
         ); // exited; entered side contributes nothing
 
         Assert.False(t.FullDamage);
-        Assert.Equal(1, t.DamageCount);
+        Assert.Equal(expected: 1, actual: t.DamageCount);
     }
 }

@@ -41,8 +41,9 @@ public sealed class Preference<T> : IReadableSignal<T>, IPreference
         _deserialize = deserialize;
 
         var value = defaultValue;
-        var isSet = false;
-        if (store.TryGetRaw(key, out var raw))
+        bool isSet = false;
+        if (store.TryGetRaw(key: key, raw: out string raw))
+        {
             try
             {
                 value = _deserialize(raw);
@@ -52,20 +53,40 @@ public sealed class Preference<T> : IReadableSignal<T>, IPreference
             {
                 // Corrupt persisted value: fall back to the default, leave the entry in place.
             }
+        }
 
-        _signal = new Signal<T>(value, comparer);
+        _signal = new Signal<T>(initialValue: value, comparer: comparer);
         IsSet = isSet;
     }
-
-    public string Key { get; }
 
     /// <summary>The value this preference has when nothing is persisted (or after <see cref="Reset" />).</summary>
     public T Default { get; }
 
-    /// <summary>True when a persisted value backs the current one; false means <see cref="Default" /> is live.</summary>
+    public string Key { get; }
+
+    /// <summary>
+    ///     True when a persisted value backs the current one; false means <see cref="Default" /> is
+    ///     live.
+    /// </summary>
     public bool IsSet { get; private set; }
 
     public Type ValueType => typeof(T);
+
+    /// <summary>Back to <see cref="Default" />; removes the persisted entry so the next load is unset too.</summary>
+    public void Reset()
+    {
+        Reactive.Sync(() =>
+            {
+                if (IsSet)
+                {
+                    _store.RemoveRaw(Key);
+                    IsSet = false;
+                }
+
+                _signal.Value = Default;
+            }
+        );
+    }
 
     /// <summary>
     ///     Get: tracked read — subscribes the running reaction like any signal read. Set:
@@ -93,43 +114,18 @@ public sealed class Preference<T> : IReadableSignal<T>, IPreference
     }
 
     /// <summary>Read the current value without subscribing the running reaction.</summary>
-    public T Peek()
-    {
-        return _signal.Peek();
-    }
+    public T Peek() => _signal.Peek();
 
     /// <summary>Atomic read-modify-write; runs under the reactive graph's lock.</summary>
-    public void Update(Func<T, T> update)
-    {
-        Reactive.Sync(() => SetValue(update(_signal.Peek())));
-    }
+    public void Update(Func<T, T> update) => Reactive.Sync(() => SetValue(update(_signal.Peek())));
 
-    /// <summary>Back to <see cref="Default" />; removes the persisted entry so the next load is unset too.</summary>
-    public void Reset()
-    {
-        Reactive.Sync(() =>
-            {
-                if (IsSet)
-                {
-                    _store.RemoveRaw(Key);
-                    IsSet = false;
-                }
+    /// <summary>
+    ///     Invokes <paramref name="listener" /> immediately with the current value, then on every
+    ///     change.
+    /// </summary>
+    public IDisposable Subscribe(Action<T> listener) => _signal.Subscribe(listener);
 
-                _signal.Value = Default;
-            }
-        );
-    }
-
-    /// <summary>Invokes <paramref name="listener" /> immediately with the current value, then on every change.</summary>
-    public IDisposable Subscribe(Action<T> listener)
-    {
-        return _signal.Subscribe(listener);
-    }
-
-    public override string ToString()
-    {
-        return $"Preference({Key} = {_signal.Peek()})";
-    }
+    public override string ToString() => $"Preference({Key} = {_signal.Peek()})";
 
     // Persist-before-notify, all under the graph's re-entrant lock: compare + storage write +
     // signal set are atomic against concurrent writers, and a failing write leaves both the
@@ -138,8 +134,8 @@ public sealed class Preference<T> : IReadableSignal<T>, IPreference
     {
         Reactive.Sync(() =>
             {
-                if (IsSet && _comparer.Equals(_signal.Peek(), value)) return;
-                _store.SetRaw(Key, _serialize(value));
+                if (IsSet && _comparer.Equals(x: _signal.Peek(), y: value)) return;
+                _store.SetRaw(key: Key, raw: _serialize(value));
                 IsSet = true;
                 _signal.Value = value;
             }

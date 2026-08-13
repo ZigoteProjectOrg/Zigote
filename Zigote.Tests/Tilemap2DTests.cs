@@ -19,93 +19,93 @@ public class Tilemap2DTests
     {
         var layer = new TilemapLayer();
 
-        Assert.True(layer.SetTile(3, -2, 7));
+        Assert.True(layer.SetTile(x: 3, y: -2, tile: 7));
 
-        Assert.Equal(3, layer.OriginX);
-        Assert.Equal(-2, layer.OriginY);
-        Assert.Equal(1, layer.Width);
-        Assert.Equal(1, layer.Height);
-        Assert.Equal(7, layer.GetTile(3, -2));
+        Assert.Equal(expected: 3, actual: layer.OriginX);
+        Assert.Equal(expected: -2, actual: layer.OriginY);
+        Assert.Equal(expected: 1, actual: layer.Width);
+        Assert.Equal(expected: 1, actual: layer.Height);
+        Assert.Equal(expected: 7, actual: layer.GetTile(x: 3, y: -2));
     }
 
     [Fact]
     public void SetTile_OutsideRect_GrowsAndPreservesExistingTiles()
     {
         var layer = new TilemapLayer();
-        layer.SetTile(0, 0, 1);
-        layer.SetTile(1, 0, 2);
-        layer.SetTile(0, 1, 3);
+        layer.SetTile(x: 0, y: 0, tile: 1);
+        layer.SetTile(x: 1, y: 0, tile: 2);
+        layer.SetTile(x: 0, y: 1, tile: 3);
 
         // Grow down-left and up-right; the original three tiles must survive the reallocation.
-        layer.SetTile(-2, -1, 9);
-        layer.SetTile(4, 3, 8);
+        layer.SetTile(x: -2, y: -1, tile: 9);
+        layer.SetTile(x: 4, y: 3, tile: 8);
 
-        Assert.Equal(1, layer.GetTile(0, 0));
-        Assert.Equal(2, layer.GetTile(1, 0));
-        Assert.Equal(3, layer.GetTile(0, 1));
-        Assert.Equal(9, layer.GetTile(-2, -1));
-        Assert.Equal(8, layer.GetTile(4, 3));
-        Assert.Equal(-2, layer.OriginX);
-        Assert.Equal(-1, layer.OriginY);
-        Assert.Equal(7, layer.Width);
-        Assert.Equal(5, layer.Height);
+        Assert.Equal(expected: 1, actual: layer.GetTile(x: 0, y: 0));
+        Assert.Equal(expected: 2, actual: layer.GetTile(x: 1, y: 0));
+        Assert.Equal(expected: 3, actual: layer.GetTile(x: 0, y: 1));
+        Assert.Equal(expected: 9, actual: layer.GetTile(x: -2, y: -1));
+        Assert.Equal(expected: 8, actual: layer.GetTile(x: 4, y: 3));
+        Assert.Equal(expected: -2, actual: layer.OriginX);
+        Assert.Equal(expected: -1, actual: layer.OriginY);
+        Assert.Equal(expected: 7, actual: layer.Width);
+        Assert.Equal(expected: 5, actual: layer.Height);
     }
 
     [Fact]
     public void GetTile_OutsideRect_IsEmptyNotOutOfRange()
     {
         var layer = new TilemapLayer();
-        layer.SetTile(0, 0, 5);
+        layer.SetTile(x: 0, y: 0, tile: 5);
 
-        Assert.Equal(Tileset.EmptyTile, layer.GetTile(100, 100));
-        Assert.Equal(Tileset.EmptyTile, layer.GetTile(-100, -100));
+        Assert.Equal(expected: Tileset.EmptyTile, actual: layer.GetTile(x: 100, y: 100));
+        Assert.Equal(expected: Tileset.EmptyTile, actual: layer.GetTile(x: -100, y: -100));
     }
 
     [Fact]
     public void SetTile_ErasingOutsideRect_DoesNotGrow()
     {
         var layer = new TilemapLayer();
-        layer.SetTile(0, 0, 1);
+        layer.SetTile(x: 0, y: 0, tile: 1);
 
-        Assert.False(layer.SetTile(50, 50, Tileset.EmptyTile));
-        Assert.Equal(1, layer.Width);
-        Assert.Equal(1, layer.Height);
+        Assert.False(layer.SetTile(x: 50, y: 50, tile: Tileset.EmptyTile));
+        Assert.Equal(expected: 1, actual: layer.Width);
+        Assert.Equal(expected: 1, actual: layer.Height);
     }
 
     [Fact]
     public void SetTile_SameValue_ReportsNoChange()
     {
         var layer = new TilemapLayer();
-        layer.SetTile(2, 2, 4);
+        layer.SetTile(x: 2, y: 2, tile: 4);
 
-        Assert.False(layer.SetTile(2, 2, 4));
-        Assert.True(layer.SetTile(2, 2, 5));
+        Assert.False(layer.SetTile(x: 2, y: 2, tile: 4));
+        Assert.True(layer.SetTile(x: 2, y: 2, tile: 5));
     }
 
     [Fact]
     public void Trim_ShrinksRectToPaintedTiles()
     {
         var layer = new TilemapLayer();
-        layer.SetTile(0, 0, 1);
-        layer.SetTile(10, 10, 2);
-        layer.SetTile(10, 10, Tileset.EmptyTile);
+        layer.SetTile(x: 0, y: 0, tile: 1);
+        layer.SetTile(x: 10, y: 10, tile: 2);
+        layer.SetTile(x: 10, y: 10, tile: Tileset.EmptyTile);
 
-        Assert.Equal(11, layer.Width); // still stretched by the erased tile
+        Assert.Equal(expected: 11, actual: layer.Width); // still stretched by the erased tile
 
         layer.Trim();
 
-        Assert.Equal(1, layer.Width);
-        Assert.Equal(1, layer.Height);
-        Assert.Equal(0, layer.OriginX);
-        Assert.Equal(1, layer.GetTile(0, 0));
+        Assert.Equal(expected: 1, actual: layer.Width);
+        Assert.Equal(expected: 1, actual: layer.Height);
+        Assert.Equal(expected: 0, actual: layer.OriginX);
+        Assert.Equal(expected: 1, actual: layer.GetTile(x: 0, y: 0));
     }
 
     [Fact]
     public void Trim_AllErased_ClearsLayer()
     {
         var layer = new TilemapLayer();
-        layer.SetTile(4, 4, 1);
-        layer.SetTile(4, 4, Tileset.EmptyTile);
+        layer.SetTile(x: 4, y: 4, tile: 1);
+        layer.SetTile(x: 4, y: 4, tile: Tileset.EmptyTile);
 
         layer.Trim();
 
@@ -117,14 +117,14 @@ public class Tilemap2DTests
     public void Clone_DeepCopiesCells()
     {
         var layer = new TilemapLayer { Name = "Ground" };
-        layer.SetTile(0, 0, 3);
+        layer.SetTile(x: 0, y: 0, tile: 3);
 
         var copy = layer.Clone();
-        copy.SetTile(0, 0, 9);
+        copy.SetTile(x: 0, y: 0, tile: 9);
 
-        Assert.Equal(3, layer.GetTile(0, 0));
-        Assert.Equal(9, copy.GetTile(0, 0));
-        Assert.Equal("Ground", copy.Name);
+        Assert.Equal(expected: 3, actual: layer.GetTile(x: 0, y: 0));
+        Assert.Equal(expected: 9, actual: copy.GetTile(x: 0, y: 0));
+        Assert.Equal(expected: "Ground", actual: copy.Name);
     }
 
     // ── Tileset ──────────────────────────────────────────────────────────────
@@ -137,12 +137,12 @@ public class Tilemap2DTests
             TileHeight = 16,
         };
 
-        Assert.True(set.FitToTexture(64, 32));
+        Assert.True(set.FitToTexture(texWidth: 64, texHeight: 32));
 
-        Assert.Equal(4, set.Columns);
-        Assert.Equal(2, set.Rows);
-        Assert.Equal(8, set.TileCount);
-        Assert.Equal(8, set.Solid.Length);
+        Assert.Equal(expected: 4, actual: set.Columns);
+        Assert.Equal(expected: 2, actual: set.Rows);
+        Assert.Equal(expected: 8, actual: set.TileCount);
+        Assert.Equal(expected: 8, actual: set.Solid.Length);
     }
 
     [Fact]
@@ -158,10 +158,10 @@ public class Tilemap2DTests
             SpacingY = 2,
         };
 
-        Assert.True(set.FitToTexture(74, 40));
+        Assert.True(set.FitToTexture(texWidth: 74, texHeight: 40));
 
-        Assert.Equal(4, set.Columns);
-        Assert.Equal(2, set.Rows);
+        Assert.Equal(expected: 4, actual: set.Columns);
+        Assert.Equal(expected: 2, actual: set.Rows);
     }
 
     [Fact]
@@ -172,7 +172,7 @@ public class Tilemap2DTests
             TileHeight = 128,
         };
 
-        Assert.False(set.FitToTexture(64, 64));
+        Assert.False(set.FitToTexture(texWidth: 64, texHeight: 64));
     }
 
     [Fact]
@@ -182,17 +182,17 @@ public class Tilemap2DTests
             TileWidth = 16,
             TileHeight = 16,
         };
-        set.FitToTexture(64, 32);
+        set.FitToTexture(texWidth: 64, texHeight: 32);
 
         var frames = set.BuildFrames();
         var expected = SpriteSheet.GridFrames(
-            64,
-            32,
-            4,
-            2
+            texWidth: 64,
+            texHeight: 32,
+            cols: 4,
+            rows: 2
         );
 
-        Assert.Equal(expected, frames);
+        Assert.Equal(expected: expected, actual: frames);
     }
 
     [Fact]
@@ -208,32 +208,32 @@ public class Tilemap2DTests
     [Fact]
     public void SaveLoad_RoundTripsGridAndFlags()
     {
-        var dir = TempDir();
+        string dir = TempDir();
         try
         {
-            var path = Path.Combine(dir, "tiles.tileset");
+            string path = Path.Combine(path1: dir, path2: "tiles.tileset");
             var set = new Tileset {
                 TexturePath = "art/tiles.png",
                 TileWidth = 8,
                 TileHeight = 8,
             };
-            set.FitToTexture(32, 16);
+            set.FitToTexture(texWidth: 32, texHeight: 16);
             set.Solid[2] = true;
             set.OneWay[2] = true;
             set.Save(path);
 
             var loaded = Tileset.Load(path);
 
-            Assert.Equal("art/tiles.png", loaded.TexturePath);
-            Assert.Equal(4, loaded.Columns);
-            Assert.Equal(2, loaded.Rows);
+            Assert.Equal(expected: "art/tiles.png", actual: loaded.TexturePath);
+            Assert.Equal(expected: 4, actual: loaded.Columns);
+            Assert.Equal(expected: 2, actual: loaded.Rows);
             Assert.True(loaded.IsSolid(2));
             Assert.True(loaded.IsOneWay(2));
             Assert.False(loaded.IsSolid(1));
         }
         finally
         {
-            Directory.Delete(dir, true);
+            Directory.Delete(path: dir, recursive: true);
         }
     }
 
@@ -244,12 +244,12 @@ public class Tilemap2DTests
     {
         var set = SolidTileset();
         var node = TilemapNode(set);
-        for (var x = 0; x < 10; x++) node.TilemapLayers[0].SetTile(x, 0, 1);
+        for (int x = 0; x < 10; x++) node.TilemapLayers[0].SetTile(x: x, y: 0, tile: 1);
 
         var world = new CollisionWorld2D();
-        Scene2DPhysics.Build(node, world, _ => set);
+        Scene2DPhysics.Build(root: node, world: world, tilesetLoader: _ => set);
 
-        Assert.Equal(1, world.Count);
+        Assert.Equal(expected: 1, actual: world.Count);
     }
 
     [Fact]
@@ -258,15 +258,15 @@ public class Tilemap2DTests
         var set = SolidTileset();
         var node = TilemapNode(set);
         var layer = node.TilemapLayers[0];
-        layer.SetTile(0, 0, 1);
-        layer.SetTile(1, 0, 1);
+        layer.SetTile(x: 0, y: 0, tile: 1);
+        layer.SetTile(x: 1, y: 0, tile: 1);
         // gap at x=2
-        layer.SetTile(3, 0, 1);
+        layer.SetTile(x: 3, y: 0, tile: 1);
 
         var world = new CollisionWorld2D();
-        Scene2DPhysics.Build(node, world, _ => set);
+        Scene2DPhysics.Build(root: node, world: world, tilesetLoader: _ => set);
 
-        Assert.Equal(2, world.Count);
+        Assert.Equal(expected: 2, actual: world.Count);
     }
 
     [Fact]
@@ -277,19 +277,19 @@ public class Tilemap2DTests
             TileWidth = 16,
             TileHeight = 16,
         };
-        set.FitToTexture(64, 16);
+        set.FitToTexture(texWidth: 64, texHeight: 16);
         set.Solid[1] = true;
         set.Solid[2] = true;
         set.OneWay[2] = true;
 
         var node = TilemapNode(set);
-        node.TilemapLayers[0].SetTile(0, 0, 1);
-        node.TilemapLayers[0].SetTile(1, 0, 2);
+        node.TilemapLayers[0].SetTile(x: 0, y: 0, tile: 1);
+        node.TilemapLayers[0].SetTile(x: 1, y: 0, tile: 2);
 
         var world = new CollisionWorld2D();
-        Scene2DPhysics.Build(node, world, _ => set);
+        Scene2DPhysics.Build(root: node, world: world, tilesetLoader: _ => set);
 
-        Assert.Equal(2, world.Count);
+        Assert.Equal(expected: 2, actual: world.Count);
     }
 
     [Fact]
@@ -299,15 +299,15 @@ public class Tilemap2DTests
             TileWidth = 16,
             TileHeight = 16,
         };
-        set.FitToTexture(64, 16);
+        set.FitToTexture(texWidth: 64, texHeight: 16);
 
         var node = TilemapNode(set);
-        for (var x = 0; x < 4; x++) node.TilemapLayers[0].SetTile(x, 0, 1);
+        for (int x = 0; x < 4; x++) node.TilemapLayers[0].SetTile(x: x, y: 0, tile: 1);
 
         var world = new CollisionWorld2D();
-        Scene2DPhysics.Build(node, world, _ => set);
+        Scene2DPhysics.Build(root: node, world: world, tilesetLoader: _ => set);
 
-        Assert.Equal(0, world.Count);
+        Assert.Equal(expected: 0, actual: world.Count);
     }
 
     [Fact]
@@ -315,34 +315,34 @@ public class Tilemap2DTests
     {
         var set = SolidTileset();
         var node = TilemapNode(set); // TileWorldSize 1, at the origin
-        for (var x = 0; x < 4; x++) node.TilemapLayers[0].SetTile(x, 0, 1);
+        for (int x = 0; x < 4; x++) node.TilemapLayers[0].SetTile(x: x, y: 0, tile: 1);
 
         var world = new CollisionWorld2D();
-        Scene2DPhysics.Build(node, world, _ => set);
+        Scene2DPhysics.Build(root: node, world: world, tilesetLoader: _ => set);
 
         // The run covers x ∈ [0,4], y ∈ [0,1] — probe inside both ends and outside.
-        Assert.True(HitsAt(world, 0.5f, 0.5f));
-        Assert.True(HitsAt(world, 3.5f, 0.5f));
-        Assert.False(HitsAt(world, 4.5f, 0.5f));
-        Assert.False(HitsAt(world, 0.5f, 1.5f));
+        Assert.True(HitsAt(world: world, x: 0.5f, y: 0.5f));
+        Assert.True(HitsAt(world: world, x: 3.5f, y: 0.5f));
+        Assert.False(HitsAt(world: world, x: 4.5f, y: 0.5f));
+        Assert.False(HitsAt(world: world, x: 0.5f, y: 1.5f));
     }
 
     [Fact]
     public void Build_NodeBoxCollider_UsesWorldPositionAndOffset()
     {
         var node = new SceneNode("Solid") {
-            Position = new Vec3(5f, 2f, 0f),
+            Position = new Vec3(x: 5f, y: 2f, z: 0f),
             Collider2DEnabled = true,
-            Collider2DOffset = new Vec2(1f, 0f),
-            Collider2DSize = new Vec2(0.5f, 0.5f),
+            Collider2DOffset = new Vec2(x: 1f, y: 0f),
+            Collider2DSize = new Vec2(x: 0.5f, y: 0.5f),
         };
 
         var world = new CollisionWorld2D();
-        Scene2DPhysics.Build(node, world);
+        Scene2DPhysics.Build(root: node, world: world);
 
-        Assert.Equal(1, world.Count);
-        Assert.True(HitsAt(world, 6f, 2f)); // shifted by the offset
-        Assert.False(HitsAt(world, 3.9f, 2f)); // outside the half-extents either way
+        Assert.Equal(expected: 1, actual: world.Count);
+        Assert.True(HitsAt(world: world, x: 6f, y: 2f)); // shifted by the offset
+        Assert.False(HitsAt(world: world, x: 3.9f, y: 2f)); // outside the half-extents either way
     }
 
     [Fact]
@@ -354,9 +354,9 @@ public class Tilemap2DTests
         };
 
         var world = new CollisionWorld2D();
-        Scene2DPhysics.Build(node, world);
+        Scene2DPhysics.Build(root: node, world: world);
 
-        Assert.Equal(0, world.Count);
+        Assert.Equal(expected: 0, actual: world.Count);
     }
 
     [Fact]
@@ -365,12 +365,12 @@ public class Tilemap2DTests
         var set = SolidTileset();
         var node = TilemapNode(set);
         node.TilemapCollision = false;
-        node.TilemapLayers[0].SetTile(0, 0, 1);
+        node.TilemapLayers[0].SetTile(x: 0, y: 0, tile: 1);
 
         var world = new CollisionWorld2D();
-        Scene2DPhysics.Build(node, world, _ => set);
+        Scene2DPhysics.Build(root: node, world: world, tilesetLoader: _ => set);
 
-        Assert.Equal(0, world.Count);
+        Assert.Equal(expected: 0, actual: world.Count);
     }
 
     // ── Draw path + culling ──────────────────────────────────────────────────
@@ -378,116 +378,132 @@ public class Tilemap2DTests
     [Fact]
     public void Render_DrawsOneInstancePerPaintedTile_InASingleBatch()
     {
-        var dir = TempDir();
+        string dir = TempDir();
         try
         {
-            var node = TilemapNodeOnDisk(dir, out _);
-            for (var y = 0; y < 4; y++)
-            for (var x = 0; x < 5; x++)
-                node.TilemapLayers[0].SetTile(x, y, 1);
+            var node = TilemapNodeOnDisk(dir: dir, set: out _);
+            for (int y = 0; y < 4; y++)
+            for (int x = 0; x < 5; x++)
+                node.TilemapLayers[0].SetTile(x: x, y: y, tile: 1);
 
             var device = new CountingSpriteDevice();
             var sprites = new Sprite2DSystem(device);
 
             // A camera wide enough to see the whole 5×4 map.
             sprites.Render(
-                node,
-                new Camera2D { OrthoHeight = 100f }.ViewProjection(256f, 256f),
-                256f,
-                256f,
-                false
+                root: node,
+                sceneViewProjection: new Camera2D { OrthoHeight = 100f }.ViewProjection(
+                    viewportW: 256f,
+                    viewportH: 256f
+                ),
+                viewportW: 256f,
+                viewportH: 256f,
+                includeScriptQueue: false
             );
 
-            Assert.Equal(20, device.Instances);
-            Assert.Equal(1, device.Batches); // one texture + one material ⇒ one draw call
+            Assert.Equal(expected: 20, actual: device.Instances);
+            Assert.Equal(
+                expected: 1,
+                actual: device.Batches
+            ); // one texture + one material ⇒ one draw call
         }
         finally
         {
-            Directory.Delete(dir, true);
+            Directory.Delete(path: dir, recursive: true);
         }
     }
 
     [Fact]
     public void Render_CullsTilesOutsideTheCamera()
     {
-        var dir = TempDir();
+        string dir = TempDir();
         try
         {
-            var node = TilemapNodeOnDisk(dir, out _);
-            for (var y = 0; y < 100; y++)
-            for (var x = 0; x < 100; x++)
-                node.TilemapLayers[0].SetTile(x, y, 1);
+            var node = TilemapNodeOnDisk(dir: dir, set: out _);
+            for (int y = 0; y < 100; y++)
+            for (int x = 0; x < 100; x++)
+                node.TilemapLayers[0].SetTile(x: x, y: y, tile: 1);
 
             var device = new CountingSpriteDevice();
             var sprites = new Sprite2DSystem(device);
 
             // 8 units tall at the origin: only the bottom-left corner of the 100×100 map is visible.
             sprites.Render(
-                node,
-                new Camera2D { OrthoHeight = 8f }.ViewProjection(256f, 256f),
-                256f,
-                256f,
-                false
+                root: node,
+                sceneViewProjection: new Camera2D { OrthoHeight = 8f }.ViewProjection(
+                    viewportW: 256f,
+                    viewportH: 256f
+                ),
+                viewportW: 256f,
+                viewportH: 256f,
+                includeScriptQueue: false
             );
 
             Assert.True(
-                device.Instances < 500,
+                condition: device.Instances < 500,
+                userMessage:
                 $"expected the camera rect to cull most of the 10 000 tiles, drew {device.Instances}"
             );
-            Assert.True(device.Instances > 0, "the visible corner must still draw");
+            Assert.True(
+                condition: device.Instances > 0,
+                userMessage: "the visible corner must still draw"
+            );
         }
         finally
         {
-            Directory.Delete(dir, true);
+            Directory.Delete(path: dir, recursive: true);
         }
     }
 
     [Fact]
     public void Render_HiddenLayer_DrawsNothing()
     {
-        var dir = TempDir();
+        string dir = TempDir();
         try
         {
-            var node = TilemapNodeOnDisk(dir, out _);
-            node.TilemapLayers[0].SetTile(0, 0, 1);
+            var node = TilemapNodeOnDisk(dir: dir, set: out _);
+            node.TilemapLayers[0].SetTile(x: 0, y: 0, tile: 1);
             node.TilemapLayers[0].Visible = false;
 
             var device = new CountingSpriteDevice();
             new Sprite2DSystem(device).Render(
-                node,
-                new Camera2D { OrthoHeight = 100f }.ViewProjection(256f, 256f),
-                256f,
-                256f,
-                false
+                root: node,
+                sceneViewProjection: new Camera2D { OrthoHeight = 100f }.ViewProjection(
+                    viewportW: 256f,
+                    viewportH: 256f
+                ),
+                viewportW: 256f,
+                viewportH: 256f,
+                includeScriptQueue: false
             );
 
-            Assert.Equal(0, device.Instances);
+            Assert.Equal(expected: 0, actual: device.Instances);
         }
         finally
         {
-            Directory.Delete(dir, true);
+            Directory.Delete(path: dir, recursive: true);
         }
     }
 
     [Fact]
     public void Render_MissingTileset_DrawsNothingAndDoesNotThrow()
     {
-        var node = new SceneNode("Map", NodeKind.Tilemap) {
+        var node = new SceneNode(name: "Map", kind: NodeKind.Tilemap) {
             TilesetPath = "/does/not/exist.tileset",
             TilemapLayers = [new TilemapLayer()],
         };
-        node.TilemapLayers[0].SetTile(0, 0, 1);
+        node.TilemapLayers[0].SetTile(x: 0, y: 0, tile: 1);
 
         var device = new CountingSpriteDevice();
         new Sprite2DSystem(device).Render(
-            node,
-            new Camera2D().ViewProjection(256f, 256f),
-            256f,
-            256f,
-            false
+            root: node,
+            sceneViewProjection: new Camera2D().ViewProjection(viewportW: 256f, viewportH: 256f),
+            viewportW: 256f,
+            viewportH: 256f,
+            includeScriptQueue: false
         );
 
-        Assert.Equal(0, device.Instances);
+        Assert.Equal(expected: 0, actual: device.Instances);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -497,18 +513,18 @@ public class Tilemap2DTests
     {
         var hits = new List<ColliderHandle>();
         return world.OverlapBox(
-            new Vec2(x, y),
-            new Vec2(1e-3f, 1e-3f),
-            uint.MaxValue,
-            hits
+            center: new Vec2(x: x, y: y),
+            halfExtents: new Vec2(x: 1e-3f, y: 1e-3f),
+            mask: uint.MaxValue,
+            results: hits
         ) > 0;
     }
 
     private static string TempDir()
     {
-        var dir = Path.Combine(
-            Path.GetTempPath(),
-            "zigote-tilemap-" + Guid.NewGuid().ToString("N")
+        string dir = Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: "zigote-tilemap-" + Guid.NewGuid().ToString("N")
         );
         Directory.CreateDirectory(dir);
         return dir;
@@ -520,14 +536,14 @@ public class Tilemap2DTests
             TileWidth = 16,
             TileHeight = 16,
         };
-        set.FitToTexture(64, 16);
+        set.FitToTexture(texWidth: 64, texHeight: 16);
         set.Solid[1] = true;
         return set;
     }
 
     private static SceneNode TilemapNode(Tileset set)
     {
-        return new SceneNode("Map", NodeKind.Tilemap) {
+        return new SceneNode(name: "Map", kind: NodeKind.Tilemap) {
             TilesetPath = "unused.tileset", // resolved by the injected loader
             TileWorldSize = 1f,
             TilemapLayers = [new TilemapLayer { Name = "Ground" }],
@@ -540,18 +556,18 @@ public class Tilemap2DTests
     /// </summary>
     private static SceneNode TilemapNodeOnDisk(string dir, out Tileset set)
     {
-        var texPath = Path.Combine(dir, "tiles.png");
-        File.WriteAllBytes(texPath, [0]); // the fake device never decodes it
-        var setPath = Path.Combine(dir, "tiles.tileset");
+        string texPath = Path.Combine(path1: dir, path2: "tiles.png");
+        File.WriteAllBytes(path: texPath, bytes: [0]); // the fake device never decodes it
+        string setPath = Path.Combine(path1: dir, path2: "tiles.tileset");
         set = new Tileset {
             TexturePath = texPath,
             TileWidth = 16,
             TileHeight = 16,
         };
-        set.FitToTexture(64, 16);
+        set.FitToTexture(texWidth: 64, texHeight: 16);
         set.Save(setPath);
 
-        return new SceneNode("Map", NodeKind.Tilemap) {
+        return new SceneNode(name: "Map", kind: NodeKind.Tilemap) {
             TilesetPath = setPath,
             TileWorldSize = 1f,
             TilemapLayers = [new TilemapLayer { Name = "Ground" }],
@@ -566,10 +582,8 @@ public class Tilemap2DTests
 
         public uint CreateTexture(ReadOnlySpan<byte> rgba, int width, int height,
             SpriteFilter filter,
-            bool srgb, SpriteWrap wrap)
-        {
-            return 1;
-        }
+            bool srgb, SpriteWrap wrap) =>
+            1;
 
         public uint CreateTextureFromFile(string path, SpriteFilter filter, bool srgb,
             SpriteWrap wrap,
@@ -580,14 +594,9 @@ public class Tilemap2DTests
             return 1;
         }
 
-        public void DestroyTexture(uint texture)
-        {
-        }
+        public void DestroyTexture(uint texture) { }
 
-        public uint CreateShader(string wgsl)
-        {
-            return 1;
-        }
+        public uint CreateShader(string wgsl) => 1;
 
         public void Begin(ReadOnlySpan<float> sceneViewProj, ReadOnlySpan<float> overlayViewProj,
             float viewportW, float viewportH)

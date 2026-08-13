@@ -33,10 +33,7 @@ public sealed class AssetManager
     ///     Resolve an <see cref="AssetId" /> to an absolute filesystem path (via
     ///     <see cref="AssetRegistry" /> + content root), or <see langword="null" /> if unknown.
     /// </param>
-    public AssetManager(Func<AssetId, string?> resolvePath)
-    {
-        _resolvePath = resolvePath;
-    }
+    public AssetManager(Func<AssetId, string?> resolvePath) => _resolvePath = resolvePath;
 
     /// <summary>True while any load is in flight or awaiting a pump — feed this into the app idle gate.</summary>
     public bool WantsFrame => Volatile.Read(ref _inFlight) > 0 || !_completed.IsEmpty;
@@ -46,10 +43,7 @@ public sealed class AssetManager
     {
         get
         {
-            lock (_lock)
-            {
-                return _entries.Count;
-            }
+            lock (_lock) return _entries.Count;
         }
     }
 
@@ -67,7 +61,7 @@ public sealed class AssetManager
         lock (_lock)
         {
             var key = (id, typeof(T));
-            if (_entries.TryGetValue(key, out var existing))
+            if (_entries.TryGetValue(key: key, value: out var existing))
             {
                 var typed = (AssetEntry<T>)existing;
                 typed.Detached = false; // in the table, therefore live again
@@ -79,7 +73,7 @@ public sealed class AssetManager
                 return new AssetHandle<T>(typed);
             }
 
-            entry = new AssetEntry<T>(id, loader) {
+            entry = new AssetEntry<T>(id: id, loader: loader) {
                 RefCount = 1,
                 LastTouchFrame = _frame,
             };
@@ -87,7 +81,7 @@ public sealed class AssetManager
             path = _resolvePath(id);
         }
 
-        BeginLoad(entry, path);
+        BeginLoad(entry: entry, path: path);
         return new AssetHandle<T>(entry);
     }
 
@@ -114,7 +108,7 @@ public sealed class AssetManager
     public int Pump(long frame, int maxApplies = int.MaxValue)
     {
         _frame = frame;
-        var applied = 0;
+        int applied = 0;
         while (applied < maxApplies && _completed.TryDequeue(out var c))
         {
             var entry = c.Entry;
@@ -132,10 +126,7 @@ public sealed class AssetManager
             // not touch the FFI or the GPU, so a payload holds nothing but managed memory — the
             // native resources only exist after Apply, which is exactly what is being skipped.
             bool wanted;
-            lock (_lock)
-            {
-                wanted = entry.RefCount > 0 && !entry.Detached;
-            }
+            lock (_lock) wanted = entry.RefCount > 0 && !entry.Detached;
 
             if (!wanted)
             {
@@ -233,12 +224,14 @@ public sealed class AssetManager
             {
                 try
                 {
-                    var payload = entry.LoadOffThread(path);
-                    _completed.Enqueue(new Completion(entry, payload, null));
+                    object payload = entry.LoadOffThread(path);
+                    _completed.Enqueue(new Completion(Entry: entry, Payload: payload, Error: null));
                 }
                 catch (Exception e)
                 {
-                    _completed.Enqueue(new Completion(entry, null, e.Message));
+                    _completed.Enqueue(
+                        new Completion(Entry: entry, Payload: null, Error: e.Message)
+                    );
                 }
                 finally
                 {
@@ -251,9 +244,9 @@ public sealed class AssetManager
     private void StartLoad(AssetEntry entry)
     {
         // Caller holds _lock. Resolve path under the lock (registry is not thread-safe) then dispatch.
-        var path = _resolvePath(entry.Id);
+        string? path = _resolvePath(entry.Id);
         entry.Error = null;
-        BeginLoad(entry, path);
+        BeginLoad(entry: entry, path: path);
     }
 
     private readonly record struct Completion(AssetEntry Entry, object? Payload, string? Error);

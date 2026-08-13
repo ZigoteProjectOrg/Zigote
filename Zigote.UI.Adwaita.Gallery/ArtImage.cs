@@ -54,11 +54,11 @@ internal sealed class ArtImage : ComposedWidget
 
         _image = new Image {
             AltText = $"Anime artwork by {piece.Artist}",
-            OnLoaded = () => Settle(ArtState.Ready, null),
-            OnFailed = error => Settle(ArtState.Failed, Describe(error)),
+            OnLoaded = () => Settle(state: ArtState.Ready, reason: null),
+            OnFailed = error => Settle(state: ArtState.Failed, reason: Describe(error)),
         };
-        _fade = new AnimatedOpacity(0f, Picture(), 0.4f);
-        _overlay = new AnimatedSwitcher(Busy(), 0.25f);
+        _fade = new AnimatedOpacity(opacity: 0f, child: Picture(), duration: 0.4f);
+        _overlay = new AnimatedSwitcher(child: Busy(), duration: 0.25f);
     }
 
     /// <summary>Set to make the picture a button — the gallery opens the zoomable viewer with it.</summary>
@@ -90,7 +90,12 @@ internal sealed class ArtImage : ComposedWidget
 
     protected override Widget Build(BuildContext context)
     {
-        var layers = new Stack { Children = { _fade, _overlay } };
+        var layers = new Stack {
+            Children = {
+                _fade,
+                _overlay,
+            },
+        };
         if (!_chrome) return layers;
 
         var palette = AdwPalette.For(ThemeProvider.Of(context));
@@ -101,16 +106,18 @@ internal sealed class ArtImage : ComposedWidget
             BorderWidth = 1f,
             // The clip is what makes a letterboxed portrait sit inside the card's corners instead
             // of squaring them off.
-            Child = new ClipRRect(AdwMetrics.CardRadius, layers),
+            Child = new ClipRRect(radius: AdwMetrics.CardRadius, child: layers),
         };
 
         if (OnPressed is { } pressed)
+        {
             card = new Pressable {
                 OnPressed = pressed,
                 FocusRadius = AdwMetrics.CardRadius,
                 SemanticsLabel = $"Open artwork by {_piece.Artist}",
                 Child = card,
             };
+        }
 
         return card;
     }
@@ -119,7 +126,10 @@ internal sealed class ArtImage : ComposedWidget
     {
         // Fire-and-forget by design: LoadAsync never faults, and both outcomes come back through
         // OnLoaded/OnFailed on the UI thread.
-        _image.LoadAsync(ct => NetworkCache.FetchAsync(_piece.Url, ct), _maxDim);
+        _image.LoadAsync(
+            fetch: ct => NetworkCache.FetchAsync(url: _piece.Url, ct: ct),
+            maxDim: _maxDim
+        );
     }
 
     private void Settle(ArtState state, string? reason)
@@ -147,19 +157,22 @@ internal sealed class ArtImage : ComposedWidget
     {
         var picture = new Stack { Children = { new Center { Child = _image } } };
         if (_chrome)
+        {
             picture.Children.Add(
                 new Align(
-                    Alignment.BottomCenter,
-                    new Padding(EdgeInsets.All(Spacing.Sm), new ArtCredit(_piece.Artist))
+                    alignment: Alignment.BottomCenter,
+                    child: new Padding(
+                        padding: EdgeInsets.All(Spacing.Sm),
+                        child: new ArtCredit(_piece.Artist)
+                    )
                 )
             );
+        }
+
         return picture;
     }
 
-    private static Widget Busy()
-    {
-        return new Center { Child = new AdwSpinner() };
-    }
+    private static Widget Busy() => new Center { Child = new AdwSpinner() };
 }
 
 /// <summary>The artist credit riding on the bottom of a loaded picture.</summary>
@@ -170,11 +183,20 @@ internal sealed class ArtCredit(string artist) : ComposedWidget
         return new DecoratedBox {
             // Its own contrast rather than the theme's: the chip has to read on a bright sky and on
             // a black coat, and it does not know which it landed on.
-            Fill = Color.Rgba(0, 0, 0, 0.55f),
+            Fill = Color.Rgba(
+                r: 0,
+                g: 0,
+                b: 0,
+                a: 0.55f
+            ),
             Radius = AdwMetrics.Pill,
             Child = new Padding(
-                EdgeInsets.Symmetric(Spacing.Sm, Spacing.Xxs),
-                new Label($"Art by {artist}", AdwTypography.Caption, Color.White) {
+                padding: EdgeInsets.Symmetric(horizontal: Spacing.Sm, vertical: Spacing.Xxs),
+                child: new Label(
+                    text: $"Art by {artist}",
+                    style: AdwTypography.Caption,
+                    color: Color.White
+                ) {
                     MaxLines = 1,
                     Overflow = TextOverflow.Ellipsis,
                 }
@@ -196,8 +218,12 @@ internal sealed class BrokenArt(string reason) : ComposedWidget
                 crossAxisAlignment: CrossAxisAlignment.Center
             ) {
                 Children = {
-                    new IconGlyph(MaterialIcons.CloudOff, 28f, theme.Label3),
-                    new Label(reason, AdwTypography.Caption, theme.TextSecondary) {
+                    new IconGlyph(glyph: MaterialIcons.CloudOff, size: 28f, color: theme.Label3),
+                    new Label(
+                        text: reason,
+                        style: AdwTypography.Caption,
+                        color: theme.TextSecondary
+                    ) {
                         Align = TextAlign.Center,
                         MaxLines = 1,
                         Overflow = TextOverflow.Ellipsis,

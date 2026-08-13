@@ -8,9 +8,7 @@ namespace Zigote.Tests;
 public sealed record AotSaveState(string Name, int Score);
 
 [JsonSerializable(typeof(AotSaveState))]
-internal sealed partial class SaveTestJsonContext : JsonSerializerContext
-{
-}
+internal sealed partial class SaveTestJsonContext : JsonSerializerContext { }
 
 public class SaveStoreTests : IDisposable
 {
@@ -24,82 +22,88 @@ public class SaveStoreTests : IDisposable
         {
             _dir.Delete(true);
         }
-        catch (IOException)
-        {
-        }
+        catch (IOException) { }
     }
 
     [Fact]
     public void Write_Read_RoundTrips()
     {
-        var store = new SaveStore(Root, 1);
+        var store = new SaveStore(directory: Root, currentVersion: 1);
 
-        var write = store.Write("slot1", new PlayerV3("Ada", 90, 3));
-        Assert.Equal(SaveStatus.Ok, write.Status);
+        var write = store.Write(
+            slot: "slot1",
+            state: new PlayerV3(Name: "Ada", Health: 90, Level: 3)
+        );
+        Assert.Equal(expected: SaveStatus.Ok, actual: write.Status);
         Assert.True(write.IsOk);
         Assert.Null(write.Error);
 
         var read = store.Read<PlayerV3>("slot1");
-        Assert.Equal(SaveStatus.Ok, read.Status);
-        Assert.Equal(new PlayerV3("Ada", 90, 3), read.State);
+        Assert.Equal(expected: SaveStatus.Ok, actual: read.Status);
+        Assert.Equal(expected: new PlayerV3(Name: "Ada", Health: 90, Level: 3), actual: read.State);
     }
 
     [Fact]
     public void Write_SameSlot_Overwrites()
     {
-        var store = new SaveStore(Root, 1);
-        store.Write("slot", new PlayerV1("First", 10));
-        store.Write("slot", new PlayerV1("Second", 20));
+        var store = new SaveStore(directory: Root, currentVersion: 1);
+        store.Write(slot: "slot", state: new PlayerV1(Name: "First", Hp: 10));
+        store.Write(slot: "slot", state: new PlayerV1(Name: "Second", Hp: 20));
 
         var read = store.Read<PlayerV1>("slot");
-        Assert.Equal(SaveStatus.Ok, read.Status);
-        Assert.Equal(new PlayerV1("Second", 20), read.State);
+        Assert.Equal(expected: SaveStatus.Ok, actual: read.Status);
+        Assert.Equal(expected: new PlayerV1(Name: "Second", Hp: 20), actual: read.State);
         Assert.Single(store.List());
     }
 
     [Fact]
     public void Write_EmitsTheVersionedEnvelope()
     {
-        var store = new SaveStore(Root, 4);
-        store.Write("fmt", new PlayerV1("A", 2));
+        var store = new SaveStore(directory: Root, currentVersion: 4);
+        store.Write(slot: "fmt", state: new PlayerV1(Name: "A", Hp: 2));
 
-        var envelope = JsonNode.Parse(File.ReadAllText(Path.Combine(Root, "fmt.save")))!.AsObject();
-        Assert.Equal(4, envelope["version"]!.GetValue<int>());
+        var envelope =
+            JsonNode.Parse(File.ReadAllText(Path.Combine(path1: Root, path2: "fmt.save")))!
+                .AsObject();
+        Assert.Equal(expected: 4, actual: envelope["version"]!.GetValue<int>());
         Assert.True(envelope["savedAtUnixMs"]!.GetValue<long>() > 0);
-        Assert.Equal("A", envelope["payload"]!["Name"]!.GetValue<string>());
-        Assert.Equal(2, envelope["payload"]!["Hp"]!.GetValue<int>());
+        Assert.Equal(expected: "A", actual: envelope["payload"]!["Name"]!.GetValue<string>());
+        Assert.Equal(expected: 2, actual: envelope["payload"]!["Hp"]!.GetValue<int>());
     }
 
     [Fact]
     public void Write_LeavesNoTmpFileBehind()
     {
-        var store = new SaveStore(Root, 1);
-        store.Write("slot", new PlayerV1("A", 1));
+        var store = new SaveStore(directory: Root, currentVersion: 1);
+        store.Write(slot: "slot", state: new PlayerV1(Name: "A", Hp: 1));
 
-        Assert.True(File.Exists(Path.Combine(Root, "slot.save")));
-        Assert.Empty(Directory.GetFiles(Root, "*.tmp"));
+        Assert.True(File.Exists(Path.Combine(path1: Root, path2: "slot.save")));
+        Assert.Empty(Directory.GetFiles(path: Root, searchPattern: "*.tmp"));
     }
 
     [Fact]
     public void Read_MigratesThroughTheChain_V1ToV3()
     {
-        new SaveStore(Root, 1).Write("hero", new PlayerV1("Kay", 40));
+        new SaveStore(directory: Root, currentVersion: 1).Write(
+            slot: "hero",
+            state: new PlayerV1(Name: "Kay", Hp: 40)
+        );
 
-        var reader = new SaveStore(Root, 3);
+        var reader = new SaveStore(directory: Root, currentVersion: 3);
         reader.RegisterMigration(
-            1,
-            node =>
+            fromVersion: 1,
+            migrate: node =>
             {
                 var o = node.AsObject();
-                var hp = o["Hp"]!.GetValue<int>();
+                int hp = o["Hp"]!.GetValue<int>();
                 o.Remove("Hp");
                 o["Health"] = hp;
                 return o;
             }
         );
         reader.RegisterMigration(
-            2,
-            node =>
+            fromVersion: 2,
+            migrate: node =>
             {
                 var o = node.AsObject();
                 o["Level"] = 1;
@@ -108,109 +112,128 @@ public class SaveStoreTests : IDisposable
         );
 
         var read = reader.Read<PlayerV3>("hero");
-        Assert.Equal(SaveStatus.Ok, read.Status);
-        Assert.Equal(new PlayerV3("Kay", 40, 1), read.State);
+        Assert.Equal(expected: SaveStatus.Ok, actual: read.Status);
+        Assert.Equal(expected: new PlayerV3(Name: "Kay", Health: 40, Level: 1), actual: read.State);
     }
 
     [Fact]
     public void Read_MissingMigrationLink_ReportsMigrationMissing()
     {
-        new SaveStore(Root, 1).Write("hero", new PlayerV1("Kay", 40));
+        new SaveStore(directory: Root, currentVersion: 1).Write(
+            slot: "hero",
+            state: new PlayerV1(Name: "Kay", Hp: 40)
+        );
 
-        var reader = new SaveStore(Root, 3);
-        reader.RegisterMigration(1, node => node); // 2→3 never registered
+        var reader = new SaveStore(directory: Root, currentVersion: 3);
+        reader.RegisterMigration(fromVersion: 1, migrate: node => node); // 2→3 never registered
 
         var read = reader.Read<PlayerV3>("hero");
-        Assert.Equal(SaveStatus.MigrationMissing, read.Status);
+        Assert.Equal(expected: SaveStatus.MigrationMissing, actual: read.Status);
         Assert.Null(read.State);
-        Assert.Contains("2", read.Error);
+        Assert.Contains(expectedSubstring: "2", actualString: read.Error);
     }
 
     [Fact]
     public void Read_ThrowingMigration_ReportsMigrationFailed()
     {
-        new SaveStore(Root, 1).Write("hero", new PlayerV1("Kay", 40));
+        new SaveStore(directory: Root, currentVersion: 1).Write(
+            slot: "hero",
+            state: new PlayerV1(Name: "Kay", Hp: 40)
+        );
 
-        var reader = new SaveStore(Root, 2);
-        reader.RegisterMigration(1, _ => throw new InvalidOperationException("boom"));
+        var reader = new SaveStore(directory: Root, currentVersion: 2);
+        reader.RegisterMigration(
+            fromVersion: 1,
+            migrate: _ => throw new InvalidOperationException("boom")
+        );
 
         var read = reader.Read<PlayerV1>("hero");
-        Assert.Equal(SaveStatus.MigrationFailed, read.Status);
-        Assert.Contains("boom", read.Error);
+        Assert.Equal(expected: SaveStatus.MigrationFailed, actual: read.Status);
+        Assert.Contains(expectedSubstring: "boom", actualString: read.Error);
     }
 
     [Fact]
     public void Read_NewerEnvelope_ReportsFutureVersion()
     {
-        new SaveStore(Root, 5).Write("hero", new PlayerV1("Kay", 40));
+        new SaveStore(directory: Root, currentVersion: 5).Write(
+            slot: "hero",
+            state: new PlayerV1(Name: "Kay", Hp: 40)
+        );
 
-        var read = new SaveStore(Root, 3).Read<PlayerV1>("hero");
-        Assert.Equal(SaveStatus.FutureVersion, read.Status);
+        var read = new SaveStore(directory: Root, currentVersion: 3).Read<PlayerV1>("hero");
+        Assert.Equal(expected: SaveStatus.FutureVersion, actual: read.Status);
         Assert.Null(read.State);
     }
 
     [Fact]
     public void Read_GarbageFile_ReportsCorrupt_AndListSkipsIt()
     {
-        var store = new SaveStore(Root, 1);
-        store.Write("good", new PlayerV1("A", 1));
-        File.WriteAllText(Path.Combine(Root, "bad.save"), "{not json at all");
+        var store = new SaveStore(directory: Root, currentVersion: 1);
+        store.Write(slot: "good", state: new PlayerV1(Name: "A", Hp: 1));
         File.WriteAllText(
-            Path.Combine(Root, "shape.save"),
-            "[1, 2, 3]"
+            path: Path.Combine(path1: Root, path2: "bad.save"),
+            contents: "{not json at all"
+        );
+        File.WriteAllText(
+            path: Path.Combine(path1: Root, path2: "shape.save"),
+            contents: "[1, 2, 3]"
         ); // valid JSON, wrong envelope
 
-        Assert.Equal(SaveStatus.Corrupt, store.Read<PlayerV1>("bad").Status);
-        Assert.Equal(SaveStatus.Corrupt, store.Read<PlayerV1>("shape").Status);
+        Assert.Equal(expected: SaveStatus.Corrupt, actual: store.Read<PlayerV1>("bad").Status);
+        Assert.Equal(expected: SaveStatus.Corrupt, actual: store.Read<PlayerV1>("shape").Status);
 
         var info = Assert.Single(store.List());
-        Assert.Equal("good", info.Slot);
+        Assert.Equal(expected: "good", actual: info.Slot);
     }
 
     [Fact]
     public void Read_UnknownSlot_ReportsNotFound()
     {
-        var store = new SaveStore(Root, 1);
+        var store = new SaveStore(directory: Root, currentVersion: 1);
         var read = store.Read<PlayerV1>("never-written");
-        Assert.Equal(SaveStatus.NotFound, read.Status);
+        Assert.Equal(expected: SaveStatus.NotFound, actual: read.Status);
         Assert.Null(read.State);
     }
 
     [Fact]
     public void Delete_RemovesTheSlot_AndReportsExistence()
     {
-        var store = new SaveStore(Root, 1);
-        store.Write("s", new PlayerV1("A", 1));
+        var store = new SaveStore(directory: Root, currentVersion: 1);
+        store.Write(slot: "s", state: new PlayerV1(Name: "A", Hp: 1));
 
         Assert.True(store.Exists("s"));
         Assert.True(store.Delete("s"));
         Assert.False(store.Exists("s"));
         Assert.False(store.Delete("s"));
-        Assert.Equal(SaveStatus.NotFound, store.Read<PlayerV1>("s").Status);
+        Assert.Equal(expected: SaveStatus.NotFound, actual: store.Read<PlayerV1>("s").Status);
     }
 
     [Fact]
     public void List_OrdersNewestFirst_WithSlotInfoFields()
     {
-        var store = new SaveStore(Root, 7);
+        var store = new SaveStore(directory: Root, currentVersion: 7);
         var before = DateTimeOffset.UtcNow.AddSeconds(-2);
 
-        store.Write("older", new PlayerV1("A", 1));
+        store.Write(slot: "older", state: new PlayerV1(Name: "A", Hp: 1));
         Thread.Sleep(30);
-        store.Write("newer", new PlayerV1("B", 2));
+        store.Write(slot: "newer", state: new PlayerV1(Name: "B", Hp: 2));
 
         var list = store.List();
-        Assert.Equal(2, list.Count);
-        Assert.Equal("newer", list[0].Slot);
-        Assert.Equal("older", list[1].Slot);
+        Assert.Equal(expected: 2, actual: list.Count);
+        Assert.Equal(expected: "newer", actual: list[0].Slot);
+        Assert.Equal(expected: "older", actual: list[1].Slot);
         Assert.True(list[0].SavedAt >= list[1].SavedAt);
         Assert.All(
-            list,
-            info =>
+            collection: list,
+            action: info =>
             {
-                Assert.Equal(7, info.Version);
+                Assert.Equal(expected: 7, actual: info.Version);
                 Assert.True(info.SizeBytes > 0);
-                Assert.InRange(info.SavedAt, before, DateTimeOffset.UtcNow.AddSeconds(2));
+                Assert.InRange(
+                    actual: info.SavedAt,
+                    low: before,
+                    high: DateTimeOffset.UtcNow.AddSeconds(2)
+                );
             }
         );
     }
@@ -218,12 +241,18 @@ public class SaveStoreTests : IDisposable
     [Fact]
     public void InvalidSlotNames_AreRejectedEverywhere()
     {
-        var store = new SaveStore(Root, 1);
+        var store = new SaveStore(directory: Root, currentVersion: 1);
         string[] bad = ["a/b", "a\\b", "..", "../escape", "", "   ", "c:evil"];
-        foreach (var slot in bad)
+        foreach (string slot in bad)
         {
-            Assert.Equal(SaveStatus.InvalidSlot, store.Write(slot, new PlayerV1("X", 1)).Status);
-            Assert.Equal(SaveStatus.InvalidSlot, store.Read<PlayerV1>(slot).Status);
+            Assert.Equal(
+                expected: SaveStatus.InvalidSlot,
+                actual: store.Write(slot: slot, state: new PlayerV1(Name: "X", Hp: 1)).Status
+            );
+            Assert.Equal(
+                expected: SaveStatus.InvalidSlot,
+                actual: store.Read<PlayerV1>(slot).Status
+            );
             Assert.False(store.Exists(slot));
             Assert.False(store.Delete(slot));
         }
@@ -235,18 +264,22 @@ public class SaveStoreTests : IDisposable
     [Fact]
     public void JsonTypeInfoOverloads_RoundTrip_AndShareTheEnvelope()
     {
-        var store = new SaveStore(Root, 1);
-        var state = new AotSaveState("Grace", 1200);
+        var store = new SaveStore(directory: Root, currentVersion: 1);
+        var state = new AotSaveState(Name: "Grace", Score: 1200);
 
-        var write = store.Write("aot", state, SaveTestJsonContext.Default.AotSaveState);
-        Assert.Equal(SaveStatus.Ok, write.Status);
+        var write = store.Write(
+            slot: "aot",
+            state: state,
+            typeInfo: SaveTestJsonContext.Default.AotSaveState
+        );
+        Assert.Equal(expected: SaveStatus.Ok, actual: write.Status);
 
-        var read = store.Read("aot", SaveTestJsonContext.Default.AotSaveState);
-        Assert.Equal(SaveStatus.Ok, read.Status);
-        Assert.Equal(state, read.State);
+        var read = store.Read(slot: "aot", typeInfo: SaveTestJsonContext.Default.AotSaveState);
+        Assert.Equal(expected: SaveStatus.Ok, actual: read.Status);
+        Assert.Equal(expected: state, actual: read.State);
 
         // Same envelope either way: the reflection path reads what the source-generated path wrote.
-        Assert.Equal(state, store.Read<AotSaveState>("aot").State);
+        Assert.Equal(expected: state, actual: store.Read<AotSaveState>("aot").State);
     }
 
     private sealed record PlayerV1(string Name, int Hp);

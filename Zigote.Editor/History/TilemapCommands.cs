@@ -26,20 +26,23 @@ public sealed class PaintTilesCommand(EditorState state, TilemapLayer layer) : I
     /// <summary>The layer this stroke writes — strokes only merge within one layer.</summary>
     public TilemapLayer Layer => layer;
 
+    /// <summary>Did this stroke change anything? Empty strokes are not worth an undo entry.</summary>
+    public bool HasEdits => _edits.Count > 0;
+
     public void Execute()
     {
         // Replaying after an undo: apply in recorded order so overlapping cells end on the last value.
-        foreach (var (x, y, _, after) in _edits) layer.SetTile(x, y, after);
+        foreach ((int x, int y, int _, int after) in _edits) layer.SetTile(x: x, y: y, tile: after);
         Changed();
     }
 
     public void Undo()
     {
         // Reverse order so a cell painted twice in one stroke unwinds to its original value.
-        for (var i = _edits.Count - 1; i >= 0; i--)
+        for (int i = _edits.Count - 1; i >= 0; i--)
         {
-            var (x, y, before, _) = _edits[i];
-            layer.SetTile(x, y, before);
+            (int x, int y, int before, _) = _edits[i];
+            layer.SetTile(x: x, y: y, tile: before);
         }
 
         layer.Trim(); // an undone stroke may have been what stretched the rect
@@ -48,7 +51,8 @@ public sealed class PaintTilesCommand(EditorState state, TilemapLayer layer) : I
 
     public bool TryMergeWith(ICommand other)
     {
-        if (!Open || other is not PaintTilesCommand p || !ReferenceEquals(p.Layer, layer))
+        if (!Open || other is not PaintTilesCommand p ||
+            !ReferenceEquals(objA: p.Layer, objB: layer))
             return false;
         _edits.AddRange(p._edits);
         return true;
@@ -60,21 +64,15 @@ public sealed class PaintTilesCommand(EditorState state, TilemapLayer layer) : I
     /// </summary>
     public bool Paint(int x, int y, int tile)
     {
-        var before = layer.GetTile(x, y);
+        int before = layer.GetTile(x: x, y: y);
         if (before == tile) return false;
-        if (!layer.SetTile(x, y, tile)) return false;
+        if (!layer.SetTile(x: x, y: y, tile: tile)) return false;
         _edits.Add((x, y, before, tile));
         return true;
     }
 
-    /// <summary>Did this stroke change anything? Empty strokes are not worth an undo entry.</summary>
-    public bool HasEdits => _edits.Count > 0;
-
     // The renderer walks TilemapLayers live every frame, so a repaint is all an edit needs to show up.
-    private void Changed()
-    {
-        state.NotifySceneChanged();
-    }
+    private void Changed() => state.NotifySceneChanged();
 }
 
 /// <summary>Add or remove a tilemap layer, preserving its position in the stack for undo.</summary>
@@ -96,28 +94,6 @@ public sealed class TilemapLayerCommand : ICommand
         _adding = adding;
     }
 
-    public static TilemapLayerCommand Add(EditorState state, SceneNode node, TilemapLayer layer)
-    {
-        return new TilemapLayerCommand(
-            state,
-            node,
-            layer,
-            node.TilemapLayers.Count,
-            true
-        );
-    }
-
-    public static TilemapLayerCommand Remove(EditorState state, SceneNode node, TilemapLayer layer)
-    {
-        return new TilemapLayerCommand(
-            state,
-            node,
-            layer,
-            node.TilemapLayers.IndexOf(layer),
-            false
-        );
-    }
-
     public void Execute()
     {
         if (_adding) Insert();
@@ -130,14 +106,36 @@ public sealed class TilemapLayerCommand : ICommand
         else Insert();
     }
 
-    public bool TryMergeWith(ICommand other)
+    public bool TryMergeWith(ICommand other) => false;
+
+    public static TilemapLayerCommand Add(EditorState state, SceneNode node, TilemapLayer layer)
     {
-        return false;
+        return new TilemapLayerCommand(
+            state: state,
+            node: node,
+            layer: layer,
+            index: node.TilemapLayers.Count,
+            adding: true
+        );
+    }
+
+    public static TilemapLayerCommand Remove(EditorState state, SceneNode node, TilemapLayer layer)
+    {
+        return new TilemapLayerCommand(
+            state: state,
+            node: node,
+            layer: layer,
+            index: node.TilemapLayers.IndexOf(layer),
+            adding: false
+        );
     }
 
     private void Insert()
     {
-        _node.TilemapLayers.Insert(Math.Clamp(_index, 0, _node.TilemapLayers.Count), _layer);
+        _node.TilemapLayers.Insert(
+            index: Math.Clamp(value: _index, min: 0, max: _node.TilemapLayers.Count),
+            item: _layer
+        );
         _state.NotifySceneChanged();
     }
 

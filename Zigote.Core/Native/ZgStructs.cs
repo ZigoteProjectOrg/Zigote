@@ -200,7 +200,7 @@ public unsafe struct ZgEvent
     public string GetTextInput(byte* textBase)
     {
         if (textBase is null || TextLen == 0) return string.Empty;
-        return Encoding.UTF8.GetString(textBase + TextOff, (int)TextLen);
+        return Encoding.UTF8.GetString(bytes: textBase + TextOff, byteCount: (int)TextLen);
     }
 }
 

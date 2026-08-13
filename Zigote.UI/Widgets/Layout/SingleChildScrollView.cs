@@ -15,7 +15,9 @@ public sealed class SingleChildScrollView : ScrollView
         Axis scrollDirection = Axis.Vertical,
         EdgeInsets? padding = null,
         bool reverse = false)
-        : base(padding is { } p && child is not null ? new Padding(p, child) : child)
+        : base(
+            padding is { } p && child is not null ? new Padding(padding: p, child: child) : child
+        )
     {
         ScrollVertical = scrollDirection == Axis.Vertical;
         ScrollHorizontal = scrollDirection == Axis.Horizontal;

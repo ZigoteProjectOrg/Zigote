@@ -40,24 +40,24 @@ public class RichTextTests
         var rt = Make(new TextSpan("Hello"));
         var size = rt.Measure(new Constraints(maxWidth: 1000f, maxHeight: 600f));
 
-        Assert.Equal(5 * CharW, size.Width, 2);
-        Assert.Equal(Fs * 1.2f, size.Height, 2);
-        Assert.Equal(1, rt.LineCount);
-        Assert.Equal(1, rt.RunCount);
-        Assert.Equal("Hello", rt.Runs[0].Slice);
+        Assert.Equal(expected: 5 * CharW, actual: size.Width, precision: 2);
+        Assert.Equal(expected: Fs * 1.2f, actual: size.Height, precision: 2);
+        Assert.Equal(expected: 1, actual: rt.LineCount);
+        Assert.Equal(expected: 1, actual: rt.RunCount);
+        Assert.Equal(expected: "Hello", actual: rt.Runs[0].Slice);
     }
 
     [Fact]
     public void AdjacentSpans_OnOneLine_AdvanceHorizontally()
     {
-        var rt = Make(new TextSpan("ab"), new TextSpan("cd", Color.Red));
-        Frame(rt, 1000f);
+        var rt = Make(new TextSpan("ab"), new TextSpan(text: "cd", color: Color.Red));
+        Frame(w: rt, maxWidth: 1000f);
 
-        Assert.Equal(2, rt.RunCount);
-        Assert.Equal(0f, rt.Runs[0].X, 2);
-        Assert.Equal(2 * CharW, rt.Runs[1].X, 2);
-        Assert.Equal(0, rt.Runs[0].Line);
-        Assert.Equal(0, rt.Runs[1].Line);
+        Assert.Equal(expected: 2, actual: rt.RunCount);
+        Assert.Equal(expected: 0f, actual: rt.Runs[0].X, precision: 2);
+        Assert.Equal(expected: 2 * CharW, actual: rt.Runs[1].X, precision: 2);
+        Assert.Equal(expected: 0, actual: rt.Runs[0].Line);
+        Assert.Equal(expected: 0, actual: rt.Runs[1].Line);
     }
 
     [Fact]
@@ -67,13 +67,16 @@ public class RichTextTests
         var rt = Make(new TextSpan("Hello "), new TextSpan("world"));
         var size = rt.Measure(new Constraints(maxWidth: 30f, maxHeight: 600f));
 
-        Assert.Equal(2, rt.LineCount);
-        Assert.Equal(2, rt.RunCount);
-        Assert.Equal("Hello", rt.Runs[0].Slice); // trailing space dropped at the wrap
-        Assert.Equal("world", rt.Runs[1].Slice);
-        Assert.Equal(1, rt.Runs[1].Line);
-        Assert.Equal(0f, rt.Runs[1].X, 2);
-        Assert.Equal(2 * Fs * 1.2f, size.Height, 2);
+        Assert.Equal(expected: 2, actual: rt.LineCount);
+        Assert.Equal(expected: 2, actual: rt.RunCount);
+        Assert.Equal(
+            expected: "Hello",
+            actual: rt.Runs[0].Slice
+        ); // trailing space dropped at the wrap
+        Assert.Equal(expected: "world", actual: rt.Runs[1].Slice);
+        Assert.Equal(expected: 1, actual: rt.Runs[1].Line);
+        Assert.Equal(expected: 0f, actual: rt.Runs[1].X, precision: 2);
+        Assert.Equal(expected: 2 * Fs * 1.2f, actual: size.Height, precision: 2);
     }
 
     [Fact]
@@ -82,48 +85,48 @@ public class RichTextTests
         // "ab" + "cd efgh" in 30px: "abcd" is one visual word split across spans — both runs stay
         // on line 0 (span boundaries are not break opportunities), "efgh" wraps.
         var rt = Make(new TextSpan("ab"), new TextSpan("cd efgh"));
-        Frame(rt, 30f);
+        Frame(w: rt, maxWidth: 30f);
 
-        Assert.Equal(2, rt.LineCount);
-        Assert.Equal("ab", rt.Runs[0].Slice);
-        Assert.Equal("cd", rt.Runs[1].Slice);
-        Assert.Equal("efgh", rt.Runs[2].Slice);
-        Assert.Equal(0, rt.Runs[1].Line);
-        Assert.Equal(1, rt.Runs[2].Line);
+        Assert.Equal(expected: 2, actual: rt.LineCount);
+        Assert.Equal(expected: "ab", actual: rt.Runs[0].Slice);
+        Assert.Equal(expected: "cd", actual: rt.Runs[1].Slice);
+        Assert.Equal(expected: "efgh", actual: rt.Runs[2].Slice);
+        Assert.Equal(expected: 0, actual: rt.Runs[1].Line);
+        Assert.Equal(expected: 1, actual: rt.Runs[2].Line);
     }
 
     [Fact]
     public void HardNewline_BreaksLine_AndTrailingNewlineAddsEmptyLine()
     {
         var rt = Make(new TextSpan("a\nb\n"));
-        Frame(rt, 1000f);
+        Frame(w: rt, maxWidth: 1000f);
 
-        Assert.Equal(3, rt.LineCount); // "a", "b", trailing empty (Label parity)
-        Assert.Equal(2, rt.RunCount);
-        Assert.Equal(0, rt.Runs[0].Line);
-        Assert.Equal(1, rt.Runs[1].Line);
+        Assert.Equal(expected: 3, actual: rt.LineCount); // "a", "b", trailing empty (Label parity)
+        Assert.Equal(expected: 2, actual: rt.RunCount);
+        Assert.Equal(expected: 0, actual: rt.Runs[0].Line);
+        Assert.Equal(expected: 1, actual: rt.Runs[1].Line);
     }
 
     [Fact]
     public void InteriorSpaces_MergeIntoOneRun()
     {
         var rt = Make(new TextSpan("a b c"));
-        Frame(rt, 1000f);
+        Frame(w: rt, maxWidth: 1000f);
 
-        Assert.Equal(1, rt.RunCount);
-        Assert.Equal("a b c", rt.Runs[0].Slice);
-        Assert.Equal(5 * CharW, rt.Runs[0].Width, 2);
+        Assert.Equal(expected: 1, actual: rt.RunCount);
+        Assert.Equal(expected: "a b c", actual: rt.Runs[0].Slice);
+        Assert.Equal(expected: 5 * CharW, actual: rt.Runs[0].Width, precision: 2);
     }
 
     [Fact]
     public void LongWord_OverflowsItsOwnLine_InsteadOfInfiniteLoop()
     {
         var rt = Make(new TextSpan("abcdefghij xy"));
-        Frame(rt, 20f); // word is 55px wide, line is 20px
+        Frame(w: rt, maxWidth: 20f); // word is 55px wide, line is 20px
 
-        Assert.Equal(2, rt.LineCount);
-        Assert.Equal("abcdefghij", rt.Runs[0].Slice);
-        Assert.Equal("xy", rt.Runs[1].Slice);
+        Assert.Equal(expected: 2, actual: rt.LineCount);
+        Assert.Equal(expected: "abcdefghij", actual: rt.Runs[0].Slice);
+        Assert.Equal(expected: "xy", actual: rt.Runs[1].Slice);
     }
 
     // ── Styling ──
@@ -134,10 +137,10 @@ public class RichTextTests
         var rt = Make(new TextSpan("big") { FontSize = 20f }, new TextSpan("small"));
         var size = rt.Measure(new Constraints(maxWidth: 1000f, maxHeight: 600f));
 
-        Assert.Equal(20f * 1.2f, size.Height, 2);
-        Assert.Equal(1, rt.LineCount);
+        Assert.Equal(expected: 20f * 1.2f, actual: size.Height, precision: 2);
+        Assert.Equal(expected: 1, actual: rt.LineCount);
         // The small span advances by its own width, positioned after the big one.
-        Assert.Equal(3 * 20f * 0.55f, rt.Runs[1].X, 2);
+        Assert.Equal(expected: 3 * 20f * 0.55f, actual: rt.Runs[1].X, precision: 2);
     }
 
     [Fact]
@@ -150,15 +153,18 @@ public class RichTextTests
                 Background = Color.Yellow,
             }
         );
-        Frame(rt, 1000f);
+        Frame(w: rt, maxWidth: 1000f);
 
         var paint = new PaintList();
         rt.Paint(paint);
-        var rects = 0;
-        for (var i = 0; i < paint.DebugCommands.Count; i++)
+        int rects = 0;
+        for (int i = 0; i < paint.DebugCommands.Count; i++)
+        {
             if ((PaintCommandKind)paint.DebugCommands[i].Kind == PaintCommandKind.Rect)
                 rects++;
-        Assert.Equal(2, rects); // one background + one underline
+        }
+
+        Assert.Equal(expected: 2, actual: rects); // one background + one underline
     }
 
     // ── MaxLines / ellipsis ──
@@ -169,10 +175,10 @@ public class RichTextTests
         var rt = Make(new TextSpan("aa bb cc dd ee ff gg hh"));
         rt.MaxLines = 2;
         rt.Overflow = TextOverflow.Ellipsis;
-        Frame(rt, 30f); // 5 chars per line
+        Frame(w: rt, maxWidth: 30f); // 5 chars per line
 
-        Assert.Equal(2, rt.LineCount);
-        Assert.EndsWith("…", rt.Runs[rt.RunCount - 1].Slice);
+        Assert.Equal(expected: 2, actual: rt.LineCount);
+        Assert.EndsWith(expectedEndString: "…", actualString: rt.Runs[rt.RunCount - 1].Slice);
     }
 
     [Fact]
@@ -180,10 +186,10 @@ public class RichTextTests
     {
         var rt = Make(new TextSpan("aa bb cc dd ee ff"));
         rt.MaxLines = 2;
-        Frame(rt, 30f);
+        Frame(w: rt, maxWidth: 30f);
 
-        Assert.Equal(2, rt.LineCount);
-        for (var i = 0; i < rt.RunCount; i++)
+        Assert.Equal(expected: 2, actual: rt.LineCount);
+        for (int i = 0; i < rt.RunCount; i++)
             Assert.True(rt.Runs[i].Line < 2);
     }
 
@@ -194,15 +200,15 @@ public class RichTextTests
     {
         var span = new TextSpan("short");
         var rt = Make(span);
-        Frame(rt, 1000f);
-        var w1 = rt.Measure(new Constraints(maxWidth: 1000f, maxHeight: 600f)).Width;
+        Frame(w: rt, maxWidth: 1000f);
+        float w1 = rt.Measure(new Constraints(maxWidth: 1000f, maxHeight: 600f)).Width;
 
         span.Text = "considerably longer";
-        var w2 = rt.Measure(new Constraints(maxWidth: 1000f, maxHeight: 600f)).Width;
-        Assert.Equal(w1, w2, 2); // cached layout still live
+        float w2 = rt.Measure(new Constraints(maxWidth: 1000f, maxHeight: 600f)).Width;
+        Assert.Equal(expected: w1, actual: w2, precision: 2); // cached layout still live
 
         rt.InvalidateSpans();
-        var w3 = rt.Measure(new Constraints(maxWidth: 1000f, maxHeight: 600f)).Width;
+        float w3 = rt.Measure(new Constraints(maxWidth: 1000f, maxHeight: 600f)).Width;
         Assert.True(w3 > w1);
     }
 
@@ -213,12 +219,20 @@ public class RichTextTests
     {
         var rt = Make(new TextSpan("ab "), new TextSpan("cd"));
         rt.LayoutDirection = TextDirection.Rtl;
-        Frame(rt, 1000f);
+        Frame(w: rt, maxWidth: 1000f);
 
         // Line width = "ab cd" = 5 chars. First span run occupies the RIGHT side.
-        var lineW = 5 * CharW;
-        Assert.Equal(lineW - 3 * CharW, rt.Runs[0].X, 2); // "ab " mirrored
-        Assert.Equal(0f, rt.Runs[1].X, 2); // "cd" hugs the line start (left end of mirrored line)
+        float lineW = 5 * CharW;
+        Assert.Equal(
+            expected: lineW - (3 * CharW),
+            actual: rt.Runs[0].X,
+            precision: 2
+        ); // "ab " mirrored
+        Assert.Equal(
+            expected: 0f,
+            actual: rt.Runs[1].X,
+            precision: 2
+        ); // "cd" hugs the line start (left end of mirrored line)
     }
 
     [Fact]
@@ -226,18 +240,18 @@ public class RichTextTests
     {
         var rt = Make(new TextSpan("ab"));
         rt.LayoutDirection = TextDirection.Rtl;
-        rt.Measure(Constraints.Tight(100f, 20f));
+        rt.Measure(Constraints.Tight(width: 100f, height: 20f));
         rt.Layout(Offset.Zero);
 
         var paint = new PaintList();
         rt.Paint(paint);
         // The single text command's baseline X sits at box right minus text width.
-        var found = false;
-        for (var i = 0; i < paint.DebugCommands.Count; i++)
+        bool found = false;
+        for (int i = 0; i < paint.DebugCommands.Count; i++)
         {
             var cmd = paint.DebugCommands[i];
             if ((PaintCommandKind)cmd.Kind != PaintCommandKind.Text) continue;
-            Assert.Equal(100f - 2 * CharW, cmd.BaselineX, 2);
+            Assert.Equal(expected: 100f - (2 * CharW), actual: cmd.BaselineX, precision: 2);
             found = true;
         }
 
@@ -251,55 +265,55 @@ public class RtlLayoutTests
     [Fact]
     public void Row_Rtl_MirrorsChildOrderAndAlignment()
     {
-        var a = new SizedBox(30f, 10f);
-        var b = new SizedBox(50f, 10f);
+        var a = new SizedBox(width: 30f, height: 10f);
+        var b = new SizedBox(width: 50f, height: 10f);
         var row = new Row([a, b]) { LayoutDirection = TextDirection.Rtl };
 
-        row.Measure(Constraints.Tight(200f, 20f));
+        row.Measure(Constraints.Tight(width: 200f, height: 20f));
         row.Layout(Offset.Zero);
 
         // MainAxisAlignment.Start under RTL hugs the RIGHT edge; first child rightmost.
-        Assert.Equal(170f, a.Bounds.X, 2);
-        Assert.Equal(120f, b.Bounds.X, 2);
+        Assert.Equal(expected: 170f, actual: a.Bounds.X, precision: 2);
+        Assert.Equal(expected: 120f, actual: b.Bounds.X, precision: 2);
     }
 
     [Fact]
     public void Row_Ltr_Unchanged()
     {
-        var a = new SizedBox(30f, 10f);
-        var b = new SizedBox(50f, 10f);
+        var a = new SizedBox(width: 30f, height: 10f);
+        var b = new SizedBox(width: 50f, height: 10f);
         var row = new Row([a, b]);
 
-        row.Measure(Constraints.Tight(200f, 20f));
+        row.Measure(Constraints.Tight(width: 200f, height: 20f));
         row.Layout(Offset.Zero);
 
-        Assert.Equal(0f, a.Bounds.X, 2);
-        Assert.Equal(30f, b.Bounds.X, 2);
+        Assert.Equal(expected: 0f, actual: a.Bounds.X, precision: 2);
+        Assert.Equal(expected: 30f, actual: b.Bounds.X, precision: 2);
     }
 
     [Fact]
     public void Row_Rtl_FromAmbientDirectionality()
     {
-        var a = new SizedBox(30f, 10f);
-        var b = new SizedBox(50f, 10f);
+        var a = new SizedBox(width: 30f, height: 10f);
+        var b = new SizedBox(width: 50f, height: 10f);
         var root = new Directionality(
-            TextDirection.Rtl,
-            new Row([a, b])
+            direction: TextDirection.Rtl,
+            child: new Row([a, b])
         );
 
-        root.Measure(Constraints.Tight(200f, 20f));
+        root.Measure(Constraints.Tight(width: 200f, height: 20f));
         root.Layout(Offset.Zero);
 
-        Assert.Equal(170f, a.Bounds.X, 2);
+        Assert.Equal(expected: 170f, actual: a.Bounds.X, precision: 2);
     }
 
     [Fact]
     public void Wrap_Rtl_FillsRunsRightToLeft()
     {
-        var a = new SizedBox(40f, 10f);
-        var b = new SizedBox(40f, 10f);
-        var c = new SizedBox(40f, 10f);
-        var wrap = new Wrap([a, b, c], spacing: 10) {
+        var a = new SizedBox(width: 40f, height: 10f);
+        var b = new SizedBox(width: 40f, height: 10f);
+        var c = new SizedBox(width: 40f, height: 10f);
+        var wrap = new Wrap(children: [a, b, c], spacing: 10) {
             LayoutDirection = TextDirection.Rtl,
             RunSpacing = 0f,
         };
@@ -308,46 +322,46 @@ public class RtlLayoutTests
         wrap.Layout(Offset.Zero);
 
         // Run 0 holds a+b (40+10+40 = 90 ≤ 100); measured width 90. Mirrored: a right, b left.
-        Assert.Equal(50f, a.Bounds.X, 2);
-        Assert.Equal(0f, b.Bounds.X, 2);
+        Assert.Equal(expected: 50f, actual: a.Bounds.X, precision: 2);
+        Assert.Equal(expected: 0f, actual: b.Bounds.X, precision: 2);
         // Run 1 holds c at the right edge of the 90px extent.
-        Assert.Equal(50f, c.Bounds.X, 2);
-        Assert.Equal(10f, c.Bounds.Y, 2);
+        Assert.Equal(expected: 50f, actual: c.Bounds.X, precision: 2);
+        Assert.Equal(expected: 10f, actual: c.Bounds.Y, precision: 2);
     }
 
     [Fact]
     public void EdgeInsetsDirectional_ResolvesPerDirection()
     {
         var d = EdgeInsetsDirectional.Only(
-            10f,
+            start: 10f,
             end: 3f,
             top: 1f,
             bottom: 2f
         );
 
         var ltr = d.Resolve(TextDirection.Ltr);
-        Assert.Equal(10f, ltr.Left);
-        Assert.Equal(3f, ltr.Right);
+        Assert.Equal(expected: 10f, actual: ltr.Left);
+        Assert.Equal(expected: 3f, actual: ltr.Right);
 
         var rtl = d.Resolve(TextDirection.Rtl);
-        Assert.Equal(3f, rtl.Left);
-        Assert.Equal(10f, rtl.Right);
-        Assert.Equal(1f, rtl.Top);
-        Assert.Equal(2f, rtl.Bottom);
+        Assert.Equal(expected: 3f, actual: rtl.Left);
+        Assert.Equal(expected: 10f, actual: rtl.Right);
+        Assert.Equal(expected: 1f, actual: rtl.Top);
+        Assert.Equal(expected: 2f, actual: rtl.Bottom);
     }
 
     [Fact]
     public void Padding_DirectionalInsets_FlipUnderAmbientRtl()
     {
-        var child = new SizedBox(10f, 10f);
-        var pad = new Padding(EdgeInsetsDirectional.Only(20f), child);
-        var root = new Directionality(TextDirection.Rtl, pad);
+        var child = new SizedBox(width: 10f, height: 10f);
+        var pad = new Padding(padding: EdgeInsetsDirectional.Only(20f), child: child);
+        var root = new Directionality(direction: TextDirection.Rtl, child: pad);
 
-        root.Measure(Constraints.Tight(100f, 20f));
+        root.Measure(Constraints.Tight(width: 100f, height: 20f));
         root.Layout(Offset.Zero);
 
         // start=20 resolves to the RIGHT side under RTL → child stays at the left edge.
-        Assert.Equal(0f, child.Bounds.X, 2);
-        Assert.Equal(20f, pad.Insets.Right, 2);
+        Assert.Equal(expected: 0f, actual: child.Bounds.X, precision: 2);
+        Assert.Equal(expected: 20f, actual: pad.Insets.Right, precision: 2);
     }
 }

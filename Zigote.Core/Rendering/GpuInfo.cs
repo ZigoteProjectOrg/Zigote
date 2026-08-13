@@ -58,7 +58,7 @@ public readonly record struct GpuInfo(
     {
         get
         {
-            var kind = DeviceType switch {
+            string kind = DeviceType switch {
                 ZgGpuDeviceType.DiscreteGpu => "discrete",
                 ZgGpuDeviceType.IntegratedGpu => "integrated",
                 ZgGpuDeviceType.Cpu => "software",

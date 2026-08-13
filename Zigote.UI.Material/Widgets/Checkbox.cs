@@ -14,14 +14,19 @@ public class Checkbox : ComposedWidget
     private readonly DecoratedBox _box = new() { Radius = Radii.Xs };
     private readonly CheckGlyph _glyph = new();
 
-    // Phone hit box: the tick keeps its 16pt look, centred in a finger-sized press area.
-    private readonly SizedBox _touchBox = new(TouchMetrics.MinTarget, TouchMetrics.MinTarget);
     private readonly Pressable _root;
+
+    // Phone hit box: the tick keeps its 16pt look, centred in a finger-sized press area.
+    private readonly SizedBox _touchBox = new(
+        width: TouchMetrics.MinTarget,
+        height: TouchMetrics.MinTarget
+    );
+
+    private bool _enabled = true;
+    private float _size = ControlMetrics.CheckboxSize;
     private ThemeData _theme = ThemeData.Dark;
 
     private bool _value;
-    private bool _enabled = true;
-    private float _size = ControlMetrics.CheckboxSize;
 
     /// <summary>Named-argument constructor: <c>new Checkbox(value: true, onChanged: (v) => …)</c>.</summary>
     public Checkbox(bool value, Action<bool>? onChanged = null)
@@ -42,7 +47,7 @@ public class Checkbox : ComposedWidget
     public bool Value
     {
         get => _value;
-        set => SetBuild(ref _value, value);
+        set => SetBuild(field: ref _value, value: value);
     }
 
     [Obsolete("Renamed — use Value.")]
@@ -68,7 +73,7 @@ public class Checkbox : ComposedWidget
     public bool Enabled
     {
         get => _enabled;
-        set => SetBuild(ref _enabled, value);
+        set => SetBuild(field: ref _enabled, value: value);
     }
 
     public override void UpdateFrom(Widget newWidget)
@@ -82,10 +87,11 @@ public class Checkbox : ComposedWidget
         }
     }
 
-    public override int DebugStateHash()
-    {
-        return HashCode.Combine(Value, Enabled, base.DebugStateHash());
-    }
+    public override int DebugStateHash() => HashCode.Combine(
+        value1: Value,
+        value2: Enabled,
+        value3: base.DebugStateHash()
+    );
 
     protected override Widget Build(BuildContext context)
     {
@@ -109,8 +115,8 @@ public class Checkbox : ComposedWidget
 
     private void ApplyColors()
     {
-        var hovered = _root.Hovered;
-        var pressed = _root.Pressed;
+        bool hovered = _root.Hovered;
+        bool pressed = _root.Pressed;
 
         if (!Enabled)
         {
@@ -130,7 +136,11 @@ public class Checkbox : ComposedWidget
         }
         else if (Value)
         {
-            _box.Fill = StateStyle.Fill(_theme.Primary, hovered, pressed);
+            _box.Fill = StateStyle.Fill(
+                baseColor: _theme.Primary,
+                hovered: hovered,
+                pressed: pressed
+            );
             _box.BorderColor = Color.Transparent;
             _glyph.Color = _theme.OnPrimary;
             _glyph.Visible = true;

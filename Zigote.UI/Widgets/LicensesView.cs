@@ -19,10 +19,7 @@ public class LicensesView : ComposedWidget
 {
     private string? _title;
 
-    public LicensesView()
-    {
-        FontLicenses.EnsureRegistered();
-    }
+    public LicensesView() => FontLicenses.EnsureRegistered();
 
     /// <summary>Optional heading, e.g. the app name.</summary>
     public string? Title
@@ -42,21 +39,32 @@ public class LicensesView : ComposedWidget
 
         if (_title is { Length: > 0 } title)
         {
-            column.Children.Add(new Label(title, Typography.Title1, theme.OnBackground));
+            column.Children.Add(
+                new Label(text: title, style: Typography.Title1, color: theme.OnBackground)
+            );
             column.Children.Add(new SizedBox(height: Spacing.Sm));
         }
 
         var entries = LicenseRegistry.Collect();
-        for (var i = 0; i < entries.Count; i++)
+        for (int i = 0; i < entries.Count; i++)
         {
             var e = entries[i];
             if (i > 0 || _title is not null)
                 column.Children.Add(new SizedBox(height: Spacing.Xxl));
             column.Children.Add(
-                new Label($"{e.Component} — {e.License}", Typography.Headline, theme.OnBackground)
+                new Label(
+                    text: $"{e.Component} — {e.License}",
+                    style: Typography.Headline,
+                    color: theme.OnBackground
+                )
             );
             if (e.Homepage is { Length: > 0 } url)
-                column.Children.Add(new Label(url, Typography.Callout, theme.Hint));
+            {
+                column.Children.Add(
+                    new Label(text: url, style: Typography.Callout, color: theme.Hint)
+                );
+            }
+
             column.Children.Add(new SizedBox(height: Spacing.Sm));
             column.Children.Add(
                 new SelectableText(
@@ -69,7 +77,7 @@ public class LicensesView : ComposedWidget
         }
 
         return new ScrollView {
-            Child = new Padding(EdgeInsets.All(Spacing.Xxl), column),
+            Child = new Padding(padding: EdgeInsets.All(Spacing.Xxl), child: column),
         };
     }
 }

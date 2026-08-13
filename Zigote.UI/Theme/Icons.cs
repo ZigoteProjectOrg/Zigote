@@ -134,14 +134,14 @@ public static class Icons
     /// </summary>
     public static void Draw(PaintList paint, string glyph, Rect box, Color color, float size)
     {
-        var x = box.X + (box.Width - size) * 0.5f;
-        var baseline = box.Y + (box.Height + size) * 0.5f - size * 0.12f;
+        float x = box.X + ((box.Width - size) * 0.5f);
+        float baseline = box.Y + ((box.Height + size) * 0.5f) - (size * 0.12f);
         paint.AddText(
-            glyph,
-            x,
-            baseline,
-            color,
-            size,
+            text: glyph,
+            baselineX: x,
+            baselineY: baseline,
+            color: color,
+            fontSize: size,
             fontFamily: Family
         );
     }
@@ -154,11 +154,11 @@ public static class Icons
         float size)
     {
         paint.AddText(
-            glyph,
-            x,
-            baselineY,
-            color,
-            size,
+            text: glyph,
+            baselineX: x,
+            baselineY: baselineY,
+            color: color,
+            fontSize: size,
             fontFamily: Family
         );
     }

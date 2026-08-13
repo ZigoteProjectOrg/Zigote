@@ -26,16 +26,13 @@ public sealed class ExportedField
     public bool IsColor { get; init; }
     public required PropertyInfo Property { get; init; }
 
-    public object? GetValue(Component instance)
-    {
-        return Property.GetValue(instance);
-    }
+    public object? GetValue(Component instance) => Property.GetValue(instance);
 
     public void SetValue(Component instance, object? value)
     {
         try
         {
-            Property.SetValue(instance, value);
+            Property.SetValue(obj: instance, value: value);
         }
         catch (Exception ex)
         {

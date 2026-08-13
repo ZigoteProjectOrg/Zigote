@@ -22,7 +22,7 @@ internal sealed class FillTransition
     private readonly AnimationController _anim;
     private readonly Action<Color> _apply;
     private readonly Ticker _ticker;
-    private readonly ColorTween _tween = new(Color.Transparent, Color.Transparent);
+    private readonly ColorTween _tween = new(begin: Color.Transparent, end: Color.Transparent);
     private bool _started;
 
     /// <summary>Theme the last target was computed from — see <see cref="Target(Color, ThemeData)" />.</summary>
@@ -54,7 +54,7 @@ internal sealed class FillTransition
     /// </summary>
     public void Target(Color target, ThemeData theme)
     {
-        if (!ReferenceEquals(_theme, theme))
+        if (!ReferenceEquals(objA: _theme, objB: theme))
         {
             _theme = theme;
             Snap(target);
@@ -107,17 +107,17 @@ public class AdwButton : ComposedWidget
     private readonly Opacity _fade = new(1.0);
     private readonly FillTransition _fill;
     private readonly Pressable _root;
-    private AdwButtonContent? _defaultContent;
-    private ThemeData _theme = ThemeData.Dark;
 
     private bool _circular;
     private bool _compact;
     private Widget? _content;
+    private AdwButtonContent? _defaultContent;
     private bool _enabled = true;
     private string? _iconName;
     private string _label;
     private bool _pill;
     private AdwButtonStyle _style = AdwButtonStyle.Regular;
+    private ThemeData _theme = ThemeData.Dark;
 
     public AdwButton(string label = "", Action? onPressed = null)
     {
@@ -141,14 +141,14 @@ public class AdwButton : ComposedWidget
     public string Label
     {
         get => _label;
-        set => SetBuild(ref _label, value);
+        set => SetBuild(field: ref _label, value: value);
     }
 
     /// <summary>Optional icon glyph (an <see cref="Icons" /> constant) drawn before the label.</summary>
     public string? IconName
     {
         get => _iconName;
-        set => SetBuild(ref _iconName, value);
+        set => SetBuild(field: ref _iconName, value: value);
     }
 
     /// <summary>Optional widget child shown instead of the label + icon.</summary>
@@ -157,7 +157,7 @@ public class AdwButton : ComposedWidget
         get => _content;
         set
         {
-            if (ReferenceEquals(_content, value)) return;
+            if (ReferenceEquals(objA: _content, objB: value)) return;
             _content = value;
             MarkNeedsBuild();
         }
@@ -166,34 +166,34 @@ public class AdwButton : ComposedWidget
     public AdwButtonStyle Style
     {
         get => _style;
-        set => SetBuild(ref _style, value);
+        set => SetBuild(field: ref _style, value: value);
     }
 
     /// <summary>.pill — fully-rounded capsule shape.</summary>
     public bool Pill
     {
         get => _pill;
-        set => SetBuild(ref _pill, value);
+        set => SetBuild(field: ref _pill, value: value);
     }
 
     /// <summary>.circular — a fixed 34×34 round icon button (icon only).</summary>
     public bool Circular
     {
         get => _circular;
-        set => SetBuild(ref _circular, value);
+        set => SetBuild(field: ref _circular, value: value);
     }
 
     /// <summary>Toolbar-density height (28px instead of 34px).</summary>
     public bool Compact
     {
         get => _compact;
-        set => SetBuild(ref _compact, value);
+        set => SetBuild(field: ref _compact, value: value);
     }
 
     public bool Enabled
     {
         get => _enabled;
-        set => SetBuild(ref _enabled, value);
+        set => SetBuild(field: ref _enabled, value: value);
     }
 
     // Read live by the Pressable on each press; a null callback renders as disabled.
@@ -214,11 +214,11 @@ public class AdwButton : ComposedWidget
     public override int DebugStateHash()
     {
         return HashCode.Combine(
-            Label,
-            IconName,
-            Style,
-            Enabled,
-            base.DebugStateHash()
+            value1: Label,
+            value2: IconName,
+            value3: Style,
+            value4: Enabled,
+            value5: base.DebugStateHash()
         );
     }
 
@@ -226,21 +226,21 @@ public class AdwButton : ComposedWidget
     {
         _theme = ThemeProvider.Of(context);
 
-        var radius = Circular || Pill ? AdwMetrics.Pill : AdwMetrics.ControlRadius;
-        var height = Compact ? AdwMetrics.CompactControlHeight
+        float radius = Circular || Pill ? AdwMetrics.Pill : AdwMetrics.ControlRadius;
+        float height = Compact ? AdwMetrics.CompactControlHeight
             : Pill ? AdwMetrics.PillHeight
             : AdwMetrics.ButtonHeight;
         // libadwaita pads by role, not by one number: 17px around a bare label, 9px once an icon
         // shares the row (the icon is its own leading space), 32px inside a pill.
-        var paddingX = Pill ? AdwMetrics.PillPaddingX
+        float paddingX = Pill ? AdwMetrics.PillPaddingX
             : IconName is not null && Label.Length > 0 ? AdwMetrics.ImageTextPaddingX
             : AdwMetrics.ButtonPaddingX;
-        var enabled = Enabled && OnPressed is not null;
+        bool enabled = Enabled && OnPressed is not null;
 
         // .circular is icon-only in Adwaita, so the label is dropped from the content (it survives
         // as the accessible name) rather than allowed to size the square.
         _defaultContent = Content is null
-            ? new AdwButtonContent(IconName, Circular ? "" : Label)
+            ? new AdwButtonContent(iconName: IconName, label: Circular ? "" : Label)
             : null;
         var content = Content ?? _defaultContent!;
 
@@ -248,12 +248,14 @@ public class AdwButton : ComposedWidget
             // Icon-only: a fixed square, capsule-round when Circular. `.circular` pins 34×34
             // regardless of density; `.image-button` is min-width 24 + 5px padding either side,
             // which lands on the same square at the button's own height.
+        {
             _box.Child = SizedBox.Square(
-                Circular ? AdwMetrics.CircularSize : height,
-                new Center(content)
+                size: Circular ? AdwMetrics.CircularSize : height,
+                child: new Center(content)
             );
+        }
         else
-            _box.Child = AdwStyle.ButtonBody(content, height, paddingX);
+            _box.Child = AdwStyle.ButtonBody(content: content, height: height, paddingX: paddingX);
 
         _box.Radius = radius;
         _root.Enabled = enabled;
@@ -271,21 +273,21 @@ public class AdwButton : ComposedWidget
 
     private void ApplyColors()
     {
-        var enabled = Enabled && OnPressed is not null;
+        bool enabled = Enabled && OnPressed is not null;
         _fill.Target(
-            AdwStyle.ButtonFill(
-                _theme,
-                Style,
-                _root.Hovered,
-                _root.Pressed,
-                enabled
+            target: AdwStyle.ButtonFill(
+                theme: _theme,
+                style: Style,
+                hovered: _root.Hovered,
+                pressed: _root.Pressed,
+                enabled: enabled
             ),
-            _theme
+            theme: _theme
         );
 
-        var fg = AdwStyle.ButtonForeground(_theme, Style);
+        var fg = AdwStyle.ButtonForeground(theme: _theme, style: Style);
         if (_defaultContent is not null) _defaultContent.Color = fg;
-        if (Content is not null) TintForeground(Content, fg);
+        if (Content is not null) TintForeground(w: Content, fg: fg);
         _box.MarkNeedsPaint();
     }
 
@@ -306,6 +308,6 @@ public class AdwButton : ComposedWidget
                 break;
         }
 
-        foreach (var child in w.GetChildren()) TintForeground(child, fg);
+        foreach (var child in w.GetChildren()) TintForeground(w: child, fg: fg);
     }
 }

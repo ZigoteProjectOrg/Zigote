@@ -2,7 +2,8 @@ namespace Zigote.Network;
 
 /// <summary>
 ///     Tunables shared by the transport, connection and replication layers. Construct once and hand to
-///     <see cref="NetworkManager" /> (or a transport directly). Defaults target a 60 Hz action game on the
+///     <see cref="NetworkManager" /> (or a transport directly). Defaults target a 60 Hz action game on
+///     the
 ///     open internet. All time values are in seconds unless noted.
 /// </summary>
 public sealed class NetConfig
@@ -18,7 +19,8 @@ public sealed class NetConfig
 
     /// <summary>
     ///     Largest UDP payload (bytes) the transport will emit without fragmenting. 1200 stays under the
-    ///     common 1280-byte IPv6 path MTU after headers. Reliable messages larger than this are fragmented.
+    ///     common 1280-byte IPv6 path MTU after headers. Reliable messages larger than this are
+    ///     fragmented.
     /// </summary>
     public int Mtu { get; init; } = 1200;
 
@@ -31,12 +33,18 @@ public sealed class NetConfig
     /// <summary>Send a keepalive ping if nothing else has been sent for this long (must be &lt; timeout).</summary>
     public float KeepAliveInterval { get; init; } = 1f;
 
-    /// <summary>How long the client waits for an accept before giving up, and the gap between connect retries.</summary>
+    /// <summary>
+    ///     How long the client waits for an accept before giving up, and the gap between connect
+    ///     retries.
+    /// </summary>
     public float ConnectTimeout { get; init; } = 5f;
 
     public float ConnectRetryInterval { get; init; } = 0.25f;
 
-    /// <summary>Base round-trip estimate (seconds) until the first ack arrives — seeds the retransmit timer.</summary>
+    /// <summary>
+    ///     Base round-trip estimate (seconds) until the first ack arrives — seeds the retransmit
+    ///     timer.
+    /// </summary>
     public float InitialRtt { get; init; } = 0.1f;
 
     /// <summary>Multiplier on the smoothed RTT used as the reliable-packet retransmit timeout (RTO).</summary>
@@ -69,8 +77,5 @@ public sealed class NetConfig
     /// <summary>Seconds per tick derived from <see cref="TickRate" />.</summary>
     public float TickInterval => 1f / TickRate;
 
-    public NetConfig Clone()
-    {
-        return (NetConfig)MemberwiseClone();
-    }
+    public NetConfig Clone() => (NetConfig)MemberwiseClone();
 }

@@ -31,22 +31,23 @@ public static class LodSystem
     ///     Apply LOD/cull to the scene for a camera at <paramref name="cameraPos" />, driving native
     ///     visibility.
     /// </summary>
-    public static void Apply(SceneNode root, Vec3 cameraPos)
-    {
-        Apply(root, cameraPos, NativeSink.Instance);
-    }
+    public static void Apply(SceneNode root, Vec3 cameraPos) => Apply(
+        root: root,
+        cameraPos: cameraPos,
+        sink: NativeSink.Instance
+    );
 
     /// <summary>Apply with an explicit sink (used by tests to record the resulting visibility).</summary>
     public static void Apply(SceneNode root, Vec3 cameraPos, IVisibilitySink sink)
     {
         Visit(
-            root,
-            cameraPos,
-            sink,
-            null,
-            StreamingPolicy.Unbounded,
-            true,
-            Transform3D.Identity
+            node: root,
+            cam: cameraPos,
+            sink: sink,
+            residency: null,
+            policy: StreamingPolicy.Unbounded,
+            parentVisible: true,
+            parentWorld: Transform3D.Identity
         );
     }
 
@@ -60,13 +61,13 @@ public static class LodSystem
         IResidencySink residency, StreamingPolicy policy)
     {
         Visit(
-            root,
-            cameraPos,
-            sink,
-            residency,
-            policy,
-            true,
-            Transform3D.Identity
+            node: root,
+            cam: cameraPos,
+            sink: sink,
+            residency: residency,
+            policy: policy,
+            parentVisible: true,
+            parentWorld: Transform3D.Identity
         );
     }
 
@@ -78,13 +79,13 @@ public static class LodSystem
         StreamingPolicy policy)
     {
         Visit(
-            root,
-            cameraPos,
-            NativeSink.Instance,
-            residency,
-            policy,
-            true,
-            Transform3D.Identity
+            node: root,
+            cam: cameraPos,
+            sink: NativeSink.Instance,
+            residency: residency,
+            policy: policy,
+            parentVisible: true,
+            parentWorld: Transform3D.Identity
         );
     }
 
@@ -93,57 +94,68 @@ public static class LodSystem
         StreamingPolicy policy, bool parentVisible, Transform3D parentWorld)
     {
         var world = Transform3D.Combine(
-            parentWorld,
-            new Transform3D(node.Position, node.Rotation, node.Scale)
+            parent: parentWorld,
+            child: new Transform3D(
+                position: node.Position,
+                rotation: node.Rotation,
+                scale: node.Scale
+            )
         );
-        var distance = (world.Position - cam).Length();
+        float distance = (world.Position - cam).Length();
 
         // LOD group: its direct children are mutually-exclusive detail levels.
         if (node is { LodGroup: true, Children.Count: > 0 })
         {
-            var n = node.Children.Count;
+            int n = node.Children.Count;
             var budgets = n <= 32 ? stackalloc float[n] : new float[n];
-            for (var i = 0; i < n; i++) budgets[i] = node.Children[i].LodMaxDistance;
-            var selected = LodMath.SelectLevel(budgets, distance);
+            for (int i = 0; i < n; i++) budgets[i] = node.Children[i].LodMaxDistance;
+            int selected = LodMath.SelectLevel(levelMaxDistances: budgets, distance: distance);
 
-            for (var i = 0; i < n; i++)
+            for (int i = 0; i < n; i++)
             {
                 var child = node.Children[i];
                 if (i == selected && parentVisible)
+                {
                     Visit(
-                        child,
-                        cam,
-                        sink,
-                        residency,
-                        policy,
-                        true,
-                        world
+                        node: child,
+                        cam: cam,
+                        sink: sink,
+                        residency: residency,
+                        policy: policy,
+                        parentVisible: true,
+                        parentWorld: world
                     ); // chosen level
+                }
                 else
-                    HideSubtree(child, sink); // unchosen level, or whole group culled
+                    HideSubtree(node: child, sink: sink); // unchosen level, or whole group culled
             }
 
             return;
         }
 
-        var visible = parentVisible && !LodMath.CulledByDistance(node.LodMaxDistance, distance);
-        sink.Set(node, visible);
+        bool visible = parentVisible && !LodMath.CulledByDistance(
+            maxDistance: node.LodMaxDistance,
+            distance: distance
+        );
+        sink.Set(node: node, visible: visible);
         ApplyResidency(
-            node,
-            distance,
-            residency,
-            policy
+            node: node,
+            distance: distance,
+            residency: residency,
+            policy: policy
         );
         foreach (var child in node.Children)
+        {
             Visit(
-                child,
-                cam,
-                sink,
-                residency,
-                policy,
-                visible,
-                world
+                node: child,
+                cam: cam,
+                sink: sink,
+                residency: residency,
+                policy: policy,
+                parentVisible: visible,
+                parentWorld: world
             );
+        }
     }
 
     private static void ApplyResidency(SceneNode node, float distance, IResidencySink? residency,
@@ -153,7 +165,7 @@ public static class LodSystem
         switch (policy.Decide(distance))
         {
             case ResidencyDecision.Want:
-                residency.Want(node, distance);
+                residency.Want(node: node, distance: distance);
                 break;
             case ResidencyDecision.Drop:
                 residency.Drop(node);
@@ -163,9 +175,9 @@ public static class LodSystem
 
     private static void HideSubtree(SceneNode node, IVisibilitySink sink)
     {
-        sink.Set(node, false);
+        sink.Set(node: node, visible: false);
         foreach (var child in node.Children)
-            HideSubtree(child, sink);
+            HideSubtree(node: child, sink: sink);
     }
 
     public interface IVisibilitySink
@@ -196,7 +208,7 @@ public static class LodSystem
             if (node.Kind != NodeKind.Mesh || node.Handle == 0) return;
             if (node.LodVisibleApplied == visible) return;
             node.LodVisibleApplied = visible;
-            ZigoteEngine.Instance?.SceneSetNodeVisible(node.Handle, visible);
+            ZigoteEngine.Instance?.SceneSetNodeVisible(nodeHandle: node.Handle, visible: visible);
         }
     }
 }

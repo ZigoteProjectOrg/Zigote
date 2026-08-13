@@ -27,10 +27,8 @@ public static class ModifiersExtensions
     ///     on macOS, <see cref="Modifiers.Ctrl" /> elsewhere. Accepting either keeps shortcuts working
     ///     across platforms and matches the ⌘-labelled hints shown in menus.
     /// </summary>
-    public static bool HasCommand(this Modifiers m)
-    {
-        return m.HasFlag(Modifiers.Ctrl) || m.HasFlag(Modifiers.Cmd);
-    }
+    public static bool HasCommand(this Modifiers m) =>
+        m.HasFlag(Modifiers.Ctrl) || m.HasFlag(Modifiers.Cmd);
 }
 
 public abstract class InputEvent
@@ -45,9 +43,7 @@ public abstract class InputEvent
 
 public sealed class MouseMoveEvent : InputEvent
 {
-    public MouseMoveEvent()
-    {
-    }
+    public MouseMoveEvent() { }
 
     public MouseMoveEvent(float x, float y)
     {
@@ -101,9 +97,7 @@ public sealed class MouseUpEvent(float x, float y, MouseButton button) : InputEv
 
 public sealed class ScrollEvent : InputEvent
 {
-    public ScrollEvent()
-    {
-    }
+    public ScrollEvent() { }
 
     public ScrollEvent(float x, float y, float scrollX, float scrollY)
     {
@@ -229,8 +223,10 @@ public enum ScrollOrientation
 /// <summary>A drag payload entered the window; the item events that follow belong to this drop.</summary>
 public sealed class DropBeginEvent : InputEvent;
 
-/// <summary>One file (of possibly many) was dropped on the window. <see cref="X" />/<see cref="Y" /> are
-/// window-relative, in the same logical-pixel space as pointer events.</summary>
+/// <summary>
+///     One file (of possibly many) was dropped on the window. <see cref="X" />/<see cref="Y" /> are
+///     window-relative, in the same logical-pixel space as pointer events.
+/// </summary>
 public sealed class DropFileEvent(string path, float x, float y) : InputEvent
 {
     public string Path { get; } = path;
@@ -246,8 +242,10 @@ public sealed class DropTextEvent(string text, float x, float y) : InputEvent
     public float Y { get; } = y;
 }
 
-/// <summary>The pointer moved over the window while carrying a drag payload. Used to highlight the
-/// drop target the pointer is currently over; no data is available until the drop completes.</summary>
+/// <summary>
+///     The pointer moved over the window while carrying a drag payload. Used to highlight the
+///     drop target the pointer is currently over; no data is available until the drop completes.
+/// </summary>
 public sealed class DropPositionEvent(float x, float y) : InputEvent
 {
     public float X { get; } = x;
@@ -308,9 +306,7 @@ public sealed class TouchDownEvent : TouchEvent
 /// <summary>A touching finger moved.</summary>
 public sealed class TouchMoveEvent : TouchEvent
 {
-    public TouchMoveEvent()
-    {
-    }
+    public TouchMoveEvent() { }
 
     public TouchMoveEvent(float x, float y, int finger, float pressure)
     {
@@ -398,9 +394,9 @@ internal static class EventDecoder
     ///     events slice their UTF-8 payload out of it. Passed as <see cref="nint" /> so the caller may
     ///     be an iterator (which cannot hold a raw pointer across <c>yield</c>).
     /// </param>
-    public static unsafe InputEvent? Decode(in ZgEvent e, nint textBase)
+    public static InputEvent? Decode(in ZgEvent e, nint textBase)
     {
-        var evt = DecodeKind(e, textBase);
+        var evt = DecodeKind(e: e, textBase: textBase);
         if (evt is not null) evt.WindowId = e.WindowId;
         return evt;
     }
@@ -408,70 +404,82 @@ internal static class EventDecoder
     private static unsafe InputEvent? DecodeKind(in ZgEvent e, nint textBase)
     {
         return (EventKind)e.Kind switch {
-            EventKind.MouseMove => new MouseMoveEvent(e.X, e.Y),
-            EventKind.MouseDown => new MouseDownEvent(e.X, e.Y, DecodeButton(e.Button)),
-            EventKind.MouseUp => new MouseUpEvent(e.X, e.Y, DecodeButton(e.Button)),
+            EventKind.MouseMove => new MouseMoveEvent(x: e.X, y: e.Y),
+            EventKind.MouseDown => new MouseDownEvent(
+                x: e.X,
+                y: e.Y,
+                button: DecodeButton(e.Button)
+            ),
+            EventKind.MouseUp => new MouseUpEvent(x: e.X, y: e.Y, button: DecodeButton(e.Button)),
             EventKind.Scroll => new ScrollEvent(
-                e.X,
-                e.Y,
-                e.ScrollX,
-                e.ScrollY
+                x: e.X,
+                y: e.Y,
+                scrollX: e.ScrollX,
+                scrollY: e.ScrollY
             ),
             // For key events the (mouse-unused) Button byte carries the SDL auto-repeat flag.
             EventKind.KeyDown => new KeyEvent(
-                true,
-                (char)e.KeyChar,
-                e.KeyScancode,
-                DecodeMods(e.Modifiers),
-                e.Button != 0
+                down: true,
+                keyChar: (char)e.KeyChar,
+                scancode: e.KeyScancode,
+                modifiers: DecodeMods(e.Modifiers),
+                repeat: e.Button != 0
             ),
             EventKind.KeyUp => new KeyEvent(
-                false,
-                (char)e.KeyChar,
-                e.KeyScancode,
-                DecodeMods(e.Modifiers),
-                e.Button != 0
+                down: false,
+                keyChar: (char)e.KeyChar,
+                scancode: e.KeyScancode,
+                modifiers: DecodeMods(e.Modifiers),
+                repeat: e.Button != 0
             ),
             EventKind.TextInput => new TextInputEvent(e.GetTextInput((byte*)textBase)),
             EventKind.TextEditing => new TextCompositionEvent(
-                e.GetTextInput((byte*)textBase),
-                (int)e.CompositionStart,
-                (int)e.CompositionLength
+                text: e.GetTextInput((byte*)textBase),
+                selectionStart: (int)e.CompositionStart,
+                selectionLength: (int)e.CompositionLength
             ),
-            EventKind.Resize => new ResizeEvent(e.ResizeW, e.ResizeH),
+            EventKind.Resize => new ResizeEvent(width: e.ResizeW, height: e.ResizeH),
             // The (mouse-unused) Button byte carries gained (1) / lost (0).
             EventKind.WindowFocus => new WindowFocusEvent(e.Button != 0),
             EventKind.WindowClose => new WindowCloseEvent(),
             // The (mouse-unused) Button byte carries the theme value (0 unknown / 1 light / 2 dark).
             EventKind.SystemTheme => new SystemThemeEvent((SystemTheme)e.Button),
             EventKind.DropBegin => new DropBeginEvent(),
-            EventKind.DropFile => new DropFileEvent(e.GetTextInput((byte*)textBase), e.X, e.Y),
-            EventKind.DropText => new DropTextEvent(e.GetTextInput((byte*)textBase), e.X, e.Y),
-            EventKind.DropPosition => new DropPositionEvent(e.X, e.Y),
-            EventKind.DropComplete => new DropCompleteEvent(e.X, e.Y),
+            EventKind.DropFile => new DropFileEvent(
+                path: e.GetTextInput((byte*)textBase),
+                x: e.X,
+                y: e.Y
+            ),
+            EventKind.DropText => new DropTextEvent(
+                text: e.GetTextInput((byte*)textBase),
+                x: e.X,
+                y: e.Y
+            ),
+            EventKind.DropPosition => new DropPositionEvent(x: e.X, y: e.Y),
+            EventKind.DropComplete => new DropCompleteEvent(x: e.X, y: e.Y),
             EventKind.TouchDown => new TouchDownEvent(
-                e.X,
-                e.Y,
-                (int)e.TouchFinger,
-                e.TouchPressure
+                x: e.X,
+                y: e.Y,
+                finger: (int)e.TouchFinger,
+                pressure: e.TouchPressure
             ),
             EventKind.TouchMove => new TouchMoveEvent(
-                e.X,
-                e.Y,
-                (int)e.TouchFinger,
-                e.TouchPressure
+                x: e.X,
+                y: e.Y,
+                finger: (int)e.TouchFinger,
+                pressure: e.TouchPressure
             ),
             EventKind.TouchUp => new TouchUpEvent(
-                e.X,
-                e.Y,
-                (int)e.TouchFinger,
-                e.TouchPressure
+                x: e.X,
+                y: e.Y,
+                finger: (int)e.TouchFinger,
+                pressure: e.TouchPressure
             ),
             EventKind.TouchCancel => new TouchCancelEvent(
-                e.X,
-                e.Y,
-                (int)e.TouchFinger,
-                e.TouchPressure
+                x: e.X,
+                y: e.Y,
+                finger: (int)e.TouchFinger,
+                pressure: e.TouchPressure
             ),
             EventKind.AppBackground => new AppBackgroundEvent(),
             EventKind.AppForeground => new AppForegroundEvent(),

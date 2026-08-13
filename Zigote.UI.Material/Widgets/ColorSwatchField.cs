@@ -11,16 +11,16 @@ namespace Zigote.UI.Material;
 public sealed class ColorSwatchField : Widget
 {
     private static readonly (string Name, Color Color)[] Presets = [
-        ("Racing Red", new Color(0.72f, 0.05f, 0.06f)),
-        ("Orange", new Color(0.85f, 0.33f, 0.03f)),
-        ("Yellow", new Color(0.86f, 0.70f, 0.05f)),
-        ("Green", new Color(0.05f, 0.36f, 0.14f)),
-        ("Blue", new Color(0.07f, 0.20f, 0.62f)),
-        ("Silver", new Color(0.62f, 0.64f, 0.67f)),
-        ("Grey", new Color(0.30f, 0.30f, 0.32f)),
-        ("Black", new Color(0.02f, 0.02f, 0.02f)),
-        ("White", new Color(0.92f, 0.92f, 0.92f)),
-        ("Maroon", new Color(0.30f, 0.04f, 0.09f)),
+        ("Racing Red", new Color(r: 0.72f, g: 0.05f, b: 0.06f)),
+        ("Orange", new Color(r: 0.85f, g: 0.33f, b: 0.03f)),
+        ("Yellow", new Color(r: 0.86f, g: 0.70f, b: 0.05f)),
+        ("Green", new Color(r: 0.05f, g: 0.36f, b: 0.14f)),
+        ("Blue", new Color(r: 0.07f, g: 0.20f, b: 0.62f)),
+        ("Silver", new Color(r: 0.62f, g: 0.64f, b: 0.67f)),
+        ("Grey", new Color(r: 0.30f, g: 0.30f, b: 0.32f)),
+        ("Black", new Color(r: 0.02f, g: 0.02f, b: 0.02f)),
+        ("White", new Color(r: 0.92f, g: 0.92f, b: 0.92f)),
+        ("Maroon", new Color(r: 0.30f, g: 0.04f, b: 0.09f)),
     ];
 
     private readonly AppInstance _app;
@@ -56,31 +56,28 @@ public sealed class ColorSwatchField : Widget
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
         // The swatch is the whole trigger for the picker popover; 22pt tall is not a finger target.
-        _size = c.Constrain(new Size(Width, TouchMetrics.AtLeast(Height)));
+        _size = c.Constrain(new Size(width: Width, height: TouchMetrics.AtLeast(Height)));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
     public override void Paint(PaintList paint)
     {
-        paint.AddRect(Bounds, _value.WithAlpha(1f), Radii.Sm);
-        paint.AddBorder(Bounds, _theme.Separator, Radii.Sm);
-        if (Focused) paint.AddFocusRing(Bounds, Radii.Sm, _theme);
+        paint.AddRect(bounds: Bounds, color: _value.WithAlpha(1f), radius: Radii.Sm);
+        paint.AddBorder(bounds: Bounds, color: _theme.Separator, radius: Radii.Sm);
+        if (Focused) paint.AddFocusRing(bounds: Bounds, radius: Radii.Sm, theme: _theme);
     }
 
-    public override void OnPointerDown(Offset point)
-    {
-        OpenPicker();
-    }
+    public override void OnPointerDown(Offset point) => OpenPicker();
 
     private void Set(Color c)
     {
@@ -97,20 +94,24 @@ public sealed class ColorSwatchField : Widget
         };
 
         // Live preview bar (reads _value each paint).
-        col.Children.Add(new SizedBox(height: 18f, child: new ColorPreview(() => _value, _theme)));
+        col.Children.Add(
+            new SizedBox(height: 18f, child: new ColorPreview(get: () => _value, theme: _theme))
+        );
         col.Children.Add(new SizedBox(height: Spacing.Sm));
 
         // Preset swatches, two rows of five.
-        for (var r = 0; r < 2; r++)
+        for (int r = 0; r < 2; r++)
         {
             var row = new Row {
                 MainAxisAlignment = MainAxisAlignment.Start,
                 CrossAxisAlignment = CrossAxisAlignment.Center,
             };
-            for (var i = 0; i < 5; i++)
+            for (int i = 0; i < 5; i++)
             {
-                var (_, c) = Presets[r * 5 + i];
-                row.Children.Add(new ColorChip(c, _theme, () => SetFromPreset(c)));
+                var (_, c) = Presets[(r * 5) + i];
+                row.Children.Add(
+                    new ColorChip(color: c, theme: _theme, onTap: () => SetFromPreset(c))
+                );
                 row.Children.Add(new SizedBox(4f));
             }
 
@@ -121,10 +122,10 @@ public sealed class ColorSwatchField : Widget
         col.Children.Add(new SizedBox(height: Spacing.Sm));
 
         // Full HSV / hex / alpha picker.
-        _picker = new ColorPicker(_value, Set);
+        _picker = new ColorPicker(initial: _value, onChanged: Set);
         col.Children.Add(_picker);
 
-        _popover = new Popover(new SizedBox(220f, child: col), Bounds);
+        _popover = new Popover(child: new SizedBox(width: 220f, child: col), anchor: Bounds);
         _popover.Show();
     }
 
@@ -143,24 +144,24 @@ public sealed class ColorSwatchField : Widget
 
         public override Size Measure(Constraints c)
         {
-            _s = c.Constrain(new Size(c.MaxWidth, 18f));
+            _s = c.Constrain(new Size(width: c.MaxWidth, height: 18f));
             return _s;
         }
 
         public override void Layout(Offset origin)
         {
             Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                _s.Width,
-                _s.Height
+                x: origin.X,
+                y: origin.Y,
+                width: _s.Width,
+                height: _s.Height
             );
         }
 
         public override void Paint(PaintList paint)
         {
-            paint.AddRect(Bounds, get().WithAlpha(1f), Radii.Xs);
-            paint.AddBorder(Bounds, theme.Separator, Radii.Xs);
+            paint.AddRect(bounds: Bounds, color: get().WithAlpha(1f), radius: Radii.Xs);
+            paint.AddBorder(bounds: Bounds, color: theme.Separator, radius: Radii.Xs);
         }
     }
 
@@ -172,30 +173,27 @@ public sealed class ColorSwatchField : Widget
         {
             // 18pt presets with 4pt gutters are a mouse grid; five 36pt chips still fit the 220pt
             // popover and each one is finally aimable.
-            var d = TouchMetrics.Pick(18f, 36f);
-            _s = new Size(d, d);
+            float d = TouchMetrics.Pick(desktop: 18f, touch: 36f);
+            _s = new Size(width: d, height: d);
             return _s;
         }
 
         public override void Layout(Offset origin)
         {
             Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                _s.Width,
-                _s.Height
+                x: origin.X,
+                y: origin.Y,
+                width: _s.Width,
+                height: _s.Height
             );
         }
 
         public override void Paint(PaintList paint)
         {
-            paint.AddRect(Bounds, color, Radii.Xs);
-            paint.AddBorder(Bounds, theme.Separator, Radii.Xs);
+            paint.AddRect(bounds: Bounds, color: color, radius: Radii.Xs);
+            paint.AddBorder(bounds: Bounds, color: theme.Separator, radius: Radii.Xs);
         }
 
-        public override void OnPointerDown(Offset point)
-        {
-            onTap();
-        }
+        public override void OnPointerDown(Offset point) => onTap();
     }
 }

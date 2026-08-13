@@ -65,7 +65,7 @@ public sealed class AutoSuggestField : Widget
 
     private void Show()
     {
-        _popup ??= new SuggestionPopup(() => _field.Bounds, Commit);
+        _popup ??= new SuggestionPopup(anchor: () => _field.Bounds, onPick: Commit);
         _popup.SetItems(_suggest(_field.Text));
         if (_popup.Items.Count == 0)
         {
@@ -112,28 +112,21 @@ public sealed class AutoSuggestField : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         _field.Layout(origin);
     }
 
-    public override void Paint(PaintList paint)
-    {
-        _field.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => _field.Paint(paint);
 
-    public override Widget? HitTest(Offset point)
-    {
-        return Bounds.Contains(point.X, point.Y) ? _field.HitTest(point) ?? this : null;
-    }
+    public override Widget? HitTest(Offset point) => Bounds.Contains(px: point.X, py: point.Y)
+        ? _field.HitTest(point) ?? this
+        : null;
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return [_field];
-    }
+    public override IEnumerable<Widget> GetChildren() => [_field];
 
     public override void Detach()
     {
@@ -173,7 +166,7 @@ public sealed class AutoSuggestField : Widget
         public override Size Measure(Constraints c)
         {
             _theme = ThemeProvider.Of(BuildContext.Current);
-            _screen = new Size(c.MaxWidth, c.MaxHeight);
+            _screen = new Size(width: c.MaxWidth, height: c.MaxHeight);
             _rowH = TouchMetrics.Pick(PointerRowH);
             return _screen;
         }
@@ -181,10 +174,10 @@ public sealed class AutoSuggestField : Widget
         public override void Layout(Offset origin)
         {
             Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                _screen.Width,
-                _screen.Height
+                x: origin.X,
+                y: origin.Y,
+                width: _screen.Width,
+                height: _screen.Height
             );
         }
 
@@ -196,23 +189,26 @@ public sealed class AutoSuggestField : Widget
         private int VisibleRows()
         {
             var a = _anchor();
-            var room = MathF.Max(a.Y, _screen.Height - a.Bottom) - 8f;
-            var fits = _rowH > 0f ? (int)MathF.Floor((room - 4f) / _rowH) : MaxRows;
-            return Math.Max(1, Math.Min(Math.Min(Items.Count, MaxRows), fits));
+            float room = MathF.Max(x: a.Y, y: _screen.Height - a.Bottom) - 8f;
+            int fits = _rowH > 0f ? (int)MathF.Floor((room - 4f) / _rowH) : MaxRows;
+            return Math.Max(
+                val1: 1,
+                val2: Math.Min(val1: Math.Min(val1: Items.Count, val2: MaxRows), val2: fits)
+            );
         }
 
         private Rect ListRect()
         {
             var a = _anchor();
-            var rows = VisibleRows();
-            var h = rows * _rowH + 4f;
-            var w = MathF.Max(a.Width, 180f);
+            int rows = VisibleRows();
+            float h = (rows * _rowH) + 4f;
+            float w = MathF.Max(x: a.Width, y: 180f);
             return OverlayPositioning.Anchored(
-                a,
-                new Size(w, h),
-                _screen,
-                OverlaySide.Below,
-                2f
+                anchor: a,
+                size: new Size(width: w, height: h),
+                screen: _screen,
+                side: OverlaySide.Below,
+                gap: 2f
             );
         }
 
@@ -220,45 +216,46 @@ public sealed class AutoSuggestField : Widget
         {
             if (Items.Count == 0) return;
             var lr = ListRect();
-            paint.AddElevation(lr, Radii.Md, Elevation.Z2);
-            paint.AddRect(lr, _theme.Surface, Radii.Md);
-            paint.AddBorder(lr, _theme.Separator, Radii.Md);
+            paint.AddElevation(bounds: lr, radius: Radii.Md, style: Elevation.Z2);
+            paint.AddRect(bounds: lr, color: _theme.Surface, radius: Radii.Md);
+            paint.AddBorder(bounds: lr, color: _theme.Separator, radius: Radii.Md);
 
-            var fs = _theme.FontSizeCaption;
-            var rows = VisibleRows();
+            float fs = _theme.FontSizeCaption;
+            int rows = VisibleRows();
             paint.AddClipStart(lr);
-            for (var i = 0; i < rows; i++)
+            for (int i = 0; i < rows; i++)
             {
-                var ry = lr.Y + 2f + i * _rowH;
+                float ry = lr.Y + 2f + (i * _rowH);
                 var row = new Rect(
-                    lr.X,
-                    ry,
-                    lr.Width,
-                    _rowH
+                    x: lr.X,
+                    y: ry,
+                    width: lr.Width,
+                    height: _rowH
                 );
-                if (i == _hover) paint.AddRect(row, _theme.Selection, Radii.Xs);
+                if (i == _hover)
+                    paint.AddRect(bounds: row, color: _theme.Selection, radius: Radii.Xs);
 
-                var (val, disp) = Items[i];
+                (string val, string disp) = Items[i];
                 var fg = i == _hover ? _theme.OnPrimary : _theme.OnSurface;
                 paint.AddText(
-                    disp,
-                    lr.X + Spacing.Sm,
-                    ry + _rowH * 0.72f,
-                    fg,
-                    fs
+                    text: disp,
+                    baselineX: lr.X + Spacing.Sm,
+                    baselineY: ry + (_rowH * 0.72f),
+                    color: fg,
+                    fontSize: fs
                 );
 
                 // Dimmed full value tail when it differs from the display name.
-                if (!string.Equals(val, disp, StringComparison.Ordinal))
+                if (!string.Equals(a: val, b: disp, comparisonType: StringComparison.Ordinal))
                 {
-                    var dispW = TextMeasure.Width(disp, fs);
+                    float dispW = TextMeasure.Width(text: disp, fontSize: fs);
                     var tail = (i == _hover ? _theme.OnPrimary : _theme.Hint).WithAlpha(0.55f);
                     paint.AddText(
-                        val,
-                        lr.X + Spacing.Sm + dispW + Spacing.Sm,
-                        ry + _rowH * 0.72f,
-                        tail,
-                        fs - 1f
+                        text: val,
+                        baselineX: lr.X + Spacing.Sm + dispW + Spacing.Sm,
+                        baselineY: ry + (_rowH * 0.72f),
+                        color: tail,
+                        fontSize: fs - 1f
                     );
                 }
             }
@@ -269,19 +266,17 @@ public sealed class AutoSuggestField : Widget
         private int RowAt(Offset p)
         {
             var lr = ListRect();
-            if (!lr.Contains(p.X, p.Y)) return -1;
-            var idx = (int)((p.Y - lr.Y - 2f) / _rowH);
+            if (!lr.Contains(px: p.X, py: p.Y)) return -1;
+            int idx = (int)((p.Y - lr.Y - 2f) / _rowH);
             return idx >= 0 && idx < VisibleRows() ? idx : -1;
         }
 
-        public override Widget? HitTest(Offset point)
-        {
-            return ListRect().Contains(point.X, point.Y) ? this : null;
-        }
+        public override Widget? HitTest(Offset point) =>
+            ListRect().Contains(px: point.X, py: point.Y) ? this : null;
 
         public override void OnPointerMove(Offset point)
         {
-            var idx = RowAt(point);
+            int idx = RowAt(point);
             if (idx != _hover)
             {
                 _hover = idx;
@@ -298,7 +293,7 @@ public sealed class AutoSuggestField : Widget
 
         public override void OnPointerDown(Offset point)
         {
-            var idx = RowAt(point);
+            int idx = RowAt(point);
             if (idx >= 0) _onPick(Items[idx].Value);
         }
     }

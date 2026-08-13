@@ -50,7 +50,7 @@ public sealed unsafe class NativeWindow : IDisposable
     public void Dispose()
     {
         if (_window == 0) return;
-        NativeEngine.WindowDestroy(_engine.Handle, _window);
+        NativeEngine.WindowDestroy(handle: _engine.Handle, windowHandle: _window);
         _window = 0;
     }
 
@@ -59,14 +59,14 @@ public sealed unsafe class NativeWindow : IDisposable
     {
         if (_window == 0) return;
         NativeEngine.WindowPixelSize(
-            _engine.Handle,
-            _window,
-            out var w,
-            out var h
+            handle: _engine.Handle,
+            windowHandle: _window,
+            outW: out uint w,
+            outH: out uint h
         );
         PixelWidth = w;
         PixelHeight = h;
-        Scale = NativeEngine.WindowScale(_engine.Handle, _window);
+        Scale = NativeEngine.WindowScale(handle: _engine.Handle, windowHandle: _window);
         if (Scale <= 0f) Scale = 1f;
     }
 
@@ -76,10 +76,10 @@ public sealed unsafe class NativeWindow : IDisposable
         if (_window == 0) return;
         _submitCb ??= (ptr, count) =>
             NativeEngine.WindowSubmitPaint(
-                _engine.Handle,
-                _window,
-                ptr,
-                count
+                handle: _engine.Handle,
+                windowHandle: _window,
+                commands: ptr,
+                count: count
             );
         paint.PinAndCall(_submitCb);
     }
@@ -90,10 +90,10 @@ public sealed unsafe class NativeWindow : IDisposable
         if (_window == 0) return;
         _submitOverlayCb ??= (ptr, count) =>
             NativeEngine.WindowSubmitOverlay(
-                _engine.Handle,
-                _window,
-                ptr,
-                count
+                handle: _engine.Handle,
+                windowHandle: _window,
+                commands: ptr,
+                count: count
             );
         paint.PinAndCall(_submitOverlayCb);
     }
@@ -102,14 +102,14 @@ public sealed unsafe class NativeWindow : IDisposable
     public void Render()
     {
         if (_window == 0) return;
-        NativeEngine.WindowRender(_engine.Handle, _window, Scale);
+        NativeEngine.WindowRender(handle: _engine.Handle, windowHandle: _window, scale: Scale);
     }
 
     /// <summary>Raise the window above others and give it input focus.</summary>
     public void Raise()
     {
         if (_window == 0) return;
-        NativeEngine.WindowRaise(_engine.Handle, _window);
+        NativeEngine.WindowRaise(handle: _engine.Handle, windowHandle: _window);
     }
 
     /// <summary>Screen position of the window's top-left corner (logical desktop coordinates).</summary>
@@ -117,10 +117,10 @@ public sealed unsafe class NativeWindow : IDisposable
     {
         if (_window == 0) return (0, 0);
         NativeEngine.WindowPosition(
-            _engine.Handle,
-            _window,
-            out var x,
-            out var y
+            handle: _engine.Handle,
+            windowHandle: _window,
+            outX: out int x,
+            outY: out int y
         );
         return (x, y);
     }
@@ -130,10 +130,10 @@ public sealed unsafe class NativeWindow : IDisposable
     {
         if (_window == 0) return;
         NativeEngine.WindowSetPosition(
-            _engine.Handle,
-            _window,
-            x,
-            y
+            handle: _engine.Handle,
+            windowHandle: _window,
+            x: x,
+            y: y
         );
     }
 
@@ -142,23 +142,21 @@ public sealed unsafe class NativeWindow : IDisposable
         if (_window == 0) return;
         byte[] titleBytes = [.. Encoding.UTF8.GetBytes(title), 0];
         fixed (byte* tp = titleBytes)
-        {
-            NativeEngine.WindowSetTitle(_engine.Handle, _window, tp);
-        }
+            NativeEngine.WindowSetTitle(handle: _engine.Handle, windowHandle: _window, title: tp);
     }
 
     /// <summary>Enable SDL3 text-input mode for this window (text-field focus).</summary>
     public void StartTextInput()
     {
         if (_window == 0) return;
-        NativeEngine.WindowStartTextInput(_engine.Handle, _window);
+        NativeEngine.WindowStartTextInput(handle: _engine.Handle, windowHandle: _window);
     }
 
     /// <summary>Disable SDL3 text-input mode for this window.</summary>
     public void StopTextInput()
     {
         if (_window == 0) return;
-        NativeEngine.WindowStopTextInput(_engine.Handle, _window);
+        NativeEngine.WindowStopTextInput(handle: _engine.Handle, windowHandle: _window);
     }
 
     /// <summary>Position the platform IME candidate window next to the active caret.</summary>
@@ -166,13 +164,13 @@ public sealed unsafe class NativeWindow : IDisposable
     {
         if (_window == 0) return;
         NativeEngine.WindowSetTextInputArea(
-            _engine.Handle,
-            _window,
-            (int)MathF.Round(area.X),
-            (int)MathF.Round(area.Y),
-            Math.Max(1, (int)MathF.Round(area.Width)),
-            Math.Max(1, (int)MathF.Round(area.Height)),
-            cursor
+            handle: _engine.Handle,
+            windowHandle: _window,
+            x: (int)MathF.Round(area.X),
+            y: (int)MathF.Round(area.Y),
+            w: Math.Max(val1: 1, val2: (int)MathF.Round(area.Width)),
+            h: Math.Max(val1: 1, val2: (int)MathF.Round(area.Height)),
+            cursor: cursor
         );
     }
 }

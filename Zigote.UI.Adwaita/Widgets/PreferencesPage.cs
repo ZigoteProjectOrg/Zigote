@@ -27,11 +27,14 @@ public sealed class AdwPreferencesPage : ComposedWidget
 
         return new SingleChildScrollView {
             Child = new AdwClamp(
-                new Padding(
-                    EdgeInsets.Symmetric(AdwMetrics.PageMarginX, AdwMetrics.PageMarginY),
-                    column
+                child: new Padding(
+                    padding: EdgeInsets.Symmetric(
+                        horizontal: AdwMetrics.PageMarginX,
+                        vertical: AdwMetrics.PageMarginY
+                    ),
+                    child: column
                 ),
-                AdwMetrics.ClampWidth
+                maximumSize: AdwMetrics.ClampWidth
             ),
         };
     }

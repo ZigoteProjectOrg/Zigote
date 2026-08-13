@@ -19,29 +19,26 @@ public sealed class CodeTextPreviewProvider : IAssetPreviewProvider
         ".toml", ".ini", ".cfg",
     ];
 
-    public bool CanHandle(string ext)
-    {
-        return Array.IndexOf(Exts, ext) >= 0;
-    }
+    public bool CanHandle(string ext) => Array.IndexOf(array: Exts, value: ext) >= 0;
 
     public Widget BuildPreview(string path, ThemeData theme)
     {
         var lines = ReadLines(
-            path,
-            MaxLines,
-            out _,
-            out _
+            path: path,
+            cap: MaxLines,
+            lineCount: out _,
+            charCount: out _
         );
-        return new ReadOnlyTextView(lines, theme);
+        return new ReadOnlyTextView(lines: lines, theme: theme);
     }
 
     public IEnumerable<(string Key, string Value)> ExtraMetadata(string path)
     {
         ReadLines(
-            path,
-            int.MaxValue,
-            out var lineCount,
-            out var charCount
+            path: path,
+            cap: int.MaxValue,
+            lineCount: out int lineCount,
+            charCount: out int charCount
         );
         yield return ("Lines", lineCount.ToString());
         yield return ("Characters", charCount.ToString());
@@ -63,7 +60,7 @@ public sealed class CodeTextPreviewProvider : IAssetPreviewProvider
                 charCount += line.Length;
                 if (lines.Count < cap)
                     // Expand tabs so AddText's monospace advance stays aligned.
-                    lines.Add(line.Replace("\t", "    "));
+                    lines.Add(line.Replace(oldValue: "\t", newValue: "    "));
             }
         }
         catch
@@ -98,110 +95,108 @@ internal sealed class ReadOnlyTextView : Widget
         _theme = theme;
     }
 
-    private float ContentHeight => _lines.Count * LineHeight + PadY * 2f;
+    private float ContentHeight => (_lines.Count * LineHeight) + (PadY * 2f);
 
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        var w = float.IsInfinity(c.MaxWidth) ? 320f : c.MaxWidth;
-        var h = float.IsInfinity(c.MaxHeight) ? 320f : MathF.Min(c.MaxHeight, 360f);
-        _size = c.Constrain(new Size(w, MathF.Max(h, c.MinHeight)));
+        float w = float.IsInfinity(c.MaxWidth) ? 320f : c.MaxWidth;
+        float h = float.IsInfinity(c.MaxHeight) ? 320f : MathF.Min(x: c.MaxHeight, y: 360f);
+        _size = c.Constrain(new Size(width: w, height: MathF.Max(x: h, y: c.MinHeight)));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         ClampScroll();
     }
 
     private void ClampScroll()
     {
-        var max = MathF.Max(0f, ContentHeight - Bounds.Height);
-        _scrollY = Math.Clamp(_scrollY, 0f, max);
+        float max = MathF.Max(x: 0f, y: ContentHeight - Bounds.Height);
+        _scrollY = Math.Clamp(value: _scrollY, min: 0f, max: max);
     }
 
     public override void Paint(PaintList paint)
     {
         if (!paint.IsVisible(Bounds)) return;
 
-        paint.AddRect(Bounds, _theme.Background, 6f);
+        paint.AddRect(bounds: Bounds, color: _theme.Background, radius: 6f);
         paint.AddClipStart(Bounds);
 
         // Gutter.
         var gutter = new Rect(
-            Bounds.X,
-            Bounds.Y,
-            GutterW,
-            Bounds.Height
+            x: Bounds.X,
+            y: Bounds.Y,
+            width: GutterW,
+            height: Bounds.Height
         );
-        paint.AddRect(gutter, _theme.SurfaceAlt);
+        paint.AddRect(bounds: gutter, color: _theme.SurfaceAlt);
 
-        var first = Math.Max(0, (int)((_scrollY - PadY) / LineHeight));
-        var visibleRows = (int)(Bounds.Height / LineHeight) + 2;
-        var last = Math.Min(_lines.Count, first + visibleRows);
+        int first = Math.Max(val1: 0, val2: (int)((_scrollY - PadY) / LineHeight));
+        int visibleRows = (int)(Bounds.Height / LineHeight) + 2;
+        int last = Math.Min(val1: _lines.Count, val2: first + visibleRows);
 
-        for (var i = first; i < last; i++)
+        for (int i = first; i < last; i++)
         {
-            var top = Bounds.Y + PadY + i * LineHeight - _scrollY;
-            var baseline = top + FontSize * 0.8f;
+            float top = Bounds.Y + PadY + (i * LineHeight) - _scrollY;
+            float baseline = top + (FontSize * 0.8f);
 
-            var num = (i + 1).ToString();
-            var numX = Bounds.X + GutterW - 6f - num.Length * 7f;
+            string num = (i + 1).ToString();
+            float numX = Bounds.X + GutterW - 6f - (num.Length * 7f);
             paint.AddText(
-                num,
-                numX,
-                baseline,
-                _theme.TextMuted,
-                FontSize,
+                text: num,
+                baselineX: numX,
+                baselineY: baseline,
+                color: _theme.TextMuted,
+                fontSize: FontSize,
                 fontFamily: "code"
             );
 
             paint.AddText(
-                _lines[i],
-                Bounds.X + GutterW + PadX,
-                baseline,
-                _theme.OnSurface,
-                FontSize,
+                text: _lines[i],
+                baselineX: Bounds.X + GutterW + PadX,
+                baselineY: baseline,
+                color: _theme.OnSurface,
+                fontSize: FontSize,
                 fontFamily: "code"
             );
         }
 
         paint.AddClipEnd();
-        paint.AddBorder(Bounds, _theme.Separator, 6f);
+        paint.AddBorder(bounds: Bounds, color: _theme.Separator, radius: 6f);
 
         // Slim scroll indicator.
-        var max = MathF.Max(0f, ContentHeight - Bounds.Height);
+        float max = MathF.Max(x: 0f, y: ContentHeight - Bounds.Height);
         if (max > 0f)
         {
-            var track = Bounds.Height;
-            var thumbH = MathF.Max(24f, track * (Bounds.Height / ContentHeight));
-            var thumbY = Bounds.Y + (track - thumbH) * (_scrollY / max);
+            float track = Bounds.Height;
+            float thumbH = MathF.Max(x: 24f, y: track * (Bounds.Height / ContentHeight));
+            float thumbY = Bounds.Y + ((track - thumbH) * (_scrollY / max));
             var thumb = new Rect(
-                Bounds.Right - 5f,
-                thumbY,
-                3f,
-                thumbH
+                x: Bounds.Right - 5f,
+                y: thumbY,
+                width: 3f,
+                height: thumbH
             );
-            paint.AddRect(thumb, _theme.OnSurface.WithAlpha(0.25f), 1.5f);
+            paint.AddRect(bounds: thumb, color: _theme.OnSurface.WithAlpha(0.25f), radius: 1.5f);
         }
     }
 
-    public override Widget? HitTest(Offset point)
-    {
-        return Bounds.Contains(point.X, point.Y) ? this : null;
-    }
+    public override Widget? HitTest(Offset point) =>
+        Bounds.Contains(px: point.X, py: point.Y) ? this : null;
 
     public override void OnScroll(float dx, float dy)
     {
-        var max = MathF.Max(0f, ContentHeight - Bounds.Height);
+        float max = MathF.Max(x: 0f, y: ContentHeight - Bounds.Height);
         if (max <= 0f) return;
-        _scrollY = Math.Clamp(_scrollY - dy * 40f, 0f, max);
+        _scrollY = Math.Clamp(value: _scrollY - (dy * 40f), min: 0f, max: max);
         MarkNeedsPaint();
     }
 }

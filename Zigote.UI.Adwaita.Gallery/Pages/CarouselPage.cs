@@ -28,29 +28,31 @@ public sealed class CarouselPage : ComposedWidget
 
     public CarouselPage()
     {
-        _pages = [.. ArtSource.Showcase.Select(piece => new ArtImage(piece, MaxDim))];
+        _pages = [
+            .. ArtSource.Showcase.Select(piece => new ArtImage(piece: piece, maxDim: MaxDim)),
+        ];
         _carousel = new AdwCarousel(_pages.Select(page => Framed(page)));
-        _previous = TurnButton(MaterialIcons.ChevronLeft, -1);
-        _next = TurnButton(MaterialIcons.ChevronRight, 1);
+        _previous = TurnButton(icon: MaterialIcons.ChevronLeft, delta: -1);
+        _next = TurnButton(icon: MaterialIcons.ChevronRight, delta: 1);
 
         _stage = new Stack {
             Children = {
                 _carousel,
                 new Align(
-                    Alignment.CenterLeft,
-                    new Padding(EdgeInsets.Only(Spacing.Md), _previous)
+                    alignment: Alignment.CenterLeft,
+                    child: new Padding(padding: EdgeInsets.Only(Spacing.Md), child: _previous)
                 ),
                 new Align(
-                    Alignment.CenterRight,
-                    new Padding(EdgeInsets.Only(right: Spacing.Md), _next)
+                    alignment: Alignment.CenterRight,
+                    child: new Padding(padding: EdgeInsets.Only(right: Spacing.Md), child: _next)
                 ),
                 // Expand and retry have to live up here too: a tap inside an interactive carousel
                 // never reaches the page it lands on.
                 new Align(
-                    Alignment.TopRight,
-                    new Padding(
-                        EdgeInsets.Only(top: Spacing.Lg, right: Spacing.Lg),
-                        new AdwButton(
+                    alignment: Alignment.TopRight,
+                    child: new Padding(
+                        padding: EdgeInsets.Only(top: Spacing.Lg, right: Spacing.Lg),
+                        child: new AdwButton(
                             onPressed: () => ArtViewer.Show(ArtSource.Showcase[_position.Peek()])
                         ) {
                             IconName = MaterialIcons.OpenInFull,
@@ -73,10 +75,16 @@ public sealed class CarouselPage : ComposedWidget
                 new Expanded(
                     new Watch(() => _placement.Value == 0
                         ? new Column(crossAxisAlignment: CrossAxisAlignment.Stretch) {
-                            Children = { new Expanded(_stage), Indicators(false) },
+                            Children = {
+                                new Expanded(_stage),
+                                Indicators(false),
+                            },
                         }
                         : new Row(crossAxisAlignment: CrossAxisAlignment.Stretch) {
-                            Children = { new Expanded(_stage), Indicators(true) },
+                            Children = {
+                                new Expanded(_stage),
+                                Indicators(true),
+                            },
                         }
                     )
                 ),
@@ -86,10 +94,10 @@ public sealed class CarouselPage : ComposedWidget
     }
 
     /// <summary>The carousel gives each page the full box; the margin is what separates the cards.</summary>
-    private static Widget Framed(Widget page)
-    {
-        return new Padding(EdgeInsets.All(Spacing.Md), page);
-    }
+    private static Widget Framed(Widget page) => new Padding(
+        padding: EdgeInsets.All(Spacing.Md),
+        child: page
+    );
 
     private AdwButton TurnButton(string icon, int delta)
     {
@@ -113,10 +121,10 @@ public sealed class CarouselPage : ComposedWidget
         if (page.State.Value != ArtState.Failed) return SizedBox.Shrink();
 
         return new Align(
-            Alignment.BottomCenter,
-            new Padding(
-                EdgeInsets.Only(bottom: Spacing.Xxl),
-                new AdwButton("Try Again", page.Reload) {
+            alignment: Alignment.BottomCenter,
+            child: new Padding(
+                padding: EdgeInsets.Only(bottom: Spacing.Xxl),
+                child: new AdwButton(label: "Try Again", onPressed: page.Reload) {
                     Style = AdwButtonStyle.Suggested,
                     Pill = true,
                 }
@@ -146,8 +154,8 @@ public sealed class CarouselPage : ComposedWidget
         // and non-flex children are measured first, so it would take the whole box and leave the
         // Expanded carousel nothing. The factor sizes this to the row on the axis that matters.
         return new Padding(
-            EdgeInsets.All(Spacing.Sm),
-            new Align(Alignment.Center, row) {
+            padding: EdgeInsets.All(Spacing.Sm),
+            child: new Align(alignment: Alignment.Center, child: row) {
                 WidthFactor = beside ? 1f : null,
                 HeightFactor = beside ? null : 1f,
             }
@@ -157,21 +165,34 @@ public sealed class CarouselPage : ComposedWidget
     private Widget Options()
     {
         return new Padding(
-            EdgeInsets.Only(Spacing.Lg, 0f, Spacing.Lg, Spacing.Lg),
-            Demo.Bar(
+            padding: EdgeInsets.Only(
+                left: Spacing.Lg,
+                top: 0f,
+                right: Spacing.Lg,
+                bottom: Spacing.Lg
+            ),
+            child: Demo.Bar(
                 Labelled(
-                    "Indicators",
-                    new AdwToggleGroup(["Dots", "Lines"], 0, i => _indicators.Value = i)
+                    label: "Indicators",
+                    control: new AdwToggleGroup(
+                        labels: ["Dots", "Lines"],
+                        active: 0,
+                        onActive: i => _indicators.Value = i
+                    )
                 ),
                 Labelled(
-                    "Position",
-                    new AdwToggleGroup(["Below", "Beside"], 0, i => _placement.Value = i)
+                    label: "Position",
+                    control: new AdwToggleGroup(
+                        labels: ["Below", "Beside"],
+                        active: 0,
+                        onActive: i => _placement.Value = i
+                    )
                 ),
                 // Off is what libadwaita's interactive:false does: the indicators and the turn
                 // buttons still page it, but the surface stops answering drags and wheels.
                 Labelled(
-                    "Drag & Scroll",
-                    new AdwSwitch(true, on => _carousel.Interactive = on)
+                    label: "Drag & Scroll",
+                    control: new AdwSwitch(value: true, onChanged: on => _carousel.Interactive = on)
                 )
             )
         );
@@ -184,7 +205,10 @@ public sealed class CarouselPage : ComposedWidget
             mainAxisSize: MainAxisSize.Min,
             crossAxisAlignment: CrossAxisAlignment.Center
         ) {
-            Children = { Demo.Caption(label), control },
+            Children = {
+                Demo.Caption(label),
+                control,
+            },
         };
     }
 }

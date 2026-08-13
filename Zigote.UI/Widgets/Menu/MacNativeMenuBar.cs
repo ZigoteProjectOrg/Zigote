@@ -21,10 +21,7 @@ public sealed class MacNativeMenuBar : INativeMenuBar
     private readonly string _appName;
     private int _nextTag;
 
-    public MacNativeMenuBar(string appName)
-    {
-        _appName = appName;
-    }
+    public MacNativeMenuBar(string appName) => _appName = appName;
 
     public bool TryInstall(IReadOnlyList<AppMenu> menus)
     {
@@ -37,10 +34,10 @@ public sealed class MacNativeMenuBar : INativeMenuBar
 
         foreach (var menu in menus)
         {
-            var native = MacMenu.AddMenu(menu.Title);
-            AddItems(native, menu.Items);
+            IntPtr native = MacMenu.AddMenu(menu.Title);
+            AddItems(parent: native, items: menu.Items);
             if (menu.Role != AppMenuRole.None)
-                MacMenu.SetMenuRole(native, (int)menu.Role);
+                MacMenu.SetMenuRole(menu: native, role: (int)menu.Role);
         }
 
         MacMenu.Commit();
@@ -67,23 +64,23 @@ public sealed class MacNativeMenuBar : INativeMenuBar
 
             if (item.Children is { Count: > 0 } children)
             {
-                var sub = MacMenu.AddSubmenu(parent, item.Label);
-                AddItems(sub, children);
+                IntPtr sub = MacMenu.AddSubmenu(parent: parent, title: item.Label);
+                AddItems(parent: sub, items: children);
                 continue;
             }
 
-            var tag = ++_nextTag;
+            int tag = ++_nextTag;
             if (item.OnSelect is { } action && item.Enabled) _actions[tag] = action;
-            var (key, mods) = ParseShortcut(item.Shortcut);
+            (string key, uint mods) = ParseShortcut(item.Shortcut);
             MacMenu.AddItem(
-                parent,
-                item.Label,
-                tag,
-                key,
-                mods,
-                item.IsEnabled,
-                item.SystemImage,
-                item.Checked == true
+                parent: parent,
+                title: item.Label,
+                tag: tag,
+                key: key,
+                modMask: mods,
+                enabled: item.IsEnabled,
+                sfSymbol: item.SystemImage,
+                @checked: item.Checked == true
             );
         }
     }
@@ -97,7 +94,7 @@ public sealed class MacNativeMenuBar : INativeMenuBar
             return;
         }
 
-        if (_actions.TryGetValue(tag, out var action)) action();
+        if (_actions.TryGetValue(key: tag, value: out var action)) action();
     }
 
     private static (string key, uint mods) ParseShortcut(string? shortcut)
@@ -108,14 +105,19 @@ public sealed class MacNativeMenuBar : INativeMenuBar
 
         // The globe/fn modifier (🌐) is a surrogate pair — strip it as a string before the
         // per-char scan or its low surrogate would be mistaken for the key.
-        if (shortcut.Contains("🌐", StringComparison.Ordinal))
+        if (shortcut.Contains(value: "🌐", comparisonType: StringComparison.Ordinal))
         {
             mods |= Function;
-            shortcut = shortcut.Replace("🌐", "", StringComparison.Ordinal);
+            shortcut = shortcut.Replace(
+                oldValue: "🌐",
+                newValue: "",
+                comparisonType: StringComparison.Ordinal
+            );
         }
 
-        var key = '\0';
-        foreach (var ch in shortcut)
+        char key = '\0';
+        foreach (char ch in shortcut)
+        {
             switch (ch)
             {
                 case '⌘': mods |= Cmd; break;
@@ -124,6 +126,7 @@ public sealed class MacNativeMenuBar : INativeMenuBar
                 case '⌃': mods |= Control; break;
                 default: key = char.ToLowerInvariant(ch); break;
             }
+        }
 
         return key == '\0' ? ("", 0) : (key.ToString(), mods);
     }

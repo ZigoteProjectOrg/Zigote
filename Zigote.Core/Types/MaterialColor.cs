@@ -36,11 +36,11 @@ public sealed class MaterialColor
     {
         get
         {
-            var best = 0;
-            var bestDist = int.MaxValue;
-            for (var i = 0; i < Stops.Length; i++)
+            int best = 0;
+            int bestDist = int.MaxValue;
+            for (int i = 0; i < Stops.Length; i++)
             {
-                var d = Math.Abs(Stops[i] - shade);
+                int d = Math.Abs(Stops[i] - shade);
                 if (d >= bestDist) continue;
                 bestDist = d;
                 best = i;
@@ -64,17 +64,14 @@ public sealed class MaterialColor
     private static Color[] Generate(Color primary)
     {
         var shades = new Color[Stops.Length];
-        for (var i = 0; i < Stops.Length; i++)
+        for (int i = 0; i < Stops.Length; i++)
         {
-            var f = Factors[i];
+            float f = Factors[i];
             shades[i] = f >= 0f ? primary.Lighten(f) : primary.Darken(-f);
         }
 
         return shades;
     }
 
-    public static implicit operator Color(MaterialColor m)
-    {
-        return m.Primary;
-    }
+    public static implicit operator Color(MaterialColor m) => m.Primary;
 }

@@ -54,26 +54,53 @@ public sealed class FutureBuilder<T> : ComposedWidget
         CreateTicker(OnTick).Start();
     }
 
-    protected override Widget Build(BuildContext context)
-    {
-        return Builder(context, Snapshot());
-    }
+    protected override Widget Build(BuildContext context) =>
+        Builder(arg1: context, arg2: Snapshot());
 
     private AsyncSnapshot<T> Snapshot()
     {
         var future = Future;
-        if (future is null) return new AsyncSnapshot<T>(ConnectionState.None, default, null);
-        if (!future.IsCompleted)
-            return new AsyncSnapshot<T>(ConnectionState.Waiting, default, null);
-        if (future.IsFaulted)
+        if (future is null)
+        {
             return new AsyncSnapshot<T>(
-                ConnectionState.Done,
-                default,
-                future.Exception?.GetBaseException()
+                connectionState: ConnectionState.None,
+                data: default,
+                error: null
             );
+        }
+
+        if (!future.IsCompleted)
+        {
+            return new AsyncSnapshot<T>(
+                connectionState: ConnectionState.Waiting,
+                data: default,
+                error: null
+            );
+        }
+
+        if (future.IsFaulted)
+        {
+            return new AsyncSnapshot<T>(
+                connectionState: ConnectionState.Done,
+                data: default,
+                error: future.Exception?.GetBaseException()
+            );
+        }
+
         if (future.IsCanceled)
-            return new AsyncSnapshot<T>(ConnectionState.Done, default, new TaskCanceledException());
-        return new AsyncSnapshot<T>(ConnectionState.Done, future.Result, null);
+        {
+            return new AsyncSnapshot<T>(
+                connectionState: ConnectionState.Done,
+                data: default,
+                error: new TaskCanceledException()
+            );
+        }
+
+        return new AsyncSnapshot<T>(
+            connectionState: ConnectionState.Done,
+            data: future.Result,
+            error: null
+        );
     }
 
     private void OnTick(float dt)

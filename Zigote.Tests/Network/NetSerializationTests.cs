@@ -20,15 +20,15 @@ public class NetSerializationTests
         var w = new NetWriter();
         w.WriteBool(true);
         w.WriteBool(false);
-        w.WriteBits(0b101, 3);
-        w.WriteBits(0xABCD, 16);
+        w.WriteBits(value: 0b101, bits: 3);
+        w.WriteBits(value: 0xABCD, bits: 16);
         w.WriteBool(true);
 
         var r = RoundTrip(w);
         Assert.True(r.ReadBool());
         Assert.False(r.ReadBool());
-        Assert.Equal(0b101u, r.ReadBits(3));
-        Assert.Equal(0xABCDu, r.ReadBits(16));
+        Assert.Equal(expected: 0b101u, actual: r.ReadBits(3));
+        Assert.Equal(expected: 0xABCDu, actual: r.ReadBits(16));
         Assert.True(r.ReadBool());
         Assert.False(r.Overflow);
     }
@@ -45,7 +45,7 @@ public class NetSerializationTests
     {
         var w = new NetWriter();
         w.WriteVarUInt(value);
-        Assert.Equal(value, RoundTrip(w).ReadVarUInt());
+        Assert.Equal(expected: value, actual: RoundTrip(w).ReadVarUInt());
     }
 
     [Theory]
@@ -59,7 +59,7 @@ public class NetSerializationTests
     {
         var w = new NetWriter();
         w.WriteVarInt(value);
-        Assert.Equal(value, RoundTrip(w).ReadVarInt());
+        Assert.Equal(expected: value, actual: RoundTrip(w).ReadVarInt());
     }
 
     [Fact]
@@ -75,13 +75,13 @@ public class NetSerializationTests
         w.WriteString("héllo 🌍");
 
         var r = RoundTrip(w);
-        Assert.Equal((byte)200, r.ReadByte());
-        Assert.Equal((ushort)40000, r.ReadUInt16());
-        Assert.Equal(-123456, r.ReadInt32());
-        Assert.Equal(0xDEAD_BEEF_F00D_1234, r.ReadUInt64());
-        Assert.Equal(3.14159f, r.ReadSingle(), 5);
-        Assert.Equal(2.718281828, r.ReadDouble(), 9);
-        Assert.Equal("héllo 🌍", r.ReadString());
+        Assert.Equal(expected: (byte)200, actual: r.ReadByte());
+        Assert.Equal(expected: (ushort)40000, actual: r.ReadUInt16());
+        Assert.Equal(expected: -123456, actual: r.ReadInt32());
+        Assert.Equal(expected: 0xDEAD_BEEF_F00D_1234, actual: r.ReadUInt64());
+        Assert.Equal(expected: 3.14159f, actual: r.ReadSingle(), precision: 5);
+        Assert.Equal(expected: 2.718281828, actual: r.ReadDouble(), precision: 9);
+        Assert.Equal(expected: "héllo 🌍", actual: r.ReadString());
     }
 
     [Fact]
@@ -89,48 +89,60 @@ public class NetSerializationTests
     {
         var w = new NetWriter();
         w.WriteRangedSingle(
-            0.5f,
-            0f,
-            1f,
-            16
+            value: 0.5f,
+            min: 0f,
+            max: 1f,
+            bits: 16
         );
         w.WriteRangedSingle(
-            -50f,
-            -100f,
-            100f,
-            16
+            value: -50f,
+            min: -100f,
+            max: 100f,
+            bits: 16
         );
         w.WriteRangedSingle(
-            1000f,
-            0f,
-            1f,
-            8
+            value: 1000f,
+            min: 0f,
+            max: 1f,
+            bits: 8
         ); // clamped to max
 
         var r = RoundTrip(w);
-        Assert.Equal(0.5f, r.ReadRangedSingle(0f, 1f, 16), 3);
-        Assert.Equal(-50f, r.ReadRangedSingle(-100f, 100f, 16), 1);
-        Assert.Equal(1f, r.ReadRangedSingle(0f, 1f, 8), 2);
+        Assert.Equal(
+            expected: 0.5f,
+            actual: r.ReadRangedSingle(min: 0f, max: 1f, bits: 16),
+            precision: 3
+        );
+        Assert.Equal(
+            expected: -50f,
+            actual: r.ReadRangedSingle(min: -100f, max: 100f, bits: 16),
+            precision: 1
+        );
+        Assert.Equal(
+            expected: 1f,
+            actual: r.ReadRangedSingle(min: 0f, max: 1f, bits: 8),
+            precision: 2
+        );
     }
 
     [Fact]
     public void Vectors_And_Color_RoundTrip()
     {
         var w = new NetWriter();
-        w.WriteVec3(new Vec3(1, -2, 3.5f));
-        w.WriteVec2(new Vec2(9, 8));
-        w.WriteColor(new Color(0.25f, 0.5f, 0.75f));
+        w.WriteVec3(new Vec3(x: 1, y: -2, z: 3.5f));
+        w.WriteVec2(new Vec2(x: 9, y: 8));
+        w.WriteColor(new Color(r: 0.25f, g: 0.5f, b: 0.75f));
 
         var r = RoundTrip(w);
         var v3 = r.ReadVec3();
-        Assert.Equal(1f, v3.X, 4);
-        Assert.Equal(-2f, v3.Y, 4);
-        Assert.Equal(3.5f, v3.Z, 4);
+        Assert.Equal(expected: 1f, actual: v3.X, precision: 4);
+        Assert.Equal(expected: -2f, actual: v3.Y, precision: 4);
+        Assert.Equal(expected: 3.5f, actual: v3.Z, precision: 4);
         var v2 = r.ReadVec2();
-        Assert.Equal(9f, v2.X, 4);
+        Assert.Equal(expected: 9f, actual: v2.X, precision: 4);
         var c = r.ReadColor();
-        Assert.Equal(0.5f, c.G, 2);
-        Assert.Equal(1f, c.A, 2);
+        Assert.Equal(expected: 0.5f, actual: c.G, precision: 2);
+        Assert.Equal(expected: 1f, actual: c.A, precision: 2);
     }
 
     [Fact]
@@ -138,20 +150,20 @@ public class NetSerializationTests
     {
         foreach (var q in new[] {
                      Quat.Identity,
-                     Quat.FromAxisAngle(new Vec3(0, 1, 0), 1.2f),
-                     Quat.FromAxisAngle(new Vec3(1, 0, 0), -2.0f),
-                     Quat.FromEuler(0.5f, -1.3f, 0.9f),
+                     Quat.FromAxisAngle(axis: new Vec3(x: 0, y: 1, z: 0), angleRadians: 1.2f),
+                     Quat.FromAxisAngle(axis: new Vec3(x: 1, y: 0, z: 0), angleRadians: -2.0f),
+                     Quat.FromEuler(pitch: 0.5f, yaw: -1.3f, roll: 0.9f),
                  })
         {
             var w = new NetWriter();
-            w.WriteQuaternion(q, 12);
+            w.WriteQuaternion(q: q, bitsPerComponent: 12);
             var decoded = RoundTrip(w).ReadQuaternion(12);
 
             // q and -q are the same rotation; compare via |dot| near 1.
-            var dot = MathF.Abs(
-                q.X * decoded.X + q.Y * decoded.Y + q.Z * decoded.Z + q.W * decoded.W
+            float dot = MathF.Abs(
+                (q.X * decoded.X) + (q.Y * decoded.Y) + (q.Z * decoded.Z) + (q.W * decoded.W)
             );
-            Assert.True(dot > 0.999f, $"quat drift too high: dot={dot}");
+            Assert.True(condition: dot > 0.999f, userMessage: $"quat drift too high: dot={dot}");
         }
     }
 
@@ -159,16 +171,16 @@ public class NetSerializationTests
     public void Transform_RoundTrips()
     {
         var t = new Transform3D(
-            new Vec3(10, 20, 30),
-            Quat.FromAxisAngle(new Vec3(0, 1, 0), 0.7f),
-            new Vec3(2, 2, 2)
+            position: new Vec3(x: 10, y: 20, z: 30),
+            rotation: Quat.FromAxisAngle(axis: new Vec3(x: 0, y: 1, z: 0), angleRadians: 0.7f),
+            scale: new Vec3(x: 2, y: 2, z: 2)
         );
         var w = new NetWriter();
         w.WriteTransform(t);
         var d = RoundTrip(w).ReadTransform();
 
-        Assert.Equal(10f, d.Position.X, 3);
-        Assert.Equal(2f, d.Scale.Y, 3);
+        Assert.Equal(expected: 10f, actual: d.Position.X, precision: 3);
+        Assert.Equal(expected: 2f, actual: d.Scale.Y, precision: 3);
     }
 
     [Fact]
@@ -189,7 +201,7 @@ public class NetSerializationTests
         w.WriteUInt32(42);
         w.Clear();
         w.WriteUInt16(7);
-        Assert.Equal(2, w.ByteLength);
-        Assert.Equal((ushort)7, RoundTrip(w).ReadUInt16());
+        Assert.Equal(expected: 2, actual: w.ByteLength);
+        Assert.Equal(expected: (ushort)7, actual: RoundTrip(w).ReadUInt16());
     }
 }

@@ -4,10 +4,10 @@ using Zigote.Core.Native;
 using Zigote.Core.Rendering;
 using Zigote.UI.Debug;
 using Zigote.UI.DevTools.Widgets;
+using Zigote.UI.Host;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Layout;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.DevTools.Panels;
 
@@ -15,7 +15,8 @@ namespace Zigote.UI.DevTools.Panels;
 ///     Live renderer controls (3D · Render): backend/surface + frame counters, the 16-channel G-buffer
 ///     debug-view selector, feature toggles (bloom / SSAO / SSR / shadows / TAA / DoF / wireframe /
 ///     diagnostic), and exposure/ambient tuning — every write goes straight through
-///     <c>SetRenderSettings3D</c>. Toggling an "amount" effect off zeros its field and remembers the last
+///     <c>SetRenderSettings3D</c>. Toggling an "amount" effect off zeros its field and remembers the
+///     last
 ///     value so toggling it back on restores the previous strength.
 /// </summary>
 public sealed class RendererPanel : IDevPanel
@@ -24,23 +25,23 @@ public sealed class RendererPanel : IDevPanel
     private readonly DevKeyValue _counters = new("Draws / tris / passes");
     private readonly Dictionary<string, float> _remembered = new();
     private readonly DevKeyValue _surface = new("Surface");
-    private readonly DevKeyValue _visible = new("Visible");
-
-    private DevToggle _bloom = null!, _ssao = null!, _ssr = null!, _shadows = null!;
-    private DevToggle _taa = null!, _dof = null!, _wire = null!, _diag = null!;
-    private DevStepper _view = null!, _exposure = null!, _ambient = null!;
+    private readonly CachedText _tAmbient = new();
+    private readonly CachedText _tCounters = new();
+    private readonly CachedText _tExposure = new();
 
     // Per-readout caches: Refresh runs every frame while the panel is open, so all formatting goes
     // through CachedText (zero-alloc while the rendered text is unchanged).
     private readonly CachedText _tSurface = new();
-    private readonly CachedText _tCounters = new();
     private readonly CachedText _tVisible = new();
-    private readonly CachedText _tExposure = new();
-    private readonly CachedText _tAmbient = new();
+    private readonly DevKeyValue _visible = new("Visible");
     private RenderBackend? _backendKey;
     private string _backendText = "—";
+
+    private DevToggle _bloom = null!, _ssao = null!, _ssr = null!, _shadows = null!;
+    private DevToggle _taa = null!, _dof = null!, _wire = null!, _diag = null!;
     private long _trisKey = -1;
     private string _trisText = "—";
+    private DevStepper _view = null!, _exposure = null!, _ambient = null!;
     private int _viewKey = -1;
     private string _viewText = "Shaded";
 
@@ -51,73 +52,73 @@ public sealed class RendererPanel : IDevPanel
     public Widget Build(BuildContext context)
     {
         _view = new DevStepper(
-            "Debug view",
-            "Shaded",
-            () => StepView(-1),
-            () => StepView(1)
+            label: "Debug view",
+            value: "Shaded",
+            onPrev: () => StepView(-1),
+            onNext: () => StepView(1)
         );
         _bloom = Amount(
-            "Bloom",
-            s => s.BloomIntensity,
-            (ref ZgRenderSettings3D s, float v) => s.BloomIntensity = v,
-            0.45f
+            label: "Bloom",
+            get: s => s.BloomIntensity,
+            set: (ref s, v) => s.BloomIntensity = v,
+            @default: 0.45f
         );
         _ssao = Amount(
-            "SSAO",
-            s => s.SsaoStrength,
-            (ref ZgRenderSettings3D s, float v) => s.SsaoStrength = v,
-            0.5f
+            label: "SSAO",
+            get: s => s.SsaoStrength,
+            set: (ref s, v) => s.SsaoStrength = v,
+            @default: 0.5f
         );
         _ssr = Amount(
-            "SSR",
-            s => s.SsrIntensity,
-            (ref ZgRenderSettings3D s, float v) => s.SsrIntensity = v,
-            0.5f
+            label: "SSR",
+            get: s => s.SsrIntensity,
+            set: (ref s, v) => s.SsrIntensity = v,
+            @default: 0.5f
         );
         _shadows = Amount(
-            "Shadows",
-            s => s.ShadowStrength,
-            (ref ZgRenderSettings3D s, float v) => s.ShadowStrength = v,
-            0.55f
+            label: "Shadows",
+            get: s => s.ShadowStrength,
+            set: (ref s, v) => s.ShadowStrength = v,
+            @default: 0.55f
         );
         _taa = Flag(
-            "TAA",
-            s => s.TaaEnabled,
-            (ref ZgRenderSettings3D s, float v) => s.TaaEnabled = v
+            label: "TAA",
+            get: s => s.TaaEnabled,
+            set: (ref s, v) => s.TaaEnabled = v
         );
         _dof = Flag(
-            "Depth of field",
-            s => s.DofEnabled,
-            (ref ZgRenderSettings3D s, float v) => s.DofEnabled = v
+            label: "Depth of field",
+            get: s => s.DofEnabled,
+            set: (ref s, v) => s.DofEnabled = v
         );
         _wire = Flag(
-            "Wireframe",
-            s => s.Wireframe,
-            (ref ZgRenderSettings3D s, float v) => s.Wireframe = v
+            label: "Wireframe",
+            get: s => s.Wireframe,
+            set: (ref s, v) => s.Wireframe = v
         );
         _diag = Flag(
-            "Diagnostic mode",
-            s => s.DiagnosticMode,
-            (ref ZgRenderSettings3D s, float v) => s.DiagnosticMode = v
+            label: "Diagnostic mode",
+            get: s => s.DiagnosticMode,
+            set: (ref s, v) => s.DiagnosticMode = v
         );
         _exposure = new DevStepper(
-            "Exposure",
-            "1.00",
-            () => Tune((ref ZgRenderSettings3D s) =>
-                s.Exposure = Clamp(s.Exposure - 0.05f, 0.2f, 3f)
+            label: "Exposure",
+            value: "1.00",
+            onPrev: () => Tune((ref s) =>
+                s.Exposure = Clamp(v: s.Exposure - 0.05f, lo: 0.2f, hi: 3f)
             ),
-            () => Tune((ref ZgRenderSettings3D s) =>
-                s.Exposure = Clamp(s.Exposure + 0.05f, 0.2f, 3f)
+            onNext: () => Tune((ref s) =>
+                s.Exposure = Clamp(v: s.Exposure + 0.05f, lo: 0.2f, hi: 3f)
             )
         );
         _ambient = new DevStepper(
-            "Ambient",
-            "0.00",
-            () => Tune((ref ZgRenderSettings3D s) =>
-                s.AmbientIntensity = Clamp(s.AmbientIntensity - 0.05f, 0f, 2f)
+            label: "Ambient",
+            value: "0.00",
+            onPrev: () => Tune((ref s) =>
+                s.AmbientIntensity = Clamp(v: s.AmbientIntensity - 0.05f, lo: 0f, hi: 2f)
             ),
-            () => Tune((ref ZgRenderSettings3D s) =>
-                s.AmbientIntensity = Clamp(s.AmbientIntensity + 0.05f, 0f, 2f)
+            onNext: () => Tune((ref s) =>
+                s.AmbientIntensity = Clamp(v: s.AmbientIntensity + 0.05f, lo: 0f, hi: 2f)
             )
         );
 
@@ -186,7 +187,7 @@ public sealed class RendererPanel : IDevPanel
 
         var s = Read();
         // ViewName allocates via Enum.ToString, so re-run it only when the view changed.
-        var viewNow = (int)s.DebugView;
+        int viewNow = (int)s.DebugView;
         if (viewNow != _viewKey)
         {
             _viewKey = viewNow;
@@ -206,31 +207,27 @@ public sealed class RendererPanel : IDevPanel
         _ambient.Value = _tAmbient.Update($"{s.AmbientIntensity:0.00}");
     }
 
-    // ── Feature helpers ──
-
-    private delegate void Mutate(ref ZgRenderSettings3D s);
-
-    private delegate void SetFloat(ref ZgRenderSettings3D s, float v);
-
     private DevToggle Amount(string label, Func<ZgRenderSettings3D, float> get, SetFloat set,
         float @default)
     {
         return new DevToggle(
-            label,
-            get(Read()) > 0f,
-            on => Tune((ref ZgRenderSettings3D s) =>
+            label: label,
+            value: get(Read()) > 0f,
+            onChanged: on => Tune((ref s) =>
                 {
                     if (on)
                     {
                         set(
-                            ref s,
-                            _remembered.TryGetValue(label, out var v) && v > 0f ? v : @default
+                            s: ref s,
+                            v: _remembered.TryGetValue(key: label, value: out float v) && v > 0f
+                                ? v
+                                : @default
                         );
                     }
                     else
                     {
                         _remembered[label] = get(s);
-                        set(ref s, 0f);
+                        set(s: ref s, v: 0f);
                     }
                 }
             )
@@ -240,31 +237,26 @@ public sealed class RendererPanel : IDevPanel
     private DevToggle Flag(string label, Func<ZgRenderSettings3D, float> get, SetFloat set)
     {
         return new DevToggle(
-            label,
-            get(Read()) != 0f,
-            on => Tune((ref ZgRenderSettings3D s) => set(ref s, on ? 1f : 0f))
+            label: label,
+            value: get(Read()) != 0f,
+            onChanged: on => Tune((ref s) => set(s: ref s, v: on ? 1f : 0f))
         );
     }
 
     private void StepView(int dir)
     {
-        Tune((ref ZgRenderSettings3D s) =>
+        Tune((ref s) =>
             {
-                var v = ((int)s.DebugView + dir + 16) % 16;
+                int v = ((int)s.DebugView + dir + 16) % 16;
                 s.DebugView = v;
             }
         );
     }
 
-    private static string ViewName(int v)
-    {
-        return v == 0 ? "Shaded" : ((DebugView)v).ToString();
-    }
+    private static string ViewName(int v) => v == 0 ? "Shaded" : ((DebugView)v).ToString();
 
-    private static float Clamp(float v, float lo, float hi)
-    {
-        return Math.Clamp(v, lo, hi);
-    }
+    private static float Clamp(float v, float lo, float hi) =>
+        Math.Clamp(value: v, min: lo, max: hi);
 
     private static ZgRenderSettings3D Read()
     {
@@ -293,4 +285,10 @@ public sealed class RendererPanel : IDevPanel
             /* engine not ready */
         }
     }
+
+    // ── Feature helpers ──
+
+    private delegate void Mutate(ref ZgRenderSettings3D s);
+
+    private delegate void SetFloat(ref ZgRenderSettings3D s, float v);
 }

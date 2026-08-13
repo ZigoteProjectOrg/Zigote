@@ -6,9 +6,9 @@ namespace Zigote.UI.Adwaita;
 /// </summary>
 public sealed class AdwPreferencesGroup : ComposedWidget
 {
-    private string? _title;
     private string? _description;
     private Widget? _headerSuffix;
+    private string? _title;
 
     public AdwPreferencesGroup(string? title = null, string? description = null)
     {
@@ -19,13 +19,13 @@ public sealed class AdwPreferencesGroup : ComposedWidget
     public string? Title
     {
         get => _title;
-        set => this.Set(ref _title, value);
+        set => this.Set(field: ref _title, value: value);
     }
 
     public string? Description
     {
         get => _description;
-        set => this.Set(ref _description, value);
+        set => this.Set(field: ref _description, value: value);
     }
 
     /// <summary>The boxed-list rows. Populate before mounting.</summary>
@@ -35,7 +35,7 @@ public sealed class AdwPreferencesGroup : ComposedWidget
     public Widget? HeaderSuffix
     {
         get => _headerSuffix;
-        set => this.Set(ref _headerSuffix, value);
+        set => this.Set(field: ref _headerSuffix, value: value);
     }
 
     protected override Widget Build(BuildContext context)
@@ -49,8 +49,8 @@ public sealed class AdwPreferencesGroup : ComposedWidget
             spacing: Spacing.Md
         );
 
-        var hasTitle = !string.IsNullOrEmpty(Title);
-        var hasDescription = !string.IsNullOrEmpty(Description);
+        bool hasTitle = !string.IsNullOrEmpty(Title);
+        bool hasDescription = !string.IsNullOrEmpty(Description);
         if (hasTitle || hasDescription || HeaderSuffix is not null)
         {
             // `preferencesgroup > box, box.labels { border-spacing: 6px }`.
@@ -60,11 +60,20 @@ public sealed class AdwPreferencesGroup : ComposedWidget
                 spacing: AdwMetrics.RowSpacing
             );
             if (hasTitle)
-                text.Children.Add(new Label(Title!, AdwTypography.Heading, theme.OnBackground));
-            if (hasDescription)
+            {
                 text.Children.Add(
-                    new Label(Description!, AdwTypography.Caption, p.DimLabel) { MaxLines = 3 }
+                    new Label(text: Title!, style: AdwTypography.Heading, color: theme.OnBackground)
                 );
+            }
+
+            if (hasDescription)
+            {
+                text.Children.Add(
+                    new Label(text: Description!, style: AdwTypography.Caption, color: p.DimLabel) {
+                        MaxLines = 3,
+                    }
+                );
+            }
 
             var header = new Row(crossAxisAlignment: CrossAxisAlignment.End) {
                 Children = { new Expanded(text) },
@@ -82,15 +91,18 @@ public sealed class AdwPreferencesGroup : ComposedWidget
             crossAxisAlignment: CrossAxisAlignment.Stretch,
             mainAxisSize: MainAxisSize.Min
         );
-        for (var i = 0; i < Rows.Count; i++)
+        for (int i = 0; i < Rows.Count; i++)
         {
             if (i > 0)
+            {
                 list.Children.Add(
                     new Container {
                         Height = 1f,
                         Background = p.CardShade,
                     }
                 );
+            }
+
             list.Children.Add(Rows[i]);
         }
 
@@ -103,7 +115,7 @@ public sealed class AdwPreferencesGroup : ComposedWidget
                 BorderColor = p.CardShade,
                 Elevation = AdwMetrics.CardShadow,
                 Radius = AdwMetrics.CardRadius,
-                Child = new ClipRRect(AdwMetrics.CardRadius, list),
+                Child = new ClipRRect(radius: AdwMetrics.CardRadius, child: list),
             }
         );
         return outer;

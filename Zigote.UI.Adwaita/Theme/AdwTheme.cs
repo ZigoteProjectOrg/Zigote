@@ -9,10 +9,10 @@ namespace Zigote.UI.Adwaita;
 public static class AdwTheme
 {
     /// <summary>Adwaita light (the GNOME default appearance).</summary>
-    public static ThemeData Light { get; } = Create(AdwAccent.Blue, false);
+    public static ThemeData Light { get; } = Create(accent: AdwAccent.Blue, dark: false);
 
     /// <summary>Adwaita dark.</summary>
-    public static ThemeData Dark { get; } = Create(AdwAccent.Blue, true);
+    public static ThemeData Dark { get; } = Create(accent: AdwAccent.Blue, dark: true);
 
     /// <summary>
     ///     An Adwaita theme with one of the nine system accent hues. Cache the result — theme
@@ -22,7 +22,7 @@ public static class AdwTheme
     {
         var p = dark ? AdwPalette.Dark : AdwPalette.Light;
         var accentBg = AdwAccentColors.Bg(accent);
-        var accentStandalone = AdwAccentColors.Standalone(accentBg, dark);
+        var accentStandalone = AdwAccentColors.Standalone(bg: accentBg, dark: dark);
 
         return new ThemeData {
             IsDark = dark,
@@ -58,8 +58,8 @@ public static class AdwTheme
             Accent = accentBg,
             // %opaque_button overlays currentColor (= white) on hover and rgb(0 0 6 / 20%) on
             // press: lighter, then darker. See AdwStyle.Solid.
-            AccentHover = AdwPalette.Mix(Color.White, accentBg, 0.10f),
-            AccentPressed = AdwPalette.Mix(AdwStyle.Ink, accentBg, 0.20f),
+            AccentHover = AdwPalette.Mix(a: Color.White, b: accentBg, t: 0.10f),
+            AccentPressed = AdwPalette.Mix(a: AdwStyle.Ink, b: accentBg, t: 0.20f),
             Error = p.Error,
             Danger = p.DestructiveBg,
             Success = p.SuccessBg,
@@ -73,7 +73,7 @@ public static class AdwTheme
             TextSecondary = p.DimLabel,
             TextMuted = p.DimLabel,
             // Opaque in light mode: a translucent dark disabled label washes out entirely.
-            TextDisabled = dark ? p.WindowFg.WithAlpha(0.32f) : Color.Rgb(150, 150, 154),
+            TextDisabled = dark ? p.WindowFg.WithAlpha(0.32f) : Color.Rgb(r: 150, g: 150, b: 154),
             Hint = p.DimLabel,
             Disabled = p.WindowFg.WithAlpha(0.32f),
             // separator { background: $border_color } — the same currentColor 15% as every border.
@@ -106,29 +106,29 @@ public static class AdwTheme
             Fill2 = p.HoverFill,
             Fill3 = p.ViewHoverFill,
             Fill4 = p.CardHoverFill,
-            Fill5 = AdwPalette.Fill(dark, 0.02f),
+            Fill5 = AdwPalette.Fill(dark: dark, percent: 0.02f),
             // Light-mode label ramps are pre-composited like the palette's foregrounds (see
             // AdwPalette.Light.WindowFg): translucent dark text renders washed out.
-            Label1 = dark ? Color.Rgb(255, 255, 255) : Color.Rgb(38, 38, 43),
+            Label1 = dark ? Color.Rgb(r: 255, g: 255, b: 255) : Color.Rgb(r: 38, g: 38, b: 43),
             Label2 = p.DimLabel,
             Label3 = dark
                 ? Color.Rgba(
-                    255,
-                    255,
-                    255,
-                    0.32f
+                    r: 255,
+                    g: 255,
+                    b: 255,
+                    a: 0.32f
                 )
-                : Color.Rgb(150, 150, 154), // alpha(#000006, .40) over #fafafb
+                : Color.Rgb(r: 150, g: 150, b: 154), // alpha(#000006, .40) over #fafafb
             // Pre-composited for the same reason as the ramp above: a translucent dark value goes
             // through the renderer's linear blend and lands lighter than the CSS equivalent.
             Label4 = dark
                 ? Color.Rgba(
-                    255,
-                    255,
-                    255,
-                    0.15f
+                    r: 255,
+                    g: 255,
+                    b: 255,
+                    a: 0.15f
                 )
-                : Color.Rgb(213, 213, 215), // alpha(#000006, .15) over #fafafb
+                : Color.Rgb(r: 213, g: 213, b: 215), // alpha(#000006, .15) over #fafafb
         };
     }
 }

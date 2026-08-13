@@ -46,12 +46,18 @@ public static class VfxAssetJson
             TexturePath = a.TexturePath,
             SoftParticles = a.SoftParticles,
         };
-        return JsonSerializer.Serialize(dto, VfxJsonContext.Default.VfxAssetDto);
+        return JsonSerializer.Serialize(
+            value: dto,
+            jsonTypeInfo: VfxJsonContext.Default.VfxAssetDto
+        );
     }
 
     public static VfxEmitterAsset Deserialize(string json)
     {
-        var dto = JsonSerializer.Deserialize(json, VfxJsonContext.Default.VfxAssetDto)
+        var dto = JsonSerializer.Deserialize(
+                      json: json,
+                      jsonTypeInfo: VfxJsonContext.Default.VfxAssetDto
+                  )
                   ?? throw new InvalidDataException("Empty VFX asset JSON.");
         var a = new VfxEmitterAsset {
             Capacity = dto.Capacity,
@@ -77,11 +83,17 @@ public static class VfxAssetJson
             SoftParticles = dto.SoftParticles,
         };
         if (dto.Bursts is not null)
-            foreach (var b in dto.Bursts)
-                a.Bursts.Add(new VfxBurst(b[0], (int)b[1]));
+        {
+            foreach (float[] b in dto.Bursts)
+                a.Bursts.Add(new VfxBurst(time: b[0], count: (int)b[1]));
+        }
+
         if (dto.Modules is not null)
+        {
             foreach (var m in dto.Modules)
                 a.UpdateModules.Add(Module(m));
+        }
+
         return a;
     }
 
@@ -135,17 +147,23 @@ public static class VfxAssetJson
         return (VfxModuleKind)m.Kind switch {
             VfxModuleKind.Gravity => new GravityModule(Vec(m.Vector!)),
             VfxModuleKind.Drag => new DragModule(m.Scalar ?? 0f),
-            VfxModuleKind.Turbulence => new TurbulenceModule(m.Scalar ?? 0f, m.Scalar2 ?? 1f),
-            VfxModuleKind.Vortex => new VortexModule(Vec(m.Vector!), m.Scalar ?? 0f),
+            VfxModuleKind.Turbulence => new TurbulenceModule(
+                strength: m.Scalar ?? 0f,
+                frequency: m.Scalar2 ?? 1f
+            ),
+            VfxModuleKind.Vortex => new VortexModule(
+                axis: Vec(m.Vector!),
+                strength: m.Scalar ?? 0f
+            ),
             VfxModuleKind.ColorOverLife => new ColorOverLifeModule(
                 new ColorRamp(
                     m.Stops!.Select(s => new ColorStop(
-                            s[0],
-                            new Color(
-                                s[1],
-                                s[2],
-                                s[3],
-                                s[4]
+                            position: s[0],
+                            color: new Color(
+                                r: s[1],
+                                g: s[2],
+                                b: s[3],
+                                a: s[4]
                             )
                         )
                     )
@@ -166,45 +184,28 @@ public static class VfxAssetJson
         ).ToList();
     }
 
-    private static FloatCurve Curve(List<float[]> stops)
-    {
-        return new FloatCurve(stops.Select(s => new CurveKey(s[0], s[1])));
-    }
+    private static FloatCurve Curve(List<float[]> stops) =>
+        new(stops.Select(s => new CurveKey(position: s[0], value: s[1])));
 
-    private static float[] Arr(Vec3 v)
-    {
-        return [v.X, v.Y, v.Z];
-    }
+    private static float[] Arr(Vec3 v) => [v.X, v.Y, v.Z];
 
-    private static float[] Arr(Color c)
-    {
-        return [c.R, c.G, c.B, c.A];
-    }
+    private static float[] Arr(Color c) => [c.R, c.G, c.B, c.A];
 
-    private static float[] Arr(FloatRange r)
-    {
-        return [r.Min, r.Max];
-    }
+    private static float[] Arr(FloatRange r) => [r.Min, r.Max];
 
-    private static Vec3 Vec(float[] a)
-    {
-        return new Vec3(a[0], a[1], a[2]);
-    }
+    private static Vec3 Vec(float[] a) => new(x: a[0], y: a[1], z: a[2]);
 
     private static Color Col(float[] a)
     {
         return new Color(
-            a[0],
-            a[1],
-            a[2],
-            a[3]
+            r: a[0],
+            g: a[1],
+            b: a[2],
+            a: a[3]
         );
     }
 
-    private static FloatRange Range(float[] a)
-    {
-        return new FloatRange(a[0], a[1]);
-    }
+    private static FloatRange Range(float[] a) => new(min: a[0], max: a[1]);
 }
 
 public sealed class VfxAssetDto

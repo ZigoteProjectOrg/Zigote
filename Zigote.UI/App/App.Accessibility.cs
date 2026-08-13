@@ -1,25 +1,8 @@
-using System.Diagnostics;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using System.Text;
 using Zigote.Core;
-using Zigote.Core.Animation;
-using Zigote.Core.Diagnostics;
-using Zigote.Core.Engine;
 using Zigote.Core.Events;
-using Zigote.Core.Native;
-using Zigote.Core.Paint;
-using Zigote.Core.Rendering;
-using Zigote.Core.State;
-using Zigote.UI.Debug;
-using Zigote.UI.Licensing;
 using Zigote.UI.Semantics;
-using Zigote.UI.TextShaping;
-using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
-using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Focus;
-using MediaQueryData = Zigote.UI.Widgets.MediaQueryData;
 
 namespace Zigote.UI.Host;
 
@@ -33,8 +16,8 @@ public partial class App
     /// </summary>
     public SemanticsNode BuildSemantics()
     {
-        var screen = new Size(HostLogicalWidth, HostLogicalHeight);
-        SemanticsRoot = SemanticsBuilder.Build(Root, _overlays, screen);
+        var screen = new Size(width: HostLogicalWidth, height: HostLogicalHeight);
+        SemanticsRoot = SemanticsBuilder.Build(root: Root, overlays: _overlays, screen: screen);
         return SemanticsRoot;
     }
 
@@ -49,30 +32,24 @@ public partial class App
     ///     metrics never freeze — even when the window is unfocused). The devtools overlay registers
     ///     one that returns true while its panel or compact stats are visible.
     /// </summary>
-    public void AddContinuousFrameSource(Func<bool> wants)
-    {
-        _continuousFrameSources.Add(wants);
-    }
+    public void AddContinuousFrameSource(Func<bool> wants) => _continuousFrameSources.Add(wants);
 
     internal bool WantsContinuousFrame()
     {
-        for (var i = 0; i < _continuousFrameSources.Count; i++)
+        for (int i = 0; i < _continuousFrameSources.Count; i++)
+        {
             if (_continuousFrameSources[i]())
                 return true;
+        }
+
         return false;
     }
 
     /// <summary>Toggle the full devtools panel (no-op until a devtools package is installed).</summary>
-    public void ToggleDebugPanel()
-    {
-        OnToggleDevTools?.Invoke();
-    }
+    public void ToggleDebugPanel() => OnToggleDevTools?.Invoke();
 
     /// <summary>Toggle the compact always-on stats block (no-op until a devtools package is installed).</summary>
-    public void ToggleCompactStats()
-    {
-        OnToggleDevCompact?.Invoke();
-    }
+    public void ToggleCompactStats() => OnToggleDevCompact?.Invoke();
 
     /// <summary>
     ///     Focusables in reading (tree) order within the active focus scope. The scope is the topmost
@@ -88,7 +65,7 @@ public partial class App
 
     private Widget? ActiveFocusScope()
     {
-        for (var i = _overlays.Count - 1; i >= 0; i--)
+        for (int i = _overlays.Count - 1; i >= 0; i--)
         {
             var ov = _overlays[i];
             if (FocusTraversal.HasFocusable(ov)) return ov;
@@ -115,9 +92,9 @@ public partial class App
         var next = scope is null
             ? null
             : FocusTraversal.NextInTab(
-                FocusTraversal.TabOrder(scope, FocusedWidget),
-                FocusedWidget,
-                backwards
+                order: FocusTraversal.TabOrder(scope: scope, focused: FocusedWidget),
+                current: FocusedWidget,
+                backwards: backwards
             );
         if (next != null)
         {
@@ -134,10 +111,10 @@ public partial class App
     {
         if (FocusedWidget is null) return false;
         var best = FocusTraversal.Directional(
-            GetFocusableWidgets(),
-            FocusedWidget,
-            dirX,
-            dirY
+            order: GetFocusableWidgets(),
+            current: FocusedWidget,
+            dx: dirX,
+            dy: dirY
         );
         if (best is null) return false;
         SetFocusRingVisible(true);
@@ -149,11 +126,13 @@ public partial class App
     private bool RunAccelerator(KeyCode key, Modifiers modifiers)
     {
         foreach (var (chord, run) in Accelerators)
-            if (chord.Matches(key, modifiers))
+        {
+            if (chord.Matches(key: key, modifiers: modifiers))
             {
                 run();
                 return true;
             }
+        }
 
         return false;
     }
@@ -164,9 +143,11 @@ public partial class App
     /// </summary>
     private bool HandleEscape()
     {
-        for (var i = _overlays.Count - 1; i >= 0; i--)
+        for (int i = _overlays.Count - 1; i >= 0; i--)
+        {
             if (_overlays[i] is IDismissableOverlay d && d.RequestDismiss())
                 return true;
+        }
 
         // A window whose ROOT is dismissable closes on Esc — this is how dialogs hosted as
         // separate OS windows (e.g. the file browser) get the same Esc-cancels behavior that
@@ -180,9 +161,11 @@ public partial class App
         // rather than sitting on the overlay stack. Escape is the desktop spelling of the same
         // gesture as the Android back button, so it runs the same handlers — otherwise Escape on a
         // modal sheet merely clears focus and leaves the sheet up.
-        for (var i = _backHandlers.Count - 1; i >= 0; i--)
+        for (int i = _backHandlers.Count - 1; i >= 0; i--)
+        {
             if (_backHandlers[i]())
                 return true;
+        }
 
         if (FocusedWidget != null)
         {

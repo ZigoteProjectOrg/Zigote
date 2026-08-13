@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Zigote.Core.Diagnostics;
 using Zigote.Core.Engine;
+using Zigote.Core.Rendering;
 using Zigote.Core.State;
 using Zigote.Editor;
 using Zigote.Editor.Export;
@@ -8,7 +9,6 @@ using Zigote.Editor.Scene;
 using Zigote.Editor.Settings;
 using Zigote.Editor.Vfx;
 using Zigote.Editor.Widgets;
-using Zigote.Core.Rendering;
 using Zigote.Persistence.SQLite;
 using Zigote.Preferences;
 using Zigote.Runtime.Scene;
@@ -19,7 +19,7 @@ using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Menu;
 
 // Headless game export (no window, no engine init) — used by CI and scripting.
-var cli = Environment.GetCommandLineArgs();
+string[] cli = Environment.GetCommandLineArgs();
 if (cli.Length > 1 && cli[1] == "--export")
     return await ExportCli.RunAsync(cli);
 
@@ -50,9 +50,9 @@ WindowChrome.Preference = EditorPreferences.ParseChrome(settings.WindowChromeMod
 // App defaults to the power-efficient one). settings.GpuIndex pins a specific one for testing —
 // read here because the GPU is chosen when the device is created and never afterwards.
 using var app = new App(
-    appName,
-    1280,
-    800,
+    title: appName,
+    width: 1280,
+    height: 800,
     gpuPreference: GpuPowerPreference.Performance,
     gpuIndex: settings.GpuIndex.Value,
     transparentWindow: WindowChrome.Resolve() == WindowChromeStyle.AdwaitaCsd
@@ -61,18 +61,18 @@ using var app = new App(
 // Editor preferences (theme mode, fonts, vsync) — reactive appliers over the EditorSettings
 // preferences; the Settings window only writes preference values. Theme mode "system" follows
 // the OS appearance (SystemThemeChanged below).
-var prefs = new EditorPreferences(app, settings, history);
+var prefs = new EditorPreferences(app: app, settings: settings, history: history);
 var theme = prefs.ResolveTheme();
 app.Theme = theme;
 prefs.ApplyAtBoot();
-DevTools.Install(app, DevToolsProfile.ThreeD);
+DevTools.Install(app: app, profile: DevToolsProfile.ThreeD);
 
 // Dev tooling: when ZIGOTE_SHOT is set the native engine dumps a one-shot framebuffer
 // capture at frame ZIGOTE_SHOT_FRAME. Force continuous rendering so the frame counter
 // reliably advances to that frame even on an otherwise-static scene. ForceContinuousRender
 // (not ContinuousUpdate, which the toolbar transport owns — it would clobber this) also
 // bypasses the viewport's change-gated 3D render, so every frame is a real render.
-var shotMode = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ZIGOTE_SHOT"));
+bool shotMode = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ZIGOTE_SHOT"));
 if (shotMode)
     app.ForceContinuousRender = true;
 
@@ -133,23 +133,21 @@ void RebuildShell()
         // fresh, so close the floats and re-open their panels in the new main dock.
         var floating = dockWindows.CloseAllForRebuild();
         layoutWidget = new EditorLayout(
-            s,
-            theme,
-            app,
-            actions
+            state: s,
+            theme: theme,
+            app: app,
+            actions: actions
         );
         app.Root = layoutWidget;
         layoutWidget.ApplyEditorFontPreferences(settings);
         if (layoutWidget.Dock is { } dock)
         {
-            dockWindows.SetMain(dock, theme);
-            foreach (var id in floating) dock.OpenPanel(id);
+            dockWindows.SetMain(dock: dock, theme: theme);
+            foreach (string id in floating) dock.OpenPanel(id);
         }
     }
     else
-    {
         ShowWelcome();
-    }
 
     settingsHost.ApplyTheme();
     app.RequestPaint();
@@ -165,30 +163,30 @@ void ShowWelcome()
     // The welcome screen is a static 2D surface — let the idle event-wait gate throttle it.
     app.ContinuousUpdate = false;
     app.Root = new WelcomeScreen(
-        app,
-        theme,
-        history,
-        OpenProject
+        app: app,
+        theme: theme,
+        history: history,
+        onOpen: OpenProject
     );
     // Replace any project menu with a minimal welcome menu (native bar only; the
     // in-window welcome screen already has on-screen New/Open buttons).
     NativeMenuBar.TryInstall(
         [
             new AppMenu(
-                "File",
-                [
+                Title: "File",
+                Items: [
                     new ContextMenuItem(
-                        "New Project",
-                        () => ProjectDialogs.ShowNew(app, OpenProject)
+                        Label: "New Project",
+                        OnSelect: () => ProjectDialogs.ShowNew(app: app, onOpen: OpenProject)
                     ),
                     new ContextMenuItem(
-                        "Open Project…",
-                        () => ProjectDialogs.ShowOpen(app, OpenProject)
+                        Label: "Open Project…",
+                        OnSelect: () => ProjectDialogs.ShowOpen(app: app, onOpen: OpenProject)
                     ),
-                    new ContextMenuItem("", null, true),
-                    new ContextMenuItem("Settings…", settingsHost.Open),
-                    new ContextMenuItem("", null, true),
-                    new ContextMenuItem("Quit", app.RequestQuit, Shortcut: "⌘Q"),
+                    new ContextMenuItem(Label: "", OnSelect: null, Separator: true),
+                    new ContextMenuItem(Label: "Settings…", OnSelect: settingsHost.Open),
+                    new ContextMenuItem(Label: "", OnSelect: null, Separator: true),
+                    new ContextMenuItem(Label: "Quit", OnSelect: app.RequestQuit, Shortcut: "⌘Q"),
                 ]
             ),
         ]
@@ -209,7 +207,7 @@ void OpenProject(string projectFile)
     CloseSession();
 
     var project = ZigoteProject.Load(projectFile);
-    var projDir = Path.GetDirectoryName(projectFile) ?? ".";
+    string projDir = Path.GetDirectoryName(projectFile) ?? ".";
 
     // Resolve all project-relative paths (scenes, meshes, textures) from the project root,
     // regardless of where the editor process was launched.
@@ -234,7 +232,7 @@ void OpenProject(string projectFile)
     state.Preferences = projectPrefs;
     var viewport = projectPrefs.Viewport;
     state.ShowPhysicsWireframe = viewport.PhysicsWireframe.Value;
-    state.StreamDistance = MathF.Max(0f, viewport.StreamDistance.Value);
+    state.StreamDistance = MathF.Max(x: 0f, y: viewport.StreamDistance.Value);
     state.UseNativeVfx = viewport.NativeVfx.Value;
     state.UseGpuVfx = viewport.GpuVfx.Value;
     state.AnimateEditVfx = viewport.AnimateEditVfx.Value;
@@ -250,7 +248,7 @@ void OpenProject(string projectFile)
     sessionBindings.Add(
         viewport.StreamDistance.Observe(() =>
             {
-                state.StreamDistance = MathF.Max(0f, viewport.StreamDistance.Peek());
+                state.StreamDistance = MathF.Max(x: 0f, y: viewport.StreamDistance.Peek());
                 if (!state.StreamingEnabled) state.MeshStreamer.Clear();
                 state.InvalidateViewport();
                 app.RequestPaint();
@@ -291,71 +289,73 @@ void OpenProject(string projectFile)
     // Physics-wireframe overlay toggle (debug menu Variables tab / `set render.physics_wireframe 1`).
     // Editor-side debug viz; draws collision shapes over the viewport in edit + play mode.
     DebugVariables.RegisterBool(
-        "render.physics_wireframe",
-        () => viewport.PhysicsWireframe.Peek(),
-        v => viewport.PhysicsWireframe.Value = v,
-        "3D · Render",
-        "Draw physics collision shapes as a wireframe overlay"
+        name: "render.physics_wireframe",
+        getter: () => viewport.PhysicsWireframe.Peek(),
+        setter: v => viewport.PhysicsWireframe.Value = v,
+        category: "3D · Render",
+        description: "Draw physics collision shapes as a wireframe overlay"
     );
 
     // Demand mesh streaming: load .zmesh meshes within this camera distance off-thread and unload
     // (hide) them beyond it. 0 = off (all meshes stay resident — the default synchronous path). The
     // per-frame asset pump (session.PumpAssets) is always live; only the residency sink gates on this.
     DebugVariables.RegisterFloat(
-        "render.stream_distance",
-        () => viewport.StreamDistance.Peek(),
-        v => viewport.StreamDistance.Value = MathF.Max(0f, v),
-        0f,
-        1000f,
-        "3D · Render",
+        name: "render.stream_distance",
+        getter: () => viewport.StreamDistance.Peek(),
+        setter: v => viewport.StreamDistance.Value = MathF.Max(x: 0f, y: v),
+        min: 0f,
+        max: 1000f,
+        category: "3D · Render",
+        description:
         "Demand-stream .zmesh meshes within this camera distance (0 = off, all resident)"
     );
 
     // VFX particles through the native GPU billboard pass vs. the editor 2D-projection overlay. Off by
     // default (the 2D path is always available); clearing it drops any native batches still uploaded.
     DebugVariables.RegisterBool(
-        "render.vfx_native",
-        () => viewport.NativeVfx.Peek(),
-        v => viewport.NativeVfx.Value = v,
-        "3D · Render",
+        name: "render.vfx_native",
+        getter: () => viewport.NativeVfx.Peek(),
+        setter: v => viewport.NativeVfx.Value = v,
+        category: "3D · Render",
+        description:
         "Render VFX particles with the native GPU billboard pass (additive + alpha blend)"
     );
 
     // Simulate VFX emitters on the GPU (compute kernel) — the scale path. Clearing it drops the GPU batches.
     DebugVariables.RegisterBool(
-        "render.vfx_gpu",
-        () => viewport.GpuVfx.Peek(),
-        v => viewport.GpuVfx.Value = v,
-        "3D · Render",
-        "Simulate VFX particles on the GPU (compute) instead of the CPU"
+        name: "render.vfx_gpu",
+        getter: () => viewport.GpuVfx.Peek(),
+        setter: v => viewport.GpuVfx.Value = v,
+        category: "3D · Render",
+        description: "Simulate VFX particles on the GPU (compute) instead of the CPU"
     );
 
     // Continuously animate VFX emitters in edit mode. Off by default — a static first-frame preview is
     // shown instead (no continuous render). On = the editor renders continuously to animate them.
     DebugVariables.RegisterBool(
-        "render.vfx_edit",
-        () => viewport.AnimateEditVfx.Peek(),
-        v => viewport.AnimateEditVfx.Value = v,
-        "3D · Render",
-        "Animate VFX emitters live in edit mode (off = static preview)"
+        name: "render.vfx_edit",
+        getter: () => viewport.AnimateEditVfx.Peek(),
+        setter: v => viewport.AnimateEditVfx.Value = v,
+        category: "3D · Render",
+        description: "Animate VFX emitters live in edit mode (off = static preview)"
     );
 
     // Native frustum-culling toggle (debug menu Variables / `set render.frustum_cull 0`). On by default;
     // the renderer skips draws whose bounding sphere is outside the camera frustum. Toggling off draws
     // everything — watch the Renderer panel's draw/tri counts drop when it's on and you look away.
-    var frustumCull = true;
+    bool frustumCull = true;
     DebugVariables.RegisterBool(
-        "render.frustum_cull",
-        () => frustumCull,
-        v =>
+        name: "render.frustum_cull",
+        getter: () => frustumCull,
+        setter: v =>
         {
             frustumCull = v;
             ZigoteEngine.Instance?.RenderSetFrustumCull(v);
             state.InvalidateViewport();
             app.RequestPaint();
         },
-        "3D · Render",
-        "Frustum-cull meshes whose bounds fall outside the camera view"
+        category: "3D · Render",
+        description: "Frustum-cull meshes whose bounds fall outside the camera view"
     );
 
     // ZIGOTE_SCENE=balls launches the HDRI material-showcase scene (glass/chrome/paint/gold/etc.).
@@ -379,49 +379,51 @@ void OpenProject(string projectFile)
     // depend on a per-machine preference.
     state.ReducedEditorGraphics = !shotMode && settings.ReducedEditorGraphics.Value;
     if (!shotMode)
+    {
         sessionBindings.Add(
             settings.ReducedEditorGraphics.Observe(() =>
                 state.ReducedEditorGraphics = settings.ReducedEditorGraphics.Peek()
             )
         );
+    }
+
     state.EditorGraphicsChanged += () =>
     {
         settings.ReducedEditorGraphics.Value = state.ReducedEditorGraphics;
         app.RequestPaint();
     };
     DebugVariables.RegisterBool(
-        "render.editor_reduced",
-        () => state.ReducedEditorGraphics,
-        v => state.ReducedEditorGraphics = v,
-        "3D · Render",
+        name: "render.editor_reduced",
+        getter: () => state.ReducedEditorGraphics,
+        setter: v => state.ReducedEditorGraphics = v,
+        category: "3D · Render",
+        description:
         "Reduced edit-mode viewport graphics (no TAA/bloom/SSR/DoF); play mode always renders full"
     );
 
     // Auto-build and hot-watch the project's script assembly if one is configured.
     if (!string.IsNullOrEmpty(project.ScriptProject))
     {
-        var scriptProjPath = Path.Combine(projDir, project.ScriptProject);
+        string scriptProjPath = Path.Combine(path1: projDir, path2: project.ScriptProject);
         if (File.Exists(scriptProjPath))
         {
             state.StartScriptWatcher(scriptProjPath);
             _ = state.BuildScriptsAsync(scriptProjPath);
         }
         else
-        {
             Console.WriteLine($"[Zigote] ScriptProject not found: {scriptProjPath}");
-        }
     }
 
     session = state;
     layoutWidget = new EditorLayout(
-        state,
-        theme,
-        app,
-        actions
+        state: state,
+        theme: theme,
+        app: app,
+        actions: actions
     );
     app.Root = layoutWidget;
     layoutWidget.ApplyEditorFontPreferences(settings);
-    if (layoutWidget.Dock is { } mainDock) dockWindows.SetMain(mainDock, theme);
+    if (layoutWidget.Dock is { } mainDock) dockWindows.SetMain(dock: mainDock, theme: theme);
 
     // Edit mode is event-driven: the App idles in WaitEvents until something requests a paint
     // (SceneChanged/SelectionSignal/AssetsChanged above, input, tickers), and the viewport itself
@@ -435,7 +437,7 @@ void OpenProject(string projectFile)
 // ── Decide the initial screen ───────────────────────────────────────────────
 // Explicit CLI arg wins; otherwise reopen the last project (if the preference allows);
 // otherwise welcome.
-var argsArray = Environment.GetCommandLineArgs();
+string[] argsArray = Environment.GetCommandLineArgs();
 if (argsArray.Length > 1 && !string.IsNullOrWhiteSpace(argsArray[1]))
     OpenProject(argsArray[1]);
 else if (settings.ReopenLastProject.Value && history.Last.Value is { Length: > 0 } lastProject &&
@@ -450,7 +452,7 @@ if (Environment.GetEnvironmentVariable("ZIGOTE_OPEN_SETTINGS") == "1")
 
 // Dev hook: enter play mode as soon as the project's scripts finish building — pairs with
 // ZIGOTE_SHOT for hands-free gameplay captures.
-var autoPlay = Environment.GetEnvironmentVariable("ZIGOTE_AUTOPLAY") == "1";
+bool autoPlay = Environment.GetEnvironmentVariable("ZIGOTE_AUTOPLAY") == "1";
 
 // ── Main loop ────────────────────────────────────────────────────────────────
 // Editor renders up to 120 fps for a smoother UI (on 120 Hz / ProMotion displays; vsync still caps
@@ -463,13 +465,13 @@ var autoPlay = Environment.GetEnvironmentVariable("ZIGOTE_AUTOPLAY") == "1";
 // that is slower) and is re-read each frame — dragging the editor from a 60 Hz to a 144 Hz screen
 // re-paces the loop without a restart.
 const int backgroundFps = 10;
-var backgroundTicks = Stopwatch.Frequency / backgroundFps;
+long backgroundTicks = Stopwatch.Frequency / backgroundFps;
 var clock = Stopwatch.StartNew();
-var assetFrame = 0L;
+long assetFrame = 0L;
 
 while (!app.ShouldQuit)
 {
-    var frameStart = clock.ElapsedTicks;
+    long frameStart = clock.ElapsedTicks;
     // GNOME publishes accent / color-scheme / titlebar-button changes on a background monitor
     // process; the flag it sets is drained here because the accent restyles the shell in every
     // theme mode, not just "system" (which SystemThemeChanged already covers).
@@ -478,10 +480,7 @@ while (!app.ShouldQuit)
     Profiler.BeginFrame();
     using (Profiler.Scope("Frame"))
     {
-        using (Profiler.Scope("App.Frame"))
-        {
-            app.Frame();
-        }
+        using (Profiler.Scope("App.Frame")) app.Frame();
 
         using (Profiler.Scope("Update.Play"))
         {
@@ -494,10 +493,7 @@ while (!app.ShouldQuit)
             session?.TickPlay(app.DeltaTime);
         }
 
-        using (Profiler.Scope("Update.Animation"))
-        {
-            session?.TickAnimation(app.DeltaTime);
-        }
+        using (Profiler.Scope("Update.Animation")) session?.TickAnimation(app.DeltaTime);
 
         using (Profiler.Scope("Assets.Pump"))
         {
@@ -506,13 +502,11 @@ while (!app.ShouldQuit)
         }
 
         using (Profiler.Scope("Background"))
-        {
             // Whatever the frame can afford of the deferred work: results that asked to wait for
             // room (Deliver.WhenIdle) and a slice of anything filling across frames. A quarter of a
             // 60 Hz frame, so a burst of results costs several frames of settling rather than one
             // visible stall. Whatever does not fit asks for another frame and continues there.
             session?.Background.RunFrame(TimeSpan.FromMilliseconds(4));
-        }
     }
 
     Profiler.EndFrame();
@@ -521,10 +515,10 @@ while (!app.ShouldQuit)
     // before we sleep — refocus latency is one 8 ms pad, not a stale ~100 ms background sleep.
     // AnyWindowFocused (not WindowFocused): a focused Settings window must keep full rate — its
     // frames are pumped from this same loop, and typing at the background heartbeat feels broken.
-    var throttled = !app.AnyWindowFocused && session is not { IsPlaying: true } &&
-                    !app.ForceContinuousRender;
-    var targetTicks = throttled ? backgroundTicks : app.FrameIntervalTicks;
-    var remaining = targetTicks - (clock.ElapsedTicks - frameStart);
+    bool throttled = !app.AnyWindowFocused && session is not { IsPlaying: true } &&
+                     !app.ForceContinuousRender;
+    long targetTicks = throttled ? backgroundTicks : app.FrameIntervalTicks;
+    long remaining = targetTicks - (clock.ElapsedTicks - frameStart);
     if (remaining > 0) Thread.Sleep((int)(remaining * 1000 / Stopwatch.Frequency));
 }
 

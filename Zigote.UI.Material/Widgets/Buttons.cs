@@ -11,24 +11,24 @@ namespace Zigote.UI.Material;
 /// </summary>
 public sealed class ElevatedButton : Button
 {
-    public ElevatedButton(Widget child, Action? onPressed = null) : base(LabelOf(child), onPressed)
+    public ElevatedButton(Widget child, Action? onPressed = null) : base(
+        label: LabelOf(child),
+        onPressed: onPressed
+    )
     {
         if (child is not LabelWidget) Content = child;
         Style = ButtonStyle.Elevated;
     }
 
-    internal static string LabelOf(Widget child)
-    {
-        return child is LabelWidget l ? l.Text : "";
-    }
+    internal static string LabelOf(Widget child) => child is LabelWidget l ? l.Text : "";
 }
 
 /// <summary><c>FilledButton</c> — a solid, filled button (maps to the elevated fill style).</summary>
 public sealed class FilledButton : Button
 {
     public FilledButton(Widget child, Action? onPressed = null) : base(
-        ElevatedButton.LabelOf(child),
-        onPressed
+        label: ElevatedButton.LabelOf(child),
+        onPressed: onPressed
     )
     {
         if (child is not LabelWidget) Content = child;
@@ -40,8 +40,8 @@ public sealed class FilledButton : Button
 public sealed class OutlinedButton : Button
 {
     public OutlinedButton(Widget child, Action? onPressed = null) : base(
-        ElevatedButton.LabelOf(child),
-        onPressed
+        label: ElevatedButton.LabelOf(child),
+        onPressed: onPressed
     )
     {
         if (child is not LabelWidget) Content = child;
@@ -53,8 +53,8 @@ public sealed class OutlinedButton : Button
 public sealed class TextButton : Button
 {
     public TextButton(Widget child, Action? onPressed = null) : base(
-        ElevatedButton.LabelOf(child),
-        onPressed
+        label: ElevatedButton.LabelOf(child),
+        onPressed: onPressed
     )
     {
         if (child is not LabelWidget) Content = child;

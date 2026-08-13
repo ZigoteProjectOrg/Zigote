@@ -24,10 +24,7 @@ public sealed class WebSocketTransport : ITransport
     private HttpListener? _listener;
     private int _nextConnectionId;
 
-    public WebSocketTransport(NetConfig? config = null)
-    {
-        _config = config ?? new NetConfig();
-    }
+    public WebSocketTransport(NetConfig? config = null) => _config = config ?? new NetConfig();
 
     public TransportRole Role { get; private set; } = TransportRole.None;
     public bool IsRunning { get; private set; }
@@ -57,7 +54,9 @@ public sealed class WebSocketTransport : ITransport
             }
             catch (Exception ex)
             {
-                _events.Enqueue(Event.Error(0, $"WebSocket server failed to start: {ex.Message}"));
+                _events.Enqueue(
+                    Event.Error(id: 0, error: $"WebSocket server failed to start: {ex.Message}")
+                );
                 _listener = null;
                 Role = TransportRole.None;
                 return;
@@ -65,7 +64,7 @@ public sealed class WebSocketTransport : ITransport
         }
 
         IsRunning = true;
-        _ = AcceptLoopAsync(_listener, _cts.Token);
+        _ = AcceptLoopAsync(listener: _listener, token: _cts.Token);
     }
 
     public void StartClient(string host, int port)
@@ -75,7 +74,7 @@ public sealed class WebSocketTransport : ITransport
         Role = TransportRole.Client;
         _cts = new CancellationTokenSource();
         IsRunning = true;
-        _ = ConnectAsync(host, port, _cts.Token);
+        _ = ConnectAsync(host: host, port: port, token: _cts.Token);
     }
 
     public void Update(float deltaTime)
@@ -87,9 +86,9 @@ public sealed class WebSocketTransport : ITransport
     public void Send(int connectionId, ReadOnlySpan<byte> payload, DeliveryMethod delivery,
         int channel = 0)
     {
-        if (!_connections.TryGetValue(connectionId, out var conn)) return;
+        if (!_connections.TryGetValue(key: connectionId, value: out var conn)) return;
 
-        var frame = new byte[2 + payload.Length];
+        byte[] frame = new byte[2 + payload.Length];
         frame[0] = (byte)delivery;
         frame[1] = (byte)channel;
         payload.CopyTo(frame.AsSpan(2));
@@ -103,8 +102,8 @@ public sealed class WebSocketTransport : ITransport
 
     public void Disconnect(int connectionId)
     {
-        if (!_connections.TryGetValue(connectionId, out var conn)) return;
-        conn.Close(WebSocketCloseStatus.NormalClosure, DisconnectReason.LocalClose);
+        if (!_connections.TryGetValue(key: connectionId, value: out var conn)) return;
+        conn.Close(status: WebSocketCloseStatus.NormalClosure, reason: DisconnectReason.LocalClose);
     }
 
     public void Stop()
@@ -115,7 +114,12 @@ public sealed class WebSocketTransport : ITransport
         _cts?.Cancel();
 
         foreach (var conn in _connections.Values)
-            conn.Close(WebSocketCloseStatus.NormalClosure, DisconnectReason.LocalClose);
+        {
+            conn.Close(
+                status: WebSocketCloseStatus.NormalClosure,
+                reason: DisconnectReason.LocalClose
+            );
+        }
 
         try
         {
@@ -132,10 +136,8 @@ public sealed class WebSocketTransport : ITransport
         Role = TransportRole.None;
     }
 
-    public NetworkStats? GetStats(int connectionId)
-    {
-        return _connections.TryGetValue(connectionId, out var conn) ? conn.Stats : null;
-    }
+    public NetworkStats? GetStats(int connectionId) =>
+        _connections.TryGetValue(key: connectionId, value: out var conn) ? conn.Stats : null;
 
     public void Dispose()
     {
@@ -147,37 +149,45 @@ public sealed class WebSocketTransport : ITransport
     private void DrainEvents()
     {
         while (_events.TryDequeue(out var evt))
+        {
             switch (evt.Kind)
             {
                 case EventKind.Connected:
                     Listener?.OnConnected(evt.ConnectionId);
                     break;
                 case EventKind.Disconnected:
-                    if (_connections.TryRemove(evt.ConnectionId, out _))
-                        Listener?.OnDisconnected(evt.ConnectionId, evt.Reason);
+                    if (_connections.TryRemove(key: evt.ConnectionId, value: out _))
+                    {
+                        Listener?.OnDisconnected(
+                            connectionId: evt.ConnectionId,
+                            reason: evt.Reason
+                        );
+                    }
+
                     break;
                 case EventKind.Receive:
-                    if (_connections.TryGetValue(evt.ConnectionId, out var conn))
+                    if (_connections.TryGetValue(key: evt.ConnectionId, value: out var conn))
                     {
                         conn.Stats.PacketsReceived++;
                         conn.Stats.BytesReceived += evt.Payload!.Length;
                         conn.LastReceived = 0f;
                         var span = evt.Payload.AsSpan();
                         var delivery = (DeliveryMethod)span[0];
-                        var channel = span[1];
+                        byte channel = span[1];
                         Listener?.OnReceive(
-                            evt.ConnectionId,
-                            span[2..],
-                            delivery,
-                            channel
+                            connectionId: evt.ConnectionId,
+                            payload: span[2..],
+                            delivery: delivery,
+                            channel: channel
                         );
                     }
 
                     break;
                 case EventKind.Error:
-                    Listener?.OnError(evt.ConnectionId, evt.Message!);
+                    Listener?.OnError(connectionId: evt.ConnectionId, error: evt.Message!);
                     break;
             }
+        }
     }
 
     private void Pump(float dt)
@@ -191,7 +201,10 @@ public sealed class WebSocketTransport : ITransport
 
             if (conn.LastReceived >= _config.ConnectionTimeout)
             {
-                conn.Close(WebSocketCloseStatus.EndpointUnavailable, DisconnectReason.Timeout);
+                conn.Close(
+                    status: WebSocketCloseStatus.EndpointUnavailable,
+                    reason: DisconnectReason.Timeout
+                );
                 continue;
             }
 
@@ -206,10 +219,7 @@ public sealed class WebSocketTransport : ITransport
 
     // Keepalive rides as a zero-length payload on a reserved channel; the receiver still resets its
     // timeout from the message arrival and the empty payload is harmless if surfaced.
-    private static byte[] KeepAliveFrame()
-    {
-        return [(byte)DeliveryMethod.ReliableOrdered, 255];
-    }
+    private static byte[] KeepAliveFrame() => [(byte)DeliveryMethod.ReliableOrdered, 255];
 
     private async Task AcceptLoopAsync(HttpListener listener, CancellationToken token)
     {
@@ -239,7 +249,7 @@ public sealed class WebSocketTransport : ITransport
                 continue;
             }
 
-            _ = AcceptOneAsync(context, token);
+            _ = AcceptOneAsync(context: context, token: token);
         }
     }
 
@@ -253,17 +263,21 @@ public sealed class WebSocketTransport : ITransport
         }
         catch (Exception ex)
         {
-            _events.Enqueue(Event.Error(0, $"WebSocket accept failed: {ex.Message}"));
+            _events.Enqueue(Event.Error(id: 0, error: $"WebSocket accept failed: {ex.Message}"));
             return;
         }
 
-        var id = Interlocked.Increment(ref _nextConnectionId);
-        var conn = new Conn(id, socket, _events);
+        int id = Interlocked.Increment(ref _nextConnectionId);
+        var conn = new Conn(id: id, socket: socket, events: _events);
 
         // Server validates the client's handshake (ProtocolId) before admitting the connection.
-        if (!await ReadHandshakeAsync(conn, token).ConfigureAwait(false))
+        if (!await ReadHandshakeAsync(conn: conn, token: token).ConfigureAwait(false))
         {
-            await CloseSilently(socket, WebSocketCloseStatus.PolicyViolation, "protocol")
+            await CloseSilently(
+                    socket: socket,
+                    status: WebSocketCloseStatus.PolicyViolation,
+                    description: "protocol"
+                )
                 .ConfigureAwait(false);
             return;
         }
@@ -271,7 +285,7 @@ public sealed class WebSocketTransport : ITransport
         _connections[id] = conn;
         _events.Enqueue(Event.Connected(id));
         conn.StartSendLoop(token);
-        _ = ReceiveLoopAsync(conn, token);
+        _ = ReceiveLoopAsync(conn: conn, token: token);
     }
 
     private async Task ConnectAsync(string host, int port, CancellationToken token)
@@ -282,40 +296,53 @@ public sealed class WebSocketTransport : ITransport
         try
         {
             using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(token);
-            connectCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(0.1f, _config.ConnectTimeout)));
-            await client.ConnectAsync(new Uri($"ws://{host}:{port}/"), connectCts.Token)
+            connectCts.CancelAfter(
+                TimeSpan.FromSeconds(Math.Max(val1: 0.1f, val2: _config.ConnectTimeout))
+            );
+            await client.ConnectAsync(
+                    uri: new Uri($"ws://{host}:{port}/"),
+                    cancellationToken: connectCts.Token
+                )
                 .ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             _events.Enqueue(
-                Event.Error(ServerConnectionId, $"WebSocket connect failed: {ex.Message}")
+                Event.Error(
+                    id: ServerConnectionId,
+                    error: $"WebSocket connect failed: {ex.Message}"
+                )
             );
-            _events.Enqueue(Event.Disconnected(ServerConnectionId, DisconnectReason.ConnectFailed));
+            _events.Enqueue(
+                Event.Disconnected(id: ServerConnectionId, reason: DisconnectReason.ConnectFailed)
+            );
             return;
         }
 
-        var conn = new Conn(ServerConnectionId, client, _events);
+        var conn = new Conn(id: ServerConnectionId, socket: client, events: _events);
 
         // Client sends the ProtocolId as the first 4 bytes after connect.
-        var handshake = new byte[4];
-        BinaryPrimitives.WriteUInt32LittleEndian(handshake, _config.ProtocolId);
+        byte[] handshake = new byte[4];
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: handshake, value: _config.ProtocolId);
         try
         {
             await client.SendAsync(
-                handshake,
-                WebSocketMessageType.Binary,
-                true,
-                token
+                buffer: handshake,
+                messageType: WebSocketMessageType.Binary,
+                endOfMessage: true,
+                cancellationToken: token
             ).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             _events.Enqueue(
-                Event.Error(ServerConnectionId, $"WebSocket handshake send failed: {ex.Message}")
+                Event.Error(
+                    id: ServerConnectionId,
+                    error: $"WebSocket handshake send failed: {ex.Message}"
+                )
             );
             _events.Enqueue(
-                Event.Disconnected(ServerConnectionId, DisconnectReason.TransportError)
+                Event.Disconnected(id: ServerConnectionId, reason: DisconnectReason.TransportError)
             );
             return;
         }
@@ -323,18 +350,20 @@ public sealed class WebSocketTransport : ITransport
         _connections[ServerConnectionId] = conn;
         _events.Enqueue(Event.Connected(ServerConnectionId));
         conn.StartSendLoop(token);
-        _ = ReceiveLoopAsync(conn, token);
+        _ = ReceiveLoopAsync(conn: conn, token: token);
     }
 
     private async Task<bool> ReadHandshakeAsync(Conn conn, CancellationToken token)
     {
-        var first = await conn.ReceiveMessageAsync(token).ConfigureAwait(false);
+        byte[]? first = await conn.ReceiveMessageAsync(token).ConfigureAwait(false);
         if (first is null || first.Length < 4) return false;
 
-        var protocol = BinaryPrimitives.ReadUInt32LittleEndian(first);
+        uint protocol = BinaryPrimitives.ReadUInt32LittleEndian(first);
         if (protocol != _config.ProtocolId)
         {
-            _events.Enqueue(Event.Disconnected(conn.Id, DisconnectReason.ProtocolMismatch));
+            _events.Enqueue(
+                Event.Disconnected(id: conn.Id, reason: DisconnectReason.ProtocolMismatch)
+            );
             return false;
         }
 
@@ -347,13 +376,13 @@ public sealed class WebSocketTransport : ITransport
         {
             while (!token.IsCancellationRequested)
             {
-                var message = await conn.ReceiveMessageAsync(token).ConfigureAwait(false);
+                byte[]? message = await conn.ReceiveMessageAsync(token).ConfigureAwait(false);
                 if (message is null)
                 {
                     _events.Enqueue(
                         Event.Disconnected(
-                            conn.Id,
-                            conn.CloseReason ?? DisconnectReason.RemoteClose
+                            id: conn.Id,
+                            reason: conn.CloseReason ?? DisconnectReason.RemoteClose
                         )
                     );
                     return;
@@ -361,17 +390,19 @@ public sealed class WebSocketTransport : ITransport
 
                 if (message.Length < 2)
                     continue; // malformed / sub-header (keepalive arrives length 2)
-                _events.Enqueue(Event.Receive(conn.Id, message));
+                _events.Enqueue(Event.Receive(id: conn.Id, payload: message));
             }
         }
         catch (OperationCanceledException)
         {
-            _events.Enqueue(Event.Disconnected(conn.Id, DisconnectReason.LocalClose));
+            _events.Enqueue(Event.Disconnected(id: conn.Id, reason: DisconnectReason.LocalClose));
         }
         catch (Exception ex)
         {
-            _events.Enqueue(Event.Error(conn.Id, ex.Message));
-            _events.Enqueue(Event.Disconnected(conn.Id, DisconnectReason.TransportError));
+            _events.Enqueue(Event.Error(id: conn.Id, error: ex.Message));
+            _events.Enqueue(
+                Event.Disconnected(id: conn.Id, reason: DisconnectReason.TransportError)
+            );
         }
     }
 
@@ -380,7 +411,11 @@ public sealed class WebSocketTransport : ITransport
     {
         try
         {
-            await socket.CloseAsync(status, description, CancellationToken.None)
+            await socket.CloseAsync(
+                    closeStatus: status,
+                    statusDescription: description,
+                    cancellationToken: CancellationToken.None
+                )
                 .ConfigureAwait(false);
         }
         catch
@@ -419,10 +454,7 @@ public sealed class WebSocketTransport : ITransport
             _sendSignal.Release();
         }
 
-        public void StartSendLoop(CancellationToken token)
-        {
-            _ = SendLoopAsync(token);
-        }
+        public void StartSendLoop(CancellationToken token) => _ = SendLoopAsync(token);
 
         private async Task SendLoopAsync(CancellationToken token)
         {
@@ -431,14 +463,14 @@ public sealed class WebSocketTransport : ITransport
                 while (!token.IsCancellationRequested && !Closing)
                 {
                     await _sendSignal.WaitAsync(token).ConfigureAwait(false);
-                    while (_outgoing.TryDequeue(out var frame))
+                    while (_outgoing.TryDequeue(out byte[]? frame))
                     {
                         if (Socket.State != WebSocketState.Open) return;
                         await Socket.SendAsync(
-                            frame,
-                            WebSocketMessageType.Binary,
-                            true,
-                            token
+                            buffer: frame,
+                            messageType: WebSocketMessageType.Binary,
+                            endOfMessage: true,
+                            cancellationToken: token
                         ).ConfigureAwait(false);
                     }
                 }
@@ -449,24 +481,28 @@ public sealed class WebSocketTransport : ITransport
             }
             catch (Exception ex)
             {
-                _events.Enqueue(Event.Error(Id, ex.Message));
+                _events.Enqueue(Event.Error(id: Id, error: ex.Message));
             }
         }
 
         public async Task<byte[]?> ReceiveMessageAsync(CancellationToken token)
         {
-            var buffer = ArrayPool<byte>.Shared.Rent(16 * 1024);
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(16 * 1024);
             try
             {
-                var written = 0;
+                int written = 0;
                 while (true)
                 {
                     WebSocketReceiveResult result;
                     try
                     {
                         result = await Socket.ReceiveAsync(
-                                new ArraySegment<byte>(buffer, written, buffer.Length - written),
-                                token
+                                buffer: new ArraySegment<byte>(
+                                    array: buffer,
+                                    offset: written,
+                                    count: buffer.Length - written
+                                ),
+                                cancellationToken: token
                             )
                             .ConfigureAwait(false);
                     }
@@ -493,15 +529,15 @@ public sealed class WebSocketTransport : ITransport
                             return null;
                         }
 
-                        var bigger = ArrayPool<byte>.Shared.Rent(buffer.Length * 2);
-                        Array.Copy(buffer, bigger, written);
+                        byte[] bigger = ArrayPool<byte>.Shared.Rent(buffer.Length * 2);
+                        Array.Copy(sourceArray: buffer, destinationArray: bigger, length: written);
                         ArrayPool<byte>.Shared.Return(buffer);
                         buffer = bigger;
                     }
                 }
 
-                var message = new byte[written];
-                Array.Copy(buffer, message, written);
+                byte[] message = new byte[written];
+                Array.Copy(sourceArray: buffer, destinationArray: message, length: written);
                 return message;
             }
             finally
@@ -515,7 +551,7 @@ public sealed class WebSocketTransport : ITransport
             if (Closing) return;
             Closing = true;
             CloseReason = reason;
-            _events.Enqueue(Event.Disconnected(Id, reason));
+            _events.Enqueue(Event.Disconnected(id: Id, reason: reason));
             _sendSignal.Release();
             _ = CloseInternalAsync(status);
         }
@@ -525,8 +561,14 @@ public sealed class WebSocketTransport : ITransport
             try
             {
                 if (Socket.State == WebSocketState.Open)
-                    await Socket.CloseAsync(status, string.Empty, CancellationToken.None)
+                {
+                    await Socket.CloseAsync(
+                            closeStatus: status,
+                            statusDescription: string.Empty,
+                            cancellationToken: CancellationToken.None
+                        )
                         .ConfigureAwait(false);
+                }
             }
             catch
             {

@@ -1,23 +1,8 @@
 using System.Diagnostics;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using System.Text;
 using Zigote.Core;
-using Zigote.Core.Animation;
 using Zigote.Core.Diagnostics;
-using Zigote.Core.Engine;
 using Zigote.Core.Events;
-using Zigote.Core.Native;
-using Zigote.Core.Paint;
-using Zigote.Core.Rendering;
-using Zigote.Core.State;
-using Zigote.UI.Debug;
-using Zigote.UI.Licensing;
-using Zigote.UI.Semantics;
-using Zigote.UI.TextShaping;
-using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
-using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Focus;
 using MediaQueryData = Zigote.UI.Widgets.MediaQueryData;
 
@@ -30,32 +15,36 @@ public partial class App
     private void RouteEventsToSecondaryWindows()
     {
         if (_secondaryWindows.Count == 0) return;
-        for (var i = 0; i < _secondaryWindows.Count; i++) _secondaryWindows[i]._events.Clear();
+        for (int i = 0; i < _secondaryWindows.Count; i++) _secondaryWindows[i]._events.Clear();
 
-        var mainId = Engine.MainWindowId;
-        var write = 0;
-        for (var read = 0; read < _events.Count; read++)
+        uint mainId = Engine.MainWindowId;
+        int write = 0;
+        for (int read = 0; read < _events.Count; read++)
         {
             var evt = _events[read];
             App? target = null;
             if (evt.WindowId != 0 && evt.WindowId != mainId)
-                for (var i = 0; i < _secondaryWindows.Count; i++)
+            {
+                for (int i = 0; i < _secondaryWindows.Count; i++)
+                {
                     if (_secondaryWindows[i].WindowId == evt.WindowId)
                     {
                         target = _secondaryWindows[i];
                         break;
                     }
+                }
+            }
 
             if (target is not null) target._events.Add(evt);
             else _events[write++] = evt; // main-window or global event — keep in the main batch
         }
 
-        _events.RemoveRange(write, _events.Count - write);
+        _events.RemoveRange(index: write, count: _events.Count - write);
     }
 
     private bool AnySecondaryWindowWantsFrame()
     {
-        for (var i = 0; i < _secondaryWindows.Count; i++)
+        for (int i = 0; i < _secondaryWindows.Count; i++)
         {
             var w = _secondaryWindows[i];
             if (w._repaint.AnyDirty || w._needsLayout || w._pendingRelayout) return true;
@@ -69,7 +58,7 @@ public partial class App
     private void PumpSecondaryWindows()
     {
         // Reverse: a window may Close() itself out of the list mid-frame (✕ handling).
-        for (var i = _secondaryWindows.Count - 1; i >= 0; i--)
+        for (int i = _secondaryWindows.Count - 1; i >= 0; i--)
             _secondaryWindows[i].SecondaryFrame(DeltaTime);
     }
 
@@ -101,7 +90,7 @@ public partial class App
             AdvanceTooltip(DeltaTime);
 
             if (_snackbars.Count > 0) _repaint.MarkOverlay();
-            for (var i = _snackbars.Count - 1; i >= 0; i--)
+            for (int i = _snackbars.Count - 1; i >= 0; i--)
             {
                 var s = _snackbars[i];
                 s.Tick(DeltaTime);
@@ -120,7 +109,7 @@ public partial class App
                 LayoutTree();
 
             _pendingRelayout = false;
-            var discrete = false;
+            bool discrete = false;
             foreach (var evt in _events)
             {
                 DispatchEvent(evt);
@@ -158,7 +147,7 @@ public partial class App
 
         // Same rounded-corner clip the main window gets — a devtools or Settings window sitting
         // next to it with square corners is the tell that it is not a real GNOME window.
-        var csdRounded = CsdRounded;
+        bool csdRounded = CsdRounded;
         var windowRect = WindowRect;
 
         InTreeWalk = true;
@@ -167,7 +156,7 @@ public partial class App
             if (_repaint.RootDirty)
             {
                 _paint.Clear();
-                if (csdRounded) _paint.AddClipStart(windowRect, CsdCornerRadius);
+                if (csdRounded) _paint.AddClipStart(bounds: windowRect, radius: CsdCornerRadius);
                 PaintChromeBackdrop();
                 Root.Paint(_paint);
                 PaintCsdOutline(csdRounded);
@@ -178,7 +167,8 @@ public partial class App
             if (_repaint.OverlayDirty)
             {
                 _overlayPaint.Clear();
-                if (csdRounded) _overlayPaint.AddClipStart(windowRect, CsdCornerRadius);
+                if (csdRounded)
+                    _overlayPaint.AddClipStart(bounds: windowRect, radius: CsdCornerRadius);
                 foreach (var ov in _overlays) ov.Paint(_overlayPaint);
                 if (csdRounded) _overlayPaint.AddClipEnd();
                 _repaint.OverlayPainted();
@@ -225,8 +215,8 @@ public partial class App
     private void PaceFrame()
     {
         if (FrameRateLimit < 0) return; // unpaced — see FrameRateLimit
-        var interval = FrameIntervalTicks;
-        var now = _clock.ElapsedTicks;
+        long interval = FrameIntervalTicks;
+        long now = _clock.ElapsedTicks;
         if (_paceAnchorTicks == 0) _paceAnchorTicks = now;
         _paceAnchorTicks += interval;
         if (_paceAnchorTicks < now)
@@ -235,10 +225,10 @@ public partial class App
             return;
         }
 
-        var oneMs = Stopwatch.Frequency / 1000;
+        long oneMs = Stopwatch.Frequency / 1000;
         while (true)
         {
-            var remaining = _paceAnchorTicks - _clock.ElapsedTicks;
+            long remaining = _paceAnchorTicks - _clock.ElapsedTicks;
             if (remaining <= 0) break;
             if (remaining > 2 * oneMs) Thread.Sleep(1);
             else Thread.SpinWait(64);
@@ -284,12 +274,12 @@ public partial class App
         {
             if (ParentApp is null)
             {
-                var (l, t, r, b) = Engine.GetSafeArea();
+                (float l, float t, float r, float b) = Engine.GetSafeArea();
                 _safeArea = new EdgeInsets(
-                    l,
-                    t,
-                    r,
-                    b
+                    left: l,
+                    top: t,
+                    right: r,
+                    bottom: b
                 );
             }
 
@@ -297,13 +287,13 @@ public partial class App
         }
 
         BuildContext.Current.MediaQuery = new MediaQueryData(
-            LayoutWidth,
-            LayoutHeight,
-            HostScale,
-            _safeArea
+            width: LayoutWidth,
+            height: LayoutHeight,
+            devicePixelRatio: HostScale,
+            padding: _safeArea
         );
 
-        var c = Constraints.Tight(LayoutWidth, LayoutHeight);
+        var c = Constraints.Tight(width: LayoutWidth, height: LayoutHeight);
 
         // The app theme scope wraps the WHOLE pass — root and overlays — so ThemeProvider.Of
         // resolves the live App.Theme everywhere (see _appThemeScope). The scope instance is reused

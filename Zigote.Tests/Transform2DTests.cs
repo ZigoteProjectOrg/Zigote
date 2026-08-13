@@ -22,61 +22,60 @@ public class Transform2DTests
     [Fact]
     public void Matrix_Identity_MapsPointToItself()
     {
-        var p = Matrix2D.Identity.Apply(new Offset(12.5f, -3f));
-        Assert.Equal(12.5f, p.X);
-        Assert.Equal(-3f, p.Y);
+        var p = Matrix2D.Identity.Apply(new Offset(x: 12.5f, y: -3f));
+        Assert.Equal(expected: 12.5f, actual: p.X);
+        Assert.Equal(expected: -3f, actual: p.Y);
         Assert.True(Matrix2D.Identity.IsIdentity);
     }
 
     [Fact]
     public void Matrix_Translation_ShiftsPoint()
     {
-        var p = Matrix2D.Translation(10f, 20f).Apply(new Offset(1f, 2f));
-        Assert.Equal(11f, p.X);
-        Assert.Equal(22f, p.Y);
+        var p = Matrix2D.Translation(dx: 10f, dy: 20f).Apply(new Offset(x: 1f, y: 2f));
+        Assert.Equal(expected: 11f, actual: p.X);
+        Assert.Equal(expected: 22f, actual: p.Y);
     }
 
     [Fact]
     public void Matrix_Rotation90_IsClockwiseInScreenSpace()
     {
         // y-down screen space: +90° sends +x to +y (visually clockwise).
-        var p = Matrix2D.Rotation(MathF.PI / 2f).Apply(new Offset(1f, 0f));
-        Assert.Equal(0f, p.X, Eps);
-        Assert.Equal(1f, p.Y, Eps);
+        var p = Matrix2D.Rotation(MathF.PI / 2f).Apply(new Offset(x: 1f, y: 0f));
+        Assert.Equal(expected: 0f, actual: p.X, tolerance: Eps);
+        Assert.Equal(expected: 1f, actual: p.Y, tolerance: Eps);
     }
 
     [Fact]
     public void Matrix_Composition_AppliesRightOperandFirst()
     {
         // Scale then translate vs translate then scale differ; (T * S) applies S first.
-        var ts = Matrix2D.Translation(10f, 0f) * Matrix2D.Scale(2f, 2f);
-        var p = ts.Apply(new Offset(3f, 4f));
-        Assert.Equal(16f, p.X, Eps); // 3*2 + 10
-        Assert.Equal(8f, p.Y, Eps);
+        var ts = Matrix2D.Translation(dx: 10f, dy: 0f) * Matrix2D.Scale(sx: 2f, sy: 2f);
+        var p = ts.Apply(new Offset(x: 3f, y: 4f));
+        Assert.Equal(expected: 16f, actual: p.X, tolerance: Eps); // 3*2 + 10
+        Assert.Equal(expected: 8f, actual: p.Y, tolerance: Eps);
 
-        var st = Matrix2D.Scale(2f, 2f) * Matrix2D.Translation(10f, 0f);
-        var q = st.Apply(new Offset(3f, 4f));
-        Assert.Equal(26f, q.X, Eps); // (3+10)*2
-        Assert.Equal(8f, q.Y, Eps);
+        var st = Matrix2D.Scale(sx: 2f, sy: 2f) * Matrix2D.Translation(dx: 10f, dy: 0f);
+        var q = st.Apply(new Offset(x: 3f, y: 4f));
+        Assert.Equal(expected: 26f, actual: q.X, tolerance: Eps); // (3+10)*2
+        Assert.Equal(expected: 8f, actual: q.Y, tolerance: Eps);
     }
 
     [Fact]
     public void Matrix_Invert_RoundTripsPoint()
     {
-        var m = Matrix2D.Translation(5f, -7f) * Matrix2D.Rotation(0.7f) * Matrix2D.Scale(3f, 0.5f);
+        var m = Matrix2D.Translation(dx: 5f, dy: -7f) * Matrix2D.Rotation(0.7f) *
+                Matrix2D.Scale(sx: 3f, sy: 0.5f);
         Assert.True(m.TryInvert(out var inv));
 
-        var p = new Offset(13f, 21f);
+        var p = new Offset(x: 13f, y: 21f);
         var back = inv.Apply(m.Apply(p));
-        Assert.Equal(p.X, back.X, 1e-3f);
-        Assert.Equal(p.Y, back.Y, 1e-3f);
+        Assert.Equal(expected: p.X, actual: back.X, tolerance: 1e-3f);
+        Assert.Equal(expected: p.Y, actual: back.Y, tolerance: 1e-3f);
     }
 
     [Fact]
-    public void Matrix_SingularScale_FailsToInvert()
-    {
-        Assert.False(Matrix2D.Scale(0f, 0f).TryInvert(out _));
-    }
+    public void Matrix_SingularScale_FailsToInvert() =>
+        Assert.False(Matrix2D.Scale(sx: 0f, sy: 0f).TryInvert(out _));
 
     // ── PaintList command emission ────────────────────────────────────────────
 
@@ -85,26 +84,29 @@ public class Transform2DTests
     {
         var paint = new PaintList();
         var m = new Matrix2D(
-            1f,
-            2f,
-            3f,
-            4f,
-            5f,
-            6f
+            a: 1f,
+            b: 2f,
+            c: 3f,
+            d: 4f,
+            tx: 5f,
+            ty: 6f
         );
         paint.PushTransform(m);
         paint.PopTransform();
 
-        Assert.Equal(2, paint.Count);
+        Assert.Equal(expected: 2, actual: paint.Count);
         var push = paint.DebugCommands[0];
-        Assert.Equal((byte)PaintCommandKind.TransformPush, push.Kind);
-        Assert.Equal(1f, push.RectX); // a
-        Assert.Equal(2f, push.RectY); // b
-        Assert.Equal(3f, push.RectW); // c
-        Assert.Equal(4f, push.RectH); // d
-        Assert.Equal(5f, push.Radius); // tx
-        Assert.Equal(6f, push.BorderWidth); // ty
-        Assert.Equal((byte)PaintCommandKind.TransformPop, paint.DebugCommands[1].Kind);
+        Assert.Equal(expected: (byte)PaintCommandKind.TransformPush, actual: push.Kind);
+        Assert.Equal(expected: 1f, actual: push.RectX); // a
+        Assert.Equal(expected: 2f, actual: push.RectY); // b
+        Assert.Equal(expected: 3f, actual: push.RectW); // c
+        Assert.Equal(expected: 4f, actual: push.RectH); // d
+        Assert.Equal(expected: 5f, actual: push.Radius); // tx
+        Assert.Equal(expected: 6f, actual: push.BorderWidth); // ty
+        Assert.Equal(
+            expected: (byte)PaintCommandKind.TransformPop,
+            actual: paint.DebugCommands[1].Kind
+        );
 
         paint.Validate(); // balanced
     }
@@ -115,27 +117,27 @@ public class Transform2DTests
         // A rotation authored in layout space must pivot correctly even when the paint list is
         // inside a PushTranslate scope: the emitted matrix is T(o) ∘ M ∘ T(−o).
         var paint = new PaintList();
-        paint.PushTranslate(100f, 50f);
-        paint.PushTransform(Matrix2D.Scale(2f, 2f));
+        paint.PushTranslate(dx: 100f, dy: 50f);
+        paint.PushTransform(Matrix2D.Scale(sx: 2f, sy: 2f));
 
         var cmd = paint.DebugCommands[0];
         var emitted = new Matrix2D(
-            cmd.RectX,
-            cmd.RectY,
-            cmd.RectW,
-            cmd.RectH,
-            cmd.Radius,
-            cmd.BorderWidth
+            a: cmd.RectX,
+            b: cmd.RectY,
+            c: cmd.RectW,
+            d: cmd.RectH,
+            tx: cmd.Radius,
+            ty: cmd.BorderWidth
         );
 
         // A layout-space point p paints at p + offset; the emitted matrix applied there must land
         // where the layout-space transform of p would paint: M(p) + offset.
-        var layoutPoint = new Offset(10f, 20f);
-        var painted = new Offset(layoutPoint.X + 100f, layoutPoint.Y + 50f);
-        var expected = Matrix2D.Scale(2f, 2f).Apply(layoutPoint);
+        var layoutPoint = new Offset(x: 10f, y: 20f);
+        var painted = new Offset(x: layoutPoint.X + 100f, y: layoutPoint.Y + 50f);
+        var expected = Matrix2D.Scale(sx: 2f, sy: 2f).Apply(layoutPoint);
         var got = emitted.Apply(painted);
-        Assert.Equal(expected.X + 100f, got.X, Eps);
-        Assert.Equal(expected.Y + 50f, got.Y, Eps);
+        Assert.Equal(expected: expected.X + 100f, actual: got.X, tolerance: Eps);
+        Assert.Equal(expected: expected.Y + 50f, actual: got.Y, tolerance: Eps);
 
         paint.PopTransform();
         paint.PopTranslate();
@@ -159,12 +161,12 @@ public class Transform2DTests
         var paint = new PaintList();
         Assert.Throws<ArgumentException>(() => paint.PushTransform(
                 new Matrix2D(
-                    float.NaN,
-                    0f,
-                    0f,
-                    1f,
-                    0f,
-                    0f
+                    a: float.NaN,
+                    b: 0f,
+                    c: 0f,
+                    d: 1f,
+                    tx: 0f,
+                    ty: 0f
                 )
             )
         );
@@ -176,20 +178,20 @@ public class Transform2DTests
         var paint = new PaintList();
         paint.AddClipStart(
             new Rect(
-                0,
-                0,
-                10,
-                10
+                x: 0,
+                y: 0,
+                width: 10,
+                height: 10
             )
         );
         // Outside the clip — normally culled…
         Assert.False(
             paint.IsVisible(
                 new Rect(
-                    100,
-                    100,
-                    5,
-                    5
+                    x: 100,
+                    y: 100,
+                    width: 5,
+                    height: 5
                 )
             )
         );
@@ -198,10 +200,10 @@ public class Transform2DTests
         Assert.True(
             paint.IsVisible(
                 new Rect(
-                    100,
-                    100,
-                    5,
-                    5
+                    x: 100,
+                    y: 100,
+                    width: 5,
+                    height: 5
                 )
             )
         );
@@ -215,12 +217,12 @@ public class Transform2DTests
         float scale = 1f, float rotation = 0f, Offset? origin = null, Offset? translation = null)
     {
         var child = new ColoredBox(Color.White);
-        var xf = new Transform(translation ?? Offset.Zero, child) {
+        var xf = new Transform(translation: translation ?? Offset.Zero, child: child) {
             Scale = scale,
             RotationRadians = rotation,
             Origin = origin,
         };
-        xf.Measure(Constraints.Tight(100f, 100f));
+        xf.Measure(Constraints.Tight(width: 100f, height: 100f));
         xf.Layout(Offset.Zero);
         return (xf, child);
     }
@@ -228,14 +230,14 @@ public class Transform2DTests
     [Fact]
     public void Widget_TranslateOnly_KeepsZeroCommandPath()
     {
-        var (xf, _) = LaidOutTransform(translation: new Offset(30f, 0f));
+        var (xf, _) = LaidOutTransform(translation: new Offset(x: 30f, y: 0f));
         var paint = new PaintList();
         xf.Paint(paint);
 
         // Pure translation is applied CPU-side: exactly one rect, no transform commands.
-        Assert.Equal(1, paint.Count);
-        Assert.Equal((byte)PaintCommandKind.Rect, paint.DebugCommands[0].Kind);
-        Assert.Equal(30f, paint.DebugCommands[0].RectX);
+        Assert.Equal(expected: 1, actual: paint.Count);
+        Assert.Equal(expected: (byte)PaintCommandKind.Rect, actual: paint.DebugCommands[0].Kind);
+        Assert.Equal(expected: 30f, actual: paint.DebugCommands[0].RectX);
     }
 
     [Fact]
@@ -245,10 +247,16 @@ public class Transform2DTests
         var paint = new PaintList();
         xf.Paint(paint);
 
-        Assert.Equal(3, paint.Count);
-        Assert.Equal((byte)PaintCommandKind.TransformPush, paint.DebugCommands[0].Kind);
-        Assert.Equal((byte)PaintCommandKind.Rect, paint.DebugCommands[1].Kind);
-        Assert.Equal((byte)PaintCommandKind.TransformPop, paint.DebugCommands[2].Kind);
+        Assert.Equal(expected: 3, actual: paint.Count);
+        Assert.Equal(
+            expected: (byte)PaintCommandKind.TransformPush,
+            actual: paint.DebugCommands[0].Kind
+        );
+        Assert.Equal(expected: (byte)PaintCommandKind.Rect, actual: paint.DebugCommands[1].Kind);
+        Assert.Equal(
+            expected: (byte)PaintCommandKind.TransformPop,
+            actual: paint.DebugCommands[2].Kind
+        );
         paint.Validate();
     }
 
@@ -258,8 +266,8 @@ public class Transform2DTests
         // 100×100 child scaled ×2 around its center covers −50..150; a point at (140, 140) is
         // inside the scaled visual but outside the laid-out bounds.
         var (xf, child) = LaidOutTransform(2f);
-        Assert.Same(child, xf.HitTest(new Offset(140f, 140f)));
-        Assert.Null(xf.HitTest(new Offset(160f, 160f)));
+        Assert.Same(expected: child, actual: xf.HitTest(new Offset(x: 140f, y: 140f)));
+        Assert.Null(xf.HitTest(new Offset(x: 160f, y: 160f)));
     }
 
     [Fact]
@@ -268,24 +276,24 @@ public class Transform2DTests
         // Rotating 90° clockwise around (0,0) sends the child's (x,y) to (−y,x): the visual now
         // spans x ∈ [−100,0], y ∈ [0,100].
         var (xf, child) = LaidOutTransform(rotation: MathF.PI / 2f, origin: Offset.Zero);
-        Assert.Same(child, xf.HitTest(new Offset(-50f, 50f)));
-        Assert.Null(xf.HitTest(new Offset(50f, 50f)));
+        Assert.Same(expected: child, actual: xf.HitTest(new Offset(x: -50f, y: 50f)));
+        Assert.Null(xf.HitTest(new Offset(x: 50f, y: 50f)));
     }
 
     [Fact]
     public void Widget_ZeroScale_HitTestReturnsNull()
     {
         var (xf, _) = LaidOutTransform(0f);
-        Assert.Null(xf.HitTest(new Offset(50f, 50f)));
+        Assert.Null(xf.HitTest(new Offset(x: 50f, y: 50f)));
     }
 
     [Fact]
     public void Widget_TransformPaint_AllocatesZero_OnSteadyState()
     {
-        var (xf, _) = LaidOutTransform(1.5f, 0.3f);
+        var (xf, _) = LaidOutTransform(scale: 1.5f, rotation: 0.3f);
         var paint = new PaintList();
 
-        for (var i = 0; i < 200; i++)
+        for (int i = 0; i < 200; i++)
         {
             paint.Clear();
             xf.Paint(paint);
@@ -293,14 +301,14 @@ public class Transform2DTests
 
         Assert.True(paint.Count > 0);
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var i = 0; i < 500; i++)
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 500; i++)
         {
             paint.Clear();
             xf.Paint(paint);
         }
 
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        Assert.Equal(0, allocated);
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        Assert.Equal(expected: 0, actual: allocated);
     }
 }

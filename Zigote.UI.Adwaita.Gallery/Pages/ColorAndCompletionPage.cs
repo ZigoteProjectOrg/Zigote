@@ -25,14 +25,16 @@ public sealed class ColorAndCompletionPage : ComposedWidget
         var theme = ThemeProvider.Of(context);
 
         return new GalleryPage(
-            "Colour & Completion",
+            title: "Colour & Completion",
+            description:
             "A colour button over the GNOME palette, and an entry that completes as you type.",
-            MaterialIcons.Palette
+            iconName: MaterialIcons.Palette
         ) {
             ClampWidth = 720f,
             Children = {
                 Demo.Group(
-                    "Colour Button",
+                    title: "Colour Button",
+                    description:
                     "The swatch opens a chooser: the nine named accent hues and the neutrals on " +
                     "top, a full hue/saturation picker under them.",
                     new AdwActionRow("Material tint") {
@@ -58,7 +60,7 @@ public sealed class ColorAndCompletionPage : ComposedWidget
                 // Size.Zero under loose constraints, so it needs tightening on BOTH axes to paint:
                 // Expanded gives it a tight width, Stretch a tight height.
                 new Watch(() => Demo.Stage(
-                        new SizedBox(
+                        child: new SizedBox(
                             height: 64f,
                             child: new Row(crossAxisAlignment: CrossAxisAlignment.Stretch) {
                                 Children = {
@@ -71,22 +73,23 @@ public sealed class ColorAndCompletionPage : ComposedWidget
                                 },
                             }
                         ),
-                        Spacing.Md
+                        padding: Spacing.Md
                     )
                 ),
                 Demo.Group(
-                    "Suggestion Entry",
+                    title: "Suggestion Entry",
+                    description:
                     "Type “albedo” or “zmesh”. The list filters as you type and never takes the " +
                     "caret, so typing is uninterrupted; Enter commits whatever is in the field, " +
                     "suggested or not.",
                     new AdwActionRow("Asset path") {
                         Suffixes = {
                             new SizedBox(
-                                280f,
+                                width: 280f,
                                 child: new AdwSuggestionEntry(
-                                    "",
-                                    Suggest,
-                                    v => _committed.Value = v
+                                    value: "",
+                                    suggest: Suggest,
+                                    onCommit: v => _committed.Value = v
                                 ) { Placeholder = "assets/…" }
                             ),
                         },
@@ -97,25 +100,34 @@ public sealed class ColorAndCompletionPage : ComposedWidget
                     )
                 ),
                 Demo.Titled(
-                    "Separator",
+                    title: "Separator",
+                    description:
                     "GTK's rule, horizontal or vertical, with an optional inset at both ends.",
-                    Demo.Stage(
-                        new Column(
+                    child: Demo.Stage(
+                        child: new Column(
                             spacing: Spacing.Md,
                             mainAxisSize: MainAxisSize.Min,
                             crossAxisAlignment: CrossAxisAlignment.Stretch
                         ) {
                             Children = {
-                                new Label("Above", AdwTypography.Body, theme.OnBackground),
+                                new Label(
+                                    text: "Above",
+                                    style: AdwTypography.Body,
+                                    color: theme.OnBackground
+                                ),
                                 new AdwSeparator(),
-                                new Label("Below", AdwTypography.Body, theme.OnBackground),
+                                new Label(
+                                    text: "Below",
+                                    style: AdwTypography.Body,
+                                    color: theme.OnBackground
+                                ),
                                 new SizedBox(height: Spacing.Sm),
                                 new SizedBox(
                                     height: AdwMetrics.ButtonHeight,
                                     child: new Row(spacing: Spacing.Md) {
                                         Children = {
                                             new AdwButton("Cut"),
-                                            new AdwSeparator(true, 4f) {
+                                            new AdwSeparator(vertical: true, margin: 4f) {
                                                 Length = AdwMetrics.ButtonHeight,
                                             },
                                             new AdwButton("Copy"),
@@ -125,7 +137,7 @@ public sealed class ColorAndCompletionPage : ComposedWidget
                                 ),
                             },
                         },
-                        Spacing.Lg
+                        padding: Spacing.Lg
                     )
                 ),
             },
@@ -135,10 +147,14 @@ public sealed class ColorAndCompletionPage : ComposedWidget
     /// <summary>Substring match over the demo asset list, newest-typed first.</summary>
     private static IReadOnlyList<(string Value, string Display)> Suggest(string typed)
     {
-        var q = typed.Trim();
+        string q = typed.Trim();
         return Assets
-            .Where(a => q.Length == 0 || a.Contains(q, StringComparison.OrdinalIgnoreCase))
-            .Select(a => (a, System.IO.Path.GetFileName(a)))
+            .Where(a => q.Length == 0 || a.Contains(
+                    value: q,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                )
+            )
+            .Select(a => (a, Path.GetFileName(a)))
             .ToList();
     }
 }

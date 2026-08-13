@@ -16,13 +16,15 @@ public sealed class MessageRegistry
     public ushort Register<T>() where T : INetMessage, new()
     {
         var type = typeof(T);
-        if (_idByType.TryGetValue(type, out var existing)) return existing;
+        if (_idByType.TryGetValue(key: type, value: out ushort existing)) return existing;
 
-        var id = StableId(type);
-        if (_typeById.TryGetValue(id, out var clash) && clash != type)
+        ushort id = StableId(type);
+        if (_typeById.TryGetValue(key: id, value: out var clash) && clash != type)
+        {
             throw new InvalidOperationException(
                 $"Network message id collision ({id}) between '{type.FullName}' and '{clash.FullName}'. Rename one."
             );
+        }
 
         _idByType[type] = id;
         _typeById[id] = type;
@@ -30,14 +32,11 @@ public sealed class MessageRegistry
         return id;
     }
 
-    public ushort GetId<T>() where T : INetMessage
-    {
-        return GetId(typeof(T));
-    }
+    public ushort GetId<T>() where T : INetMessage => GetId(typeof(T));
 
     public ushort GetId(Type type)
     {
-        return _idByType.TryGetValue(type, out var id)
+        return _idByType.TryGetValue(key: type, value: out ushort id)
             ? id
             : throw new InvalidOperationException(
                 $"Message type '{type.FullName}' is not registered."
@@ -45,27 +44,22 @@ public sealed class MessageRegistry
     }
 
     /// <summary>Instantiate a registered message by id, or null if the id is unknown.</summary>
-    public INetMessage? Create(ushort id)
-    {
-        return _factoryById.TryGetValue(id, out var factory) ? factory() : null;
-    }
+    public INetMessage? Create(ushort id) =>
+        _factoryById.TryGetValue(key: id, value: out var factory) ? factory() : null;
 
-    public bool IsRegistered(ushort id)
-    {
-        return _typeById.ContainsKey(id);
-    }
+    public bool IsRegistered(ushort id) => _typeById.ContainsKey(id);
 
     private static ushort StableId(Type type)
     {
-        var name = type.FullName ?? type.Name;
-        var hash = 2166136261;
-        foreach (var c in name)
+        string name = type.FullName ?? type.Name;
+        uint hash = 2166136261;
+        foreach (char c in name)
         {
             hash ^= c;
             hash *= 16777619;
         }
 
-        var folded = (ushort)((hash & 0xFFFF) ^ (hash >> 16));
+        ushort folded = (ushort)((hash & 0xFFFF) ^ (hash >> 16));
         return folded == 0 ? (ushort)1 : folded; // reserve 0 as "none"
     }
 }

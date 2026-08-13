@@ -9,7 +9,8 @@ namespace Zigote.UI.DevTools.Panels;
 /// <summary>
 ///     The editable <see cref="DebugVariables" /> registry: bool → toggle, enum → cycle stepper,
 ///     int/float → ± stepper, read-only → value row, grouped by category. Every edit goes through
-///     <see cref="DebugVariable.TrySet" /> (which validates + clamps). Displays refresh each frame so a
+///     <see cref="DebugVariable.TrySet" /> (which validates + clamps). Displays refresh each frame so
+///     a
 ///     variable changed elsewhere (console, another panel) stays in sync.
 /// </summary>
 public sealed class VariablesPanel : IDevPanel
@@ -52,7 +53,7 @@ public sealed class VariablesPanel : IDevPanel
     {
         if (v.IsReadOnly)
         {
-            var row = new DevKeyValue(v.Name, v.Display());
+            var row = new DevKeyValue(key: v.Name, value: v.Display());
             _sync.Add(() => row.Value = v.Display());
             return row;
         }
@@ -61,17 +62,21 @@ public sealed class VariablesPanel : IDevPanel
         {
             case DebugVarType.Bool:
             {
-                var toggle = new DevToggle(v.Name, Bool(v), on => v.TrySet(on ? "true" : "false"));
+                var toggle = new DevToggle(
+                    label: v.Name,
+                    value: Bool(v),
+                    onChanged: on => v.TrySet(on ? "true" : "false")
+                );
                 _sync.Add(() => toggle.Value = Bool(v));
                 return toggle;
             }
             case DebugVarType.Enum:
             {
                 var step = new DevStepper(
-                    v.Name,
-                    v.Display(),
-                    () => CycleEnum(v, -1),
-                    () => CycleEnum(v, 1)
+                    label: v.Name,
+                    value: v.Display(),
+                    onPrev: () => CycleEnum(v: v, dir: -1),
+                    onNext: () => CycleEnum(v: v, dir: 1)
                 );
                 _sync.Add(() => step.Value = v.Display());
                 return step;
@@ -79,10 +84,10 @@ public sealed class VariablesPanel : IDevPanel
             default:
             {
                 var step = new DevStepper(
-                    v.Name,
-                    v.Display(),
-                    () => Nudge(v, -1),
-                    () => Nudge(v, 1)
+                    label: v.Name,
+                    value: v.Display(),
+                    onPrev: () => Nudge(v: v, dir: -1),
+                    onNext: () => Nudge(v: v, dir: 1)
                 );
                 _sync.Add(() => step.Value = v.Display());
                 return step;
@@ -90,15 +95,12 @@ public sealed class VariablesPanel : IDevPanel
         }
     }
 
-    private static bool Bool(DebugVariable v)
-    {
-        return v.Value is bool b && b;
-    }
+    private static bool Bool(DebugVariable v) => v.Value is bool b && b;
 
     private static void CycleEnum(DebugVariable v, int dir)
     {
         if (v.EnumNames is not { Length: > 0 } names) return;
-        var idx = v.Value is int i ? i : 0;
+        int idx = v.Value is int i ? i : 0;
         v.TrySet(names[(idx + dir + names.Length) % names.Length]);
     }
 
@@ -106,13 +108,17 @@ public sealed class VariablesPanel : IDevPanel
     {
         if (v.Type == DebugVarType.Int)
         {
-            var cur = v.Value is int i ? i : 0;
+            int cur = v.Value is int i ? i : 0;
             v.TrySet((cur + dir).ToString(CultureInfo.InvariantCulture));
             return;
         }
 
-        var f = v.Value is float x ? x : 0f;
-        var stepSize = v.Min is float mn && v.Max is float mx && mx > mn ? (mx - mn) / 20f : 0.05f;
-        v.TrySet((f + dir * stepSize).ToString("0.###", CultureInfo.InvariantCulture));
+        float f = v.Value is float x ? x : 0f;
+        float stepSize = v.Min is float mn && v.Max is float mx && mx > mn
+            ? (mx - mn) / 20f
+            : 0.05f;
+        v.TrySet(
+            (f + (dir * stepSize)).ToString(format: "0.###", provider: CultureInfo.InvariantCulture)
+        );
     }
 }

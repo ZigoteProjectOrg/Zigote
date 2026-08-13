@@ -33,7 +33,7 @@ public static class FilePickerDialog
             LockRoot = rootPath,
             Filters = extensions.Length == 0
                 ? null
-                : [new FileDialogFilter("Matching Files", extensions)],
+                : [new FileDialogFilter(name: "Matching Files", extensions: extensions)],
         };
         Run();
         return;
@@ -42,16 +42,17 @@ public static class FilePickerDialog
         {
             try
             {
-                var picked = await FileBrowserDialog.ShowAsync(app, options);
+                string[] picked = await FileBrowserDialog.ShowAsync(app: app, options: options);
                 if (picked.Length == 0)
                 {
                     onCancel?.Invoke();
                     return;
                 }
 
-                var relative = Path.GetRelativePath(rootPath, picked[0]).Replace('\\', '/');
+                string relative = Path.GetRelativePath(relativeTo: rootPath, path: picked[0])
+                    .Replace(oldChar: '\\', newChar: '/');
                 onSelected(
-                    relative.StartsWith("..", StringComparison.Ordinal)
+                    relative.StartsWith(value: "..", comparisonType: StringComparison.Ordinal)
                         ? picked[0]
                         : relative
                 );

@@ -12,19 +12,13 @@ public readonly record struct AssetId(Guid Value)
 
     public bool IsEmpty => Value == Guid.Empty;
 
-    public static AssetId New()
-    {
-        return new AssetId(Guid.NewGuid());
-    }
+    public static AssetId New() => new(Guid.NewGuid());
 
-    public static AssetId Parse(string s)
-    {
-        return new AssetId(Guid.Parse(s));
-    }
+    public static AssetId Parse(string s) => new(Guid.Parse(s));
 
     public static bool TryParse(string? s, out AssetId id)
     {
-        if (Guid.TryParse(s, out var g))
+        if (Guid.TryParse(input: s, result: out var g))
         {
             id = new AssetId(g);
             return true;
@@ -35,8 +29,5 @@ public readonly record struct AssetId(Guid Value)
     }
 
     /// <summary>Compact lowercase hex without dashes — safe as a filename/JSON key.</summary>
-    public override string ToString()
-    {
-        return Value.ToString("N");
-    }
+    public override string ToString() => Value.ToString("N");
 }

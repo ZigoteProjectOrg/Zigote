@@ -16,37 +16,33 @@ namespace Zigote.Tests;
 /// </summary>
 public class WidgetDebugTests
 {
-    private static string Val(List<(string Name, string Value)> p, string name)
-    {
-        return p.First(x => x.Name == name).Value;
-    }
+    private static string Val(List<(string Name, string Value)> p, string name) =>
+        p.First(x => x.Name == name).Value;
 
-    private static bool Has(List<(string Name, string Value)> p, string name)
-    {
-        return p.Any(x => x.Name == name);
-    }
+    private static bool Has(List<(string Name, string Value)> p, string name) =>
+        p.Any(x => x.Name == name);
 
     [Fact]
     public void Strings_AreQuotedAndNewlineEscaped()
     {
         var props = WidgetDebug.Properties(new TextField { Text = "hi\nthere" });
-        Assert.Equal("\"hi⏎there\"", Val(props, "Text"));
+        Assert.Equal(expected: "\"hi⏎there\"", actual: Val(p: props, name: "Text"));
     }
 
     [Fact]
     public void EmptyString_ShowsAsQuotes_NotBlank()
     {
         var props = WidgetDebug.Properties(new TextField { Text = "" });
-        Assert.Equal("\"\"", Val(props, "Text"));
+        Assert.Equal(expected: "\"\"", actual: Val(p: props, name: "Text"));
     }
 
     [Fact]
     public void Delegate_ShowsAsFunctionGlyph_NotTypeName()
     {
         var props = WidgetDebug.Properties(new TextField { OnChanged = _ => { } });
-        var v = Val(props, "OnChanged");
-        Assert.StartsWith("ƒ", v);
-        Assert.DoesNotContain("System.Action", v);
+        string v = Val(p: props, name: "OnChanged");
+        Assert.StartsWith(expectedStartString: "ƒ", actualString: v);
+        Assert.DoesNotContain(expectedSubstring: "System.Action", actualString: v);
     }
 
     [Fact]
@@ -58,22 +54,23 @@ public class WidgetDebugTests
                 ReadOnly = false,
             }
         );
-        Assert.Equal("true", Val(props, "Multiline"));
-        Assert.Equal("false", Val(props, "ReadOnly"));
+        Assert.Equal(expected: "true", actual: Val(p: props, name: "Multiline"));
+        Assert.Equal(expected: "false", actual: Val(p: props, name: "ReadOnly"));
     }
 
     [Fact]
     public void WholeNumberFloats_RenderWithoutDecimals()
     {
         var props = WidgetDebug.Properties(new TextField { MinWidth = 140f });
-        Assert.Equal("140", Val(props, "MinWidth"));
+        Assert.Equal(expected: "140", actual: Val(p: props, name: "MinWidth"));
     }
 
     [Fact]
     public void Color_RendersAsHex()
     {
-        var props = WidgetDebug.Properties(new Label("x") { Color = new Color(1f, 0f, 0f) });
-        Assert.Equal("#FF0000", Val(props, "Color"));
+        var props =
+            WidgetDebug.Properties(new Label("x") { Color = new Color(r: 1f, g: 0f, b: 0f) });
+        Assert.Equal(expected: "#FF0000", actual: Val(p: props, name: "Color"));
     }
 
     [Fact]
@@ -81,59 +78,59 @@ public class WidgetDebugTests
     {
         // OnChanged defaults to null → no row for it.
         var props = WidgetDebug.Properties(new TextField());
-        Assert.False(Has(props, "OnChanged"));
+        Assert.False(Has(p: props, name: "OnChanged"));
     }
 
     [Fact]
     public void HeaderRows_ArePresent()
     {
         var props = WidgetDebug.Properties(new TextField());
-        Assert.Equal("TextField", Val(props, "Type"));
-        Assert.True(Has(props, "Bounds"));
-        Assert.True(Has(props, "Dirty"));
+        Assert.Equal(expected: "TextField", actual: Val(p: props, name: "Type"));
+        Assert.True(Has(p: props, name: "Bounds"));
+        Assert.True(Has(p: props, name: "Dirty"));
     }
 
     [Fact]
     public void LongValues_AreTruncated()
     {
-        var props = WidgetDebug.Properties(new TextField { Text = new string('x', 500) });
-        Assert.True(Val(props, "Text").Length <= 161); // 160 cap + ellipsis
-        Assert.EndsWith("…", Val(props, "Text"));
+        var props = WidgetDebug.Properties(new TextField { Text = new string(c: 'x', count: 500) });
+        Assert.True(Val(p: props, name: "Text").Length <= 161); // 160 cap + ellipsis
+        Assert.EndsWith(expectedEndString: "…", actualString: Val(p: props, name: "Text"));
     }
 
     // ── Inspector tree helpers (Describe / DeepestAt / PathTo / FormatConstraints) ──
 
     [Fact]
-    public void Describe_Label_ReturnsQuotedText()
-    {
-        Assert.Equal("\"Save\"", WidgetDebug.Describe(new Label("Save")));
-    }
+    public void Describe_Label_ReturnsQuotedText() => Assert.Equal(
+        expected: "\"Save\"",
+        actual: WidgetDebug.Describe(new Label("Save"))
+    );
 
     [Fact]
     public void Describe_LongText_IsTruncated()
     {
-        var s = WidgetDebug.Describe(new Label(new string('x', 100)));
+        string? s = WidgetDebug.Describe(new Label(new string(c: 'x', count: 100)));
         Assert.NotNull(s);
-        Assert.EndsWith("…", s);
+        Assert.EndsWith(expectedEndString: "…", actualString: s);
         Assert.True(s.Length <= 40);
     }
 
     [Fact]
-    public void Describe_PlainContainer_IsNull()
-    {
-        Assert.Null(WidgetDebug.Describe(new Column()));
-    }
+    public void Describe_PlainContainer_IsNull() => Assert.Null(WidgetDebug.Describe(new Column()));
 
     [Fact]
     public void FormatConstraints_TightAndRanged()
     {
-        Assert.Equal("tight 200×100", WidgetDebug.FormatConstraints(Constraints.Tight(200f, 100f)));
         Assert.Equal(
-            "0≤w≤400 · 0≤h≤∞",
-            WidgetDebug.FormatConstraints(
+            expected: "tight 200×100",
+            actual: WidgetDebug.FormatConstraints(Constraints.Tight(width: 200f, height: 100f))
+        );
+        Assert.Equal(
+            expected: "0≤w≤400 · 0≤h≤∞",
+            actual: WidgetDebug.FormatConstraints(
                 new Constraints(
-                    0f,
-                    400f
+                    minWidth: 0f,
+                    maxWidth: 400f
                 )
             )
         );
@@ -142,16 +139,19 @@ public class WidgetDebugTests
     private static Column LaidOutTree(out SizedBox first, out SizedBox second, out Label inner)
     {
         inner = new Label("hi");
-        first = new SizedBox(200f, 40f, inner);
-        second = new SizedBox(200f, 40f);
+        first = new SizedBox(width: 200f, height: 40f, child: inner);
+        second = new SizedBox(width: 200f, height: 40f);
         var root = new Column {
             Children = {
                 first,
                 second,
             },
         };
-        root.Attach(null!, null); // populate Parent links, as App does when a root is installed
-        root.Measure(Constraints.Tight(200f, 100f));
+        root.Attach(
+            owner: null!,
+            parent: null
+        ); // populate Parent links, as App does when a root is installed
+        root.Measure(Constraints.Tight(width: 200f, height: 100f));
         root.Layout(Offset.Zero);
         return root;
     }
@@ -159,11 +159,17 @@ public class WidgetDebugTests
     [Fact]
     public void DeepestAt_PicksTheDeepestWidgetUnderThePoint()
     {
-        var root = LaidOutTree(out _, out var second, out var inner);
+        var root = LaidOutTree(first: out _, second: out var second, inner: out var inner);
         // Inside the first box → the Label leaf, not its SizedBox wrapper.
-        Assert.Same(inner, WidgetDebug.DeepestAt(root, new Offset(5f, 5f)));
+        Assert.Same(
+            expected: inner,
+            actual: WidgetDebug.DeepestAt(root: root, point: new Offset(x: 5f, y: 5f))
+        );
         // Inside the second (empty) box → the box itself.
-        Assert.Same(second, WidgetDebug.DeepestAt(root, new Offset(5f, 60f)));
+        Assert.Same(
+            expected: second,
+            actual: WidgetDebug.DeepestAt(root: root, point: new Offset(x: 5f, y: 60f))
+        );
     }
 
     [Fact]
@@ -172,7 +178,7 @@ public class WidgetDebugTests
         // The AdwToastOverlay shape: content plus a topmost Align that fills the window and shows
         // nothing until a toast arrives. Picking by bounds alone selected that Align everywhere.
         var inner = new Label("hi");
-        var content = new SizedBox(200f, 100f, inner);
+        var content = new SizedBox(width: 200f, height: 100f, child: inner);
         var empty = new Align(Alignment.BottomCenter);
         var root = new Stack {
             Children = {
@@ -180,29 +186,110 @@ public class WidgetDebugTests
                 empty,
             },
         };
-        root.Attach(null!, null);
-        root.Measure(Constraints.Tight(200f, 100f));
+        root.Attach(owner: null!, parent: null);
+        root.Measure(Constraints.Tight(width: 200f, height: 100f));
         root.Layout(Offset.Zero);
 
-        Assert.True(empty.Bounds.Contains(5f, 5f), "the empty layer must cover the point");
-        Assert.Same(inner, WidgetDebug.DeepestAt(root, new Offset(5f, 5f)));
+        Assert.True(
+            condition: empty.Bounds.Contains(px: 5f, py: 5f),
+            userMessage: "the empty layer must cover the point"
+        );
+        Assert.Same(
+            expected: inner,
+            actual: WidgetDebug.DeepestAt(root: root, point: new Offset(x: 5f, y: 5f))
+        );
     }
 
     [Fact]
     public void DeepestAt_OutsideEverything_ReturnsNull()
     {
-        var root = LaidOutTree(out _, out _, out _);
-        Assert.Null(WidgetDebug.DeepestAt(root, new Offset(500f, 500f)));
+        var root = LaidOutTree(first: out _, second: out _, inner: out _);
+        Assert.Null(WidgetDebug.DeepestAt(root: root, point: new Offset(x: 500f, y: 500f)));
     }
 
     [Fact]
     public void PathTo_WalksRootToWidget()
     {
-        var root = LaidOutTree(out var first, out _, out var inner);
+        var root = LaidOutTree(first: out var first, second: out _, inner: out var inner);
         var path = WidgetDebug.PathTo(inner);
-        Assert.Same(inner, path[^1]);
-        Assert.Contains(first, path);
-        Assert.Same(root, path[0]);
+        Assert.Same(expected: inner, actual: path[^1]);
+        Assert.Contains(expected: first, collection: path);
+        Assert.Same(expected: root, actual: path[0]);
+    }
+
+    [Fact]
+    public void Members_ObjectValue_IsExpandableAndShownAsItsType()
+    {
+        var w = new Styled {
+            Sheet = new Style(Background: new Color(r: 1f, g: 0f, b: 0f), Radius: 12f),
+        };
+        var m = WidgetDebug.Members(w).First(x => x.Name == "Sheet");
+        Assert.True(m.Expandable);
+        Assert.Equal(expected: "{Style}", actual: m.Value); // not the record's whole ToString dump
+        Assert.Equal(
+            expected: "#FF0000",
+            actual: WidgetDebug.Members(m.Raw!).First(x => x.Name == "Background").Value
+        );
+    }
+
+    [Fact]
+    public void Members_NestedNulls_AreKept_ButWidgetNullsAreNot()
+    {
+        var style = new Style(Background: null, Radius: 12f);
+        Assert.Equal(
+            expected: "null",
+            actual: WidgetDebug.Members(style).First(x => x.Name == "Background").Value
+        );
+        Assert.DoesNotContain(
+            collection: WidgetDebug.Members(new Styled()),
+            filter: x => x.Name == "Sheet"
+        );
+    }
+
+    [Fact]
+    public void CanExpand_LeafValuesAreNotExpandable()
+    {
+        Assert.False(WidgetDebug.CanExpand(null));
+        Assert.False(WidgetDebug.CanExpand("text"));
+        Assert.False(WidgetDebug.CanExpand(12f));
+        Assert.False(WidgetDebug.CanExpand(new Color(r: 1f, g: 0f, b: 0f)));
+        Assert.True(WidgetDebug.CanExpand(new Style(Background: null, Radius: 1f)));
+        Assert.True(WidgetDebug.CanExpand(new List<int> { 1 }));
+    }
+
+    [Fact]
+    public void ToJson_NestsObjectsAndQuotesFormattedLeaves()
+    {
+        string json = WidgetDebug.ToJson(
+            new Style(
+                Background: new Color(r: 1f, g: 0f, b: 0f),
+                Radius: 12f,
+                Inner: new Nested("deep")
+            )
+        );
+        Assert.Contains(expectedSubstring: "\"Background\": \"#FF0000\"", actualString: json);
+        Assert.Contains(expectedSubstring: "\"Radius\": 12", actualString: json);
+        Assert.Contains(expectedSubstring: "\"Name\": \"deep\"", actualString: json);
+    }
+
+    [Fact]
+    public void ToJson_DepthCap_StopsDescending()
+    {
+        string json = WidgetDebug.ToJson(
+            root: new Style(Background: null, Radius: 1f, Inner: new Nested("deep")),
+            maxDepth: 1
+        );
+        Assert.Contains(expectedSubstring: "\"Inner\": \"{Nested}\"", actualString: json);
+        Assert.DoesNotContain(expectedSubstring: "deep", actualString: json);
+    }
+
+    [Fact]
+    public void ToJson_Cycle_DoesNotRecurseForever()
+    {
+        var a = new Node();
+        a.Next = a;
+        string json = WidgetDebug.ToJson(a);
+        Assert.Contains(expectedSubstring: "↻", actualString: json);
     }
 
     // ── Property tree / JSON view (Members / CanExpand / ToJson) ──
@@ -213,69 +300,9 @@ public class WidgetDebugTests
 
     private sealed class Styled : Label
     {
-        public Styled() : base("x")
-        {
-        }
+        public Styled() : base("x") { }
 
         public Style? Sheet { get; set; }
-    }
-
-    [Fact]
-    public void Members_ObjectValue_IsExpandableAndShownAsItsType()
-    {
-        var w = new Styled { Sheet = new Style(new Color(1f, 0f, 0f), 12f) };
-        var m = WidgetDebug.Members(w).First(x => x.Name == "Sheet");
-        Assert.True(m.Expandable);
-        Assert.Equal("{Style}", m.Value); // not the record's whole ToString dump
-        Assert.Equal(
-            "#FF0000",
-            WidgetDebug.Members(m.Raw!).First(x => x.Name == "Background").Value
-        );
-    }
-
-    [Fact]
-    public void Members_NestedNulls_AreKept_ButWidgetNullsAreNot()
-    {
-        var style = new Style(null, 12f);
-        Assert.Equal("null", WidgetDebug.Members(style).First(x => x.Name == "Background").Value);
-        Assert.DoesNotContain(WidgetDebug.Members(new Styled()), x => x.Name == "Sheet");
-    }
-
-    [Fact]
-    public void CanExpand_LeafValuesAreNotExpandable()
-    {
-        Assert.False(WidgetDebug.CanExpand(null));
-        Assert.False(WidgetDebug.CanExpand("text"));
-        Assert.False(WidgetDebug.CanExpand(12f));
-        Assert.False(WidgetDebug.CanExpand(new Color(1f, 0f, 0f)));
-        Assert.True(WidgetDebug.CanExpand(new Style(null, 1f)));
-        Assert.True(WidgetDebug.CanExpand(new List<int> { 1 }));
-    }
-
-    [Fact]
-    public void ToJson_NestsObjectsAndQuotesFormattedLeaves()
-    {
-        var json = WidgetDebug.ToJson(new Style(new Color(1f, 0f, 0f), 12f, new Nested("deep")));
-        Assert.Contains("\"Background\": \"#FF0000\"", json);
-        Assert.Contains("\"Radius\": 12", json);
-        Assert.Contains("\"Name\": \"deep\"", json);
-    }
-
-    [Fact]
-    public void ToJson_DepthCap_StopsDescending()
-    {
-        var json = WidgetDebug.ToJson(new Style(null, 1f, new Nested("deep")), 1);
-        Assert.Contains("\"Inner\": \"{Nested}\"", json);
-        Assert.DoesNotContain("deep", json);
-    }
-
-    [Fact]
-    public void ToJson_Cycle_DoesNotRecurseForever()
-    {
-        var a = new Node();
-        a.Next = a;
-        var json = WidgetDebug.ToJson(a);
-        Assert.Contains("↻", json);
     }
 
     private sealed class Node

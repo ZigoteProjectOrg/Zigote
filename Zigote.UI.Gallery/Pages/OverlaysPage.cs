@@ -14,59 +14,65 @@ internal sealed class OverlaysPage : ComposedWidget
     {
         return Sections(
             Section(
-                "Dialogs",
-                new Wrap(
+                title: "Dialogs",
+                child: new Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: [
                         new ElevatedButton(
-                            new Text("Alert"),
-                            () => Dialog.Alert("Heads up", "This is an alert dialog.").Show()
+                            child: new Text("Alert"),
+                            onPressed: () => Dialog.Alert(
+                                title: "Heads up",
+                                message: "This is an alert dialog."
+                            ).Show()
                         ),
                         new OutlinedButton(
-                            new Text("Confirm"),
-                            () => Dialog.Confirm(
-                                "Delete file?",
-                                "This can't be undone.",
-                                () => Toast("Confirmed"),
-                                () => Toast("Cancelled")
+                            child: new Text("Confirm"),
+                            onPressed: () => Dialog.Confirm(
+                                title: "Delete file?",
+                                message: "This can't be undone.",
+                                onConfirm: () => Toast("Confirmed"),
+                                onCancel: () => Toast("Cancelled")
                             ).Show()
                         ),
                     ]
                 )
             ),
             Section(
-                "Snackbars",
-                new Wrap(
+                title: "Snackbars",
+                child: new Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                        new FilledButton(new Text("Show snackbar"), () => Toast("It worked!")),
+                        new FilledButton(
+                            child: new Text("Show snackbar"),
+                            onPressed: () => Toast("It worked!")
+                        ),
                         new TextButton(
-                            new Text("With action"),
-                            () => App.Active?.ShowSnackbar(
-                                "Item archived",
-                                4f,
-                                "Undo",
-                                () => Toast("Undone")
+                            child: new Text("With action"),
+                            onPressed: () => App.Active?.ShowSnackbar(
+                                message: "Item archived",
+                                duration: 4f,
+                                actionLabel: "Undo",
+                                onAction: () => Toast("Undone")
                             )
                         ),
                     ]
                 )
             ),
             Section(
-                "Tooltip",
+                title: "Tooltip",
                 // Tooltips are revealed by hover, and a finger never hovers — on a phone the
                 // hover-only chip would be a dead control with no way to read its message, so
                 // there the chip carries the tip itself and hands it to a snackbar on tap.
-                new AdaptiveBuilder((_, size) => size == WindowSizeClass.Compact
+                child: new AdaptiveBuilder((_, size) => size == WindowSizeClass.Compact
                     ? new Chip(
-                        "Tap for the tip",
+                        label: "Tap for the tip",
                         onPressed: () => Toast("Tooltips are hover-only — a tap shows this instead")
                     )
                     : new Tooltip(
-                        "Tooltips appear after a short hover",
-                        new Chip("Hover for a tip")
+                        message: "Tooltips appear after a short hover",
+                        child: new Chip("Hover for a tip")
                     )
                 )
             )

@@ -10,8 +10,10 @@ using EcsApi = Zigote.Scripting.Ecs;
 namespace Zigote.Tests;
 
 /// <summary>
-///     The scripting <see cref="Ecs" /> provider — the entity-first counterpart to Physics/Audio. Verifies
-///     it is a safe no-op outside play and exposes the live world / scene bridge / prefab library when the
+///     The scripting <see cref="Ecs" /> provider — the entity-first counterpart to Physics/Audio.
+///     Verifies
+///     it is a safe no-op outside play and exposes the live world / scene bridge / prefab library when
+///     the
 ///     host wires it (as GameSession does).
 /// </summary>
 public sealed class EcsProviderTests : IDisposable
@@ -43,7 +45,10 @@ public sealed class EcsProviderTests : IDisposable
         var bridge = new EcsSceneBridge(); // owns a flecs world
         EcsApi.World = bridge.World;
         EcsApi.Scene = bridge;
-        EcsApi.Prefabs = new EcsPrefabLibrary(bridge.World, new EcsComponentRegistry());
+        EcsApi.Prefabs = new EcsPrefabLibrary(
+            world: bridge.World,
+            registry: new EcsComponentRegistry()
+        );
 
         Assert.True(EcsApi.IsAvailable);
         Assert.False(EcsApi.CreateEntity().IsNull);
@@ -51,8 +56,8 @@ public sealed class EcsProviderTests : IDisposable
         EcsApi.Prefabs.Define("Pickup").With(new Tag { Value = 7 });
         var inst = EcsApi.Instantiate("Pickup");
         Assert.False(inst.IsNull);
-        Assert.True(EcsApi.World!.TryGet<Tag>(inst, out var tag));
-        Assert.Equal(7, tag.Value);
+        Assert.True(EcsApi.World!.TryGet<Tag>(e: inst, value: out var tag));
+        Assert.Equal(expected: 7, actual: tag.Value);
     }
 
     [Fact]
@@ -65,7 +70,7 @@ public sealed class EcsProviderTests : IDisposable
 
         var e = EcsApi.EntityForNode(42);
         Assert.False(e.IsNull);
-        Assert.Equal(bridge.EntityOf(42), e);
+        Assert.Equal(expected: bridge.EntityOf(42), actual: e);
     }
 
     private struct Tag

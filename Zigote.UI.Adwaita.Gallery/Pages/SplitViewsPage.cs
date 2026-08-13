@@ -6,45 +6,47 @@ public sealed class SplitViewsPage : ComposedWidget
     protected override Widget Build(BuildContext context)
     {
         return new GalleryPage(
-            "Split Views",
+            title: "Split Views",
+            description:
             "Sidebar and content side by side — until the window is too narrow, and then not.",
-            MaterialIcons.VerticalSplit
+            iconName: MaterialIcons.VerticalSplit
         ) {
             ClampWidth = 720f,
             Children = {
                 Demo.Titled(
-                    "Overlay Split View",
+                    title: "Overlay Split View",
+                    description:
                     "The sidebar slides over the content, behind a scrim once collapsed. Narrow the window to see it fold.",
-                    new SizedBox(height: 300f, child: Inline())
+                    child: new SizedBox(height: 300f, child: Inline())
                 ),
                 Demo.Group(
-                    "Full Size",
-                    "The same two containers at window scale, in a dialog.",
+                    title: "Full Size",
+                    description: "The same two containers at window scale, in a dialog.",
                     new AdwActionRow(
-                        "Navigation Split View",
-                        "Two panes that become one page at the breakpoint"
+                        title: "Navigation Split View",
+                        subtitle: "Two panes that become one page at the breakpoint"
                     ) {
                         ShowChevron = true,
                         OnActivated = ShowNavigationSplitView,
                     },
                     new AdwActionRow(
-                        "Overlay Split View",
-                        "A sidebar that overlays instead of pushing"
+                        title: "Overlay Split View",
+                        subtitle: "A sidebar that overlays instead of pushing"
                     ) {
                         ShowChevron = true,
                         OnActivated = ShowOverlaySplitView,
                     }
                 ),
                 Demo.Group(
-                    "Which One",
-                    null,
+                    title: "Which One",
+                    description: null,
                     new AdwActionRow(
-                        "Navigation",
-                        "The sidebar is where you pick what the content shows"
+                        title: "Navigation",
+                        subtitle: "The sidebar is where you pick what the content shows"
                     ) { IconName = MaterialIcons.VerticalSplit },
                     new AdwActionRow(
-                        "Overlay",
-                        "The sidebar is a tool panel the content does not depend on"
+                        title: "Overlay",
+                        subtitle: "The sidebar is a tool panel the content does not depend on"
                     ) { IconName = MaterialIcons.ViewSidebar }
                 ),
             },
@@ -77,17 +79,17 @@ public sealed class SplitViewsPage : ComposedWidget
         };
         bar.Start.Add(
             new Tooltip(
-                "Toggle Sidebar",
-                Demo.IconButton(
-                    MaterialIcons.ViewSidebar,
-                    () => split.ShowSidebar = !split.ShowSidebar
+                message: "Toggle Sidebar",
+                child: Demo.IconButton(
+                    icon: MaterialIcons.ViewSidebar,
+                    onPressed: () => split.ShowSidebar = !split.ShowSidebar
                 )
             )
         );
 
         return new ClipRRect(
-            AdwMetrics.CardRadius,
-            new AdwToolbarView(split) { TopBars = { bar } }
+            radius: AdwMetrics.CardRadius,
+            child: new AdwToolbarView(split) { TopBars = { bar } }
         );
     }
 
@@ -104,7 +106,9 @@ public sealed class SplitViewsPage : ComposedWidget
             ShowStartWindowControls = false,
             ShowEndWindowControls = false,
         };
-        sidebarBar.End.Add(Demo.IconButton(MaterialIcons.Close, () => dlg?.Close()));
+        sidebarBar.End.Add(
+            Demo.IconButton(icon: MaterialIcons.Close, onPressed: () => dlg?.Close())
+        );
         // Both the "open the other pane" button and the back button only exist past the
         // breakpoint, where the two panes have become one page — IsCollapsed is the split view's
         // own answer to "am I folded", including the AutoCollapseBelow the layout decides.
@@ -112,7 +116,10 @@ public sealed class SplitViewsPage : ComposedWidget
             new AdwStatusPage {
                 Title = "Sidebar",
                 Child = new Watch(() => split.IsCollapsed.Value
-                    ? new AdwButton("Open Content", () => split.ShowContent = true) { Pill = true }
+                    ? new AdwButton(
+                        label: "Open Content",
+                        onPressed: () => split.ShowContent = true
+                    ) { Pill = true }
                     : Demo.Caption("Widen or narrow the dialog to fold the panes")
                 ),
             }
@@ -153,18 +160,18 @@ public sealed class SplitViewsPage : ComposedWidget
         // (and an Invalidate so the split view's Row re-resolves it); a full version would need a
         // SidebarPosition property on AdwOverlaySplitView. The inner LTR scope keeps the sidebar's
         // own content unmirrored.
-        var direction = new Directionality(TextDirection.Ltr, split);
+        var direction = new Directionality(direction: TextDirection.Ltr, child: split);
 
         split.Sidebar = new Directionality(
-            TextDirection.Ltr,
-            new AdwStatusPage {
+            direction: TextDirection.Ltr,
+            child: new AdwStatusPage {
                 Title = "Sidebar",
                 // ponytail: one joined toggle group instead of two stacked grouped pill toggles —
                 // AdwToggleButton has no pill style.
                 Child = new AdwToggleGroup(
-                    ["Start", "End"],
-                    0,
-                    i =>
+                    labels: ["Start", "End"],
+                    active: 0,
+                    onActive: i =>
                     {
                         atStart.Value = i == 0;
                         direction.Direction = i == 0 ? TextDirection.Ltr : TextDirection.Rtl;
@@ -183,15 +190,17 @@ public sealed class SplitViewsPage : ComposedWidget
                     ShowEndWindowControls = false,
                 };
                 var toggle = new Tooltip(
-                    "Toggle Sidebar",
-                    Demo.IconButton(
-                        MaterialIcons.ViewSidebar,
-                        () => split.ShowSidebar = !split.ShowSidebar
+                    message: "Toggle Sidebar",
+                    child: Demo.IconButton(
+                        icon: MaterialIcons.ViewSidebar,
+                        onPressed: () => split.ShowSidebar = !split.ShowSidebar
                     )
                 );
                 if (atStart.Value) bar.Start.Add(toggle);
                 else bar.End.Add(toggle);
-                bar.End.Add(Demo.IconButton(MaterialIcons.Close, () => dlg?.Close()));
+                bar.End.Add(
+                    Demo.IconButton(icon: MaterialIcons.Close, onPressed: () => dlg?.Close())
+                );
                 return bar;
             }
         );

@@ -1,3 +1,4 @@
+using Zigote.Core.Engine;
 using Zigote.UI.Host;
 
 namespace Zigote.UI.Adwaita;
@@ -25,10 +26,14 @@ public enum AdwControlsSide
 /// </summary>
 public sealed class AdwWindowControls : ComposedWidget
 {
-    public AdwWindowControls(AdwControlsSide side)
-    {
-        Side = side;
-    }
+    /// <summary>
+    ///     What the headerbar itself already puts in front of its first packed widget: its own side
+    ///     padding, plus the row gap that follows this cluster. Both spacer widths below work
+    ///     backwards from it, so the first real widget lands exactly on the window's titlebar inset.
+    /// </summary>
+    private const float LeadIn = AdwMetrics.HeaderBarPaddingX + AdwMetrics.HeaderBarPadding;
+
+    public AdwWindowControls(AdwControlsSide side) => Side = side;
 
     public AdwControlsSide Side { get; }
 
@@ -42,53 +47,63 @@ public sealed class AdwWindowControls : ComposedWidget
     internal static bool IsWindowChrome(Widget widget)
     {
         if (widget.Owner is not { } app ||
-            app.ChromeStyle != Core.Engine.WindowChromeStyle.AdwaitaCsd)
+            app.ChromeStyle != WindowChromeStyle.AdwaitaCsd)
             return false;
 
         for (var w = widget.Parent; w is not null; w = w.Parent)
+        {
             if (w is AdwDialog)
                 return false;
+        }
+
         return true;
     }
 
     protected override Widget Build(BuildContext context)
     {
         var app = Owner;
-        if (app is null) return new SizedBox(0f, 0f);
+        if (app is null) return new SizedBox(width: 0f, height: 0f);
 
         for (var w = Parent; w is not null; w = w.Parent)
+        {
             if (w is AdwDialog)
-                return new SizedBox(0f, 0f);
+                return new SizedBox(width: 0f, height: 0f);
+        }
 
         // Unified chrome: the OS draws the window buttons ITSELF, over the app's content. Nothing
         // to draw here — but the start of the bar has to step aside for them, or the first packed
         // widget ends up underneath the lights.
-        if (app.ChromeStyle == Core.Engine.WindowChromeStyle.MacUnified)
+        if (app.ChromeStyle == WindowChromeStyle.MacUnified)
+        {
             return new SizedBox(
-                Side == AdwControlsSide.Start ? TrafficLightReserve(app) : 0f,
-                0f
+                width: Side == AdwControlsSide.Start ? TrafficLightReserve(app) : 0f,
+                height: 0f
             );
+        }
 
-        if (app.ChromeStyle != Core.Engine.WindowChromeStyle.AdwaitaCsd)
-            return new SizedBox(0f, 0f);
+        if (app.ChromeStyle != WindowChromeStyle.AdwaitaCsd)
+            return new SizedBox(width: 0f, height: 0f);
 
         // macOS CSD: the buttons are the traffic lights, and macOS puts them at the leading edge
         // whatever GNOME's button-layout says.
         if (OperatingSystem.IsMacOS())
+        {
             return Side == AdwControlsSide.Start
                 ? new MacTrafficLights(app)
-                : new SizedBox(0f, 0f);
+                : new SizedBox(width: 0f, height: 0f);
+        }
 
         var buttons = Side == AdwControlsSide.Start
             ? GnomeDesktop.LeftButtons
             : GnomeDesktop.RightButtons;
-        if (buttons.Count == 0) return new SizedBox(0f, 0f);
+        if (buttons.Count == 0) return new SizedBox(width: 0f, height: 0f);
 
         var theme = ThemeProvider.Of(context);
         // `windowcontrols { border-spacing: 3px }` — the frame buttons sit closer together than
         // ordinary packed widgets do, which is what reads them as one cluster.
         var row = new Row(spacing: AdwMetrics.ToggleGroupPadding, mainAxisSize: MainAxisSize.Min);
-        foreach (var kind in buttons) row.Children.Add(new FrameButton(app, theme, kind));
+        foreach (var kind in buttons)
+            row.Children.Add(new FrameButton(app: app, theme: theme, kind: kind));
         return row;
     }
 
@@ -97,17 +112,8 @@ public sealed class AdwWindowControls : ComposedWidget
     ///     headerbar already puts in front of the first packed widget (its own left padding, plus
     ///     the row gap after this spacer), so that widget lands exactly on the inset.
     /// </summary>
-    private static float TrafficLightReserve(App app)
-    {
-        return MathF.Max(0f, app.TitleBarLeftInset - LeadIn);
-    }
-
-    /// <summary>
-    ///     What the headerbar itself already puts in front of its first packed widget: its own side
-    ///     padding, plus the row gap that follows this cluster. Both spacer widths below work
-    ///     backwards from it, so the first real widget lands exactly on the window's titlebar inset.
-    /// </summary>
-    private const float LeadIn = AdwMetrics.HeaderBarPaddingX + AdwMetrics.HeaderBarPadding;
+    private static float TrafficLightReserve(App app) =>
+        MathF.Max(x: 0f, y: app.TitleBarLeftInset - LeadIn);
 
     /// <summary>
     ///     The macOS window buttons, drawn by the app: close · minimize · zoom as the three system
@@ -130,9 +136,9 @@ public sealed class AdwWindowControls : ComposedWidget
         private const float Lead = 8f;
 
         private static readonly Color[] Hues = [
-            Color.Rgb(255, 95, 87), // close
-            Color.Rgb(254, 188, 46), // minimize
-            Color.Rgb(40, 200, 64), // zoom
+            Color.Rgb(r: 255, g: 95, b: 87), // close
+            Color.Rgb(r: 254, g: 188, b: 46), // minimize
+            Color.Rgb(r: 40, g: 200, b: 64), // zoom
         ];
 
         private int _pressed = -1;
@@ -145,11 +151,11 @@ public sealed class AdwWindowControls : ComposedWidget
             // Trailing room folded in so the NEXT widget starts on the titlebar inset: the bar
             // already contributes its padding before this cluster and a row gap after it.
             _size = new Size(
-                MathF.Max(
-                    Lead + Diameter * 3f + Gap * 2f,
-                    App.MacTrafficLightInset - LeadIn
+                width: MathF.Max(
+                    x: Lead + (Diameter * 3f) + (Gap * 2f),
+                    y: App.MacTrafficLightInset - LeadIn
                 ),
-                Diameter
+                height: Diameter
             );
             return _size;
         }
@@ -157,10 +163,10 @@ public sealed class AdwWindowControls : ComposedWidget
         public override void Layout(Offset origin)
         {
             Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                _size.Width,
-                _size.Height
+                x: origin.X,
+                y: origin.Y,
+                width: _size.Width,
+                height: _size.Height
             );
         }
 
@@ -168,43 +174,45 @@ public sealed class AdwWindowControls : ComposedWidget
         {
             // Inactive windows grey their lights out — the strongest signal macOS gives that a
             // window is not the one taking keystrokes.
-            var inactive = !app.WindowFocused;
-            for (var i = 0; i < 3; i++)
+            bool inactive = !app.WindowFocused;
+            for (int i = 0; i < 3; i++)
             {
                 var color = inactive ? _theme.Control : Hues[i];
                 if (i == _pressed) color = Darken(color);
-                paint.AddRect(LightRect(i), color, Diameter / 2f);
+                paint.AddRect(bounds: LightRect(i), color: color, radius: Diameter / 2f);
             }
         }
 
-        private static Color Darken(Color c)
-        {
-            return new Color(c.R * 0.75f, c.G * 0.75f, c.B * 0.75f, c.A);
-        }
+        private static Color Darken(Color c) => new(
+            r: c.R * 0.75f,
+            g: c.G * 0.75f,
+            b: c.B * 0.75f,
+            a: c.A
+        );
 
         private Rect LightRect(int index)
         {
             return new Rect(
-                Bounds.X + Lead + index * (Diameter + Gap),
-                Bounds.Y + (Bounds.Height - Diameter) / 2f,
-                Diameter,
-                Diameter
+                x: Bounds.X + Lead + (index * (Diameter + Gap)),
+                y: Bounds.Y + ((Bounds.Height - Diameter) / 2f),
+                width: Diameter,
+                height: Diameter
             );
         }
 
         private int LightAt(Offset point)
         {
-            for (var i = 0; i < 3; i++)
-                if (LightRect(i).Contains(point.X, point.Y))
+            for (int i = 0; i < 3; i++)
+            {
+                if (LightRect(i).Contains(px: point.X, py: point.Y))
                     return i;
+            }
+
             return -1;
         }
 
         /// <summary>Only the circles are ours; the gaps stay part of the titlebar drag surface.</summary>
-        public override Widget? HitTest(Offset point)
-        {
-            return LightAt(point) >= 0 ? this : null;
-        }
+        public override Widget? HitTest(Offset point) => LightAt(point) >= 0 ? this : null;
 
         public override void OnPointerDown(Offset point)
         {
@@ -221,7 +229,7 @@ public sealed class AdwWindowControls : ComposedWidget
 
         public override void OnPointerUp(Offset point)
         {
-            var hit = _pressed;
+            int hit = _pressed;
             _pressed = -1;
             MarkNeedsPaint();
             if (hit < 0 || LightAt(point) != hit) return;
@@ -239,15 +247,12 @@ public sealed class AdwWindowControls : ComposedWidget
             }
         }
 
-        public override MouseCursor? GetCursor(Offset point)
-        {
-            return MouseCursor.Pointer;
-        }
+        public override MouseCursor? GetCursor(Offset point) => MouseCursor.Pointer;
 
-        public override int DebugStateHash()
-        {
-            return HashCode.Combine(_pressed, app.WindowFocused);
-        }
+        public override int DebugStateHash() => HashCode.Combine(
+            value1: _pressed,
+            value2: app.WindowFocused
+        );
     }
 
     /// <summary>
@@ -266,74 +271,72 @@ public sealed class AdwWindowControls : ComposedWidget
         private bool _hovered;
         private bool _pressed;
 
-        public override Size Measure(Constraints c)
-        {
-            return new Size(Target, Target);
-        }
+        /// <summary>The drawn circle, centred in the (larger) hit target.</summary>
+        private Rect Circle => new(
+            x: Bounds.X + ((Bounds.Width - Diameter) / 2f),
+            y: Bounds.Y + ((Bounds.Height - Diameter) / 2f),
+            width: Diameter,
+            height: Diameter
+        );
+
+        public override Size Measure(Constraints c) => new(width: Target, height: Target);
 
         public override void Layout(Offset origin)
         {
             Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                Target,
-                Target
+                x: origin.X,
+                y: origin.Y,
+                width: Target,
+                height: Target
             );
         }
-
-        /// <summary>The drawn circle, centred in the (larger) hit target.</summary>
-        private Rect Circle => new(
-            Bounds.X + (Bounds.Width - Diameter) / 2f,
-            Bounds.Y + (Bounds.Height - Diameter) / 2f,
-            Diameter,
-            Diameter
-        );
 
         public override void Paint(PaintList paint)
         {
             var circle = Circle;
             paint.AddRect(
-                circle,
-                _pressed ? theme.ControlPressed : _hovered ? theme.ControlHover : theme.Control,
-                Diameter / 2f
+                bounds: circle,
+                color: _pressed ? theme.ControlPressed :
+                _hovered ? theme.ControlHover : theme.Control,
+                radius: Diameter / 2f
             );
 
             var fg = theme.OnBackground;
-            var cx = Bounds.X + Bounds.Width / 2f;
-            var cy = Bounds.Y + Bounds.Height / 2f;
+            float cx = Bounds.X + (Bounds.Width / 2f);
+            float cy = Bounds.Y + (Bounds.Height / 2f);
             switch (kind)
             {
                 case AdwWindowButton.Close:
                     Icons.Draw(
-                        paint,
-                        Icons.Close,
-                        circle,
-                        fg,
-                        13f
+                        paint: paint,
+                        glyph: Icons.Close,
+                        box: circle,
+                        color: fg,
+                        size: 13f
                     );
                     break;
                 case AdwWindowButton.Maximize:
                     paint.AddBorder(
-                        new Rect(
-                            cx - 4f,
-                            cy - 4f,
-                            8f,
-                            8f
+                        bounds: new Rect(
+                            x: cx - 4f,
+                            y: cy - 4f,
+                            width: 8f,
+                            height: 8f
                         ),
-                        fg,
-                        1f,
-                        1.4f
+                        color: fg,
+                        radius: 1f,
+                        width: 1.4f
                     );
                     break;
                 default: // minimize
                     paint.AddRect(
-                        new Rect(
-                            cx - 4.5f,
-                            cy + 2.5f,
-                            9f,
-                            1.6f
+                        bounds: new Rect(
+                            x: cx - 4.5f,
+                            y: cy + 2.5f,
+                            width: 9f,
+                            height: 1.6f
                         ),
-                        fg
+                        color: fg
                     );
                     break;
             }
@@ -362,7 +365,7 @@ public sealed class AdwWindowControls : ComposedWidget
 
         public override void OnPointerUp(Offset point)
         {
-            var inside = _pressed && Bounds.Contains(point.X, point.Y);
+            bool inside = _pressed && Bounds.Contains(px: point.X, py: point.Y);
             _pressed = false;
             MarkNeedsPaint();
             if (!inside) return;
@@ -380,10 +383,7 @@ public sealed class AdwWindowControls : ComposedWidget
             }
         }
 
-        public override MouseCursor? GetCursor(Offset point)
-        {
-            return MouseCursor.Pointer;
-        }
+        public override MouseCursor? GetCursor(Offset point) => MouseCursor.Pointer;
     }
 }
 
@@ -397,19 +397,13 @@ public sealed class AdwDragArea : ComposedWidget
 {
     private readonly Widget _child;
 
-    public AdwDragArea(Widget child)
-    {
-        _child = child;
-    }
+    public AdwDragArea(Widget child) => _child = child;
 
-    protected override Widget Build(BuildContext context)
-    {
-        return _child;
-    }
+    protected override Widget Build(BuildContext context) => _child;
 
     public override void Attach(App owner, Widget? parent)
     {
-        base.Attach(owner, parent);
+        base.Attach(owner: owner, parent: parent);
         if (!owner.CsdDragSurfaces.Contains(this)) owner.CsdDragSurfaces.Add(this);
     }
 

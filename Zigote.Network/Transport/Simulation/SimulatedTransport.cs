@@ -49,42 +49,27 @@ public sealed class SimulatedTransport : ITransport, ITransportListener
 
     public ITransportListener? Listener { get; set; }
 
-    public void StartServer(int port)
-    {
-        _inner.StartServer(port);
-    }
+    public void StartServer(int port) => _inner.StartServer(port);
 
-    public void StartClient(string host, int port)
-    {
-        _inner.StartClient(host, port);
-    }
+    public void StartClient(string host, int port) => _inner.StartClient(host: host, port: port);
 
     public void Send(int connectionId, ReadOnlySpan<byte> payload, DeliveryMethod delivery,
         int channel = 0)
     {
         _inner.Send(
-            connectionId,
-            payload,
-            delivery,
-            channel
+            connectionId: connectionId,
+            payload: payload,
+            delivery: delivery,
+            channel: channel
         );
         // impairment lands on the receive side, not here
     }
 
-    public void Disconnect(int connectionId)
-    {
-        _inner.Disconnect(connectionId);
-    }
+    public void Disconnect(int connectionId) => _inner.Disconnect(connectionId);
 
-    public void Stop()
-    {
-        _inner.Stop();
-    }
+    public void Stop() => _inner.Stop();
 
-    public NetworkStats? GetStats(int connectionId)
-    {
-        return _inner.GetStats(connectionId);
-    }
+    public NetworkStats? GetStats(int connectionId) => _inner.GetStats(connectionId);
 
     public void Update(float deltaTime)
     {
@@ -101,20 +86,13 @@ public sealed class SimulatedTransport : ITransport, ITransportListener
 
     // ---- ITransportListener: inner transport reports here; we schedule to the app listener. ----
 
-    void ITransportListener.OnConnected(int connectionId)
-    {
-        Listener?.OnConnected(connectionId);
-    }
+    void ITransportListener.OnConnected(int connectionId) => Listener?.OnConnected(connectionId);
 
-    void ITransportListener.OnDisconnected(int connectionId, DisconnectReason reason)
-    {
-        Listener?.OnDisconnected(connectionId, reason);
-    }
+    void ITransportListener.OnDisconnected(int connectionId, DisconnectReason reason) =>
+        Listener?.OnDisconnected(connectionId: connectionId, reason: reason);
 
-    void ITransportListener.OnError(int connectionId, string error)
-    {
-        Listener?.OnError(connectionId, error);
-    }
+    void ITransportListener.OnError(int connectionId, string error) =>
+        Listener?.OnError(connectionId: connectionId, error: error);
 
     void ITransportListener.OnReceive(int connectionId, ReadOnlySpan<byte> payload,
         DeliveryMethod delivery,
@@ -129,30 +107,32 @@ public sealed class SimulatedTransport : ITransport, ITransportListener
             return;
         }
 
-        var copy = payload.ToArray();
+        byte[] copy = payload.ToArray();
         Enqueue(
-            connectionId,
-            copy,
-            delivery,
-            channel,
-            OneWayDelay(c)
+            connectionId: connectionId,
+            payload: copy,
+            delivery: delivery,
+            channel: channel,
+            delay: OneWayDelay(c)
         );
 
         if (c.DuplicationChance > 0f && _rng.NextDouble() < c.DuplicationChance)
+        {
             Enqueue(
-                connectionId,
-                copy,
-                delivery,
-                channel,
-                OneWayDelay(c) + _rng.NextDouble() * 0.002
+                connectionId: connectionId,
+                payload: copy,
+                delivery: delivery,
+                channel: channel,
+                delay: OneWayDelay(c) + (_rng.NextDouble() * 0.002)
             );
+        }
     }
 
     private double OneWayDelay(NetworkConditions c)
     {
-        var delay = c.LatencySeconds + _rng.NextDouble() * c.JitterSeconds;
+        double delay = c.LatencySeconds + (_rng.NextDouble() * c.JitterSeconds);
         if (c.ReorderChance > 0f && _rng.NextDouble() < c.ReorderChance)
-            delay += _rng.NextDouble() * Math.Max(c.JitterSeconds, c.LatencySeconds);
+            delay += _rng.NextDouble() * Math.Max(val1: c.JitterSeconds, val2: c.LatencySeconds);
         return delay;
     }
 
@@ -161,11 +141,11 @@ public sealed class SimulatedTransport : ITransport, ITransportListener
     {
         _pending.Add(
             new Pending(
-                _now + delay,
-                connectionId,
-                payload,
-                delivery,
-                channel
+                ReleaseTime: _now + delay,
+                ConnectionId: connectionId,
+                Payload: payload,
+                Delivery: delivery,
+                Channel: channel
             )
         );
     }
@@ -177,20 +157,20 @@ public sealed class SimulatedTransport : ITransport, ITransportListener
         // Release in time order so reorder is driven purely by per-packet jitter, not insertion order.
         _pending.Sort(static (a, b) => a.ReleaseTime.CompareTo(b.ReleaseTime));
 
-        var i = 0;
+        int i = 0;
         for (; i < _pending.Count; i++)
         {
             var p = _pending[i];
             if (p.ReleaseTime > _now) break;
             Listener?.OnReceive(
-                p.ConnectionId,
-                p.Payload,
-                p.Delivery,
-                p.Channel
+                connectionId: p.ConnectionId,
+                payload: p.Payload,
+                delivery: p.Delivery,
+                channel: p.Channel
             );
         }
 
-        if (i > 0) _pending.RemoveRange(0, i);
+        if (i > 0) _pending.RemoveRange(index: 0, count: i);
     }
 
     private readonly record struct Pending(

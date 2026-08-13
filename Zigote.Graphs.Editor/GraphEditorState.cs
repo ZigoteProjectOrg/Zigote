@@ -76,10 +76,7 @@ public sealed class GraphEditorState
         SelectionChanged?.Invoke();
     }
 
-    public bool IsSelected(Guid nodeId)
-    {
-        return _selectedNodes.Contains(nodeId);
-    }
+    public bool IsSelected(Guid nodeId) => _selectedNodes.Contains(nodeId);
 
     public void SelectEdge(Guid? edgeId)
     {
@@ -88,14 +85,12 @@ public sealed class GraphEditorState
         SelectionChanged?.Invoke();
     }
 
-    public bool IsEdgeSelected(Guid edgeId)
-    {
-        return SelectedEdgeId == edgeId;
-    }
+    public bool IsEdgeSelected(Guid edgeId) => SelectedEdgeId == edgeId;
 
     public GraphValidationResult Validate()
     {
-        if (Registry.TryGetDomain(Graph.DomainId, out var domain) && domain is not null)
+        if (Registry.TryGetDomain(domainId: Graph.DomainId, domain: out var domain) &&
+            domain is not null)
             LastValidation = domain.Validate(Graph);
         else
             LastValidation = GraphValidationResult.Ok;
@@ -103,18 +98,16 @@ public sealed class GraphEditorState
     }
 
     /// <summary>Force a validate + compile cycle, even when <see cref="AutoCompile" /> is false.</summary>
-    public void TriggerCompile()
-    {
-        ReactiveCompile();
-    }
+    public void TriggerCompile() => ReactiveCompile();
 
     private void ReactiveCompile()
     {
         Validate();
-        if (!Registry.TryGetDomain(Graph.DomainId, out var domain) || domain is null) return;
+        if (!Registry.TryGetDomain(domainId: Graph.DomainId, domain: out var domain) ||
+            domain is null) return;
         LastCompileResult = domain.Compile(
-            Graph,
-            new GraphCompileContext { TargetPlatform = "gallery" }
+            graph: Graph,
+            context: new GraphCompileContext { TargetPlatform = "gallery" }
         );
         CompileChanged?.Invoke();
     }

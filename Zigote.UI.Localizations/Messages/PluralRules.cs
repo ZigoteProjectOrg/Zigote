@@ -28,12 +28,12 @@ public readonly struct PluralOperands
     public static PluralOperands FromLong(long value)
     {
         return new PluralOperands(
-            Math.Abs((double)value),
-            Math.Abs(value),
-            0,
-            0,
-            0,
-            0
+            n: Math.Abs((double)value),
+            i: Math.Abs(value),
+            v: 0,
+            w: 0,
+            f: 0,
+            t: 0
         );
     }
 
@@ -45,29 +45,36 @@ public readonly struct PluralOperands
     {
         value = Math.Abs(value);
 
-        var s = fractionDigits is int fd
-            ? value.ToString("F" + Math.Clamp(fd, 0, 15), CultureInfo.InvariantCulture)
-            : value.ToString("0.###############", CultureInfo.InvariantCulture);
+        string s = fractionDigits is int fd
+            ? value.ToString(
+                format: "F" + Math.Clamp(value: fd, min: 0, max: 15),
+                provider: CultureInfo.InvariantCulture
+            )
+            : value.ToString(format: "0.###############", provider: CultureInfo.InvariantCulture);
 
-        var dot = s.IndexOf('.');
-        var intText = dot < 0 ? s : s[..dot];
-        var fracText = dot < 0 ? string.Empty : s[(dot + 1)..];
+        int dot = s.IndexOf('.');
+        string intText = dot < 0 ? s : s[..dot];
+        string fracText = dot < 0 ? string.Empty : s[(dot + 1)..];
 
-        var i = ParseIntegerTail(intText);
+        long i = ParseIntegerTail(intText);
 
-        var v = fracText.Length;
-        var trimmed = fracText.TrimEnd('0');
-        var w = trimmed.Length;
-        var f = fracText.Length == 0 ? 0 : long.Parse(fracText, CultureInfo.InvariantCulture);
-        var t = trimmed.Length == 0 ? 0 : long.Parse(trimmed, CultureInfo.InvariantCulture);
+        int v = fracText.Length;
+        string trimmed = fracText.TrimEnd('0');
+        int w = trimmed.Length;
+        long f = fracText.Length == 0
+            ? 0
+            : long.Parse(s: fracText, provider: CultureInfo.InvariantCulture);
+        long t = trimmed.Length == 0
+            ? 0
+            : long.Parse(s: trimmed, provider: CultureInfo.InvariantCulture);
 
         return new PluralOperands(
-            value,
-            i,
-            v,
-            w,
-            f,
-            t
+            n: value,
+            i: i,
+            v: v,
+            w: w,
+            f: f,
+            t: t
         );
     }
 
@@ -76,17 +83,17 @@ public readonly struct PluralOperands
     private static long ParseIntegerTail(string intText)
     {
         if (long.TryParse(
-                intText,
-                NumberStyles.None,
-                CultureInfo.InvariantCulture,
-                out var i
+                s: intText,
+                style: NumberStyles.None,
+                provider: CultureInfo.InvariantCulture,
+                result: out long i
             )) return i;
-        var tail = intText.Length > 18 ? intText[^18..] : intText;
-        var t = long.TryParse(
-            tail,
-            NumberStyles.None,
-            CultureInfo.InvariantCulture,
-            out var parsed
+        string tail = intText.Length > 18 ? intText[^18..] : intText;
+        long t = long.TryParse(
+            s: tail,
+            style: NumberStyles.None,
+            provider: CultureInfo.InvariantCulture,
+            result: out long parsed
         )
             ? parsed
             : 0;
@@ -132,8 +139,8 @@ public static class PluralRules
         lock (RegisterLock)
         {
             var next = new Dictionary<string, (PluralRule?, PluralRule?)>(
-                _custom,
-                StringComparer.Ordinal
+                dictionary: _custom,
+                comparer: StringComparer.Ordinal
             ) { [Canon(language)] = (cardinal, ordinal) };
             _custom = next;
         }
@@ -146,8 +153,8 @@ public static class PluralRules
         {
             if (!_custom.ContainsKey(Canon(language))) return false;
             var next = new Dictionary<string, (PluralRule?, PluralRule?)>(
-                _custom,
-                StringComparer.Ordinal
+                dictionary: _custom,
+                comparer: StringComparer.Ordinal
             );
             next.Remove(Canon(language));
             _custom = next;
@@ -172,8 +179,8 @@ public static class PluralRules
     /// <summary>The cardinal category ("1 item / 2 items") for a language and number.</summary>
     public static PluralCategory Cardinal(string language, PluralOperands op)
     {
-        var canon = Canon(language);
-        if (_custom.TryGetValue(canon, out var custom) && custom.Cardinal is { } rule)
+        string canon = Canon(language);
+        if (_custom.TryGetValue(key: canon, value: out var custom) && custom.Cardinal is { } rule)
             return rule(op);
 
         return canon switch {
@@ -224,11 +231,11 @@ public static class PluralRules
     /// <summary>The ordinal category ("1st / 2nd / 3rd") for a language and number.</summary>
     public static PluralCategory Ordinal(string language, PluralOperands op)
     {
-        var canon = Canon(language);
-        if (_custom.TryGetValue(canon, out var custom) && custom.Ordinal is { } rule)
+        string canon = Canon(language);
+        if (_custom.TryGetValue(key: canon, value: out var custom) && custom.Ordinal is { } rule)
             return rule(op);
 
-        var n = (long)op.N;
+        long n = (long)op.N;
         return canon switch {
             "en" => EnglishOrdinal(n),
             "mo" or "ro" => n == 1 ? PluralCategory.One : PluralCategory.Other,
@@ -243,10 +250,8 @@ public static class PluralRules
 
     // ── Rule bodies ──────────────────────────────────────────────────────────
 
-    private static PluralCategory EnglishLike(PluralOperands op)
-    {
-        return op.I == 1 && op.V == 0 ? PluralCategory.One : PluralCategory.Other;
-    }
+    private static PluralCategory EnglishLike(PluralOperands op) =>
+        op.I == 1 && op.V == 0 ? PluralCategory.One : PluralCategory.Other;
 
     // Romance "many": exact non-zero integer multiples of a million (CLDR v43+ for es/fr/pt/it/ca).
     private static PluralCategory RomanceMany(PluralOperands op)
@@ -260,10 +265,10 @@ public static class PluralRules
     // and the one/few tests also apply to visible fraction digits.
     private static PluralCategory SerboCroatian(PluralOperands op)
     {
-        var i10 = op.I % 10;
-        var i100 = op.I % 100;
-        var f10 = op.F % 10;
-        var f100 = op.F % 100;
+        long i10 = op.I % 10;
+        long i100 = op.I % 100;
+        long f10 = op.F % 10;
+        long f100 = op.F % 100;
         if ((op.V == 0 && i10 == 1 && i100 != 11) || (f10 == 1 && f100 != 11))
             return PluralCategory.One;
         if ((op.V == 0 && i10 is >= 2 and <= 4 && i100 is < 12 or > 14) ||
@@ -276,9 +281,12 @@ public static class PluralRules
     private static PluralCategory Filipino(PluralOperands op)
     {
         if (op.V == 0)
+        {
             return op.I is >= 1 and <= 3 || (op.I % 10 != 4 && op.I % 10 != 6 && op.I % 10 != 9)
                 ? PluralCategory.One
                 : PluralCategory.Other;
+        }
+
         return op.F % 10 != 4 && op.F % 10 != 6 && op.F % 10 != 9
             ? PluralCategory.One
             : PluralCategory.Other;
@@ -287,8 +295,8 @@ public static class PluralRules
     private static PluralCategory RussianLike(PluralOperands op)
     {
         if (op.V != 0) return PluralCategory.Other;
-        var i10 = op.I % 10;
-        var i100 = op.I % 100;
+        long i10 = op.I % 10;
+        long i100 = op.I % 100;
         if (i10 == 1 && i100 != 11) return PluralCategory.One;
         if (i10 is >= 2 and <= 4 && i100 is < 12 or > 14) return PluralCategory.Few;
         return PluralCategory.Many;
@@ -298,8 +306,8 @@ public static class PluralRules
     {
         if (op.V != 0) return PluralCategory.Other;
         if (op.I == 1) return PluralCategory.One;
-        var i10 = op.I % 10;
-        var i100 = op.I % 100;
+        long i10 = op.I % 10;
+        long i100 = op.I % 100;
         if (i10 is >= 2 and <= 4 && i100 is < 12 or > 14) return PluralCategory.Few;
         return PluralCategory.Many;
     }
@@ -314,8 +322,8 @@ public static class PluralRules
 
     private static PluralCategory Lithuanian(PluralOperands op)
     {
-        var n10 = op.I % 10;
-        var n100 = op.I % 100;
+        long n10 = op.I % 10;
+        long n100 = op.I % 100;
         if (op.F != 0) return PluralCategory.Many;
         if (n10 == 1 && n100 is < 11 or > 19) return PluralCategory.One;
         if (n10 is >= 2 and <= 9 && n100 is < 11 or > 19) return PluralCategory.Few;
@@ -325,7 +333,7 @@ public static class PluralRules
     private static PluralCategory Romanian(PluralOperands op)
     {
         if (op.I == 1 && op.V == 0) return PluralCategory.One;
-        var i100 = op.I % 100;
+        long i100 = op.I % 100;
         if (op.V != 0 || op.N == 0 || i100 is >= 2 and <= 19) return PluralCategory.Few;
         return PluralCategory.Other;
     }
@@ -335,7 +343,7 @@ public static class PluralRules
         if (op.N == 0) return PluralCategory.Zero;
         if (op.N == 1) return PluralCategory.One;
         if (op.N == 2) return PluralCategory.Two;
-        var n100 = op.I % 100;
+        long n100 = op.I % 100;
         if (op.V == 0 && n100 is >= 3 and <= 10) return PluralCategory.Few;
         if (op.V == 0 && n100 is >= 11 and <= 99) return PluralCategory.Many;
         return PluralCategory.Other;
@@ -351,8 +359,8 @@ public static class PluralRules
 
     private static PluralCategory EnglishOrdinal(long n)
     {
-        var n10 = n % 10;
-        var n100 = n % 100;
+        long n10 = n % 10;
+        long n100 = n % 100;
         if (n10 == 1 && n100 != 11) return PluralCategory.One;
         if (n10 == 2 && n100 != 12) return PluralCategory.Two;
         if (n10 == 3 && n100 != 13) return PluralCategory.Few;

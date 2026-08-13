@@ -33,13 +33,13 @@ public static class SemanticsBuilder
     public static SemanticsNode Build(Widget? root, IReadOnlyList<Widget> overlays, Size screen)
     {
         var node = new SemanticsNode(
-            0,
-            SemanticsRole.Group,
-            new Rect(
-                0f,
-                0f,
-                screen.Width,
-                screen.Height
+            id: 0,
+            role: SemanticsRole.Group,
+            bounds: new Rect(
+                x: 0f,
+                y: 0f,
+                width: screen.Width,
+                height: screen.Height
             )
         );
         if (root is not null) node.Children.AddRange(Collect(root));
@@ -59,14 +59,16 @@ public static class SemanticsBuilder
         if (!cfg.IsLeaf)
             // Visible children only — hidden TabView pages / covered navigator routes must not be
             // announced by a screen reader (parity with focus traversal).
+        {
             foreach (var child in w.GetVisibleChildren())
                 childNodes.AddRange(Collect(child));
+        }
 
         if (!cfg.HasContent)
             return childNodes; // transparent — hoist descendants into the parent
 
         if (w.SemanticsId == 0) w.SemanticsId = _nextId++;
-        var node = new SemanticsNode(w.SemanticsId, cfg.Role, w.Bounds) {
+        var node = new SemanticsNode(id: w.SemanticsId, role: cfg.Role, bounds: w.Bounds) {
             Label = cfg.Label,
             Value = cfg.Value,
             Hint = cfg.Hint,

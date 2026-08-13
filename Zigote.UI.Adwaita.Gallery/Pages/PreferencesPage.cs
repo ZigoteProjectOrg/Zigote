@@ -11,53 +11,64 @@ public sealed class PreferencesPage : ComposedWidget
         var host = GalleryHost.Of(context);
 
         return new GalleryPage(
-            "Preferences",
-            "Pages of groups of rows — the shape every GNOME settings dialog shares.",
-            MaterialIcons.Settings
+            title: "Preferences",
+            description: "Pages of groups of rows — the shape every GNOME settings dialog shares.",
+            iconName: MaterialIcons.Settings
         ) {
             Children = {
                 Demo.Group(
-                    "The Real Thing",
+                    title: "The Real Thing",
+                    description:
                     "The gallery's own preferences — the appearance rows in it drive this window.",
-                    new AdwActionRow("Open Preferences", "Ctrl+,") {
+                    new AdwActionRow(title: "Open Preferences", subtitle: "Ctrl+,") {
                         IconName = MaterialIcons.Settings,
                         ShowChevron = true,
                         OnActivated = host.ShowPreferences,
                     },
-                    new AdwActionRow("Open a Subpage", "A dialog raised over a dialog") {
+                    new AdwActionRow(
+                        title: "Open a Subpage",
+                        subtitle: "A dialog raised over a dialog"
+                    ) {
                         IconName = MaterialIcons.OpenInNew,
                         ShowChevron = true,
                         OnActivated = ShowSubpage,
                     }
                 ),
                 Demo.Group(
-                    "Anatomy",
+                    title: "Anatomy",
+                    description:
                     "A page holds groups; a group holds rows and can carry a title, a description and a header suffix.",
-                    new AdwActionRow("Page", "Scrolls, and clamps its content to 600 px"),
-                    new AdwActionRow("Group", "A card of rows under a heading"),
-                    new AdwActionRow("Row", "Action, switch, spin, combo, entry, expander…")
+                    new AdwActionRow(
+                        title: "Page",
+                        subtitle: "Scrolls, and clamps its content to 600 px"
+                    ),
+                    new AdwActionRow(title: "Group", subtitle: "A card of rows under a heading"),
+                    new AdwActionRow(
+                        title: "Row",
+                        subtitle: "Action, switch, spin, combo, entry, expander…"
+                    )
                 ),
                 WithSuffix(host),
                 Demo.Group(
-                    "Sample Settings",
-                    null,
+                    title: "Sample Settings",
+                    description: null,
                     new AdwSwitchRow(
-                        "Automatic Updates",
-                        "Check daily on a metered connection",
-                        true
+                        title: "Automatic Updates",
+                        subtitle: "Check daily on a metered connection",
+                        value: true
                     ),
-                    new AdwComboRow("Update Channel", ["Stable", "Beta", "Nightly"]),
+                    new AdwComboRow(title: "Update Channel", items: ["Stable", "Beta", "Nightly"]),
                     new AdwSpinRow(
-                        "Keep Backups",
-                        "Days",
-                        30,
-                        1,
-                        365
+                        title: "Keep Backups",
+                        subtitle: "Days",
+                        value: 30,
+                        min: 1,
+                        max: 365
                     ),
-                    new AdwExpanderRow("Advanced", "Rarely worth changing") {
+                    new AdwExpanderRow(title: "Advanced", subtitle: "Rarely worth changing") {
                         Rows = {
                             new AdwSwitchRow("Verbose Logging"),
-                            new AdwSwitchRow("Developer Tools", value: true),
+                            new AdwSwitchRow(title: "Developer Tools", value: true),
                         },
                     }
                 ),
@@ -67,8 +78,15 @@ public sealed class PreferencesPage : ComposedWidget
 
     private static Widget WithSuffix(GalleryHost host)
     {
-        return new AdwPreferencesGroup("Header Suffix", "A group can carry an action of its own") {
-            HeaderSuffix = new AdwButton("Add", () => host.Toast("Added")) { Compact = true },
+        return new AdwPreferencesGroup(
+            title: "Header Suffix",
+            description: "A group can carry an action of its own"
+        ) {
+            HeaderSuffix =
+                new AdwButton(
+                    label: "Add",
+                    onPressed: () => host.Toast("Added")
+                ) { Compact = true },
             Rows = {
                 new AdwActionRow("First entry"),
                 new AdwActionRow("Second entry"),
@@ -79,14 +97,14 @@ public sealed class PreferencesPage : ComposedWidget
     private static void ShowSubpage()
     {
         Demo.ShowDialog(
-            "Subpage",
-            new AdwStatusPage {
+            title: "Subpage",
+            content: new AdwStatusPage {
                 IconName = MaterialIcons.Layers,
                 Title = "This Is a Subpage",
                 Description = "Dialogs stack, and the topmost one takes Escape.",
             },
-            420f,
-            340f
+            width: 420f,
+            height: 340f
         );
     }
 }

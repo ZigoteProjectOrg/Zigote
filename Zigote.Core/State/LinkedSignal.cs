@@ -2,8 +2,10 @@ namespace Zigote.Core.State;
 
 /// <summary>
 ///     A writable signal that follows a source: it holds whatever you last wrote, but as soon as any
-///     signal read by <c>compute</c> changes, it snaps back to the freshly computed value. The primitive
-///     for widget-local state that tracks a prop — a selected index that resets when the list changes, a
+///     signal read by <c>compute</c> changes, it snaps back to the freshly computed value. The
+///     primitive
+///     for widget-local state that tracks a prop — a selected index that resets when the list changes,
+///     a
 ///     draft field that reloads when the edited entity changes (Angular's <c>linkedSignal</c>).
 ///     <code>
 ///     var selected = Linked.From(() => items.Value.FirstOrDefault());  // resets when items change
@@ -12,7 +14,8 @@ namespace Zigote.Core.State;
 ///     </code>
 ///     <para>
 ///         Reads track like any signal, so computeds/effects/Watch depend on it normally. It is a
-///         <see cref="Signal{T}" /> driven by an <see cref="Effect" />, nothing more — dispose it to stop
+///         <see cref="Signal{T}" /> driven by an <see cref="Effect" />, nothing more — dispose it to
+///         stop
 ///         following (the held value stays readable and writable).
 ///     </para>
 /// </summary>
@@ -25,12 +28,15 @@ public sealed class LinkedSignal<T> : IReadableSignal<T>, IDisposable
     internal LinkedSignal(Func<T> compute, IEqualityComparer<T>? comparer)
     {
         _compute = compute;
-        _current = new Signal<T>(default!, comparer);
+        _current = new Signal<T>(initialValue: default!, comparer: comparer);
 
         // Tracked: re-runs whenever a source of `compute` changes, and each run overwrites whatever was
         // written by hand since the last one. It writes a signal it never reads, so there is no cycle.
         _link = new Effect(() => _current.Value = _compute());
     }
+
+    /// <summary>Stop following the source. The current value remains readable and writable.</summary>
+    public void Dispose() => _link.Dispose();
 
     /// <summary>Get: tracked read. Set: manual override, kept until the next source change.</summary>
     public T Value
@@ -53,34 +59,16 @@ public sealed class LinkedSignal<T> : IReadableSignal<T>, IDisposable
         remove => _current.Changed -= value;
     }
 
-    /// <summary>Stop following the source. The current value remains readable and writable.</summary>
-    public void Dispose()
-    {
-        _link.Dispose();
-    }
-
     /// <summary>Read the current value without subscribing the running reaction.</summary>
-    public T Peek()
-    {
-        return _current.Peek();
-    }
+    public T Peek() => _current.Peek();
 
     /// <summary>Drop a manual override now, without waiting for the source to change.</summary>
-    public void Reset()
-    {
-        Reactive.Sync(() => _current.Value = Reactive.Untracked(_compute));
-    }
+    public void Reset() => Reactive.Sync(() => _current.Value = Reactive.Untracked(_compute));
 
     /// <summary>Subscribe and immediately invoke <paramref name="listener" /> with the current value.</summary>
-    public IDisposable Subscribe(Action<T> listener)
-    {
-        return _current.Subscribe(listener);
-    }
+    public IDisposable Subscribe(Action<T> listener) => _current.Subscribe(listener);
 
-    public override string ToString()
-    {
-        return $"Linked({_current})";
-    }
+    public override string ToString() => $"Linked({_current})";
 }
 
 public static class Linked
@@ -89,8 +77,6 @@ public static class Linked
     ///     A writable signal seeded (and re-seeded) by <paramref name="compute" /> — see
     ///     <see cref="LinkedSignal{T}" />. Dependencies are tracked automatically, like a computed.
     /// </summary>
-    public static LinkedSignal<T> From<T>(Func<T> compute, IEqualityComparer<T>? comparer = null)
-    {
-        return new LinkedSignal<T>(compute, comparer);
-    }
+    public static LinkedSignal<T> From<T>(Func<T> compute, IEqualityComparer<T>? comparer = null) =>
+        new(compute: compute, comparer: comparer);
 }

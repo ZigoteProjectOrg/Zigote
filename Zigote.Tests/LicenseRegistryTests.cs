@@ -15,11 +15,14 @@ public class LicenseRegistryTests
     {
         var entries = LicenseRegistry.Collect();
 
-        Assert.Contains(entries, e => e is { Component: "Zigote", License: "MIT" });
-        Assert.Contains(entries, e => e.Component == "SDL3");
-        Assert.Contains(entries, e => e.Component == "FreeType");
-        Assert.Contains(entries, e => e.Component == "wgpu-native");
-        Assert.Contains(entries, e => e.Component == "meshoptimizer");
+        Assert.Contains(
+            collection: entries,
+            filter: e => e is { Component: "Zigote", License: "MIT" }
+        );
+        Assert.Contains(collection: entries, filter: e => e.Component == "SDL3");
+        Assert.Contains(collection: entries, filter: e => e.Component == "FreeType");
+        Assert.Contains(collection: entries, filter: e => e.Component == "wgpu-native");
+        Assert.Contains(collection: entries, filter: e => e.Component == "meshoptimizer");
     }
 
     [Fact]
@@ -28,31 +31,47 @@ public class LicenseRegistryTests
         FontLicenses.EnsureRegistered();
         var entries = LicenseRegistry.Collect();
 
-        var inter = Assert.Single(entries, e => e.Component.StartsWith("Inter"));
-        Assert.Contains("SIL OPEN FONT LICENSE", inter.Text);
-        var icons = Assert.Single(entries, e => e.Component.StartsWith("Material Icons"));
-        Assert.Contains("Apache License", icons.Text);
-        Assert.Contains(
-            entries,
-            e => e.Component.StartsWith("Iosevka") && e.Text.Contains("Renzhi Li")
+        var inter = Assert.Single(
+            collection: entries,
+            predicate: e => e.Component.StartsWith("Inter")
         );
-        Assert.Contains(entries, e => e.Component.StartsWith("Noto Emoji"));
+        Assert.Contains(expectedSubstring: "SIL OPEN FONT LICENSE", actualString: inter.Text);
+        var icons = Assert.Single(
+            collection: entries,
+            predicate: e => e.Component.StartsWith("Material Icons")
+        );
+        Assert.Contains(expectedSubstring: "Apache License", actualString: icons.Text);
+        Assert.Contains(
+            collection: entries,
+            filter: e => e.Component.StartsWith("Iosevka") && e.Text.Contains("Renzhi Li")
+        );
+        Assert.Contains(collection: entries, filter: e => e.Component.StartsWith("Noto Emoji"));
     }
 
     [Fact]
     public void BuildText_RendersAppEntriesAndAttributions()
     {
         LicenseRegistry.Add(
-            new LicenseEntry("MyTestGame", "Proprietary", "All rights reserved (test).")
+            new LicenseEntry(
+                Component: "MyTestGame",
+                License: "Proprietary",
+                Text: "All rights reserved (test)."
+            )
         );
 
-        var text = LicenseRegistry.BuildText("Open-source licenses");
+        string text = LicenseRegistry.BuildText("Open-source licenses");
 
-        Assert.StartsWith("Open-source licenses", text);
-        Assert.Contains("Zigote — MIT", text);
-        Assert.Contains("MyTestGame — Proprietary", text);
+        Assert.StartsWith(expectedStartString: "Open-source licenses", actualString: text);
+        Assert.Contains(expectedSubstring: "Zigote — MIT", actualString: text);
+        Assert.Contains(expectedSubstring: "MyTestGame — Proprietary", actualString: text);
         // The FTL credit line must survive into the rendered document verbatim.
-        Assert.Contains("Portions of this software are copyright © The FreeType Project", text);
-        Assert.Contains("https://github.com/jrouwe/JoltPhysics", text);
+        Assert.Contains(
+            expectedSubstring: "Portions of this software are copyright © The FreeType Project",
+            actualString: text
+        );
+        Assert.Contains(
+            expectedSubstring: "https://github.com/jrouwe/JoltPhysics",
+            actualString: text
+        );
     }
 }

@@ -25,27 +25,27 @@ public class HotPathAllocationTests
     private static Widget BuildTree()
     {
         return new ColoredBox(
-            Color.White,
-            new Padding(
-                EdgeInsets.All(8f),
-                new Column(
+            color: Color.White,
+            child: new Padding(
+                padding: EdgeInsets.All(8f),
+                child: new Column(
                     [
                         new Row(
                             [
-                                new SizedBox(24f, 24f),
-                                new SizedBox(8f, 0f),
+                                new SizedBox(width: 24f, height: 24f),
+                                new SizedBox(width: 8f, height: 0f),
                                 new Label("Toolbar"),
                             ]
                         ),
-                        new SizedBox(0f, 8f),
+                        new SizedBox(width: 0f, height: 8f),
                         new Center(new Label("Body content goes here")),
-                        new SizedBox(0f, 8f),
+                        new SizedBox(width: 0f, height: 8f),
                         new Row(
                             [
                                 new Label("Alpha"),
-                                new SizedBox(8f, 0f),
+                                new SizedBox(width: 8f, height: 0f),
                                 new Label("Beta"),
-                                new SizedBox(8f, 0f),
+                                new SizedBox(width: 8f, height: 0f),
                                 new Label("Gamma"),
                             ]
                         ),
@@ -68,23 +68,23 @@ public class HotPathAllocationTests
     {
         var root = BuildTree();
         var paint = new PaintList();
-        var c = Constraints.Tight(800f, 600f);
+        var c = Constraints.Tight(width: 800f, height: 600f);
 
         // Warm up past tiered JIT and populate the Utf8 / TextMeasure / PaintList-capacity caches.
-        for (var i = 0; i < 200; i++) Frame(root, paint, c);
+        for (int i = 0; i < 200; i++) Frame(root: root, paint: paint, c: c);
 
         // Sanity: the tree actually produced paint commands (the loop isn't a no-op).
         Assert.True(paint.Count > 0);
 
         const int frames = 500;
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var i = 0; i < frames; i++) Frame(root, paint, c);
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < frames; i++) Frame(root: root, paint: paint, c: c);
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
         Assert.True(
-            allocated == 0,
-            $"Hot path allocated {allocated} B over {frames} frames " +
-            $"({allocated / (double)frames:F2} B/frame); expected 0."
+            condition: allocated == 0,
+            userMessage: $"Hot path allocated {allocated} B over {frames} frames " +
+                         $"({allocated / (double)frames:F2} B/frame); expected 0."
         );
     }
 
@@ -95,14 +95,14 @@ public class HotPathAllocationTests
     {
         var root = new GlassGlow(
             new Padding(
-                EdgeInsets.All(8f),
-                new LiquidGlass(new Label("Glass"))
+                padding: EdgeInsets.All(8f),
+                child: new LiquidGlass(new Label("Glass"))
             )
         );
         var paint = new PaintList();
-        var c = Constraints.Tight(400f, 300f);
+        var c = Constraints.Tight(width: 400f, height: 300f);
 
-        AllocGuard.AssertZeroAlloc(() => Frame(root, paint, c));
+        AllocGuard.AssertZeroAlloc(() => Frame(root: root, paint: paint, c: c));
         Assert.True(paint.Count > 0);
     }
 }

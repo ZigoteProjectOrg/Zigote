@@ -1,25 +1,4 @@
-using System.Diagnostics;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using System.Text;
-using Zigote.Core;
-using Zigote.Core.Animation;
-using Zigote.Core.Diagnostics;
-using Zigote.Core.Engine;
-using Zigote.Core.Events;
-using Zigote.Core.Native;
-using Zigote.Core.Paint;
-using Zigote.Core.Rendering;
-using Zigote.Core.State;
-using Zigote.UI.Debug;
-using Zigote.UI.Licensing;
-using Zigote.UI.Semantics;
-using Zigote.UI.TextShaping;
-using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
-using Zigote.UI.Widgets.Controls;
-using Zigote.UI.Widgets.Focus;
-using MediaQueryData = Zigote.UI.Widgets.MediaQueryData;
 
 namespace Zigote.UI.Host;
 
@@ -48,18 +27,17 @@ public partial class App
 
         _semanticsDirty = true;
         if (SemanticsBridge != null)
+        {
             SemanticsBridge.FocusChanged(
                 widget is null
                     ? null
                     : SemanticsRoot?.Flatten()
-                        .FirstOrDefault(n => ReferenceEquals(n.Source, widget))
+                        .FirstOrDefault(n => ReferenceEquals(objA: n.Source, objB: widget))
             );
+        }
     }
 
-    public void ClearFocus()
-    {
-        RequestFocus(null);
-    }
+    public void ClearFocus() => RequestFocus(null);
 
     /// <summary>Depth-first search for the first focusable under <paramref name="widget" />.</summary>
     private static Widget? FirstFocusableIn(Widget widget)

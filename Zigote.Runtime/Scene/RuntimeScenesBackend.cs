@@ -27,7 +27,7 @@ internal sealed class RuntimeScenesBackend(RuntimeWorldBackend world, string? in
     public void Load(string scenePath, float fadeSeconds)
     {
         if (string.IsNullOrWhiteSpace(scenePath)) return;
-        _pending = (scenePath, MathF.Max(0f, fadeSeconds));
+        _pending = (scenePath, MathF.Max(x: 0f, y: fadeSeconds));
         if (_pending.Value.fade > 0f && _phase != FadePhase.Out)
         {
             // Also covers a Load arriving mid-fade-IN: flip back to Out so the alpha climbs from
@@ -40,7 +40,9 @@ internal sealed class RuntimeScenesBackend(RuntimeWorldBackend world, string? in
     public EntityHandle LoadAdditive(string scenePath)
     {
         var content = LoadContainer(scenePath);
-        return content != null ? world.IntegrateExternal(content, world.Root) : EntityHandle.None;
+        return content != null
+            ? world.IntegrateExternal(subtreeRoot: content, parentNode: world.Root)
+            : EntityHandle.None;
     }
 
     /// <summary>
@@ -52,10 +54,14 @@ internal sealed class RuntimeScenesBackend(RuntimeWorldBackend world, string? in
         switch (_phase)
         {
             case FadePhase.Out:
-                FadeAlpha = _fadeSeconds > 0f ? MathF.Min(1f, FadeAlpha + dt / _fadeSeconds) : 1f;
+                FadeAlpha = _fadeSeconds > 0f
+                    ? MathF.Min(x: 1f, y: FadeAlpha + (dt / _fadeSeconds))
+                    : 1f;
                 break;
             case FadePhase.In:
-                FadeAlpha = _fadeSeconds > 0f ? MathF.Max(0f, FadeAlpha - dt / _fadeSeconds) : 0f;
+                FadeAlpha = _fadeSeconds > 0f
+                    ? MathF.Max(x: 0f, y: FadeAlpha - (dt / _fadeSeconds))
+                    : 0f;
                 if (FadeAlpha <= 0f) _phase = FadePhase.None;
                 break;
         }
@@ -86,7 +92,7 @@ internal sealed class RuntimeScenesBackend(RuntimeWorldBackend world, string? in
         // physics/audio/VFX/ECS release and the ledger records authored nodes for play-stop restore.
         _scratch.Clear();
         var children = world.Root.Children;
-        for (var i = 0; i < children.Count; i++)
+        for (int i = 0; i < children.Count; i++)
         {
             var h = new EntityHandle((uint)children[i].Id);
             if (world.IsAlive(h)) _scratch.Add(h);
@@ -94,7 +100,7 @@ internal sealed class RuntimeScenesBackend(RuntimeWorldBackend world, string? in
 
         foreach (var h in _scratch) world.DestroyNow(h);
 
-        world.IntegrateExternal(content, world.Root);
+        world.IntegrateExternal(subtreeRoot: content, parentNode: world.Root);
         Current = path;
     }
 

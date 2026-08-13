@@ -92,7 +92,7 @@ public class Card(Widget? child = null) : ComposedWidget
             Fill = _color ?? theme.Surface,
             BorderColor = _bordered ? theme.Separator : Core.Color.Transparent,
             Radius = _radius ?? theme.CardRadius,
-            Child = new LayoutPadding(padding, _child),
+            Child = new LayoutPadding(padding: padding, child: _child),
         };
     }
 

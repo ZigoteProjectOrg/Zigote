@@ -26,18 +26,18 @@ public struct GradientStop
 /// </summary>
 public sealed class ColorGradient
 {
-    public ColorGradient()
-    {
-        Stops = [new GradientStop(0f, Color.Black), new GradientStop(1f, Color.White)];
-    }
+    public ColorGradient() => Stops = [
+        new GradientStop(position: 0f, color: Color.Black),
+        new GradientStop(position: 1f, color: Color.White),
+    ];
 
     public ColorGradient(IEnumerable<GradientStop> stops)
     {
         Stops = [.. stops];
         if (Stops.Count == 0)
         {
-            Stops.Add(new GradientStop(0f, Color.Black));
-            Stops.Add(new GradientStop(1f, Color.White));
+            Stops.Add(new GradientStop(position: 0f, color: Color.Black));
+            Stops.Add(new GradientStop(position: 1f, color: Color.White));
         }
 
         Sort();
@@ -49,10 +49,7 @@ public sealed class ColorGradient
     ///     Re-sort the stops by ascending position. Call after mutating a stop's
     ///     <see cref="GradientStop.Position" />.
     /// </summary>
-    public void Sort()
-    {
-        Stops.Sort(static (a, b) => a.Position.CompareTo(b.Position));
-    }
+    public void Sort() => Stops.Sort(static (a, b) => a.Position.CompareTo(b.Position));
 
     /// <summary>
     ///     Linearly interpolate the ramp color at <paramref name="t" /> (0..1). Assumes the stops are
@@ -60,25 +57,25 @@ public sealed class ColorGradient
     /// </summary>
     public Color Sample(float t)
     {
-        var n = Stops.Count;
+        int n = Stops.Count;
         if (n == 0) return Color.Black;
         if (n == 1) return Stops[0].Color;
 
-        t = Math.Clamp(t, 0f, 1f);
+        t = Math.Clamp(value: t, min: 0f, max: 1f);
 
         // Before the first / after the last stop: clamp to the endpoint color.
         if (t <= Stops[0].Position) return Stops[0].Color;
         if (t >= Stops[n - 1].Position) return Stops[n - 1].Color;
 
-        for (var i = 0; i < n - 1; i++)
+        for (int i = 0; i < n - 1; i++)
         {
             var a = Stops[i];
             var b = Stops[i + 1];
             if (t < a.Position || t > b.Position) continue;
 
-            var span = b.Position - a.Position;
-            var f = span > 1e-6f ? (t - a.Position) / span : 0f;
-            return LerpColor(a.Color, b.Color, f);
+            float span = b.Position - a.Position;
+            float f = span > 1e-6f ? (t - a.Position) / span : 0f;
+            return LerpColor(a: a.Color, b: b.Color, f: f);
         }
 
         return Stops[n - 1].Color;
@@ -87,18 +84,15 @@ public sealed class ColorGradient
     private static Color LerpColor(Color a, Color b, float f)
     {
         return new Color(
-            a.R + (b.R - a.R) * f,
-            a.G + (b.G - a.G) * f,
-            a.B + (b.B - a.B) * f,
-            a.A + (b.A - a.A) * f
+            r: a.R + ((b.R - a.R) * f),
+            g: a.G + ((b.G - a.G) * f),
+            b: a.B + ((b.B - a.B) * f),
+            a: a.A + ((b.A - a.A) * f)
         );
     }
 
     /// <summary>A deep copy — independent stop list — so edits don't alias an externally-held gradient.</summary>
-    public ColorGradient Clone()
-    {
-        return new ColorGradient(Stops);
-    }
+    public ColorGradient Clone() => new(Stops);
 }
 
 /// <summary>
@@ -120,12 +114,6 @@ public sealed class GradientEditor : Widget
     private const float CheckerSize = 6f;
     private const int RampPixels = 256; // internal raster width; AddImage scales to bounds
     private const double DoubleClickSeconds = 0.35;
-
-    // Effective metrics. A 12×14 colour stop is a mouse affordance; on a phone the handle grows and
-    // the pick tolerance grows further still, so a fingertip lands on the stop it aimed at.
-    private float HalfW => _compact ? 10f : HandleHalfWidth;
-
-    private float StripH => _compact ? 24f : HandleStripHeight;
 
     private bool _compact;
     private bool _draggingStop;
@@ -150,6 +138,12 @@ public sealed class GradientEditor : Widget
         OnChanged = onChanged;
     }
 
+    // Effective metrics. A 12×14 colour stop is a mouse affordance; on a phone the handle grows and
+    // the pick tolerance grows further still, so a fingertip lands on the stop it aimed at.
+    private float HalfW => _compact ? 10f : HandleHalfWidth;
+
+    private float StripH => _compact ? 24f : HandleStripHeight;
+
     public Action<ColorGradient>? OnChanged { get; set; }
 
     /// <summary>The gradient being edited (mutated in place). Read-only handle for callers.</summary>
@@ -160,12 +154,12 @@ public sealed class GradientEditor : Widget
     public override int DebugStateHash()
     {
         return HashCode.Combine(
-            Gradient.Stops.Count,
-            _selected,
-            _draggingStop,
-            Focused,
-            Bounds.X,
-            Bounds.Width
+            value1: Gradient.Stops.Count,
+            value2: _selected,
+            value3: _draggingStop,
+            value4: Focused,
+            value5: Bounds.X,
+            value6: Bounds.Width
         );
     }
 
@@ -175,9 +169,9 @@ public sealed class GradientEditor : Widget
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
         _compact = TouchMetrics.IsCompact;
-        var rawW = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 240f;
-        var h = RampHeight + Gap + StripH;
-        var sz = c.Constrain(new Size(rawW, h));
+        float rawW = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 240f;
+        float h = RampHeight + Gap + StripH;
+        var sz = c.Constrain(new Size(width: rawW, height: h));
         _measureW = sz.Width;
         _measureH = sz.Height;
         return sz;
@@ -186,19 +180,19 @@ public sealed class GradientEditor : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _measureW,
-            _measureH
+            x: origin.X,
+            y: origin.Y,
+            width: _measureW,
+            height: _measureH
         );
         // Inset the ramp by the handle half-width so a stop at t=0 or t=1 stays fully on-screen.
-        var rampX = Bounds.X + HalfW;
-        var rampW = MathF.Max(1f, _measureW - HalfW * 2f);
+        float rampX = Bounds.X + HalfW;
+        float rampW = MathF.Max(x: 1f, y: _measureW - (HalfW * 2f));
         _rampRect = new Rect(
-            rampX,
-            Bounds.Y,
-            rampW,
-            RampHeight
+            x: rampX,
+            y: Bounds.Y,
+            width: rampW,
+            height: RampHeight
         );
     }
 
@@ -208,113 +202,116 @@ public sealed class GradientEditor : Widget
     {
         if (!paint.IsVisible(Bounds)) return;
 
-        PaintCheckerboard(paint, _rampRect);
+        PaintCheckerboard(paint: paint, r: _rampRect);
 
         EnsureRamp();
         if (_rampPixels is not null)
+        {
             paint.AddImage(
-                _rampRect,
-                RampPixels,
-                1,
-                _rampPixels
+                bounds: _rampRect,
+                pixelWidth: RampPixels,
+                pixelHeight: 1,
+                pixels: _rampPixels
             );
+        }
 
-        paint.AddBorder(_rampRect, _theme.Separator, Radii.Sm);
+        paint.AddBorder(bounds: _rampRect, color: _theme.Separator, radius: Radii.Sm);
 
         PaintHandles(paint);
 
         if (Focused)
-            paint.AddFocusRing(_rampRect, Radii.Sm, _theme);
+            paint.AddFocusRing(bounds: _rampRect, radius: Radii.Sm, theme: _theme);
     }
 
     private void PaintCheckerboard(PaintList paint, Rect r)
     {
-        var light = new Color(0.78f, 0.78f, 0.78f);
-        var dark = new Color(0.55f, 0.55f, 0.55f);
-        paint.AddRect(r, light, Radii.Sm);
+        var light = new Color(r: 0.78f, g: 0.78f, b: 0.78f);
+        var dark = new Color(r: 0.55f, g: 0.55f, b: 0.55f);
+        paint.AddRect(bounds: r, color: light, radius: Radii.Sm);
 
-        var cols = (int)MathF.Ceiling(r.Width / CheckerSize);
-        var rows = (int)MathF.Ceiling(r.Height / CheckerSize);
-        for (var row = 0; row < rows; row++)
-        for (var col = 0; col < cols; col++)
+        int cols = (int)MathF.Ceiling(r.Width / CheckerSize);
+        int rows = (int)MathF.Ceiling(r.Height / CheckerSize);
+        for (int row = 0; row < rows; row++)
+        for (int col = 0; col < cols; col++)
         {
             if ((row + col) % 2 == 0) continue;
-            var x = r.X + col * CheckerSize;
-            var y = r.Y + row * CheckerSize;
-            var w = MathF.Min(CheckerSize, r.Right - x);
-            var h = MathF.Min(CheckerSize, r.Bottom - y);
+            float x = r.X + (col * CheckerSize);
+            float y = r.Y + (row * CheckerSize);
+            float w = MathF.Min(x: CheckerSize, y: r.Right - x);
+            float h = MathF.Min(x: CheckerSize, y: r.Bottom - y);
             if (w <= 0f || h <= 0f) continue;
             paint.AddRect(
-                new Rect(
-                    x,
-                    y,
-                    w,
-                    h
+                bounds: new Rect(
+                    x: x,
+                    y: y,
+                    width: w,
+                    height: h
                 ),
-                dark
+                color: dark
             );
         }
     }
 
     private void PaintHandles(PaintList paint)
     {
-        var stripY = _rampRect.Bottom + Gap;
+        float stripY = _rampRect.Bottom + Gap;
         var stops = Gradient.Stops;
-        for (var i = 0; i < stops.Count; i++)
+        for (int i = 0; i < stops.Count; i++)
         {
-            var cx = StopCenterX(stops[i].Position);
-            var selected = i == _selected;
+            float cx = StopCenterX(stops[i].Position);
+            bool selected = i == _selected;
 
             // Triangle marker pointing up at the ramp, built from narrowing dabs (flat, AA-free).
-            var tipY = stripY;
+            float tipY = stripY;
             var fill = stops[i].Color.A > 0.02f ? stops[i].Color.WithAlpha(1f) : Color.White;
             var border = selected ? _theme.Primary : _theme.Separator;
 
             const int steps = 7;
-            for (var s = 0; s < steps; s++)
+            for (int s = 0; s < steps; s++)
             {
-                var t = (s + 0.5f) / steps; // 0 at tip, 1 at base
-                var half = HalfW * t;
-                var y = tipY + t * StripH;
-                var thickness = StripH / steps + 1f;
+                float t = (s + 0.5f) / steps; // 0 at tip, 1 at base
+                float half = HalfW * t;
+                float y = tipY + (t * StripH);
+                float thickness = (StripH / steps) + 1f;
                 paint.AddRect(
-                    new Rect(
-                        cx - half,
-                        y,
-                        MathF.Max(half * 2f, 1f),
-                        thickness
+                    bounds: new Rect(
+                        x: cx - half,
+                        y: y,
+                        width: MathF.Max(x: half * 2f, y: 1f),
+                        height: thickness
                     ),
-                    fill
+                    color: fill
                 );
             }
 
             // Outline: base bar + a hairline frame so the marker reads against any ramp color.
             var baseRect = new Rect(
-                cx - HalfW,
-                stripY + StripH - 2f,
-                HalfW * 2f,
-                2f
+                x: cx - HalfW,
+                y: stripY + StripH - 2f,
+                width: HalfW * 2f,
+                height: 2f
             );
-            paint.AddRect(baseRect, border);
+            paint.AddRect(bounds: baseRect, color: border);
             if (selected)
+            {
                 paint.AddBorder(
-                    new Rect(
-                        cx - HalfW - 1f,
-                        stripY,
-                        HalfW * 2f + 2f,
-                        StripH
+                    bounds: new Rect(
+                        x: cx - HalfW - 1f,
+                        y: stripY,
+                        width: (HalfW * 2f) + 2f,
+                        height: StripH
                     ),
-                    _theme.Primary,
-                    0f,
-                    1.5f
+                    color: _theme.Primary,
+                    radius: 0f,
+                    width: 1.5f
                 );
+            }
         }
     }
 
-    private float StopCenterX(float position)
-    {
-        return _rampRect.X + Math.Clamp(position, 0f, 1f) * _rampRect.Width;
-    }
+    private float StopCenterX(float position) => _rampRect.X +
+                                                 (Math.Clamp(value: position, min: 0f, max: 1f) *
+                                                  _rampRect.Width);
 
     // ── Ramp rasterisation ──────────────────────────────────────────────────
 
@@ -326,12 +323,12 @@ public sealed class GradientEditor : Widget
 
     private void RasterizeRamp()
     {
-        var px = _rampPixels!;
-        for (var x = 0; x < RampPixels; x++)
+        byte[] px = _rampPixels!;
+        for (int x = 0; x < RampPixels; x++)
         {
-            var t = RampPixels > 1 ? x / (float)(RampPixels - 1) : 0f;
+            float t = RampPixels > 1 ? x / (float)(RampPixels - 1) : 0f;
             var c = Gradient.Sample(t);
-            var idx = x * 4;
+            int idx = x * 4;
             px[idx] = ToByte(c.R);
             px[idx + 1] = ToByte(c.G);
             px[idx + 2] = ToByte(c.B);
@@ -339,10 +336,8 @@ public sealed class GradientEditor : Widget
         }
     }
 
-    private static byte ToByte(float v)
-    {
-        return (byte)(Math.Clamp(v, 0f, 1f) * 255f + 0.5f);
-    }
+    private static byte ToByte(float v) =>
+        (byte)((Math.Clamp(value: v, min: 0f, max: 1f) * 255f) + 0.5f);
 
     // ── Hit-testing ─────────────────────────────────────────────────────────
 
@@ -352,20 +347,22 @@ public sealed class GradientEditor : Widget
     /// </summary>
     private int HandleAt(float x, float y)
     {
-        var stripTop = _rampRect.Bottom + Gap;
-        var stripBottom = stripTop + StripH;
+        float stripTop = _rampRect.Bottom + Gap;
+        float stripBottom = stripTop + StripH;
         if (y < stripTop - 2f || y > stripBottom + 2f)
             // Also allow grabbing along the whole strip height with a slightly wider band.
+        {
             if (y < _rampRect.Bottom || y > stripBottom + 4f)
                 return -1;
+        }
 
-        var best = -1;
-        var bestDist = _compact ? TouchMetrics.MinTarget / 2f : HalfW + 4f;
+        int best = -1;
+        float bestDist = _compact ? TouchMetrics.MinTarget / 2f : HalfW + 4f;
         var stops = Gradient.Stops;
-        for (var i = 0; i < stops.Count; i++)
+        for (int i = 0; i < stops.Count; i++)
         {
-            var cx = StopCenterX(stops[i].Position);
-            var d = MathF.Abs(x - cx);
+            float cx = StopCenterX(stops[i].Position);
+            float d = MathF.Abs(x - cx);
             if (d < bestDist)
             {
                 bestDist = d;
@@ -382,13 +379,13 @@ public sealed class GradientEditor : Widget
     {
         App.Active?.RequestFocus(this);
 
-        var now = TimeNow();
-        var isDouble = now - _lastClickTime < DoubleClickSeconds &&
-                       MathF.Abs(point.X - _lastClickX) < 6f;
+        double now = TimeNow();
+        bool isDouble = now - _lastClickTime < DoubleClickSeconds &&
+                        MathF.Abs(point.X - _lastClickX) < 6f;
         _lastClickTime = now;
         _lastClickX = point.X;
 
-        var handle = HandleAt(point.X, point.Y);
+        int handle = HandleAt(x: point.X, y: point.Y);
         if (handle >= 0)
         {
             _selected = handle;
@@ -431,20 +428,14 @@ public sealed class GradientEditor : Widget
     }
 
     /// <summary>The press was taken over (pinch, app background): drop the held stop.</summary>
-    public override void OnPointerCancel()
-    {
-        OnPointerUp(Offset.Zero);
-    }
+    public override void OnPointerCancel() => OnPointerUp(Offset.Zero);
 
     /// <summary>
     ///     A held stop owns the gesture: the finger is moving it along the ramp, and a page that
     ///     stole the vertical half would drop the stop mid-drag. A press that grabbed no stop
     ///     claims nothing.
     /// </summary>
-    public override bool CanTouchDrag(bool vertical)
-    {
-        return _draggingStop;
-    }
+    public override bool CanTouchDrag(bool vertical) => _draggingStop;
 
     public override void OnRightClick(Offset point)
     {
@@ -474,7 +465,7 @@ public sealed class GradientEditor : Widget
     private float RampParam(float screenX)
     {
         return _rampRect.Width > 0f
-            ? Math.Clamp((screenX - _rampRect.X) / _rampRect.Width, 0f, 1f)
+            ? Math.Clamp(value: (screenX - _rampRect.X) / _rampRect.Width, min: 0f, max: 1f)
             : 0f;
     }
 
@@ -487,12 +478,12 @@ public sealed class GradientEditor : Widget
 
         var moved = stops[_selected];
         if (MathF.Abs(moved.Position - position) < 1e-4f) return;
-        moved.Position = Math.Clamp(position, 0f, 1f);
+        moved.Position = Math.Clamp(value: position, min: 0f, max: 1f);
         stops[_selected] = moved;
 
         // Keep sorted; track the moved stop across the re-sort so the selection follows it.
         Gradient.Sort();
-        _selected = IndexOfPosition(moved.Position, moved.Color);
+        _selected = IndexOfPosition(position: moved.Position, color: moved.Color);
 
         MarkNeedsPaint();
         OnChanged?.Invoke(Gradient);
@@ -501,16 +492,19 @@ public sealed class GradientEditor : Widget
     private int IndexOfPosition(float position, Color color)
     {
         var stops = Gradient.Stops;
-        for (var i = 0; i < stops.Count; i++)
+        for (int i = 0; i < stops.Count; i++)
+        {
             if (MathF.Abs(stops[i].Position - position) < 1e-4f &&
                 stops[i].Color.ApproxEquals(color))
                 return i;
+        }
+
         // Fallback: nearest by position.
-        var best = 0;
-        var bestDist = float.MaxValue;
-        for (var i = 0; i < stops.Count; i++)
+        int best = 0;
+        float bestDist = float.MaxValue;
+        for (int i = 0; i < stops.Count; i++)
         {
-            var d = MathF.Abs(stops[i].Position - position);
+            float d = MathF.Abs(stops[i].Position - position);
             if (d < bestDist)
             {
                 bestDist = d;
@@ -523,11 +517,11 @@ public sealed class GradientEditor : Widget
 
     private void AddStopAt(float position)
     {
-        position = Math.Clamp(position, 0f, 1f);
+        position = Math.Clamp(value: position, min: 0f, max: 1f);
         var color = Gradient.Sample(position);
-        Gradient.Stops.Add(new GradientStop(position, color));
+        Gradient.Stops.Add(new GradientStop(position: position, color: color));
         Gradient.Sort();
-        _selected = IndexOfPosition(position, color);
+        _selected = IndexOfPosition(position: position, color: color);
         MarkNeedsPaint();
         OnChanged?.Invoke(Gradient);
     }
@@ -539,7 +533,7 @@ public sealed class GradientEditor : Widget
         if (stops.Count <= 2) return; // always keep a valid two-endpoint ramp
 
         stops.RemoveAt(_selected);
-        _selected = Math.Clamp(_selected, 0, stops.Count - 1);
+        _selected = Math.Clamp(value: _selected, min: 0, max: stops.Count - 1);
         MarkNeedsPaint();
         OnChanged?.Invoke(Gradient);
     }
@@ -554,23 +548,23 @@ public sealed class GradientEditor : Widget
         _picker?.Dismiss();
 
         // Anchor the popover at the handle, in screen space.
-        var cx = StopCenterX(stops[stopIndex].Position);
+        float cx = StopCenterX(stops[stopIndex].Position);
         var anchor = new Rect(
-            cx - HalfW,
-            _rampRect.Bottom + Gap,
-            HalfW * 2f,
-            StripH
+            x: cx - HalfW,
+            y: _rampRect.Bottom + Gap,
+            width: HalfW * 2f,
+            height: StripH
         );
 
         // Track the stop by identity-ish key (position+color at open) so it survives re-sorts.
-        var openPos = stops[stopIndex].Position;
+        float openPos = stops[stopIndex].Position;
         var openColor = stops[stopIndex].Color;
 
         var picker = new ColorPicker(
-            openColor,
-            c =>
+            initial: openColor,
+            onChanged: c =>
             {
-                var idx = IndexOfPosition(openPos, openColor);
+                int idx = IndexOfPosition(position: openPos, color: openColor);
                 var list = Gradient.Stops;
                 if (idx < 0 || idx >= list.Count) return;
                 var st = list[idx];
@@ -584,12 +578,9 @@ public sealed class GradientEditor : Widget
             }
         );
 
-        _picker = new Popover(picker, anchor) { PreferredSide = OverlaySide.Below };
+        _picker = new Popover(child: picker, anchor: anchor) { PreferredSide = OverlaySide.Below };
         _picker.Show();
     }
 
-    private static double TimeNow()
-    {
-        return Environment.TickCount64 / 1000.0;
-    }
+    private static double TimeNow() => Environment.TickCount64 / 1000.0;
 }

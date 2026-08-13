@@ -20,37 +20,37 @@ public sealed class FpsChip : Widget
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        _size = c.Constrain(new Size(56f, 22f));
+        _size = c.Constrain(new Size(width: 56f, height: 22f));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
     public override void Paint(PaintList paint)
     {
-        var dt = App.Active?.DeltaTime ?? 0f;
-        var fps = dt > 0f ? 1f / dt : 0f;
+        float dt = App.Active?.DeltaTime ?? 0f;
+        float fps = dt > 0f ? 1f / dt : 0f;
         var color = fps >= 50f ? _theme.Success : fps >= 25f ? _theme.Warning : _theme.Error;
 
-        var text = $"{fps:F0} fps";
-        var fs = _theme.FontSizeCaption;
-        var tw = TextMeasure.Width(text, fs, FontWeight.Medium);
-        var x = Bounds.Right - tw - 2f;
-        var y = Bounds.Y + (Bounds.Height - fs) / 2f + fs * 0.8f;
+        string text = $"{fps:F0} fps";
+        float fs = _theme.FontSizeCaption;
+        float tw = TextMeasure.Width(text: text, fontSize: fs, weight: FontWeight.Medium);
+        float x = Bounds.Right - tw - 2f;
+        float y = Bounds.Y + ((Bounds.Height - fs) / 2f) + (fs * 0.8f);
         paint.AddText(
-            text,
-            x,
-            y,
-            color,
-            fs,
+            text: text,
+            baselineX: x,
+            baselineY: y,
+            color: color,
+            fontSize: fs,
             fontWeight: FontWeight.Medium
         );
     }

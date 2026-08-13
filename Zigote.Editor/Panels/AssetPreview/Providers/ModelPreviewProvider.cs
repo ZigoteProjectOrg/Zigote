@@ -16,18 +16,15 @@ public sealed class ModelPreviewProvider : IAssetPreviewProvider
     private static readonly string[] Exts =
         [".zmesh", ".gltf", ".glb", ".fbx", ".obj", ".dae", ".ply", ".stl"];
 
-    public bool CanHandle(string ext)
-    {
-        return Array.IndexOf(Exts, ext) >= 0;
-    }
+    public bool CanHandle(string ext) => Array.IndexOf(array: Exts, value: ext) >= 0;
 
     public Widget BuildPreview(string path, ThemeData theme)
     {
         var mesh = MeshLoader.Load(path);
         if (mesh is { } m && m.TriangleCount > 0)
-            return new MeshPreviewWidget(m, theme);
+            return new MeshPreviewWidget(mesh: m, theme: theme);
 
-        return new ModelPlaceholderWidget(path, theme);
+        return new ModelPlaceholderWidget(path: path, theme: theme);
     }
 
     public IEnumerable<(string Key, string Value)> ExtraMetadata(string path)
@@ -41,12 +38,12 @@ public sealed class ModelPreviewProvider : IAssetPreviewProvider
             yield break;
         }
 
-        var ext = Path.GetExtension(path).ToLowerInvariant();
+        string ext = Path.GetExtension(path).ToLowerInvariant();
 
         // Cheap text-format counts where possible; binary formats stay opaque.
         if (ext == ".obj")
         {
-            var (verts, faces) = CountObj(path);
+            (int verts, int faces) = CountObj(path);
             if (verts > 0) yield return ("Vertices", verts.ToString());
             if (faces > 0) yield return ("Faces", faces.ToString());
         }
@@ -54,15 +51,20 @@ public sealed class ModelPreviewProvider : IAssetPreviewProvider
 
     private static (int Verts, int Faces) CountObj(string path)
     {
-        var verts = 0;
-        var faces = 0;
+        int verts = 0;
+        int faces = 0;
         try
         {
             using var reader = new StreamReader(path);
             string? line;
             while ((line = reader.ReadLine()) is not null)
-                if (line.StartsWith("v ", StringComparison.Ordinal)) verts++;
-                else if (line.StartsWith("f ", StringComparison.Ordinal)) faces++;
+            {
+                if (line.StartsWith(value: "v ", comparisonType: StringComparison.Ordinal)) verts++;
+                else if (line.StartsWith(
+                             value: "f ",
+                             comparisonType: StringComparison.Ordinal
+                         )) faces++;
+            }
         }
         catch
         {
@@ -89,18 +91,18 @@ internal sealed class ModelPlaceholderWidget : Widget
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        var w = float.IsInfinity(c.MaxWidth) ? 240f : c.MaxWidth;
-        _size = c.Constrain(new Size(w, 200f));
+        float w = float.IsInfinity(c.MaxWidth) ? 240f : c.MaxWidth;
+        _size = c.Constrain(new Size(width: w, height: 200f));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
@@ -108,43 +110,43 @@ internal sealed class ModelPlaceholderWidget : Widget
     {
         if (!paint.IsVisible(Bounds)) return;
 
-        paint.AddRect(Bounds, _theme.SurfaceAlt, 6f);
-        paint.AddBorder(Bounds, _theme.Separator, 6f);
+        paint.AddRect(bounds: Bounds, color: _theme.SurfaceAlt, radius: 6f);
+        paint.AddBorder(bounds: Bounds, color: _theme.Separator, radius: 6f);
 
         var iconBox = new Rect(
-            Bounds.X,
-            Bounds.Y + Bounds.Height * 0.18f,
-            Bounds.Width,
-            64f
+            x: Bounds.X,
+            y: Bounds.Y + (Bounds.Height * 0.18f),
+            width: Bounds.Width,
+            height: 64f
         );
         Icons.Draw(
-            paint,
-            Icons.Cube,
-            iconBox,
-            _theme.Primary.WithAlpha(0.85f),
-            56f
+            paint: paint,
+            glyph: Icons.Cube,
+            box: iconBox,
+            color: _theme.Primary.WithAlpha(0.85f),
+            size: 56f
         );
 
-        var label = _ext.TrimStart('.').ToUpperInvariant() + " model";
-        var lx = Bounds.X + (Bounds.Width - label.Length * 6.5f) * 0.5f;
-        var ly = iconBox.Bottom + 18f;
+        string label = _ext.TrimStart('.').ToUpperInvariant() + " model";
+        float lx = Bounds.X + ((Bounds.Width - (label.Length * 6.5f)) * 0.5f);
+        float ly = iconBox.Bottom + 18f;
         paint.AddText(
-            label,
-            lx,
-            ly,
-            _theme.OnSurface,
-            _theme.FontSizeBody
+            text: label,
+            baselineX: lx,
+            baselineY: ly,
+            color: _theme.OnSurface,
+            fontSize: _theme.FontSizeBody
         );
 
         const string note = "3D preview requires the renderer (currently gated)";
-        var nx = Bounds.X + (Bounds.Width - note.Length * 5.0f) * 0.5f;
-        var ny = ly + 20f;
+        float nx = Bounds.X + ((Bounds.Width - (note.Length * 5.0f)) * 0.5f);
+        float ny = ly + 20f;
         paint.AddText(
-            note,
-            MathF.Max(Bounds.X + 8f, nx),
-            ny,
-            _theme.TextMuted,
-            _theme.FontSizeCaption
+            text: note,
+            baselineX: MathF.Max(x: Bounds.X + 8f, y: nx),
+            baselineY: ny,
+            color: _theme.TextMuted,
+            fontSize: _theme.FontSizeCaption
         );
     }
 }

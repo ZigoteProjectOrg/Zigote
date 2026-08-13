@@ -23,24 +23,24 @@ public static class FontLicenses
     {
         return [
             new LicenseEntry(
-                "Inter (bundled font)",
-                "SIL Open Font License 1.1",
-                Resource("Zigote.UI.Fonts.Inter.OFL")
+                Component: "Inter (bundled font)",
+                License: "SIL Open Font License 1.1",
+                Text: Resource("Zigote.UI.Fonts.Inter.OFL")
             ) { Homepage = "https://rsms.me/inter/" },
             new LicenseEntry(
-                "Iosevka (bundled font)",
-                "SIL Open Font License 1.1",
-                Resource("Zigote.UI.Fonts.Iosevka.OFL")
+                Component: "Iosevka (bundled font)",
+                License: "SIL Open Font License 1.1",
+                Text: Resource("Zigote.UI.Fonts.Iosevka.OFL")
             ) { Homepage = "https://typeof.net/Iosevka/" },
             new LicenseEntry(
-                "Noto Emoji (bundled font)",
-                "SIL Open Font License 1.1",
-                Resource("Zigote.UI.Fonts.NotoEmoji.OFL")
+                Component: "Noto Emoji (bundled font)",
+                License: "SIL Open Font License 1.1",
+                Text: Resource("Zigote.UI.Fonts.NotoEmoji.OFL")
             ) { Homepage = "https://fonts.google.com/noto/specimen/Noto+Emoji" },
             new LicenseEntry(
-                "Material Icons (bundled font)",
-                "Apache-2.0",
-                Resource("Zigote.UI.Fonts.MaterialIcons.LICENSE")
+                Component: "Material Icons (bundled font)",
+                License: "Apache-2.0",
+                Text: Resource("Zigote.UI.Fonts.MaterialIcons.LICENSE")
             ) { Homepage = "https://github.com/google/material-design-icons" },
         ];
     }

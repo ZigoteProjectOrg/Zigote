@@ -21,8 +21,8 @@ public sealed class CollisionWorld2D(float cellSize = 2f)
     private const float DirEpsilon = 1e-8f;
 
     private readonly List<uint> _candidates = [];
-    private readonly Dictionary<long, List<uint>> _cells = new();
     private readonly float _cellSize = cellSize > 0f ? cellSize : 2f;
+    private readonly Dictionary<long, List<uint>> _cells = new();
     private readonly Dictionary<uint, Collider> _colliders = new();
     private uint _nextId = 1;
     private int _stamp;
@@ -54,7 +54,7 @@ public sealed class CollisionWorld2D(float cellSize = 2f)
         var col = new Collider {
             Shape = ColliderShape2D.Circle,
             Center = center,
-            HalfExtents = new Vec2(radius, radius),
+            HalfExtents = new Vec2(x: radius, y: radius),
             Radius = radius,
             Layer = layer,
             IsTrigger = isTrigger,
@@ -65,27 +65,22 @@ public sealed class CollisionWorld2D(float cellSize = 2f)
 
     public void Remove(ColliderHandle handle)
     {
-        if (!_colliders.TryGetValue(handle.Id, out var col)) return;
-        RemoveFromCells(handle.Id, col);
+        if (!_colliders.TryGetValue(key: handle.Id, value: out var col)) return;
+        RemoveFromCells(id: handle.Id, col: col);
         _colliders.Remove(handle.Id);
     }
 
-    public bool IsAlive(ColliderHandle handle)
-    {
-        return _colliders.ContainsKey(handle.Id);
-    }
+    public bool IsAlive(ColliderHandle handle) => _colliders.ContainsKey(handle.Id);
 
-    public Vec2 GetPosition(ColliderHandle handle)
-    {
-        return _colliders.TryGetValue(handle.Id, out var col) ? col.Center : Vec2.Zero;
-    }
+    public Vec2 GetPosition(ColliderHandle handle) =>
+        _colliders.TryGetValue(key: handle.Id, value: out var col) ? col.Center : Vec2.Zero;
 
     public void SetPosition(ColliderHandle handle, Vec2 position)
     {
-        if (!_colliders.TryGetValue(handle.Id, out var col)) return;
+        if (!_colliders.TryGetValue(key: handle.Id, value: out var col)) return;
         col.MoveDelta += position - col.Center;
         col.Center = position;
-        Reindex(handle.Id, col);
+        Reindex(id: handle.Id, col: col);
     }
 
     /// <summary>
@@ -93,10 +88,8 @@ public sealed class CollisionWorld2D(float cellSize = 2f)
     ///     how riders are
     ///     carried.
     /// </summary>
-    public Vec2 GetMoveDelta(ColliderHandle handle)
-    {
-        return _colliders.TryGetValue(handle.Id, out var col) ? col.MoveDelta : Vec2.Zero;
-    }
+    public Vec2 GetMoveDelta(ColliderHandle handle) =>
+        _colliders.TryGetValue(key: handle.Id, value: out var col) ? col.MoveDelta : Vec2.Zero;
 
     /// <summary>Call once per fixed tick, before moving platforms, to reset every collider's move delta.</summary>
     public void BeginStep()
@@ -104,46 +97,34 @@ public sealed class CollisionWorld2D(float cellSize = 2f)
         foreach (var col in _colliders.Values) col.MoveDelta = Vec2.Zero;
     }
 
-    public object? GetUserData(ColliderHandle handle)
-    {
-        return _colliders.TryGetValue(handle.Id, out var col) ? col.UserData : null;
-    }
+    public object? GetUserData(ColliderHandle handle) =>
+        _colliders.TryGetValue(key: handle.Id, value: out var col) ? col.UserData : null;
 
-    public uint GetLayer(ColliderHandle handle)
-    {
-        return _colliders.TryGetValue(handle.Id, out var col) ? col.Layer : 0;
-    }
+    public uint GetLayer(ColliderHandle handle) =>
+        _colliders.TryGetValue(key: handle.Id, value: out var col) ? col.Layer : 0;
 
     public void SetLayer(ColliderHandle handle, uint layer)
     {
-        if (_colliders.TryGetValue(handle.Id, out var col)) col.Layer = layer;
+        if (_colliders.TryGetValue(key: handle.Id, value: out var col)) col.Layer = layer;
     }
 
-    public ColliderShape2D GetShape(ColliderHandle handle)
-    {
-        return _colliders.TryGetValue(handle.Id, out var col) ? col.Shape : ColliderShape2D.Box;
-    }
+    public ColliderShape2D GetShape(ColliderHandle handle) =>
+        _colliders.TryGetValue(key: handle.Id, value: out var col)
+            ? col.Shape
+            : ColliderShape2D.Box;
 
     /// <summary>Box half-extents; for circles, (radius, radius).</summary>
-    public Vec2 GetHalfExtents(ColliderHandle handle)
-    {
-        return _colliders.TryGetValue(handle.Id, out var col) ? col.HalfExtents : Vec2.Zero;
-    }
+    public Vec2 GetHalfExtents(ColliderHandle handle) =>
+        _colliders.TryGetValue(key: handle.Id, value: out var col) ? col.HalfExtents : Vec2.Zero;
 
-    public float GetRadius(ColliderHandle handle)
-    {
-        return _colliders.TryGetValue(handle.Id, out var col) ? col.Radius : 0f;
-    }
+    public float GetRadius(ColliderHandle handle) =>
+        _colliders.TryGetValue(key: handle.Id, value: out var col) ? col.Radius : 0f;
 
-    public bool IsTrigger(ColliderHandle handle)
-    {
-        return _colliders.TryGetValue(handle.Id, out var col) && col.IsTrigger;
-    }
+    public bool IsTrigger(ColliderHandle handle) =>
+        _colliders.TryGetValue(key: handle.Id, value: out var col) && col.IsTrigger;
 
-    public bool IsOneWay(ColliderHandle handle)
-    {
-        return _colliders.TryGetValue(handle.Id, out var col) && col.OneWayUp;
-    }
+    public bool IsOneWay(ColliderHandle handle) =>
+        _colliders.TryGetValue(key: handle.Id, value: out var col) && col.OneWayUp;
 
     // ── Overlap queries ──────────────────────────────────────────────────────
 
@@ -156,25 +137,25 @@ public sealed class CollisionWorld2D(float cellSize = 2f)
         bool includeTriggers = true)
     {
         results.Clear();
-        GatherCandidates(center - halfExtents, center + halfExtents);
-        for (var i = 0; i < _candidates.Count; i++)
+        GatherCandidates(min: center - halfExtents, max: center + halfExtents);
+        for (int i = 0; i < _candidates.Count; i++)
         {
-            var id = _candidates[i];
+            uint id = _candidates[i];
             var col = _colliders[id];
             if ((col.Layer & mask) == 0) continue;
             if (!includeTriggers && col.IsTrigger) continue;
-            var hit = col.Shape == ColliderShape2D.Box
+            bool hit = col.Shape == ColliderShape2D.Box
                 ? BoxOverlapsBox(
-                    center,
-                    halfExtents,
-                    col.Center,
-                    col.HalfExtents
+                    ca: center,
+                    ha: halfExtents,
+                    cb: col.Center,
+                    hb: col.HalfExtents
                 )
                 : BoxOverlapsCircle(
-                    center,
-                    halfExtents,
-                    col.Center,
-                    col.Radius
+                    boxCenter: center,
+                    boxHalf: halfExtents,
+                    circleCenter: col.Center,
+                    radius: col.Radius
                 );
             if (hit) results.Add(new ColliderHandle(id));
         }
@@ -186,11 +167,11 @@ public sealed class CollisionWorld2D(float cellSize = 2f)
         bool includeTriggers = true)
     {
         results.Clear();
-        var r = new Vec2(radius, radius);
-        GatherCandidates(center - r, center + r);
-        for (var i = 0; i < _candidates.Count; i++)
+        var r = new Vec2(x: radius, y: radius);
+        GatherCandidates(min: center - r, max: center + r);
+        for (int i = 0; i < _candidates.Count; i++)
         {
-            var id = _candidates[i];
+            uint id = _candidates[i];
             var col = _colliders[id];
             if ((col.Layer & mask) == 0) continue;
             if (!includeTriggers && col.IsTrigger) continue;
@@ -198,15 +179,15 @@ public sealed class CollisionWorld2D(float cellSize = 2f)
             if (col.Shape == ColliderShape2D.Box)
             {
                 hit = BoxOverlapsCircle(
-                    col.Center,
-                    col.HalfExtents,
-                    center,
-                    radius
+                    boxCenter: col.Center,
+                    boxHalf: col.HalfExtents,
+                    circleCenter: center,
+                    radius: radius
                 );
             }
             else
             {
-                var sum = radius + col.Radius;
+                float sum = radius + col.Radius;
                 hit = (col.Center - center).LengthSq() < sum * sum;
             }
 
@@ -229,20 +210,20 @@ public sealed class CollisionWorld2D(float cellSize = 2f)
         bool includeTriggers = false)
     {
         hit = default;
-        var len = direction.Length();
+        float len = direction.Length();
         if (len < DirEpsilon || maxDistance <= 0f) return false;
         var dir = direction * (1f / len);
 
-        var end = origin + dir * maxDistance;
+        var end = origin + (dir * maxDistance);
         GatherCandidates(
-            new Vec2(MathF.Min(origin.X, end.X), MathF.Min(origin.Y, end.Y)),
-            new Vec2(MathF.Max(origin.X, end.X), MathF.Max(origin.Y, end.Y))
+            min: new Vec2(x: MathF.Min(x: origin.X, y: end.X), y: MathF.Min(x: origin.Y, y: end.Y)),
+            max: new Vec2(x: MathF.Max(x: origin.X, y: end.X), y: MathF.Max(x: origin.Y, y: end.Y))
         );
 
-        var bestT = float.PositiveInfinity;
-        for (var i = 0; i < _candidates.Count; i++)
+        float bestT = float.PositiveInfinity;
+        for (int i = 0; i < _candidates.Count; i++)
         {
-            var id = _candidates[i];
+            uint id = _candidates[i];
             var col = _colliders[id];
             if ((col.Layer & mask) == 0) continue;
             if (!includeTriggers && col.IsTrigger) continue;
@@ -255,36 +236,36 @@ public sealed class CollisionWorld2D(float cellSize = 2f)
                     (dir.Y >= 0f || origin.Y < col.Center.Y + col.HalfExtents.Y - OneWayEpsilon))
                     continue;
                 if (!RayVsAabb(
-                        origin,
-                        dir,
-                        maxDistance,
-                        col.Center - col.HalfExtents,
-                        col.Center + col.HalfExtents,
-                        out t,
-                        out normal
+                        origin: origin,
+                        dir: dir,
+                        maxDist: maxDistance,
+                        min: col.Center - col.HalfExtents,
+                        max: col.Center + col.HalfExtents,
+                        t: out t,
+                        normal: out normal
                     )) continue;
                 if (col.OneWayUp && normal.Y < 0.5f) continue;
             }
             else
             {
                 if (!RayVsCircle(
-                        origin,
-                        dir,
-                        maxDistance,
-                        col.Center,
-                        col.Radius,
-                        out t,
-                        out normal
+                        origin: origin,
+                        dir: dir,
+                        maxDist: maxDistance,
+                        center: col.Center,
+                        radius: col.Radius,
+                        t: out t,
+                        normal: out normal
                     )) continue;
             }
 
             if (t >= bestT) continue;
             bestT = t;
             hit = new RayHit2D(
-                new ColliderHandle(id),
-                origin + dir * t,
-                normal,
-                t
+                collider: new ColliderHandle(id),
+                point: origin + (dir * t),
+                normal: normal,
+                distance: t
             );
         }
 
@@ -310,21 +291,27 @@ public sealed class CollisionWorld2D(float cellSize = 2f)
         Func<ColliderHandle, bool>? ignoreWhere = null)
     {
         hit = default;
-        var dist = displacement.Length();
+        float dist = displacement.Length();
         if (dist < DirEpsilon) return false;
         var dir = displacement * (1f / dist);
 
         var end = center + displacement;
         GatherCandidates(
-            new Vec2(MathF.Min(center.X, end.X), MathF.Min(center.Y, end.Y)) - halfExtents,
-            new Vec2(MathF.Max(center.X, end.X), MathF.Max(center.Y, end.Y)) + halfExtents
+            min: new Vec2(
+                x: MathF.Min(x: center.X, y: end.X),
+                y: MathF.Min(x: center.Y, y: end.Y)
+            ) - halfExtents,
+            max: new Vec2(
+                x: MathF.Max(x: center.X, y: end.X),
+                y: MathF.Max(x: center.Y, y: end.Y)
+            ) + halfExtents
         );
 
-        var bestT = float.PositiveInfinity;
-        var moverBottom = center.Y - halfExtents.Y;
-        for (var i = 0; i < _candidates.Count; i++)
+        float bestT = float.PositiveInfinity;
+        float moverBottom = center.Y - halfExtents.Y;
+        for (int i = 0; i < _candidates.Count; i++)
         {
-            var id = _candidates[i];
+            uint id = _candidates[i];
             if (id == ignore.Id) continue;
             var col = _colliders[id];
             if ((col.Layer & mask) == 0) continue;
@@ -343,56 +330,52 @@ public sealed class CollisionWorld2D(float cellSize = 2f)
                 var min = col.Center - ext;
                 var max = col.Center + ext;
                 if (RayVsAabb(
-                        center,
-                        dir,
-                        dist,
-                        min,
-                        max,
-                        out t,
-                        out normal
-                    ))
-                {
-                }
-                else if (PointInAabb(center, min, max))
+                        origin: center,
+                        dir: dir,
+                        maxDist: dist,
+                        min: min,
+                        max: max,
+                        t: out t,
+                        normal: out normal
+                    )) { }
+                else if (PointInAabb(p: center, min: min, max: max))
                 {
                     t = 0f;
-                    normal = AabbPushNormal(center, min, max);
+                    normal = AabbPushNormal(p: center, min: min, max: max);
                 }
                 else
-                {
                     continue;
-                }
 
                 if (col.OneWayUp && normal.Y < 0.5f) continue;
                 point = ClampToAabb(
-                    center + dir * t,
-                    col.Center - col.HalfExtents,
-                    col.Center + col.HalfExtents
+                    p: center + (dir * t),
+                    min: col.Center - col.HalfExtents,
+                    max: col.Center + col.HalfExtents
                 );
             }
             else
             {
                 if (!SweepVsRoundedRect(
-                        center,
-                        dir,
-                        dist,
-                        col.Center,
-                        halfExtents,
-                        col.Radius,
-                        out t,
-                        out normal
+                        origin: center,
+                        dir: dir,
+                        maxDist: dist,
+                        center: col.Center,
+                        core: halfExtents,
+                        radius: col.Radius,
+                        t: out t,
+                        normal: out normal
                     ))
                     continue;
-                point = col.Center + normal * col.Radius;
+                point = col.Center + (normal * col.Radius);
             }
 
             if (t >= bestT) continue;
             bestT = t;
             hit = new SweepHit2D(
-                new ColliderHandle(id),
-                t / dist,
-                point,
-                normal
+                collider: new ColliderHandle(id),
+                time: t / dist,
+                point: point,
+                normal: normal
             );
         }
 
@@ -403,36 +386,36 @@ public sealed class CollisionWorld2D(float cellSize = 2f)
 
     private ColliderHandle Insert(Collider col)
     {
-        var id = _nextId++;
+        uint id = _nextId++;
         _colliders[id] = col;
         ComputeCellRange(
-            col,
-            out col.MinCx,
-            out col.MinCy,
-            out col.MaxCx,
-            out col.MaxCy
+            col: col,
+            minCx: out col.MinCx,
+            minCy: out col.MinCy,
+            maxCx: out col.MaxCx,
+            maxCy: out col.MaxCy
         );
-        AddToCells(id, col);
+        AddToCells(id: id, col: col);
         return new ColliderHandle(id);
     }
 
     private void Reindex(uint id, Collider col)
     {
         ComputeCellRange(
-            col,
-            out var minCx,
-            out var minCy,
-            out var maxCx,
-            out var maxCy
+            col: col,
+            minCx: out int minCx,
+            minCy: out int minCy,
+            maxCx: out int maxCx,
+            maxCy: out int maxCy
         );
         if (minCx == col.MinCx && minCy == col.MinCy && maxCx == col.MaxCx &&
             maxCy == col.MaxCy) return;
-        RemoveFromCells(id, col);
+        RemoveFromCells(id: id, col: col);
         col.MinCx = minCx;
         col.MinCy = minCy;
         col.MaxCx = maxCx;
         col.MaxCy = maxCy;
-        AddToCells(id, col);
+        AddToCells(id: id, col: col);
     }
 
     private void ComputeCellRange(Collider col, out int minCx, out int minCy, out int maxCx,
@@ -448,21 +431,23 @@ public sealed class CollisionWorld2D(float cellSize = 2f)
 
     private void AddToCells(uint id, Collider col)
     {
-        for (var cx = col.MinCx; cx <= col.MaxCx; cx++)
-        for (var cy = col.MinCy; cy <= col.MaxCy; cy++)
+        for (int cx = col.MinCx; cx <= col.MaxCx; cx++)
+        for (int cy = col.MinCy; cy <= col.MaxCy; cy++)
         {
-            var key = KeyOf(cx, cy);
-            if (!_cells.TryGetValue(key, out var list)) _cells[key] = list = [];
+            long key = KeyOf(x: cx, y: cy);
+            if (!_cells.TryGetValue(key: key, value: out var list)) _cells[key] = list = [];
             list.Add(id);
         }
     }
 
     private void RemoveFromCells(uint id, Collider col)
     {
-        for (var cx = col.MinCx; cx <= col.MaxCx; cx++)
-        for (var cy = col.MinCy; cy <= col.MaxCy; cy++)
-            if (_cells.TryGetValue(KeyOf(cx, cy), out var list))
+        for (int cx = col.MinCx; cx <= col.MaxCx; cx++)
+        for (int cy = col.MinCy; cy <= col.MaxCy; cy++)
+        {
+            if (_cells.TryGetValue(key: KeyOf(x: cx, y: cy), value: out var list))
                 list.Remove(id);
+        }
     }
 
     /// <summary>
@@ -475,21 +460,21 @@ public sealed class CollisionWorld2D(float cellSize = 2f)
         _candidates.Clear();
         int minCx = CellOf(min.X), maxCx = CellOf(max.X);
         int minCy = CellOf(min.Y), maxCy = CellOf(max.Y);
-        var cellCount = ((long)(maxCx - minCx) + 1) * ((long)(maxCy - minCy) + 1);
+        long cellCount = ((long)(maxCx - minCx) + 1) * ((long)(maxCy - minCy) + 1);
         if (cellCount > _colliders.Count)
         {
-            foreach (var id in _colliders.Keys) _candidates.Add(id);
+            foreach (uint id in _colliders.Keys) _candidates.Add(id);
             return;
         }
 
         _stamp++;
-        for (var cx = minCx; cx <= maxCx; cx++)
-        for (var cy = minCy; cy <= maxCy; cy++)
+        for (int cx = minCx; cx <= maxCx; cx++)
+        for (int cy = minCy; cy <= maxCy; cy++)
         {
-            if (!_cells.TryGetValue(KeyOf(cx, cy), out var list)) continue;
-            for (var i = 0; i < list.Count; i++)
+            if (!_cells.TryGetValue(key: KeyOf(x: cx, y: cy), value: out var list)) continue;
+            for (int i = 0; i < list.Count; i++)
             {
-                var id = list[i];
+                uint id = list[i];
                 var col = _colliders[id];
                 if (col.Stamp == _stamp) continue;
                 col.Stamp = _stamp;
@@ -498,63 +483,53 @@ public sealed class CollisionWorld2D(float cellSize = 2f)
         }
     }
 
-    private int CellOf(float v)
-    {
-        return (int)MathF.Floor(v / _cellSize);
-    }
+    private int CellOf(float v) => (int)MathF.Floor(v / _cellSize);
 
-    private static long KeyOf(int x, int y)
-    {
-        return ((long)x << 32) | (uint)y;
-    }
+    private static long KeyOf(int x, int y) => ((long)x << 32) | (uint)y;
 
     // ── Shape math ───────────────────────────────────────────────────────────
 
-    private static bool BoxOverlapsBox(Vec2 ca, Vec2 ha, Vec2 cb, Vec2 hb)
-    {
-        return MathF.Abs(ca.X - cb.X) < ha.X + hb.X && MathF.Abs(ca.Y - cb.Y) < ha.Y + hb.Y;
-    }
+    private static bool BoxOverlapsBox(Vec2 ca, Vec2 ha, Vec2 cb, Vec2 hb) =>
+        MathF.Abs(ca.X - cb.X) < ha.X + hb.X && MathF.Abs(ca.Y - cb.Y) < ha.Y + hb.Y;
 
     private static bool BoxOverlapsCircle(Vec2 boxCenter, Vec2 boxHalf, Vec2 circleCenter,
         float radius)
     {
-        var qx = MathF.Max(
-            boxCenter.X - boxHalf.X,
-            MathF.Min(circleCenter.X, boxCenter.X + boxHalf.X)
+        float qx = MathF.Max(
+            x: boxCenter.X - boxHalf.X,
+            y: MathF.Min(x: circleCenter.X, y: boxCenter.X + boxHalf.X)
         );
-        var qy = MathF.Max(
-            boxCenter.Y - boxHalf.Y,
-            MathF.Min(circleCenter.Y, boxCenter.Y + boxHalf.Y)
+        float qy = MathF.Max(
+            x: boxCenter.Y - boxHalf.Y,
+            y: MathF.Min(x: circleCenter.Y, y: boxCenter.Y + boxHalf.Y)
         );
-        var dx = circleCenter.X - qx;
-        var dy = circleCenter.Y - qy;
-        return dx * dx + dy * dy < radius * radius;
+        float dx = circleCenter.X - qx;
+        float dy = circleCenter.Y - qy;
+        return (dx * dx) + (dy * dy) < radius * radius;
     }
 
-    private static bool PointInAabb(Vec2 p, Vec2 min, Vec2 max)
-    {
-        return p.X > min.X && p.X < max.X && p.Y > min.Y && p.Y < max.Y;
-    }
+    private static bool PointInAabb(Vec2 p, Vec2 min, Vec2 max) =>
+        p.X > min.X && p.X < max.X && p.Y > min.Y && p.Y < max.Y;
 
     private static Vec2 ClampToAabb(Vec2 p, Vec2 min, Vec2 max)
     {
         return new Vec2(
-            MathF.Max(min.X, MathF.Min(p.X, max.X)),
-            MathF.Max(min.Y, MathF.Min(p.Y, max.Y))
+            x: MathF.Max(x: min.X, y: MathF.Min(x: p.X, y: max.X)),
+            y: MathF.Max(x: min.Y, y: MathF.Min(x: p.Y, y: max.Y))
         );
     }
 
     /// <summary>Minimal-translation face normal for a point inside an AABB (start-overlap sweeps).</summary>
     private static Vec2 AabbPushNormal(Vec2 p, Vec2 min, Vec2 max)
     {
-        var left = p.X - min.X;
-        var right = max.X - p.X;
-        var down = p.Y - min.Y;
-        var up = max.Y - p.Y;
-        var best = MathF.Min(MathF.Min(left, right), MathF.Min(down, up));
+        float left = p.X - min.X;
+        float right = max.X - p.X;
+        float down = p.Y - min.Y;
+        float up = max.Y - p.Y;
+        float best = MathF.Min(x: MathF.Min(x: left, y: right), y: MathF.Min(x: down, y: up));
         if (best == up) return Vec2.Up;
-        if (best == down) return new Vec2(0f, -1f);
-        return best == right ? Vec2.Right : new Vec2(-1f, 0f);
+        if (best == down) return new Vec2(x: 0f, y: -1f);
+        return best == right ? Vec2.Right : new Vec2(x: -1f, y: 0f);
     }
 
     /// <summary>
@@ -566,9 +541,9 @@ public sealed class CollisionWorld2D(float cellSize = 2f)
     {
         t = 0f;
         normal = Vec2.Zero;
-        var tEnter = float.NegativeInfinity;
-        var tExit = float.PositiveInfinity;
-        var axis = -1;
+        float tEnter = float.NegativeInfinity;
+        float tExit = float.PositiveInfinity;
+        int axis = -1;
 
         if (MathF.Abs(dir.X) < DirEpsilon)
         {
@@ -576,9 +551,9 @@ public sealed class CollisionWorld2D(float cellSize = 2f)
         }
         else
         {
-            var inv = 1f / dir.X;
-            var t1 = (min.X - origin.X) * inv;
-            var t2 = (max.X - origin.X) * inv;
+            float inv = 1f / dir.X;
+            float t1 = (min.X - origin.X) * inv;
+            float t2 = (max.X - origin.X) * inv;
             if (t1 > t2) (t1, t2) = (t2, t1);
             if (t1 > tEnter)
             {
@@ -586,7 +561,7 @@ public sealed class CollisionWorld2D(float cellSize = 2f)
                 axis = 0;
             }
 
-            tExit = MathF.Min(tExit, t2);
+            tExit = MathF.Min(x: tExit, y: t2);
         }
 
         if (MathF.Abs(dir.Y) < DirEpsilon)
@@ -595,9 +570,9 @@ public sealed class CollisionWorld2D(float cellSize = 2f)
         }
         else
         {
-            var inv = 1f / dir.Y;
-            var t1 = (min.Y - origin.Y) * inv;
-            var t2 = (max.Y - origin.Y) * inv;
+            float inv = 1f / dir.Y;
+            float t1 = (min.Y - origin.Y) * inv;
+            float t2 = (max.Y - origin.Y) * inv;
             if (t1 > t2) (t1, t2) = (t2, t1);
             if (t1 > tEnter)
             {
@@ -605,7 +580,7 @@ public sealed class CollisionWorld2D(float cellSize = 2f)
                 axis = 1;
             }
 
-            tExit = MathF.Min(tExit, t2);
+            tExit = MathF.Min(x: tExit, y: t2);
         }
 
         if (axis < 0 || tExit < tEnter || tExit < 0f) return false;
@@ -613,8 +588,8 @@ public sealed class CollisionWorld2D(float cellSize = 2f)
 
         t = tEnter;
         normal = axis == 0
-            ? new Vec2(dir.X > 0f ? -1f : 1f, 0f)
-            : new Vec2(0f, dir.Y > 0f ? -1f : 1f);
+            ? new Vec2(x: dir.X > 0f ? -1f : 1f, y: 0f)
+            : new Vec2(x: 0f, y: dir.Y > 0f ? -1f : 1f);
         return true;
     }
 
@@ -624,16 +599,16 @@ public sealed class CollisionWorld2D(float cellSize = 2f)
         t = 0f;
         normal = Vec2.Zero;
         var m = origin - center;
-        var b = m.Dot(dir);
-        var c = m.LengthSq() - radius * radius;
+        float b = m.Dot(dir);
+        float c = m.LengthSq() - (radius * radius);
         if (c < 0f) return false; // starts inside
         if (b > 0f) return false; // pointing away
-        var disc = b * b - c;
+        float disc = (b * b) - c;
         if (disc < 0f) return false;
-        var tHit = -b - MathF.Sqrt(disc);
+        float tHit = -b - MathF.Sqrt(disc);
         if (tHit < 0f || tHit > maxDist) return false;
         t = tHit;
-        normal = (origin + dir * tHit - center) * (1f / radius);
+        normal = (origin + (dir * tHit) - center) * (1f / radius);
         return true;
     }
 
@@ -650,31 +625,31 @@ public sealed class CollisionWorld2D(float cellSize = 2f)
         normal = Vec2.Zero;
 
         // Start-overlap: closest point on the core AABB to the origin within radius.
-        var q = ClampToAabb(origin, center - core, center + core);
+        var q = ClampToAabb(p: origin, min: center - core, max: center + core);
         var d0 = origin - q;
-        var d0Sq = d0.LengthSq();
+        float d0Sq = d0.LengthSq();
         if (d0Sq < radius * radius)
         {
             t = 0f;
             normal = d0Sq > DirEpsilon
                 ? d0 * (1f / MathF.Sqrt(d0Sq))
                 : AabbPushNormal(
-                    origin,
-                    center - core - new Vec2(radius, radius),
-                    center + core + new Vec2(radius, radius)
+                    p: origin,
+                    min: center - core - new Vec2(x: radius, y: radius),
+                    max: center + core + new Vec2(x: radius, y: radius)
                 );
             return true;
         }
 
         // Vertical faces (±X), valid while the crossing point is within the core's Y span.
         if (RayVsAabb(
-                origin,
-                dir,
-                maxDist,
-                center - new Vec2(core.X + radius, core.Y),
-                center + new Vec2(core.X + radius, core.Y),
-                out var tf,
-                out var nf
+                origin: origin,
+                dir: dir,
+                maxDist: maxDist,
+                min: center - new Vec2(x: core.X + radius, y: core.Y),
+                max: center + new Vec2(x: core.X + radius, y: core.Y),
+                t: out float tf,
+                normal: out var nf
             ) && nf.Y == 0f)
         {
             t = tf;
@@ -683,13 +658,13 @@ public sealed class CollisionWorld2D(float cellSize = 2f)
 
         // Horizontal faces (±Y), valid within the core's X span.
         if (RayVsAabb(
-                origin,
-                dir,
-                maxDist,
-                center - new Vec2(core.X, core.Y + radius),
-                center + new Vec2(core.X, core.Y + radius),
-                out tf,
-                out nf
+                origin: origin,
+                dir: dir,
+                maxDist: maxDist,
+                min: center - new Vec2(x: core.X, y: core.Y + radius),
+                max: center + new Vec2(x: core.X, y: core.Y + radius),
+                t: out tf,
+                normal: out nf
             ) && nf.X == 0f && tf < t)
         {
             t = tf;
@@ -697,18 +672,18 @@ public sealed class CollisionWorld2D(float cellSize = 2f)
         }
 
         // Corner circles.
-        for (var sx = -1; sx <= 1; sx += 2)
-        for (var sy = -1; sy <= 1; sy += 2)
+        for (int sx = -1; sx <= 1; sx += 2)
+        for (int sy = -1; sy <= 1; sy += 2)
         {
-            var corner = center + new Vec2(sx * core.X, sy * core.Y);
+            var corner = center + new Vec2(x: sx * core.X, y: sy * core.Y);
             if (RayVsCircle(
-                    origin,
-                    dir,
-                    maxDist,
-                    corner,
-                    radius,
-                    out tf,
-                    out nf
+                    origin: origin,
+                    dir: dir,
+                    maxDist: maxDist,
+                    center: corner,
+                    radius: radius,
+                    t: out tf,
+                    normal: out nf
                 ) && tf < t)
             {
                 t = tf;

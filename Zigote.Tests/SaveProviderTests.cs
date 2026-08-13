@@ -14,9 +14,7 @@ public class SaveProviderTests : IDisposable
         {
             _dir.Delete(true);
         }
-        catch (IOException)
-        {
-        }
+        catch (IOException) { }
     }
 
     [Fact]
@@ -26,8 +24,15 @@ public class SaveProviderTests : IDisposable
         try
         {
             Assert.False(GameSave.IsAvailable);
-            Assert.Equal(SaveStatus.IoError, GameSave.Write("slot", new Progress(1, 100f)).Status);
-            Assert.Equal(SaveStatus.NotFound, GameSave.Read<Progress>("slot").Status);
+            Assert.Equal(
+                expected: SaveStatus.IoError,
+                actual: GameSave.Write(slot: "slot", state: new Progress(Level: 1, Health: 100f))
+                    .Status
+            );
+            Assert.Equal(
+                expected: SaveStatus.NotFound,
+                actual: GameSave.Read<Progress>("slot").Status
+            );
             Assert.False(GameSave.Exists("slot"));
             Assert.False(GameSave.Delete("slot"));
             Assert.Empty(GameSave.List());
@@ -42,20 +47,24 @@ public class SaveProviderTests : IDisposable
     public void Routes_Through_The_Assigned_Store()
     {
         GameSave.DefaultDirectory = _dir.FullName;
-        GameSave.Store = new SaveStore(GameSave.DefaultDirectory!, 2);
+        GameSave.Store = new SaveStore(directory: GameSave.DefaultDirectory!, currentVersion: 2);
         try
         {
             Assert.True(GameSave.IsAvailable);
-            Assert.Equal(SaveStatus.Ok, GameSave.Write("run", new Progress(5, 62.5f)).Status);
+            Assert.Equal(
+                expected: SaveStatus.Ok,
+                actual: GameSave.Write(slot: "run", state: new Progress(Level: 5, Health: 62.5f))
+                    .Status
+            );
             Assert.True(GameSave.Exists("run"));
 
             var read = GameSave.Read<Progress>("run");
-            Assert.Equal(SaveStatus.Ok, read.Status);
-            Assert.Equal(new Progress(5, 62.5f), read.State);
+            Assert.Equal(expected: SaveStatus.Ok, actual: read.Status);
+            Assert.Equal(expected: new Progress(Level: 5, Health: 62.5f), actual: read.State);
 
             var info = Assert.Single(GameSave.List());
-            Assert.Equal("run", info.Slot);
-            Assert.Equal(2, info.Version);
+            Assert.Equal(expected: "run", actual: info.Slot);
+            Assert.Equal(expected: 2, actual: info.Version);
 
             Assert.True(GameSave.Delete("run"));
             Assert.False(GameSave.Exists("run"));

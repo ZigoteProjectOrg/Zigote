@@ -4,7 +4,6 @@ using Zigote.Core.Paint;
 using Zigote.Editor.Widgets;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
-using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
 
 namespace Zigote.Editor.Settings;
@@ -24,16 +23,17 @@ public sealed class SettingsWindow : Widget
     private readonly Func<EditorLayout?> _layout;
     private readonly EditorPreferences _prefs;
     private readonly AdwSearchEntry _searchField;
-    private readonly AdwSidebar _sidebar;
-
-    private readonly string[] _sections =
-        ["General", "Appearance", "UI Font", "Editor Font", "Panels", "Terminal", "Developer"];
 
     /// <summary>Sidebar glyphs, positionally matched to <see cref="_sections" />.</summary>
     private readonly string[] _sectionIcons = [
         Icons.Tune, Icons.Palette, Icons.Description, Icons.Code, Icons.Dashboard,
         Icons.Terminal, Icons.Bolt,
     ];
+
+    private readonly string[] _sections =
+        ["General", "Appearance", "UI Font", "Editor Font", "Panels", "Terminal", "Developer"];
+
+    private readonly AdwSidebar _sidebar;
 
     private Widget _content;
     private string _search = string.Empty;
@@ -56,9 +56,13 @@ public sealed class SettingsWindow : Widget
         };
         _sidebar = new AdwSidebar(
             new AdwSidebarSection(
-                null,
-                [
-                    .. _sections.Select((s, i) => new AdwSidebarItem(s, _sectionIcons[i])),
+                title: null,
+                items: [
+                    .. _sections.Select((s, i) => new AdwSidebarItem(
+                            title: s,
+                            iconName: _sectionIcons[i]
+                        )
+                    ),
                 ]
             )
         ) {
@@ -86,7 +90,7 @@ public sealed class SettingsWindow : Widget
         // owning its effects and tickers — because nothing ever detached it.
         var previous = _content;
         _content = Build();
-        SwapChild(previous, _content);
+        SwapChild(previous: previous, next: _content);
         RequestLayout();
     }
 
@@ -94,7 +98,7 @@ public sealed class SettingsWindow : Widget
 
     private Widget Build()
     {
-        var searching = !string.IsNullOrWhiteSpace(_search);
+        bool searching = !string.IsNullOrWhiteSpace(_search);
         _sidebar.Selected = _selected;
 
         var rows = BuildRows();
@@ -104,19 +108,29 @@ public sealed class SettingsWindow : Widget
         {
             // Search spans every section, so each one that still has a match becomes its own group
             // — the same page shape, filtered, rather than a separate results list.
-            var q = _search.Trim();
-            foreach (var section in _sections)
+            string q = _search.Trim();
+            foreach (string section in _sections)
             {
                 var matches = rows.Where(r =>
                     r.Section == section &&
-                    (r.Title.Contains(q, StringComparison.OrdinalIgnoreCase) ||
-                     (r.Desc?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                     r.Section.Contains(q, StringComparison.OrdinalIgnoreCase))
+                    (r.Title.Contains(
+                         value: q,
+                         comparisonType: StringComparison.OrdinalIgnoreCase
+                     ) ||
+                     (r.Desc?.Contains(
+                         value: q,
+                         comparisonType: StringComparison.OrdinalIgnoreCase
+                     ) ?? false) ||
+                     r.Section.Contains(
+                         value: q,
+                         comparisonType: StringComparison.OrdinalIgnoreCase
+                     ))
                 ).ToList();
-                if (matches.Count > 0) page.Groups.Add(Group(section, matches));
+                if (matches.Count > 0) page.Groups.Add(Group(title: section, rows: matches));
             }
 
             if (page.Groups.Count == 0)
+            {
                 page.Groups.Add(
                     new AdwStatusPage {
                         IconName = Icons.Search,
@@ -125,28 +139,36 @@ public sealed class SettingsWindow : Widget
                         Compact = true,
                     }
                 );
+            }
         }
         else
         {
-            var section = _sections[_selected];
-            page.Groups.Add(Group(section, rows.Where(r => r.Section == section).ToList()));
+            string section = _sections[_selected];
+            page.Groups.Add(
+                Group(title: section, rows: rows.Where(r => r.Section == section).ToList())
+            );
         }
 
         var split = new AdwNavigationSplitView {
             Sidebar = new AdwToolbarView(_sidebar) {
-                TopBars = { new AdwHeaderBar { Title = "Settings", ShowEndWindowControls = false } },
+                TopBars = {
+                    new AdwHeaderBar {
+                        Title = "Settings",
+                        ShowEndWindowControls = false,
+                    },
+                },
             },
             // AdwPreferencesPage scrolls itself; wrapping it in a ScrollView kills both.
             Content = new AdwToolbarView(page) {
                 TopBars = {
                     new AdwHeaderBar {
-                        TitleWidget = new AdwClamp(_searchField, 360f),
+                        TitleWidget = new AdwClamp(child: _searchField, maximumSize: 360f),
                         ShowStartWindowControls = false,
                     },
                 },
             },
         };
-        return new ColoredBox(_theme.Window, split);
+        return new ColoredBox(color: _theme.Window, child: split);
     }
 
     /// <summary>One boxed list: the section's rows, each control hung off its row's end.</summary>
@@ -154,9 +176,14 @@ public sealed class SettingsWindow : Widget
     {
         var group = new AdwPreferencesGroup(title);
         foreach (var row in rows)
+        {
             group.Rows.Add(
-                new AdwActionRow(row.Title, row.Desc) { Suffixes = { row.Control() } }
+                new AdwActionRow(title: row.Title, subtitle: row.Desc) {
+                    Suffixes = { row.Control() },
+                }
             );
+        }
+
         return group;
     }
 
@@ -172,35 +199,39 @@ public sealed class SettingsWindow : Widget
         // General
         rows.Add(
             new RowDef(
-                "General",
-                "Reopen last project",
-                "Open the most recent project on launch instead of the welcome screen.",
-                () => new AdwSwitch(
-                    settings.ReopenLastProject.Value,
-                    v => settings.ReopenLastProject.Value = v
+                Section: "General",
+                Title: "Reopen last project",
+                Desc: "Open the most recent project on launch instead of the welcome screen.",
+                Control: () => new AdwSwitch(
+                    value: settings.ReopenLastProject.Value,
+                    onChanged: v => settings.ReopenLastProject.Value = v
                 )
             )
         );
         if (OperatingSystem.IsMacOS())
+        {
             rows.Add(
                 new RowDef(
-                    "General",
-                    "Native menu bar",
+                    Section: "General",
+                    Title: "Native menu bar",
+                    Desc:
                     "Use the macOS system menu bar; off shows the in-window menu bar instead.",
-                    () => new AdwSwitch(
-                        settings.NativeMenuBar.Value,
-                        v => settings.NativeMenuBar.Value = v
+                    Control: () => new AdwSwitch(
+                        value: settings.NativeMenuBar.Value,
+                        onChanged: v => settings.NativeMenuBar.Value = v
                     )
                 )
             );
+        }
+
         rows.Add(
             new RowDef(
-                "General",
-                "Recent projects",
-                $"{history.Recent.Value.Length} entries in the File ▸ Open Recent menu.",
-                () => new AdwButton(
-                    "Clear",
-                    () =>
+                Section: "General",
+                Title: "Recent projects",
+                Desc: $"{history.Recent.Value.Length} entries in the File ▸ Open Recent menu.",
+                Control: () => new AdwButton(
+                    label: "Clear",
+                    onPressed: () =>
                     {
                         history.ClearRecent();
                         Rebuild();
@@ -210,12 +241,12 @@ public sealed class SettingsWindow : Widget
         );
         rows.Add(
             new RowDef(
-                "General",
-                "Settings database",
-                EditorSettings.DbPath,
-                () => new AdwButton(
-                    "Copy Path",
-                    () =>
+                Section: "General",
+                Title: "Settings database",
+                Desc: EditorSettings.DbPath,
+                Control: () => new AdwButton(
+                    label: "Copy Path",
+                    onPressed: () =>
                     {
                         _prefs.App.Engine.SetClipboard(EditorSettings.DbPath);
                         Owner?.ShowSnackbar("Settings path copied");
@@ -225,12 +256,12 @@ public sealed class SettingsWindow : Widget
         );
         rows.Add(
             new RowDef(
-                "General",
-                "Reset settings",
-                "Restore every editor setting to its default. Recent projects are kept.",
-                () => new AdwButton(
-                    "Reset All",
-                    () =>
+                Section: "General",
+                Title: "Reset settings",
+                Desc: "Restore every editor setting to its default. Recent projects are kept.",
+                Control: () => new AdwButton(
+                    label: "Reset All",
+                    onPressed: () =>
                     {
                         // One batched group reset: the appliers settle once each, then the
                         // shell (and this window, via ApplyTheme) restyle to the defaults.
@@ -245,16 +276,16 @@ public sealed class SettingsWindow : Widget
         // Appearance
         rows.Add(
             new RowDef(
-                "Appearance",
-                "Theme mode",
-                "System follows the OS light/dark appearance; changes apply immediately.",
-                () =>
+                Section: "Appearance",
+                Title: "Theme mode",
+                Desc: "System follows the OS light/dark appearance; changes apply immediately.",
+                Control: () =>
                 {
                     string[] labels = ["System", "Dark", "Light"];
                     return new AdwDropDown(
-                        labels,
-                        (int)settings.ThemeMode.Value,
-                        i => settings.ThemeMode.Value = (EditorThemeMode)i
+                        items: labels,
+                        selectedIndex: (int)settings.ThemeMode.Value,
+                        onSelected: i => settings.ThemeMode.Value = (EditorThemeMode)i
                     );
                 }
             )
@@ -263,27 +294,28 @@ public sealed class SettingsWindow : Widget
         // UI Font
         rows.Add(
             new RowDef(
-                "UI Font",
-                "UI font family",
-                "Face used by all interface text (swaps the \"Inter\" family live).",
-                () => FontDropdown(
-                    settings.UiFontPath.Value,
-                    "Inter (default)",
-                    p => settings.UiFontPath.Value = p
+                Section: "UI Font",
+                Title: "UI font family",
+                Desc: "Face used by all interface text (swaps the \"Inter\" family live).",
+                Control: () => FontDropdown(
+                    currentPath: settings.UiFontPath.Value,
+                    defaultLabel: "Inter (default)",
+                    apply: p => settings.UiFontPath.Value = p
                 )
             )
         );
         rows.Add(
             new RowDef(
-                "UI Font",
-                "UI font size",
+                Section: "UI Font",
+                Title: "UI font size",
+                Desc:
                 "Base interface font size in points (default 13). Scales titles and captions with it.",
-                () => NumberBox(
-                    settings.UiFontSize.Value,
-                    9f,
-                    26f,
-                    1f,
-                    v => settings.UiFontSize.Value = v
+                Control: () => NumberBox(
+                    value: settings.UiFontSize.Value,
+                    min: 9f,
+                    max: 26f,
+                    step: 1f,
+                    apply: v => settings.UiFontSize.Value = v
                 )
             )
         );
@@ -291,27 +323,28 @@ public sealed class SettingsWindow : Widget
         // Editor Font
         rows.Add(
             new RowDef(
-                "Editor Font",
-                "Editor font family",
+                Section: "Editor Font",
+                Title: "Editor font family",
+                Desc:
                 "Monospace face for the code editor and console (swaps the \"code\" family live).",
-                () => FontDropdown(
-                    settings.EditorFontPath.Value,
-                    "Iosevka (default)",
-                    p => settings.EditorFontPath.Value = p
+                Control: () => FontDropdown(
+                    currentPath: settings.EditorFontPath.Value,
+                    defaultLabel: "Iosevka (default)",
+                    apply: p => settings.EditorFontPath.Value = p
                 )
             )
         );
         rows.Add(
             new RowDef(
-                "Editor Font",
-                "Editor font size",
-                "Code editor font size in points (default 13).",
-                () => NumberBox(
-                    settings.EditorFontSize.Value,
-                    8f,
-                    32f,
-                    1f,
-                    v => settings.EditorFontSize.Value = v
+                Section: "Editor Font",
+                Title: "Editor font size",
+                Desc: "Code editor font size in points (default 13).",
+                Control: () => NumberBox(
+                    value: settings.EditorFontSize.Value,
+                    min: 8f,
+                    max: 32f,
+                    step: 1f,
+                    apply: v => settings.EditorFontSize.Value = v
                 )
             )
         );
@@ -321,15 +354,15 @@ public sealed class SettingsWindow : Widget
         {
             foreach (var panel in dock.Panels.OrderBy(p => p.Title))
             {
-                var id = panel.PanelId;
+                string id = panel.PanelId;
                 rows.Add(
                     new RowDef(
-                        "Panels",
-                        panel.Title,
-                        $"Show the {panel.Title} panel in the dock.",
-                        () => new AdwSwitch(
-                            dock.IsPanelOpen(id),
-                            v =>
+                        Section: "Panels",
+                        Title: panel.Title,
+                        Desc: $"Show the {panel.Title} panel in the dock.",
+                        Control: () => new AdwSwitch(
+                            value: dock.IsPanelOpen(id),
+                            onChanged: v =>
                             {
                                 if (v) dock.OpenPanel(id);
                                 else dock.ClosePanelById(id);
@@ -342,12 +375,12 @@ public sealed class SettingsWindow : Widget
 
             rows.Add(
                 new RowDef(
-                    "Panels",
-                    "Reset layout",
-                    "Restore the default dock arrangement.",
-                    () => new AdwButton(
-                        "Reset",
-                        () =>
+                    Section: "Panels",
+                    Title: "Reset layout",
+                    Desc: "Restore the default dock arrangement.",
+                    Control: () => new AdwButton(
+                        label: "Reset",
+                        onPressed: () =>
                         {
                             layout.ResetLayout();
                             Rebuild();
@@ -360,10 +393,10 @@ public sealed class SettingsWindow : Widget
         {
             rows.Add(
                 new RowDef(
-                    "Panels",
-                    "No project open",
-                    "Open a project to configure its panel layout.",
-                    () => new SizedBox()
+                    Section: "Panels",
+                    Title: "No project open",
+                    Desc: "Open a project to configure its panel layout.",
+                    Control: () => new SizedBox()
                 )
             );
         }
@@ -371,28 +404,28 @@ public sealed class SettingsWindow : Widget
         // Terminal (console)
         rows.Add(
             new RowDef(
-                "Terminal",
-                "Console font size",
-                "Log text size in points (default follows the theme caption size).",
-                () => NumberBox(
-                    settings.ConsoleFontSize.Value > 0
+                Section: "Terminal",
+                Title: "Console font size",
+                Desc: "Log text size in points (default follows the theme caption size).",
+                Control: () => NumberBox(
+                    value: settings.ConsoleFontSize.Value > 0
                         ? settings.ConsoleFontSize.Value
                         : _theme.FontSizeCaption,
-                    8f,
-                    24f,
-                    1f,
-                    v => settings.ConsoleFontSize.Value = v
+                    min: 8f,
+                    max: 24f,
+                    step: 1f,
+                    apply: v => settings.ConsoleFontSize.Value = v
                 )
             )
         );
         rows.Add(
             new RowDef(
-                "Terminal",
-                "Clear on play",
-                "Empty the console every time play mode starts.",
-                () => new AdwSwitch(
-                    settings.ConsoleClearOnPlay.Value,
-                    v => settings.ConsoleClearOnPlay.Value = v
+                Section: "Terminal",
+                Title: "Clear on play",
+                Desc: "Empty the console every time play mode starts.",
+                Control: () => new AdwSwitch(
+                    value: settings.ConsoleClearOnPlay.Value,
+                    onChanged: v => settings.ConsoleClearOnPlay.Value = v
                 )
             )
         );
@@ -400,75 +433,82 @@ public sealed class SettingsWindow : Widget
         // Developer
         rows.Add(
             new RowDef(
-                "Developer",
-                "Reduced editor graphics",
-                "Disable TAA/bloom/SSR/DoF while authoring; play mode always renders full.",
-                () => new AdwSwitch(
-                    settings.ReducedEditorGraphics.Value,
-                    v => settings.ReducedEditorGraphics.Value = v
+                Section: "Developer",
+                Title: "Reduced editor graphics",
+                Desc: "Disable TAA/bloom/SSR/DoF while authoring; play mode always renders full.",
+                Control: () => new AdwSwitch(
+                    value: settings.ReducedEditorGraphics.Value,
+                    onChanged: v => settings.ReducedEditorGraphics.Value = v
                 )
             )
         );
         rows.Add(
             new RowDef(
-                "Developer",
-                "VSync",
-                "Cap presentation to the display refresh rate.",
-                () => new AdwSwitch(settings.VSync.Value, v => settings.VSync.Value = v)
-            )
-        );
-        rows.Add(
-            new RowDef(
-                "Developer",
-                "Partial repaint",
-                "Redraw only damaged regions on idle frames (GPU-scissor).",
-                () => new AdwSwitch(
-                    _prefs.App.PartialRepaintEnabled,
-                    v => _prefs.App.PartialRepaintEnabled = v
+                Section: "Developer",
+                Title: "VSync",
+                Desc: "Cap presentation to the display refresh rate.",
+                Control: () => new AdwSwitch(
+                    value: settings.VSync.Value,
+                    onChanged: v => settings.VSync.Value = v
                 )
             )
         );
         rows.Add(
             new RowDef(
-                "Developer",
-                "Continuous render",
-                "Render every frame even when idle (throughput testing; burns CPU/GPU).",
-                () => new AdwSwitch(
-                    _prefs.App.ForceContinuousRender,
-                    v => _prefs.App.ForceContinuousRender = v
+                Section: "Developer",
+                Title: "Partial repaint",
+                Desc: "Redraw only damaged regions on idle frames (GPU-scissor).",
+                Control: () => new AdwSwitch(
+                    value: _prefs.App.PartialRepaintEnabled,
+                    onChanged: v => _prefs.App.PartialRepaintEnabled = v
+                )
+            )
+        );
+        rows.Add(
+            new RowDef(
+                Section: "Developer",
+                Title: "Continuous render",
+                Desc: "Render every frame even when idle (throughput testing; burns CPU/GPU).",
+                Control: () => new AdwSwitch(
+                    value: _prefs.App.ForceContinuousRender,
+                    onChanged: v => _prefs.App.ForceContinuousRender = v
                 )
             )
         );
         if (FileDialog.PlatformSupported)
+        {
             rows.Add(
                 new RowDef(
-                    "Developer",
-                    "Native file dialogs",
-                    "Use the OS open/save dialogs; off uses the in-app picker everywhere.",
-                    () => new AdwSwitch(
-                        settings.NativeFileDialogs.Value,
-                        v => settings.NativeFileDialogs.Value = v
+                    Section: "Developer",
+                    Title: "Native file dialogs",
+                    Desc: "Use the OS open/save dialogs; off uses the in-app picker everywhere.",
+                    Control: () => new AdwSwitch(
+                        value: settings.NativeFileDialogs.Value,
+                        onChanged: v => settings.NativeFileDialogs.Value = v
                     )
                 )
             );
+        }
+
         rows.Add(
             new RowDef(
-                "Developer",
-                "Window chrome",
+                Section: "Developer",
+                Title: "Window chrome",
+                Desc:
                 "Titlebar style for ALL app windows (main, Settings, dialogs). Auto follows " +
                 "the OS: macOS unified traffic lights, GNOME Adwaita buttons, system " +
                 "decorations elsewhere (Windows/KDE); override to test any look. Native OS " +
                 "file panels keep their own chrome.",
-                () =>
+                Control: () =>
                 {
                     string[] modes = ["auto", "system", "mac", "adwaita"];
                     string[] labels = ["Auto", "System", "macOS Unified", "GNOME (Adwaita)"];
-                    var sel = Array.IndexOf(modes, settings.WindowChromeMode.Value);
+                    int sel = Array.IndexOf(array: modes, value: settings.WindowChromeMode.Value);
                     if (sel < 0) sel = 0;
                     return new AdwDropDown(
-                        labels,
-                        sel,
-                        i => settings.WindowChromeMode.Value = modes[i]
+                        items: labels,
+                        selectedIndex: sel,
+                        onSelected: i => settings.WindowChromeMode.Value = modes[i]
                     );
                 }
             )
@@ -477,14 +517,16 @@ public sealed class SettingsWindow : Widget
         // be listed once per graphics API, so the entries name both (see GpuInfo.DisplayName).
         var gpus = _prefs.App.Engine.EnumerateGpus();
         if (gpus.Count > 1)
+        {
             rows.Add(
                 new RowDef(
-                    "Developer",
-                    "Graphics device",
+                    Section: "Developer",
+                    Title: "Graphics device",
+                    Desc:
                     "Which GPU the editor renders on. Automatic picks the fastest one. Takes " +
                     "effect after restarting the editor — the GPU device is created once at " +
                     "startup. ZIGOTE_GPU / ZIGOTE_GPU_POWER override this for a single launch.",
-                    () =>
+                    Control: () =>
                     {
                         var active = _prefs.App.Engine.ActiveGpu();
                         string[] labels = [
@@ -492,18 +534,27 @@ public sealed class SettingsWindow : Widget
                             .. gpus.Select(g => g.DisplayName),
                         ];
                         // Entry 0 is Automatic, so a stored index shifts by one.
-                        var stored = settings.GpuIndex.Value;
-                        var sel = stored >= 0 && stored < gpus.Count ? stored + 1 : 0;
-                        return new AdwDropDown(labels, sel, i => settings.GpuIndex.Value = i - 1);
+                        int stored = settings.GpuIndex.Value;
+                        int sel = stored >= 0 && stored < gpus.Count ? stored + 1 : 0;
+                        return new AdwDropDown(
+                            items: labels,
+                            selectedIndex: sel,
+                            onSelected: i => settings.GpuIndex.Value = i - 1
+                        );
                     }
                 )
             );
+        }
+
         rows.Add(
             new RowDef(
-                "Developer",
-                "Debug menu",
-                "The in-engine diagnostics overlay (Shift+D in any window).",
-                () => new AdwButton("Open", () => _prefs.App.ToggleDebugPanel())
+                Section: "Developer",
+                Title: "Debug menu",
+                Desc: "The in-engine diagnostics overlay (Shift+D in any window).",
+                Control: () => new AdwButton(
+                    label: "Open",
+                    onPressed: () => _prefs.App.ToggleDebugPanel()
+                )
             )
         );
 
@@ -513,29 +564,37 @@ public sealed class SettingsWindow : Widget
     private Widget FontDropdown(string? currentPath, string defaultLabel, Action<string?> apply)
     {
         var fonts = EditorPreferences.AvailableFonts();
-        var labels = new string[fonts.Count + 1];
+        string[] labels = new string[fonts.Count + 1];
         labels[0] = defaultLabel;
-        var sel = 0;
-        for (var i = 0; i < fonts.Count; i++)
+        int sel = 0;
+        for (int i = 0; i < fonts.Count; i++)
         {
             labels[i + 1] = fonts[i].Name;
             if (currentPath is not null &&
-                string.Equals(fonts[i].Path, currentPath, StringComparison.OrdinalIgnoreCase))
+                string.Equals(
+                    a: fonts[i].Path,
+                    b: currentPath,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                ))
                 sel = i + 1;
         }
 
-        return new AdwDropDown(labels, sel, i => apply(i == 0 ? null : fonts[i - 1].Path));
+        return new AdwDropDown(
+            items: labels,
+            selectedIndex: sel,
+            onSelected: i => apply(i == 0 ? null : fonts[i - 1].Path)
+        );
     }
 
     private static Widget NumberBox(float value, float min, float max, float step,
         Action<float> apply)
     {
         return new AdwSpinButton(
-            value,
-            min,
-            max,
-            step,
-            v => apply((float)v)
+            value: value,
+            min: min,
+            max: max,
+            step: step,
+            onChanged: v => apply((float)v)
         );
     }
 
@@ -543,36 +602,29 @@ public sealed class SettingsWindow : Widget
 
     public override Size Measure(Constraints c)
     {
-        _size = c.Constrain(new Size(c.MaxWidth, c.MaxHeight));
-        _content.Measure(Constraints.Tight(_size.Width, _size.Height));
+        _size = c.Constrain(new Size(width: c.MaxWidth, height: c.MaxHeight));
+        _content.Measure(Constraints.Tight(width: _size.Width, height: _size.Height));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         _content.Layout(origin);
     }
 
-    public override void Paint(PaintList paint)
-    {
-        _content.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => _content.Paint(paint);
 
-    public override Widget? HitTest(Offset point)
-    {
-        return !Bounds.Contains(point.X, point.Y) ? null : _content.HitTest(point);
-    }
+    public override Widget? HitTest(Offset point) => !Bounds.Contains(px: point.X, py: point.Y)
+        ? null
+        : _content.HitTest(point);
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return [_content];
-    }
+    public override IEnumerable<Widget> GetChildren() => [_content];
 
     private readonly record struct RowDef(
         string Section,

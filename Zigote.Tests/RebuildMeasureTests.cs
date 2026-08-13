@@ -16,46 +16,11 @@ namespace Zigote.Tests;
 public class RebuildMeasureTests
 {
     private static readonly Constraints Room = new(
-        0f,
-        200f,
-        0f,
-        200f
+        minWidth: 0f,
+        maxWidth: 200f,
+        minHeight: 0f,
+        maxHeight: 200f
     );
-
-    private sealed class Probe : Widget
-    {
-        public bool Measured;
-
-        public override Size Measure(Constraints constraints)
-        {
-            Measured = true;
-            return new Size(10f, 10f);
-        }
-
-        public override void Layout(Offset origin)
-        {
-            Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                10f,
-                10f
-            );
-        }
-
-        public override void Paint(PaintList paint)
-        {
-        }
-    }
-
-    private sealed class Host : ComposedWidget
-    {
-        public Widget Next = new Probe();
-
-        protected override Widget Build(BuildContext context)
-        {
-            return Next;
-        }
-    }
 
     [Fact]
     public void RebuiltChildIsMeasuredBeforeItIsLaidOut()
@@ -73,6 +38,39 @@ public class RebuildMeasureTests
         host.Measure(Room); // same constraints as before: the stale cache must not win
         host.Layout(Offset.Zero);
 
-        Assert.True(fresh.Measured, "the rebuilt subtree was laid out without ever being measured");
+        Assert.True(
+            condition: fresh.Measured,
+            userMessage: "the rebuilt subtree was laid out without ever being measured"
+        );
+    }
+
+    private sealed class Probe : Widget
+    {
+        public bool Measured;
+
+        public override Size Measure(Constraints constraints)
+        {
+            Measured = true;
+            return new Size(width: 10f, height: 10f);
+        }
+
+        public override void Layout(Offset origin)
+        {
+            Bounds = new Rect(
+                x: origin.X,
+                y: origin.Y,
+                width: 10f,
+                height: 10f
+            );
+        }
+
+        public override void Paint(PaintList paint) { }
+    }
+
+    private sealed class Host : ComposedWidget
+    {
+        public Widget Next = new Probe();
+
+        protected override Widget Build(BuildContext context) => Next;
     }
 }

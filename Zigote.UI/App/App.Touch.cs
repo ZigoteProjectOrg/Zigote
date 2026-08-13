@@ -47,6 +47,18 @@ public partial class App
     /// <summary>Inward travel that commits an edge swipe to a back navigation.</summary>
     private const float EdgeBackTravel = 48f;
 
+    // Per-thread like Widget.CurrentScrollParent: input dispatch and the hit-test walk it drives
+    // run on the same thread, and a process-wide flag would leak between parallel test hosts.
+    [ThreadStatic] internal static bool PointerIsTouchFlag;
+
+    private Offset _pinchLastCentroid;
+
+    /// <summary>Finger separation at the last scale event — the denominator of the next ratio.</summary>
+    private float _pinchLastDistance;
+
+    /// <summary>An in-flight back gesture: the finger started at the screen's leading edge.</summary>
+    private bool _touchEdgeBack;
+
     // Frame-accumulated finger displacement, folded into the smoothed velocity by TickTouch —
     // per-event dt inside one poll batch is meaningless, per-frame dt is real.
     private float _touchFrameDx, _touchFrameDy;
@@ -58,30 +70,18 @@ public partial class App
     /// <summary>Finger slot driving the pointer pipeline; -1 = no touch interaction active.</summary>
     private int _touchPrimaryFinger = -1;
 
-    /// <summary>Second finger of a pinch; -1 = none down.</summary>
-    private int _touchSecondFinger = -1;
-
-    private Offset _touchSecondLast;
-
-    /// <summary>Finger separation at the last scale event — the denominator of the next ratio.</summary>
-    private float _pinchLastDistance;
-
-    private Offset _pinchLastCentroid;
-
     /// <summary>The widget consuming the active pinch, null when no pinch is in flight.</summary>
     private Widget? _touchScaleTarget;
 
     private Widget? _touchScrollTarget;
 
-    /// <summary>An in-flight back gesture: the finger started at the screen's leading edge.</summary>
-    private bool _touchEdgeBack;
+    /// <summary>Second finger of a pinch; -1 = none down.</summary>
+    private int _touchSecondFinger = -1;
+
+    private Offset _touchSecondLast;
 
     private Offset _touchStart;
     private float _touchVelX, _touchVelY;
-
-    // Per-thread like Widget.CurrentScrollParent: input dispatch and the hit-test walk it drives
-    // run on the same thread, and a process-wide flag would leak between parallel test hosts.
-    [ThreadStatic] internal static bool PointerIsTouchFlag;
 
     /// <summary>
     ///     True when the most recent pointer input came from a finger rather than a mouse. Widgets
@@ -94,7 +94,7 @@ public partial class App
     private void DispatchTouchEvent(TouchEvent evt)
     {
         PointerIsTouchFlag = true;
-        var point = new Offset(evt.X, evt.Y);
+        var point = new Offset(x: evt.X, y: evt.Y);
         switch (evt)
         {
             case TouchDownEvent when _touchPrimaryFinger < 0:
@@ -111,7 +111,7 @@ public partial class App
                 // iOS has no system back control, so the edge swipe IS the platform convention;
                 // it costs nothing elsewhere because the gesture only completes on a decisive
                 // inward drag. RTL flips the edge, matching the direction "back" travels.
-                var edge = Directionality.Of(BuildContext.Current) == TextDirection.Rtl
+                bool edge = Directionality.Of(BuildContext.Current) == TextDirection.Rtl
                     ? point.X >= HostLogicalWidth - EdgeBackWidth
                     : point.X <= EdgeBackWidth;
                 _touchEdgeBack = edge && CanHandleSystemBack;
@@ -141,8 +141,8 @@ public partial class App
                 _touchSecondFinger = evt.Finger;
                 _touchSecondLast = point;
                 _touchScaleTarget = target;
-                _pinchLastDistance = Distance(_touchLast, point);
-                _pinchLastCentroid = Centroid(_touchLast, point);
+                _pinchLastDistance = Distance(a: _touchLast, b: point);
+                _pinchLastCentroid = Centroid(a: _touchLast, b: point);
 
                 // A pinch is not a tap, a long-press, or a drag: whatever the first finger was
                 // doing must abandon rather than commit. A scroll in flight keeps its position
@@ -171,26 +171,26 @@ public partial class App
                 if (evt.Finger == _touchPrimaryFinger) _touchLast = point;
                 else _touchSecondLast = point;
 
-                var distance = Distance(_touchLast, _touchSecondLast);
-                var centroid = Centroid(_touchLast, _touchSecondLast);
+                float distance = Distance(a: _touchLast, b: _touchSecondLast);
+                var centroid = Centroid(a: _touchLast, b: _touchSecondLast);
 
                 // Guard the ratio: fingers can land on the same pixel, and dividing by ~0 would
                 // send an infinite scale into the consumer's transform.
                 if (_pinchLastDistance > 1f && distance > 1f)
                 {
-                    var scale = distance / _pinchLastDistance;
+                    float scale = distance / _pinchLastDistance;
                     if (MathF.Abs(scale - 1f) > 0.0001f)
-                        _touchScaleTarget.OnTouchScale(scale, centroid);
+                        _touchScaleTarget.OnTouchScale(scale: scale, focus: centroid);
                     _pinchLastDistance = distance;
                 }
 
                 // Centroid travel pans the zoomed content — same 1:1 finger-pixel contract as a
                 // one-finger drag, so a widget that already implements OnTouchScroll gets pan free.
-                var panX = centroid.X - _pinchLastCentroid.X;
-                var panY = centroid.Y - _pinchLastCentroid.Y;
+                float panX = centroid.X - _pinchLastCentroid.X;
+                float panY = centroid.Y - _pinchLastCentroid.Y;
                 if (panX != 0f || panY != 0f)
                 {
-                    _touchScaleTarget.OnTouchScroll(panX, panY);
+                    _touchScaleTarget.OnTouchScroll(dx: panX, dy: panY);
                     _pinchLastCentroid = centroid;
                 }
 
@@ -209,15 +209,15 @@ public partial class App
 
             case TouchMoveEvent when evt.Finger == _touchPrimaryFinger:
             {
-                var dx = point.X - _touchLast.X;
-                var dy = point.Y - _touchLast.Y;
+                float dx = point.X - _touchLast.X;
+                float dy = point.Y - _touchLast.Y;
                 _touchLast = point;
                 _touchFrameDx += dx;
                 _touchFrameDy += dy;
 
                 if (_touchScrollTarget is not null)
                 {
-                    _touchScrollTarget.OnTouchScroll(dx, dy);
+                    _touchScrollTarget.OnTouchScroll(dx: dx, dy: dy);
                     break;
                 }
 
@@ -227,9 +227,9 @@ public partial class App
                 // touchscreen — could never complete.
                 if (_touchEdgeBack)
                 {
-                    var edgeDx = point.X - _touchStart.X;
-                    var edgeDy = point.Y - _touchStart.Y;
-                    var inward = Directionality.Of(BuildContext.Current) == TextDirection.Rtl
+                    float edgeDx = point.X - _touchStart.X;
+                    float edgeDy = point.Y - _touchStart.Y;
+                    float inward = Directionality.Of(BuildContext.Current) == TextDirection.Rtl
                         ? -edgeDx
                         : edgeDx;
                     // Mostly-horizontal travel inward from the edge: hand the gesture to the
@@ -250,12 +250,12 @@ public partial class App
 
                 if (!_touchMovedPastSlop && !_touchLongPressFired)
                 {
-                    var totX = point.X - _touchStart.X;
-                    var totY = point.Y - _touchStart.Y;
-                    if (totX * totX + totY * totY > TouchSlop * TouchSlop)
+                    float totX = point.X - _touchStart.X;
+                    float totY = point.Y - _touchStart.Y;
+                    if ((totX * totX) + (totY * totY) > TouchSlop * TouchSlop)
                     {
                         _touchMovedPastSlop = true; // also disarms the long-press
-                        var vertical = MathF.Abs(totY) >= MathF.Abs(totX);
+                        bool vertical = MathF.Abs(totY) >= MathF.Abs(totX);
                         var claimer = FindTouchScrollTarget(vertical);
                         if (claimer is not null)
                         {
@@ -272,7 +272,7 @@ public partial class App
                             }
 
                             _touchScrollTarget = claimer;
-                            claimer.OnTouchScroll(totX, totY);
+                            claimer.OnTouchScroll(dx: totX, dy: totY);
                             break;
                         }
                     }
@@ -295,7 +295,12 @@ public partial class App
                 {
                     if (MathF.Abs(_touchVelX) > MinFlingVelocity ||
                         MathF.Abs(_touchVelY) > MinFlingVelocity)
-                        _touchScrollTarget.OnTouchFling(_touchVelX, _touchVelY);
+                    {
+                        _touchScrollTarget.OnTouchFling(
+                            velocityX: _touchVelX,
+                            velocityY: _touchVelY
+                        );
+                    }
 
                     // A widget that claimed its own drag kept the press too — the scroll path
                     // never delivers a lift, and it needs one to commit (drop a reordered row,
@@ -339,9 +344,9 @@ public partial class App
 
         // Exponentially-smoothed lift-off velocity from this frame's displacement. A resting
         // finger decays toward zero, so pausing mid-drag then lifting produces no fling.
-        var k = 1f - MathF.Exp(-dt * 15f);
-        _touchVelX += (_touchFrameDx / dt - _touchVelX) * k;
-        _touchVelY += (_touchFrameDy / dt - _touchVelY) * k;
+        float k = 1f - MathF.Exp(-dt * 15f);
+        _touchVelX += ((_touchFrameDx / dt) - _touchVelX) * k;
+        _touchVelY += ((_touchFrameDy / dt) - _touchVelY) * k;
         _touchFrameDx = _touchFrameDy = 0f;
 
         if (_touchMovedPastSlop || _touchLongPressFired || _touchScrollTarget is not null)
@@ -390,22 +395,23 @@ public partial class App
     {
         var start = _capturedWidget ?? _touchScrollTarget ?? HitTestAll(_touchLast);
         for (var w = start; w is not null; w = w.Parent)
+        {
             if (w.CanTouchScale())
                 return w;
+        }
+
         return null;
     }
 
     private static float Distance(Offset a, Offset b)
     {
-        var dx = a.X - b.X;
-        var dy = a.Y - b.Y;
-        return MathF.Sqrt(dx * dx + dy * dy);
+        float dx = a.X - b.X;
+        float dy = a.Y - b.Y;
+        return MathF.Sqrt((dx * dx) + (dy * dy));
     }
 
-    private static Offset Centroid(Offset a, Offset b)
-    {
-        return new Offset((a.X + b.X) * 0.5f, (a.Y + b.Y) * 0.5f);
-    }
+    private static Offset Centroid(Offset a, Offset b) =>
+        new(x: (a.X + b.X) * 0.5f, y: (a.Y + b.Y) * 0.5f);
 
     /// <summary>End the active touch interaction (finger lifted, cancelled, or app paused).</summary>
     private void ResetTouch()

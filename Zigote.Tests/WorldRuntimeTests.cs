@@ -20,20 +20,11 @@ public sealed class WorldProbeComponent : Component
     public bool Destroyed;
     public int Updates;
 
-    protected override void OnCreate()
-    {
-        Created = true;
-    }
+    protected override void OnCreate() => Created = true;
 
-    protected override void OnUpdate(float dt)
-    {
-        Updates++;
-    }
+    protected override void OnUpdate(float dt) => Updates++;
 
-    protected override void OnDestroy()
-    {
-        Destroyed = true;
-    }
+    protected override void OnDestroy() => Destroyed = true;
 }
 
 /// <summary>Spawns one prefab from inside OnUpdate — exercises mid-walk tree mutation.</summary>
@@ -45,17 +36,19 @@ public sealed class WorldSpawnerComponent : Component
     protected override void OnUpdate(float dt)
     {
         if (!Spawned.IsValid && PrefabPath != null)
-            Spawned = GameWorld.Spawn(PrefabPath, new Vec3(5f, 0f, 0f));
+        {
+            Spawned = GameWorld.Spawn(
+                prefabPath: PrefabPath,
+                position: new Vec3(x: 5f, y: 0f, z: 0f)
+            );
+        }
     }
 }
 
 /// <summary>Destroys its own entity from inside OnUpdate — exercises the deferred-destroy path.</summary>
 public sealed class WorldSelfDestructComponent : Component
 {
-    protected override void OnUpdate(float dt)
-    {
-        GameWorld.Destroy(GameWorld.Of(this));
-    }
+    protected override void OnUpdate(float dt) => GameWorld.Destroy(GameWorld.Of(this));
 }
 
 /// <summary>
@@ -81,13 +74,13 @@ public sealed class WorldRuntimeTests : IDisposable
         _root.AddChild(
             new SceneNode("Player") {
                 Tag = "Player",
-                Position = new Vec3(0f, 0f, 0f),
+                Position = new Vec3(x: 0f, y: 0f, z: 0f),
             }
         );
         _root.AddChild(
             new SceneNode("Rock") {
                 Tag = "Obstacle",
-                Position = new Vec3(10f, 0f, 0f),
+                Position = new Vec3(x: 10f, y: 0f, z: 0f),
             }
         );
 
@@ -98,13 +91,13 @@ public sealed class WorldRuntimeTests : IDisposable
         _ecs = new EcsSceneBridge();
         _ecs.BuildFrom(_root); // same order as GameSession: bridge first, then the backend
         _backend = new RuntimeWorldBackend(
-            _root,
-            _scripts,
-            _ecs,
-            _hooks
+            root: _root,
+            scripts: _scripts,
+            ecs: _ecs,
+            hooks: _hooks
         );
 
-        _prefabPath = Path.Combine(_dir, "bullet.prefab");
+        _prefabPath = Path.Combine(path1: _dir, path2: "bullet.prefab");
         var template = new SceneNode("Bullet") {
             Tag = "Projectile",
             ScriptClass = typeof(WorldProbeComponent).FullName,
@@ -121,11 +114,9 @@ public sealed class WorldRuntimeTests : IDisposable
         _ecs.Dispose();
         try
         {
-            Directory.Delete(_dir, true);
+            Directory.Delete(path: _dir, recursive: true);
         }
-        catch (IOException)
-        {
-        }
+        catch (IOException) { }
     }
 
     private static void Tick(RuntimeWorldBackend backend)
@@ -140,16 +131,16 @@ public sealed class WorldRuntimeTests : IDisposable
     public void Spawn_FromPrefab_CreatesALiveIntegratedEntity()
     {
         var h = _backend.Spawn(
-            _prefabPath,
-            new Vec3(1f, 2f, 3f),
-            Quat.Identity,
-            EntityHandle.None
+            prefabPath: _prefabPath,
+            position: new Vec3(x: 1f, y: 2f, z: 3f),
+            rotation: Quat.Identity,
+            parent: EntityHandle.None
         );
 
         Assert.True(h.IsValid);
         Assert.True(_backend.IsAlive(h));
-        Assert.Equal("Bullet", _backend.GetName(h));
-        Assert.Equal(new Vec3(1f, 2f, 3f), _backend.GetPosition(h));
+        Assert.Equal(expected: "Bullet", actual: _backend.GetName(h));
+        Assert.Equal(expected: new Vec3(x: 1f, y: 2f, z: 3f), actual: _backend.GetPosition(h));
 
         // In the tree, under the root, with its child intact
         var node = _root.Children.Single(c => c.Name == "Bullet");
@@ -158,51 +149,57 @@ public sealed class WorldRuntimeTests : IDisposable
         // Scripts attached and OnCreate ran inside Spawn
         var probe =
             Assert.IsType<WorldProbeComponent>(
-                _backend.GetComponent(h, typeof(WorldProbeComponent))
+                _backend.GetComponent(entity: h, type: typeof(WorldProbeComponent))
             );
         Assert.True(probe.Created);
 
         // Session hooks saw the subtree
-        Assert.Equal(["Bullet"], _hooks.Spawned);
+        Assert.Equal(expected: ["Bullet"], actual: _hooks.Spawned);
 
         // flecs mirror: a live entity carrying the canonical Transform, parented under the root's entity
         var e = _backend.EcsEntity(h);
         Assert.False(e.IsNull);
         Assert.True(_ecs.World.IsAlive(e));
-        Assert.Equal(_ecs.EntityOf(_root.Id), _ecs.World.GetParent(e));
+        Assert.Equal(expected: _ecs.EntityOf(_root.Id), actual: _ecs.World.GetParent(e));
 
         // Template tag seeded the index
-        Assert.Equal(1, _backend.CountByTag("Projectile"));
+        Assert.Equal(expected: 1, actual: _backend.CountByTag("Projectile"));
     }
 
     [Fact]
     public void Spawn_UnderParent_ParentsAndBakesWorldPosition()
     {
         var parent = _backend.Find("Player");
-        _backend.SetPosition(parent, new Vec3(100f, 0f, 0f));
+        _backend.SetPosition(entity: parent, position: new Vec3(x: 100f, y: 0f, z: 0f));
 
         var h = _backend.Spawn(
-            _prefabPath,
-            new Vec3(1f, 0f, 0f),
-            Quat.Identity,
-            parent
+            prefabPath: _prefabPath,
+            position: new Vec3(x: 1f, y: 0f, z: 0f),
+            rotation: Quat.Identity,
+            parent: parent
         );
 
-        Assert.Equal(parent, _backend.GetParent(h));
-        Assert.Equal(new Vec3(1f, 0f, 0f), _backend.GetPosition(h)); // local
-        Assert.Equal(new Vec3(101f, 0f, 0f), _backend.GetWorldPosition(h)); // parent-baked
+        Assert.Equal(expected: parent, actual: _backend.GetParent(h));
+        Assert.Equal(
+            expected: new Vec3(x: 1f, y: 0f, z: 0f),
+            actual: _backend.GetPosition(h)
+        ); // local
+        Assert.Equal(
+            expected: new Vec3(x: 101f, y: 0f, z: 0f),
+            actual: _backend.GetWorldPosition(h)
+        ); // parent-baked
     }
 
     [Fact]
     public void Spawn_MissingPrefab_ReturnsNone()
     {
         Assert.Equal(
-            EntityHandle.None,
-            _backend.Spawn(
-                Path.Combine(_dir, "nope.prefab"),
-                Vec3.Zero,
-                Quat.Identity,
-                EntityHandle.None
+            expected: EntityHandle.None,
+            actual: _backend.Spawn(
+                prefabPath: Path.Combine(path1: _dir, path2: "nope.prefab"),
+                position: Vec3.Zero,
+                rotation: Quat.Identity,
+                parent: EntityHandle.None
             )
         );
     }
@@ -210,17 +207,17 @@ public sealed class WorldRuntimeTests : IDisposable
     [Fact]
     public void Spawn_UnderDeadParent_ReturnsNone()
     {
-        var h = _backend.SpawnEmpty("Mount", Vec3.Zero, EntityHandle.None);
+        var h = _backend.SpawnEmpty(name: "Mount", position: Vec3.Zero, parent: EntityHandle.None);
         _backend.Destroy(h);
         Tick(_backend);
 
         Assert.Equal(
-            EntityHandle.None,
-            _backend.Spawn(
-                _prefabPath,
-                Vec3.Zero,
-                Quat.Identity,
-                h
+            expected: EntityHandle.None,
+            actual: _backend.Spawn(
+                prefabPath: _prefabPath,
+                position: Vec3.Zero,
+                rotation: Quat.Identity,
+                parent: h
             )
         );
     }
@@ -228,12 +225,19 @@ public sealed class WorldRuntimeTests : IDisposable
     [Fact]
     public void SpawnEmpty_Plus_AddComponent()
     {
-        var h = _backend.SpawnEmpty("Mount", new Vec3(2f, 0f, 0f), EntityHandle.None);
+        var h = _backend.SpawnEmpty(
+            name: "Mount",
+            position: new Vec3(x: 2f, y: 0f, z: 0f),
+            parent: EntityHandle.None
+        );
 
-        var comp = _backend.AddComponent(h, typeof(WorldProbeComponent));
+        var comp = _backend.AddComponent(entity: h, type: typeof(WorldProbeComponent));
         var probe = Assert.IsType<WorldProbeComponent>(comp);
         Assert.True(probe.Created);
-        Assert.Same(probe, _backend.GetComponent(h, typeof(WorldProbeComponent)));
+        Assert.Same(
+            expected: probe,
+            actual: _backend.GetComponent(entity: h, type: typeof(WorldProbeComponent))
+        );
     }
 
     // ── Destroy (deferred) ────────────────────────────────────────────────────
@@ -242,12 +246,15 @@ public sealed class WorldRuntimeTests : IDisposable
     public void Destroy_IsDeferred_ThenTearsEverythingDown()
     {
         var h = _backend.Spawn(
-            _prefabPath,
-            Vec3.Zero,
-            Quat.Identity,
-            EntityHandle.None
+            prefabPath: _prefabPath,
+            position: Vec3.Zero,
+            rotation: Quat.Identity,
+            parent: EntityHandle.None
         );
-        var probe = (WorldProbeComponent)_backend.GetComponent(h, typeof(WorldProbeComponent))!;
+        var probe = (WorldProbeComponent)_backend.GetComponent(
+            entity: h,
+            type: typeof(WorldProbeComponent)
+        )!;
         var e = _backend.EcsEntity(h);
 
         _backend.Destroy(h);
@@ -257,10 +264,10 @@ public sealed class WorldRuntimeTests : IDisposable
 
         Assert.False(_backend.IsAlive(h));
         Assert.True(probe.Destroyed);
-        Assert.DoesNotContain(_root.Children, c => c.Name == "Bullet");
-        Assert.Equal(["Bullet"], _hooks.Destroying);
+        Assert.DoesNotContain(collection: _root.Children, filter: c => c.Name == "Bullet");
+        Assert.Equal(expected: ["Bullet"], actual: _hooks.Destroying);
         Assert.False(_ecs.World.IsAlive(e));
-        Assert.Equal(0, _backend.CountByTag("Projectile"));
+        Assert.Equal(expected: 0, actual: _backend.CountByTag("Projectile"));
     }
 
     [Fact]
@@ -275,10 +282,10 @@ public sealed class WorldRuntimeTests : IDisposable
     public void Destroy_Twice_IsHarmless()
     {
         var h = _backend.Spawn(
-            _prefabPath,
-            Vec3.Zero,
-            Quat.Identity,
-            EntityHandle.None
+            prefabPath: _prefabPath,
+            position: Vec3.Zero,
+            rotation: Quat.Identity,
+            parent: EntityHandle.None
         );
         _backend.Destroy(h);
         _backend.Destroy(h);
@@ -292,24 +299,24 @@ public sealed class WorldRuntimeTests : IDisposable
     [Fact]
     public void RestoreSceneEdits_RemovesSpawnedNodes()
     {
-        var authoredCount = _root.Children.Count;
+        int authoredCount = _root.Children.Count;
         _backend.Spawn(
-            _prefabPath,
-            Vec3.Zero,
-            Quat.Identity,
-            EntityHandle.None
+            prefabPath: _prefabPath,
+            position: Vec3.Zero,
+            rotation: Quat.Identity,
+            parent: EntityHandle.None
         );
         _backend.Spawn(
-            _prefabPath,
-            Vec3.Zero,
-            Quat.Identity,
-            EntityHandle.None
+            prefabPath: _prefabPath,
+            position: Vec3.Zero,
+            rotation: Quat.Identity,
+            parent: EntityHandle.None
         );
 
         _backend.RestoreSceneEdits();
 
-        Assert.Equal(authoredCount, _root.Children.Count);
-        Assert.DoesNotContain(_root.Children, c => c.Name == "Bullet");
+        Assert.Equal(expected: authoredCount, actual: _root.Children.Count);
+        Assert.DoesNotContain(collection: _root.Children, filter: c => c.Name == "Bullet");
     }
 
     [Fact]
@@ -318,12 +325,15 @@ public sealed class WorldRuntimeTests : IDisposable
         var rock = _backend.Find("Rock");
         _backend.Destroy(rock);
         Tick(_backend);
-        Assert.DoesNotContain(_root.Children, c => c.Name == "Rock");
+        Assert.DoesNotContain(collection: _root.Children, filter: c => c.Name == "Rock");
 
         _backend.RestoreSceneEdits();
 
-        Assert.Equal("Rock", _root.Children[1].Name); // back at its original index
-        Assert.Same(_root, _root.Children[1].Parent);
+        Assert.Equal(
+            expected: "Rock",
+            actual: _root.Children[1].Name
+        ); // back at its original index
+        Assert.Same(expected: _root, actual: _root.Children[1].Parent);
     }
 
     [Fact]
@@ -331,28 +341,31 @@ public sealed class WorldRuntimeTests : IDisposable
     {
         var rock = _backend.Find("Rock");
         var spawned = _backend.Spawn(
-            _prefabPath,
-            Vec3.Zero,
-            Quat.Identity,
-            rock
+            prefabPath: _prefabPath,
+            position: Vec3.Zero,
+            rotation: Quat.Identity,
+            parent: rock
         );
         Assert.True(spawned.IsValid);
 
         _backend.Destroy(rock);
         Tick(_backend);
         Assert.False(_backend.IsAlive(spawned)); // died with its parent, with full teardown
-        Assert.Contains("Bullet", _hooks.Destroying);
+        Assert.Contains(expected: "Bullet", collection: _hooks.Destroying);
 
         _backend.RestoreSceneEdits();
         var restored = _root.Children.Single(c => c.Name == "Rock");
-        Assert.DoesNotContain(restored.Children, c => c.Name == "Bullet"); // spawn not resurrected
+        Assert.DoesNotContain(
+            collection: restored.Children,
+            filter: c => c.Name == "Bullet"
+        ); // spawn not resurrected
     }
 
     [Fact]
     public void RestoreSceneEdits_RestoresVisibility()
     {
         var rock = _backend.Find("Rock");
-        _backend.SetVisible(rock, false);
+        _backend.SetVisible(entity: rock, visible: false);
         Assert.False(_backend.GetVisible(rock));
 
         _backend.RestoreSceneEdits();
@@ -367,14 +380,17 @@ public sealed class WorldRuntimeTests : IDisposable
         var rock = _backend.Find("Rock");
         var player = _backend.Find("Player");
 
-        _backend.SetParent(rock, player);
-        Assert.Equal(new EntityHandle((uint)_root.Id), _backend.GetParent(rock)); // not yet
+        _backend.SetParent(child: rock, parent: player);
+        Assert.Equal(
+            expected: new EntityHandle((uint)_root.Id),
+            actual: _backend.GetParent(rock)
+        ); // not yet
 
         Tick(_backend);
-        Assert.Equal(player, _backend.GetParent(rock));
+        Assert.Equal(expected: player, actual: _backend.GetParent(rock));
 
         _backend.RestoreSceneEdits();
-        Assert.Equal("Rock", _root.Children[1].Name); // authored structure back
+        Assert.Equal(expected: "Rock", actual: _root.Children[1].Name); // authored structure back
     }
 
     [Fact]
@@ -382,16 +398,19 @@ public sealed class WorldRuntimeTests : IDisposable
     {
         var player = _backend.Find("Player");
         var child = _backend.Spawn(
-            _prefabPath,
-            Vec3.Zero,
-            Quat.Identity,
-            player
+            prefabPath: _prefabPath,
+            position: Vec3.Zero,
+            rotation: Quat.Identity,
+            parent: player
         );
 
-        _backend.SetParent(player, child);
+        _backend.SetParent(child: player, parent: child);
         Tick(_backend);
 
-        Assert.Equal(new EntityHandle((uint)_root.Id), _backend.GetParent(player));
+        Assert.Equal(
+            expected: new EntityHandle((uint)_root.Id),
+            actual: _backend.GetParent(player)
+        );
     }
 
     // ── Find / tags / spatial ─────────────────────────────────────────────────
@@ -399,26 +418,29 @@ public sealed class WorldRuntimeTests : IDisposable
     [Fact]
     public void Find_ReturnsFirstLiveMatchInTreeOrder()
     {
-        Assert.Equal("Player", _backend.GetName(_backend.Find("Player")));
-        Assert.Equal(EntityHandle.None, _backend.Find("Ghost"));
+        Assert.Equal(expected: "Player", actual: _backend.GetName(_backend.Find("Player")));
+        Assert.Equal(expected: EntityHandle.None, actual: _backend.Find("Ghost"));
     }
 
     [Fact]
     public void Tags_SeededFromAuthoredNodes_AndSessionRetaggable()
     {
-        Assert.Equal(1, _backend.CountByTag("Obstacle"));
+        Assert.Equal(expected: 1, actual: _backend.CountByTag("Obstacle"));
 
         var rock = _backend.Find("Rock");
-        _backend.SetTag(rock, "Rubble");
-        Assert.Equal(0, _backend.CountByTag("Obstacle"));
-        Assert.Equal("Rubble", _backend.GetTag(rock));
+        _backend.SetTag(entity: rock, tag: "Rubble");
+        Assert.Equal(expected: 0, actual: _backend.CountByTag("Obstacle"));
+        Assert.Equal(expected: "Rubble", actual: _backend.GetTag(rock));
 
         // Session-local: the authored node's Tag was never touched
-        Assert.Equal("Obstacle", _root.Children.Single(c => c.Name == "Rock").Tag);
+        Assert.Equal(
+            expected: "Obstacle",
+            actual: _root.Children.Single(c => c.Name == "Rock").Tag
+        );
 
         var results = new List<EntityHandle>();
-        Assert.Equal(1, _backend.FindAllByTag("Rubble", results));
-        Assert.Equal(rock, results[0]);
+        Assert.Equal(expected: 1, actual: _backend.FindAllByTag(tag: "Rubble", results: results));
+        Assert.Equal(expected: rock, actual: results[0]);
     }
 
     [Fact]
@@ -429,45 +451,48 @@ public sealed class WorldRuntimeTests : IDisposable
 
         // Player at 0, Rock at 10 — radius 5 around origin hits only the Player
         Assert.Equal(
-            1,
-            _backend.OverlapSphere(
-                Vec3.Zero,
-                5f,
-                results,
-                null
+            expected: 1,
+            actual: _backend.OverlapSphere(
+                center: Vec3.Zero,
+                radius: 5f,
+                results: results,
+                tag: null
             )
         );
-        Assert.Equal(_backend.Find("Player"), results[0]);
+        Assert.Equal(expected: _backend.Find("Player"), actual: results[0]);
 
         // Tag filter
         Assert.Equal(
-            0,
-            _backend.OverlapSphere(
-                Vec3.Zero,
-                5f,
-                results,
-                "Obstacle"
+            expected: 0,
+            actual: _backend.OverlapSphere(
+                center: Vec3.Zero,
+                radius: 5f,
+                results: results,
+                tag: "Obstacle"
             )
         );
         Assert.Equal(
-            1,
-            _backend.OverlapSphere(
-                Vec3.Zero,
-                50f,
-                results,
-                "Obstacle"
+            expected: 1,
+            actual: _backend.OverlapSphere(
+                center: Vec3.Zero,
+                radius: 50f,
+                results: results,
+                tag: "Obstacle"
             )
         );
 
         // Position writes invalidate the per-tick index
-        _backend.SetPosition(_backend.Find("Rock"), new Vec3(1f, 0f, 0f));
+        _backend.SetPosition(
+            entity: _backend.Find("Rock"),
+            position: new Vec3(x: 1f, y: 0f, z: 0f)
+        );
         Assert.Equal(
-            1,
-            _backend.OverlapSphere(
-                Vec3.Zero,
-                5f,
-                results,
-                "Obstacle"
+            expected: 1,
+            actual: _backend.OverlapSphere(
+                center: Vec3.Zero,
+                radius: 5f,
+                results: results,
+                tag: "Obstacle"
             )
         );
     }
@@ -480,39 +505,39 @@ public sealed class WorldRuntimeTests : IDisposable
         var rock = _backend.Find("Rock");
 
         Assert.Equal(
-            player,
-            _backend.Nearest(
-                new Vec3(1f, 0f, 0f),
-                100f,
-                null,
-                EntityHandle.None
+            expected: player,
+            actual: _backend.Nearest(
+                center: new Vec3(x: 1f, y: 0f, z: 0f),
+                maxRadius: 100f,
+                tag: null,
+                ignore: EntityHandle.None
             )
         );
         Assert.Equal(
-            rock,
-            _backend.Nearest(
-                new Vec3(1f, 0f, 0f),
-                100f,
-                null,
-                player
+            expected: rock,
+            actual: _backend.Nearest(
+                center: new Vec3(x: 1f, y: 0f, z: 0f),
+                maxRadius: 100f,
+                tag: null,
+                ignore: player
             )
         );
         Assert.Equal(
-            rock,
-            _backend.Nearest(
-                new Vec3(1f, 0f, 0f),
-                100f,
-                "Obstacle",
-                EntityHandle.None
+            expected: rock,
+            actual: _backend.Nearest(
+                center: new Vec3(x: 1f, y: 0f, z: 0f),
+                maxRadius: 100f,
+                tag: "Obstacle",
+                ignore: EntityHandle.None
             )
         );
         Assert.Equal(
-            EntityHandle.None,
-            _backend.Nearest(
-                new Vec3(1f, 0f, 0f),
-                2f,
-                "Obstacle",
-                EntityHandle.None
+            expected: EntityHandle.None,
+            actual: _backend.Nearest(
+                center: new Vec3(x: 1f, y: 0f, z: 0f),
+                maxRadius: 2f,
+                tag: "Obstacle",
+                ignore: EntityHandle.None
             )
         );
     }
@@ -522,10 +547,10 @@ public sealed class WorldRuntimeTests : IDisposable
     {
         Assert.Null(_backend.FindComponent(typeof(WorldProbeComponent)));
         _backend.Spawn(
-            _prefabPath,
-            Vec3.Zero,
-            Quat.Identity,
-            EntityHandle.None
+            prefabPath: _prefabPath,
+            position: Vec3.Zero,
+            rotation: Quat.Identity,
+            parent: EntityHandle.None
         );
         Assert.IsType<WorldProbeComponent>(_backend.FindComponent(typeof(WorldProbeComponent)));
     }
@@ -536,13 +561,13 @@ public sealed class WorldRuntimeTests : IDisposable
     public void Component_CanSpawn_FromInsideOnUpdate()
     {
         var spawnerHandle = _backend.SpawnEmpty(
-            "Spawner",
-            new Vec3(1000f, 0f, 0f),
-            EntityHandle.None
+            name: "Spawner",
+            position: new Vec3(x: 1000f, y: 0f, z: 0f),
+            parent: EntityHandle.None
         );
         var spawner = (WorldSpawnerComponent)_backend.AddComponent(
-            spawnerHandle,
-            typeof(WorldSpawnerComponent)
+            entity: spawnerHandle,
+            type: typeof(WorldSpawnerComponent)
         )!;
 
         GameWorld.Backend = _backend;
@@ -550,12 +575,15 @@ public sealed class WorldRuntimeTests : IDisposable
         try
         {
             _backend.BeginTick();
-            _scripts.Update(_root, 1f / 120f); // spawner appends a child to _root mid-walk
+            _scripts.Update(
+                root: _root,
+                dt: 1f / 120f
+            ); // spawner appends a child to _root mid-walk
             _backend.ApplyDeferred();
 
             Assert.True(spawner.Spawned.IsValid);
             Assert.True(_backend.IsAlive(spawner.Spawned));
-            Assert.Contains(_root.Children, c => c.Name == "Bullet");
+            Assert.Contains(collection: _root.Children, filter: c => c.Name == "Bullet");
         }
         finally
         {
@@ -567,19 +595,23 @@ public sealed class WorldRuntimeTests : IDisposable
     [Fact]
     public void Component_CanDestroyItself_FromInsideOnUpdate()
     {
-        var h = _backend.SpawnEmpty("Kamikaze", Vec3.Zero, EntityHandle.None);
-        _backend.AddComponent(h, typeof(WorldSelfDestructComponent));
+        var h = _backend.SpawnEmpty(
+            name: "Kamikaze",
+            position: Vec3.Zero,
+            parent: EntityHandle.None
+        );
+        _backend.AddComponent(entity: h, type: typeof(WorldSelfDestructComponent));
 
         GameWorld.Backend = _backend;
         try
         {
             _backend.BeginTick();
-            _scripts.Update(_root, 1f / 120f);
+            _scripts.Update(root: _root, dt: 1f / 120f);
             Assert.True(_backend.IsAlive(h)); // deferred within the tick
 
             _backend.ApplyDeferred();
             Assert.False(_backend.IsAlive(h));
-            Assert.DoesNotContain(_root.Children, c => c.Name == "Kamikaze");
+            Assert.DoesNotContain(collection: _root.Children, filter: c => c.Name == "Kamikaze");
         }
         finally
         {
@@ -592,14 +624,8 @@ public sealed class WorldRuntimeTests : IDisposable
         public readonly List<string> Destroying = [];
         public readonly List<string> Spawned = [];
 
-        public void OnSpawned(SceneNode subtreeRoot)
-        {
-            Spawned.Add(subtreeRoot.Name);
-        }
+        public void OnSpawned(SceneNode subtreeRoot) => Spawned.Add(subtreeRoot.Name);
 
-        public void OnDestroying(SceneNode subtreeRoot)
-        {
-            Destroying.Add(subtreeRoot.Name);
-        }
+        public void OnDestroying(SceneNode subtreeRoot) => Destroying.Add(subtreeRoot.Name);
     }
 }

@@ -16,12 +16,12 @@ public sealed class EngineSpriteDevice : ISpriteDevice
         var engine = ZigoteEngine.Instance;
         if (engine is null || width <= 0 || height <= 0) return 0;
         return engine.SpritesTextureCreate(
-            rgba,
-            (uint)width,
-            (uint)height,
-            (uint)filter,
-            srgb ? 1u : 0u,
-            (uint)wrap
+            rgba: rgba,
+            width: (uint)width,
+            height: (uint)height,
+            filter: (uint)filter,
+            srgb: srgb ? 1u : 0u,
+            wrap: (uint)wrap
         );
     }
 
@@ -33,39 +33,34 @@ public sealed class EngineSpriteDevice : ISpriteDevice
         height = 0;
         var engine = ZigoteEngine.Instance;
         if (engine is null) return 0;
-        var handle =
+        uint handle =
             engine.SpritesTextureCreateFile(
-                path,
-                (uint)filter,
-                srgb ? 1u : 0u,
-                (uint)wrap,
-                out var w,
-                out var h
+                path: path,
+                filter: (uint)filter,
+                srgb: srgb ? 1u : 0u,
+                wrap: (uint)wrap,
+                outW: out uint w,
+                outH: out uint h
             );
         width = (int)w;
         height = (int)h;
         return handle;
     }
 
-    public void DestroyTexture(uint texture)
-    {
+    public void DestroyTexture(uint texture) =>
         ZigoteEngine.Instance?.SpritesTextureDestroy(texture);
-    }
 
-    public uint CreateShader(string wgsl)
-    {
-        return ZigoteEngine.Instance?.SpritesShaderCreate(wgsl) ?? 0;
-    }
+    public uint CreateShader(string wgsl) => ZigoteEngine.Instance?.SpritesShaderCreate(wgsl) ?? 0;
 
     public void Begin(ReadOnlySpan<float> sceneViewProj, ReadOnlySpan<float> overlayViewProj,
         float viewportW,
         float viewportH)
     {
         ZigoteEngine.Instance?.SpritesBegin(
-            sceneViewProj,
-            overlayViewProj,
-            viewportW,
-            viewportH
+            sceneViewProj: sceneViewProj,
+            overlayViewProj: overlayViewProj,
+            viewportW: viewportW,
+            viewportH: viewportH
         );
     }
 
@@ -74,14 +69,14 @@ public sealed class EngineSpriteDevice : ISpriteDevice
     {
         if (count <= 0) return;
         ZigoteEngine.Instance?.SpritesDraw(
-            texture,
-            texture2,
-            shader,
-            (uint)blend,
-            (uint)stage,
-            materialParams,
-            instances,
-            (uint)count
+            texture: texture,
+            texture2: texture2,
+            shader: shader,
+            blend: (uint)blend,
+            stage: (uint)stage,
+            materialParams: materialParams,
+            instances: instances,
+            count: (uint)count
         );
     }
 }

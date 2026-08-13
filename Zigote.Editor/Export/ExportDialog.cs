@@ -53,17 +53,17 @@ public static class ExportDialog
             return;
         }
 
-        var hostRid = RuntimeInformation.RuntimeIdentifier;
-        var platformSelected = Platforms.Select(p => p.Rid == hostRid).ToArray();
+        string hostRid = RuntimeInformation.RuntimeIdentifier;
+        bool[] platformSelected = Platforms.Select(p => p.Rid == hostRid).ToArray();
         if (!platformSelected.Any(s => s)) platformSelected[0] = true;
-        var jitSelected = true;
-        var aotSelected = false;
+        bool jitSelected = true;
+        bool aotSelected = false;
 
         var outField = new AdwEntry {
             Placeholder = "Output folder",
-            Text = Path.Combine(Path.GetDirectoryName(state.ProjectPath)!, "export"),
+            Text = Path.Combine(path1: Path.GetDirectoryName(state.ProjectPath)!, path2: "export"),
         };
-        var validation = new Label("", theme.FontSizeCaption, theme.Error);
+        var validation = new Label(text: "", fontSize: theme.FontSizeCaption, color: theme.Error);
 
         Dialog? dialog = null;
         // Dialog passes a bounded max height and expects content columns to be MainAxisSize.Min —
@@ -72,55 +72,61 @@ public static class ExportDialog
             CrossAxisAlignment = CrossAxisAlignment.Stretch,
             MainAxisSize = MainAxisSize.Min,
         };
-        rows.Children.Add(new Label("Export Game", theme.FontSizeTitle, theme.OnSurface));
+        rows.Children.Add(
+            new Label(text: "Export Game", fontSize: theme.FontSizeTitle, color: theme.OnSurface)
+        );
         rows.Children.Add(new SizedBox(height: 6f));
         rows.Children.Add(
             new Label(
+                text:
                 "Bundles the game (scene, assets, scripts, engine) into distributable builds.",
-                theme.FontSizeCaption,
-                theme.Hint
+                fontSize: theme.FontSizeCaption,
+                color: theme.Hint
             )
         );
         rows.Children.Add(new SizedBox(height: 14f));
 
-        rows.Children.Add(SectionHeader("Platforms", theme));
-        for (var i = 0; i < Platforms.Length; i++)
+        rows.Children.Add(SectionHeader(text: "Platforms", theme: theme));
+        for (int i = 0; i < Platforms.Length; i++)
         {
-            var idx = i;
-            var label = Platforms[idx].Label +
-                        (Platforms[idx].Rid == hostRid ? "  — this machine" : "");
+            int idx = i;
+            string label = Platforms[idx].Label +
+                           (Platforms[idx].Rid == hostRid ? "  — this machine" : "");
             rows.Children.Add(
                 CheckRow(
-                    new AdwCheckButton(value: platformSelected[idx],
-                        onChanged: v => platformSelected[idx] = v),
-                    label,
-                    null,
-                    theme
+                    box: new AdwCheckButton(
+                        value: platformSelected[idx],
+                        onChanged: v => platformSelected[idx] = v
+                    ),
+                    label: label,
+                    caption: null,
+                    theme: theme
                 )
             );
         }
 
         rows.Children.Add(new SizedBox(height: 12f));
-        rows.Children.Add(SectionHeader("Build flavors", theme));
+        rows.Children.Add(SectionHeader(text: "Build flavors", theme: theme));
         rows.Children.Add(
             CheckRow(
-                new AdwCheckButton(value: jitSelected, onChanged: v => jitSelected = v),
-                "Self-contained (JIT)",
-                "single-file on Windows/Linux; every platform buildable from here",
-                theme
+                box: new AdwCheckButton(value: jitSelected, onChanged: v => jitSelected = v),
+                label: "Self-contained (JIT)",
+                caption: "single-file on Windows/Linux; every platform buildable from here",
+                theme: theme
             )
         );
         rows.Children.Add(
             CheckRow(
-                new AdwCheckButton(value: aotSelected, onChanged: v => aotSelected = v),
-                "Native AOT",
+                box: new AdwCheckButton(value: aotSelected, onChanged: v => aotSelected = v),
+                label: "Native AOT",
+                caption:
                 $"fastest startup, smallest runtime; only for this machine's OS ({RidOsLabel(hostRid)})",
-                theme
+                theme: theme
             )
         );
         rows.Children.Add(new SizedBox(height: 12f));
 
-        rows.Children.Add(SectionHeader("Output", theme));
+        rows.Children.Add(SectionHeader(text: "Output", theme: theme));
 
         // Native folder picker beside the field; the export folder may not exist yet, so the
         // field stays editable and the picker just replaces its text.
@@ -128,11 +134,14 @@ public static class ExportDialog
         {
             try
             {
-                var current = outField.Text.Trim();
-                var startDir = Directory.Exists(current)
+                string current = outField.Text.Trim();
+                string? startDir = Directory.Exists(current)
                     ? current
                     : Path.GetDirectoryName(state.ProjectPath);
-                var picked = await FileDialog.PickFolderAsync("Choose Export Folder", startDir);
+                string? picked = await FileDialog.PickFolderAsync(
+                    title: "Choose Export Folder",
+                    startDirectory: startDir
+                );
                 if (picked is null) return;
                 outField.Text = picked;
                 app.RequestPaint();
@@ -150,7 +159,7 @@ public static class ExportDialog
                     Children = {
                         new Expanded(outField),
                         new SizedBox(8f),
-                        new AdwButton("Browse…", BrowseOutput),
+                        new AdwButton(label: "Browse…", onPressed: BrowseOutput),
                     },
                 }
                 : outField
@@ -163,11 +172,11 @@ public static class ExportDialog
             new Row {
                 MainAxisAlignment = MainAxisAlignment.End,
                 Children = {
-                    new AdwButton("Cancel", () => dialog?.Dismiss()),
+                    new AdwButton(label: "Cancel", onPressed: () => dialog?.Dismiss()),
                     new SizedBox(10f),
                     new AdwButton(
-                        "Export",
-                        () =>
+                        label: "Export",
+                        onPressed: () =>
                         {
                             var rids = Platforms.Where((_, i) => platformSelected[i])
                                 .Select(p => p.Rid).ToList();
@@ -184,25 +193,25 @@ public static class ExportDialog
                             }
 
                             var input = new ExportInput(
-                                state.ProjectPath!,
-                                state.Project!,
-                                state.ScriptRegistry,
-                                state.ScriptDomain.AssemblyPath is { } asm
+                                ProjectPath: state.ProjectPath!,
+                                Project: state.Project!,
+                                Scripts: state.ScriptRegistry,
+                                ScriptAssemblyName: state.ScriptDomain.AssemblyPath is { } asm
                                     ? Path.GetFileNameWithoutExtension(asm)
                                     : null
                             );
                             var options = new ExportOptions(
-                                Path.GetFullPath(outField.Text.Trim()),
-                                rids,
-                                modes
+                                OutputDir: Path.GetFullPath(outField.Text.Trim()),
+                                Rids: rids,
+                                Modes: modes
                             );
 
                             dialog?.Dismiss();
                             RunWithProgress(
-                                app,
-                                theme,
-                                input,
-                                options
+                                app: app,
+                                theme: theme,
+                                input: input,
+                                options: options
                             );
                         }
                     ) { Style = AdwButtonStyle.Suggested },
@@ -210,8 +219,11 @@ public static class ExportDialog
             }
         );
 
-        var body = new SizedBox(540f, child: new Padding(EdgeInsets.All(20f), rows));
-        dialog = new Dialog(body, app) { Dismissible = true };
+        var body = new SizedBox(
+            width: 540f,
+            child: new Padding(padding: EdgeInsets.All(20f), child: rows)
+        );
+        dialog = new Dialog(content: body, app: app) { Dismissible = true };
         dialog.Show();
     }
 
@@ -228,21 +240,27 @@ public static class ExportDialog
             CrossAxisAlignment = CrossAxisAlignment.Stretch,
             MainAxisSize = MainAxisSize.Min,
         };
-        rows.Children.Add(new Label("Exporting…", theme.FontSizeTitle, theme.OnSurface));
+        rows.Children.Add(
+            new Label(text: "Exporting…", fontSize: theme.FontSizeTitle, color: theme.OnSurface)
+        );
         rows.Children.Add(new SizedBox(height: 12f));
-        foreach (var rid in options.Rids)
+        foreach (string rid in options.Rids)
         foreach (var mode in options.Modes)
         {
-            var job = new ExportJob(rid, mode);
-            var status = new Label("queued", theme.FontSizeCaption, theme.Hint);
+            var job = new ExportJob(Rid: rid, Mode: mode);
+            var status = new Label(
+                text: "queued",
+                fontSize: theme.FontSizeCaption,
+                color: theme.Hint
+            );
             jobRows[job] = status;
             rows.Children.Add(
                 new Row {
                     Children = {
                         new Label(
-                            $"{PlatformLabel(rid)} · {ModeLabel(mode)}",
-                            theme.FontSizeBody,
-                            theme.OnSurface
+                            text: $"{PlatformLabel(rid)} · {ModeLabel(mode)}",
+                            fontSize: theme.FontSizeBody,
+                            color: theme.OnSurface
                         ),
                         new Spacer(),
                         status,
@@ -253,7 +271,11 @@ public static class ExportDialog
         }
 
         rows.Children.Add(new SizedBox(height: 8f));
-        var logLine = new Label("Starting…", theme.FontSizeCaption, theme.Hint) { MaxLines = 1 };
+        var logLine = new Label(
+            text: "Starting…",
+            fontSize: theme.FontSizeCaption,
+            color: theme.Hint
+        ) { MaxLines = 1 };
         rows.Children.Add(logLine);
         rows.Children.Add(new SizedBox(height: 12f));
 
@@ -273,9 +295,14 @@ public static class ExportDialog
             }
         );
 
-        var body = new SizedBox(540f, child: new Padding(EdgeInsets.All(20f), rows));
+        var body = new SizedBox(
+            width: 540f,
+            child: new Padding(padding: EdgeInsets.All(20f), child: rows)
+        );
         var progress =
-            new Dialog(body, app) { Dismissible = false }; // blocked until the pass finishes
+            new Dialog(content: body, app: app) {
+                Dismissible = false,
+            }; // blocked until the pass finishes
         progress.Show();
         closeButton.OnPressed = () => progress.Dismiss();
         revealButton.OnPressed = () => Reveal(options.OutputDir);
@@ -283,12 +310,12 @@ public static class ExportDialog
         var log = new LineProgress(line =>
             {
                 Console.WriteLine(line); // EditorLog tees this into the Console panel
-                logLine.Text = Truncate(line, 90);
+                logLine.Text = Truncate(s: line, max: 90);
             }
         );
         var jobs = new JobProgress(update =>
             {
-                if (!jobRows.TryGetValue(update.Job, out var status)) return;
+                if (!jobRows.TryGetValue(key: update.Job, value: out var status)) return;
                 (status.Text, status.Color) = update.State switch {
                     ExportJobState.Running => ("building…", theme.Hint),
                     ExportJobState.Succeeded => ("done", theme.Success),
@@ -304,16 +331,16 @@ public static class ExportDialog
                 try
                 {
                     ok = await GameExporter.ExportAsync(
-                        input,
-                        options,
-                        log,
-                        jobs
+                        input: input,
+                        options: options,
+                        log: log,
+                        jobs: jobs
                     );
                 }
                 catch (Exception ex)
                 {
                     Console.Error.WriteLine($"[Export] {ex}");
-                    logLine.Text = Truncate(ex.Message, 90);
+                    logLine.Text = Truncate(s: ex.Message, max: 90);
                     ok = false;
                 }
                 finally
@@ -336,8 +363,12 @@ public static class ExportDialog
     private static Widget SectionHeader(string text, ThemeData theme)
     {
         return new Padding(
-            EdgeInsets.Only(bottom: 6f),
-            new Label(text.ToUpperInvariant(), theme.FontSizeCaption, theme.Hint)
+            padding: EdgeInsets.Only(bottom: 6f),
+            child: new Label(
+                text: text.ToUpperInvariant(),
+                fontSize: theme.FontSizeCaption,
+                color: theme.Hint
+            )
         );
     }
 
@@ -348,13 +379,20 @@ public static class ExportDialog
         var text = new Column {
             CrossAxisAlignment = CrossAxisAlignment.Start,
             MainAxisSize = MainAxisSize.Min,
-            Children = { new Label(label, theme.FontSizeBody, theme.OnSurface) },
+            Children = {
+                new Label(text: label, fontSize: theme.FontSizeBody, color: theme.OnSurface),
+            },
         };
         if (caption is not null)
-            text.Children.Add(new Label(caption, theme.FontSizeCaption, theme.Hint));
+        {
+            text.Children.Add(
+                new Label(text: caption, fontSize: theme.FontSizeCaption, color: theme.Hint)
+            );
+        }
+
         return new Padding(
-            EdgeInsets.Only(bottom: 6f),
-            new Row {
+            padding: EdgeInsets.Only(bottom: 6f),
+            child: new Row {
                 CrossAxisAlignment = CrossAxisAlignment.Start,
                 Children = {
                     box,
@@ -365,15 +403,11 @@ public static class ExportDialog
         );
     }
 
-    private static string PlatformLabel(string rid)
-    {
-        return Platforms.FirstOrDefault(p => p.Rid == rid).Label ?? rid;
-    }
+    private static string PlatformLabel(string rid) =>
+        Platforms.FirstOrDefault(p => p.Rid == rid).Label ?? rid;
 
-    private static string ModeLabel(ExportMode mode)
-    {
-        return mode == ExportMode.NativeAot ? "Native AOT" : "JIT";
-    }
+    private static string ModeLabel(ExportMode mode) =>
+        mode == ExportMode.NativeAot ? "Native AOT" : "JIT";
 
     private static string RidOsLabel(string rid)
     {
@@ -388,10 +422,12 @@ public static class ExportDialog
     {
         try
         {
-            var (exe, args) = OperatingSystem.IsMacOS() ? ("open", $"\"{dir}\"")
+            (string exe, string args) = OperatingSystem.IsMacOS() ? ("open", $"\"{dir}\"")
                 : OperatingSystem.IsWindows() ? ("explorer", $"\"{dir}\"")
                 : ("xdg-open", $"\"{dir}\"");
-            Process.Start(new ProcessStartInfo(exe, args) { UseShellExecute = false });
+            Process.Start(
+                new ProcessStartInfo(fileName: exe, arguments: args) { UseShellExecute = false }
+            );
         }
         catch (Exception ex)
         {
@@ -399,24 +435,15 @@ public static class ExportDialog
         }
     }
 
-    private static string Truncate(string s, int max)
-    {
-        return s.Length <= max ? s : s[..(max - 1)] + "…";
-    }
+    private static string Truncate(string s, int max) => s.Length <= max ? s : s[..(max - 1)] + "…";
 
     private sealed class LineProgress(Action<string> onLine) : IProgress<string>
     {
-        public void Report(string value)
-        {
-            onLine(value);
-        }
+        public void Report(string value) => onLine(value);
     }
 
     private sealed class JobProgress(Action<ExportJobUpdate> onUpdate) : IProgress<ExportJobUpdate>
     {
-        public void Report(ExportJobUpdate value)
-        {
-            onUpdate(value);
-        }
+        public void Report(ExportJobUpdate value) => onUpdate(value);
     }
 }

@@ -38,14 +38,14 @@ public static class TextMeasure
         if (string.IsNullOrEmpty(text) || fontSize <= 0f) return Size.Zero;
 
         var key = new Key(
-            text,
-            fontSize,
-            weight,
-            style,
-            fontFamily
+            Text: text,
+            Size: fontSize,
+            Weight: weight,
+            Style: style,
+            FontFamily: fontFamily
         );
-        if (_cache.TryGetValue(key, out var cached)) return cached;
-        if (_previous.TryGetValue(key, out cached))
+        if (_cache.TryGetValue(key: key, value: out var cached)) return cached;
+        if (_previous.TryGetValue(key: key, value: out cached))
         {
             _cache[key] = cached;
             return cached;
@@ -54,13 +54,13 @@ public static class TextMeasure
         var engine = ZigoteEngine.Instance;
         var size = engine is not null
             ? engine.MeasureText(
-                text,
-                fontSize,
+                text: text,
+                fontSize: fontSize,
                 weight: weight,
                 style: style,
                 fontFamily: fontFamily
             )
-            : new Size(text.Length * fontSize * 0.55f, fontSize * 1.2f);
+            : new Size(width: text.Length * fontSize * 0.55f, height: fontSize * 1.2f);
 
         if (_cache.Count >= MaxEntries)
         {
@@ -83,11 +83,11 @@ public static class TextMeasure
         string? fontFamily = null)
     {
         return Measure(
-            text,
-            fontSize,
-            weight,
-            style,
-            fontFamily
+            text: text,
+            fontSize: fontSize,
+            weight: weight,
+            style: style,
+            fontFamily: fontFamily
         ).Width;
     }
 

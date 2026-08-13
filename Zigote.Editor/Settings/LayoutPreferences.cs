@@ -11,10 +11,8 @@ namespace Zigote.Editor.Settings;
 /// </summary>
 public sealed class LayoutPreferences : PreferencesProvider
 {
-    public LayoutPreferences(PreferenceStore store) : base(store, "layout")
-    {
-        Dock = Register<DockLayoutData?>("dock", null);
-    }
+    public LayoutPreferences(PreferenceStore store) : base(store: store, prefix: "layout") =>
+        Dock = Register<DockLayoutData?>(key: "dock", defaultValue: null);
 
     /// <summary>The saved dock arrangement; null = the default layout.</summary>
     public Preference<DockLayoutData?> Dock { get; }

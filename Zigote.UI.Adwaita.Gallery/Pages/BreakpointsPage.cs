@@ -7,13 +7,12 @@ namespace AdwaitaGallery.Pages;
 /// </summary>
 public sealed class BreakpointsPage : ComposedWidget
 {
-    private readonly Signal<float> _width = new(720f);
-
     // Retained: the slider mutates these boxes' Width. Rebuilding the stages from a Watch would
     // discard and re-create the breakpoint bin, its panes and the shared entry on every pointer
     // move of the drag — which is exactly the state a multi-layout view exists to preserve.
-    private readonly SizedBox _binStage = new(720f, 120f);
-    private readonly SizedBox _layoutStage = new(720f, 140f);
+    private readonly SizedBox _binStage = new(width: 720f, height: 120f);
+    private readonly SizedBox _layoutStage = new(width: 720f, height: 140f);
+    private readonly Signal<float> _width = new(720f);
 
     protected override Widget Build(BuildContext context)
     {
@@ -25,7 +24,9 @@ public sealed class BreakpointsPage : ComposedWidget
             return new DecoratedBox {
                 Fill = fill,
                 Radius = AdwMetrics.CardRadius,
-                Child = new Center(new Label(label, AdwTypography.Body, theme.OnBackground)),
+                Child = new Center(
+                    new Label(text: label, style: AdwTypography.Body, color: theme.OnBackground)
+                ),
             };
         }
 
@@ -34,26 +35,28 @@ public sealed class BreakpointsPage : ComposedWidget
         var shared = new AdwEntry { Placeholder = "Type here, then fold the layout" };
 
         return new GalleryPage(
-            "Breakpoints",
+            title: "Breakpoints",
+            description:
             "Containers that answer for their own size, and layouts that share their children.",
-            MaterialIcons.Rule
+            iconName: MaterialIcons.Rule
         ) {
             ClampWidth = 760f,
             Children = {
                 Demo.Group(
-                    "Allocation",
+                    title: "Allocation",
+                    description:
                     "Drag to resize the stages below. Nothing here reads the window size.",
                     new AdwActionRow("Width") {
                         Suffixes = {
                             new SizedBox(
-                                240f,
+                                width: 240f,
                                 child: new AdwSlider(
-                                    720f,
-                                    260f,
-                                    760f,
-                                    v =>
+                                    value: 720f,
+                                    min: 260f,
+                                    max: 760f,
+                                    onChanged: v =>
                                     {
-                                        var w = MathF.Round(v);
+                                        float w = MathF.Round(v);
                                         _width.Value = w; // drives the readout only
                                         _binStage.Width = w;
                                         _layoutStage.Width = w;
@@ -70,17 +73,28 @@ public sealed class BreakpointsPage : ComposedWidget
                     )
                 ),
                 Demo.Titled(
-                    "Breakpoint Bin",
+                    title: "Breakpoint Bin",
+                    description:
                     "Breakpoints are listed narrowest-first and the LAST match wins, so the list " +
                     "reads top-to-bottom like a stylesheet.",
-                    new Align(Alignment.TopCenter, Stage(_binStage, Bin(Pane, p))) {
+                    child: new Align(
+                        alignment: Alignment.TopCenter,
+                        child: Stage(box: _binStage, content: Bin(pane: Pane, p: p))
+                    ) {
                         HeightFactor = 1f,
                     }
                 ),
                 Demo.Titled(
-                    "Multi-Layout View",
+                    title: "Multi-Layout View",
+                    description:
                     "The same entry moves between arrangements; its text and caret survive.",
-                    new Align(Alignment.TopCenter, Stage(_layoutStage, MultiLayout(shared, Pane, p))) {
+                    child: new Align(
+                        alignment: Alignment.TopCenter,
+                        child: Stage(
+                            box: _layoutStage,
+                            content: MultiLayout(shared: shared, pane: Pane, p: p)
+                        )
+                    ) {
                         HeightFactor = 1f,
                     }
                 ),
@@ -103,19 +117,19 @@ public sealed class BreakpointsPage : ComposedWidget
         var bin = new AdwBreakpointBin(
             new Row(spacing: Spacing.Md) {
                 Children = {
-                    new SizedBox(200f, child: pane("Sidebar", p.SidebarBg)),
-                    new Expanded(pane("Content — wide", p.ViewBg)),
+                    new SizedBox(width: 200f, child: pane(arg1: "Sidebar", arg2: p.SidebarBg)),
+                    new Expanded(pane(arg1: "Content — wide", arg2: p.ViewBg)),
                 },
             }
         );
         bin.Breakpoints.Add(
             new AdwBreakpoint(AdwBreakpointCondition.MaxWidth(600f)) {
-                Child = pane("Content — folded", p.ViewBg),
+                Child = pane(arg1: "Content — folded", arg2: p.ViewBg),
             }
         );
         bin.Breakpoints.Add(
             new AdwBreakpoint(AdwBreakpointCondition.MaxWidth(360f)) {
-                Child = pane("Content — narrow", p.CardBg),
+                Child = pane(arg1: "Content — narrow", arg2: p.CardBg),
             }
         );
         return bin;
@@ -127,21 +141,28 @@ public sealed class BreakpointsPage : ComposedWidget
             Children = { ["entry"] = shared },
             Layouts = {
                 new AdwLayout(
-                    "wide",
-                    new Row(spacing: Spacing.Md) {
+                    name: "wide",
+                    content: new Row(spacing: Spacing.Md) {
                         Children = {
-                            new SizedBox(180f, child: pane("Sidebar", p.SidebarBg)),
-                            new Expanded(
-                                new Center(new AdwLayoutSlot("entry"))
+                            new SizedBox(
+                                width: 180f,
+                                child: pane(arg1: "Sidebar", arg2: p.SidebarBg)
                             ),
+                            new Expanded(new Center(new AdwLayoutSlot("entry"))),
                         },
                     }
                 ),
                 new AdwLayout(
-                    "narrow",
-                    new Column(spacing: Spacing.Md, crossAxisAlignment: CrossAxisAlignment.Stretch) {
+                    name: "narrow",
+                    content: new Column(
+                        spacing: Spacing.Md,
+                        crossAxisAlignment: CrossAxisAlignment.Stretch
+                    ) {
                         Children = {
-                            new SizedBox(height: 40f, child: pane("Sidebar", p.SidebarBg)),
+                            new SizedBox(
+                                height: 40f,
+                                child: pane(arg1: "Sidebar", arg2: p.SidebarBg)
+                            ),
                             new AdwLayoutSlot("entry"),
                         },
                     }

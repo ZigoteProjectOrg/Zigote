@@ -16,15 +16,10 @@ public sealed class VfxDomain : IGraphDomain
     public string DisplayName => "VFX";
     public IReadOnlyList<string> SupportedSchemas => [VfxNodeLibrary.EmitterSchema];
 
-    public IReadOnlyList<GraphTypeDefinition> GetTypeDefinitions()
-    {
-        return VfxNodeLibrary.TypeDefinitions;
-    }
+    public IReadOnlyList<GraphTypeDefinition> GetTypeDefinitions() =>
+        VfxNodeLibrary.TypeDefinitions;
 
-    public IReadOnlyList<NodeDefinition> GetNodeDefinitions()
-    {
-        return VfxNodeLibrary.Definitions;
-    }
+    public IReadOnlyList<NodeDefinition> GetNodeDefinitions() => VfxNodeLibrary.Definitions;
 
     public bool CanCreateEdge(GraphDocument graph, GraphPinEndpoint from, GraphPinEndpoint to,
         out string? reason)
@@ -45,11 +40,15 @@ public sealed class VfxDomain : IGraphDomain
         }
 
         var fromType = VfxNodeLibrary.PinType(
-            fromNode.DefinitionId,
-            from.PinId,
-            PinDirection.Output
+            definitionId: fromNode.DefinitionId,
+            pinId: from.PinId,
+            direction: PinDirection.Output
         );
-        var toType = VfxNodeLibrary.PinType(toNode.DefinitionId, to.PinId, PinDirection.Input);
+        var toType = VfxNodeLibrary.PinType(
+            definitionId: toNode.DefinitionId,
+            pinId: to.PinId,
+            direction: PinDirection.Input
+        );
         if (fromType is null || toType is null)
         {
             reason = "Unknown pin.";
@@ -69,8 +68,9 @@ public sealed class VfxDomain : IGraphDomain
     public GraphValidationResult Validate(GraphDocument graph)
     {
         var diags = new List<GraphDiagnostic>();
-        var outputs = graph.Nodes.Count(n => n.DefinitionId == VfxNodeLibrary.Output);
+        int outputs = graph.Nodes.Count(n => n.DefinitionId == VfxNodeLibrary.Output);
         if (outputs > 1)
+        {
             diags.Add(
                 new GraphDiagnostic {
                     Severity = GraphDiagnosticSeverity.Error,
@@ -79,6 +79,7 @@ public sealed class VfxDomain : IGraphDomain
                     DomainId = Id,
                 }
             );
+        }
 
         diags.AddRange(VfxGraphCompiler.Compile(graph).Diagnostics);
         return new GraphValidationResult {

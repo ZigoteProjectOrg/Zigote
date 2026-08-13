@@ -18,14 +18,18 @@ namespace Zigote.Mcp;
 /// </summary>
 public static class Program
 {
-    private static readonly string[] KnownProtocolVersions = ["2025-06-18", "2025-03-26", "2024-11-05"];
+    private static readonly string[] KnownProtocolVersions =
+        ["2025-06-18", "2025-03-26", "2024-11-05"];
 
     public static int Main()
     {
         // UTF-8 without a BOM on both ends: a BOM ahead of the first '{' is a parse error to the
         // client, and Windows consoles default to neither.
         Console.InputEncoding = Encoding.UTF8;
-        var stdout = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true };
+        var stdout = new StreamWriter(
+            stream: Console.OpenStandardOutput(),
+            encoding: new UTF8Encoding(false)
+        ) { AutoFlush = true };
 
         while (Console.ReadLine() is { } line)
         {
@@ -38,13 +42,16 @@ public static class Program
             }
             catch (JsonException)
             {
-                Write(stdout, RpcError(null, -32700, "parse error"));
+                Write(
+                    stdout: stdout,
+                    message: RpcError(id: null, code: -32700, message: "parse error")
+                );
                 continue;
             }
 
             if (message is not JsonObject request) continue;
 
-            var method = request["method"]?.GetValue<string>();
+            string? method = request["method"]?.GetValue<string>();
             var id = request["id"];
 
             // A response to a server-initiated request — this server never sends any — or garbage.
@@ -54,8 +61,8 @@ public static class Program
             // ones that actually arrive.
             if (id is null) continue;
 
-            var reply = Dispatch(method, request["params"] as JsonObject, id);
-            Write(stdout, reply);
+            var reply = Dispatch(method: method, @params: request["params"] as JsonObject, id: id);
+            Write(stdout: stdout, message: reply);
         }
 
         AppHost.StopAll();
@@ -66,24 +73,23 @@ public static class Program
     {
         try
         {
-            return method switch
-            {
-                "initialize" => Result(id, Initialize(@params)),
-                "ping" => Result(id, new JsonObject()),
-                "tools/list" => Result(id, new JsonObject { ["tools"] = Tools.List() }),
-                "tools/call" => Result(id, Tools.Call(@params)),
-                _ => RpcError(id, -32601, $"method '{method}' not found"),
+            return method switch {
+                "initialize" => Result(id: id, result: Initialize(@params)),
+                "ping" => Result(id: id, result: new JsonObject()),
+                "tools/list" => Result(id: id, result: new JsonObject { ["tools"] = Tools.List() }),
+                "tools/call" => Result(id: id, result: Tools.Call(@params)),
+                _ => RpcError(id: id, code: -32601, message: $"method '{method}' not found"),
             };
         }
         catch (ToolError e)
         {
             // A tool that fails is a *successful* tools/call whose result says isError — the model
             // reads the message and adjusts. Only malformed requests become JSON-RPC errors.
-            return Result(id, Tools.ErrorResult(e.Message));
+            return Result(id: id, result: Tools.ErrorResult(e.Message));
         }
         catch (Exception e)
         {
-            return RpcError(id, -32603, e.Message);
+            return RpcError(id: id, code: -32603, message: e.Message);
         }
     }
 
@@ -91,15 +97,18 @@ public static class Program
     {
         // Echo the client's version when it is one we know; otherwise answer with our newest and
         // let the client decide whether to proceed (the spec's negotiation rule).
-        var asked = @params?["protocolVersion"]?.GetValue<string>();
-        var version = asked is not null && KnownProtocolVersions.Contains(asked)
+        string? asked = @params?["protocolVersion"]?.GetValue<string>();
+        string version = asked is not null && KnownProtocolVersions.Contains(asked)
             ? asked
             : KnownProtocolVersions[0];
 
         return new JsonObject {
             ["protocolVersion"] = version,
             ["capabilities"] = new JsonObject { ["tools"] = new JsonObject() },
-            ["serverInfo"] = new JsonObject { ["name"] = "zigote", ["version"] = "0.1.0" },
+            ["serverInfo"] = new JsonObject {
+                ["name"] = "zigote",
+                ["version"] = "0.1.0",
+            },
             ["instructions"] =
                 "Drives a running Zigote app. Start one with `launch` (it sets ZIGOTE_INSPECT and " +
                 "remembers the port; watch=true adds hot reload on save), or start it yourself " +
@@ -123,17 +132,21 @@ public static class Program
         stdout.Flush();
     }
 
-    private static JsonObject Result(JsonNode id, JsonNode result)
-    {
-        return new JsonObject { ["jsonrpc"] = "2.0", ["id"] = id.DeepClone(), ["result"] = result };
-    }
+    private static JsonObject Result(JsonNode id, JsonNode result) => new() {
+        ["jsonrpc"] = "2.0",
+        ["id"] = id.DeepClone(),
+        ["result"] = result,
+    };
 
     private static JsonObject RpcError(JsonNode? id, int code, string message)
     {
         return new JsonObject {
             ["jsonrpc"] = "2.0",
             ["id"] = id?.DeepClone(),
-            ["error"] = new JsonObject { ["code"] = code, ["message"] = message },
+            ["error"] = new JsonObject {
+                ["code"] = code,
+                ["message"] = message,
+            },
         };
     }
 }

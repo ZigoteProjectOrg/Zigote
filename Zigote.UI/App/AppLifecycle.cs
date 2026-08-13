@@ -40,9 +40,7 @@ public interface IAppLifecycleObserver
     ///     The OS is low on memory: drop caches that can be rebuilt (decoded images, pooled
     ///     buffers). The framework already drops the native text caches. Default: no-op.
     /// </summary>
-    void OnLowMemory()
-    {
-    }
+    void OnLowMemory() { }
 }
 
 public partial class App
@@ -59,11 +57,11 @@ public partial class App
     /// </summary>
     public bool ScreenKeyboardVisible { get; private set; }
 
-    /// <summary>Raised when the mobile on-screen keyboard appears/disappears.</summary>
-    public event Action<bool>? ScreenKeyboardChanged;
-
     /// <summary>True while backgrounded — <see cref="Frame" /> drains events but renders nothing.</summary>
     public bool IsPaused => LifecycleState == AppLifecycleState.Paused;
+
+    /// <summary>Raised when the mobile on-screen keyboard appears/disappears.</summary>
+    public event Action<bool>? ScreenKeyboardChanged;
 
     /// <summary>Delegate-style companion to <see cref="IAppLifecycleObserver" />.</summary>
     public event Action<AppLifecycleState>? LifecycleChanged;
@@ -76,17 +74,15 @@ public partial class App
         if (!_lifecycleObservers.Contains(observer)) _lifecycleObservers.Add(observer);
     }
 
-    public void RemoveLifecycleObserver(IAppLifecycleObserver observer)
-    {
+    public void RemoveLifecycleObserver(IAppLifecycleObserver observer) =>
         _lifecycleObservers.Remove(observer);
-    }
 
     private void SetLifecycleState(AppLifecycleState state)
     {
         if (LifecycleState == state) return;
         LifecycleState = state;
         // Backwards: observers may remove themselves (or their widget) during the callback.
-        for (var i = _lifecycleObservers.Count - 1; i >= 0; i--)
+        for (int i = _lifecycleObservers.Count - 1; i >= 0; i--)
             _lifecycleObservers[i].OnLifecycleChanged(state);
         LifecycleChanged?.Invoke(state);
     }
@@ -109,7 +105,7 @@ public partial class App
                 break;
 
             case LowMemoryEvent:
-                for (var i = _lifecycleObservers.Count - 1; i >= 0; i--)
+                for (int i = _lifecycleObservers.Count - 1; i >= 0; i--)
                     _lifecycleObservers[i].OnLowMemory();
                 LowMemory?.Invoke();
                 // Shaped runs and glyph atlases rebuild lazily — the cheapest big cache to give

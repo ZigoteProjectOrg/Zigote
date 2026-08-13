@@ -15,87 +15,132 @@ public sealed class TypographyPage : ComposedWidget
         var theme = ThemeProvider.Of(context);
 
         var scale = new AdwPreferencesGroup(
-            "The Scale",
-            "libadwaita's style classes, converted from points and rendered in Inter."
+            title: "The Scale",
+            description: "libadwaita's style classes, converted from points and rendered in Inter."
         );
-        foreach (var (name, style, note) in Specimens())
+        foreach ((string name, var style, string note) in Specimens())
+        {
             scale.Rows.Add(
-                new AdwActionRow(name, note) {
+                new AdwActionRow(title: name, subtitle: note) {
                     Suffixes = {
-                        new Label("Aa", style, theme.OnBackground) { MaxLines = 1 },
+                        new Label(text: "Aa", style: style, color: theme.OnBackground) {
+                            MaxLines = 1,
+                        },
                     },
                 }
             );
+        }
 
         return new GalleryPage(
-            "Typography",
+            title: "Typography",
+            description:
             "One ramp, six steps and a monospace face — the whole type system of a GNOME app.",
-            MaterialIcons.FormatSize
+            iconName: MaterialIcons.FormatSize
         ) {
             ClampWidth = 680f,
             Children = {
                 Demo.Titled(
-                    "Specimens",
-                    null,
-                    Demo.Stage(
-                        new Column(
+                    title: "Specimens",
+                    description: null,
+                    child: Demo.Stage(
+                        child: new Column(
                             spacing: Spacing.Md,
                             mainAxisSize: MainAxisSize.Min,
                             crossAxisAlignment: CrossAxisAlignment.Start
                         ) {
                             Children = {
-                                new Label("Title 1", AdwTypography.Title1, theme.OnBackground),
-                                new Label("Title 2", AdwTypography.Title2, theme.OnBackground),
-                                new Label("Title 3", AdwTypography.Title3, theme.OnBackground),
-                                new Label("Title 4", AdwTypography.Title4, theme.OnBackground),
-                                new Label("Heading", AdwTypography.Heading, theme.OnBackground),
-                                new Label("Body", AdwTypography.Body, theme.OnBackground),
                                 new Label(
-                                    "Caption heading",
-                                    AdwTypography.CaptionHeading,
-                                    theme.TextSecondary
+                                    text: "Title 1",
+                                    style: AdwTypography.Title1,
+                                    color: theme.OnBackground
                                 ),
-                                new Label("Caption", AdwTypography.Caption, theme.TextSecondary),
                                 new Label(
-                                    "Monospace 0123",
-                                    AdwTypography.Monospace,
-                                    theme.OnBackground
+                                    text: "Title 2",
+                                    style: AdwTypography.Title2,
+                                    color: theme.OnBackground
+                                ),
+                                new Label(
+                                    text: "Title 3",
+                                    style: AdwTypography.Title3,
+                                    color: theme.OnBackground
+                                ),
+                                new Label(
+                                    text: "Title 4",
+                                    style: AdwTypography.Title4,
+                                    color: theme.OnBackground
+                                ),
+                                new Label(
+                                    text: "Heading",
+                                    style: AdwTypography.Heading,
+                                    color: theme.OnBackground
+                                ),
+                                new Label(
+                                    text: "Body",
+                                    style: AdwTypography.Body,
+                                    color: theme.OnBackground
+                                ),
+                                new Label(
+                                    text: "Caption heading",
+                                    style: AdwTypography.CaptionHeading,
+                                    color: theme.TextSecondary
+                                ),
+                                new Label(
+                                    text: "Caption",
+                                    style: AdwTypography.Caption,
+                                    color: theme.TextSecondary
+                                ),
+                                new Label(
+                                    text: "Monospace 0123",
+                                    style: AdwTypography.Monospace,
+                                    color: theme.OnBackground
                                 ),
                             },
                         },
-                        Spacing.Lg
+                        padding: Spacing.Lg
                     )
                 ),
                 scale,
                 Demo.Titled(
-                    "Behaviour",
-                    "Wrapping, a hard one-line limit, and centring.",
-                    Demo.Stage(
-                        new Column(
+                    title: "Behaviour",
+                    description: "Wrapping, a hard one-line limit, and centring.",
+                    child: Demo.Stage(
+                        child: new Column(
                             spacing: Spacing.Lg,
                             mainAxisSize: MainAxisSize.Min,
                             crossAxisAlignment: CrossAxisAlignment.Stretch
                         ) {
                             Children = {
-                                new Label(Paragraph, AdwTypography.Body, theme.OnBackground),
-                                new Label(Paragraph, AdwTypography.Body, theme.TextSecondary) {
+                                new Label(
+                                    text: Paragraph,
+                                    style: AdwTypography.Body,
+                                    color: theme.OnBackground
+                                ),
+                                new Label(
+                                    text: Paragraph,
+                                    style: AdwTypography.Body,
+                                    color: theme.TextSecondary
+                                ) {
                                     MaxLines = 1,
                                     Overflow = TextOverflow.Ellipsis,
                                 },
-                                new Label("Centred", AdwTypography.Heading, theme.OnBackground) {
+                                new Label(
+                                    text: "Centred",
+                                    style: AdwTypography.Heading,
+                                    color: theme.OnBackground
+                                ) {
                                     Align = TextAlign.Center,
                                 },
                             },
                         },
-                        Spacing.Lg
+                        padding: Spacing.Lg
                     )
                 ),
                 Demo.Titled(
-                    "Selectable",
-                    "Drag across it — the same text, selectable and copyable.",
-                    Demo.Stage(
-                        new SelectableText(Paragraph),
-                        Spacing.Lg
+                    title: "Selectable",
+                    description: "Drag across it — the same text, selectable and copyable.",
+                    child: Demo.Stage(
+                        child: new SelectableText(Paragraph),
+                        padding: Spacing.Lg
                     )
                 ),
             },

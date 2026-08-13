@@ -13,41 +13,36 @@ public readonly struct Mat4(Vec4 c0, Vec4 c1, Vec4 c2, Vec4 c3)
     public Vec4 Col3 { get; } = c3;
 
     public static readonly Mat4 Identity = new(
-        new Vec4(
-            1,
-            0,
-            0,
-            0
+        c0: new Vec4(
+            x: 1,
+            y: 0,
+            z: 0,
+            w: 0
         ),
-        new Vec4(
-            0,
-            1,
-            0,
-            0
+        c1: new Vec4(
+            x: 0,
+            y: 1,
+            z: 0,
+            w: 0
         ),
-        new Vec4(
-            0,
-            0,
-            1,
-            0
+        c2: new Vec4(
+            x: 0,
+            y: 0,
+            z: 1,
+            w: 0
         ),
-        new Vec4(
-            0,
-            0,
-            0,
-            1
+        c3: new Vec4(
+            x: 0,
+            y: 0,
+            z: 0,
+            w: 1
         )
     );
 
-    private Vec4 GetCol(int c)
-    {
-        return c switch { 0 => Col0, 1 => Col1, 2 => Col2, 3 => Col3, _ => Vec4.Zero };
-    }
+    private Vec4 GetCol(int c) =>
+        c switch { 0 => Col0, 1 => Col1, 2 => Col2, 3 => Col3, _ => Vec4.Zero };
 
-    public float Get(int col, int row)
-    {
-        return GetCol(col).GetComp(row);
-    }
+    public float Get(int col, int row) => GetCol(col).GetComp(row);
 
     // ── Arithmetic ───────────────────────────────────────────────────────────
 
@@ -56,10 +51,10 @@ public readonly struct Mat4(Vec4 c0, Vec4 c1, Vec4 c2, Vec4 c3)
         // Each result column is A applied to the corresponding column of B.
         // Equivalent to the column-major triple-loop but allocation-free (no temp array).
         return new Mat4(
-            a.MulVec4(b.Col0),
-            a.MulVec4(b.Col1),
-            a.MulVec4(b.Col2),
-            a.MulVec4(b.Col3)
+            c0: a.MulVec4(b.Col0),
+            c1: a.MulVec4(b.Col1),
+            c2: a.MulVec4(b.Col2),
+            c3: a.MulVec4(b.Col3)
         );
     }
 
@@ -68,7 +63,7 @@ public readonly struct Mat4(Vec4 c0, Vec4 c1, Vec4 c2, Vec4 c3)
         // Column-major M·v is the linear combination of M's columns weighted by v's components.
         // Each term is a SIMD Vector4 scale and the sum is SIMD — identical math to the scalar
         // form, zero convention risk. operator* calls this per column, so it benefits too.
-        return new Vec4(Col0.V * v.X + Col1.V * v.Y + Col2.V * v.Z + Col3.V * v.W);
+        return new Vec4((Col0.V * v.X) + (Col1.V * v.Y) + (Col2.V * v.Z) + (Col3.V * v.W));
     }
 
     public Vec3 MulPoint(Vec3 v)
@@ -88,29 +83,29 @@ public readonly struct Mat4(Vec4 c0, Vec4 c1, Vec4 c2, Vec4 c3)
     public Mat4 Transpose()
     {
         return new Mat4(
-            new Vec4(
-                Col0.X,
-                Col1.X,
-                Col2.X,
-                Col3.X
+            c0: new Vec4(
+                x: Col0.X,
+                y: Col1.X,
+                z: Col2.X,
+                w: Col3.X
             ),
-            new Vec4(
-                Col0.Y,
-                Col1.Y,
-                Col2.Y,
-                Col3.Y
+            c1: new Vec4(
+                x: Col0.Y,
+                y: Col1.Y,
+                z: Col2.Y,
+                w: Col3.Y
             ),
-            new Vec4(
-                Col0.Z,
-                Col1.Z,
-                Col2.Z,
-                Col3.Z
+            c2: new Vec4(
+                x: Col0.Z,
+                y: Col1.Z,
+                z: Col2.Z,
+                w: Col3.Z
             ),
-            new Vec4(
-                Col0.W,
-                Col1.W,
-                Col2.W,
-                Col3.W
+            c3: new Vec4(
+                x: Col0.W,
+                y: Col1.W,
+                z: Col2.W,
+                w: Col3.W
             )
         );
     }
@@ -120,64 +115,71 @@ public readonly struct Mat4(Vec4 c0, Vec4 c1, Vec4 c2, Vec4 c3)
     {
         // Augmented matrix [A | I], 4 rows × 8 cols, on the stack (row-major: a[r * 8 + c]).
         Span<float> a = stackalloc float[4 * 8];
-        for (var r = 0; r < 4; r++)
+        for (int r = 0; r < 4; r++)
         {
-            for (var c = 0; c < 4; c++) a[r * 8 + c] = Get(c, r);
-            a[r * 8 + 4 + r] = 1f;
+            for (int c = 0; c < 4; c++) a[(r * 8) + c] = Get(col: c, row: r);
+            a[(r * 8) + 4 + r] = 1f;
         }
 
-        for (var col = 0; col < 4; col++)
+        for (int col = 0; col < 4; col++)
         {
-            var maxRow = col;
-            var maxVal = MathF.Abs(a[col * 8 + col]);
-            for (var row = col + 1; row < 4; row++)
-                if (MathF.Abs(a[row * 8 + col]) > maxVal)
+            int maxRow = col;
+            float maxVal = MathF.Abs(a[(col * 8) + col]);
+            for (int row = col + 1; row < 4; row++)
+            {
+                if (MathF.Abs(a[(row * 8) + col]) > maxVal)
                 {
-                    maxVal = MathF.Abs(a[row * 8 + col]);
+                    maxVal = MathF.Abs(a[(row * 8) + col]);
                     maxRow = row;
                 }
+            }
 
             if (maxVal < float.Epsilon) return Identity;
 
             if (maxRow != col)
-                for (var j = 0; j < 8; j++)
-                    (a[col * 8 + j], a[maxRow * 8 + j]) = (a[maxRow * 8 + j], a[col * 8 + j]);
+            {
+                for (int j = 0; j < 8; j++)
+                {
+                    (a[(col * 8) + j], a[(maxRow * 8) + j]) =
+                        (a[(maxRow * 8) + j], a[(col * 8) + j]);
+                }
+            }
 
-            var invPiv = 1f / a[col * 8 + col];
-            for (var j = 0; j < 8; j++) a[col * 8 + j] *= invPiv;
+            float invPiv = 1f / a[(col * 8) + col];
+            for (int j = 0; j < 8; j++) a[(col * 8) + j] *= invPiv;
 
-            for (var row = 0; row < 4; row++)
+            for (int row = 0; row < 4; row++)
             {
                 if (row == col) continue;
-                var factor = a[row * 8 + col];
-                for (var j = 0; j < 8; j++) a[row * 8 + j] -= factor * a[col * 8 + j];
+                float factor = a[(row * 8) + col];
+                for (int j = 0; j < 8; j++) a[(row * 8) + j] -= factor * a[(col * 8) + j];
             }
         }
 
         return new Mat4(
-            new Vec4(
-                a[0 * 8 + 4],
-                a[1 * 8 + 4],
-                a[2 * 8 + 4],
-                a[3 * 8 + 4]
+            c0: new Vec4(
+                x: a[(0 * 8) + 4],
+                y: a[(1 * 8) + 4],
+                z: a[(2 * 8) + 4],
+                w: a[(3 * 8) + 4]
             ),
-            new Vec4(
-                a[0 * 8 + 5],
-                a[1 * 8 + 5],
-                a[2 * 8 + 5],
-                a[3 * 8 + 5]
+            c1: new Vec4(
+                x: a[(0 * 8) + 5],
+                y: a[(1 * 8) + 5],
+                z: a[(2 * 8) + 5],
+                w: a[(3 * 8) + 5]
             ),
-            new Vec4(
-                a[0 * 8 + 6],
-                a[1 * 8 + 6],
-                a[2 * 8 + 6],
-                a[3 * 8 + 6]
+            c2: new Vec4(
+                x: a[(0 * 8) + 6],
+                y: a[(1 * 8) + 6],
+                z: a[(2 * 8) + 6],
+                w: a[(3 * 8) + 6]
             ),
-            new Vec4(
-                a[0 * 8 + 7],
-                a[1 * 8 + 7],
-                a[2 * 8 + 7],
-                a[3 * 8 + 7]
+            c3: new Vec4(
+                x: a[(0 * 8) + 7],
+                y: a[(1 * 8) + 7],
+                z: a[(2 * 8) + 7],
+                w: a[(3 * 8) + 7]
             )
         );
     }
@@ -188,14 +190,14 @@ public readonly struct Mat4(Vec4 c0, Vec4 c1, Vec4 c2, Vec4 c3)
     {
         var m = Identity;
         return new Mat4(
-            m.Col0,
-            m.Col1,
-            m.Col2,
-            new Vec4(
-                v.X,
-                v.Y,
-                v.Z,
-                1f
+            c0: m.Col0,
+            c1: m.Col1,
+            c2: m.Col2,
+            c3: new Vec4(
+                x: v.X,
+                y: v.Y,
+                z: v.Z,
+                w: 1f
             )
         );
     }
@@ -203,125 +205,125 @@ public readonly struct Mat4(Vec4 c0, Vec4 c1, Vec4 c2, Vec4 c3)
     public static Mat4 Scaling(Vec3 v)
     {
         return new Mat4(
-            new Vec4(
-                v.X,
-                0,
-                0,
-                0
+            c0: new Vec4(
+                x: v.X,
+                y: 0,
+                z: 0,
+                w: 0
             ),
-            new Vec4(
-                0,
-                v.Y,
-                0,
-                0
+            c1: new Vec4(
+                x: 0,
+                y: v.Y,
+                z: 0,
+                w: 0
             ),
-            new Vec4(
-                0,
-                0,
-                v.Z,
-                0
+            c2: new Vec4(
+                x: 0,
+                y: 0,
+                z: v.Z,
+                w: 0
             ),
-            new Vec4(
-                0,
-                0,
-                0,
-                1
+            c3: new Vec4(
+                x: 0,
+                y: 0,
+                z: 0,
+                w: 1
             )
         );
     }
 
     public static Mat4 RotationX(float angle)
     {
-        var c = MathF.Cos(angle);
-        var s = MathF.Sin(angle);
+        float c = MathF.Cos(angle);
+        float s = MathF.Sin(angle);
         return new Mat4(
-            new Vec4(
-                1,
-                0,
-                0,
-                0
+            c0: new Vec4(
+                x: 1,
+                y: 0,
+                z: 0,
+                w: 0
             ),
-            new Vec4(
-                0,
-                c,
-                s,
-                0
+            c1: new Vec4(
+                x: 0,
+                y: c,
+                z: s,
+                w: 0
             ),
-            new Vec4(
-                0,
-                -s,
-                c,
-                0
+            c2: new Vec4(
+                x: 0,
+                y: -s,
+                z: c,
+                w: 0
             ),
-            new Vec4(
-                0,
-                0,
-                0,
-                1
+            c3: new Vec4(
+                x: 0,
+                y: 0,
+                z: 0,
+                w: 1
             )
         );
     }
 
     public static Mat4 RotationY(float angle)
     {
-        var c = MathF.Cos(angle);
-        var s = MathF.Sin(angle);
+        float c = MathF.Cos(angle);
+        float s = MathF.Sin(angle);
         return new Mat4(
-            new Vec4(
-                c,
-                0,
-                -s,
-                0
+            c0: new Vec4(
+                x: c,
+                y: 0,
+                z: -s,
+                w: 0
             ),
-            new Vec4(
-                0,
-                1,
-                0,
-                0
+            c1: new Vec4(
+                x: 0,
+                y: 1,
+                z: 0,
+                w: 0
             ),
-            new Vec4(
-                s,
-                0,
-                c,
-                0
+            c2: new Vec4(
+                x: s,
+                y: 0,
+                z: c,
+                w: 0
             ),
-            new Vec4(
-                0,
-                0,
-                0,
-                1
+            c3: new Vec4(
+                x: 0,
+                y: 0,
+                z: 0,
+                w: 1
             )
         );
     }
 
     public static Mat4 RotationZ(float angle)
     {
-        var c = MathF.Cos(angle);
-        var s = MathF.Sin(angle);
+        float c = MathF.Cos(angle);
+        float s = MathF.Sin(angle);
         return new Mat4(
-            new Vec4(
-                c,
-                s,
-                0,
-                0
+            c0: new Vec4(
+                x: c,
+                y: s,
+                z: 0,
+                w: 0
             ),
-            new Vec4(
-                -s,
-                c,
-                0,
-                0
+            c1: new Vec4(
+                x: -s,
+                y: c,
+                z: 0,
+                w: 0
             ),
-            new Vec4(
-                0,
-                0,
-                1,
-                0
+            c2: new Vec4(
+                x: 0,
+                y: 0,
+                z: 1,
+                w: 0
             ),
-            new Vec4(
-                0,
-                0,
-                0,
-                1
+            c3: new Vec4(
+                x: 0,
+                y: 0,
+                z: 0,
+                w: 1
             )
         );
     }
@@ -331,31 +333,31 @@ public readonly struct Mat4(Vec4 c0, Vec4 c1, Vec4 c2, Vec4 c3)
     /// </summary>
     public static Mat4 PerspectiveRhZo(float fovyRadians, float aspect, float near, float far)
     {
-        var f = 1f / MathF.Tan(fovyRadians * 0.5f);
+        float f = 1f / MathF.Tan(fovyRadians * 0.5f);
         return new Mat4(
-            new Vec4(
-                f / aspect,
-                0,
-                0,
-                0
+            c0: new Vec4(
+                x: f / aspect,
+                y: 0,
+                z: 0,
+                w: 0
             ),
-            new Vec4(
-                0,
-                f,
-                0,
-                0
+            c1: new Vec4(
+                x: 0,
+                y: f,
+                z: 0,
+                w: 0
             ),
-            new Vec4(
-                0,
-                0,
-                far / (near - far),
-                -1f
+            c2: new Vec4(
+                x: 0,
+                y: 0,
+                z: far / (near - far),
+                w: -1f
             ),
-            new Vec4(
-                0,
-                0,
-                near * far / (near - far),
-                0
+            c3: new Vec4(
+                x: 0,
+                y: 0,
+                z: near * far / (near - far),
+                w: 0
             )
         );
     }
@@ -365,29 +367,29 @@ public readonly struct Mat4(Vec4 c0, Vec4 c1, Vec4 c2, Vec4 c3)
         float near, float far)
     {
         return new Mat4(
-            new Vec4(
-                2f / (right - left),
-                0,
-                0,
-                0
+            c0: new Vec4(
+                x: 2f / (right - left),
+                y: 0,
+                z: 0,
+                w: 0
             ),
-            new Vec4(
-                0,
-                2f / (top - bottom),
-                0,
-                0
+            c1: new Vec4(
+                x: 0,
+                y: 2f / (top - bottom),
+                z: 0,
+                w: 0
             ),
-            new Vec4(
-                0,
-                0,
-                1f / (near - far),
-                0
+            c2: new Vec4(
+                x: 0,
+                y: 0,
+                z: 1f / (near - far),
+                w: 0
             ),
-            new Vec4(
-                -(right + left) / (right - left),
-                -(top + bottom) / (top - bottom),
-                near / (near - far),
-                1f
+            c3: new Vec4(
+                x: -(right + left) / (right - left),
+                y: -(top + bottom) / (top - bottom),
+                z: near / (near - far),
+                w: 1f
             )
         );
     }
@@ -400,29 +402,29 @@ public readonly struct Mat4(Vec4 c0, Vec4 c1, Vec4 c2, Vec4 c3)
         var u = r.Cross(f);
 
         return new Mat4(
-            new Vec4(
-                r.X,
-                u.X,
-                -f.X,
-                0
+            c0: new Vec4(
+                x: r.X,
+                y: u.X,
+                z: -f.X,
+                w: 0
             ),
-            new Vec4(
-                r.Y,
-                u.Y,
-                -f.Y,
-                0
+            c1: new Vec4(
+                x: r.Y,
+                y: u.Y,
+                z: -f.Y,
+                w: 0
             ),
-            new Vec4(
-                r.Z,
-                u.Z,
-                -f.Z,
-                0
+            c2: new Vec4(
+                x: r.Z,
+                y: u.Z,
+                z: -f.Z,
+                w: 0
             ),
-            new Vec4(
-                -r.Dot(eye),
-                -u.Dot(eye),
-                f.Dot(eye),
-                1f
+            c3: new Vec4(
+                x: -r.Dot(eye),
+                y: -u.Dot(eye),
+                z: f.Dot(eye),
+                w: 1f
             )
         );
     }
@@ -443,62 +445,51 @@ public readonly struct Mat4(Vec4 c0, Vec4 c1, Vec4 c2, Vec4 c3)
     public static Mat4 FromArray(float[] a)
     {
         return new Mat4(
-            new Vec4(
-                a[0],
-                a[1],
-                a[2],
-                a[3]
+            c0: new Vec4(
+                x: a[0],
+                y: a[1],
+                z: a[2],
+                w: a[3]
             ),
-            new Vec4(
-                a[4],
-                a[5],
-                a[6],
-                a[7]
+            c1: new Vec4(
+                x: a[4],
+                y: a[5],
+                z: a[6],
+                w: a[7]
             ),
-            new Vec4(
-                a[8],
-                a[9],
-                a[10],
-                a[11]
+            c2: new Vec4(
+                x: a[8],
+                y: a[9],
+                z: a[10],
+                w: a[11]
             ),
-            new Vec4(
-                a[12],
-                a[13],
-                a[14],
-                a[15]
+            c3: new Vec4(
+                x: a[12],
+                y: a[13],
+                z: a[14],
+                w: a[15]
             )
         );
     }
 
     // ── Equality ─────────────────────────────────────────────────────────────
 
-    public bool Equals(Mat4 other)
-    {
-        return Col0 == other.Col0 && Col1 == other.Col1 && Col2 == other.Col2 && Col3 == other.Col3;
-    }
+    public bool Equals(Mat4 other) => Col0 == other.Col0 && Col1 == other.Col1 &&
+                                      Col2 == other.Col2 && Col3 == other.Col3;
 
-    public override bool Equals(object? obj)
-    {
-        return obj is Mat4 m && Equals(m);
-    }
+    public override bool Equals(object? obj) => obj is Mat4 m && Equals(m);
 
     public override int GetHashCode()
     {
         return HashCode.Combine(
-            Col0,
-            Col1,
-            Col2,
-            Col3
+            value1: Col0,
+            value2: Col1,
+            value3: Col2,
+            value4: Col3
         );
     }
 
-    public static bool operator ==(Mat4 a, Mat4 b)
-    {
-        return a.Equals(b);
-    }
+    public static bool operator ==(Mat4 a, Mat4 b) => a.Equals(b);
 
-    public static bool operator !=(Mat4 a, Mat4 b)
-    {
-        return !a.Equals(b);
-    }
+    public static bool operator !=(Mat4 a, Mat4 b) => !a.Equals(b);
 }

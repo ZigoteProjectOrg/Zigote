@@ -9,8 +9,8 @@ namespace Zigote.UI.Widgets.Layout;
 /// </summary>
 public class Wrap : MultiChildWidget
 {
-    private Offset[] _offsets = [];
     private float[] _mains = [];
+    private Offset[] _offsets = [];
     private Size _size;
 
     /// <summary>
@@ -48,13 +48,13 @@ public class Wrap : MultiChildWidget
 
     public override Size Measure(Constraints c)
     {
-        var horizontal = Direction == Axis.Horizontal;
-        var maxMain = horizontal ? c.MaxWidth : c.MaxHeight;
+        bool horizontal = Direction == Axis.Horizontal;
+        float maxMain = horizontal ? c.MaxWidth : c.MaxHeight;
         if (!float.IsFinite(maxMain)) maxMain = float.MaxValue;
 
-        var rtl = horizontal &&
-                  (LayoutDirection ?? Directionality.Of(BuildContext.Current)) ==
-                  TextDirection.Rtl;
+        bool rtl = horizontal &&
+                   (LayoutDirection ?? Directionality.Of(BuildContext.Current)) ==
+                   TextDirection.Rtl;
 
         // Grow-only scratch buffers — never reallocate when the child count is stable (steady-state
         // 0-alloc, matching the Column/Toolbar pattern). Only the first Children.Count slots are used.
@@ -63,17 +63,17 @@ public class Wrap : MultiChildWidget
 
         float mainCursor = 0f, crossCursor = 0f, runCross = 0f, lineMainExtent = 0f;
         var childC = new Constraints(
-            0,
-            horizontal ? c.MaxWidth : float.PositiveInfinity,
-            0,
-            horizontal ? float.PositiveInfinity : c.MaxHeight
+            minWidth: 0,
+            maxWidth: horizontal ? c.MaxWidth : float.PositiveInfinity,
+            minHeight: 0,
+            maxHeight: horizontal ? float.PositiveInfinity : c.MaxHeight
         );
 
-        for (var i = 0; i < Children.Count; i++)
+        for (int i = 0; i < Children.Count; i++)
         {
             var sz = Children[i].Measure(childC);
-            var childMain = horizontal ? sz.Width : sz.Height;
-            var childCross = horizontal ? sz.Height : sz.Width;
+            float childMain = horizontal ? sz.Width : sz.Height;
+            float childCross = horizontal ? sz.Height : sz.Width;
 
             // Wrap to a new run when this child would overflow the current one.
             if (mainCursor > 0f && mainCursor + childMain > maxMain)
@@ -84,30 +84,34 @@ public class Wrap : MultiChildWidget
             }
 
             _offsets[i] = horizontal
-                ? new Offset(mainCursor, crossCursor)
-                : new Offset(crossCursor, mainCursor);
+                ? new Offset(x: mainCursor, y: crossCursor)
+                : new Offset(x: crossCursor, y: mainCursor);
             if (rtl) _mains[i] = childMain;
 
             mainCursor += childMain + Spacing;
-            runCross = MathF.Max(runCross, childCross);
-            lineMainExtent = MathF.Max(lineMainExtent, mainCursor - Spacing);
+            runCross = MathF.Max(x: runCross, y: childCross);
+            lineMainExtent = MathF.Max(x: lineMainExtent, y: mainCursor - Spacing);
         }
 
-        var totalCross = crossCursor + runCross;
+        float totalCross = crossCursor + runCross;
         _size = c.Constrain(
             horizontal
-                ? new Size(lineMainExtent, totalCross)
-                : new Size(totalCross, lineMainExtent)
+                ? new Size(width: lineMainExtent, height: totalCross)
+                : new Size(width: totalCross, height: lineMainExtent)
         );
 
         // RTL: mirror each child's x against the measured width so runs fill right-to-left. Done as
         // a post-pass because the width is only known once every run has been placed.
         if (rtl)
-            for (var i = 0; i < Children.Count; i++)
+        {
+            for (int i = 0; i < Children.Count; i++)
+            {
                 _offsets[i] = new Offset(
-                    _size.Width - _offsets[i].X - _mains[i],
-                    _offsets[i].Y
+                    x: _size.Width - _offsets[i].X - _mains[i],
+                    y: _offsets[i].Y
                 );
+            }
+        }
 
         return _size;
     }
@@ -115,10 +119,10 @@ public class Wrap : MultiChildWidget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
 
         // The same guard FlexLayout.Layout carries: the child list can grow between the Measure
@@ -126,9 +130,13 @@ public class Wrap : MultiChildWidget
         // live-resize, or a subtree swapped in by an ancestor that then skipped re-measuring. Lay
         // out the measured prefix instead of indexing past the table, and ask for another layout so
         // the rest arrives next frame rather than staying invisible.
-        var count = Math.Min(Children.Count, _offsets.Length);
-        for (var i = 0; i < count; i++)
-            Children[i].Layout(new Offset(origin.X + _offsets[i].X, origin.Y + _offsets[i].Y));
+        int count = Math.Min(val1: Children.Count, val2: _offsets.Length);
+        for (int i = 0; i < count; i++)
+        {
+            Children[i].Layout(
+                new Offset(x: origin.X + _offsets[i].X, y: origin.Y + _offsets[i].Y)
+            );
+        }
 
         if (count < Children.Count) MarkNeedsLayout();
     }
@@ -140,8 +148,8 @@ public class Wrap : MultiChildWidget
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
-        for (var i = Children.Count - 1; i >= 0; i--)
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
+        for (int i = Children.Count - 1; i >= 0; i--)
         {
             var hit = Children[i].HitTest(point);
             if (hit != null) return hit;

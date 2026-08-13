@@ -1,6 +1,8 @@
 using System.Collections;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Reflection;
+using System.Text;
 using Zigote.Core;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Layout;
@@ -14,6 +16,9 @@ namespace Zigote.UI.Debug;
 /// </summary>
 public static class WidgetDebug
 {
+    /// <summary>Cap on how many elements of a collection are listed / serialized.</summary>
+    private const int MaxItems = 200;
+
     /// <summary>Names handled by the fixed header rows or never useful in the dump.</summary>
     private static readonly HashSet<string> SkipProps = new(StringComparer.Ordinal) {
         "Bounds",
@@ -46,6 +51,8 @@ public static class WidgetDebug
     /// <summary>Content-bearing properties worth surfacing inline next to the type name, best first.</summary>
     private static readonly string[] SummaryNames = ["Text", "Label", "Hint", "Value", "Glyph"];
 
+    private static readonly ConcurrentDictionary<Type, PropertyInfo[]> ObjProps = new();
+
     private static bool CouldHoldWidgets(Type pt)
     {
         return typeof(Widget).IsAssignableFrom(pt) ||
@@ -57,8 +64,8 @@ public static class WidgetDebug
     private static PropertyInfo[] ChildCandidates(Type type)
     {
         return ChildProps.GetOrAdd(
-            type,
-            static t => t
+            key: type,
+            valueFactory: static t => t
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(p => p.GetIndexParameters().Length == 0 && p.CanRead)
                 .Where(p =>
@@ -80,10 +87,7 @@ public static class WidgetDebug
         {
             if (rc.Count > 0) return children;
         }
-        else if (children != null && children.Any())
-        {
-            return children;
-        }
+        else if (children != null && children.Any()) return children;
 
         var props = ChildCandidates(w.GetType());
         if (props.Length == 0) return [];
@@ -122,12 +126,15 @@ public static class WidgetDebug
             return watch.RebuildCount == 0 ? null : $"{watch.RebuildCount} rebuilds";
 
         var prop = SummaryProps.GetOrAdd(
-            w.GetType(),
-            static t =>
+            key: w.GetType(),
+            valueFactory: static t =>
             {
-                foreach (var name in SummaryNames)
+                foreach (string name in SummaryNames)
                 {
-                    var p = t.GetProperty(name, BindingFlags.Public | BindingFlags.Instance);
+                    var p = t.GetProperty(
+                        name: name,
+                        bindingAttr: BindingFlags.Public | BindingFlags.Instance
+                    );
                     if (p is { CanRead: true } && p.GetIndexParameters().Length == 0 &&
                         !typeof(Widget).IsAssignableFrom(p.PropertyType) &&
                         !typeof(Delegate).IsAssignableFrom(p.PropertyType))
@@ -152,7 +159,7 @@ public static class WidgetDebug
 
             if (val is not null)
             {
-                var s = Format(val);
+                string s = Format(val);
                 if (s.Length > 0 && s != "\"\"") return s.Length > 40 ? s[..37] + "…" : s;
             }
         }
@@ -169,12 +176,12 @@ public static class WidgetDebug
     /// </summary>
     public static Widget? DeepestAt(Widget root, Offset point, int maxDepth = 64)
     {
-        return Descend(root, point, maxDepth);
+        return Descend(w: root, p: point, depth: maxDepth);
 
         static Widget? Descend(Widget w, Offset p, int depth)
         {
             var b = w.Bounds;
-            var self = b is { Width: > 0f, Height: > 0f } && b.Contains(p.X, p.Y);
+            bool self = b is { Width: > 0f, Height: > 0f } && b.Contains(px: p.X, py: p.Y);
             if (depth <= 0) return self ? w : null;
 
             var kids = Children(w);
@@ -189,9 +196,9 @@ public static class WidgetDebug
             // keeps a wholly decorative subtree (a Column of Labels) pickable.
             Widget? best = null;
             Widget? fallback = null;
-            for (var i = list.Count - 1; i >= 0 && best is null; i--)
+            for (int i = list.Count - 1; i >= 0 && best is null; i--)
             {
-                var hit = Descend(list[i], p, depth - 1);
+                var hit = Descend(w: list[i], p: p, depth: depth - 1);
                 if (hit is null) continue;
                 fallback ??= hit;
                 if (list[i].HitTest(p) is not null) best = hit;
@@ -228,7 +235,7 @@ public static class WidgetDebug
     public static int Count(Widget? w, int cap = 5000)
     {
         if (w is null) return 0;
-        var n = 0;
+        int n = 0;
         var stack = new Stack<Widget>();
         var seen = new HashSet<Widget>(ReferenceEqualityComparer.Instance);
         stack.Push(w);
@@ -239,11 +246,15 @@ public static class WidgetDebug
             n++;
             var kids = Children(cur);
             if (kids is IReadOnlyList<Widget> list)
-                for (var i = 0; i < list.Count; i++)
+            {
+                for (int i = 0; i < list.Count; i++)
                     stack.Push(list[i]);
+            }
             else
+            {
                 foreach (var c in kids)
                     stack.Push(c);
+            }
         }
 
         return n;
@@ -264,22 +275,6 @@ public static class WidgetDebug
         return list;
     }
 
-    // ── Nested member walk (property tree / JSON view) ──
-
-    /// <summary>
-    ///     One row of the property tree: the display name, its formatted one-line value, the boxed
-    ///     value itself (null when the property is null) and whether it has members worth expanding.
-    /// </summary>
-    public readonly record struct DebugMember(
-        string Name,
-        string Value,
-        object? Raw,
-        bool Expandable
-    );
-
-    /// <summary>Cap on how many elements of a collection are listed / serialized.</summary>
-    private const int MaxItems = 200;
-
     /// <summary>Values that <see cref="Format" /> already renders in full — never expanded.</summary>
     private static bool IsLeaf(object v)
     {
@@ -298,8 +293,8 @@ public static class WidgetDebug
     private static PropertyInfo[] MemberProps(Type type)
     {
         return ObjProps.GetOrAdd(
-            type,
-            static t => t
+            key: type,
+            valueFactory: static t => t
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(p => p.GetIndexParameters().Length == 0 && p.CanRead)
                 .Where(p => !typeof(Widget).IsAssignableFrom(p.PropertyType))
@@ -308,8 +303,6 @@ public static class WidgetDebug
                 .ToArray()
         );
     }
-
-    private static readonly ConcurrentDictionary<Type, PropertyInfo[]> ObjProps = new();
 
     /// <summary>
     ///     The inspectable members of any value: a widget's reflected properties (declared ones first,
@@ -320,40 +313,40 @@ public static class WidgetDebug
     public static List<DebugMember> Members(object o)
     {
         var list = new List<DebugMember>();
-        var isWidget = o is Widget;
+        bool isWidget = o is Widget;
 
         if (o is Widget w)
         {
             list.Add(
                 new DebugMember(
-                    "Focusable",
-                    Bool(w.Focusable),
-                    w.Focusable,
-                    false
+                    Name: "Focusable",
+                    Value: Bool(w.Focusable),
+                    Raw: w.Focusable,
+                    Expandable: false
                 )
             );
-            if (w.Key is not null) list.Add(Member("Key", w.Key));
-            if (w.TooltipText is not null) list.Add(Member("Tooltip", w.TooltipText));
+            if (w.Key is not null) list.Add(Member(name: "Key", val: w.Key));
+            if (w.TooltipText is not null) list.Add(Member(name: "Tooltip", val: w.TooltipText));
         }
         else if (o is IEnumerable seq)
         {
-            var i = 0;
-            foreach (var item in seq)
+            int i = 0;
+            foreach (object item in seq)
             {
                 if (i >= MaxItems)
                 {
                     list.Add(
                         new DebugMember(
-                            "…",
-                            "more elements",
-                            null,
-                            false
+                            Name: "…",
+                            Value: "more elements",
+                            Raw: null,
+                            Expandable: false
                         )
                     );
                     break;
                 }
 
-                list.Add(Member($"[{i++}]", item));
+                list.Add(Member(name: $"[{i++}]", val: item));
             }
 
             return list;
@@ -363,8 +356,9 @@ public static class WidgetDebug
         // shows above the inherited base plumbing.
         var props = isWidget
             ? DumpProps.GetOrAdd(
-                o.GetType(),
-                static t => MemberProps(t).Where(p => !SkipProps.Contains(p.Name)).ToArray()
+                key: o.GetType(),
+                valueFactory: static t =>
+                    MemberProps(t).Where(p => !SkipProps.Contains(p.Name)).ToArray()
             )
             : MemberProps(o.GetType());
 
@@ -381,7 +375,7 @@ public static class WidgetDebug
             }
 
             if (val is null && isWidget) continue;
-            list.Add(Member(prop.Name, val));
+            list.Add(Member(name: prop.Name, val: val));
         }
 
         return list;
@@ -390,14 +384,16 @@ public static class WidgetDebug
     private static DebugMember Member(string name, object? val)
     {
         if (val is null)
+        {
             return new DebugMember(
-                name,
-                "null",
-                null,
-                false
+                Name: name,
+                Value: "null",
+                Raw: null,
+                Expandable: false
             );
+        }
 
-        var expandable = CanExpand(val);
+        bool expandable = CanExpand(val);
         string s;
         try
         {
@@ -412,10 +408,10 @@ public static class WidgetDebug
 
         if (s.Length > 160) s = s[..157] + "…";
         return new DebugMember(
-            name,
-            s,
-            val,
-            expandable
+            Name: name,
+            Value: s,
+            Raw: val,
+            Expandable: expandable
         );
     }
 
@@ -426,9 +422,9 @@ public static class WidgetDebug
     /// </summary>
     public static string ToJson(object? root, int maxDepth = 4, int maxChars = 64_000)
     {
-        var sb = new System.Text.StringBuilder();
+        var sb = new StringBuilder();
         var path = new HashSet<object>(ReferenceEqualityComparer.Instance);
-        Write(root, 0);
+        Write(v: root, depth: 0);
         if (sb.Length >= maxChars) sb.Append("\n…truncated");
         return sb.ToString();
 
@@ -455,7 +451,12 @@ public static class WidgetDebug
 
             if (v.GetType().IsPrimitive && v is not char)
             {
-                sb.Append(Convert.ToString(v, System.Globalization.CultureInfo.InvariantCulture));
+                sb.Append(
+                    Convert.ToString(
+                        value: v,
+                        provider: CultureInfo.InvariantCulture
+                    )
+                );
                 return;
             }
 
@@ -477,28 +478,29 @@ public static class WidgetDebug
                 return;
             }
 
-            var array = v is IEnumerable;
+            bool array = v is IEnumerable;
             var members = Members(v);
             sb.Append(array ? '[' : '{');
-            for (var i = 0; i < members.Count; i++)
+            for (int i = 0; i < members.Count; i++)
             {
                 if (i > 0) sb.Append(',');
-                sb.Append('\n').Append(' ', (depth + 1) * 2);
+                sb.Append('\n').Append(value: ' ', repeatCount: (depth + 1) * 2);
                 if (!array) Str(members[i].Name).Append(": ");
                 if (members[i].Raw is null && members[i].Value is not "null") Str(members[i].Value);
-                else Write(members[i].Raw, depth + 1);
+                else Write(v: members[i].Raw, depth: depth + 1);
                 if (sb.Length >= maxChars) break;
             }
 
-            if (members.Count > 0) sb.Append('\n').Append(' ', depth * 2);
+            if (members.Count > 0) sb.Append('\n').Append(value: ' ', repeatCount: depth * 2);
             sb.Append(array ? ']' : '}');
             path.Remove(v);
         }
 
-        System.Text.StringBuilder Str(string s)
+        StringBuilder Str(string s)
         {
             sb.Append('"');
-            foreach (var c in s)
+            foreach (char c in s)
+            {
                 switch (c)
                 {
                     case '"': sb.Append("\\\""); break;
@@ -511,20 +513,15 @@ public static class WidgetDebug
                         else sb.Append(c);
                         break;
                 }
+            }
 
             return sb.Append('"');
         }
     }
 
-    private static string Bool(bool b)
-    {
-        return b ? "true" : "false";
-    }
+    private static string Bool(bool b) => b ? "true" : "false";
 
-    private static string Bit(bool b)
-    {
-        return b ? "1" : "0";
-    }
+    private static string Bit(bool b) => b ? "1" : "0";
 
     private static string Num(float f)
     {
@@ -545,7 +542,8 @@ public static class WidgetDebug
             case float f: return Num(f);
             case double d: return Num((float)d);
             case Color col:
-                var hex = $"#{(int)(col.R * 255):X2}{(int)(col.G * 255):X2}{(int)(col.B * 255):X2}";
+                string hex =
+                    $"#{(int)(col.R * 255):X2}{(int)(col.G * 255):X2}{(int)(col.B * 255):X2}";
                 return col.A < 0.999f ? $"{hex} a{col.A:0.##}" : hex;
             case Size sz: return $"{Num(sz.Width)}×{Num(sz.Height)}";
             case Offset off: return $"({Num(off.X)}, {Num(off.Y)})";
@@ -558,7 +556,7 @@ public static class WidgetDebug
             case ICollection coll: return $"[{coll.Count}]";
             case IEnumerable: return "[…]";
             default:
-                var s = val.ToString() ?? "";
+                string s = val.ToString() ?? "";
                 // Default object.ToString returns the type name — show a short braced form instead.
                 return s.Length == 0 || s == val.GetType().ToString()
                     ? "{" + val.GetType().Name + "}"
@@ -568,15 +566,26 @@ public static class WidgetDebug
 
     private static string FormatDelegate(Delegate del)
     {
-        var handlers = del.GetInvocationList().Length;
+        int handlers = del.GetInvocationList().Length;
         if (handlers > 1) return $"ƒ ×{handlers}";
-        var name = del.Method.Name;
+        string name = del.Method.Name;
         // Compiler-generated lambda / local-function names look like "<Build>b__7_0" — show them as ƒ.
         return name.StartsWith('<') ? "ƒ" : $"ƒ {name}";
     }
 
-    private static string Escape(string s)
-    {
-        return s.Replace("\r", "").Replace("\n", "⏎").Replace("\t", "⇥");
-    }
+    private static string Escape(string s) => s.Replace(oldValue: "\r", newValue: "")
+        .Replace(oldValue: "\n", newValue: "⏎").Replace(oldValue: "\t", newValue: "⇥");
+
+    // ── Nested member walk (property tree / JSON view) ──
+
+    /// <summary>
+    ///     One row of the property tree: the display name, its formatted one-line value, the boxed
+    ///     value itself (null when the property is null) and whether it has members worth expanding.
+    /// </summary>
+    public readonly record struct DebugMember(
+        string Name,
+        string Value,
+        object? Raw,
+        bool Expandable
+    );
 }

@@ -52,73 +52,72 @@ public sealed class AppBar : Widget
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
 
-        var w = c.MaxWidth;
+        float w = c.MaxWidth;
 
         // Reserve leading (48 px) and action slots (48 px each)
-        var leadingW = Leading != null ? 56f : 16f;
-        var actionsW = Actions.Count * 48f + 8f;
-        var titleW = Math.Max(0, w - leadingW - actionsW);
+        float leadingW = Leading != null ? 56f : 16f;
+        float actionsW = (Actions.Count * 48f) + 8f;
+        float titleW = Math.Max(val1: 0, val2: w - leadingW - actionsW);
 
-        Leading?.Measure(Constraints.Tight(48f, Height));
+        Leading?.Measure(Constraints.Tight(width: 48f, height: Height));
 
-        if (Title != null) _titleSize = Title.Measure(Constraints.Loose(titleW, Height));
+        if (Title != null)
+            _titleSize = Title.Measure(Constraints.Loose(width: titleW, height: Height));
 
         foreach (var a in Actions)
-            a.Measure(Constraints.Tight(48f, Height));
+            a.Measure(Constraints.Tight(width: 48f, height: Height));
 
-        _size = new Size(w, Height);
+        _size = new Size(width: w, height: Height);
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
 
-        var x = origin.X + 8f;
+        float x = origin.X + 8f;
 
         if (Leading != null)
         {
-            Leading.Layout(new Offset(x, origin.Y + (Height - 48f) / 2f));
+            Leading.Layout(new Offset(x: x, y: origin.Y + ((Height - 48f) / 2f)));
             x += 56f;
         }
         else
-        {
             x += 8f;
-        }
 
         if (Title != null)
         {
-            var ty = origin.Y + (Height - _titleSize.Height) / 2f;
-            var tx = CenterTitle ? origin.X + (_size.Width - _titleSize.Width) / 2f : x;
-            Title.Layout(new Offset(tx, ty));
+            float ty = origin.Y + ((Height - _titleSize.Height) / 2f);
+            float tx = CenterTitle ? origin.X + ((_size.Width - _titleSize.Width) / 2f) : x;
+            Title.Layout(new Offset(x: tx, y: ty));
         }
 
-        var ax = origin.X + _size.Width - 8f;
-        for (var i = Actions.Count - 1; i >= 0; i--)
+        float ax = origin.X + _size.Width - 8f;
+        for (int i = Actions.Count - 1; i >= 0; i--)
         {
             ax -= 48f;
-            Actions[i].Layout(new Offset(ax, origin.Y + (Height - 48f) / 2f));
+            Actions[i].Layout(new Offset(x: ax, y: origin.Y + ((Height - 48f) / 2f)));
         }
     }
 
     public override void Paint(PaintList paint)
     {
-        paint.AddRect(Bounds, BackgroundColor ?? _theme.Surface);
+        paint.AddRect(bounds: Bounds, color: BackgroundColor ?? _theme.Surface);
 
         // Bottom shadow line
         paint.AddRect(
-            new Rect(
-                Bounds.X,
-                Bounds.Y + Bounds.Height - 1f,
-                Bounds.Width,
-                1f
+            bounds: new Rect(
+                x: Bounds.X,
+                y: Bounds.Y + Bounds.Height - 1f,
+                width: Bounds.Width,
+                height: 1f
             ),
-            _theme.SurfaceAlt
+            color: _theme.SurfaceAlt
         );
 
         Leading?.Paint(paint);
@@ -128,8 +127,8 @@ public sealed class AppBar : Widget
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
-        for (var i = Actions.Count - 1; i >= 0; i--)
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
+        for (int i = Actions.Count - 1; i >= 0; i--)
         {
             var hit = Actions[i].HitTest(point);
             if (hit != null) return hit;

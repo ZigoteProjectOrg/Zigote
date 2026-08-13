@@ -53,15 +53,12 @@ public static class GltfLoader
         PropertyNameCaseInsensitive = true,
     };
 
-    public static bool IsSupported(string path)
-    {
-        return !string.IsNullOrEmpty(path) && SupportedExtensions.Contains(Path.GetExtension(path));
-    }
+    public static bool IsSupported(string path) => !string.IsNullOrEmpty(path) &&
+                                                   SupportedExtensions.Contains(
+                                                       Path.GetExtension(path)
+                                                   );
 
-    public static SceneNode Load(string path)
-    {
-        return Load(path, out _);
-    }
+    public static SceneNode Load(string path) => Load(path: path, report: out _);
 
     /// <summary>
     ///     Import the model at <paramref name="path" /> and return a root <see cref="SceneNode" />,
@@ -69,11 +66,14 @@ public static class GltfLoader
     /// </summary>
     public static SceneNode Load(string path, out GltfImportReport report)
     {
-        var baseName = Path.GetFileNameWithoutExtension(path);
+        string baseName = Path.GetFileNameWithoutExtension(path);
         report = new GltfImportReport { SourceName = Path.GetFileName(path) };
 
-        var fullPath = Path.GetFullPath(path);
-        var cacheDir = Path.Combine(Path.GetDirectoryName(fullPath)!, ".mesh_cache");
+        string fullPath = Path.GetFullPath(path);
+        string cacheDir = Path.Combine(
+            path1: Path.GetDirectoryName(fullPath)!,
+            path2: ".mesh_cache"
+        );
         Directory.CreateDirectory(cacheDir);
 
         var engine = ZigoteEngine.Instance
@@ -81,12 +81,12 @@ public static class GltfLoader
                          "Engine not initialised; cannot import model."
                      );
 
-        var json = engine.ModelImport(fullPath, cacheDir)
-                   ?? throw new InvalidOperationException(
-                       $"Assimp failed to import '{Path.GetFileName(path)}'."
-                   );
+        string json = engine.ModelImport(path: fullPath, cacheDir: cacheDir)
+                      ?? throw new InvalidOperationException(
+                          $"Assimp failed to import '{Path.GetFileName(path)}'."
+                      );
 
-        var manifest = JsonSerializer.Deserialize<ModelManifest>(json, JsonOpts)
+        var manifest = JsonSerializer.Deserialize<ModelManifest>(json: json, options: JsonOpts)
                        ?? throw new InvalidOperationException(
                            "Model import returned an empty manifest."
                        );
@@ -97,7 +97,7 @@ public static class GltfLoader
         report.Textures = manifest.Counts.Textures;
         report.Nodes = manifest.Counts.Nodes;
         report.Primitives = manifest.Counts.Primitives;
-        foreach (var w in manifest.Warnings) report.Warn(w);
+        foreach (string w in manifest.Warnings) report.Warn(w);
 
         var root = new SceneNode(baseName);
 
@@ -105,14 +105,20 @@ public static class GltfLoader
         {
             // Hierarchy preserved so animation channels bind to nodes by name.
             foreach (var n in manifest.Nodes)
-                root.AddChild(BuildHierarchicalNode(n, manifest.Materials, report));
+            {
+                root.AddChild(
+                    BuildHierarchicalNode(n: n, materials: manifest.Materials, report: report)
+                );
+            }
 
             var clips = GltfAnimationImporter.Import(manifest.Animations);
             root.Animations.AddRange(clips);
             if (clips.Count > 0)
+            {
                 report.Warn(
                     $"Imported {clips.Count} animation clip(s); hierarchy preserved for binding."
                 );
+            }
         }
         else
         {
@@ -120,16 +126,23 @@ public static class GltfLoader
             foreach (var mn in manifest.MeshNodes)
             {
                 if (mn.Material < 0)
+                {
                     report.Warn(
                         "Some primitives have no material; imported with a default dielectric fallback."
                     );
+                }
+
                 var node = new SceneNode(
-                    string.IsNullOrWhiteSpace(mn.Name) ? $"Material {mn.Material}" : mn.Name,
-                    NodeKind.Mesh
+                    name: string.IsNullOrWhiteSpace(mn.Name) ? $"Material {mn.Material}" : mn.Name,
+                    kind: NodeKind.Mesh
                 ) {
                     MeshPath = mn.Cache,
                 };
-                ApplyMaterial(node, MaterialAt(manifest.Materials, mn.Material), report);
+                ApplyMaterial(
+                    node: node,
+                    mat: MaterialAt(mats: manifest.Materials, idx: mn.Material),
+                    report: report
+                );
                 root.AddChild(node);
             }
         }
@@ -142,9 +155,9 @@ public static class GltfLoader
         // project-relative form so scenes stay portable across machines (cwd = project dir).
         var rpt = report;
         ScenePaths.Normalize(
-            root,
-            Directory.GetCurrentDirectory(),
-            w => rpt.Warn($"unportable path: {w}")
+            root: root,
+            projectRoot: Directory.GetCurrentDirectory(),
+            warn: w => rpt.Warn($"unportable path: {w}")
         );
 
         return root;
@@ -161,17 +174,23 @@ public static class GltfLoader
             Scale = n.Scale.Length >= 3 ? Vec(n.Scale) : Vec3.One,
         };
 
-        var p = 0;
+        int p = 0;
         foreach (var mref in n.Meshes)
         {
             var primNode =
-                new SceneNode($"{n.Name}#prim{p++}", NodeKind.Mesh) { MeshPath = mref.Cache };
-            ApplyMaterial(primNode, MaterialAt(materials, mref.Material), report);
+                new SceneNode(name: $"{n.Name}#prim{p++}", kind: NodeKind.Mesh) {
+                    MeshPath = mref.Cache,
+                };
+            ApplyMaterial(
+                node: primNode,
+                mat: MaterialAt(mats: materials, idx: mref.Material),
+                report: report
+            );
             node.AddChild(primNode);
         }
 
         foreach (var child in n.Children)
-            node.AddChild(BuildHierarchicalNode(child, materials, report));
+            node.AddChild(BuildHierarchicalNode(n: child, materials: materials, report: report));
 
         return node;
     }
@@ -184,8 +203,8 @@ public static class GltfLoader
             _ => LightType.Point,
         };
         return new SceneNode(
-            string.IsNullOrWhiteSpace(light.Name) ? $"{kind} Light" : light.Name,
-            NodeKind.Light
+            name: string.IsNullOrWhiteSpace(light.Name) ? $"{kind} Light" : light.Name,
+            kind: NodeKind.Light
         ) {
             Position = Vec(light.Position),
             Rotation = Quat4(light.Rotation),
@@ -198,16 +217,14 @@ public static class GltfLoader
 
     // ── Material ──────────────────────────────────────────────────────────────
 
-    private static ModelMaterial? MaterialAt(ModelMaterial[] mats, int idx)
-    {
-        return idx >= 0 && idx < mats.Length ? mats[idx] : null;
-    }
+    private static ModelMaterial? MaterialAt(ModelMaterial[] mats, int idx) =>
+        idx >= 0 && idx < mats.Length ? mats[idx] : null;
 
     private static void ApplyMaterial(SceneNode node, ModelMaterial? mat, GltfImportReport report)
     {
         if (mat is null) return;
 
-        node.MeshColor = new Vec3(mat.BaseColor[0], mat.BaseColor[1], mat.BaseColor[2]);
+        node.MeshColor = new Vec3(x: mat.BaseColor[0], y: mat.BaseColor[1], z: mat.BaseColor[2]);
         if (mat.BaseColorTexture is not null) node.TexturePath = mat.BaseColorTexture;
 
         // Per-pixel metalness/roughness (glTF convention: roughness in G, metallic in B).
@@ -223,9 +240,7 @@ public static class GltfLoader
         // plain dielectric — stylised / unlit / MToon surfaces otherwise read as mirror metal from
         // the glTF metallic=1 default, killing their base colour. (Mirrors the original loader.)
         if (mat.NormalTexture is not null)
-        {
             node.NormalTexturePath = mat.NormalTexture;
-        }
         else
         {
             node.MeshMetallic = 0f;
@@ -262,9 +277,9 @@ public static class GltfLoader
 
         // Emissive (KHR_materials_emissive_strength already split out by the importer).
         node.MeshEmissive = new Vec3(
-            mat.Emissive[0] * mat.EmissiveStrength,
-            mat.Emissive[1] * mat.EmissiveStrength,
-            mat.Emissive[2] * mat.EmissiveStrength
+            x: mat.Emissive[0] * mat.EmissiveStrength,
+            y: mat.Emissive[1] * mat.EmissiveStrength,
+            z: mat.Emissive[2] * mat.EmissiveStrength
         );
         if (mat.EmissiveTexture is not null)
         {
@@ -274,9 +289,9 @@ public static class GltfLoader
             if (node.MeshEmissive.ApproxEquals(Vec3.Zero))
             {
                 node.MeshEmissive = new Vec3(
-                    mat.EmissiveStrength,
-                    mat.EmissiveStrength,
-                    mat.EmissiveStrength
+                    x: mat.EmissiveStrength,
+                    y: mat.EmissiveStrength,
+                    z: mat.EmissiveStrength
                 );
                 report.Warn(
                     $"Material '{mat.Name}' has an emissive texture but a black emissive factor; treated the factor as white so the map shows."
@@ -292,15 +307,17 @@ public static class GltfLoader
             if (mat.OcclusionTexture == mat.MetallicRoughnessTexture)
                 node.MeshOcclusionStrength = 1f;
             else
+            {
                 report.Warn(
                     $"Material '{mat.Name}' uses a standalone occlusion texture; only ORM-packed occlusion (shared with the metallic-roughness map) is supported — skipped."
                 );
+            }
         }
 
         // Transparency. BLEND is generic alpha (decals, stickers, hair, cloth, toon). The dedicated
         // glass path triggers on a real KHR_materials_transmission factor regardless of alpha mode
         // (transmissive glTFs are usually authored OPAQUE), or on glass-like names under BLEND.
-        var isGlass = mat.Transmission > 0f || (mat.AlphaMode == "BLEND" && IsGlassMaterial(mat));
+        bool isGlass = mat.Transmission > 0f || (mat.AlphaMode == "BLEND" && IsGlassMaterial(mat));
         if (isGlass)
         {
             node.MeshAlphaMode = 3; // glass: refractive + reflective, depth-sorted
@@ -334,26 +351,27 @@ public static class GltfLoader
     private static bool IsGlassMaterial(ModelMaterial mat)
     {
         if (mat.Transmission > 0f) return true;
-        var name = mat.Name ?? string.Empty;
-        return name.Contains("glass", StringComparison.OrdinalIgnoreCase)
-               || name.Contains("window", StringComparison.OrdinalIgnoreCase)
-               || name.Contains("windshield", StringComparison.OrdinalIgnoreCase)
-               || name.Contains("lens", StringComparison.OrdinalIgnoreCase);
+        string name = mat.Name ?? string.Empty;
+        return name.Contains(value: "glass", comparisonType: StringComparison.OrdinalIgnoreCase)
+               || name.Contains(value: "window", comparisonType: StringComparison.OrdinalIgnoreCase)
+               || name.Contains(
+                   value: "windshield",
+                   comparisonType: StringComparison.OrdinalIgnoreCase
+               )
+               || name.Contains(value: "lens", comparisonType: StringComparison.OrdinalIgnoreCase);
     }
 
-    private static Vec3 Vec(float[] a)
-    {
-        return a.Length >= 3 ? new Vec3(a[0], a[1], a[2]) : Vec3.Zero;
-    }
+    private static Vec3 Vec(float[] a) =>
+        a.Length >= 3 ? new Vec3(x: a[0], y: a[1], z: a[2]) : Vec3.Zero;
 
     private static Quat Quat4(float[] a)
     {
         return a.Length >= 4
             ? new Quat(
-                a[0],
-                a[1],
-                a[2],
-                a[3]
+                x: a[0],
+                y: a[1],
+                z: a[2],
+                w: a[3]
             )
             : Quat.Identity;
     }

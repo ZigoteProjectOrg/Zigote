@@ -23,10 +23,7 @@ public sealed class Renderer2D
     private float[] _instances = new float[64 * FloatsPerInstance];
     private ulong[] _keys = new ulong[64];
 
-    public Renderer2D(ISpriteDevice device)
-    {
-        _device = device;
-    }
+    public Renderer2D(ISpriteDevice device) => _device = device;
 
     /// <summary>Draws recorded since <see cref="Begin" />.</summary>
     public int DrawCount { get; private set; }
@@ -37,14 +34,14 @@ public sealed class Renderer2D
     public void Begin(in Mat4 sceneViewProjection, in Mat4 overlayViewProjection, float viewportW,
         float viewportH)
     {
-        Mat4Marshal.WriteColumnMajor(sceneViewProjection, _sceneVp);
-        Mat4Marshal.WriteColumnMajor(overlayViewProjection, _overlayVp);
+        Mat4Marshal.WriteColumnMajor(m: sceneViewProjection, dst: _sceneVp);
+        Mat4Marshal.WriteColumnMajor(m: overlayViewProjection, dst: _overlayVp);
         DrawCount = 0;
         _device.Begin(
-            _sceneVp,
-            _overlayVp,
-            viewportW,
-            viewportH
+            sceneViewProj: _sceneVp,
+            overlayViewProj: _overlayVp,
+            viewportW: viewportW,
+            viewportH: viewportH
         );
     }
 
@@ -53,7 +50,7 @@ public sealed class Renderer2D
         if (DrawCount == _draws.Length)
         {
             var grown = new SpriteDraw[_draws.Length * 2];
-            Array.Copy(_draws, grown, DrawCount);
+            Array.Copy(sourceArray: _draws, destinationArray: grown, length: DrawCount);
             _draws = grown;
         }
 
@@ -63,11 +60,11 @@ public sealed class Renderer2D
     public void Draw(SpriteTexture texture, Vec2 position, Vec2 size)
     {
         Draw(
-            texture,
-            position,
-            size,
-            texture.FullFrame,
-            Vec4.One
+            texture: texture,
+            position: position,
+            size: size,
+            frame: texture.FullFrame,
+            color: Vec4.One
         );
     }
 
@@ -96,7 +93,7 @@ public sealed class Renderer2D
     public void End()
     {
         BatchCount = 0;
-        var count = DrawCount;
+        int count = DrawCount;
         if (count == 0) return;
 
         if (_keys.Length < count)
@@ -110,7 +107,7 @@ public sealed class Renderer2D
 
         // Unique keys (the low 32 bits are the submission sequence), so the sort is stable by
         // construction even though Array.Sort itself is introsort.
-        for (var i = 0; i < count; i++)
+        for (int i = 0; i < count; i++)
         {
             ref readonly var d = ref _draws[i];
             _keys[i] = ((ulong)(ushort)(d.SortingLayer + 32768) << 48)
@@ -120,63 +117,63 @@ public sealed class Renderer2D
         }
 
         Array.Sort(
-            _keys,
-            _indices,
-            0,
-            count
+            keys: _keys,
+            items: _indices,
+            index: 0,
+            length: count
         );
 
         // A material's scalar fields are keyed by its reference (shared instance ⇒ identical
         // fields), so (texture, material reference) is the complete batch key.
         ref readonly var first = ref _draws[_indices[0]];
-        var batchTexture = first.Texture;
+        uint batchTexture = first.Texture;
         var batchMaterial = first.Material ?? Material2D.Default;
-        var batchStart = 0;
-        Pack(in first, _instances, 0);
+        int batchStart = 0;
+        Pack(d: in first, dst: _instances, o: 0);
 
-        for (var s = 1; s < count; s++)
+        for (int s = 1; s < count; s++)
         {
             ref readonly var d = ref _draws[_indices[s]];
             var material = d.Material ?? Material2D.Default;
-            if (d.Texture != batchTexture || !ReferenceEquals(material, batchMaterial))
+            if (d.Texture != batchTexture || !ReferenceEquals(objA: material, objB: batchMaterial))
             {
                 Emit(
-                    batchTexture,
-                    batchMaterial,
-                    batchStart,
-                    s - batchStart
+                    texture: batchTexture,
+                    material: batchMaterial,
+                    start: batchStart,
+                    instanceCount: s - batchStart
                 );
                 batchTexture = d.Texture;
                 batchMaterial = material;
                 batchStart = s;
             }
 
-            Pack(in d, _instances, s * FloatsPerInstance);
+            Pack(d: in d, dst: _instances, o: s * FloatsPerInstance);
         }
 
         Emit(
-            batchTexture,
-            batchMaterial,
-            batchStart,
-            count - batchStart
+            texture: batchTexture,
+            material: batchMaterial,
+            start: batchStart,
+            instanceCount: count - batchStart
         );
     }
 
     private void Emit(uint texture, Material2D material, int start, int instanceCount)
     {
         _device.Submit(
-            texture,
-            material.Texture2,
-            material.ShaderHandle,
-            material.Blend,
-            material.Stage,
-            material.Params,
-            new ReadOnlySpan<float>(
-                _instances,
-                start * FloatsPerInstance,
-                instanceCount * FloatsPerInstance
+            texture: texture,
+            texture2: material.Texture2,
+            shader: material.ShaderHandle,
+            blend: material.Blend,
+            stage: material.Stage,
+            materialParams: material.Params,
+            instances: new ReadOnlySpan<float>(
+                array: _instances,
+                start: start * FloatsPerInstance,
+                length: instanceCount * FloatsPerInstance
             ),
-            instanceCount
+            count: instanceCount
         );
         BatchCount++;
     }
@@ -185,21 +182,21 @@ public sealed class Renderer2D
     {
         // Bake the pivot into the position: the shader expands a center-pivot quad, so shift the
         // center by the rotated pivot→center offset.
-        var ox = (0.5f - d.PivotX) * d.Width;
-        var oy = (0.5f - d.PivotY) * d.Height;
-        var cos = MathF.Cos(d.Rotation);
-        var sin = MathF.Sin(d.Rotation);
-        dst[o + 0] = d.X + ox * cos - oy * sin;
-        dst[o + 1] = d.Y + ox * sin + oy * cos;
+        float ox = (0.5f - d.PivotX) * d.Width;
+        float oy = (0.5f - d.PivotY) * d.Height;
+        float cos = MathF.Cos(d.Rotation);
+        float sin = MathF.Sin(d.Rotation);
+        dst[o + 0] = d.X + (ox * cos) - (oy * sin);
+        dst[o + 1] = d.Y + (ox * sin) + (oy * cos);
         dst[o + 2] = d.Z;
         dst[o + 3] = d.Rotation;
         dst[o + 4] = d.Width;
         dst[o + 5] = d.Height;
 
-        var u0 = d.Frame.U0;
-        var u1 = d.Frame.U1;
-        var v0 = d.Frame.V0;
-        var v1 = d.Frame.V1;
+        float u0 = d.Frame.U0;
+        float u1 = d.Frame.U1;
+        float v0 = d.Frame.V0;
+        float v1 = d.Frame.V1;
         if (d.FlipX) (u0, u1) = (u1, u0);
         if (d.FlipY) (v0, v1) = (v1, v0);
         dst[o + 6] = u0;

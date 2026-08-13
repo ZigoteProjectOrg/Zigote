@@ -17,10 +17,7 @@ BenchmarkSwitcher.FromTypes(
 /// <summary>Medium-run, in-process — the dispatch numbers are nanosecond-scale.</summary>
 public class BlocConfig : ManualConfig
 {
-    public BlocConfig()
-    {
-        AddJob(Job.MediumRun.WithToolchain(InProcessNoEmitToolchain.Instance));
-    }
+    public BlocConfig() => AddJob(Job.MediumRun.WithToolchain(InProcessNoEmitToolchain.Instance));
 }
 
 /// <summary>
@@ -30,18 +27,17 @@ public class BlocConfig : ManualConfig
 /// </summary>
 public class BlocComparisonConfig : ManualConfig
 {
-    public BlocComparisonConfig()
-    {
-        AddJob(Job.ShortRun);
-    }
+    public BlocComparisonConfig() => AddJob(Job.ShortRun);
 }
 
 /// <summary>
 ///     Dispatch cost and allocation for <see cref="Bloc{TEvent,TState}" />, one thread.
 ///     <para>
-///         The shapes here are the ones the README makes promises about — "synchronous when the handler
+///         The shapes here are the ones the README makes promises about — "synchronous when the
+///         handler
 ///         is", "allocation-free on that synchronous path", state deduplicated by the signal, and
-///         <c>Select</c> as the way a view avoids waking on a field it does not read. Each promise gets
+///         <c>Select</c> as the way a view avoids waking on a field it does not read. Each promise
+///         gets
 ///         a row, because a promise nobody measured is a promise that quietly stops being true.
 ///     </para>
 ///     <para>Run: <c>dotnet run -c Release --project Zigote.Bloc.Benchmark</c></para>
@@ -54,13 +50,13 @@ public class BlocBenchmarks
 
     private readonly AsyncCounter _async = new();
     private readonly SyncCounter _observed = new();
-    private readonly SyncCounter _sync = new();
 
     // One bloc per watcher, never one bloc with both: a shared bloc would run BOTH reactions on every
     // Add, so the two rows would measure the same thing and the Select row would look no cheaper —
     // which is exactly the wrong-looking result the first run of this benchmark produced.
     private readonly SyncCounter _selectWatched = new();
     private readonly SyncCounter _stateWatched = new();
+    private readonly SyncCounter _sync = new();
 
     private IDisposable? _selectLive;
     private Computed<bool>? _selected;
@@ -107,10 +103,7 @@ public class BlocBenchmarks
     }
 
     [GlobalCleanup(Target = nameof(ValueChangeWakesStateWatcher))]
-    public void CleanupStateWatcher()
-    {
-        _stateLive?.Dispose();
-    }
+    public void CleanupStateWatcher() => _stateLive?.Dispose();
 
     [GlobalCleanup(Target = nameof(ValueChangeSkipsSelectWatcher))]
     public void CleanupSelectWatcher()
@@ -134,10 +127,7 @@ public class BlocBenchmarks
 
     /// <summary>Dispatch floor: through the pump, handler decides to do nothing. Must allocate zero.</summary>
     [Benchmark]
-    public void AddWithoutEmitting()
-    {
-        _sync.Add(Noop.Instance);
-    }
+    public void AddWithoutEmitting() => _sync.Add(Noop.Instance);
 
     /// <summary>
     ///     The same work on the <c>async ValueTask</c> base, completing without ever suspending — the
@@ -180,7 +170,7 @@ public class BlocBenchmarks
     [Benchmark(OperationsPerInvoke = Burst)]
     public int AddBurst()
     {
-        for (var i = 0; i < Burst; i++) _sync.Add(Bump.One);
+        for (int i = 0; i < Burst; i++) _sync.Add(Bump.One);
         return _sync.Current.Value;
     }
 
@@ -244,7 +234,8 @@ public sealed record Chained : CounterEvent
 
 public sealed record CounterState(int Value, bool Busy);
 
-public sealed class SyncCounter() : SyncBloc<CounterEvent, CounterState>(new CounterState(0, false))
+public sealed class SyncCounter()
+    : SyncBloc<CounterEvent, CounterState>(new CounterState(Value: 0, Busy: false))
 {
     protected override void OnEvent(CounterEvent @event)
     {
@@ -262,7 +253,8 @@ public sealed class SyncCounter() : SyncBloc<CounterEvent, CounterState>(new Cou
     }
 }
 
-public sealed class AsyncCounter() : Bloc<CounterEvent, CounterState>(new CounterState(0, false))
+public sealed class AsyncCounter()
+    : Bloc<CounterEvent, CounterState>(new CounterState(Value: 0, Busy: false))
 {
     protected override ValueTask OnEventAsync(CounterEvent @event, CancellationToken ct)
     {

@@ -46,8 +46,5 @@ public sealed class NetworkConditions
         ReorderChance = 0.05f,
     };
 
-    public NetworkConditions Clone()
-    {
-        return (NetworkConditions)MemberwiseClone();
-    }
+    public NetworkConditions Clone() => (NetworkConditions)MemberwiseClone();
 }

@@ -19,6 +19,12 @@ public class Dropdown<T>(
     Action<int, T>? onChanged = null)
     : Widget
 {
+    private bool _hovered;
+    private IReadOnlyList<T> _items = items;
+    private int _selectedIndex = selectedIndex;
+    private Size _size;
+    private ThemeData _theme = ThemeData.Dark;
+
     /// <summary>
     ///     Convenience overload for the common <c>T = string</c> case:
     ///     <c>new Dropdown&lt;string&gt;(items, selectedIndex)</c> — the display selector defaults to the
@@ -26,30 +32,22 @@ public class Dropdown<T>(
     /// </summary>
     public Dropdown(IReadOnlyList<T> items, int selectedIndex, Action<int, T>? onChanged = null)
         : this(
-            items,
-            selectedIndex,
-            x => x?.ToString() ?? string.Empty,
-            onChanged
-        )
-    {
-    }
-
-    private bool _hovered;
-    private Size _size;
-    private ThemeData _theme = ThemeData.Dark;
-    private IReadOnlyList<T> _items = items;
-    private int _selectedIndex = selectedIndex;
+            items: items,
+            selectedIndex: selectedIndex,
+            displayText: x => x?.ToString() ?? string.Empty,
+            onChanged: onChanged
+        ) { }
 
     public IReadOnlyList<T> Items
     {
         get => _items;
-        set => SetPaint(ref _items, value);
+        set => SetPaint(field: ref _items, value: value);
     }
 
     public int SelectedIndex
     {
         get => _selectedIndex;
-        set => SetPaint(ref _selectedIndex, value);
+        set => SetPaint(field: ref _selectedIndex, value: value);
     }
 
     public Func<T, string> DisplayText { get; set; } = displayText;
@@ -71,27 +69,25 @@ public class Dropdown<T>(
         ? Items[SelectedIndex]
         : default;
 
-    public override int DebugStateHash()
-    {
-        return HashCode.Combine(SelectedIndex, _hovered);
-    }
+    public override int DebugStateHash() =>
+        HashCode.Combine(value1: SelectedIndex, value2: _hovered);
 
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        var w = MathF.Max(MinWidth, c.MaxWidth);
+        float w = MathF.Max(x: MinWidth, y: c.MaxWidth);
         w = float.IsPositiveInfinity(w) ? MinWidth : w;
-        _size = c.Constrain(new Size(w, TouchMetrics.AtLeast(Height)));
+        _size = c.Constrain(new Size(width: w, height: TouchMetrics.AtLeast(Height)));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
@@ -99,57 +95,57 @@ public class Dropdown<T>(
     {
         var bg = _hovered ? _theme.SurfaceAlt : _theme.Surface;
         var border = _theme.OnSurface.WithAlpha(0.25f);
-        paint.AddRect(Bounds, bg, _theme.InputRadius);
-        paint.AddBorder(Bounds, border, _theme.InputRadius);
+        paint.AddRect(bounds: Bounds, color: bg, radius: _theme.InputRadius);
+        paint.AddBorder(bounds: Bounds, color: border, radius: _theme.InputRadius);
 
         // Guard against a stale/out-of-range SelectedIndex so painting can never throw — fall back to
         // the first item, or an em-dash when there are none.
-        var idx = SelectedIndex >= 0 && SelectedIndex < Items.Count ? SelectedIndex : 0;
-        var label = Items.Count > 0 ? DisplayText(Items[idx]) : "—";
-        var fs = _theme.FontSizeBody;
-        var bx = Bounds.X + 10f;
-        var by = Bounds.Y + (Bounds.Height - fs) / 2f + fs * 0.8f;
+        int idx = SelectedIndex >= 0 && SelectedIndex < Items.Count ? SelectedIndex : 0;
+        string label = Items.Count > 0 ? DisplayText(Items[idx]) : "—";
+        float fs = _theme.FontSizeBody;
+        float bx = Bounds.X + 10f;
+        float by = Bounds.Y + ((Bounds.Height - fs) / 2f) + (fs * 0.8f);
         paint.AddText(
-            label,
-            bx,
-            by,
-            _theme.OnSurface,
-            fs,
+            text: label,
+            baselineX: bx,
+            baselineY: by,
+            color: _theme.OnSurface,
+            fontSize: fs,
             fontFamily: FontFamily
         );
 
         // Arrow ▾ (drawn as a small downward triangle via three rects)
-        var ax = Bounds.X + Bounds.Width - 20f;
-        var ay = Bounds.Y + Bounds.Height / 2f - 3f;
+        float ax = Bounds.X + Bounds.Width - 20f;
+        float ay = Bounds.Y + (Bounds.Height / 2f) - 3f;
         paint.AddRect(
-            new Rect(
-                ax,
-                ay,
-                10f,
-                2f
+            bounds: new Rect(
+                x: ax,
+                y: ay,
+                width: 10f,
+                height: 2f
             ),
-            _theme.Hint,
-            1f
+            color: _theme.Hint,
+            radius: 1f
         );
         paint.AddRect(
-            new Rect(
-                ax + 2f,
-                ay + 2f,
-                6f,
-                2f
+            bounds: new Rect(
+                x: ax + 2f,
+                y: ay + 2f,
+                width: 6f,
+                height: 2f
             ),
-            _theme.Hint,
-            1f
+            color: _theme.Hint,
+            radius: 1f
         );
         paint.AddRect(
-            new Rect(
-                ax + 4f,
-                ay + 4f,
-                2f,
-                2f
+            bounds: new Rect(
+                x: ax + 4f,
+                y: ay + 4f,
+                width: 2f,
+                height: 2f
             ),
-            _theme.Hint,
-            1f
+            color: _theme.Hint,
+            radius: 1f
         );
     }
 
@@ -174,7 +170,7 @@ public class Dropdown<T>(
         if (CycleOnClick)
         {
             SelectedIndex = (SelectedIndex + 1) % Items.Count;
-            OnChanged?.Invoke(SelectedIndex, Items[SelectedIndex]);
+            OnChanged?.Invoke(arg1: SelectedIndex, arg2: Items[SelectedIndex]);
             MarkNeedsPaint();
             return;
         }
@@ -187,21 +183,21 @@ public class Dropdown<T>(
         var app = AppInstance.Active;
         if (app is null) return;
 
-        var labels = new string[Items.Count];
-        for (var i = 0; i < Items.Count; i++) labels[i] = DisplayText(Items[i]);
+        string[] labels = new string[Items.Count];
+        for (int i = 0; i < Items.Count; i++) labels[i] = DisplayText(Items[i]);
 
         new DropdownPopup(
-            app,
-            labels,
-            SelectedIndex,
-            Bounds,
-            MinWidth,
-            FontFamily,
-            i =>
+            app: app,
+            labels: labels,
+            selected: SelectedIndex,
+            anchor: Bounds,
+            minWidth: MinWidth,
+            fontFamily: FontFamily,
+            onPick: i =>
             {
                 if (i < 0 || i >= Items.Count) return;
                 SelectedIndex = i;
-                OnChanged?.Invoke(i, Items[i]);
+                OnChanged?.Invoke(arg1: i, arg2: Items[i]);
                 MarkNeedsPaint();
             }
         ).Show();
@@ -241,8 +237,8 @@ internal sealed class DropdownPopup : Widget, IDismissableOverlay
     private float _rowH = ControlMetrics.MenuRowHeight;
 
     private Size _screen;
-    private bool _scrolledToSelection;
     private float _scrollY;
+    private bool _scrolledToSelection;
     private ThemeData _theme = ThemeData.Dark;
 
     public DropdownPopup(AppInstance app, string[] labels, int selected, Rect anchor,
@@ -257,16 +253,10 @@ internal sealed class DropdownPopup : Widget, IDismissableOverlay
         _minWidth = minWidth;
         _fontFamily = fontFamily;
         _onPick = onPick;
-        _enter = new AnimationController(Motion.Standard, this) { Curve = Curves.EaseOut };
+        _enter = new AnimationController(durationSeconds: Motion.Standard, vsync: this) {
+            Curve = Curves.EaseOut,
+        };
         _enter.OnTick += MarkNeedsLayout;
-    }
-
-
-    // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
-    // re-attach rebinds instead of leaking one per attach cascade.
-    protected override void OnMount()
-    {
-        _enter.AttachTicker(this);
     }
 
 
@@ -276,6 +266,11 @@ internal sealed class DropdownPopup : Widget, IDismissableOverlay
         return true;
     }
 
+
+    // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
+    // re-attach rebinds instead of leaking one per attach cascade.
+    protected override void OnMount() => _enter.AttachTicker(this);
+
     public void Show()
     {
         _app.PushOverlay(this);
@@ -283,42 +278,47 @@ internal sealed class DropdownPopup : Widget, IDismissableOverlay
         _enter.Forward();
     }
 
-    public void Dismiss()
-    {
-        _app.PopOverlay(this);
-    }
+    public void Dismiss() => _app.PopOverlay(this);
 
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        _screen = new Size(c.MaxWidth, c.MaxHeight);
+        _screen = new Size(width: c.MaxWidth, height: c.MaxHeight);
         _compact = TouchMetrics.IsCompact;
         _rowH = TouchMetrics.Pick(ControlMetrics.MenuRowHeight);
 
-        var fs = _theme.FontSizeBody;
-        var widest = _labels.Aggregate(
-            0f,
-            (current, l) => MathF.Max(current, TextMeasure.Width(l, fs, fontFamily: _fontFamily))
+        float fs = _theme.FontSizeBody;
+        float widest = _labels.Aggregate(
+            seed: 0f,
+            func: (current, l) => MathF.Max(
+                x: current,
+                y: TextMeasure.Width(text: l, fontSize: fs, fontFamily: _fontFamily)
+            )
         );
-        _popupW = MathF.Max(_minWidth, MathF.Max(_anchor.Width, widest + CheckW + Spacing.Md));
+        _popupW = MathF.Max(
+            x: _minWidth,
+            y: MathF.Max(x: _anchor.Width, y: widest + CheckW + Spacing.Md)
+        );
         // OverlayPositioning only shifts the popup, so a long label would otherwise push rows off
         // a phone screen where they can never be tapped. Rows clip their text at the surface.
-        _popupW = MathF.Min(_popupW, MathF.Max(_minWidth, _screen.Width - Spacing.Lg));
+        _popupW = MathF.Min(x: _popupW, y: MathF.Max(x: _minWidth, y: _screen.Width - Spacing.Lg));
 
-        var content = _labels.Length * _rowH;
-        var cap = MathF.Min(MaxPopupH, _screen.Height - 16f);
-        _popupH = MathF.Min(content, cap);
-        _maxScroll = MathF.Max(0f, content - _popupH);
+        float content = _labels.Length * _rowH;
+        float cap = MathF.Min(x: MaxPopupH, y: _screen.Height - 16f);
+        _popupH = MathF.Min(x: content, y: cap);
+        _maxScroll = MathF.Max(x: 0f, y: content - _popupH);
 
         // First measure: scroll so the selected row is centred (only matters when the list overflows).
         if (_scrolledToSelection) return _screen;
         _scrolledToSelection = true;
         if (_maxScroll > 0f && _selected >= 0)
+        {
             _scrollY = Math.Clamp(
-                _selected * _rowH - _popupH * 0.5f + _rowH * 0.5f,
-                0f,
-                _maxScroll
+                value: (_selected * _rowH) - (_popupH * 0.5f) + (_rowH * 0.5f),
+                min: 0f,
+                max: _maxScroll
             );
+        }
 
         return _screen;
     }
@@ -326,64 +326,68 @@ internal sealed class DropdownPopup : Widget, IDismissableOverlay
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _screen.Width,
-            _screen.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _screen.Width,
+            height: _screen.Height
         );
     }
 
-    private Rect PopupRect()
-    {
-        return OverlayPositioning.Anchored(_anchor, new Size(_popupW, _popupH), _screen);
-    }
+    private Rect PopupRect() => OverlayPositioning.Anchored(
+        anchor: _anchor,
+        size: new Size(width: _popupW, height: _popupH),
+        screen: _screen
+    );
 
     public override void Paint(PaintList paint)
     {
-        var t = _enter.Value;
-        var fade = t < 0.999f;
-        var rise = (1f - t) * 6f; // settle downward into place
+        float t = _enter.Value;
+        bool fade = t < 0.999f;
+        float rise = (1f - t) * 6f; // settle downward into place
         if (fade) paint.PushAlpha(t);
-        if (rise > 0.01f) paint.PushTranslate(0f, -rise);
+        if (rise > 0.01f) paint.PushTranslate(dx: 0f, dy: -rise);
 
         var mr = PopupRect();
-        paint.AddElevation(mr, Radii.Md, Elevation.Z2);
-        paint.AddRect(mr, _theme.Surface, Radii.Md);
-        paint.AddBorder(mr, _theme.Separator, Radii.Md);
+        paint.AddElevation(bounds: mr, radius: Radii.Md, style: Elevation.Z2);
+        paint.AddRect(bounds: mr, color: _theme.Surface, radius: Radii.Md);
+        paint.AddBorder(bounds: mr, color: _theme.Separator, radius: Radii.Md);
 
-        var fs = _theme.FontSizeBody;
+        float fs = _theme.FontSizeBody;
         paint.AddClipStart(mr);
-        for (var i = 0; i < _labels.Length; i++)
+        for (int i = 0; i < _labels.Length; i++)
         {
-            var rowY = mr.Y + i * _rowH - _scrollY;
+            float rowY = mr.Y + (i * _rowH) - _scrollY;
             if (rowY + _rowH <= mr.Y || rowY >= mr.Bottom) continue; // outside the visible window
 
             var row = new Rect(
-                mr.X,
-                rowY,
-                _popupW,
-                _rowH
+                x: mr.X,
+                y: rowY,
+                width: _popupW,
+                height: _rowH
             );
-            var hovered = i == _hovered;
-            if (hovered) paint.AddRect(row, _theme.Selection, Radii.Xs);
+            bool hovered = i == _hovered;
+            if (hovered) paint.AddRect(bounds: row, color: _theme.Selection, radius: Radii.Xs);
 
             var fg = hovered ? _theme.OnPrimary : _theme.OnSurface;
-            var baseline = row.Y + (_rowH - fs) / 2f + fs * 0.8f;
+            float baseline = row.Y + ((_rowH - fs) / 2f) + (fs * 0.8f);
             if (i == _selected)
+            {
                 Icons.DrawAt(
-                    paint,
-                    Icons.Check,
-                    row.X + Spacing.Xxs,
-                    baseline,
-                    hovered ? _theme.OnPrimary : _theme.Primary,
-                    fs
+                    paint: paint,
+                    glyph: Icons.Check,
+                    x: row.X + Spacing.Xxs,
+                    baselineY: baseline,
+                    color: hovered ? _theme.OnPrimary : _theme.Primary,
+                    size: fs
                 );
+            }
+
             paint.AddText(
-                _labels[i],
-                row.X + CheckW,
-                baseline,
-                fg,
-                fs,
+                text: _labels[i],
+                baselineX: row.X + CheckW,
+                baselineY: baseline,
+                color: fg,
+                fontSize: fs,
                 fontFamily: _fontFamily
             );
         }
@@ -393,17 +397,17 @@ internal sealed class DropdownPopup : Widget, IDismissableOverlay
         // Slim scrollbar thumb when the list overflows.
         if (_maxScroll > 0f)
         {
-            var thumb = MathF.Max(24f, mr.Height * (_popupH / (_labels.Length * _rowH)));
-            var thumbY = mr.Y + (mr.Height - thumb) * (_scrollY / _maxScroll);
+            float thumb = MathF.Max(x: 24f, y: mr.Height * (_popupH / (_labels.Length * _rowH)));
+            float thumbY = mr.Y + ((mr.Height - thumb) * (_scrollY / _maxScroll));
             paint.AddRect(
-                new Rect(
-                    mr.Right - 5f,
-                    thumbY,
-                    3f,
-                    thumb
+                bounds: new Rect(
+                    x: mr.Right - 5f,
+                    y: thumbY,
+                    width: 3f,
+                    height: thumb
                 ),
-                _theme.OnSurface.WithAlpha(0.25f),
-                1.5f
+                color: _theme.OnSurface.WithAlpha(0.25f),
+                radius: 1.5f
             );
         }
 
@@ -414,20 +418,20 @@ internal sealed class DropdownPopup : Widget, IDismissableOverlay
     public override Widget? HitTest(Offset point)
     {
         // Capture all input over the full screen; click-outside dismiss is in OnPointerDown.
-        return Bounds.Contains(point.X, point.Y) ? this : null;
+        return Bounds.Contains(px: point.X, py: point.Y) ? this : null;
     }
 
     private int RowAt(Rect mr, float y)
     {
         if (y < mr.Y || y >= mr.Bottom) return -1;
-        var idx = (int)((y - mr.Y + _scrollY) / _rowH);
+        int idx = (int)((y - mr.Y + _scrollY) / _rowH);
         return idx >= 0 && idx < _labels.Length ? idx : -1;
     }
 
     public override void OnPointerMove(Offset point)
     {
         var mr = PopupRect();
-        var idx = mr.Contains(point.X, point.Y) ? RowAt(mr, point.Y) : -1;
+        int idx = mr.Contains(px: point.X, py: point.Y) ? RowAt(mr: mr, y: point.Y) : -1;
         if (idx == _hovered) return;
         _hovered = idx;
         MarkNeedsPaint();
@@ -443,13 +447,13 @@ internal sealed class DropdownPopup : Widget, IDismissableOverlay
     public override void OnPointerDown(Offset point)
     {
         var mr = PopupRect();
-        if (!mr.Contains(point.X, point.Y))
+        if (!mr.Contains(px: point.X, py: point.Y))
         {
             Dismiss();
             return;
         }
 
-        var idx = RowAt(mr, point.Y);
+        int idx = RowAt(mr: mr, y: point.Y);
         if (idx < 0) return;
 
         // A finger that lands on a row must still be able to start a scroll drag, so on a phone the
@@ -468,12 +472,12 @@ internal sealed class DropdownPopup : Widget, IDismissableOverlay
 
     public override void OnPointerUp(Offset point)
     {
-        var pressed = _pressedRow;
+        int pressed = _pressedRow;
         _pressedRow = -1;
         if (pressed < 0) return;
 
         var mr = PopupRect();
-        if (!mr.Contains(point.X, point.Y) || RowAt(mr, point.Y) != pressed)
+        if (!mr.Contains(px: point.X, py: point.Y) || RowAt(mr: mr, y: point.Y) != pressed)
         {
             _hovered = -1;
             MarkNeedsPaint();
@@ -495,20 +499,17 @@ internal sealed class DropdownPopup : Widget, IDismissableOverlay
     public override void OnScroll(float dx, float dy)
     {
         if (_maxScroll <= 0f) return;
-        _scrollY = Math.Clamp(_scrollY - dy * _rowH * 3f, 0f, _maxScroll);
+        _scrollY = Math.Clamp(value: _scrollY - (dy * _rowH * 3f), min: 0f, max: _maxScroll);
         MarkNeedsPaint();
     }
 
     // A popup taller than its cap is wheel-only otherwise — the 3pt thumb is paint, not a handle.
-    public override bool CanTouchScroll(bool vertical)
-    {
-        return vertical && _maxScroll > 0f;
-    }
+    public override bool CanTouchScroll(bool vertical) => vertical && _maxScroll > 0f;
 
     public override void OnTouchScroll(float dx, float dy)
     {
         if (_maxScroll <= 0f) return;
-        _scrollY = Math.Clamp(_scrollY - dy, 0f, _maxScroll);
+        _scrollY = Math.Clamp(value: _scrollY - dy, min: 0f, max: _maxScroll);
         MarkNeedsPaint();
     }
 }

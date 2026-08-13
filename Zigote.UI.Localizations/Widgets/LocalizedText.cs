@@ -46,7 +46,7 @@ public sealed class LocalizedText : ComposedWidget
 
     protected override Widget Build(BuildContext context)
     {
-        var text = context.Tr(TranslationKey, _args);
+        string text = context.Tr(key: TranslationKey, args: _args);
         return new Label(text) {
             FontSize = FontSize,
             Color = Color,

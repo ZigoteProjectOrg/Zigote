@@ -15,34 +15,31 @@ public sealed class LayoutBuilder : Widget
     private Constraints? _lastConstraints;
     private Size _size;
 
-    public LayoutBuilder(Func<BuildContext, BoxConstraints, Widget> builder)
-    {
-        _builder = builder;
-    }
+    public LayoutBuilder(Func<BuildContext, BoxConstraints, Widget> builder) => _builder = builder;
 
     public override Size Measure(Constraints c)
     {
         if (_child is null || _lastConstraints is not { } last || c != last)
         {
             var bc = new BoxConstraints(
-                c.MinWidth,
-                c.MaxWidth,
-                c.MinHeight,
-                c.MaxHeight
+                minWidth: c.MinWidth,
+                maxWidth: c.MaxWidth,
+                minHeight: c.MinHeight,
+                maxHeight: c.MaxHeight
             );
-            var next = _builder(BuildContext.Current, bc);
+            var next = _builder(arg1: BuildContext.Current, arg2: bc);
             // A builder that hands back the SAME widget is asking to be re-laid-out, not rebuilt.
             // Detaching and re-attaching it would restart its animations and re-defer the build of
             // any Watch inside it (Watch postpones swaps while the tree walk is running) — once per
             // frame for the whole of a window-resize drag, which is what made resizing flicker.
-            if (!ReferenceEquals(next, _child))
+            if (!ReferenceEquals(objA: next, objB: _child))
             {
                 // Attach-then-detach (Widget.SwapChild): a builder can return a DIFFERENT wrapper
                 // around the SAME retained subtree, and detaching first would tear that shared
                 // subtree down for the same reasons the identity check above avoids.
                 var previous = _child;
                 _child = next;
-                SwapChild(previous, _child);
+                SwapChild(previous: previous, next: _child);
             }
 
             _lastConstraints = c;
@@ -55,27 +52,21 @@ public sealed class LayoutBuilder : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         _child?.Layout(origin);
     }
 
-    public override void Paint(PaintList paint)
-    {
-        _child?.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => _child?.Paint(paint);
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return _child?.HitTest(point) ?? this;
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(_child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(_child);
 }

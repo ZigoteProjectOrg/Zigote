@@ -21,15 +21,18 @@ public class ListViewItemAttachTests
     {
         var app = (App)RuntimeHelpers.GetUninitializedObject(typeof(App));
         typeof(App)
-            .GetField("_repaint", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .SetValue(app, new RepaintTracker());
+            .GetField(
+                name: "_repaint",
+                bindingAttr: BindingFlags.Instance | BindingFlags.NonPublic
+            )!
+            .SetValue(obj: app, value: new RepaintTracker());
         return app;
     }
 
     private static ListView AttachedList()
     {
         var list = new ListView(itemExtent: 20f);
-        list.Attach(FakeOwner, null);
+        list.Attach(owner: FakeOwner, parent: null);
         return list;
     }
 
@@ -37,29 +40,29 @@ public class ListViewItemAttachTests
     public void RowsAddedAfterAttach_GetOwnerAndParent()
     {
         var list = AttachedList();
-        var a = new SizedBox(10f, 20f);
-        var b = new SizedBox(10f, 20f);
+        var a = new SizedBox(width: 10f, height: 20f);
+        var b = new SizedBox(width: 10f, height: 20f);
 
         list.SetItems([a]);
         list.AddItem(b);
 
-        Assert.Same(list, a.Parent);
-        Assert.Same(list, b.Parent);
-        Assert.Same(FakeOwner, a.Owner);
-        Assert.Same(FakeOwner, b.Owner);
+        Assert.Same(expected: list, actual: a.Parent);
+        Assert.Same(expected: list, actual: b.Parent);
+        Assert.Same(expected: FakeOwner, actual: a.Owner);
+        Assert.Same(expected: FakeOwner, actual: b.Owner);
     }
 
     [Fact]
     public void ReplacedRows_AreDetached_ButRetainedOnesSurvive()
     {
         var list = AttachedList();
-        var kept = new SizedBox(10f, 20f);
-        var dropped = new SizedBox(10f, 20f);
+        var kept = new SizedBox(width: 10f, height: 20f);
+        var dropped = new SizedBox(width: 10f, height: 20f);
         list.SetItems([kept, dropped]);
 
         list.SetItems([kept]);
 
-        Assert.Same(list, kept.Parent);
+        Assert.Same(expected: list, actual: kept.Parent);
         Assert.Null(dropped.Parent);
 
         list.Clear();

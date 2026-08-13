@@ -1,9 +1,7 @@
-using Zigote.Core;
 using Zigote.Editor.Settings;
 using Zigote.UI.Host;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
-using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
 
 namespace Zigote.Editor.Widgets;
@@ -34,27 +32,40 @@ public sealed class WelcomeScreen : ComposedWidget
     {
         var actions = new Row(spacing: 12f, mainAxisSize: MainAxisSize.Min) {
             Children = {
-                new AdwButton("New Project", () => ProjectDialogs.ShowNew(_app, _onOpen)) {
+                new AdwButton(
+                    label: "New Project",
+                    onPressed: () => ProjectDialogs.ShowNew(app: _app, onOpen: _onOpen)
+                ) {
                     Style = AdwButtonStyle.Suggested,
                     Pill = true,
                 },
-                new AdwButton("Open Project…", () => ProjectDialogs.ShowOpen(_app, _onOpen)) {
+                new AdwButton(
+                    label: "Open Project…",
+                    onPressed: () => ProjectDialogs.ShowOpen(app: _app, onOpen: _onOpen)
+                ) {
                     Pill = true,
                 },
             },
         };
 
         var recent = new AdwPreferencesGroup("Recent");
-        var recentProjects = _history.Recent.Value;
+        string[] recentProjects = _history.Recent.Value;
         if (recentProjects.Length == 0)
+        {
             recent.Rows.Add(
-                new AdwActionRow("No recent projects yet", "Create or open one to begin") {
+                new AdwActionRow(
+                    title: "No recent projects yet",
+                    subtitle: "Create or open one to begin"
+                ) {
                     Enabled = false,
                 }
             );
+        }
         else
-            foreach (var path in recentProjects)
+        {
+            foreach (string path in recentProjects)
                 recent.Rows.Add(RecentRow(path));
+        }
 
         var page = new AdwStatusPage {
             IconName = Icons.Cube,
@@ -68,19 +79,17 @@ public sealed class WelcomeScreen : ComposedWidget
             },
         };
 
-        return new AdwToolbarView(
-            new ScrollView(new AdwClamp(page))
-        ) {
+        return new AdwToolbarView(new ScrollView(new AdwClamp(page))) {
             TopBars = { new AdwHeaderBar { Flat = true } },
         };
     }
 
     private Widget RecentRow(string path)
     {
-        var name = Path.GetFileNameWithoutExtension(path);
-        var dir = Path.GetDirectoryName(path) ?? "";
-        var exists = File.Exists(path);
-        return new AdwActionRow(name, exists ? dir : $"{dir}   (missing)") {
+        string name = Path.GetFileNameWithoutExtension(path);
+        string dir = Path.GetDirectoryName(path) ?? "";
+        bool exists = File.Exists(path);
+        return new AdwActionRow(title: name, subtitle: exists ? dir : $"{dir}   (missing)") {
             IconName = exists ? Icons.Folder : Icons.Warning,
             ShowChevron = true,
             OnActivated = () =>

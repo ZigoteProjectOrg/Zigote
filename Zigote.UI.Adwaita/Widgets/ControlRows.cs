@@ -2,15 +2,18 @@ using Zigote.UI.Semantics;
 
 namespace Zigote.UI.Adwaita;
 
-/// <summary>AdwSwitchRow — an <see cref="AdwActionRow" /> with a switch suffix; clicking the row toggles.</summary>
+/// <summary>
+///     AdwSwitchRow — an <see cref="AdwActionRow" /> with a switch suffix; clicking the row
+///     toggles.
+/// </summary>
 public sealed class AdwSwitchRow : ComposedWidget
 {
-    private AdwActionRow? _row;
-    private AdwSwitch? _switch;
-    private bool _value;
-    private string _title;
-    private string? _subtitle;
     private bool _enabled = true;
+    private AdwActionRow? _row;
+    private string? _subtitle;
+    private AdwSwitch? _switch;
+    private string _title;
+    private bool _value;
 
     public AdwSwitchRow(
         string title = "",
@@ -27,13 +30,13 @@ public sealed class AdwSwitchRow : ComposedWidget
     public string Title
     {
         get => _title;
-        set => this.Set(ref _title, value);
+        set => this.Set(field: ref _title, value: value);
     }
 
     public string? Subtitle
     {
         get => _subtitle;
-        set => this.Set(ref _subtitle, value);
+        set => this.Set(field: ref _subtitle, value: value);
     }
 
     public Action<bool>? OnChanged { get; set; }
@@ -41,7 +44,7 @@ public sealed class AdwSwitchRow : ComposedWidget
     public bool Enabled
     {
         get => _enabled;
-        set => this.Set(ref _enabled, value);
+        set => this.Set(field: ref _enabled, value: value);
     }
 
     public bool Value
@@ -53,8 +56,8 @@ public sealed class AdwSwitchRow : ComposedWidget
     protected override Widget Build(BuildContext context)
     {
         _switch = new AdwSwitch(
-            _value,
-            v =>
+            value: _value,
+            onChanged: v =>
             {
                 SetValue(v);
                 OnChanged?.Invoke(v);
@@ -63,14 +66,14 @@ public sealed class AdwSwitchRow : ComposedWidget
 
         // Role/Checked: the row Pressable is a semantics leaf, so without these the whole row
         // announces as an unlabelled button and the switch's state never reaches the reader.
-        Widget row = _row = new AdwActionRow(Title, Subtitle) {
+        Widget row = _row = new AdwActionRow(title: Title, subtitle: Subtitle) {
             Suffixes = { _switch },
             OnActivated = Enabled ? Toggle : null,
             Role = SemanticsRole.Switch,
             Checked = _value,
         };
         // Adwaita disabled rows dim wholesale.
-        return Enabled ? row : new Opacity(AdwStyle.DisabledOpacity, row);
+        return Enabled ? row : new Opacity(opacity: AdwStyle.DisabledOpacity, child: row);
     }
 
     private void Toggle()
@@ -91,14 +94,14 @@ public sealed class AdwSwitchRow : ComposedWidget
 /// <summary>AdwSpinRow — an <see cref="AdwActionRow" /> with an <see cref="AdwSpinButton" /> suffix.</summary>
 public sealed class AdwSpinRow : ComposedWidget
 {
-    private AdwSpinButton? _spin;
-    private double _value;
-    private string _title;
-    private string? _subtitle;
-    private double _min;
-    private double _max;
-    private double _step;
     private bool _enabled = true;
+    private double _max;
+    private double _min;
+    private AdwSpinButton? _spin;
+    private double _step;
+    private string? _subtitle;
+    private string _title;
+    private double _value;
 
     public AdwSpinRow(
         string title = "",
@@ -121,13 +124,13 @@ public sealed class AdwSpinRow : ComposedWidget
     public string Title
     {
         get => _title;
-        set => this.Set(ref _title, value);
+        set => this.Set(field: ref _title, value: value);
     }
 
     public string? Subtitle
     {
         get => _subtitle;
-        set => this.Set(ref _subtitle, value);
+        set => this.Set(field: ref _subtitle, value: value);
     }
 
     public Action<double>? OnChanged { get; set; }
@@ -136,25 +139,25 @@ public sealed class AdwSpinRow : ComposedWidget
     public double Min
     {
         get => _min;
-        set => this.Set(ref _min, value);
+        set => this.Set(field: ref _min, value: value);
     }
 
     public double Max
     {
         get => _max;
-        set => this.Set(ref _max, value);
+        set => this.Set(field: ref _max, value: value);
     }
 
     public double Step
     {
         get => _step;
-        set => this.Set(ref _step, value);
+        set => this.Set(field: ref _step, value: value);
     }
 
     public bool Enabled
     {
         get => _enabled;
-        set => this.Set(ref _enabled, value);
+        set => this.Set(field: ref _enabled, value: value);
     }
 
     public double Value
@@ -170,18 +173,18 @@ public sealed class AdwSpinRow : ComposedWidget
     protected override Widget Build(BuildContext context)
     {
         _spin = new AdwSpinButton(
-            _value,
-            Min,
-            Max,
-            Step,
-            v =>
+            value: _value,
+            min: Min,
+            max: Max,
+            step: Step,
+            onChanged: v =>
             {
                 _value = v;
                 OnChanged?.Invoke(v);
             }
         ) { Enabled = Enabled };
-        Widget row = new AdwActionRow(Title, Subtitle) { Suffixes = { _spin } };
-        return Enabled ? row : new Opacity(AdwStyle.DisabledOpacity, row);
+        Widget row = new AdwActionRow(title: Title, subtitle: Subtitle) { Suffixes = { _spin } };
+        return Enabled ? row : new Opacity(opacity: AdwStyle.DisabledOpacity, child: row);
     }
 }
 
@@ -191,12 +194,12 @@ public sealed class AdwSpinRow : ComposedWidget
 /// </summary>
 public sealed class AdwButtonRow : ComposedWidget
 {
-    private string _title;
-    private string? _iconName;
-    private string? _endIconName;
     private bool _destructive;
-    private bool _suggested;
     private bool _enabled = true;
+    private string? _endIconName;
+    private string? _iconName;
+    private bool _suggested;
+    private string _title;
 
     public AdwButtonRow(string title = "", Action? onPressed = null, string? iconName = null)
     {
@@ -208,7 +211,7 @@ public sealed class AdwButtonRow : ComposedWidget
     public string Title
     {
         get => _title;
-        set => this.Set(ref _title, value);
+        set => this.Set(field: ref _title, value: value);
     }
 
     public Action? OnPressed { get; set; }
@@ -216,33 +219,33 @@ public sealed class AdwButtonRow : ComposedWidget
     public string? IconName
     {
         get => _iconName;
-        set => this.Set(ref _iconName, value);
+        set => this.Set(field: ref _iconName, value: value);
     }
 
     /// <summary>Icon drawn after the title (libadwaita's end-icon-name), e.g. an external-link mark.</summary>
     public string? EndIconName
     {
         get => _endIconName;
-        set => this.Set(ref _endIconName, value);
+        set => this.Set(field: ref _endIconName, value: value);
     }
 
     public bool Destructive
     {
         get => _destructive;
-        set => this.Set(ref _destructive, value);
+        set => this.Set(field: ref _destructive, value: value);
     }
 
     /// <summary>.suggested-action — accent-coloured content. Destructive wins if both are set.</summary>
     public bool Suggested
     {
         get => _suggested;
-        set => this.Set(ref _suggested, value);
+        set => this.Set(field: ref _suggested, value: value);
     }
 
     public bool Enabled
     {
         get => _enabled;
-        set => this.Set(ref _enabled, value);
+        set => this.Set(field: ref _enabled, value: value);
     }
 
     protected override Widget Build(BuildContext context)
@@ -263,12 +266,16 @@ public sealed class AdwButtonRow : ComposedWidget
         );
         // Invisible strut so the centered content still enforces the row min-height — a button row
         // is 40px, shorter than the 50px of a titled action row.
-        content.Children.Add(new SizedBox(0f, AdwMetrics.ButtonRowHeight));
+        content.Children.Add(new SizedBox(width: 0f, height: AdwMetrics.ButtonRowHeight));
         if (IconName is { } icon)
-            content.Children.Add(new IconGlyph(icon, AdwMetrics.IconSize, fg));
-        content.Children.Add(new Label(Title, AdwTypography.Heading, fg));
+            content.Children.Add(new IconGlyph(glyph: icon, size: AdwMetrics.IconSize, color: fg));
+        content.Children.Add(new Label(text: Title, style: AdwTypography.Heading, color: fg));
         if (EndIconName is { } endIcon)
-            content.Children.Add(new IconGlyph(endIcon, AdwMetrics.IconSize, fg));
+        {
+            content.Children.Add(
+                new IconGlyph(glyph: endIcon, size: AdwMetrics.IconSize, color: fg)
+            );
+        }
 
         var wash = new DecoratedBox {
             Fill = Suggested ? theme.Accent : Color.Transparent,
@@ -283,10 +290,20 @@ public sealed class AdwButtonRow : ComposedWidget
         pressable.OnStateChanged = () =>
         {
             wash.Fill = Suggested
-                ? AdwStyle.Solid(theme.Accent, pressable.Hovered, pressable.Pressed)
-                : AdwStyle.RowFill(theme, pressable.Hovered, pressable.Pressed);
+                ? AdwStyle.Solid(
+                    baseColor: theme.Accent,
+                    hovered: pressable.Hovered,
+                    pressed: pressable.Pressed
+                )
+                : AdwStyle.RowFill(
+                    theme: theme,
+                    hovered: pressable.Hovered,
+                    pressed: pressable.Pressed
+                );
             wash.MarkNeedsPaint();
         };
-        return Enabled ? pressable : new Opacity(AdwStyle.DisabledOpacity, pressable);
+        return Enabled
+            ? pressable
+            : new Opacity(opacity: AdwStyle.DisabledOpacity, child: pressable);
     }
 }

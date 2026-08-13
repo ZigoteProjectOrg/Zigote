@@ -20,7 +20,7 @@ public sealed class ScaleTransition(AnimationController controller, Widget? chil
 
     public override Size Measure(Constraints c)
     {
-        _size = Child?.Measure(c) ?? new Size(0, 0);
+        _size = Child?.Measure(c) ?? new Size(width: 0, height: 0);
         return _size;
     }
 
@@ -28,21 +28,21 @@ public sealed class ScaleTransition(AnimationController controller, Widget? chil
     {
         _naturalOrigin = origin;
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
 
-        var scale = BeginScale + (1f - BeginScale) * Controller.Value;
-        var sw = _size.Width * scale;
-        var sh = _size.Height * scale;
-        var ox = origin.X + (_size.Width - sw) / 2f;
-        var oy = origin.Y + (_size.Height - sh) / 2f;
+        float scale = BeginScale + ((1f - BeginScale) * Controller.Value);
+        float sw = _size.Width * scale;
+        float sh = _size.Height * scale;
+        float ox = origin.X + ((_size.Width - sw) / 2f);
+        float oy = origin.Y + ((_size.Height - sh) / 2f);
 
         // Measure child again at scaled size so it can fill it
-        Child?.Measure(Constraints.Tight(sw, sh));
-        Child?.Layout(new Offset(ox, oy));
+        Child?.Measure(Constraints.Tight(width: sw, height: sh));
+        Child?.Layout(new Offset(x: ox, y: oy));
     }
 
     public override void Paint(PaintList paint)
@@ -54,7 +54,7 @@ public sealed class ScaleTransition(AnimationController controller, Widget? chil
     public override Widget? HitTest(Offset point)
     {
         if (Controller.Progress < 0.01f) return null;
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return Child?.HitTest(point) ?? this;
     }
 

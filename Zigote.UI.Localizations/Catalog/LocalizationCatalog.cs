@@ -33,10 +33,8 @@ public sealed class LocalizationCatalog : IEnumerable<KeyValuePair<string, strin
     }
 
     public LocalizationCatalog(Locale locale, IEnumerable<KeyValuePair<string, string>> messages)
-        : this(locale)
-    {
+        : this(locale) =>
         AddRange(messages);
-    }
 
     public Locale Locale { get; }
 
@@ -47,55 +45,44 @@ public sealed class LocalizationCatalog : IEnumerable<KeyValuePair<string, strin
     public string this[string key]
     {
         get => _messages[key];
-        set => Add(key, value);
+        set => Add(key: key, template: value);
     }
 
-    public IEnumerator<KeyValuePair<string, string>> GetEnumerator()
-    {
-        return _messages.GetEnumerator();
-    }
+    public IEnumerator<KeyValuePair<string, string>> GetEnumerator() => _messages.GetEnumerator();
 
-    IEnumerator IEnumerable.GetEnumerator()
-    {
-        return GetEnumerator();
-    }
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
     public void Add(string key, string template)
     {
         _messages[key] = template ?? throw new ArgumentNullException(nameof(template));
-        _compiled.TryRemove(key, out _);
+        _compiled.TryRemove(key: key, value: out _);
     }
 
     public void AddRange(IEnumerable<KeyValuePair<string, string>> messages)
     {
-        foreach (var kv in messages) Add(kv.Key, kv.Value);
+        foreach (var kv in messages) Add(key: kv.Key, template: kv.Value);
     }
 
-    public bool Contains(string key)
-    {
-        return _messages.ContainsKey(key);
-    }
+    public bool Contains(string key) => _messages.ContainsKey(key);
 
-    public bool TryGetTemplate(string key, out string template)
-    {
-        return _messages.TryGetValue(key, out template!);
-    }
+    public bool TryGetTemplate(string key, out string template) =>
+        _messages.TryGetValue(key: key, value: out template!);
 
     /// <summary>Translate a key, or return <c>null</c> when the key is absent from this catalog.</summary>
     public string? Translate(string key, IReadOnlyDictionary<string, object?>? args = null)
     {
-        if (!_messages.TryGetValue(key, out var template)) return null;
-        return Render(key, template, args ?? NoArgs);
+        if (!_messages.TryGetValue(key: key, value: out string? template)) return null;
+        return Render(key: key, template: template, args: args ?? NoArgs);
     }
 
-    public string? Translate(string key, params (string Name, object? Value)[] args)
-    {
-        return Translate(key, MessageFormat.ToDictionary(args));
-    }
+    public string? Translate(string key, params (string Name, object? Value)[] args) => Translate(
+        key: key,
+        args: MessageFormat.ToDictionary(args)
+    );
 
     private string Render(string key, string template, IReadOnlyDictionary<string, object?> args)
     {
-        if (!_compiled.TryGetValue(key, out var format))
+        if (!_compiled.TryGetValue(key: key, value: out var format))
         {
             try
             {
@@ -111,7 +98,7 @@ public sealed class LocalizationCatalog : IEnumerable<KeyValuePair<string, strin
 
         try
         {
-            return format.Format(Locale, args);
+            return format.Format(locale: Locale, arguments: args);
         }
         catch (FormatException)
         {

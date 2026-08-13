@@ -15,39 +15,38 @@ public static class Instancing
 
     /// <summary>
     ///     Submit <paramref name="count" /> per-instance model matrices for the node identified by
-    ///     <paramref name="entityId" /> (a <see cref="Component.EntityId" />). <paramref name="matrices" />
+    ///     <paramref name="entityId" /> (a <see cref="Component.EntityId" />).
+    ///     <paramref name="matrices" />
     ///     holds <paramref name="count" /> × 16 column-major floats (one 4×4 matrix per instance). The
     ///     node draws as <paramref name="count" /> instances of its mesh, ignoring its own transform.
     /// </summary>
-    public static void SetInstances(uint entityId, ReadOnlySpan<float> matrices, int count)
-    {
-        Backend?.SetInstances(entityId, matrices, count);
-    }
+    public static void SetInstances(uint entityId, ReadOnlySpan<float> matrices, int count) =>
+        Backend?.SetInstances(entityId: entityId, matrices: matrices, count: count);
 
     /// <summary>
     ///     Submit instances to a node addressed by NAME instead of entity id — useful when a manager
     ///     script drives several other mesh nodes (e.g. one node per LOD level). The host resolves the
     ///     first node with that name. No-op if no such node exists.
     /// </summary>
-    public static void SetInstances(string nodeName, ReadOnlySpan<float> matrices, int count)
-    {
-        Backend?.SetInstances(nodeName, matrices, count);
-    }
+    public static void SetInstances(string nodeName, ReadOnlySpan<float> matrices, int count) =>
+        Backend?.SetInstances(nodeName: nodeName, matrices: matrices, count: count);
 
     /// <summary>
     ///     Stop drawing an instanced node (count 0). It draws nothing — an instanced node is never
     ///     rendered as a single fallback mesh, so an emptied node leaves no stray draw at the origin.
     /// </summary>
-    public static void Clear(uint entityId)
-    {
-        Backend?.SetInstances(entityId, ReadOnlySpan<float>.Empty, 0);
-    }
+    public static void Clear(uint entityId) => Backend?.SetInstances(
+        entityId: entityId,
+        matrices: ReadOnlySpan<float>.Empty,
+        count: 0
+    );
 
     /// <summary>Stop drawing an instanced node addressed by name (count 0 → draws nothing).</summary>
-    public static void Clear(string nodeName)
-    {
-        Backend?.SetInstances(nodeName, ReadOnlySpan<float>.Empty, 0);
-    }
+    public static void Clear(string nodeName) => Backend?.SetInstances(
+        nodeName: nodeName,
+        matrices: ReadOnlySpan<float>.Empty,
+        count: 0
+    );
 }
 
 /// <summary>

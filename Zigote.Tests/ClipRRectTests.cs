@@ -18,19 +18,19 @@ public class ClipRRectTests
     {
         var paint = new PaintList();
         paint.AddClipStart(
-            new Rect(
-                10f,
-                20f,
-                200f,
-                100f
+            bounds: new Rect(
+                x: 10f,
+                y: 20f,
+                width: 200f,
+                height: 100f
             ),
-            12f
+            radius: 12f
         );
         paint.AddClipEnd();
 
         var cmd = paint.DebugCommands[0];
-        Assert.Equal((byte)PaintCommandKind.ClipStart, cmd.Kind);
-        Assert.Equal(12f, cmd.Radius);
+        Assert.Equal(expected: (byte)PaintCommandKind.ClipStart, actual: cmd.Kind);
+        Assert.Equal(expected: 12f, actual: cmd.Radius);
     }
 
     [Fact]
@@ -39,26 +39,26 @@ public class ClipRRectTests
         var paint = new PaintList();
         paint.AddClipStart(
             new Rect(
-                0f,
-                0f,
-                100f,
-                100f
+                x: 0f,
+                y: 0f,
+                width: 100f,
+                height: 100f
             )
         );
         paint.AddClipEnd();
         paint.AddClipStart(
-            new Rect(
-                0f,
-                0f,
-                100f,
-                100f
+            bounds: new Rect(
+                x: 0f,
+                y: 0f,
+                width: 100f,
+                height: 100f
             ),
-            -5f
+            radius: -5f
         );
         paint.AddClipEnd();
 
-        Assert.Equal(0f, paint.DebugCommands[0].Radius);
-        Assert.Equal(0f, paint.DebugCommands[2].Radius);
+        Assert.Equal(expected: 0f, actual: paint.DebugCommands[0].Radius);
+        Assert.Equal(expected: 0f, actual: paint.DebugCommands[2].Radius);
     }
 
     [Fact]
@@ -66,31 +66,40 @@ public class ClipRRectTests
     {
         var paint = new PaintList();
         paint.AddClipStart(
-            new Rect(
-                0f,
-                0f,
-                200f,
-                80f
+            bounds: new Rect(
+                x: 0f,
+                y: 0f,
+                width: 200f,
+                height: 80f
             ),
-            9999f
+            radius: 9999f
         ); // capsule sentinel
         paint.AddClipEnd();
 
-        Assert.Equal(40f, paint.DebugCommands[0].Radius);
+        Assert.Equal(expected: 40f, actual: paint.DebugCommands[0].Radius);
     }
 
     [Fact]
     public void ClipRRect_EmitsRoundedClipAroundChild()
     {
-        var clip = new ClipRRect(16f, new ColoredBox(new Color(1f, 0f, 0f)));
-        clip.Measure(Constraints.Tight(120f, 90f));
+        var clip = new ClipRRect(
+            radius: 16f,
+            child: new ColoredBox(new Color(r: 1f, g: 0f, b: 0f))
+        );
+        clip.Measure(Constraints.Tight(width: 120f, height: 90f));
         clip.Layout(Offset.Zero);
 
         var paint = new PaintList();
         clip.Paint(paint);
 
-        Assert.Equal((byte)PaintCommandKind.ClipStart, paint.DebugCommands[0].Kind);
-        Assert.Equal(16f, paint.DebugCommands[0].Radius);
-        Assert.Equal((byte)PaintCommandKind.ClipEnd, paint.DebugCommands[^1].Kind);
+        Assert.Equal(
+            expected: (byte)PaintCommandKind.ClipStart,
+            actual: paint.DebugCommands[0].Kind
+        );
+        Assert.Equal(expected: 16f, actual: paint.DebugCommands[0].Radius);
+        Assert.Equal(
+            expected: (byte)PaintCommandKind.ClipEnd,
+            actual: paint.DebugCommands[^1].Kind
+        );
     }
 }

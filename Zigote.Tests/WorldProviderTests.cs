@@ -17,24 +17,27 @@ public class WorldProviderTests
         GameWorld.Backend = null;
         Assert.False(GameWorld.IsAvailable);
 
-        Assert.Equal(EntityHandle.None, GameWorld.Spawn("prefabs/tear.prefab"));
-        Assert.Equal(EntityHandle.None, GameWorld.SpawnEmpty("Empty"));
+        Assert.Equal(expected: EntityHandle.None, actual: GameWorld.Spawn("prefabs/tear.prefab"));
+        Assert.Equal(expected: EntityHandle.None, actual: GameWorld.SpawnEmpty("Empty"));
         GameWorld.Destroy(new EntityHandle(3)); // must not throw
         Assert.False(GameWorld.IsAlive(new EntityHandle(3)));
-        Assert.Equal(Vec3.Zero, GameWorld.GetPosition(new EntityHandle(3)));
-        Assert.Equal(Quat.Identity, GameWorld.GetRotation(new EntityHandle(3)));
-        Assert.Equal(Vec3.One, GameWorld.GetScale(new EntityHandle(3)));
+        Assert.Equal(expected: Vec3.Zero, actual: GameWorld.GetPosition(new EntityHandle(3)));
+        Assert.Equal(expected: Quat.Identity, actual: GameWorld.GetRotation(new EntityHandle(3)));
+        Assert.Equal(expected: Vec3.One, actual: GameWorld.GetScale(new EntityHandle(3)));
         Assert.Null(GameWorld.GetName(new EntityHandle(3)));
-        Assert.Equal(EntityHandle.None, GameWorld.Find("Player"));
-        Assert.Equal(0, GameWorld.CountByTag("Enemy"));
-        Assert.Equal(Entity.Null, GameWorld.EcsEntity(new EntityHandle(3)));
+        Assert.Equal(expected: EntityHandle.None, actual: GameWorld.Find("Player"));
+        Assert.Equal(expected: 0, actual: GameWorld.CountByTag("Enemy"));
+        Assert.Equal(expected: Entity.Null, actual: GameWorld.EcsEntity(new EntityHandle(3)));
         Assert.Null(GameWorld.FindComponent<Component>());
 
         var results = new List<EntityHandle> { new(9) };
-        Assert.Equal(0, GameWorld.OverlapSphere(Vec3.Zero, 5f, results));
+        Assert.Equal(
+            expected: 0,
+            actual: GameWorld.OverlapSphere(center: Vec3.Zero, radius: 5f, results: results)
+        );
         Assert.Empty(results); // cleared even without a backend
         results.Add(new EntityHandle(9));
-        Assert.Equal(0, GameWorld.FindAllByTag("Enemy", results));
+        Assert.Equal(expected: 0, actual: GameWorld.FindAllByTag(tag: "Enemy", results: results));
         Assert.Empty(results);
     }
 
@@ -47,16 +50,16 @@ public class WorldProviderTests
         {
             var parent = new EntityHandle(7);
             var handle = GameWorld.Spawn(
-                "prefabs/tear.prefab",
-                new Vec3(1f, 2f, 3f),
-                Quat.Identity,
-                parent
+                prefabPath: "prefabs/tear.prefab",
+                position: new Vec3(x: 1f, y: 2f, z: 3f),
+                rotation: Quat.Identity,
+                parent: parent
             );
 
-            Assert.Equal(new EntityHandle(42), handle);
-            Assert.Equal("prefabs/tear.prefab", fake.LastPrefabPath);
-            Assert.Equal(new Vec3(1f, 2f, 3f), fake.LastPosition);
-            Assert.Equal(parent, fake.LastParent);
+            Assert.Equal(expected: new EntityHandle(42), actual: handle);
+            Assert.Equal(expected: "prefabs/tear.prefab", actual: fake.LastPrefabPath);
+            Assert.Equal(expected: new Vec3(x: 1f, y: 2f, z: 3f), actual: fake.LastPosition);
+            Assert.Equal(expected: parent, actual: fake.LastParent);
         }
         finally
         {
@@ -72,9 +75,9 @@ public class WorldProviderTests
         try
         {
             GameWorld.Spawn("p.prefab");
-            Assert.Equal(Vec3.Zero, fake.LastPosition);
-            Assert.Equal(Quat.Identity, fake.LastRotation);
-            Assert.Equal(EntityHandle.None, fake.LastParent);
+            Assert.Equal(expected: Vec3.Zero, actual: fake.LastPosition);
+            Assert.Equal(expected: Quat.Identity, actual: fake.LastRotation);
+            Assert.Equal(expected: EntityHandle.None, actual: fake.LastParent);
         }
         finally
         {
@@ -90,14 +93,14 @@ public class WorldProviderTests
         try
         {
             GameWorld.Destroy(new EntityHandle(5));
-            Assert.Equal(new EntityHandle(5), fake.LastDestroyed);
+            Assert.Equal(expected: new EntityHandle(5), actual: fake.LastDestroyed);
 
-            GameWorld.SetTag(new EntityHandle(5), "Enemy");
-            Assert.Equal("Enemy", fake.LastTag);
+            GameWorld.SetTag(entity: new EntityHandle(5), tag: "Enemy");
+            Assert.Equal(expected: "Enemy", actual: fake.LastTag);
 
-            GameWorld.Nearest(new Vec3(1f, 0f, 0f), 10f, "Enemy");
-            Assert.Equal("Enemy", fake.LastNearestTag);
-            Assert.Equal(EntityHandle.None, fake.LastNearestIgnore);
+            GameWorld.Nearest(center: new Vec3(x: 1f, y: 0f, z: 0f), maxRadius: 10f, tag: "Enemy");
+            Assert.Equal(expected: "Enemy", actual: fake.LastNearestTag);
+            Assert.Equal(expected: EntityHandle.None, actual: fake.LastNearestIgnore);
         }
         finally
         {
@@ -109,13 +112,16 @@ public class WorldProviderTests
     public void Of_Wraps_A_Components_EntityId()
     {
         var comp = new ProviderProbeComponent();
-        Assert.Equal(EntityHandle.None, GameWorld.Of(comp)); // unattached → id 0 → None
+        Assert.Equal(
+            expected: EntityHandle.None,
+            actual: GameWorld.Of(comp)
+        ); // unattached → id 0 → None
     }
 
     [Fact]
     public void EntityHandle_Equality_And_Sentinel()
     {
-        Assert.Equal(EntityHandle.None, default);
+        Assert.Equal(expected: EntityHandle.None, actual: default);
         Assert.False(default(EntityHandle).IsValid);
         Assert.True(new EntityHandle(1).IsValid);
         Assert.True(new EntityHandle(3) == new EntityHandle(3));
@@ -145,90 +151,41 @@ public class WorldProviderTests
             return new EntityHandle(42);
         }
 
-        public EntityHandle SpawnEmpty(string name, Vec3 position, EntityHandle parent)
-        {
-            return new EntityHandle(43);
-        }
+        public EntityHandle SpawnEmpty(string name, Vec3 position, EntityHandle parent) => new(43);
 
-        public void Destroy(EntityHandle entity)
-        {
-            LastDestroyed = entity;
-        }
+        public void Destroy(EntityHandle entity) => LastDestroyed = entity;
 
-        public bool IsAlive(EntityHandle entity)
-        {
-            return false;
-        }
+        public bool IsAlive(EntityHandle entity) => false;
 
-        public Vec3 GetPosition(EntityHandle entity)
-        {
-            return Vec3.Zero;
-        }
+        public Vec3 GetPosition(EntityHandle entity) => Vec3.Zero;
 
-        public void SetPosition(EntityHandle entity, Vec3 position)
-        {
-        }
+        public void SetPosition(EntityHandle entity, Vec3 position) { }
 
-        public Quat GetRotation(EntityHandle entity)
-        {
-            return Quat.Identity;
-        }
+        public Quat GetRotation(EntityHandle entity) => Quat.Identity;
 
-        public void SetRotation(EntityHandle entity, Quat rotation)
-        {
-        }
+        public void SetRotation(EntityHandle entity, Quat rotation) { }
 
-        public Vec3 GetScale(EntityHandle entity)
-        {
-            return Vec3.One;
-        }
+        public Vec3 GetScale(EntityHandle entity) => Vec3.One;
 
-        public void SetScale(EntityHandle entity, Vec3 scale)
-        {
-        }
+        public void SetScale(EntityHandle entity, Vec3 scale) { }
 
-        public Vec3 GetWorldPosition(EntityHandle entity)
-        {
-            return Vec3.Zero;
-        }
+        public Vec3 GetWorldPosition(EntityHandle entity) => Vec3.Zero;
 
-        public bool GetVisible(EntityHandle entity)
-        {
-            return true;
-        }
+        public bool GetVisible(EntityHandle entity) => true;
 
-        public void SetVisible(EntityHandle entity, bool visible)
-        {
-        }
+        public void SetVisible(EntityHandle entity, bool visible) { }
 
-        public string? GetName(EntityHandle entity)
-        {
-            return null;
-        }
+        public string? GetName(EntityHandle entity) => null;
 
-        public string? GetTag(EntityHandle entity)
-        {
-            return LastTag;
-        }
+        public string? GetTag(EntityHandle entity) => LastTag;
 
-        public void SetTag(EntityHandle entity, string? tag)
-        {
-            LastTag = tag;
-        }
+        public void SetTag(EntityHandle entity, string? tag) => LastTag = tag;
 
-        public EntityHandle GetParent(EntityHandle entity)
-        {
-            return EntityHandle.None;
-        }
+        public EntityHandle GetParent(EntityHandle entity) => EntityHandle.None;
 
-        public void SetParent(EntityHandle child, EntityHandle parent)
-        {
-        }
+        public void SetParent(EntityHandle child, EntityHandle parent) { }
 
-        public EntityHandle Find(string name)
-        {
-            return EntityHandle.None;
-        }
+        public EntityHandle Find(string name) => EntityHandle.None;
 
         public int FindAllByTag(string tag, List<EntityHandle> results)
         {
@@ -236,10 +193,7 @@ public class WorldProviderTests
             return 0;
         }
 
-        public int CountByTag(string tag)
-        {
-            return 0;
-        }
+        public int CountByTag(string tag) => 0;
 
         public int OverlapSphere(Vec3 center, float radius, List<EntityHandle> results, string? tag)
         {
@@ -254,24 +208,12 @@ public class WorldProviderTests
             return EntityHandle.None;
         }
 
-        public Component? GetComponent(EntityHandle entity, Type type)
-        {
-            return null;
-        }
+        public Component? GetComponent(EntityHandle entity, Type type) => null;
 
-        public Component? AddComponent(EntityHandle entity, Type type)
-        {
-            return null;
-        }
+        public Component? AddComponent(EntityHandle entity, Type type) => null;
 
-        public Component? FindComponent(Type type)
-        {
-            return null;
-        }
+        public Component? FindComponent(Type type) => null;
 
-        public Entity EcsEntity(EntityHandle entity)
-        {
-            return Entity.Null;
-        }
+        public Entity EcsEntity(EntityHandle entity) => Entity.Null;
     }
 }

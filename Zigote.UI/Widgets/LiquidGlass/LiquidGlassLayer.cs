@@ -8,16 +8,13 @@ namespace Zigote.UI.Widgets.LiquidGlass;
 /// </summary>
 public class LiquidGlassLayer : InheritedWidget
 {
-    public LiquidGlassLayer(Widget? child = null)
-    {
-        Child = child;
-    }
+    public LiquidGlassLayer(Widget? child = null) => Child = child;
 
     public Color GlassColor { get; set; } = new(
-        0.9f,
-        0.95f,
-        1f,
-        0.12f
+        r: 0.9f,
+        g: 0.95f,
+        b: 1f,
+        a: 0.12f
     );
 
     public float Thickness { get; set; } = 8f;

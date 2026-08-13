@@ -46,10 +46,7 @@ public sealed class SettingsPanel : Widget
         _content = Build();
     }
 
-    private void Apply()
-    {
-        _state.Apply3D(in _s);
-    }
+    private void Apply() => _state.Apply3D(in _s);
 
     private void Rebuild()
     {
@@ -65,50 +62,50 @@ public sealed class SettingsPanel : Widget
         };
 
         AddGroup(
-            outer,
-            "Diagnostics",
-            null,
+            outer: outer,
+            title: "Diagnostics",
+            reset: null,
             CheckRow(
-                "Diagnostic Mode",
-                _s.DiagnosticMode != 0f,
-                v => _s.DiagnosticMode = v ? 1f : 0f
+                label: "Diagnostic Mode",
+                value: _s.DiagnosticMode != 0f,
+                set: v => _s.DiagnosticMode = v ? 1f : 0f
             ),
             DebugViewRow()
         );
 
         AddGroup(
-            outer,
-            "Editor Viewport",
-            null,
+            outer: outer,
+            title: "Editor Viewport",
+            reset: null,
             MutedRow(
                 "Render the edit viewport without TAA, bloom, SSR and DoF. Play mode always runs the full authored settings."
             ),
             CheckRow(
-                "Reduced graphics",
-                _state.ReducedEditorGraphics,
-                v => _state.ReducedEditorGraphics = v
+                label: "Reduced graphics",
+                value: _state.ReducedEditorGraphics,
+                set: v => _state.ReducedEditorGraphics = v
             )
         );
 
         AddGroup(
-            outer,
-            "Viewport FPS (testing)",
-            null,
+            outer: outer,
+            title: "Viewport FPS (testing)",
+            reset: null,
             MutedRow(
                 "Unlock = Continuous on + VSync off + Limit Off. A limit caps the render loop."
             ),
             CheckRow(
-                "Continuous Render",
-                App.Active?.ForceContinuousRender ?? false,
-                v =>
+                label: "Continuous Render",
+                value: App.Active?.ForceContinuousRender ?? false,
+                set: v =>
                 {
                     if (App.Active is { } a) a.ForceContinuousRender = v;
                 }
             ),
             CheckRow(
-                "VSync",
-                App.Active?.VSync ?? true,
-                v =>
+                label: "VSync",
+                value: App.Active?.VSync ?? true,
+                set: v =>
                 {
                     if (App.Active is { } a) a.VSync = v;
                 }
@@ -117,428 +114,434 @@ public sealed class SettingsPanel : Widget
         );
 
         AddGroup(
-            outer,
-            "Environment",
-            () => ResetGroup("Environment"),
+            outer: outer,
+            title: "Environment",
+            reset: () => ResetGroup("Environment"),
             new Row {
                 CrossAxisAlignment = CrossAxisAlignment.Center,
                 Children = {
                     new Expanded(
-                        new AdwButton("Load HDRI…", LoadHdri) { Compact = true }
+                        new AdwButton(label: "Load HDRI…", onPressed: LoadHdri) { Compact = true }
                     ),
                     new SizedBox(6f),
                     new Expanded(
-                        new AdwButton("Procedural", UseProceduralEnv) { Compact = true }
+                        new AdwButton(label: "Procedural", onPressed: UseProceduralEnv) {
+                            Compact = true,
+                        }
                     ),
                 },
             },
             SliderRow(
-                "Ambient",
-                _s.AmbientIntensity,
-                0f,
-                2f,
-                v => _s.AmbientIntensity = v
+                label: "Ambient",
+                value: _s.AmbientIntensity,
+                min: 0f,
+                max: 2f,
+                set: v => _s.AmbientIntensity = v
             ),
             ColorRows(
-                "Sky Horizon",
-                _s.SkyHorizonR,
-                _s.SkyHorizonG,
-                _s.SkyHorizonB,
-                v => _s.SkyHorizonR = v,
-                v => _s.SkyHorizonG = v,
-                v => _s.SkyHorizonB = v
+                label: "Sky Horizon",
+                r: _s.SkyHorizonR,
+                g: _s.SkyHorizonG,
+                b: _s.SkyHorizonB,
+                sr: v => _s.SkyHorizonR = v,
+                sg: v => _s.SkyHorizonG = v,
+                sb: v => _s.SkyHorizonB = v
             ),
             ColorRows(
-                "Sky Zenith",
-                _s.SkyZenithR,
-                _s.SkyZenithG,
-                _s.SkyZenithB,
-                v => _s.SkyZenithR = v,
-                v => _s.SkyZenithG = v,
-                v => _s.SkyZenithB = v
+                label: "Sky Zenith",
+                r: _s.SkyZenithR,
+                g: _s.SkyZenithG,
+                b: _s.SkyZenithB,
+                sr: v => _s.SkyZenithR = v,
+                sg: v => _s.SkyZenithG = v,
+                sb: v => _s.SkyZenithB = v
             ),
             ColorRows(
-                "Sky Ground",
-                _s.SkyGroundR,
-                _s.SkyGroundG,
-                _s.SkyGroundB,
-                v => _s.SkyGroundR = v,
-                v => _s.SkyGroundG = v,
-                v => _s.SkyGroundB = v
+                label: "Sky Ground",
+                r: _s.SkyGroundR,
+                g: _s.SkyGroundG,
+                b: _s.SkyGroundB,
+                sr: v => _s.SkyGroundR = v,
+                sg: v => _s.SkyGroundG = v,
+                sb: v => _s.SkyGroundB = v
             ),
             ColorRows(
-                "Env Average",
-                _s.EnvAvgR,
-                _s.EnvAvgG,
-                _s.EnvAvgB,
-                v => _s.EnvAvgR = v,
-                v => _s.EnvAvgG = v,
-                v => _s.EnvAvgB = v
+                label: "Env Average",
+                r: _s.EnvAvgR,
+                g: _s.EnvAvgG,
+                b: _s.EnvAvgB,
+                sr: v => _s.EnvAvgR = v,
+                sg: v => _s.EnvAvgG = v,
+                sb: v => _s.EnvAvgB = v
             )
         );
 
         AddGroup(
-            outer,
-            "Studio Lights",
-            () => ResetGroup("Studio Lights"),
+            outer: outer,
+            title: "Studio Lights",
+            reset: () => ResetGroup("Studio Lights"),
             SliderRow(
-                "Sun Azimuth",
-                _s.SunAzimuthDeg,
-                0f,
-                360f,
-                v => _s.SunAzimuthDeg = v
+                label: "Sun Azimuth",
+                value: _s.SunAzimuthDeg,
+                min: 0f,
+                max: 360f,
+                set: v => _s.SunAzimuthDeg = v
             ),
             SliderRow(
-                "Sun Elevation",
-                _s.SunElevationDeg,
-                0f,
-                90f,
-                v => _s.SunElevationDeg = v
+                label: "Sun Elevation",
+                value: _s.SunElevationDeg,
+                min: 0f,
+                max: 90f,
+                set: v => _s.SunElevationDeg = v
             ),
             SliderRow(
-                "Sun Intensity",
-                _s.SunIntensity,
-                0f,
-                15f,
-                v => _s.SunIntensity = v
+                label: "Sun Intensity",
+                value: _s.SunIntensity,
+                min: 0f,
+                max: 15f,
+                set: v => _s.SunIntensity = v
             ),
             SliderRow(
-                "Sun Sharpness",
-                _s.SunSharpness,
-                1f,
-                300f,
-                v => _s.SunSharpness = v
+                label: "Sun Sharpness",
+                value: _s.SunSharpness,
+                min: 1f,
+                max: 300f,
+                set: v => _s.SunSharpness = v
             ),
             SliderRow(
-                "Overhead Softbox",
-                _s.Overhead,
-                0f,
-                4f,
-                v => _s.Overhead = v
+                label: "Overhead Softbox",
+                value: _s.Overhead,
+                min: 0f,
+                max: 4f,
+                set: v => _s.Overhead = v
             ),
             SliderRow(
-                "Horizon Glow",
-                _s.HorizonGlow,
-                0f,
-                3f,
-                v => _s.HorizonGlow = v
+                label: "Horizon Glow",
+                value: _s.HorizonGlow,
+                min: 0f,
+                max: 3f,
+                set: v => _s.HorizonGlow = v
             )
         );
 
         AddGroup(
-            outer,
-            "Post-processing",
-            () => ResetGroup("Post-processing"),
+            outer: outer,
+            title: "Post-processing",
+            reset: () => ResetGroup("Post-processing"),
             SliderRow(
-                "Exposure",
-                _s.Exposure,
-                0.2f,
-                3f,
-                v => _s.Exposure = v
+                label: "Exposure",
+                value: _s.Exposure,
+                min: 0.2f,
+                max: 3f,
+                set: v => _s.Exposure = v
             ),
             SliderRow(
-                "Contrast",
-                _s.Contrast,
-                0f,
-                1f,
-                v => _s.Contrast = v
+                label: "Contrast",
+                value: _s.Contrast,
+                min: 0f,
+                max: 1f,
+                set: v => _s.Contrast = v
             ),
             SliderRow(
-                "Saturation",
-                _s.Saturation,
-                0.5f,
-                2f,
-                v => _s.Saturation = v
+                label: "Saturation",
+                value: _s.Saturation,
+                min: 0.5f,
+                max: 2f,
+                set: v => _s.Saturation = v
             ),
             SliderRow(
-                "Bloom Threshold",
-                _s.BloomThreshold,
-                0f,
-                4f,
-                v => _s.BloomThreshold = v
+                label: "Bloom Threshold",
+                value: _s.BloomThreshold,
+                min: 0f,
+                max: 4f,
+                set: v => _s.BloomThreshold = v
             ),
             SliderRow(
-                "Bloom Knee",
-                _s.BloomKnee,
-                0.01f,
-                1f,
-                v => _s.BloomKnee = v
+                label: "Bloom Knee",
+                value: _s.BloomKnee,
+                min: 0.01f,
+                max: 1f,
+                set: v => _s.BloomKnee = v
             ),
             SliderRow(
-                "Bloom Intensity",
-                _s.BloomIntensity,
-                0f,
-                2f,
-                v => _s.BloomIntensity = v
+                label: "Bloom Intensity",
+                value: _s.BloomIntensity,
+                min: 0f,
+                max: 2f,
+                set: v => _s.BloomIntensity = v
             )
         );
 
         AddGroup(
-            outer,
-            "Ambient Occlusion",
-            () => ResetGroup("Ambient Occlusion"),
+            outer: outer,
+            title: "Ambient Occlusion",
+            reset: () => ResetGroup("Ambient Occlusion"),
             SliderRow(
-                "AO Radius",
-                _s.SsaoRadius,
-                0.05f,
-                2f,
-                v => _s.SsaoRadius = v
+                label: "AO Radius",
+                value: _s.SsaoRadius,
+                min: 0.05f,
+                max: 2f,
+                set: v => _s.SsaoRadius = v
             ),
             SliderRow(
-                "AO Strength",
-                _s.SsaoStrength,
-                0f,
-                3f,
-                v => _s.SsaoStrength = v
+                label: "AO Strength",
+                value: _s.SsaoStrength,
+                min: 0f,
+                max: 3f,
+                set: v => _s.SsaoStrength = v
             ),
             SliderRow(
-                "AO Bias",
-                _s.SsaoBias,
-                0f,
-                0.1f,
-                v => _s.SsaoBias = v
+                label: "AO Bias",
+                value: _s.SsaoBias,
+                min: 0f,
+                max: 0.1f,
+                set: v => _s.SsaoBias = v
             ),
             SliderRow(
-                "AO Power",
-                _s.SsaoPower,
-                0.5f,
-                4f,
-                v => _s.SsaoPower = v
+                label: "AO Power",
+                value: _s.SsaoPower,
+                min: 0.5f,
+                max: 4f,
+                set: v => _s.SsaoPower = v
             )
         );
 
         AddGroup(
-            outer,
-            "Reflections (SSR)",
-            () => ResetGroup("Reflections (SSR)"),
+            outer: outer,
+            title: "Reflections (SSR)",
+            reset: () => ResetGroup("Reflections (SSR)"),
             SliderRow(
-                "SSR Intensity",
-                _s.SsrIntensity,
-                0f,
-                1.5f,
-                v => _s.SsrIntensity = v
+                label: "SSR Intensity",
+                value: _s.SsrIntensity,
+                min: 0f,
+                max: 1.5f,
+                set: v => _s.SsrIntensity = v
             ),
             SliderRow(
-                "SSR Distance",
-                _s.SsrMaxDistance,
-                1f,
-                20f,
-                v => _s.SsrMaxDistance = v
+                label: "SSR Distance",
+                value: _s.SsrMaxDistance,
+                min: 1f,
+                max: 20f,
+                set: v => _s.SsrMaxDistance = v
             ),
             SliderRow(
-                "SSR Thickness",
-                _s.SsrThickness,
-                0.05f,
-                2f,
-                v => _s.SsrThickness = v
+                label: "SSR Thickness",
+                value: _s.SsrThickness,
+                min: 0.05f,
+                max: 2f,
+                set: v => _s.SsrThickness = v
             )
         );
 
         AddGroup(
-            outer,
-            "Anti-aliasing (TAA)",
-            () => ResetGroup("Anti-aliasing (TAA)"),
+            outer: outer,
+            title: "Anti-aliasing (TAA)",
+            reset: () => ResetGroup("Anti-aliasing (TAA)"),
             SliderRow(
-                "TAA Enabled",
-                _s.TaaEnabled,
-                0f,
-                1f,
-                v => _s.TaaEnabled = v
+                label: "TAA Enabled",
+                value: _s.TaaEnabled,
+                min: 0f,
+                max: 1f,
+                set: v => _s.TaaEnabled = v
             ),
             SliderRow(
-                "TAA Feedback",
-                _s.TaaFeedback,
-                0.5f,
-                0.97f,
-                v => _s.TaaFeedback = v
+                label: "TAA Feedback",
+                value: _s.TaaFeedback,
+                min: 0.5f,
+                max: 0.97f,
+                set: v => _s.TaaFeedback = v
             )
         );
 
         AddGroup(
-            outer,
-            "Shadows",
-            () => ResetGroup("Shadows"),
+            outer: outer,
+            title: "Shadows",
+            reset: () => ResetGroup("Shadows"),
             SliderRow(
-                "Shadow Strength",
-                _s.ShadowStrength,
-                0f,
-                1f,
-                v => _s.ShadowStrength = v
+                label: "Shadow Strength",
+                value: _s.ShadowStrength,
+                min: 0f,
+                max: 1f,
+                set: v => _s.ShadowStrength = v
             ),
             SliderRow(
-                "Shadow Bias",
-                _s.ShadowBias,
-                0f,
-                0.02f,
-                v => _s.ShadowBias = v
+                label: "Shadow Bias",
+                value: _s.ShadowBias,
+                min: 0f,
+                max: 0.02f,
+                set: v => _s.ShadowBias = v
             ),
             SliderRow(
-                "Shadow Softness",
-                _s.ShadowSoftness,
-                0.25f,
-                6f,
-                v => _s.ShadowSoftness = v
+                label: "Shadow Softness",
+                value: _s.ShadowSoftness,
+                min: 0.25f,
+                max: 6f,
+                set: v => _s.ShadowSoftness = v
             )
         );
 
         AddGroup(
-            outer,
-            "Material",
-            () => ResetGroup("Material"),
+            outer: outer,
+            title: "Material",
+            reset: () => ResetGroup("Material"),
             SliderRow(
-                "Clearcoat",
-                _s.Clearcoat,
-                0f,
-                1f,
-                v => _s.Clearcoat = v
+                label: "Clearcoat",
+                value: _s.Clearcoat,
+                min: 0f,
+                max: 1f,
+                set: v => _s.Clearcoat = v
             )
         );
 
         AddGroup(
-            outer,
-            "Depth of Field",
-            () => ResetGroup("Depth of Field"),
-            CheckRow("Enabled", _s.DofEnabled != 0f, v => _s.DofEnabled = v ? 1f : 0f),
-            SliderRow(
-                "Focus Distance",
-                _s.DofFocusDistance,
-                1f,
-                30f,
-                v => _s.DofFocusDistance = v
-            ),
-            SliderRow(
-                "F-Stop",
-                _s.DofFStop,
-                1f,
-                16f,
-                v => _s.DofFStop = v
-            ),
-            SliderRow(
-                "Max Blur (px)",
-                _s.DofMaxCoc,
-                0f,
-                40f,
-                v => _s.DofMaxCoc = v
-            )
-        );
-
-        AddGroup(
-            outer,
-            "Fog",
-            () => ResetGroup("Fog"),
-            SliderRow(
-                "Density",
-                _s.FogDensity,
-                0f,
-                1f,
-                v => _s.FogDensity = v
-            ),
-            ColorRows(
-                "Colour",
-                _s.FogColorR,
-                _s.FogColorG,
-                _s.FogColorB,
-                v => _s.FogColorR = v,
-                v => _s.FogColorG = v,
-                v => _s.FogColorB = v
-            ),
-            SliderRow(
-                "Height",
-                _s.FogHeight,
-                -20f,
-                20f,
-                v => _s.FogHeight = v
-            ),
-            SliderRow(
-                "Height Falloff",
-                _s.FogHeightFalloff,
-                0f,
-                2f,
-                v => _s.FogHeightFalloff = v
-            ),
-            SliderRow(
-                "Sun In-scatter",
-                _s.FogSunInscatter,
-                0f,
-                4f,
-                v => _s.FogSunInscatter = v
-            ),
-            SliderRow(
-                "Anisotropy",
-                _s.FogAnisotropy,
-                -0.95f,
-                0.95f,
-                v => _s.FogAnisotropy = v
-            )
-        );
-
-        AddGroup(
-            outer,
-            "Auto-exposure",
-            () => ResetGroup("Auto-exposure"),
+            outer: outer,
+            title: "Depth of Field",
+            reset: () => ResetGroup("Depth of Field"),
             CheckRow(
-                "Enabled",
-                _s.AutoExposureEnabled != 0f,
-                v => _s.AutoExposureEnabled = v ? 1f : 0f
+                label: "Enabled",
+                value: _s.DofEnabled != 0f,
+                set: v => _s.DofEnabled = v ? 1f : 0f
             ),
             SliderRow(
-                "Key (mid-grey)",
-                _s.AutoExposureKey,
-                0.02f,
-                0.6f,
-                v => _s.AutoExposureKey = v
+                label: "Focus Distance",
+                value: _s.DofFocusDistance,
+                min: 1f,
+                max: 30f,
+                set: v => _s.DofFocusDistance = v
             ),
             SliderRow(
-                "Min Luminance",
-                _s.AutoExposureMin,
-                0.001f,
-                1f,
-                v => _s.AutoExposureMin = v
+                label: "F-Stop",
+                value: _s.DofFStop,
+                min: 1f,
+                max: 16f,
+                set: v => _s.DofFStop = v
             ),
             SliderRow(
-                "Max Luminance",
-                _s.AutoExposureMax,
-                0.5f,
-                40f,
-                v => _s.AutoExposureMax = v
+                label: "Max Blur (px)",
+                value: _s.DofMaxCoc,
+                min: 0f,
+                max: 40f,
+                set: v => _s.DofMaxCoc = v
+            )
+        );
+
+        AddGroup(
+            outer: outer,
+            title: "Fog",
+            reset: () => ResetGroup("Fog"),
+            SliderRow(
+                label: "Density",
+                value: _s.FogDensity,
+                min: 0f,
+                max: 1f,
+                set: v => _s.FogDensity = v
+            ),
+            ColorRows(
+                label: "Colour",
+                r: _s.FogColorR,
+                g: _s.FogColorG,
+                b: _s.FogColorB,
+                sr: v => _s.FogColorR = v,
+                sg: v => _s.FogColorG = v,
+                sb: v => _s.FogColorB = v
             ),
             SliderRow(
-                "Adapt Speed",
-                _s.AutoExposureSpeed,
-                0.01f,
-                1f,
-                v => _s.AutoExposureSpeed = v
+                label: "Height",
+                value: _s.FogHeight,
+                min: -20f,
+                max: 20f,
+                set: v => _s.FogHeight = v
+            ),
+            SliderRow(
+                label: "Height Falloff",
+                value: _s.FogHeightFalloff,
+                min: 0f,
+                max: 2f,
+                set: v => _s.FogHeightFalloff = v
+            ),
+            SliderRow(
+                label: "Sun In-scatter",
+                value: _s.FogSunInscatter,
+                min: 0f,
+                max: 4f,
+                set: v => _s.FogSunInscatter = v
+            ),
+            SliderRow(
+                label: "Anisotropy",
+                value: _s.FogAnisotropy,
+                min: -0.95f,
+                max: 0.95f,
+                set: v => _s.FogAnisotropy = v
+            )
+        );
+
+        AddGroup(
+            outer: outer,
+            title: "Auto-exposure",
+            reset: () => ResetGroup("Auto-exposure"),
+            CheckRow(
+                label: "Enabled",
+                value: _s.AutoExposureEnabled != 0f,
+                set: v => _s.AutoExposureEnabled = v ? 1f : 0f
+            ),
+            SliderRow(
+                label: "Key (mid-grey)",
+                value: _s.AutoExposureKey,
+                min: 0.02f,
+                max: 0.6f,
+                set: v => _s.AutoExposureKey = v
+            ),
+            SliderRow(
+                label: "Min Luminance",
+                value: _s.AutoExposureMin,
+                min: 0.001f,
+                max: 1f,
+                set: v => _s.AutoExposureMin = v
+            ),
+            SliderRow(
+                label: "Max Luminance",
+                value: _s.AutoExposureMax,
+                min: 0.5f,
+                max: 40f,
+                set: v => _s.AutoExposureMax = v
+            ),
+            SliderRow(
+                label: "Adapt Speed",
+                value: _s.AutoExposureSpeed,
+                min: 0.01f,
+                max: 1f,
+                set: v => _s.AutoExposureSpeed = v
             )
         );
 
         outer.Children.Add(
             new Padding(
-                EdgeInsets.Only(top: Spacing.Md),
-                new AdwButton("Reset all to defaults", ResetDefaults) {
+                padding: EdgeInsets.Only(top: Spacing.Md),
+                child: new AdwButton(label: "Reset all to defaults", onPressed: ResetDefaults) {
                     Style = AdwButtonStyle.Destructive,
                 }
             )
         );
 
-        return new Padding(EdgeInsets.Only(top: Spacing.Xs), outer);
+        return new Padding(padding: EdgeInsets.Only(top: Spacing.Xs), child: outer);
     }
 
     // ── Group machinery ─────────────────────────────────────────────────────────
 
     private void AddGroup(Column outer, string title, Action? reset, params Widget[] rows)
     {
-        var collapsed = _collapsedGroups.Contains(title);
+        bool collapsed = _collapsedGroups.Contains(title);
         outer.Children.Add(
             new GroupHeader(
-                title,
-                _theme,
-                collapsed,
-                () =>
+                title: title,
+                theme: _theme,
+                collapsed: collapsed,
+                onToggle: () =>
                 {
                     if (!_collapsedGroups.Remove(title)) _collapsedGroups.Add(title);
                     Rebuild();
                 },
-                reset
+                onReset: reset
             )
         );
 
@@ -551,10 +554,13 @@ public sealed class SettingsPanel : Widget
         body.Children.AddRange(rows);
         outer.Children.Add(
             new Padding(
-                EdgeInsets.Only(bottom: Spacing.Sm),
-                new ColoredBox(
-                    _theme.SurfaceAlt,
-                    new Padding(EdgeInsets.Symmetric(Spacing.Sm, Spacing.Xs), body)
+                padding: EdgeInsets.Only(bottom: Spacing.Sm),
+                child: new ColoredBox(
+                    color: _theme.SurfaceAlt,
+                    child: new Padding(
+                        padding: EdgeInsets.Symmetric(horizontal: Spacing.Sm, vertical: Spacing.Xs),
+                        child: body
+                    )
                 )
             )
         );
@@ -564,18 +570,25 @@ public sealed class SettingsPanel : Widget
     {
         var debugViews = (DebugView[])Enum.GetValues(typeof(DebugView));
         return new Padding(
-            EdgeInsets.Symmetric(0f, Spacing.Xxs),
-            new Row {
+            padding: EdgeInsets.Symmetric(horizontal: 0f, vertical: Spacing.Xxs),
+            child: new Row {
                 Children = {
                     new SizedBox(
-                        LabelColW,
-                        child: new Label("Debug View", _theme.FontSizeCaption, _theme.OnSurface)
+                        width: LabelColW,
+                        child: new Label(
+                            text: "Debug View",
+                            fontSize: _theme.FontSizeCaption,
+                            color: _theme.OnSurface
+                        )
                     ),
                     new Expanded(
                         new AdwDropDown(
-                            [.. debugViews.Select(PrettyDebugView)],
-                            Array.IndexOf(debugViews, (DebugView)(int)_s.DebugView),
-                            i =>
+                            items: [.. debugViews.Select(PrettyDebugView)],
+                            selectedIndex: Array.IndexOf(
+                                array: debugViews,
+                                value: (DebugView)(int)_s.DebugView
+                            ),
+                            onSelected: i =>
                             {
                                 _s.DebugView = (int)debugViews[i];
                                 Apply();
@@ -590,16 +603,20 @@ public sealed class SettingsPanel : Widget
     private Widget CheckRow(string label, bool value, Action<bool> set)
     {
         return new Padding(
-            EdgeInsets.Symmetric(0f, Spacing.Xxs),
-            new Row {
+            padding: EdgeInsets.Symmetric(horizontal: 0f, vertical: Spacing.Xxs),
+            child: new Row {
                 Children = {
                     new SizedBox(
-                        LabelColW,
-                        child: new Label(label, _theme.FontSizeCaption, _theme.OnSurface)
+                        width: LabelColW,
+                        child: new Label(
+                            text: label,
+                            fontSize: _theme.FontSizeCaption,
+                            color: _theme.OnSurface
+                        )
                     ),
                     new AdwSwitch(
-                        value,
-                        v =>
+                        value: value,
+                        onChanged: v =>
                         {
                             set(v);
                             Apply();
@@ -613,8 +630,8 @@ public sealed class SettingsPanel : Widget
     private Widget MutedRow(string text)
     {
         return new Padding(
-            EdgeInsets.Symmetric(0f, Spacing.Xxs),
-            new Label(text, _theme.FontSizeCaption, _theme.Hint)
+            padding: EdgeInsets.Symmetric(horizontal: 0f, vertical: Spacing.Xxs),
+            child: new Label(text: text, fontSize: _theme.FontSizeCaption, color: _theme.Hint)
         );
     }
 
@@ -627,8 +644,8 @@ public sealed class SettingsPanel : Widget
         {
             return new Expanded(
                 new AdwButton(
-                    label,
-                    () =>
+                    label: label,
+                    onPressed: () =>
                     {
                         if (App.Active is not { } a) return;
                         a.FrameRateLimit = fps;
@@ -639,32 +656,33 @@ public sealed class SettingsPanel : Widget
             );
         }
 
-        var current = App.Active?.FrameRateLimit ?? 0;
+        int current = App.Active?.FrameRateLimit ?? 0;
         return new Padding(
-            EdgeInsets.Symmetric(0f, Spacing.Xxs),
-            new Column {
+            padding: EdgeInsets.Symmetric(horizontal: 0f, vertical: Spacing.Xxs),
+            child: new Column {
                 CrossAxisAlignment = CrossAxisAlignment.Stretch,
                 MainAxisSize = MainAxisSize.Min,
                 Children = {
                     new Label(
+                        text:
                         $"FPS Limit  (current: {(current == 0 ? $"display {App.Active?.DisplayRefreshHz ?? 60f:0} Hz" : current.ToString())})",
-                        _theme.FontSizeCaption,
-                        _theme.Hint
+                        fontSize: _theme.FontSizeCaption,
+                        color: _theme.Hint
                     ),
                     new SizedBox(4f),
                     new Row {
                         Children = {
-                            Preset("Off", 0),
+                            Preset(label: "Off", fps: 0),
                             new SizedBox(4f),
-                            Preset("30", 30),
+                            Preset(label: "30", fps: 30),
                             new SizedBox(4f),
-                            Preset("60", 60),
+                            Preset(label: "60", fps: 60),
                             new SizedBox(4f),
-                            Preset("120", 120),
+                            Preset(label: "120", fps: 120),
                             new SizedBox(4f),
-                            Preset("144", 144),
+                            Preset(label: "144", fps: 144),
                             new SizedBox(4f),
-                            Preset("240", 240),
+                            Preset(label: "240", fps: 240),
                         },
                     },
                 },
@@ -681,35 +699,35 @@ public sealed class SettingsPanel : Widget
         };
         c.Children.Add(
             new Padding(
-                EdgeInsets.Only(top: 4f),
-                new Label(label, _theme.FontSizeCaption, _theme.Hint)
+                padding: EdgeInsets.Only(top: 4f),
+                child: new Label(text: label, fontSize: _theme.FontSizeCaption, color: _theme.Hint)
             )
         );
         c.Children.Add(
             SliderRow(
-                "  R",
-                r,
-                0f,
-                1f,
-                sr
+                label: "  R",
+                value: r,
+                min: 0f,
+                max: 1f,
+                set: sr
             )
         );
         c.Children.Add(
             SliderRow(
-                "  G",
-                g,
-                0f,
-                1f,
-                sg
+                label: "  G",
+                value: g,
+                min: 0f,
+                max: 1f,
+                set: sg
             )
         );
         c.Children.Add(
             SliderRow(
-                "  B",
-                b,
-                0f,
-                1f,
-                sb
+                label: "  B",
+                value: b,
+                min: 0f,
+                max: 1f,
+                set: sb
             )
         );
         return c;
@@ -717,7 +735,11 @@ public sealed class SettingsPanel : Widget
 
     private Widget SliderRow(string label, float value, float min, float max, Action<float> set)
     {
-        var valLabel = new Label(value.ToString("0.###"), _theme.FontSizeCaption, _theme.Hint);
+        var valLabel = new Label(
+            text: value.ToString("0.###"),
+            fontSize: _theme.FontSizeCaption,
+            color: _theme.Hint
+        );
         var slider = new AdwSlider(value) {
             Min = min,
             Max = max,
@@ -729,15 +751,19 @@ public sealed class SettingsPanel : Widget
             Apply();
         };
         return new Padding(
-            EdgeInsets.Symmetric(0f, Spacing.Xxs),
-            new Row {
+            padding: EdgeInsets.Symmetric(horizontal: 0f, vertical: Spacing.Xxs),
+            child: new Row {
                 Children = {
                     new SizedBox(
-                        LabelColW,
-                        child: new Label(label, _theme.FontSizeCaption, _theme.OnSurface)
+                        width: LabelColW,
+                        child: new Label(
+                            text: label,
+                            fontSize: _theme.FontSizeCaption,
+                            color: _theme.OnSurface
+                        )
                     ),
                     new Expanded(slider),
-                    new SizedBox(ValueColW, child: valLabel),
+                    new SizedBox(width: ValueColW, child: valLabel),
                 },
             }
         );
@@ -747,7 +773,7 @@ public sealed class SettingsPanel : Widget
     {
         var app = App.Active;
         if (app is null) return;
-        var root = Directory.Exists("examples")
+        string root = Directory.Exists("examples")
             ? Path.GetFullPath("examples")
             : Directory.GetCurrentDirectory();
 
@@ -759,12 +785,12 @@ public sealed class SettingsPanel : Widget
         {
             try
             {
-                var path = await FileDialog.OpenFileAsync(
-                    "Load HDRI / Environment",
-                    root,
-                    [
+                string? path = await FileDialog.OpenFileAsync(
+                    title: "Load HDRI / Environment",
+                    startDirectory: root,
+                    filters: [
                         new FileDialogFilter(
-                            "Images",
+                            name: "Images",
                             "hdr",
                             "png",
                             "jpg",
@@ -930,10 +956,7 @@ public sealed class SettingsPanel : Widget
     }
 
     // Canonical defaults live in RenderDefaults (shared with the project-settings reset path).
-    private static ZgRenderSettings3D Defaults()
-    {
-        return RenderDefaults.Settings3D();
-    }
+    private static ZgRenderSettings3D Defaults() => RenderDefaults.Settings3D();
 
     public override Size Measure(Constraints c)
     {
@@ -944,29 +967,23 @@ public sealed class SettingsPanel : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         _content.Layout(origin);
     }
 
-    public override void Paint(PaintList paint)
-    {
-        _content.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => _content.Paint(paint);
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return _content.HitTest(point);
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return [_content];
-    }
+    public override IEnumerable<Widget> GetChildren() => [_content];
 
     // ── Collapsible group header ────────────────────────────────────────────────
 
@@ -992,65 +1009,67 @@ public sealed class SettingsPanel : Widget
         }
 
         private Rect ResetRect => new(
-            Bounds.Right - 22f,
-            Bounds.Y,
-            22f,
-            Bounds.Height
+            x: Bounds.Right - 22f,
+            y: Bounds.Y,
+            width: 22f,
+            height: Bounds.Height
         );
 
         public override Size Measure(Constraints c)
         {
-            _size = c.Constrain(new Size(c.MaxWidth, 26f));
+            _size = c.Constrain(new Size(width: c.MaxWidth, height: 26f));
             return _size;
         }
 
         public override void Layout(Offset origin)
         {
             Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                _size.Width,
-                _size.Height
+                x: origin.X,
+                y: origin.Y,
+                width: _size.Width,
+                height: _size.Height
             );
         }
 
         public override void Paint(PaintList paint)
         {
             if (_hovered)
+            {
                 paint.AddRect(
-                    new Rect(
-                        Bounds.X,
-                        Bounds.Y,
-                        Bounds.Width,
-                        Bounds.Height - 1f
+                    bounds: new Rect(
+                        x: Bounds.X,
+                        y: Bounds.Y,
+                        width: Bounds.Width,
+                        height: Bounds.Height - 1f
                     ),
-                    _theme.ControlHover,
-                    4f
+                    color: _theme.ControlHover,
+                    radius: 4f
                 );
+            }
 
             const float cs = 14f;
-            var chevron = _collapsed ? Icons.ChevronRight : Icons.ChevronDown;
+            string chevron = _collapsed ? Icons.ChevronRight : Icons.ChevronDown;
             Icons.Draw(
-                paint,
-                chevron,
-                new Rect(
-                    Bounds.X,
-                    Bounds.Y,
-                    cs,
-                    Bounds.Height
+                paint: paint,
+                glyph: chevron,
+                box: new Rect(
+                    x: Bounds.X,
+                    y: Bounds.Y,
+                    width: cs,
+                    height: Bounds.Height
                 ),
-                _theme.TextSecondary,
-                cs
+                color: _theme.TextSecondary,
+                size: cs
             );
 
-            var fs = _theme.FontSizeBody;
-            var ty = Bounds.Y + (Bounds.Height - fs) / 2f + fs * 0.8f;
+            float fs = _theme.FontSizeBody;
+            float ty = Bounds.Y + ((Bounds.Height - fs) / 2f) + (fs * 0.8f);
             paint.AddText(
-                _title,
-                Bounds.X + cs + 2f,
-                ty,
-                _theme.OnSurface,
-                fs,
+                text: _title,
+                baselineX: Bounds.X + cs + 2f,
+                baselineY: ty,
+                color: _theme.OnSurface,
+                fontSize: fs,
                 fontWeight: FontWeight.SemiBold
             );
 
@@ -1058,22 +1077,22 @@ public sealed class SettingsPanel : Widget
             {
                 var rr = ResetRect;
                 Icons.Draw(
-                    paint,
-                    Icons.Refresh,
-                    rr,
-                    _resetHovered ? _theme.OnSurface : _theme.Hint.WithAlpha(0.6f),
-                    13f
+                    paint: paint,
+                    glyph: Icons.Refresh,
+                    box: rr,
+                    color: _resetHovered ? _theme.OnSurface : _theme.Hint.WithAlpha(0.6f),
+                    size: 13f
                 );
             }
 
             paint.AddRect(
-                new Rect(
-                    Bounds.X,
-                    Bounds.Bottom - 1f,
-                    Bounds.Width,
-                    1f
+                bounds: new Rect(
+                    x: Bounds.X,
+                    y: Bounds.Bottom - 1f,
+                    width: Bounds.Width,
+                    height: 1f
                 ),
-                _theme.Separator
+                color: _theme.Separator
             );
         }
 
@@ -1092,7 +1111,7 @@ public sealed class SettingsPanel : Widget
 
         public override void OnPointerMove(Offset point)
         {
-            var rh = _onReset != null && ResetRect.Contains(point.X, point.Y);
+            bool rh = _onReset != null && ResetRect.Contains(px: point.X, py: point.Y);
             if (rh != _resetHovered)
             {
                 _resetHovered = rh;
@@ -1102,8 +1121,8 @@ public sealed class SettingsPanel : Widget
 
         public override void OnPointerUp(Offset point)
         {
-            if (!Bounds.Contains(point.X, point.Y)) return;
-            if (_onReset != null && ResetRect.Contains(point.X, point.Y)) _onReset();
+            if (!Bounds.Contains(px: point.X, py: point.Y)) return;
+            if (_onReset != null && ResetRect.Contains(px: point.X, py: point.Y)) _onReset();
             else _onToggle();
         }
     }

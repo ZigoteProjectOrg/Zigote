@@ -9,29 +9,29 @@ namespace Zigote.UI.Widgets.Layout;
 /// </summary>
 public readonly record struct Alignment(float X, float Y)
 {
-    public static readonly Alignment TopLeft = new(0f, 0f);
-    public static readonly Alignment TopCenter = new(0.5f, 0f);
-    public static readonly Alignment TopRight = new(1f, 0f);
-    public static readonly Alignment CenterLeft = new(0f, 0.5f);
-    public static readonly Alignment Center = new(0.5f, 0.5f);
-    public static readonly Alignment CenterRight = new(1f, 0.5f);
-    public static readonly Alignment BottomLeft = new(0f, 1f);
-    public static readonly Alignment BottomCenter = new(0.5f, 1f);
-    public static readonly Alignment BottomRight = new(1f, 1f);
+    public static readonly Alignment TopLeft = new(X: 0f, Y: 0f);
+    public static readonly Alignment TopCenter = new(X: 0.5f, Y: 0f);
+    public static readonly Alignment TopRight = new(X: 1f, Y: 0f);
+    public static readonly Alignment CenterLeft = new(X: 0f, Y: 0.5f);
+    public static readonly Alignment Center = new(X: 0.5f, Y: 0.5f);
+    public static readonly Alignment CenterRight = new(X: 1f, Y: 0.5f);
+    public static readonly Alignment BottomLeft = new(X: 0f, Y: 1f);
+    public static readonly Alignment BottomCenter = new(X: 0.5f, Y: 1f);
+    public static readonly Alignment BottomRight = new(X: 1f, Y: 1f);
 
     /// <summary>
     ///     The offset of a child of size <paramref name="child" /> inside a box of size
     ///     <paramref name="outer" /> for this alignment.
     /// </summary>
-    public Offset Within(Size outer, Size child)
-    {
-        return new Offset((outer.Width - child.Width) * X, (outer.Height - child.Height) * Y);
-    }
+    public Offset Within(Size outer, Size child) => new(
+        x: (outer.Width - child.Width) * X,
+        y: (outer.Height - child.Height) * Y
+    );
 
-    public static Alignment Lerp(Alignment a, Alignment b, float t)
-    {
-        return new Alignment(a.X + (b.X - a.X) * t, a.Y + (b.Y - a.Y) * t);
-    }
+    public static Alignment Lerp(Alignment a, Alignment b, float t) => new(
+        X: a.X + ((b.X - a.X) * t),
+        Y: a.Y + ((b.Y - a.Y) * t)
+    );
 
     /// <summary>
     ///     Build an alignment using the −1..1 alignment convention, where <c>(-1,-1)</c> is top-left,
@@ -44,8 +44,8 @@ public readonly record struct Alignment(float X, float Y)
     ///         isn't silently offset.
     ///     </para>
     /// </summary>
-    public static Alignment Xy(double x, double y)
-    {
-        return new Alignment((float)((x + 1.0) / 2.0), (float)((y + 1.0) / 2.0));
-    }
+    public static Alignment Xy(double x, double y) => new(
+        X: (float)((x + 1.0) / 2.0),
+        Y: (float)((y + 1.0) / 2.0)
+    );
 }

@@ -30,28 +30,28 @@ public class Icon(string iconName) : Widget
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        _size = c.Constrain(new Size(Size, Size));
+        _size = c.Constrain(new Size(width: Size, height: Size));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
     public override void Paint(PaintList paint)
     {
         Icons.Draw(
-            paint,
-            Glyph,
-            Bounds,
-            Color ?? _theme.OnSurface,
-            Size
+            paint: paint,
+            glyph: Glyph,
+            box: Bounds,
+            color: Color ?? _theme.OnSurface,
+            size: Size
         );
     }
 }

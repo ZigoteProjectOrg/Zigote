@@ -13,12 +13,12 @@ public class InstancingTests
         try
         {
             float[] mats = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5, 6, 7, 1];
-            Instancing.SetInstances(42u, mats, 1);
+            Instancing.SetInstances(entityId: 42u, matrices: mats, count: 1);
 
-            Assert.Equal(1, fake.Calls);
-            Assert.Equal(42u, fake.LastEntity);
-            Assert.Equal(1, fake.LastCount);
-            Assert.Equal(mats, fake.LastData);
+            Assert.Equal(expected: 1, actual: fake.Calls);
+            Assert.Equal(expected: 42u, actual: fake.LastEntity);
+            Assert.Equal(expected: 1, actual: fake.LastCount);
+            Assert.Equal(expected: mats, actual: fake.LastData);
         }
         finally
         {
@@ -34,8 +34,8 @@ public class InstancingTests
         try
         {
             Instancing.Clear(7u);
-            Assert.Equal(7u, fake.LastEntity);
-            Assert.Equal(0, fake.LastCount);
+            Assert.Equal(expected: 7u, actual: fake.LastEntity);
+            Assert.Equal(expected: 0, actual: fake.LastCount);
         }
         finally
         {
@@ -48,7 +48,7 @@ public class InstancingTests
     {
         Instancing.Backend = null;
         // Must not throw with no host backend (outside play mode).
-        Instancing.SetInstances(1u, [1f, 2f, 3f], 0);
+        Instancing.SetInstances(entityId: 1u, matrices: [1f, 2f, 3f], count: 0);
         Instancing.Clear(1u);
         Assert.False(Instancing.IsAvailable);
     }

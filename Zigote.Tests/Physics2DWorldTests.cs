@@ -15,46 +15,46 @@ public class Physics2DWorldTests
         Assert.False(ColliderHandle.None.IsValid);
         Assert.False(world.IsAlive(ColliderHandle.None));
 
-        var h = world.AddBox(Vec2.Zero, Vec2.One);
+        var h = world.AddBox(center: Vec2.Zero, halfExtents: Vec2.One);
         Assert.True(h.IsValid);
         Assert.True(world.IsAlive(h));
-        Assert.NotEqual(ColliderHandle.None, h);
+        Assert.NotEqual(expected: ColliderHandle.None, actual: h);
     }
 
     [Fact]
     public void Remove_KillsHandle_AndQueriesStopFindingIt()
     {
         var world = new CollisionWorld2D();
-        var h = world.AddBox(Vec2.Zero, Vec2.One);
+        var h = world.AddBox(center: Vec2.Zero, halfExtents: Vec2.One);
         var results = new List<ColliderHandle>();
         Assert.Equal(
-            1,
-            world.OverlapBox(
-                Vec2.Zero,
-                Vec2.One,
-                0xFFFFFFFF,
-                results
+            expected: 1,
+            actual: world.OverlapBox(
+                center: Vec2.Zero,
+                halfExtents: Vec2.One,
+                mask: 0xFFFFFFFF,
+                results: results
             )
         );
 
         world.Remove(h);
         Assert.False(world.IsAlive(h));
         Assert.Equal(
-            0,
-            world.OverlapBox(
-                Vec2.Zero,
-                Vec2.One,
-                0xFFFFFFFF,
-                results
+            expected: 0,
+            actual: world.OverlapBox(
+                center: Vec2.Zero,
+                halfExtents: Vec2.One,
+                mask: 0xFFFFFFFF,
+                results: results
             )
         );
         Assert.False(
             world.Raycast(
-                new Vec2(-5f, 0f),
-                Vec2.Right,
-                10f,
-                0xFFFFFFFF,
-                out _
+                origin: new Vec2(x: -5f, y: 0f),
+                direction: Vec2.Right,
+                maxDistance: 10f,
+                mask: 0xFFFFFFFF,
+                hit: out _
             )
         );
     }
@@ -63,20 +63,20 @@ public class Physics2DWorldTests
     public void UserDataAndLayer_RoundTrip()
     {
         var world = new CollisionWorld2D();
-        var tag = new object();
+        object tag = new();
         var h = world.AddBox(
-            Vec2.Zero,
-            Vec2.One,
-            4,
+            center: Vec2.Zero,
+            halfExtents: Vec2.One,
+            layer: 4,
             userData: tag
         );
 
-        Assert.Same(tag, world.GetUserData(h));
-        Assert.Equal(4u, world.GetLayer(h));
-        world.SetLayer(h, 8);
-        Assert.Equal(8u, world.GetLayer(h));
-        Assert.Equal(ColliderShape2D.Box, world.GetShape(h));
-        Assert.Equal(new Vec2(1f, 1f), world.GetHalfExtents(h));
+        Assert.Same(expected: tag, actual: world.GetUserData(h));
+        Assert.Equal(expected: 4u, actual: world.GetLayer(h));
+        world.SetLayer(handle: h, layer: 8);
+        Assert.Equal(expected: 8u, actual: world.GetLayer(h));
+        Assert.Equal(expected: ColliderShape2D.Box, actual: world.GetShape(h));
+        Assert.Equal(expected: new Vec2(x: 1f, y: 1f), actual: world.GetHalfExtents(h));
     }
 
     // ── Overlap queries ──────────────────────────────────────────────────────
@@ -85,46 +85,46 @@ public class Physics2DWorldTests
     public void OverlapBox_RespectsLayerMask()
     {
         var world = new CollisionWorld2D();
-        var a = world.AddBox(Vec2.Zero, Vec2.One);
-        var b = world.AddBox(new Vec2(0.5f, 0f), Vec2.One, 2);
+        var a = world.AddBox(center: Vec2.Zero, halfExtents: Vec2.One);
+        var b = world.AddBox(center: new Vec2(x: 0.5f, y: 0f), halfExtents: Vec2.One, layer: 2);
         var results = new List<ColliderHandle>();
 
         Assert.Equal(
-            2,
-            world.OverlapBox(
-                Vec2.Zero,
-                Vec2.One,
-                0xFFFFFFFF,
-                results
+            expected: 2,
+            actual: world.OverlapBox(
+                center: Vec2.Zero,
+                halfExtents: Vec2.One,
+                mask: 0xFFFFFFFF,
+                results: results
             )
         );
         Assert.Equal(
-            1,
-            world.OverlapBox(
-                Vec2.Zero,
-                Vec2.One,
-                1,
-                results
+            expected: 1,
+            actual: world.OverlapBox(
+                center: Vec2.Zero,
+                halfExtents: Vec2.One,
+                mask: 1,
+                results: results
             )
         );
-        Assert.Contains(a, results);
+        Assert.Contains(expected: a, collection: results);
         Assert.Equal(
-            1,
-            world.OverlapBox(
-                Vec2.Zero,
-                Vec2.One,
-                2,
-                results
+            expected: 1,
+            actual: world.OverlapBox(
+                center: Vec2.Zero,
+                halfExtents: Vec2.One,
+                mask: 2,
+                results: results
             )
         );
-        Assert.Contains(b, results);
+        Assert.Contains(expected: b, collection: results);
         Assert.Equal(
-            0,
-            world.OverlapBox(
-                Vec2.Zero,
-                Vec2.One,
-                4,
-                results
+            expected: 0,
+            actual: world.OverlapBox(
+                center: Vec2.Zero,
+                halfExtents: Vec2.One,
+                mask: 4,
+                results: results
             )
         );
     }
@@ -133,37 +133,37 @@ public class Physics2DWorldTests
     public void OverlapBox_TriggerFilter_AndSeparatedBoxesMiss()
     {
         var world = new CollisionWorld2D();
-        world.AddBox(Vec2.Zero, Vec2.One, isTrigger: true);
-        world.AddBox(new Vec2(10f, 0f), Vec2.One);
+        world.AddBox(center: Vec2.Zero, halfExtents: Vec2.One, isTrigger: true);
+        world.AddBox(center: new Vec2(x: 10f, y: 0f), halfExtents: Vec2.One);
         var results = new List<ColliderHandle>();
 
         Assert.Equal(
-            1,
-            world.OverlapBox(
-                Vec2.Zero,
-                Vec2.One,
-                0xFFFFFFFF,
-                results
+            expected: 1,
+            actual: world.OverlapBox(
+                center: Vec2.Zero,
+                halfExtents: Vec2.One,
+                mask: 0xFFFFFFFF,
+                results: results
             )
         );
         Assert.Equal(
-            0,
-            world.OverlapBox(
-                Vec2.Zero,
-                Vec2.One,
-                0xFFFFFFFF,
-                results,
-                false
+            expected: 0,
+            actual: world.OverlapBox(
+                center: Vec2.Zero,
+                halfExtents: Vec2.One,
+                mask: 0xFFFFFFFF,
+                results: results,
+                includeTriggers: false
             )
         );
         Assert.Equal(
-            0,
-            world.OverlapBox(
-                new Vec2(5f, 0f),
-                Vec2.One,
-                0xFFFFFFFF,
-                results,
-                false
+            expected: 0,
+            actual: world.OverlapBox(
+                center: new Vec2(x: 5f, y: 0f),
+                halfExtents: Vec2.One,
+                mask: 0xFFFFFFFF,
+                results: results,
+                includeTriggers: false
             )
         );
     }
@@ -172,38 +172,38 @@ public class Physics2DWorldTests
     public void OverlapCircle_HitsBoxesAndCircles()
     {
         var world = new CollisionWorld2D();
-        var box = world.AddBox(new Vec2(3f, 0f), new Vec2(1f, 1f));
-        var circle = world.AddCircle(new Vec2(-3f, 0f), 1f);
+        var box = world.AddBox(center: new Vec2(x: 3f, y: 0f), halfExtents: new Vec2(x: 1f, y: 1f));
+        var circle = world.AddCircle(center: new Vec2(x: -3f, y: 0f), radius: 1f);
         var results = new List<ColliderHandle>();
 
         Assert.Equal(
-            1,
-            world.OverlapCircle(
-                new Vec2(1.5f, 0f),
-                1f,
-                0xFFFFFFFF,
-                results
+            expected: 1,
+            actual: world.OverlapCircle(
+                center: new Vec2(x: 1.5f, y: 0f),
+                radius: 1f,
+                mask: 0xFFFFFFFF,
+                results: results
             )
         );
-        Assert.Contains(box, results);
+        Assert.Contains(expected: box, collection: results);
         Assert.Equal(
-            1,
-            world.OverlapCircle(
-                new Vec2(-1.5f, 0f),
-                1f,
-                0xFFFFFFFF,
-                results
+            expected: 1,
+            actual: world.OverlapCircle(
+                center: new Vec2(x: -1.5f, y: 0f),
+                radius: 1f,
+                mask: 0xFFFFFFFF,
+                results: results
             )
         );
-        Assert.Contains(circle, results);
+        Assert.Contains(expected: circle, collection: results);
         // Gap of 0.5 between circle surfaces: no hit.
         Assert.Equal(
-            0,
-            world.OverlapCircle(
-                new Vec2(-5.5f, 0f),
-                1f,
-                0xFFFFFFFF,
-                results
+            expected: 0,
+            actual: world.OverlapCircle(
+                center: new Vec2(x: -5.5f, y: 0f),
+                radius: 1f,
+                mask: 0xFFFFFFFF,
+                results: results
             )
         );
     }
@@ -214,68 +214,68 @@ public class Physics2DWorldTests
     public void Raycast_HitsBox_WithCorrectNormalAndDistance()
     {
         var world = new CollisionWorld2D();
-        var h = world.AddBox(new Vec2(5f, 0f), new Vec2(1f, 1f));
+        var h = world.AddBox(center: new Vec2(x: 5f, y: 0f), halfExtents: new Vec2(x: 1f, y: 1f));
 
         Assert.True(
             world.Raycast(
-                Vec2.Zero,
-                Vec2.Right,
-                20f,
-                0xFFFFFFFF,
-                out var hit
+                origin: Vec2.Zero,
+                direction: Vec2.Right,
+                maxDistance: 20f,
+                mask: 0xFFFFFFFF,
+                hit: out var hit
             )
         );
-        Assert.Equal(h, hit.Collider);
-        Assert.Equal(4f, hit.Distance, 4);
-        Assert.Equal(-1f, hit.Normal.X, 4);
-        Assert.Equal(0f, hit.Normal.Y, 4);
-        Assert.Equal(4f, hit.Point.X, 4);
+        Assert.Equal(expected: h, actual: hit.Collider);
+        Assert.Equal(expected: 4f, actual: hit.Distance, precision: 4);
+        Assert.Equal(expected: -1f, actual: hit.Normal.X, precision: 4);
+        Assert.Equal(expected: 0f, actual: hit.Normal.Y, precision: 4);
+        Assert.Equal(expected: 4f, actual: hit.Point.X, precision: 4);
 
         // Top face from above.
         Assert.True(
             world.Raycast(
-                new Vec2(5f, 5f),
-                new Vec2(0f, -1f),
-                20f,
-                0xFFFFFFFF,
-                out hit
+                origin: new Vec2(x: 5f, y: 5f),
+                direction: new Vec2(x: 0f, y: -1f),
+                maxDistance: 20f,
+                mask: 0xFFFFFFFF,
+                hit: out hit
             )
         );
-        Assert.Equal(1f, hit.Normal.Y, 4);
-        Assert.Equal(4f, hit.Distance, 4);
+        Assert.Equal(expected: 1f, actual: hit.Normal.Y, precision: 4);
+        Assert.Equal(expected: 4f, actual: hit.Distance, precision: 4);
     }
 
     [Fact]
     public void Raycast_MissesBeyondMaxDistance_AndOffAxis()
     {
         var world = new CollisionWorld2D();
-        world.AddBox(new Vec2(5f, 0f), new Vec2(1f, 1f));
+        world.AddBox(center: new Vec2(x: 5f, y: 0f), halfExtents: new Vec2(x: 1f, y: 1f));
 
         Assert.False(
             world.Raycast(
-                Vec2.Zero,
-                Vec2.Right,
-                3f,
-                0xFFFFFFFF,
-                out _
+                origin: Vec2.Zero,
+                direction: Vec2.Right,
+                maxDistance: 3f,
+                mask: 0xFFFFFFFF,
+                hit: out _
             )
         );
         Assert.False(
             world.Raycast(
-                Vec2.Zero,
-                new Vec2(0f, 1f),
-                20f,
-                0xFFFFFFFF,
-                out _
+                origin: Vec2.Zero,
+                direction: new Vec2(x: 0f, y: 1f),
+                maxDistance: 20f,
+                mask: 0xFFFFFFFF,
+                hit: out _
             )
         );
         Assert.False(
             world.Raycast(
-                Vec2.Zero,
-                Vec2.Right,
-                20f,
-                2,
-                out _
+                origin: Vec2.Zero,
+                direction: Vec2.Right,
+                maxDistance: 20f,
+                mask: 2,
+                hit: out _
             )
         ); // mask miss (collider is layer 1)
     }
@@ -284,49 +284,49 @@ public class Physics2DWorldTests
     public void Raycast_ReturnsClosestOfSeveral()
     {
         var world = new CollisionWorld2D();
-        world.AddBox(new Vec2(10f, 0f), Vec2.One);
-        var near = world.AddBox(new Vec2(5f, 0f), Vec2.One);
+        world.AddBox(center: new Vec2(x: 10f, y: 0f), halfExtents: Vec2.One);
+        var near = world.AddBox(center: new Vec2(x: 5f, y: 0f), halfExtents: Vec2.One);
 
         Assert.True(
             world.Raycast(
-                Vec2.Zero,
-                Vec2.Right,
-                20f,
-                0xFFFFFFFF,
-                out var hit
+                origin: Vec2.Zero,
+                direction: Vec2.Right,
+                maxDistance: 20f,
+                mask: 0xFFFFFFFF,
+                hit: out var hit
             )
         );
-        Assert.Equal(near, hit.Collider);
-        Assert.Equal(4f, hit.Distance, 4);
+        Assert.Equal(expected: near, actual: hit.Collider);
+        Assert.Equal(expected: 4f, actual: hit.Distance, precision: 4);
     }
 
     [Fact]
     public void Raycast_HitsCircle_WithRadialNormal()
     {
         var world = new CollisionWorld2D();
-        var h = world.AddCircle(new Vec2(5f, 0f), 1f);
+        var h = world.AddCircle(center: new Vec2(x: 5f, y: 0f), radius: 1f);
 
         Assert.True(
             world.Raycast(
-                Vec2.Zero,
-                Vec2.Right,
-                20f,
-                0xFFFFFFFF,
-                out var hit
+                origin: Vec2.Zero,
+                direction: Vec2.Right,
+                maxDistance: 20f,
+                mask: 0xFFFFFFFF,
+                hit: out var hit
             )
         );
-        Assert.Equal(h, hit.Collider);
-        Assert.Equal(4f, hit.Distance, 4);
-        Assert.Equal(-1f, hit.Normal.X, 4);
+        Assert.Equal(expected: h, actual: hit.Collider);
+        Assert.Equal(expected: 4f, actual: hit.Distance, precision: 4);
+        Assert.Equal(expected: -1f, actual: hit.Normal.X, precision: 4);
 
         // Diagonal graze above the circle misses.
         Assert.False(
             world.Raycast(
-                new Vec2(0f, 1.5f),
-                Vec2.Right,
-                20f,
-                0xFFFFFFFF,
-                out _
+                origin: new Vec2(x: 0f, y: 1.5f),
+                direction: Vec2.Right,
+                maxDistance: 20f,
+                mask: 0xFFFFFFFF,
+                hit: out _
             )
         );
     }
@@ -335,19 +335,19 @@ public class Physics2DWorldTests
     public void Raycast_NormalizesDirection()
     {
         var world = new CollisionWorld2D();
-        world.AddBox(new Vec2(5f, 0f), Vec2.One);
+        world.AddBox(center: new Vec2(x: 5f, y: 0f), halfExtents: Vec2.One);
 
         // Same ray, unnormalized direction: distance still in world units.
         Assert.True(
             world.Raycast(
-                Vec2.Zero,
-                new Vec2(100f, 0f),
-                20f,
-                0xFFFFFFFF,
-                out var hit
+                origin: Vec2.Zero,
+                direction: new Vec2(x: 100f, y: 0f),
+                maxDistance: 20f,
+                mask: 0xFFFFFFFF,
+                hit: out var hit
             )
         );
-        Assert.Equal(4f, hit.Distance, 4);
+        Assert.Equal(expected: 4f, actual: hit.Distance, precision: 4);
     }
 
     // ── SweepBox ─────────────────────────────────────────────────────────────
@@ -356,65 +356,72 @@ public class Physics2DWorldTests
     public void Sweep_ReportsTimeOfImpactAndNormal()
     {
         var world = new CollisionWorld2D();
-        var wall = world.AddBox(new Vec2(5f, 0f), new Vec2(0.5f, 2f));
+        var wall = world.AddBox(
+            center: new Vec2(x: 5f, y: 0f),
+            halfExtents: new Vec2(x: 0.5f, y: 2f)
+        );
 
         Assert.True(
             world.SweepBox(
-                Vec2.Zero,
-                new Vec2(0.5f, 0.5f),
-                new Vec2(10f, 0f),
-                0xFFFFFFFF,
-                out var hit
+                center: Vec2.Zero,
+                halfExtents: new Vec2(x: 0.5f, y: 0.5f),
+                displacement: new Vec2(x: 10f, y: 0f),
+                mask: 0xFFFFFFFF,
+                hit: out var hit
             )
         );
-        Assert.Equal(wall, hit.Collider);
-        Assert.Equal(0.4f, hit.Time, 4); // faces meet at x = 4.5 − 0.5 = 4 → 4/10
-        Assert.Equal(-1f, hit.Normal.X, 4);
-        Assert.Equal(0f, hit.Normal.Y, 4);
-        Assert.Equal(4.5f, hit.Point.X, 4);
+        Assert.Equal(expected: wall, actual: hit.Collider);
+        Assert.Equal(
+            expected: 0.4f,
+            actual: hit.Time,
+            precision: 4
+        ); // faces meet at x = 4.5 − 0.5 = 4 → 4/10
+        Assert.Equal(expected: -1f, actual: hit.Normal.X, precision: 4);
+        Assert.Equal(expected: 0f, actual: hit.Normal.Y, precision: 4);
+        Assert.Equal(expected: 4.5f, actual: hit.Point.X, precision: 4);
     }
 
     [Fact]
     public void Sweep_HighSpeed_ThinWall_NoTunnelling()
     {
         var world = new CollisionWorld2D();
-        world.AddBox(new Vec2(50f, 0f), new Vec2(0.025f, 2f));
+        world.AddBox(center: new Vec2(x: 50f, y: 0f), halfExtents: new Vec2(x: 0.025f, y: 2f));
 
         Assert.True(
             world.SweepBox(
-                Vec2.Zero,
-                new Vec2(0.5f, 0.5f),
-                new Vec2(1000f, 0f),
-                0xFFFFFFFF,
-                out var hit
+                center: Vec2.Zero,
+                halfExtents: new Vec2(x: 0.5f, y: 0.5f),
+                displacement: new Vec2(x: 1000f, y: 0f),
+                mask: 0xFFFFFFFF,
+                hit: out var hit
             )
         );
-        Assert.Equal((50f - 0.025f - 0.5f) / 1000f, hit.Time, 5);
-        Assert.Equal(-1f, hit.Normal.X, 4);
+        Assert.Equal(expected: (50f - 0.025f - 0.5f) / 1000f, actual: hit.Time, precision: 5);
+        Assert.Equal(expected: -1f, actual: hit.Normal.X, precision: 4);
     }
 
     [Fact]
     public void Sweep_MissesWhenPathIsClear_AndZeroDisplacementIsNoHit()
     {
         var world = new CollisionWorld2D();
-        world.AddBox(new Vec2(5f, 5f), Vec2.One);
+        world.AddBox(center: new Vec2(x: 5f, y: 5f), halfExtents: Vec2.One);
 
         Assert.False(
             world.SweepBox(
-                Vec2.Zero,
-                new Vec2(0.5f, 0.5f),
-                new Vec2(10f, 0f),
-                0xFFFFFFFF,
-                out _
+                center: Vec2.Zero,
+                halfExtents: new Vec2(x: 0.5f, y: 0.5f),
+                displacement: new Vec2(x: 10f, y: 0f),
+                mask: 0xFFFFFFFF,
+                hit: out _
             )
         );
         Assert.False(
             world.SweepBox(
-                Vec2.Zero,
-                new Vec2(0.5f, 0.5f),
-                Vec2.Zero,
-                0xFFFFFFFF,
-                out _
+                center: Vec2.Zero,
+                halfExtents: new Vec2(x: 0.5f, y: 0.5f),
+                displacement: Vec2.Zero,
+                mask: 0xFFFFFFFF,
+                hit: out _
             )
         );
     }
@@ -423,16 +430,19 @@ public class Physics2DWorldTests
     public void Sweep_IgnoreHandle_Skips()
     {
         var world = new CollisionWorld2D();
-        var wall = world.AddBox(new Vec2(5f, 0f), new Vec2(0.5f, 2f));
+        var wall = world.AddBox(
+            center: new Vec2(x: 5f, y: 0f),
+            halfExtents: new Vec2(x: 0.5f, y: 2f)
+        );
 
         Assert.False(
             world.SweepBox(
-                Vec2.Zero,
-                new Vec2(0.5f, 0.5f),
-                new Vec2(10f, 0f),
-                0xFFFFFFFF,
-                out _,
-                wall
+                center: Vec2.Zero,
+                halfExtents: new Vec2(x: 0.5f, y: 0.5f),
+                displacement: new Vec2(x: 10f, y: 0f),
+                mask: 0xFFFFFFFF,
+                hit: out _,
+                ignore: wall
             )
         );
     }
@@ -441,65 +451,65 @@ public class Physics2DWorldTests
     public void Sweep_VsCircle_FaceRegion_GivesUpNormal()
     {
         var world = new CollisionWorld2D();
-        world.AddCircle(Vec2.Zero, 2f);
+        world.AddCircle(center: Vec2.Zero, radius: 2f);
 
         // Box center within the core span (|x| ≤ 0.5): lands on the flat Minkowski face at y = 2.5.
         Assert.True(
             world.SweepBox(
-                new Vec2(0.2f, 4f),
-                new Vec2(0.5f, 0.5f),
-                new Vec2(0f, -3f),
-                0xFFFFFFFF,
-                out var hit
+                center: new Vec2(x: 0.2f, y: 4f),
+                halfExtents: new Vec2(x: 0.5f, y: 0.5f),
+                displacement: new Vec2(x: 0f, y: -3f),
+                mask: 0xFFFFFFFF,
+                hit: out var hit
             )
         );
-        Assert.Equal((4f - 2.5f) / 3f, hit.Time, 4);
-        Assert.Equal(0f, hit.Normal.X, 4);
-        Assert.Equal(1f, hit.Normal.Y, 4);
+        Assert.Equal(expected: (4f - 2.5f) / 3f, actual: hit.Time, precision: 4);
+        Assert.Equal(expected: 0f, actual: hit.Normal.X, precision: 4);
+        Assert.Equal(expected: 1f, actual: hit.Normal.Y, precision: 4);
     }
 
     [Fact]
     public void Sweep_VsCircle_CornerRegion_GivesRadialNormal()
     {
         var world = new CollisionWorld2D();
-        world.AddCircle(Vec2.Zero, 2f);
+        world.AddCircle(center: Vec2.Zero, radius: 2f);
 
         // Box center at x = 1.5: contact via the corner circle at (0.5, 0.5) → 30°-from-vertical normal.
         Assert.True(
             world.SweepBox(
-                new Vec2(1.5f, 4f),
-                new Vec2(0.5f, 0.5f),
-                new Vec2(0f, -3f),
-                0xFFFFFFFF,
-                out var hit
+                center: new Vec2(x: 1.5f, y: 4f),
+                halfExtents: new Vec2(x: 0.5f, y: 0.5f),
+                displacement: new Vec2(x: 0f, y: -3f),
+                mask: 0xFFFFFFFF,
+                hit: out var hit
             )
         );
-        Assert.Equal(0.5f, hit.Normal.X, 3);
-        Assert.Equal(MathF.Sqrt(3f) / 2f, hit.Normal.Y, 3);
-        var contactY = 0.5f + MathF.Sqrt(3f); // corner center + √(r² − dx²)
-        Assert.Equal((4f - contactY) / 3f, hit.Time, 3);
+        Assert.Equal(expected: 0.5f, actual: hit.Normal.X, precision: 3);
+        Assert.Equal(expected: MathF.Sqrt(3f) / 2f, actual: hit.Normal.Y, precision: 3);
+        float contactY = 0.5f + MathF.Sqrt(3f); // corner center + √(r² − dx²)
+        Assert.Equal(expected: (4f - contactY) / 3f, actual: hit.Time, precision: 3);
         // Point sits on the circle's surface.
-        Assert.Equal(2f, hit.Point.Length(), 3);
+        Assert.Equal(expected: 2f, actual: hit.Point.Length(), precision: 3);
     }
 
     [Fact]
     public void Sweep_StartOverlapping_ReportsTimeZero_WithPushNormal()
     {
         var world = new CollisionWorld2D();
-        world.AddBox(Vec2.Zero, Vec2.One);
+        world.AddBox(center: Vec2.Zero, halfExtents: Vec2.One);
 
         // Mover center just above the solid's center: minimal push is up.
         Assert.True(
             world.SweepBox(
-                new Vec2(0f, 1.2f),
-                new Vec2(0.5f, 0.5f),
-                new Vec2(0f, -1f),
-                0xFFFFFFFF,
-                out var hit
+                center: new Vec2(x: 0f, y: 1.2f),
+                halfExtents: new Vec2(x: 0.5f, y: 0.5f),
+                displacement: new Vec2(x: 0f, y: -1f),
+                mask: 0xFFFFFFFF,
+                hit: out var hit
             )
         );
-        Assert.Equal(0f, hit.Time, 5);
-        Assert.Equal(1f, hit.Normal.Y, 4);
+        Assert.Equal(expected: 0f, actual: hit.Time, precision: 5);
+        Assert.Equal(expected: 1f, actual: hit.Normal.Y, precision: 4);
     }
 
     // ── One-way platforms ────────────────────────────────────────────────────
@@ -508,56 +518,68 @@ public class Physics2DWorldTests
     public void OneWay_BlocksFallingFromAbove()
     {
         var world = new CollisionWorld2D();
-        var plat = world.AddBox(new Vec2(0f, 2f), new Vec2(1f, 0.1f), oneWayUp: true);
+        var plat = world.AddBox(
+            center: new Vec2(x: 0f, y: 2f),
+            halfExtents: new Vec2(x: 1f, y: 0.1f),
+            oneWayUp: true
+        );
 
         Assert.True(
             world.SweepBox(
-                new Vec2(0f, 3f),
-                new Vec2(0.3f, 0.3f),
-                new Vec2(0f, -2f),
-                0xFFFFFFFF,
-                out var hit
+                center: new Vec2(x: 0f, y: 3f),
+                halfExtents: new Vec2(x: 0.3f, y: 0.3f),
+                displacement: new Vec2(x: 0f, y: -2f),
+                mask: 0xFFFFFFFF,
+                hit: out var hit
             )
         );
-        Assert.Equal(plat, hit.Collider);
-        Assert.Equal((3f - 2.4f) / 2f, hit.Time, 4); // mover bottom meets platform top: 2.1 + 0.3
-        Assert.Equal(1f, hit.Normal.Y, 4);
+        Assert.Equal(expected: plat, actual: hit.Collider);
+        Assert.Equal(
+            expected: (3f - 2.4f) / 2f,
+            actual: hit.Time,
+            precision: 4
+        ); // mover bottom meets platform top: 2.1 + 0.3
+        Assert.Equal(expected: 1f, actual: hit.Normal.Y, precision: 4);
     }
 
     [Fact]
     public void OneWay_IgnoresRisingAndSideways()
     {
         var world = new CollisionWorld2D();
-        world.AddBox(new Vec2(0f, 2f), new Vec2(1f, 0.1f), oneWayUp: true);
+        world.AddBox(
+            center: new Vec2(x: 0f, y: 2f),
+            halfExtents: new Vec2(x: 1f, y: 0.1f),
+            oneWayUp: true
+        );
 
         // Rising from below: passes.
         Assert.False(
             world.SweepBox(
-                new Vec2(0f, 1f),
-                new Vec2(0.3f, 0.3f),
-                new Vec2(0f, 2f),
-                0xFFFFFFFF,
-                out _
+                center: new Vec2(x: 0f, y: 1f),
+                halfExtents: new Vec2(x: 0.3f, y: 0.3f),
+                displacement: new Vec2(x: 0f, y: 2f),
+                mask: 0xFFFFFFFF,
+                hit: out _
             )
         );
         // Pure sideways through the platform's band: passes (rule requires downward motion).
         Assert.False(
             world.SweepBox(
-                new Vec2(3f, 2f),
-                new Vec2(0.3f, 0.3f),
-                new Vec2(-6f, 0f),
-                0xFFFFFFFF,
-                out _
+                center: new Vec2(x: 3f, y: 2f),
+                halfExtents: new Vec2(x: 0.3f, y: 0.3f),
+                displacement: new Vec2(x: -6f, y: 0f),
+                mask: 0xFFFFFFFF,
+                hit: out _
             )
         );
         // Falling but the bottom starts below the top: passes.
         Assert.False(
             world.SweepBox(
-                new Vec2(0f, 2.2f),
-                new Vec2(0.3f, 0.3f),
-                new Vec2(0f, -1f),
-                0xFFFFFFFF,
-                out _
+                center: new Vec2(x: 0f, y: 2.2f),
+                halfExtents: new Vec2(x: 0.3f, y: 0.3f),
+                displacement: new Vec2(x: 0f, y: -1f),
+                mask: 0xFFFFFFFF,
+                hit: out _
             )
         );
     }
@@ -566,19 +588,23 @@ public class Physics2DWorldTests
     public void OneWay_StillReportedByOverlap()
     {
         var world = new CollisionWorld2D();
-        var plat = world.AddBox(new Vec2(0f, 2f), new Vec2(1f, 0.1f), oneWayUp: true);
+        var plat = world.AddBox(
+            center: new Vec2(x: 0f, y: 2f),
+            halfExtents: new Vec2(x: 1f, y: 0.1f),
+            oneWayUp: true
+        );
         var results = new List<ColliderHandle>();
 
         Assert.Equal(
-            1,
-            world.OverlapBox(
-                new Vec2(0f, 2f),
-                new Vec2(0.5f, 0.5f),
-                0xFFFFFFFF,
-                results
+            expected: 1,
+            actual: world.OverlapBox(
+                center: new Vec2(x: 0f, y: 2f),
+                halfExtents: new Vec2(x: 0.5f, y: 0.5f),
+                mask: 0xFFFFFFFF,
+                results: results
             )
         );
-        Assert.Contains(plat, results);
+        Assert.Contains(expected: plat, collection: results);
         Assert.True(world.IsOneWay(plat));
     }
 
@@ -586,45 +612,49 @@ public class Physics2DWorldTests
     public void OneWay_RaycastRule_OnlyDownwardFromAbove()
     {
         var world = new CollisionWorld2D();
-        world.AddBox(new Vec2(0f, 2f), new Vec2(1f, 0.1f), oneWayUp: true);
+        world.AddBox(
+            center: new Vec2(x: 0f, y: 2f),
+            halfExtents: new Vec2(x: 1f, y: 0.1f),
+            oneWayUp: true
+        );
 
         Assert.True(
             world.Raycast(
-                new Vec2(0f, 3f),
-                new Vec2(0f, -1f),
-                5f,
-                0xFFFFFFFF,
-                out var hit
+                origin: new Vec2(x: 0f, y: 3f),
+                direction: new Vec2(x: 0f, y: -1f),
+                maxDistance: 5f,
+                mask: 0xFFFFFFFF,
+                hit: out var hit
             )
         );
-        Assert.Equal(3f - 2.1f, hit.Distance, 4);
-        Assert.Equal(1f, hit.Normal.Y, 4);
+        Assert.Equal(expected: 3f - 2.1f, actual: hit.Distance, precision: 4);
+        Assert.Equal(expected: 1f, actual: hit.Normal.Y, precision: 4);
 
         Assert.False(
             world.Raycast(
-                new Vec2(0f, 1f),
-                new Vec2(0f, 1f),
-                5f,
-                0xFFFFFFFF,
-                out _
+                origin: new Vec2(x: 0f, y: 1f),
+                direction: new Vec2(x: 0f, y: 1f),
+                maxDistance: 5f,
+                mask: 0xFFFFFFFF,
+                hit: out _
             )
         ); // from below
         Assert.False(
             world.Raycast(
-                new Vec2(3f, 2f),
-                new Vec2(-1f, 0f),
-                5f,
-                0xFFFFFFFF,
-                out _
+                origin: new Vec2(x: 3f, y: 2f),
+                direction: new Vec2(x: -1f, y: 0f),
+                maxDistance: 5f,
+                mask: 0xFFFFFFFF,
+                hit: out _
             )
         ); // sideways
         Assert.False(
             world.Raycast(
-                new Vec2(0f, 1f),
-                new Vec2(0f, -1f),
-                5f,
-                0xFFFFFFFF,
-                out _
+                origin: new Vec2(x: 0f, y: 1f),
+                direction: new Vec2(x: 0f, y: -1f),
+                maxDistance: 5f,
+                mask: 0xFFFFFFFF,
+                hit: out _
             )
         ); // below, downward
     }
@@ -635,85 +665,87 @@ public class Physics2DWorldTests
     public void SetPosition_ReindexesTheGrid()
     {
         var world = new CollisionWorld2D();
-        var h = world.AddBox(new Vec2(100f, 100f), Vec2.One);
+        var h = world.AddBox(center: new Vec2(x: 100f, y: 100f), halfExtents: Vec2.One);
         // Enough far-away decoys that queries take the grid path, not the iterate-all fallback.
-        for (var i = 0; i < 16; i++) world.AddBox(new Vec2(500f + i * 10f, 500f), Vec2.One);
+        for (int i = 0; i < 16; i++)
+            world.AddBox(center: new Vec2(x: 500f + (i * 10f), y: 500f), halfExtents: Vec2.One);
         var results = new List<ColliderHandle>();
 
         Assert.Equal(
-            1,
-            world.OverlapBox(
-                new Vec2(100f, 100f),
-                Vec2.One,
-                0xFFFFFFFF,
-                results
+            expected: 1,
+            actual: world.OverlapBox(
+                center: new Vec2(x: 100f, y: 100f),
+                halfExtents: Vec2.One,
+                mask: 0xFFFFFFFF,
+                results: results
             )
         );
 
-        world.SetPosition(h, new Vec2(-100f, -100f));
+        world.SetPosition(handle: h, position: new Vec2(x: -100f, y: -100f));
         Assert.Equal(
-            0,
-            world.OverlapBox(
-                new Vec2(100f, 100f),
-                Vec2.One,
-                0xFFFFFFFF,
-                results
+            expected: 0,
+            actual: world.OverlapBox(
+                center: new Vec2(x: 100f, y: 100f),
+                halfExtents: Vec2.One,
+                mask: 0xFFFFFFFF,
+                results: results
             )
         );
         Assert.Equal(
-            1,
-            world.OverlapBox(
-                new Vec2(-100f, -100f),
-                Vec2.One,
-                0xFFFFFFFF,
-                results
+            expected: 1,
+            actual: world.OverlapBox(
+                center: new Vec2(x: -100f, y: -100f),
+                halfExtents: Vec2.One,
+                mask: 0xFFFFFFFF,
+                results: results
             )
         );
-        Assert.Contains(h, results);
-        Assert.Equal(new Vec2(-100f, -100f), world.GetPosition(h));
+        Assert.Contains(expected: h, collection: results);
+        Assert.Equal(expected: new Vec2(x: -100f, y: -100f), actual: world.GetPosition(h));
     }
 
     [Fact]
     public void NegativeCoordinateSpace_QueriesWork()
     {
         var world = new CollisionWorld2D();
-        var h = world.AddBox(new Vec2(-1000f, -1000f), Vec2.One);
-        for (var i = 0; i < 16; i++) world.AddBox(new Vec2(1000f + i * 10f, 1000f), Vec2.One);
+        var h = world.AddBox(center: new Vec2(x: -1000f, y: -1000f), halfExtents: Vec2.One);
+        for (int i = 0; i < 16; i++)
+            world.AddBox(center: new Vec2(x: 1000f + (i * 10f), y: 1000f), halfExtents: Vec2.One);
         var results = new List<ColliderHandle>();
 
         Assert.Equal(
-            1,
-            world.OverlapBox(
-                new Vec2(-1000f, -1000f),
-                Vec2.One,
-                0xFFFFFFFF,
-                results
+            expected: 1,
+            actual: world.OverlapBox(
+                center: new Vec2(x: -1000f, y: -1000f),
+                halfExtents: Vec2.One,
+                mask: 0xFFFFFFFF,
+                results: results
             )
         );
-        Assert.Contains(h, results);
+        Assert.Contains(expected: h, collection: results);
 
         Assert.True(
             world.Raycast(
-                new Vec2(-1005f, -1000f),
-                Vec2.Right,
-                10f,
-                0xFFFFFFFF,
-                out var hit
+                origin: new Vec2(x: -1005f, y: -1000f),
+                direction: Vec2.Right,
+                maxDistance: 10f,
+                mask: 0xFFFFFFFF,
+                hit: out var hit
             )
         );
-        Assert.Equal(h, hit.Collider);
-        Assert.Equal(4f, hit.Distance, 4);
+        Assert.Equal(expected: h, actual: hit.Collider);
+        Assert.Equal(expected: 4f, actual: hit.Distance, precision: 4);
 
         Assert.True(
             world.SweepBox(
-                new Vec2(-1000f, -995f),
-                new Vec2(0.5f, 0.5f),
-                new Vec2(0f, -10f),
-                0xFFFFFFFF,
-                out var sweep
+                center: new Vec2(x: -1000f, y: -995f),
+                halfExtents: new Vec2(x: 0.5f, y: 0.5f),
+                displacement: new Vec2(x: 0f, y: -10f),
+                mask: 0xFFFFFFFF,
+                hit: out var sweep
             )
         );
-        Assert.Equal(h, sweep.Collider);
+        Assert.Equal(expected: h, actual: sweep.Collider);
     }
 
     // ── Move deltas (platform carry) ─────────────────────────────────────────
@@ -722,18 +754,18 @@ public class Physics2DWorldTests
     public void MoveDelta_AccumulatesAcrossSetPosition_AndClearsOnBeginStep()
     {
         var world = new CollisionWorld2D();
-        var h = world.AddBox(Vec2.Zero, Vec2.One);
-        Assert.Equal(Vec2.Zero, world.GetMoveDelta(h));
+        var h = world.AddBox(center: Vec2.Zero, halfExtents: Vec2.One);
+        Assert.Equal(expected: Vec2.Zero, actual: world.GetMoveDelta(h));
 
-        world.SetPosition(h, new Vec2(1f, 0f));
-        world.SetPosition(h, new Vec2(1f, 2f));
+        world.SetPosition(handle: h, position: new Vec2(x: 1f, y: 0f));
+        world.SetPosition(handle: h, position: new Vec2(x: 1f, y: 2f));
         var delta = world.GetMoveDelta(h);
-        Assert.Equal(1f, delta.X, 4);
-        Assert.Equal(2f, delta.Y, 4);
+        Assert.Equal(expected: 1f, actual: delta.X, precision: 4);
+        Assert.Equal(expected: 2f, actual: delta.Y, precision: 4);
 
         world.BeginStep();
-        Assert.Equal(Vec2.Zero, world.GetMoveDelta(h));
-        world.SetPosition(h, new Vec2(1.5f, 2f));
-        Assert.Equal(0.5f, world.GetMoveDelta(h).X, 4);
+        Assert.Equal(expected: Vec2.Zero, actual: world.GetMoveDelta(h));
+        world.SetPosition(handle: h, position: new Vec2(x: 1.5f, y: 2f));
+        Assert.Equal(expected: 0.5f, actual: world.GetMoveDelta(h).X, precision: 4);
     }
 }

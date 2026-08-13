@@ -22,10 +22,10 @@ public class ScrollFillLayoutTests
         var scroll = new ScrollView(child);
         scroll.Measure(
             new Constraints(
-                0,
-                800,
-                0,
-                600
+                minWidth: 0,
+                maxWidth: 800,
+                minHeight: 0,
+                maxHeight: 600
             )
         );
         scroll.Layout(Offset.Zero);
@@ -34,9 +34,9 @@ public class ScrollFillLayoutTests
     private static void AssertFinite(Rect b)
     {
         Assert.True(
-            float.IsFinite(b.X) && float.IsFinite(b.Y) &&
-            float.IsFinite(b.Width) && float.IsFinite(b.Height),
-            $"non-finite bounds: {b}"
+            condition: float.IsFinite(b.X) && float.IsFinite(b.Y) &&
+                       float.IsFinite(b.Width) && float.IsFinite(b.Height),
+            userMessage: $"non-finite bounds: {b}"
         );
     }
 
@@ -51,12 +51,12 @@ public class ScrollFillLayoutTests
     public void TabView_InVerticalScroll_SizesToActiveChild()
     {
         var tabs = new TabView();
-        tabs.Children.Add(new SizedBox(0, 100));
+        tabs.Children.Add(new SizedBox(width: 0, height: 100));
 
         // Unbounded height (as a vertical ScrollView supplies) → size to the active child, not ∞.
-        var measured = tabs.Measure(new Constraints(0, 776));
-        Assert.Equal(100f, measured.Height, 1);
-        Assert.Equal(776f, measured.Width, 1);
+        var measured = tabs.Measure(new Constraints(minWidth: 0, maxWidth: 776));
+        Assert.Equal(expected: 100f, actual: measured.Height, precision: 1);
+        Assert.Equal(expected: 776f, actual: measured.Width, precision: 1);
 
         // Same shape that crashed in the gallery: a TabView inside a Card inside the scroll.
         var card = new Card(new Column([tabs]) { CrossAxisAlignment = CrossAxisAlignment.Stretch });
@@ -65,7 +65,11 @@ public class ScrollFillLayoutTests
 
         AssertFinite(card.Bounds);
         AssertFinite(tabs.Bounds);
-        Assert.Equal(100f, tabs.Bounds.Height, 1); // sized to its page, not to ∞
+        Assert.Equal(
+            expected: 100f,
+            actual: tabs.Bounds.Height,
+            precision: 1
+        ); // sized to its page, not to ∞
         PaintNoThrow(page);
     }
 
@@ -73,26 +77,33 @@ public class ScrollFillLayoutTests
     public void ListView_InVerticalScroll_SizesToContentHeight()
     {
         var list = new ListView { ItemHeight = 40f };
-        list.SetItems(Enumerable.Range(0, 5).Select(_ => (Widget)new SizedBox(0, 40)));
+        list.SetItems(
+            Enumerable.Range(start: 0, count: 5)
+                .Select(_ => (Widget)new SizedBox(width: 0, height: 40))
+        );
 
         var page = new Column([list]) { CrossAxisAlignment = CrossAxisAlignment.Start };
         LayoutInVerticalScroll(page);
 
         AssertFinite(list.Bounds);
-        Assert.Equal(200f, list.Bounds.Height, 1); // 5 × 40, not ∞
+        Assert.Equal(expected: 200f, actual: list.Bounds.Height, precision: 1); // 5 × 40, not ∞
         PaintNoThrow(page);
     }
 
     [Fact]
     public void Scaffold_InVerticalScroll_SizesToContent()
     {
-        var scaffold = new Scaffold { Body = new SizedBox(0, 150) };
+        var scaffold = new Scaffold { Body = new SizedBox(width: 0, height: 150) };
 
         var page = new Column([scaffold]) { CrossAxisAlignment = CrossAxisAlignment.Start };
         LayoutInVerticalScroll(page);
 
         AssertFinite(scaffold.Bounds);
-        Assert.Equal(150f, scaffold.Bounds.Height, 1); // body content, not ∞
+        Assert.Equal(
+            expected: 150f,
+            actual: scaffold.Bounds.Height,
+            precision: 1
+        ); // body content, not ∞
         PaintNoThrow(page);
     }
 
@@ -106,24 +117,27 @@ public class ScrollFillLayoutTests
         var scroll = new ScrollView(new InfiniteHeightChild()) { ScrollVertical = true };
         scroll.Measure(
             new Constraints(
-                0,
-                800,
-                0,
-                600
+                minWidth: 0,
+                maxWidth: 800,
+                minHeight: 0,
+                maxHeight: 600
             )
         );
         scroll.Layout(Offset.Zero);
 
         // Content was infinite → clamped to the viewport, so there is no scroll extent.
-        Assert.Equal(0f, scroll.OffsetY, 3);
+        Assert.Equal(expected: 0f, actual: scroll.OffsetY, precision: 3);
 
         // Simulate a drag on the trailing-edge scrollbar strip (x ≥ Right − HitWidth), which previously
         // pushed the offset to ∞. After the fix the strip is inert (nothing to scroll) and stays finite.
-        scroll.OnPointerDown(new Offset(795, 100));
-        scroll.OnPointerMove(new Offset(795, 500));
-        scroll.OnPointerUp(new Offset(795, 500));
+        scroll.OnPointerDown(new Offset(x: 795, y: 100));
+        scroll.OnPointerMove(new Offset(x: 795, y: 500));
+        scroll.OnPointerUp(new Offset(x: 795, y: 500));
 
-        Assert.True(float.IsFinite(scroll.OffsetY), $"non-finite scroll offset: {scroll.OffsetY}");
+        Assert.True(
+            condition: float.IsFinite(scroll.OffsetY),
+            userMessage: $"non-finite scroll offset: {scroll.OffsetY}"
+        );
         PaintNoThrow(scroll);
     }
 
@@ -133,7 +147,7 @@ public class ScrollFillLayoutTests
         // SizedBox.Expand legitimately reports ∞ on an unbounded axis. Placing it in a Center-aligned
         // flex previously produced (∞ − ∞)/2 = NaN offsets; the FlexLayout guard must keep paint alive.
         var row = new Row([SizedBox.Expand()]) { MainAxisAlignment = MainAxisAlignment.Start };
-        var page = new Column([new SizedBox(0, 30), row]) {
+        var page = new Column([new SizedBox(width: 0, height: 30), row]) {
             MainAxisAlignment = MainAxisAlignment.Center,
             CrossAxisAlignment = CrossAxisAlignment.Start,
         };
@@ -141,9 +155,9 @@ public class ScrollFillLayoutTests
 
         // The child may still be infinite (it asked to be), but no coordinate may be NaN.
         Assert.False(
-            float.IsNaN(row.Bounds.X) || float.IsNaN(row.Bounds.Y) ||
-            float.IsNaN(row.Bounds.Width) || float.IsNaN(row.Bounds.Height),
-            $"NaN in bounds: {row.Bounds}"
+            condition: float.IsNaN(row.Bounds.X) || float.IsNaN(row.Bounds.Y) ||
+                       float.IsNaN(row.Bounds.Width) || float.IsNaN(row.Bounds.Height),
+            userMessage: $"NaN in bounds: {row.Bounds}"
         );
         PaintNoThrow(page);
     }
@@ -154,14 +168,18 @@ public class ScrollFillLayoutTests
         // A Row with CrossAxisAlignment.Stretch inside a vertical scroll has an unbounded cross axis
         // (height). Before the FlexLayout guard, Stretch pinned the child's min-height to ∞, forcing an
         // infinite child size; now it degrades to a loose measure (natural content height) instead.
-        var row = new Row([new SizedBox(100, 40)]) {
+        var row = new Row([new SizedBox(width: 100, height: 40)]) {
             CrossAxisAlignment = CrossAxisAlignment.Stretch,
         };
         var page = new Column([row]) { CrossAxisAlignment = CrossAxisAlignment.Start };
         LayoutInVerticalScroll(page);
 
         AssertFinite(row.Bounds);
-        Assert.Equal(40f, row.Bounds.Height, 1); // content height, not ∞
+        Assert.Equal(
+            expected: 40f,
+            actual: row.Bounds.Height,
+            precision: 1
+        ); // content height, not ∞
         PaintNoThrow(page);
     }
 
@@ -172,27 +190,22 @@ public class ScrollFillLayoutTests
 
         public override Size Measure(Constraints c)
         {
-            _s = new Size(float.IsFinite(c.MaxWidth) ? c.MaxWidth : 0f, c.MaxHeight);
+            _s = new Size(width: float.IsFinite(c.MaxWidth) ? c.MaxWidth : 0f, height: c.MaxHeight);
             return _s;
         }
 
         public override void Layout(Offset origin)
         {
             Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                _s.Width,
-                _s.Height
+                x: origin.X,
+                y: origin.Y,
+                width: _s.Width,
+                height: _s.Height
             );
         }
 
-        public override void Paint(PaintList paint)
-        {
-        }
+        public override void Paint(PaintList paint) { }
 
-        public override IEnumerable<Widget> GetChildren()
-        {
-            return [];
-        }
+        public override IEnumerable<Widget> GetChildren() => [];
     }
 }

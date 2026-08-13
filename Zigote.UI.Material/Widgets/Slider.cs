@@ -12,16 +12,16 @@ namespace Zigote.UI.Material;
 public class Slider : Widget
 {
     private bool _dragging;
+    private float _height = ControlMetrics.RegularHeight;
     private bool _hovered;
+    private float _max = 1f;
     private float _measureH;
     private float _measureW;
+    private float _min;
     private ThemeData _theme = ThemeData.Dark;
     private float _trackLeft;
     private float _trackWidth;
     private float _value;
-    private float _min;
-    private float _max = 1f;
-    private float _height = ControlMetrics.RegularHeight;
 
     /// <summary>
     ///     Named-argument constructor:
@@ -38,19 +38,19 @@ public class Slider : Widget
     public float Value
     {
         get => _value;
-        set => SetPaint(ref _value, value);
+        set => SetPaint(field: ref _value, value: value);
     }
 
     public float Min
     {
         get => _min;
-        set => SetPaint(ref _min, value);
+        set => SetPaint(field: ref _min, value: value);
     }
 
     public float Max
     {
         get => _max;
-        set => SetPaint(ref _max, value);
+        set => SetPaint(field: ref _max, value: value);
     }
 
     public Action<float>? OnChanged { get; set; }
@@ -58,7 +58,7 @@ public class Slider : Widget
     public float Height
     {
         get => _height;
-        set => SetLayout(ref _height, value);
+        set => SetLayout(field: ref _height, value: value);
     }
 
     public bool Enabled { get; set; } = true;
@@ -79,13 +79,13 @@ public class Slider : Widget
     {
         config.Role = SemanticsRole.Slider;
         config.Label = SemanticsLabel;
-        var pct = Max > Min ? (Value - Min) / (Max - Min) * 100f : 0f;
+        float pct = Max > Min ? (Value - Min) / (Max - Min) * 100f : 0f;
         config.Value = $"{pct:F0}%";
         config.Actions =
             SemanticsAction.Increase | SemanticsAction.Decrease | SemanticsAction.Focus;
-        config.AddFlag(SemanticsFlags.Focusable, Enabled)
-            .AddFlag(SemanticsFlags.Focused, Focused)
-            .AddFlag(SemanticsFlags.Disabled, !Enabled);
+        config.AddFlag(flag: SemanticsFlags.Focusable, on: Enabled)
+            .AddFlag(flag: SemanticsFlags.Focused, on: Focused)
+            .AddFlag(flag: SemanticsFlags.Disabled, on: !Enabled);
     }
 
     public override void UpdateFrom(Widget newWidget)
@@ -103,11 +103,11 @@ public class Slider : Widget
     public override int DebugStateHash()
     {
         return HashCode.Combine(
-            Value,
-            _dragging,
-            _hovered,
-            Enabled,
-            Focused
+            value1: Value,
+            value2: _dragging,
+            value3: _hovered,
+            value4: Enabled,
+            value5: Focused
         );
     }
 
@@ -116,9 +116,13 @@ public class Slider : Widget
         _theme = ThemeProvider.Of(BuildContext.Current);
         // The whole widget is the scrub target, so on a phone the band — not the 4pt track it
         // draws inside it — has to be finger-sized. Paint centres off the measured height.
-        _measureH = Math.Clamp(TouchMetrics.AtLeast(Height), c.MinHeight, c.MaxHeight);
-        var rawW = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 200f;
-        var sz = c.Constrain(new Size(rawW, _measureH));
+        _measureH = Math.Clamp(
+            value: TouchMetrics.AtLeast(Height),
+            min: c.MinHeight,
+            max: c.MaxHeight
+        );
+        float rawW = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 200f;
+        var sz = c.Constrain(new Size(width: rawW, height: _measureH));
         _measureW = sz.Width;
         _measureH = sz.Height;
         return sz;
@@ -127,77 +131,77 @@ public class Slider : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _measureW,
-            _measureH
+            x: origin.X,
+            y: origin.Y,
+            width: _measureW,
+            height: _measureH
         );
         _trackLeft = Bounds.X + ThumbR;
-        _trackWidth = MathF.Max(0f, _measureW - ThumbR * 2f);
+        _trackWidth = MathF.Max(x: 0f, y: _measureW - (ThumbR * 2f));
     }
 
     public override void Paint(PaintList paint)
     {
-        var cy = Bounds.Y + _measureH / 2f;
-        var t = Max > Min ? Math.Clamp((Value - Min) / (Max - Min), 0f, 1f) : 0f;
-        var thumbX = _trackLeft + t * _trackWidth;
+        float cy = Bounds.Y + (_measureH / 2f);
+        float t = Max > Min ? Math.Clamp(value: (Value - Min) / (Max - Min), min: 0f, max: 1f) : 0f;
+        float thumbX = _trackLeft + (t * _trackWidth);
 
-        var trackH = ControlMetrics.SliderTrack;
-        var trackY = cy - trackH / 2f;
-        var trackRadius = Radii.Capsule;
+        float trackH = ControlMetrics.SliderTrack;
+        float trackY = cy - (trackH / 2f);
+        float trackRadius = Radii.Capsule;
 
         // Background track — a clearly visible groove (Fill tokens are too faint for a 4px line).
         var trackBase = _theme.OnSurface.WithAlpha(0.18f);
         var trackFill = Enabled ? trackBase : StateStyle.Disabled(trackBase);
         paint.AddRect(
-            new Rect(
-                _trackLeft,
-                trackY,
-                _trackWidth,
-                trackH
+            bounds: new Rect(
+                x: _trackLeft,
+                y: trackY,
+                width: _trackWidth,
+                height: trackH
             ),
-            trackFill,
-            trackRadius
+            color: trackFill,
+            radius: trackRadius
         );
 
         // Accent-filled portion left of the thumb.
-        var filledW = thumbX - _trackLeft;
+        float filledW = thumbX - _trackLeft;
         if (filledW > 0f)
         {
             var accent = Enabled ? _theme.Primary : StateStyle.Disabled(_theme.Primary);
             paint.AddRect(
-                new Rect(
-                    _trackLeft,
-                    trackY,
-                    filledW,
-                    trackH
+                bounds: new Rect(
+                    x: _trackLeft,
+                    y: trackY,
+                    width: filledW,
+                    height: trackH
                 ),
-                accent,
-                trackRadius
+                color: accent,
+                radius: trackRadius
             );
         }
 
         // Circular white thumb with a soft hairline shadow.
         var thumb = new Rect(
-            thumbX - ThumbR,
-            cy - ThumbR,
-            ThumbR * 2f,
-            ThumbR * 2f
+            x: thumbX - ThumbR,
+            y: cy - ThumbR,
+            width: ThumbR * 2f,
+            height: ThumbR * 2f
         );
-        if (Enabled) paint.AddElevation(thumb, ThumbR, Elevation.Z1);
+        if (Enabled) paint.AddElevation(bounds: thumb, radius: ThumbR, style: Elevation.Z1);
         var thumbColor = Enabled ? _theme.OnPrimary : StateStyle.Disabled(_theme.OnPrimary);
-        paint.AddRect(thumb, thumbColor, ThumbR);
-        paint.AddBorder(thumb, _theme.Separator, ThumbR);
+        paint.AddRect(bounds: thumb, color: thumbColor, radius: ThumbR);
+        paint.AddBorder(bounds: thumb, color: _theme.Separator, radius: ThumbR);
 
         // Focus ring around the whole track.
         if (!Focused || !Enabled) return;
         var ringRect = new Rect(
-            Bounds.X,
-            trackY,
-            _measureW,
-            trackH
+            x: Bounds.X,
+            y: trackY,
+            width: _measureW,
+            height: trackH
         );
-        paint.AddFocusRing(ringRect, trackRadius, _theme);
+        paint.AddFocusRing(bounds: ringRect, radius: trackRadius, theme: _theme);
     }
 
     public override void OnPointerEnter()
@@ -232,10 +236,7 @@ public class Slider : Widget
     ///     away in either direction — the vertical half matters most, because that is the finger
     ///     that settles downward a little before setting off sideways.
     /// </summary>
-    public override bool CanTouchDrag(bool vertical)
-    {
-        return _dragging;
-    }
+    public override bool CanTouchDrag(bool vertical) => _dragging;
 
     public override void OnPointerUp(Offset point)
     {
@@ -255,10 +256,7 @@ public class Slider : Widget
         MarkNeedsPaint();
     }
 
-    public override MouseCursor? GetCursor(Offset point)
-    {
-        return Enabled ? MouseCursor.Pointer : null;
-    }
+    public override MouseCursor? GetCursor(Offset point) => Enabled ? MouseCursor.Pointer : null;
 
     public override void OnKey(char keyChar, uint scancode, bool down, Modifiers mods)
     {
@@ -266,7 +264,7 @@ public class Slider : Widget
         const uint scLeft = 80;
         const uint scRight = 79;
 
-        var step = (Max - Min) / 20f; // 5% step
+        float step = (Max - Min) / 20f; // 5% step
         switch (scancode)
         {
             case scLeft:
@@ -280,7 +278,7 @@ public class Slider : Widget
 
     private void UpdateValueBy(float delta)
     {
-        var newVal = Math.Clamp(Value + delta, Min, Max);
+        float newVal = Math.Clamp(value: Value + delta, min: Min, max: Max);
         if (!(MathF.Abs(newVal - Value) > 0.0001f)) return;
         Value = newVal;
         MarkNeedsPaint();
@@ -289,8 +287,10 @@ public class Slider : Widget
 
     private void UpdateValue(float x)
     {
-        var t = _trackWidth > 0f ? Math.Clamp((x - _trackLeft) / _trackWidth, 0f, 1f) : 0f;
-        var newVal = Min + t * (Max - Min);
+        float t = _trackWidth > 0f
+            ? Math.Clamp(value: (x - _trackLeft) / _trackWidth, min: 0f, max: 1f)
+            : 0f;
+        float newVal = Min + (t * (Max - Min));
         if (!(MathF.Abs(newVal - Value) > 0.0001f)) return;
         Value = newVal;
         MarkNeedsPaint();

@@ -180,7 +180,7 @@ public readonly record struct ShaderInstr(
 {
     public string Dump()
     {
-        var args = Args is { Length: > 0 } ? string.Join(",", Args) : "";
+        string args = Args is { Length: > 0 } ? string.Join(separator: ",", values: Args) : "";
         return $"v{Result} = {Op}:{Type}({args}) [{P0:G},{P1:G},{P2:G},{P3:G}]" +
                (Aux >= 0 ? $" aux={Aux}" : "");
     }
@@ -203,18 +203,18 @@ public sealed class ShaderColorRamp
             ? stops
             : [
                 new ShaderRampStop(
-                    0f,
-                    0f,
-                    0f,
-                    0f,
-                    1f
+                    Pos: 0f,
+                    R: 0f,
+                    G: 0f,
+                    B: 0f,
+                    A: 1f
                 ),
                 new ShaderRampStop(
-                    1f,
-                    1f,
-                    1f,
-                    1f,
-                    1f
+                    Pos: 1f,
+                    R: 1f,
+                    G: 1f,
+                    B: 1f,
+                    A: 1f
                 ),
             ];
         Interpolation = interp;
@@ -229,23 +229,23 @@ public sealed class ShaderColorRamp
     /// </summary>
     public Vec4 Sample(float t)
     {
-        var n = Stops.Count;
+        int n = Stops.Count;
         if (n == 0) return Vec4.One;
         if (t <= Stops[0].Pos) return ToVec4(Stops[0]);
         if (t >= Stops[n - 1].Pos) return ToVec4(Stops[n - 1]);
-        for (var i = 0; i < n - 1; i++)
+        for (int i = 0; i < n - 1; i++)
         {
             var a = Stops[i];
             var b = Stops[i + 1];
             if (t < a.Pos || t > b.Pos) continue;
-            var span = b.Pos - a.Pos;
-            var f = span > 1e-6f ? (t - a.Pos) / span : 0f;
+            float span = b.Pos - a.Pos;
+            float f = span > 1e-6f ? (t - a.Pos) / span : 0f;
             f = Interpolation switch {
                 RampInterpolation.Constant => 0f,
-                RampInterpolation.Ease => f * f * (3f - 2f * f),
+                RampInterpolation.Ease => f * f * (3f - (2f * f)),
                 _ => f,
             };
-            return ToVec4(a) + (ToVec4(b) - ToVec4(a)) * f;
+            return ToVec4(a) + ((ToVec4(b) - ToVec4(a)) * f);
         }
 
         return ToVec4(Stops[n - 1]);
@@ -254,10 +254,10 @@ public sealed class ShaderColorRamp
     private static Vec4 ToVec4(ShaderRampStop s)
     {
         return new Vec4(
-            s.R,
-            s.G,
-            s.B,
-            s.A
+            x: s.R,
+            y: s.G,
+            z: s.B,
+            w: s.A
         );
     }
 }
@@ -283,18 +283,18 @@ public readonly record struct SurfaceConstants(
     float EmissiveB)
 {
     public static SurfaceConstants Default => new(
-        0.8f,
-        0.8f,
-        0.8f,
-        1f,
-        0f,
-        0.5f,
-        1f,
-        0f,
-        0.03f,
-        0f,
-        0f,
-        0f
+        BaseR: 0.8f,
+        BaseG: 0.8f,
+        BaseB: 0.8f,
+        BaseA: 1f,
+        Metallic: 0f,
+        Roughness: 0.5f,
+        Specular: 1f,
+        Clearcoat: 0f,
+        ClearcoatRoughness: 0.03f,
+        EmissiveR: 0f,
+        EmissiveG: 0f,
+        EmissiveB: 0f
     );
 }
 

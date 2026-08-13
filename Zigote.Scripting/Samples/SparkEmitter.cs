@@ -20,11 +20,13 @@ public sealed class SparkEmitter : Component
     private VfxHandle _emitter;
 
     [Export]
-    [EditorRange(1, 500)]
+    [EditorRange(min: 1, max: 500)]
     [EditorTooltip("Continuous emission rate (particles/second)")]
     public float Rate { get; set; } = 60f;
 
-    [Export] [EditorRange(0.1f, 20f)] public float Speed { get; set; } = 4f;
+    [Export]
+    [EditorRange(min: 0.1f, max: 20f)]
+    public float Speed { get; set; } = 4f;
 
     [Export]
     [EditorTooltip("Particles emitted in one burst when the component starts")]
@@ -37,26 +39,26 @@ public sealed class SparkEmitter : Component
             SpawnRate = Rate,
             Shape = EmissionShape.Sphere,
             ShapeRadius = 0.1f,
-            StartSpeed = new FloatRange(Speed * 0.5f, Speed),
-            StartLifetime = new FloatRange(0.5f, 1.0f),
-            StartSize = new FloatRange(0.03f, 0.07f),
+            StartSpeed = new FloatRange(min: Speed * 0.5f, max: Speed),
+            StartLifetime = new FloatRange(min: 0.5f, max: 1.0f),
+            StartSize = new FloatRange(min: 0.03f, max: 0.07f),
             Blend = VfxBlendMode.Additive,
         };
-        asset.UpdateModules.Add(new GravityModule(new Vec3(0f, -4f, 0f)));
+        asset.UpdateModules.Add(new GravityModule(new Vec3(x: 0f, y: -4f, z: 0f)));
         asset.UpdateModules.Add(new DragModule(0.8f));
         asset.UpdateModules.Add(
             new ColorOverLifeModule(
                 new ColorRamp(
                     [
-                        new ColorStop(0f, Color.White),
-                        new ColorStop(0.5f, new Color(1f, 0.6f, 0.15f)),
+                        new ColorStop(position: 0f, color: Color.White),
+                        new ColorStop(position: 0.5f, color: new Color(r: 1f, g: 0.6f, b: 0.15f)),
                         new ColorStop(
-                            1f,
-                            new Color(
-                                0.5f,
-                                0.05f,
-                                0f,
-                                0f
+                            position: 1f,
+                            color: new Color(
+                                r: 0.5f,
+                                g: 0.05f,
+                                b: 0f,
+                                a: 0f
                             )
                         ),
                     ]
@@ -64,13 +66,13 @@ public sealed class SparkEmitter : Component
             )
         );
 
-        _emitter = Vfx.Create(asset, Position);
-        Vfx.Burst(_emitter, StartBurst);
+        _emitter = Vfx.Create(asset: asset, position: Position);
+        Vfx.Burst(handle: _emitter, count: StartBurst);
     }
 
     protected override void OnUpdate(float deltaTime)
     {
-        if (_emitter.IsValid) Vfx.SetPosition(_emitter, Position);
+        if (_emitter.IsValid) Vfx.SetPosition(handle: _emitter, position: Position);
     }
 
     protected override void OnDestroy()

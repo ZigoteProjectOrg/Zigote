@@ -53,11 +53,11 @@ public static class Music
         if (!Audio.IsAvailable) return;
         if (_current.IsValid && !_stopping && CurrentTrack == path) return;
 
-        var incoming = Audio.CreateFile(path, true);
+        var incoming = Audio.CreateFile(path: path, streaming: true);
         if (!incoming.IsValid) return;
-        Audio.SetSpatial(incoming, false);
-        Audio.SetLooping(incoming, loop);
-        if (Bus.IsValid) Audio.SetBus(incoming, Bus);
+        Audio.SetSpatial(sound: incoming, enabled: false);
+        Audio.SetLooping(sound: incoming, looping: loop);
+        if (Bus.IsValid) Audio.SetBus(sound: incoming, bus: Bus);
 
         // A crossfade already in flight: the half-faded outgoing track just ends now.
         if (_outgoing.IsValid) DestroyTrack(_outgoing);
@@ -66,10 +66,10 @@ public static class Music
         _current = incoming;
         CurrentTrack = path;
         _stopping = false;
-        _fadeSeconds = MathF.Max(0f, crossfadeSeconds);
+        _fadeSeconds = MathF.Max(x: 0f, y: crossfadeSeconds);
         _fade = _fadeSeconds > 0f ? 0f : 1f;
 
-        Audio.SetVolume(incoming, EffectiveVolume(_fade));
+        Audio.SetVolume(sound: incoming, volume: EffectiveVolume(_fade));
         Audio.Play(incoming);
         ApplyFade(); // settle volumes (and free the outgoing track when the fade is instant)
     }
@@ -84,7 +84,7 @@ public static class Music
         _current = SoundHandle.None;
         CurrentTrack = null;
         _stopping = true;
-        _fadeSeconds = MathF.Max(0f, fadeSeconds);
+        _fadeSeconds = MathF.Max(x: 0f, y: fadeSeconds);
         _fade = _fadeSeconds > 0f ? 0f : 1f;
         ApplyFade();
     }
@@ -92,13 +92,14 @@ public static class Music
     /// <summary>Advance fades + ducking. Called by the host once per render frame during play.</summary>
     public static void Tick(float dt)
     {
-        var blendTarget = Ducked ? 1f : 0f;
-        var blendStep = DuckSeconds > 0f ? dt / DuckSeconds : 1f;
+        float blendTarget = Ducked ? 1f : 0f;
+        float blendStep = DuckSeconds > 0f ? dt / DuckSeconds : 1f;
         _duckBlend = _duckBlend < blendTarget
-            ? MathF.Min(blendTarget, _duckBlend + blendStep)
-            : MathF.Max(blendTarget, _duckBlend - blendStep);
+            ? MathF.Min(x: blendTarget, y: _duckBlend + blendStep)
+            : MathF.Max(x: blendTarget, y: _duckBlend - blendStep);
 
-        if (_fade < 1f) _fade = _fadeSeconds > 0f ? MathF.Min(1f, _fade + dt / _fadeSeconds) : 1f;
+        if (_fade < 1f)
+            _fade = _fadeSeconds > 0f ? MathF.Min(x: 1f, y: _fade + (dt / _fadeSeconds)) : 1f;
         ApplyFade();
     }
 
@@ -119,7 +120,7 @@ public static class Music
 
     private static void ApplyFade()
     {
-        if (_current.IsValid) Audio.SetVolume(_current, EffectiveVolume(_fade));
+        if (_current.IsValid) Audio.SetVolume(sound: _current, volume: EffectiveVolume(_fade));
         if (_outgoing.IsValid)
         {
             if (_fade >= 1f)
@@ -129,16 +130,14 @@ public static class Music
                 if (_stopping) _stopping = false;
             }
             else
-            {
-                Audio.SetVolume(_outgoing, EffectiveVolume(1f - _fade));
-            }
+                Audio.SetVolume(sound: _outgoing, volume: EffectiveVolume(1f - _fade));
         }
     }
 
     private static float EffectiveVolume(float fade)
     {
-        var duckLevel = 1f + (MathF.Max(0f, DuckVolume) - 1f) * _duckBlend;
-        return MathF.Max(0f, Volume) * duckLevel * fade;
+        float duckLevel = 1f + ((MathF.Max(x: 0f, y: DuckVolume) - 1f) * _duckBlend);
+        return MathF.Max(x: 0f, y: Volume) * duckLevel * fade;
     }
 
     private static void DestroyTrack(SoundHandle handle)

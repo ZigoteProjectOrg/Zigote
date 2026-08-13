@@ -32,17 +32,22 @@ public sealed class TimelinePanel : Widget
         _state = state;
         _theme = theme;
 
-        _playBtn = new AdwButton("Play", _state.ToggleAnimationPlay) { Compact = true };
-        _timeLabel = new Label("0.00 / 0.00", theme.FontSizeCaption, theme.Hint);
-        _scrub = new AdwSlider(0f) {
+        _playBtn =
+            new AdwButton(label: "Play", onPressed: _state.ToggleAnimationPlay) { Compact = true };
+        _timeLabel = new Label(
+            text: "0.00 / 0.00",
+            fontSize: theme.FontSizeCaption,
+            color: theme.Hint
+        );
+        _scrub = new AdwSlider() {
             Min = 0f,
             Max = 1f,
             OnChanged = _state.SeekAnimation,
         };
         _loop = new AdwCheckButton(
-            "Loop",
-            _state.AnimationPlayer.Loop,
-            v => _state.AnimationPlayer.Loop = v
+            label: "Loop",
+            value: _state.AnimationPlayer.Loop,
+            onChanged: v => _state.AnimationPlayer.Loop = v
         );
 
         _content = Build();
@@ -53,22 +58,24 @@ public sealed class TimelinePanel : Widget
         _builtClipCount = _state.AnimationClips.Count;
 
         if (_builtClipCount == 0)
+        {
             return new Padding(
-                EdgeInsets.All(10f),
-                new Label(
-                    "No animation — import an animated glTF.",
-                    _theme.FontSizeCaption,
-                    _theme.Hint
+                padding: EdgeInsets.All(10f),
+                child: new Label(
+                    text: "No animation — import an animated glTF.",
+                    fontSize: _theme.FontSizeCaption,
+                    color: _theme.Hint
                 )
             );
+        }
 
         var row = new Row {
             Children = {
                 _playBtn,
                 new SizedBox(6f),
                 new AdwButton(
-                    "Stop",
-                    () =>
+                    label: "Stop",
+                    onPressed: () =>
                     {
                         _state.AnimationPlayer.Stop();
                         _state.SeekAnimation(0f);
@@ -77,7 +84,7 @@ public sealed class TimelinePanel : Widget
                 new SizedBox(10f),
                 new Expanded(_scrub),
                 new SizedBox(10f),
-                new SizedBox(96f, child: _timeLabel),
+                new SizedBox(width: 96f, child: _timeLabel),
                 new SizedBox(8f),
                 _loop,
             },
@@ -86,28 +93,31 @@ public sealed class TimelinePanel : Widget
         // Clip selector only when there's a choice to make.
         if (_builtClipCount > 1)
         {
-            var indices = Enumerable.Range(0, _builtClipCount).ToList();
-            var selected = Math.Max(0, IndexOfActiveClip());
+            var indices = Enumerable.Range(start: 0, count: _builtClipCount).ToList();
+            int selected = Math.Max(val1: 0, val2: IndexOfActiveClip());
             row.Children.Add(new SizedBox(8f));
             row.Children.Add(
                 new Expanded(
                     new AdwDropDown(
-                        [.. indices.Select(i => _state.AnimationClips[i].Name)],
-                        selected,
-                        _state.SetActiveClip
+                        items: [.. indices.Select(i => _state.AnimationClips[i].Name)],
+                        selectedIndex: selected,
+                        onSelected: _state.SetActiveClip
                     ) { Compact = true }
                 )
             );
         }
 
-        return new Padding(EdgeInsets.Symmetric(8f, 6f), row);
+        return new Padding(padding: EdgeInsets.Symmetric(horizontal: 8f, vertical: 6f), child: row);
     }
 
     private int IndexOfActiveClip()
     {
-        for (var i = 0; i < _state.AnimationClips.Count; i++)
-            if (ReferenceEquals(_state.AnimationClips[i], _state.AnimationPlayer.Clip))
+        for (int i = 0; i < _state.AnimationClips.Count; i++)
+        {
+            if (ReferenceEquals(objA: _state.AnimationClips[i], objB: _state.AnimationPlayer.Clip))
                 return i;
+        }
+
         return -1;
     }
 
@@ -117,8 +127,8 @@ public sealed class TimelinePanel : Widget
         if (_state.AnimationClips.Count != _builtClipCount) _content = Build();
 
         var p = _state.AnimationPlayer;
-        var dur = p.Clip?.Duration ?? 0f;
-        _scrub.Max = MathF.Max(dur, 0.0001f);
+        float dur = p.Clip?.Duration ?? 0f;
+        _scrub.Max = MathF.Max(x: dur, y: 0.0001f);
         _scrub.Value = p.Time;
         _timeLabel.Text = $"{p.Time:0.00} / {dur:0.00}";
         _playBtn.Label = p.Playing ? "Pause" : "Play";
@@ -134,22 +144,19 @@ public sealed class TimelinePanel : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         _content.Layout(origin);
     }
 
-    public override void Paint(PaintList paint)
-    {
-        _content.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => _content.Paint(paint);
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return _content.HitTest(point);
     }
 }

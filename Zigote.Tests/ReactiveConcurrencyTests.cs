@@ -3,6 +3,7 @@
 // defeat the test. Cancellation is likewise irrelevant to a wait that is already time-bounded.
 
 #pragma warning disable xUnit1031, xUnit1051
+using System.Collections.Concurrent;
 using Xunit;
 using Zigote.Core.State;
 
@@ -11,7 +12,8 @@ namespace Zigote.Tests;
 /// <summary>
 ///     Hard concurrency stress tests for the reactive core. The whole graph is guarded by one
 ///     re-entrant lock (<c>Reactive.Gate</c>), so these assert the guarantees that lock must provide:
-///     no lost updates, no torn reads, atomic batches, and no crashes/deadlocks when many threads read,
+///     no lost updates, no torn reads, atomic batches, and no crashes/deadlocks when many threads
+///     read,
 ///     write, subscribe, and build/dispose derived nodes concurrently.
 /// </summary>
 [Collection(
@@ -30,14 +32,14 @@ public class ReactiveConcurrencyTests
         var s = new Signal<int>(0);
 
         RunThreads(
-            Threads,
-            () =>
+            n: Threads,
+            body: () =>
             {
-                for (var i = 0; i < perThread; i++) s.Update(v => v + 1);
+                for (int i = 0; i < perThread; i++) s.Update(v => v + 1);
             }
         );
 
-        Assert.Equal(Threads * perThread, s.Value);
+        Assert.Equal(expected: Threads * perThread, actual: s.Value);
     }
 
     [Fact]
@@ -49,39 +51,39 @@ public class ReactiveConcurrencyTests
         var s = new Signal<long>(-1);
 
         RunThreads(
-            Threads,
-            t =>
+            n: Threads,
+            body: t =>
             {
-                for (var i = 0; i < perThread; i++) s.Value = ((long)t << 40) | (uint)i;
+                for (int i = 0; i < perThread; i++) s.Value = ((long)t << 40) | (uint)i;
             }
         );
 
-        var final = s.Value;
-        var thread = (int)(final >> 40);
-        var iteration = final & ((1L << 40) - 1);
-        Assert.InRange(thread, 0, Threads - 1);
-        Assert.InRange(iteration, 0, perThread - 1);
+        long final = s.Value;
+        int thread = (int)(final >> 40);
+        long iteration = final & ((1L << 40) - 1);
+        Assert.InRange(actual: thread, low: 0, high: Threads - 1);
+        Assert.InRange(actual: iteration, low: 0, high: perThread - 1);
     }
 
     [Fact]
     public void Concurrent_readers_never_see_a_torn_value()
     {
         // A 16-byte struct write isn't atomic without the lock; a reader must never see A != B.
-        var s = new Signal<Pair>(new Pair(0, 0));
-        var stop = false;
+        var s = new Signal<Pair>(new Pair(A: 0, B: 0));
+        bool stop = false;
 
         var readers = StartReaders(
-            Threads,
-            () =>
+            n: Threads,
+            read: () =>
             {
                 var p = s.Value;
-                Assert.Equal(p.A, p.B);
+                Assert.Equal(expected: p.A, actual: p.B);
             },
-            () => Volatile.Read(ref stop)
+            stopped: () => Volatile.Read(ref stop)
         );
 
-        for (long i = 1; i <= 400_000; i++) s.Value = new Pair(i, i);
-        Volatile.Write(ref stop, true);
+        for (long i = 1; i <= 400_000; i++) s.Value = new Pair(A: i, B: i);
+        Volatile.Write(location: ref stop, value: true);
         AwaitAll(readers);
     }
 
@@ -97,21 +99,21 @@ public class ReactiveConcurrencyTests
         var b = new Signal<long>(0);
         using var sum = Computed.From(() => a.Value + b.Value);
 
-        var stop = false;
+        bool stop = false;
         var readers = StartReaders(
-            2,
-            () => Assert.Equal(total, sum.Value),
-            () => Volatile.Read(ref stop)
+            n: 2,
+            read: () => Assert.Equal(expected: total, actual: sum.Value),
+            stopped: () => Volatile.Read(ref stop)
         );
 
         RunThreads(
-            Threads,
-            t =>
+            n: Threads,
+            body: t =>
             {
                 var rng = new Random(t + 1);
-                for (var i = 0; i < perThread; i++)
+                for (int i = 0; i < perThread; i++)
                 {
-                    var x = rng.Next(1, 1000);
+                    int x = rng.Next(minValue: 1, maxValue: 1000);
                     Reactive.Batch(() =>
                         {
                             a.Value -= x;
@@ -128,9 +130,9 @@ public class ReactiveConcurrencyTests
             }
         );
 
-        Volatile.Write(ref stop, true);
+        Volatile.Write(location: ref stop, value: true);
         AwaitAll(readers);
-        Assert.Equal(total, a.Value + b.Value);
+        Assert.Equal(expected: total, actual: a.Value + b.Value);
     }
 
     [Fact]
@@ -140,17 +142,17 @@ public class ReactiveConcurrencyTests
         const int perThread = 20_000;
         var s = new Signal<int>(0);
         using var doubled = Computed.From(() => s.Value * 2);
-        using var _ = ((ISignal)doubled).Observe(() => { }); // keep it live
+        using var _ = doubled.Observe(() => { }); // keep it live
 
         RunThreads(
-            Threads,
-            t =>
+            n: Threads,
+            body: t =>
             {
-                for (var i = 0; i < perThread; i++) s.Value = (t << 20) | i;
+                for (int i = 0; i < perThread; i++) s.Value = (t << 20) | i;
             }
         );
 
-        Assert.Equal(s.Value * 2, doubled.Value);
+        Assert.Equal(expected: s.Value * 2, actual: doubled.Value);
     }
 
     [Fact]
@@ -161,17 +163,24 @@ public class ReactiveConcurrencyTests
         using var b = Computed.From(() => a.Value + 1);
         using var c = Computed.From(() => a.Value + 2);
         long lastSum = -1;
-        using var e = new Effect(() => Volatile.Write(ref lastSum, b.Value + c.Value));
+        using var e = new Effect(() => Volatile.Write(
+                location: ref lastSum,
+                value: b.Value + c.Value
+            )
+        );
 
         RunThreads(
-            Threads,
-            t =>
+            n: Threads,
+            body: t =>
             {
-                for (var i = 0; i < 15_000; i++) a.Value = (t << 20) | i;
+                for (int i = 0; i < 15_000; i++) a.Value = (t << 20) | i;
             }
         );
 
-        Assert.Equal((long)(a.Value + 1) + (a.Value + 2), Volatile.Read(ref lastSum));
+        Assert.Equal(
+            expected: (long)(a.Value + 1) + (a.Value + 2),
+            actual: Volatile.Read(ref lastSum)
+        );
     }
 
     [Fact]
@@ -182,30 +191,35 @@ public class ReactiveConcurrencyTests
         var s = new Signal<int>(0);
         var tasks = new List<Task> {
             Task.Factory.StartNew(
-                () =>
+                action: () =>
                 {
-                    for (var i = 0; i < 200_000; i++) s.Value = i;
+                    for (int i = 0; i < 200_000; i++) s.Value = i;
                 },
-                TaskCreationOptions.LongRunning
+                creationOptions: TaskCreationOptions.LongRunning
             ),
         };
 
-        for (var t = 0; t < Threads; t++)
+        for (int t = 0; t < Threads; t++)
+        {
             tasks.Add(
                 Task.Factory.StartNew(
-                    () =>
+                    action: () =>
                     {
-                        for (var i = 0; i < 20_000; i++)
+                        for (int i = 0; i < 20_000; i++)
                         {
                             var sub = s.Subscribe(_ => { });
                             sub.Dispose();
                         }
                     },
-                    TaskCreationOptions.LongRunning
+                    creationOptions: TaskCreationOptions.LongRunning
                 )
             );
+        }
 
-        Assert.True(Task.WaitAll(tasks.ToArray(), Budget), "did not finish (deadlock?)");
+        Assert.True(
+            condition: Task.WaitAll(tasks: tasks.ToArray(), timeout: Budget),
+            userMessage: "did not finish (deadlock?)"
+        );
     }
 
     [Fact]
@@ -217,23 +231,24 @@ public class ReactiveConcurrencyTests
         var s = new Signal<int>(0);
         var tasks = new List<Task> {
             Task.Factory.StartNew(
-                () =>
+                action: () =>
                 {
-                    for (var i = 0; i < 200_000; i++) s.Value = i;
+                    for (int i = 0; i < 200_000; i++) s.Value = i;
                 },
-                TaskCreationOptions.LongRunning
+                creationOptions: TaskCreationOptions.LongRunning
             ),
         };
 
-        for (var t = 0; t < Threads; t++)
+        for (int t = 0; t < Threads; t++)
+        {
             tasks.Add(
                 Task.Factory.StartNew(
-                    () =>
+                    action: () =>
                     {
-                        for (var i = 0; i < 5_000; i++)
+                        for (int i = 0; i < 5_000; i++)
                         {
                             var c = Computed.From(() => s.Value + 1);
-                            var obs = ((ISignal)c).Observe(() => { });
+                            var obs = c.Observe(() => { });
                             var e = new Effect(() => _ = s.Value);
                             _ = c.Value;
                             obs.Dispose();
@@ -241,11 +256,15 @@ public class ReactiveConcurrencyTests
                             c.Dispose();
                         }
                     },
-                    TaskCreationOptions.LongRunning
+                    creationOptions: TaskCreationOptions.LongRunning
                 )
             );
+        }
 
-        Assert.True(Task.WaitAll(tasks.ToArray(), Budget), "did not finish (deadlock?)");
+        Assert.True(
+            condition: Task.WaitAll(tasks: tasks.ToArray(), timeout: Budget),
+            userMessage: "did not finish (deadlock?)"
+        );
     }
 
     [Fact]
@@ -253,71 +272,74 @@ public class ReactiveConcurrencyTests
     {
         // Mixed read/write storm — completes without deadlock and ends on a written value.
         var s = new Signal<long>(0);
-        var stop = false;
-        var seen = new System.Collections.Concurrent.ConcurrentBag<long>();
+        bool stop = false;
+        var seen = new ConcurrentBag<long>();
 
         var readers = StartReaders(
-            Threads / 2,
-            () => seen.Add(s.Value),
-            () => Volatile.Read(ref stop)
+            n: Threads / 2,
+            read: () => seen.Add(s.Value),
+            stopped: () => Volatile.Read(ref stop)
         );
 
         RunThreads(
-            Threads / 2,
-            t =>
+            n: Threads / 2,
+            body: t =>
             {
-                for (var i = 0; i < 30_000; i++) s.Value = ((long)(t + 1) << 40) | (uint)i;
+                for (int i = 0; i < 30_000; i++) s.Value = ((long)(t + 1) << 40) | (uint)i;
             }
         );
 
-        Volatile.Write(ref stop, true);
+        Volatile.Write(location: ref stop, value: true);
         AwaitAll(readers);
         Assert.True(seen.Count > 0);
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
-    private static void RunThreads(int n, Action body)
-    {
-        RunThreads(n, _ => body());
-    }
+    private static void RunThreads(int n, Action body) => RunThreads(n: n, body: _ => body());
 
     private static void RunThreads(int n, Action<int> body)
     {
         var tasks = new Task[n];
-        for (var t = 0; t < n; t++)
+        for (int t = 0; t < n; t++)
         {
-            var id = t;
-            tasks[t] = Task.Factory.StartNew(() => body(id), TaskCreationOptions.LongRunning);
+            int id = t;
+            tasks[t] = Task.Factory.StartNew(
+                action: () => body(id),
+                creationOptions: TaskCreationOptions.LongRunning
+            );
         }
 
         Assert.True(
-            Task.WaitAll(tasks, Budget),
-            "threads did not finish within the budget (possible deadlock)"
+            condition: Task.WaitAll(tasks: tasks, timeout: Budget),
+            userMessage: "threads did not finish within the budget (possible deadlock)"
         );
     }
 
     private static List<Task> StartReaders(int n, Action read, Func<bool> stopped)
     {
         var tasks = new List<Task>(n);
-        for (var r = 0; r < n; r++)
+        for (int r = 0; r < n; r++)
+        {
             tasks.Add(
                 Task.Factory.StartNew(
-                    () =>
+                    action: () =>
                     {
                         while (!stopped()) read();
                     },
-                    TaskCreationOptions.LongRunning
+                    creationOptions: TaskCreationOptions.LongRunning
                 )
             );
+        }
+
         return tasks;
     }
 
     private static void AwaitAll(List<Task> tasks)
     {
         Assert.True(
-            Task.WaitAll(tasks.ToArray(), Budget),
-            "reader tasks did not finish within the budget"
+            condition: Task.WaitAll(tasks: tasks.ToArray(), timeout: Budget),
+            userMessage: "reader tasks did not finish within the budget"
         );
     }
 

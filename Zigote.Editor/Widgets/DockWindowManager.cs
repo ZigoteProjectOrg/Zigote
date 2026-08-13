@@ -36,7 +36,7 @@ public sealed class DockWindowManager(App app)
     {
         _mainDock = dock;
         _theme = theme;
-        Wire(app, dock);
+        Wire(win: app, dock: dock);
     }
 
     /// <summary>
@@ -53,12 +53,12 @@ public sealed class DockWindowManager(App app)
 
     private void Wire(App win, DockLayout dock)
     {
-        dock.TabDragMoved = (id, local) => OnDragMoved(win, id, local);
+        dock.TabDragMoved = (id, local) => OnDragMoved(sourceWin: win, panelId: id, local: local);
         dock.TabDragReleased = (id, local) => OnDragReleased(
-            win,
-            dock,
-            id,
-            local
+            sourceWin: win,
+            sourceDock: dock,
+            panelId: id,
+            local: local
         );
     }
 
@@ -72,12 +72,14 @@ public sealed class DockWindowManager(App app)
             return;
         }
 
-        var global = ToGlobal(sourceWin, local);
-        var target = FindDockAt(global, sourceWin);
+        var global = ToGlobal(win: sourceWin, local: local);
+        var target = FindDockAt(global: global, exclude: sourceWin);
         foreach (var (win, dock) in AllDocks())
         {
             if (win == sourceWin) continue; // its own internal preview handles in-window feedback
-            dock.SetExternalDropHover(target?.Win == win ? ToLocal(win, global) : null);
+            dock.SetExternalDropHover(
+                target?.Win == win ? ToLocal(win: win, global: global) : null
+            );
         }
     }
 
@@ -86,29 +88,29 @@ public sealed class DockWindowManager(App app)
         ClearHovers();
         if (!CanTearOut(panelId)) return;
 
-        var global = ToGlobal(sourceWin, local);
+        var global = ToGlobal(win: sourceWin, local: local);
 
-        var target = FindDockAt(global, sourceWin);
+        var target = FindDockAt(global: global, exclude: sourceWin);
         if (target is { } t)
         {
             MovePanel(
-                sourceWin,
-                sourceDock,
-                panelId,
-                t.Dock,
-                ToLocal(t.Win, global)
+                sourceWin: sourceWin,
+                sourceDock: sourceDock,
+                panelId: panelId,
+                targetDock: t.Dock,
+                dropPoint: ToLocal(win: t.Win, global: global)
             );
             return;
         }
 
         // Released inside the source window but on no drop zone → plain drag cancel.
-        if (WindowRect(sourceWin).Contains(global.X, global.Y)) return;
+        if (WindowRect(sourceWin).Contains(px: global.X, py: global.Y)) return;
 
         TearOut(
-            sourceWin,
-            sourceDock,
-            panelId,
-            global
+            sourceWin: sourceWin,
+            sourceDock: sourceDock,
+            panelId: panelId,
+            global: global
         );
     }
 
@@ -118,12 +120,12 @@ public sealed class DockWindowManager(App app)
         DockLayout targetDock, Offset dropPoint)
     {
         // A floating window losing its last panel dies with it; the main dock keeps its last tab.
-        var lastTab = sourceDock.OpenPanelIds.Count() <= 1;
+        bool lastTab = sourceDock.OpenPanelIds.Count() <= 1;
         if (sourceWin == app && lastTab) return;
 
         var panel = sourceDock.DetachPanelForTransfer(panelId);
         if (panel is null) return;
-        targetDock.AdoptPanel(panel, dropPoint);
+        targetDock.AdoptPanel(panel: panel, dropPoint: dropPoint);
 
         if (sourceWin != app && lastTab &&
             _floats.FirstOrDefault(f => f.Win == sourceWin) is { } emptied)
@@ -139,30 +141,30 @@ public sealed class DockWindowManager(App app)
         var panel = sourceDock.DetachPanelForTransfer(panelId);
         if (panel is null) return;
 
-        var win = app.CreateWindow(panel.Title, 560, 420);
+        var win = app.CreateWindow(title: panel.Title, width: 560, height: 420);
         win.Theme = app.Theme;
         var dock = new DockLayout(
-            win,
-            _theme,
-            new DockLeaf(panel.PanelId),
-            [panel]
+            app: win,
+            theme: _theme,
+            root: new DockLeaf(panel.PanelId),
+            panels: [panel]
         );
-        Wire(win, dock);
+        Wire(win: win, dock: dock);
         // Its own header bar, because the app suppresses the injected chrome strip under Adwaita
         // CSD — without one this window would have no way to be moved or closed.
         win.Root = new ThemeProvider(
-            win.Theme,
-            new ColoredBox(
-                _theme.Window,
-                new AdwToolbarView(dock) {
+            data: win.Theme,
+            child: new ColoredBox(
+                color: _theme.Window,
+                child: new AdwToolbarView(dock) {
                     TopBars = { new AdwHeaderBar { Title = panel.Title } },
                 }
             )
         );
         // Position so the tab lands roughly under the cursor.
-        win.NativeWindow!.SetPosition((int)(global.X - 80f), (int)(global.Y - 14f));
+        win.NativeWindow!.SetPosition(x: (int)(global.X - 80f), y: (int)(global.Y - 14f));
 
-        var entry = new Entry(win, dock);
+        var entry = new Entry(Win: win, Dock: dock);
         _floats.Add(entry);
         win.CloseRequested += () => ReturnPanels(entry);
     }
@@ -171,10 +173,10 @@ public sealed class DockWindowManager(App app)
     private void ReturnPanels(Entry entry)
     {
         _floats.Remove(entry);
-        foreach (var id in entry.Dock.OpenPanelIds.ToList())
+        foreach (string id in entry.Dock.OpenPanelIds.ToList())
         {
             var panel = entry.Dock.DetachPanelForTransfer(id);
-            if (panel is not null) _mainDock?.AdoptPanel(panel, null);
+            if (panel is not null) _mainDock?.AdoptPanel(panel: panel, dropPoint: null);
         }
         // The window closes itself right after CloseRequested (see App.DispatchEvent).
     }
@@ -191,15 +193,15 @@ public sealed class DockWindowManager(App app)
     {
         // Floating windows first (usually above the main window); most recent first so overlaps
         // resolve to the newest float. Without OS z-order this is the best available guess.
-        for (var i = _floats.Count - 1; i >= 0; i--)
+        for (int i = _floats.Count - 1; i >= 0; i--)
         {
             var f = _floats[i];
-            if (f.Win != exclude && WindowRect(f.Win).Contains(global.X, global.Y))
+            if (f.Win != exclude && WindowRect(f.Win).Contains(px: global.X, py: global.Y))
                 return (f.Win, f.Dock);
         }
 
         if (app != exclude && _mainDock is { } main &&
-            WindowRect(app).Contains(global.X, global.Y))
+            WindowRect(app).Contains(px: global.X, py: global.Y))
             return (app, main);
 
         return null;
@@ -218,25 +220,25 @@ public sealed class DockWindowManager(App app)
 
     private Rect WindowRect(App win)
     {
-        var (x, y) = win.NativeWindow?.GetPosition() ?? app.Engine.MainWindowPosition();
+        (int x, int y) = win.NativeWindow?.GetPosition() ?? app.Engine.MainWindowPosition();
         return new Rect(
-            x,
-            y,
-            win.HostLogicalWidth,
-            win.HostLogicalHeight
+            x: x,
+            y: y,
+            width: win.HostLogicalWidth,
+            height: win.HostLogicalHeight
         );
     }
 
     private Offset ToGlobal(App win, Offset local)
     {
-        var (x, y) = win.NativeWindow?.GetPosition() ?? app.Engine.MainWindowPosition();
-        return new Offset(local.X + x, local.Y + y);
+        (int x, int y) = win.NativeWindow?.GetPosition() ?? app.Engine.MainWindowPosition();
+        return new Offset(x: local.X + x, y: local.Y + y);
     }
 
     private Offset ToLocal(App win, Offset global)
     {
-        var (x, y) = win.NativeWindow?.GetPosition() ?? app.Engine.MainWindowPosition();
-        return new Offset(global.X - x, global.Y - y);
+        (int x, int y) = win.NativeWindow?.GetPosition() ?? app.Engine.MainWindowPosition();
+        return new Offset(x: global.X - x, y: global.Y - y);
     }
 
     private sealed record Entry(App Win, DockLayout Dock);

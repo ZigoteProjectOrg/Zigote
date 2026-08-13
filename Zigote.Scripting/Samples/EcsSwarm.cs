@@ -20,23 +20,23 @@ public sealed class EcsSwarm : Component
     private Query<SwarmPos, SwarmVel>? _query;
 
     [Export]
-    [EditorRange(0, 5000)]
+    [EditorRange(min: 0, max: 5000)]
     [EditorTooltip("Number of ECS entities the swarm spawns and integrates")]
     public int Count { get; set; } = 500;
 
     protected override void OnCreate()
     {
         if (Ecs.World is not { } world) return;
-        for (var i = 0; i < Count; i++)
+        for (int i = 0; i < Count; i++)
         {
             var e = world.CreateEntity();
-            world.Set(e, new SwarmPos());
+            world.Set(e: e, c: new SwarmPos());
             world.Set(
-                e,
-                new SwarmVel {
-                    X = i % 7 - 3,
+                e: e,
+                c: new SwarmVel {
+                    X = (i % 7) - 3,
                     Y = 1f,
-                    Z = i % 5 - 2,
+                    Z = (i % 5) - 2,
                 }
             );
         }
@@ -60,7 +60,7 @@ public sealed class EcsSwarm : Component
 
     private void Integrate(Span<SwarmPos> pos, Span<SwarmVel> vel)
     {
-        for (var i = 0; i < pos.Length; i++)
+        for (int i = 0; i < pos.Length; i++)
         {
             pos[i].X += vel[i].X * _dt;
             pos[i].Y += vel[i].Y * _dt;

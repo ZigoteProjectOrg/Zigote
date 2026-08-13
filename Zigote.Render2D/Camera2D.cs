@@ -15,21 +15,21 @@ public sealed class Camera2D
 
     public Mat4 ViewProjection(float viewportW, float viewportH)
     {
-        var aspect = viewportH > 0f ? viewportW / viewportH : 1f;
-        var zoom = MathF.Max(Zoom, 1e-6f);
-        var halfH = OrthoHeight / zoom * 0.5f;
-        var halfW = halfH * aspect;
+        float aspect = viewportH > 0f ? viewportW / viewportH : 1f;
+        float zoom = MathF.Max(x: Zoom, y: 1e-6f);
+        float halfH = OrthoHeight / zoom * 0.5f;
+        float halfW = halfH * aspect;
 
         var proj = Mat4.OrthographicRhZo(
-            -halfW,
-            halfW,
-            -halfH,
-            halfH,
-            -1000f,
-            1000f
+            left: -halfW,
+            right: halfW,
+            bottom: -halfH,
+            top: halfH,
+            near: -1000f,
+            far: 1000f
         );
         var view = Mat4.RotationZ(-Rotation) *
-                   Mat4.Translation(new Vec3(-Position.X, -Position.Y, 0f));
+                   Mat4.Translation(new Vec3(x: -Position.X, y: -Position.Y, z: 0f));
         return proj * view;
     }
 
@@ -37,12 +37,12 @@ public sealed class Camera2D
     public static Mat4 PixelOverlay(float viewportW, float viewportH)
     {
         return Mat4.OrthographicRhZo(
-            0f,
-            viewportW,
-            viewportH,
-            0f,
-            -1000f,
-            1000f
+            left: 0f,
+            right: viewportW,
+            bottom: viewportH,
+            top: 0f,
+            near: -1000f,
+            far: 1000f
         );
     }
 }

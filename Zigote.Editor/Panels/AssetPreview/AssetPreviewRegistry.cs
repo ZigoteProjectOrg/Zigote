@@ -28,17 +28,17 @@ public sealed class AssetPreviewRegistry
         return r;
     }
 
-    public void Register(IAssetPreviewProvider provider)
-    {
-        _providers.Add(provider);
-    }
+    public void Register(IAssetPreviewProvider provider) => _providers.Add(provider);
 
     /// <summary>Resolve a provider for the given lower-case extension, or null if none handles it.</summary>
     public IAssetPreviewProvider? Resolve(string ext)
     {
         foreach (var p in _providers)
+        {
             if (p.CanHandle(ext))
                 return p;
+        }
+
         return null;
     }
 }

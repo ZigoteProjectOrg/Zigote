@@ -6,11 +6,11 @@ using Zigote.Core.Paint;
 using Zigote.UI.Charts.Marks;
 using Zigote.UI.Charts.Rendering;
 using Zigote.UI.Charts.Scales;
+using Zigote.UI.Host;
 using Zigote.UI.Semantics;
 using Zigote.UI.TextShaping;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.Charts;
 
@@ -39,21 +39,21 @@ public class Chart : Widget
 
     private const float LegendRowHeight = 18f;
 
-    private readonly List<LegendEntry> _legend = [];
-
     // Chart-owned hover registry, reused across relayouts (capacity persists) and rebuilt LAZILY on
     // the first hover/tap after a data change — a live chart that is never hovered skips the whole
     // per-invalidate CollectInteractive pass, the dominant resolve-path allocation.
     private readonly List<ChartDataPoint> _hoverPoints = [];
-    private bool _hoverRegistryDirty = true;
 
-    // Interaction state that survives live data updates: the last hover position (re-resolved after
-    // each relayout while the pointer is over the plot) and the tap-pinned column's data x.
-    private Offset? _hoverPos;
-    private ChartValue? _pinnedX;
+    private readonly List<LegendEntry> _legend = [];
+
+    // Read-back for tests and advanced composition. The backing lists are reused across relayouts —
+    // a scrolling chart re-ticks every pan step, so tick lists never reallocate on that warm path.
+    private readonly List<ChartTick> _xTicks = [];
 
     // ── Scroll / zoom windows (see AxisWindow) ─────────────────────────────────
     private readonly AxisWindow _xWin = new() { StickToEnd = true };
+    private readonly List<ChartTick> _y2Ticks = [];
+    private readonly List<ChartTick> _yTicks = [];
     private readonly AxisWindow _yWin = new();
     private float _animTime;
     private ChartRenderContext? _ctx;
@@ -66,17 +66,23 @@ public class Chart : Widget
     private double _dragStartX, _dragStartY;
     private bool _hasSecondaryAxis;
     private bool _hoverFromRegion;
+
+    // Interaction state that survives live data updates: the last hover position (re-resolved after
+    // each relayout while the pointer is over the plot) and the tap-pinned column's data x.
+    private Offset? _hoverPos;
+    private bool _hoverRegistryDirty = true;
     private Constraints _lastConstraints;
     private bool _layoutDirty = true;
     private Size _measured;
+    private ChartValue? _pinnedX;
     private bool _pressed, _dragging;
     private float _progress = 1f;
+    private float _selectStartPx, _selectEndPx;
 
     private (double Min, double Max)? _selectedRange;
 
     // ── X range selection ──────────────────────────────────────────────────────
     private bool _selecting;
-    private float _selectStartPx, _selectEndPx;
     private ThemeData _theme = ThemeData.Dark;
     private Ticker? _ticker;
 
@@ -235,11 +241,6 @@ public class Chart : Widget
     /// <summary>Accessible description; defaults to a series summary.</summary>
     public string? SemanticsLabel { get; set; }
 
-    // Read-back for tests and advanced composition. The backing lists are reused across relayouts —
-    // a scrolling chart re-ticks every pan step, so tick lists never reallocate on that warm path.
-    private readonly List<ChartTick> _xTicks = [];
-    private readonly List<ChartTick> _yTicks = [];
-    private readonly List<ChartTick> _y2Ticks = [];
     public Rect PlotRect { get; private set; }
     public IReadOnlyList<ChartTick> XTicks => _xTicks;
 
@@ -267,7 +268,7 @@ public class Chart : Widget
     ///     Data↔screen conversion over the laid-out scales (Swift Charts' ChartProxy) for custom
     ///     overlays and hit resolution. Invalid until the chart's first layout.
     /// </summary>
-    public ChartProxy Proxy => new(_ctx, _ctxSecondary);
+    public ChartProxy Proxy => new(ctx: _ctx, secondary: _ctxSecondary);
 
     /// <summary>
     ///     Custom overlay painted above the marks and annotations, clipped to the plot (the
@@ -296,11 +297,27 @@ public class Chart : Widget
     {
         if (factor <= 0 || (!ZoomableX && !ZoomableY)) return;
         var f = focus ?? new Offset(
-            PlotRect.X + PlotRect.Width / 2f,
-            PlotRect.Y + PlotRect.Height / 2f
+            x: PlotRect.X + (PlotRect.Width / 2f),
+            y: PlotRect.Y + (PlotRect.Height / 2f)
         );
-        if (ZoomableX) _xWin.ApplyZoom(factor, XFocusFraction(f.X), MinVisibleFraction);
-        if (ZoomableY) _yWin.ApplyZoom(factor, YFocusFraction(f.Y), MinVisibleFraction);
+        if (ZoomableX)
+        {
+            _xWin.ApplyZoom(
+                factor: factor,
+                focusFraction: XFocusFraction(f.X),
+                minFraction: MinVisibleFraction
+            );
+        }
+
+        if (ZoomableY)
+        {
+            _yWin.ApplyZoom(
+                factor: factor,
+                focusFraction: YFocusFraction(f.Y),
+                minFraction: MinVisibleFraction
+            );
+        }
+
         MarkNeedsLayout();
     }
 
@@ -316,7 +333,7 @@ public class Chart : Widget
     {
         return PlotRect.Width <= 0
             ? 0.5f
-            : Math.Clamp((px - PlotRect.X) / PlotRect.Width, 0f, 1f);
+            : Math.Clamp(value: (px - PlotRect.X) / PlotRect.Width, min: 0f, max: 1f);
     }
 
     // Y screen grows downward while the domain grows upward, so the fraction is inverted.
@@ -324,7 +341,7 @@ public class Chart : Widget
     {
         return PlotRect.Height <= 0
             ? 0.5f
-            : Math.Clamp(1f - (py - PlotRect.Y) / PlotRect.Height, 0f, 1f);
+            : Math.Clamp(value: 1f - ((py - PlotRect.Y) / PlotRect.Height), min: 0f, max: 1f);
     }
 
     /// <summary>
@@ -358,24 +375,18 @@ public class Chart : Widget
         MarkNeedsPaint();
     }
 
-    private Ticker EnsureTicker()
-    {
-        return _ticker ??= new Ticker(OnTick);
-    }
+    private Ticker EnsureTicker() => _ticker ??= new Ticker(OnTick);
 
     /// <summary>
     ///     Advance this chart's animations (entrance, data morph, scroll easing) by
     ///     <paramref name="dt" /> seconds without the global ticker — deterministic stepping for
     ///     headless/manual control and tests. No-op semantics match a real tick.
     /// </summary>
-    public void AdvanceAnimation(float dt)
-    {
-        OnTick(dt);
-    }
+    public void AdvanceAnimation(float dt) => OnTick(dt);
 
     public override void Attach(App owner, Widget? parent)
     {
-        base.Attach(owner, parent);
+        base.Attach(owner: owner, parent: parent);
         EnsureTicker();
         if (Animated) AnimateIn();
     }
@@ -389,14 +400,14 @@ public class Chart : Widget
 
     private void OnTick(float dt)
     {
-        var busy = false;
+        bool busy = false;
 
         if (_progress < 1f)
         {
             _animTime += dt;
             _progress = AnimationDuration <= 0f
                 ? 1f
-                : Math.Clamp(_animTime / AnimationDuration, 0f, 1f);
+                : Math.Clamp(value: _animTime / AnimationDuration, min: 0f, max: 1f);
             busy |= _progress < 1f;
             MarkNeedsPaint();
         }
@@ -406,13 +417,13 @@ public class Chart : Widget
             _dataAnimTime += dt;
             _dataProgress = DataAnimationDuration <= 0f
                 ? 1f
-                : Math.Clamp(_dataAnimTime / DataAnimationDuration, 0f, 1f);
+                : Math.Clamp(value: _dataAnimTime / DataAnimationDuration, min: 0f, max: 1f);
             busy |= _dataProgress < 1f;
             MarkNeedsPaint();
         }
 
         // Eased approach toward the wheel-scroll targets (drag pans set the offset directly).
-        var scrolled = _xWin.Step(dt) | _yWin.Step(dt);
+        bool scrolled = _xWin.Step(dt) | _yWin.Step(dt);
         if (scrolled)
         {
             busy = true;
@@ -431,18 +442,21 @@ public class Chart : Widget
     private string BuildSemanticsSummary()
     {
         if (_legend.Count > 0)
+        {
             return
-                $"Chart with {_legend.Count} series: {string.Join(", ", _legend.Select(e => e.Label))}";
+                $"Chart with {_legend.Count} series: {string.Join(separator: ", ", values: _legend.Select(e => e.Label))}";
+        }
+
         return Marks.Count == 0 ? "Empty chart" : "Chart";
     }
 
     public override int DebugStateHash()
     {
         return HashCode.Combine(
-            base.DebugStateHash(),
-            _progress,
-            CurrentHover?.Points.Count ?? -1,
-            Marks.Count
+            value1: base.DebugStateHash(),
+            value2: _progress,
+            value3: CurrentHover?.Points.Count ?? -1,
+            value4: Marks.Count
         );
     }
 
@@ -457,7 +471,7 @@ public class Chart : Widget
     public override Size Measure(Constraints c)
     {
         var theme = Theme ?? ThemeProvider.Of(BuildContext.Current);
-        if (!ReferenceEquals(theme, _theme))
+        if (!ReferenceEquals(objA: theme, objB: _theme))
         {
             _theme = theme;
             _layoutDirty = true; // colours + label metrics change with the theme
@@ -469,19 +483,19 @@ public class Chart : Widget
             _layoutDirty = true;
         }
 
-        var w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : DefaultWidth;
-        var h = float.IsFinite(c.MaxHeight) ? c.MaxHeight : DefaultHeight;
-        _measured = c.Constrain(new Size(w, h));
+        float w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : DefaultWidth;
+        float h = float.IsFinite(c.MaxHeight) ? c.MaxHeight : DefaultHeight;
+        _measured = c.Constrain(new Size(width: w, height: h));
         return _measured;
     }
 
     public override void Layout(Offset origin)
     {
         var bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _measured.Width,
-            _measured.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _measured.Width,
+            height: _measured.Height
         );
 
         // Change-gate the (potentially expensive) domain resolve + geometry rebuild: a chart in a
@@ -499,8 +513,11 @@ public class Chart : Widget
     private bool HasCartesianMarks()
     {
         foreach (var m in Marks)
+        {
             if (!m.IsPolar)
                 return true;
+        }
+
         return false;
     }
 
@@ -510,11 +527,13 @@ public class Chart : Widget
 
         _hasSecondaryAxis = false;
         foreach (var m in Marks)
+        {
             if (m is { UseSecondaryYAxis: true, IsPolar: false })
             {
                 _hasSecondaryAxis = true;
                 break;
             }
+        }
 
         // 1. Build the shared domain: user-pinned scales reset, marks accumulate, then finalize.
         XScale?.Reset();
@@ -526,7 +545,7 @@ public class Chart : Widget
             YScale2 = YScale2,
             DataEpoch = _dataEpoch,
         };
-        for (var i = 0; i < Marks.Count; i++)
+        for (int i = 0; i < Marks.Count; i++)
         {
             Marks[i].MarkIndex = i;
             Marks[i].IncludeDomain(domain);
@@ -537,54 +556,64 @@ public class Chart : Widget
         xScale.FinalizeDomain();
         yScale.FinalizeDomain();
         _xWin.Configure(
-            ScrollableX,
-            ZoomableX,
-            VisibleXDomainLength,
-            xScale,
-            MinVisibleFraction
+            scrollable: ScrollableX,
+            zoomable: ZoomableX,
+            baseVisibleLen: VisibleXDomainLength,
+            scale: xScale,
+            minFraction: MinVisibleFraction
         );
         _yWin.Configure(
-            ScrollableY,
-            ZoomableY,
-            VisibleYDomainLength,
-            yScale,
-            MinVisibleFraction
+            scrollable: ScrollableY,
+            zoomable: ZoomableY,
+            baseVisibleLen: VisibleYDomainLength,
+            scale: yScale,
+            minFraction: MinVisibleFraction
         );
 
         var yScale2 = domain.YScale2;
         yScale2?.FinalizeDomain();
 
-        var cartesian = HasCartesianMarks();
-        var showXAxis = XAxis.Show && cartesian;
-        var showYAxis = YAxis.Show && cartesian;
-        var showYAxis2 = _hasSecondaryAxis && YAxis2.Show && yScale2 is not null;
+        bool cartesian = HasCartesianMarks();
+        bool showXAxis = XAxis.Show && cartesian;
+        bool showYAxis = YAxis.Show && cartesian;
+        bool showYAxis2 = _hasSecondaryAxis && YAxis2.Show && yScale2 is not null;
 
         // 2. Ticks (targets derived from the widget extent; margins barely change the counts).
-        var caption = _theme.FontSizeCaption;
-        var xTarget = XAxis.TickTarget ?? Math.Clamp((int)(_measured.Width / 90f), 2, 12);
-        var yTarget = YAxis.TickTarget ?? Math.Clamp((int)(_measured.Height / 46f), 2, 10);
-        BuildAxisTicks(
-            xScale,
-            XAxis,
-            xTarget,
-            _xTicks,
-            showXAxis
+        float caption = _theme.FontSizeCaption;
+        int xTarget = XAxis.TickTarget ?? Math.Clamp(
+            value: (int)(_measured.Width / 90f),
+            min: 2,
+            max: 12
+        );
+        int yTarget = YAxis.TickTarget ?? Math.Clamp(
+            value: (int)(_measured.Height / 46f),
+            min: 2,
+            max: 10
         );
         BuildAxisTicks(
-            yScale,
-            YAxis,
-            yTarget,
-            _yTicks,
-            showYAxis
+            scale: xScale,
+            axis: XAxis,
+            target: xTarget,
+            into: _xTicks,
+            show: showXAxis
+        );
+        BuildAxisTicks(
+            scale: yScale,
+            axis: YAxis,
+            target: yTarget,
+            into: _yTicks,
+            show: showYAxis
         );
         if (showYAxis2)
+        {
             BuildAxisTicks(
-                yScale2!,
-                YAxis2,
-                yTarget,
-                _y2Ticks,
-                true
+                scale: yScale2!,
+                axis: YAxis2,
+                target: yTarget,
+                into: _y2Ticks,
+                show: true
             );
+        }
         else _y2Ticks.Clear();
 
         // 3. Series slots + legend entries (colors depend only on slot order, not geometry).
@@ -597,18 +626,18 @@ public class Chart : Widget
         };
         foreach (var m in Marks) m.CollectSeries(seed);
         _legend.Clear();
-        foreach (var m in Marks) m.CollectLegend(seed, _legend);
+        foreach (var m in Marks) m.CollectLegend(ctx: seed, entries: _legend);
         DedupeLegend();
 
         // 4. Margins around the plot.
         float top = 8f, bottom = 4f, leading = 8f, trailing = 8f;
 
-        var legendVisible = LegendPosition switch {
+        bool legendVisible = LegendPosition switch {
             ChartLegendPosition.Hidden => false,
             ChartLegendPosition.Auto => _legend.Count >= 2,
             _ => _legend.Count > 0,
         };
-        var legendHeight = legendVisible ? LegendRowHeight * CountLegendRows() : 0f;
+        float legendHeight = legendVisible ? LegendRowHeight * CountLegendRows() : 0f;
         if (legendVisible && LegendPosition != ChartLegendPosition.Bottom) top += legendHeight + 6f;
         if (legendVisible && LegendPosition == ChartLegendPosition.Bottom)
             bottom += legendHeight + 8f;
@@ -616,17 +645,17 @@ public class Chart : Widget
         if (YAxis.Title is not null) top += caption + 6f;
 
         // Primary y labels on YAxisSide; secondary y labels on the opposite side.
-        var primaryLeading = YAxisSide == ChartYAxisSide.Leading;
+        bool primaryLeading = YAxisSide == ChartYAxisSide.Leading;
         if (showYAxis && YAxis.ShowLabels && YTicks.Count > 0)
         {
-            var side = LabelBandWidth(YTicks, caption);
+            float side = LabelBandWidth(ticks: YTicks, caption: caption);
             if (primaryLeading) leading += side;
             else trailing += side;
         }
 
         if (showYAxis2 && YAxis2.ShowLabels && SecondaryYTicks.Count > 0)
         {
-            var side = LabelBandWidth(SecondaryYTicks, caption);
+            float side = LabelBandWidth(ticks: SecondaryYTicks, caption: caption);
             if (primaryLeading) trailing += side;
             else leading += side;
         }
@@ -639,16 +668,16 @@ public class Chart : Widget
         }
 
         bottom += IndicatorSpaceX;
-        if (showXAxis && XAxis.ShowLabels && XTicks.Count > 0) bottom += caption * 1.2f + 8f;
+        if (showXAxis && XAxis.ShowLabels && XTicks.Count > 0) bottom += (caption * 1.2f) + 8f;
         if (XAxis.Title is not null) bottom += caption + 6f;
 
-        var plotW = MathF.Max(8f, _measured.Width - leading - trailing);
-        var plotH = MathF.Max(8f, _measured.Height - top - bottom);
+        float plotW = MathF.Max(x: 8f, y: _measured.Width - leading - trailing);
+        float plotH = MathF.Max(x: 8f, y: _measured.Height - top - bottom);
         PlotRect = new Rect(
-            Bounds.X + leading,
-            Bounds.Y + top,
-            plotW,
-            plotH
+            x: Bounds.X + leading,
+            y: Bounds.Y + top,
+            width: plotW,
+            height: plotH
         );
 
         // Now the plot rect is known, apply the y window (needs FullExtent already finalized above).
@@ -688,9 +717,11 @@ public class Chart : Widget
 
         EnsureHoverRegistry();
         List<ChartDataPoint>? cluster = null;
-        for (var i = 0; i < _hoverPoints.Count; i++)
+        for (int i = 0; i < _hoverPoints.Count; i++)
+        {
             if (_hoverPoints[i].X == px)
                 (cluster ??= []).Add(_hoverPoints[i]);
+        }
 
         if (cluster is null)
         {
@@ -759,40 +790,46 @@ public class Chart : Widget
             return;
         }
 
-        if (axis.TickValues is { } values) scale.BuildTicksFor(values, axis.Formatter, into);
-        else scale.BuildTicksInto(target, axis.Formatter, into);
+        if (axis.TickValues is { } values)
+            scale.BuildTicksFor(values: values, formatter: axis.Formatter, into: into);
+        else scale.BuildTicksInto(targetCount: target, formatter: axis.Formatter, into: into);
     }
 
     private static float LabelBandWidth(IReadOnlyList<ChartTick> ticks, float caption)
     {
-        var maxW = 0f;
-        foreach (var t in ticks) maxW = MathF.Max(maxW, TextMeasure.Width(t.Label, caption));
+        float maxW = 0f;
+        foreach (var t in ticks)
+            maxW = MathF.Max(x: maxW, y: TextMeasure.Width(text: t.Label, fontSize: caption));
         return maxW + 10f;
     }
 
     private void DedupeLegend()
     {
         var seen = new HashSet<string>();
-        var write = 0;
-        for (var read = 0; read < _legend.Count; read++)
+        int write = 0;
+        for (int read = 0; read < _legend.Count; read++)
+        {
             if (seen.Add(_legend[read].Label))
                 _legend[write++] = _legend[read];
-        _legend.RemoveRange(write, _legend.Count - write);
+        }
+
+        _legend.RemoveRange(index: write, count: _legend.Count - write);
     }
 
-    private float LegendEntryWidth(LegendEntry e)
-    {
-        return 8f + 5f + TextMeasure.Width(e.Label, _theme.FontSizeCaption) + 16f;
-    }
+    private float LegendEntryWidth(LegendEntry e) => 8f + 5f +
+                                                     TextMeasure.Width(
+                                                         text: e.Label,
+                                                         fontSize: _theme.FontSizeCaption
+                                                     ) + 16f;
 
     private int CountLegendRows()
     {
-        var rows = 1;
-        var x = 0f;
-        var maxW = MathF.Max(40f, _measured.Width - 16f);
+        int rows = 1;
+        float x = 0f;
+        float maxW = MathF.Max(x: 40f, y: _measured.Width - 16f);
         foreach (var e in _legend)
         {
-            var w = LegendEntryWidth(e);
+            float w = LegendEntryWidth(e);
             if (x > 0f && x + w > maxW)
             {
                 rows++;
@@ -816,8 +853,8 @@ public class Chart : Widget
         // the whole projection/emit cost is the point of a chart's paint, so culling is a big win.
         if (!paint.IsVisible(Bounds)) return;
 
-        var progress = Animated ? Curves.EaseOut(_progress) : 1f;
-        var dataProgress = Curves.EaseOut(_dataProgress);
+        float progress = Animated ? Curves.EaseOut(_progress) : 1f;
+        float dataProgress = Curves.EaseOut(_dataProgress);
         ctx.Paint = paint;
         ctx.Progress = progress;
         ctx.DataProgress = dataProgress;
@@ -828,29 +865,31 @@ public class Chart : Widget
             _ctxSecondary.DataProgress = dataProgress;
         }
 
-        if (PlotBackground is { } bg) paint.AddRect(PlotRect, bg, 4f);
+        if (PlotBackground is { } bg) paint.AddRect(bounds: PlotRect, color: bg, radius: 4f);
 
-        var cartesian = HasCartesianMarks();
-        if (cartesian) PaintGridAndAxes(paint, ctx);
+        bool cartesian = HasCartesianMarks();
+        if (cartesian) PaintGridAndAxes(paint: paint, ctx: ctx);
         if (cartesian && _selectedRange is { } sel)
+        {
             PaintSelectionBand(
-                paint,
-                ctx,
-                sel.Min,
-                sel.Max
+                paint: paint,
+                ctx: ctx,
+                min: sel.Min,
+                max: sel.Max
             );
+        }
 
         // Marks clip to the plot (slightly padded so edge strokes keep their full width).
         var clip = new Rect(
-            PlotRect.X - 1f,
-            PlotRect.Y - 4f,
-            PlotRect.Width + 2f,
-            PlotRect.Height + 8f
+            x: PlotRect.X - 1f,
+            y: PlotRect.Y - 4f,
+            width: PlotRect.Width + 2f,
+            height: PlotRect.Height + 8f
         );
         paint.AddClipStart(clip);
         foreach (var m in Marks) m.Paint(ContextFor(m));
         if (cartesian) PaintAnnotations(paint);
-        OverlayPainter?.Invoke(paint, Proxy);
+        OverlayPainter?.Invoke(arg1: paint, arg2: Proxy);
         paint.AddClipEnd();
 
         // Live drag-selection rectangle (drawn above the clip so its label isn't cut).
@@ -864,15 +903,18 @@ public class Chart : Widget
         if (Interactive)
         {
             if (PinnedHover is { } pin)
+            {
                 PaintHover(
-                    paint,
-                    ctx,
-                    pin,
-                    true
+                    paint: paint,
+                    ctx: ctx,
+                    hover: pin,
+                    pinned: true
                 );
+            }
+
             if (CurrentHover is { } hover &&
-                (PinnedHover is null || !HoverEquals(hover, PinnedHover)))
-                PaintHover(paint, ctx, hover);
+                (PinnedHover is null || !HoverEquals(a: hover, b: PinnedHover)))
+                PaintHover(paint: paint, ctx: ctx, hover: hover);
         }
 
         ctx.Paint = null;
@@ -886,79 +928,86 @@ public class Chart : Widget
 
         // Indexed loops: foreach over the IReadOnlyList props boxes an enumerator per paint.
         if (YAxis.ShowGrid)
-            for (var i = 0; i < _yTicks.Count; i++)
+        {
+            for (int i = 0; i < _yTicks.Count; i++)
             {
                 var t = _yTicks[i];
-                var y = plot.Bottom - t.Position * plot.Height;
+                float y = plot.Bottom - (t.Position * plot.Height);
                 if (y < plot.Y - 0.5f || y > plot.Bottom + 0.5f) continue;
                 var style = YAxis.TickStyle?.Invoke(t.Value) ?? default;
                 if (style.HideGrid) continue;
                 paint.AddRect(
-                    new Rect(
-                        plot.X,
-                        y,
-                        plot.Width,
-                        style.GridWidth > 0f ? style.GridWidth : 1f
+                    bounds: new Rect(
+                        x: plot.X,
+                        y: y,
+                        width: plot.Width,
+                        height: style.GridWidth > 0f ? style.GridWidth : 1f
                     ),
-                    style.GridColor ?? grid
+                    color: style.GridColor ?? grid
                 );
             }
+        }
 
         if (XAxis.ShowGrid)
-            for (var i = 0; i < _xTicks.Count; i++)
+        {
+            for (int i = 0; i < _xTicks.Count; i++)
             {
                 var t = _xTicks[i];
-                var x = plot.X + t.Position * plot.Width;
+                float x = plot.X + (t.Position * plot.Width);
                 if (x < plot.X - 0.5f || x > plot.Right + 0.5f) continue;
                 var style = XAxis.TickStyle?.Invoke(t.Value) ?? default;
                 if (style.HideGrid) continue;
                 paint.AddRect(
-                    new Rect(
-                        x,
-                        plot.Y,
-                        style.GridWidth > 0f ? style.GridWidth : 1f,
-                        plot.Height
+                    bounds: new Rect(
+                        x: x,
+                        y: plot.Y,
+                        width: style.GridWidth > 0f ? style.GridWidth : 1f,
+                        height: plot.Height
                     ),
-                    style.GridColor ?? grid
+                    color: style.GridColor ?? grid
                 );
             }
+        }
 
         // A slightly stronger zero line when the value axis crosses zero.
         if (ctx.YScale is LinearScale { DomainMin: < 0, DomainMax: > 0 })
         {
-            var zero = ctx.MapYNumeric(0);
+            float zero = ctx.MapYNumeric(0);
             paint.AddRect(
-                new Rect(
-                    plot.X,
-                    zero,
-                    plot.Width,
-                    1f
+                bounds: new Rect(
+                    x: plot.X,
+                    y: zero,
+                    width: plot.Width,
+                    height: 1f
                 ),
-                _theme.TextMuted.WithAlpha(0.45f)
+                color: _theme.TextMuted.WithAlpha(0.45f)
             );
         }
 
         if (XAxis.ShowLine)
+        {
             paint.AddRect(
-                new Rect(
-                    plot.X,
-                    plot.Bottom,
-                    plot.Width,
-                    1f
+                bounds: new Rect(
+                    x: plot.X,
+                    y: plot.Bottom,
+                    width: plot.Width,
+                    height: 1f
                 ),
-                _theme.TextMuted
+                color: _theme.TextMuted
             );
+        }
+
         if (YAxis.ShowLine)
         {
-            var x = YAxisSide == ChartYAxisSide.Trailing ? plot.Right : plot.X - 1f;
+            float x = YAxisSide == ChartYAxisSide.Trailing ? plot.Right : plot.X - 1f;
             paint.AddRect(
-                new Rect(
-                    x,
-                    plot.Y,
-                    1f,
-                    plot.Height
+                bounds: new Rect(
+                    x: x,
+                    y: plot.Y,
+                    width: 1f,
+                    height: plot.Height
                 ),
-                _theme.TextMuted
+                color: _theme.TextMuted
             );
         }
     }
@@ -966,79 +1015,81 @@ public class Chart : Widget
     private void PaintAxisLabels(PaintList paint)
     {
         var plot = PlotRect;
-        var caption = _theme.FontSizeCaption;
+        float caption = _theme.FontSizeCaption;
         var color = _theme.TextMuted;
 
-        var primaryLeading = YAxisSide == ChartYAxisSide.Leading;
+        bool primaryLeading = YAxisSide == ChartYAxisSide.Leading;
 
         if (YAxis.Show && YAxis.ShowLabels)
-            for (var i = 0; i < _yTicks.Count; i++)
+        {
+            for (int i = 0; i < _yTicks.Count; i++)
             {
                 var t = _yTicks[i];
-                var y = plot.Bottom - t.Position * plot.Height;
+                float y = plot.Bottom - (t.Position * plot.Height);
                 if (y < plot.Y - 2f || y > plot.Bottom + 2f) continue;
                 var style = YAxis.TickStyle?.Invoke(t.Value) ?? default;
                 if (style.HideLabel) continue;
-                var w = TextMeasure.Width(t.Label, caption);
-                var x = primaryLeading ? plot.X - 8f - w : plot.Right + 8f;
+                float w = TextMeasure.Width(text: t.Label, fontSize: caption);
+                float x = primaryLeading ? plot.X - 8f - w : plot.Right + 8f;
                 paint.AddText(
-                    t.Label,
-                    x,
-                    y + caption * 0.36f,
-                    style.LabelColor ?? color,
-                    caption
+                    text: t.Label,
+                    baselineX: x,
+                    baselineY: y + (caption * 0.36f),
+                    color: style.LabelColor ?? color,
+                    fontSize: caption
                 );
             }
+        }
 
         // Secondary y labels on the opposite side, tinted toward the axis's own series colour.
         if (_ctxSecondary is not null && YAxis2.Show && YAxis2.ShowLabels)
         {
             var sColor = SecondaryAxisColor();
-            for (var i = 0; i < _y2Ticks.Count; i++)
+            for (int i = 0; i < _y2Ticks.Count; i++)
             {
                 var t = _y2Ticks[i];
-                var y = plot.Bottom - t.Position * plot.Height;
+                float y = plot.Bottom - (t.Position * plot.Height);
                 if (y < plot.Y - 2f || y > plot.Bottom + 2f) continue;
                 var style = YAxis2.TickStyle?.Invoke(t.Value) ?? default;
                 if (style.HideLabel) continue;
-                var w = TextMeasure.Width(t.Label, caption);
-                var x = primaryLeading ? plot.Right + 8f : plot.X - 8f - w;
+                float w = TextMeasure.Width(text: t.Label, fontSize: caption);
+                float x = primaryLeading ? plot.Right + 8f : plot.X - 8f - w;
                 paint.AddText(
-                    t.Label,
-                    x,
-                    y + caption * 0.36f,
-                    style.LabelColor ?? sColor,
-                    caption
+                    text: t.Label,
+                    baselineX: x,
+                    baselineY: y + (caption * 0.36f),
+                    color: style.LabelColor ?? sColor,
+                    fontSize: caption
                 );
             }
         }
 
         if (XAxis.Show && XAxis.ShowLabels)
         {
-            var baseline = plot.Bottom + 8f + IndicatorSpaceX + caption * 0.8f;
-            var lastRight = float.NegativeInfinity;
-            for (var i = 0; i < _xTicks.Count; i++)
+            float baseline = plot.Bottom + 8f + IndicatorSpaceX + (caption * 0.8f);
+            float lastRight = float.NegativeInfinity;
+            for (int i = 0; i < _xTicks.Count; i++)
             {
                 var t = _xTicks[i];
-                var cx = plot.X + t.Position * plot.Width;
+                float cx = plot.X + (t.Position * plot.Width);
                 if (cx < plot.X - 2f || cx > plot.Right + 2f) continue;
                 var style = XAxis.TickStyle?.Invoke(t.Value) ?? default;
                 if (style.HideLabel) continue;
-                var w = TextMeasure.Width(t.Label, caption);
+                float w = TextMeasure.Width(text: t.Label, fontSize: caption);
                 // Floor the max bound at the min: a label wider than the chart would invert the clamp
                 // bounds and Math.Clamp throws on min > max (narrow grid cells / long tick labels).
-                var left = Math.Clamp(
-                    cx - w / 2f,
-                    Bounds.X + 2f,
-                    MathF.Max(Bounds.X + 2f, Bounds.Right - w - 2f)
+                float left = Math.Clamp(
+                    value: cx - (w / 2f),
+                    min: Bounds.X + 2f,
+                    max: MathF.Max(x: Bounds.X + 2f, y: Bounds.Right - w - 2f)
                 );
                 if (left < lastRight + 6f) continue; // skip colliding labels
                 paint.AddText(
-                    t.Label,
-                    left,
-                    baseline,
-                    style.LabelColor ?? color,
-                    caption
+                    text: t.Label,
+                    baselineX: left,
+                    baselineY: baseline,
+                    color: style.LabelColor ?? color,
+                    fontSize: caption
                 );
                 lastRight = left + w;
             }
@@ -1053,58 +1104,60 @@ public class Chart : Widget
         if (_xWin.Active)
         {
             var track = new Rect(
-                plot.X,
-                plot.Bottom + 3f,
-                plot.Width,
-                3f
+                x: plot.X,
+                y: plot.Bottom + 3f,
+                width: plot.Width,
+                height: 3f
             );
-            paint.AddRect(track, _theme.OnSurface.WithAlpha(0.08f), 1.5f);
-            var thumbW = MathF.Max(20f, plot.Width * (float)(_xWin.Len / _xWin.FullSpan));
-            var t = _xWin.Max > _xWin.Min
+            paint.AddRect(bounds: track, color: _theme.OnSurface.WithAlpha(0.08f), radius: 1.5f);
+            float thumbW = MathF.Max(x: 20f, y: plot.Width * (float)(_xWin.Len / _xWin.FullSpan));
+            double t = _xWin.Max > _xWin.Min
                 ? (_xWin.CurrentOffset - _xWin.Min) / (_xWin.Max - _xWin.Min)
                 : 0.0;
-            var thumbX = plot.X + (plot.Width - thumbW) * (float)Math.Clamp(t, 0, 1);
+            float thumbX = plot.X +
+                           ((plot.Width - thumbW) * (float)Math.Clamp(value: t, min: 0, max: 1));
             paint.AddRect(
-                new Rect(
-                    thumbX,
-                    plot.Bottom + 3f,
-                    thumbW,
-                    3f
+                bounds: new Rect(
+                    x: thumbX,
+                    y: plot.Bottom + 3f,
+                    width: thumbW,
+                    height: 3f
                 ),
-                _theme.TextMuted.WithAlpha(0.6f),
-                1.5f
+                color: _theme.TextMuted.WithAlpha(0.6f),
+                radius: 1.5f
             );
         }
 
         if (_yWin.Active)
         {
             // Indicator on whichever side has no primary y labels.
-            var ix = YAxisSide == ChartYAxisSide.Trailing ? plot.X - 5f : plot.Right + 2f;
+            float ix = YAxisSide == ChartYAxisSide.Trailing ? plot.X - 5f : plot.Right + 2f;
             paint.AddRect(
-                new Rect(
-                    ix,
-                    plot.Y,
-                    3f,
-                    plot.Height
+                bounds: new Rect(
+                    x: ix,
+                    y: plot.Y,
+                    width: 3f,
+                    height: plot.Height
                 ),
-                _theme.OnSurface.WithAlpha(0.08f),
-                1.5f
+                color: _theme.OnSurface.WithAlpha(0.08f),
+                radius: 1.5f
             );
-            var thumbH = MathF.Max(20f, plot.Height * (float)(_yWin.Len / _yWin.FullSpan));
-            var t = _yWin.Max > _yWin.Min
+            float thumbH = MathF.Max(x: 20f, y: plot.Height * (float)(_yWin.Len / _yWin.FullSpan));
+            double t = _yWin.Max > _yWin.Min
                 ? (_yWin.CurrentOffset - _yWin.Min) / (_yWin.Max - _yWin.Min)
                 : 0.0;
             // Y domain grows upward, so a larger offset places the thumb higher (smaller screen y).
-            var thumbY = plot.Bottom - thumbH - (plot.Height - thumbH) * (float)Math.Clamp(t, 0, 1);
+            float thumbY = plot.Bottom - thumbH -
+                           ((plot.Height - thumbH) * (float)Math.Clamp(value: t, min: 0, max: 1));
             paint.AddRect(
-                new Rect(
-                    ix,
-                    thumbY,
-                    3f,
-                    thumbH
+                bounds: new Rect(
+                    x: ix,
+                    y: thumbY,
+                    width: 3f,
+                    height: thumbH
                 ),
-                _theme.TextMuted.WithAlpha(0.6f),
-                1.5f
+                color: _theme.TextMuted.WithAlpha(0.6f),
+                radius: 1.5f
             );
         }
     }
@@ -1113,8 +1166,17 @@ public class Chart : Widget
     {
         // Tint the secondary axis toward the first secondary-bound mark's colour for legibility.
         foreach (var m in Marks)
+        {
             if (m is { UseSecondaryYAxis: true, IsPolar: false })
-                return _ctxSecondary!.ColorFor(m.Name ?? "", m.Color, m.MarkIndex);
+            {
+                return _ctxSecondary!.ColorFor(
+                    series: m.Name ?? "",
+                    markOverride: m.Color,
+                    markIndex: m.MarkIndex
+                );
+            }
+        }
+
         return _theme.TextMuted;
     }
 
@@ -1123,7 +1185,7 @@ public class Chart : Widget
     private void PaintAnnotations(PaintList paint)
     {
         if (Annotations.Count == 0) return;
-        var caption = _theme.FontSizeCaption;
+        float caption = _theme.FontSizeCaption;
         var plot = PlotRect;
 
         foreach (var a in Annotations)
@@ -1131,218 +1193,231 @@ public class Chart : Widget
             if (string.IsNullOrEmpty(a.Text) && !a.ShowMarker) continue;
             var ctx = a.UseSecondaryYAxis && _ctxSecondary is not null ? _ctxSecondary : _ctx!;
 
-            var ax = a.X is { } xv ? ctx.MapX(xv) : plot.X + plot.Width;
-            var ay = a.Y is { } yv ? ctx.MapY(yv) : plot.Y;
-            var hasPoint = a.X is not null && a.Y is not null;
+            float ax = a.X is { } xv ? ctx.MapX(xv) : plot.X + plot.Width;
+            float ay = a.Y is { } yv ? ctx.MapY(yv) : plot.Y;
+            bool hasPoint = a.X is not null && a.Y is not null;
 
             var color = a.Color ?? _theme.TextSecondary;
-            var w = TextMeasure.Width(a.Text, caption);
-            var (tx, ty) = a.Placement switch {
-                ChartAnnotationPlacement.Above => (ax - w / 2f, ay - 8f - caption),
-                ChartAnnotationPlacement.Below => (ax - w / 2f, ay + 10f),
-                ChartAnnotationPlacement.Leading => (ax - w - 8f, ay - caption / 2f),
-                ChartAnnotationPlacement.Trailing => (ax + 8f, ay - caption / 2f),
-                _ => (ax - w / 2f, ay - caption / 2f), // Over
+            float w = TextMeasure.Width(text: a.Text, fontSize: caption);
+            (float tx, float ty) = a.Placement switch {
+                ChartAnnotationPlacement.Above => (ax - (w / 2f), ay - 8f - caption),
+                ChartAnnotationPlacement.Below => (ax - (w / 2f), ay + 10f),
+                ChartAnnotationPlacement.Leading => (ax - w - 8f, ay - (caption / 2f)),
+                ChartAnnotationPlacement.Trailing => (ax + 8f, ay - (caption / 2f)),
+                _ => (ax - (w / 2f), ay - (caption / 2f)), // Over
             };
             // When the label is wider (or taller) than the plot, the upper clamp bound can fall below the
             // lower one — Math.Clamp throws on min > max. Keep max ≥ min so an oversized label just pins to
             // the top-left of the plot instead of crashing (narrow grid cells, tiny plots).
-            tx = Math.Clamp(tx, plot.X + 2f, MathF.Max(plot.X + 2f, plot.Right - w - 2f));
-            ty = Math.Clamp(ty, plot.Y + 2f, MathF.Max(plot.Y + 2f, plot.Bottom - caption - 2f));
+            tx = Math.Clamp(
+                value: tx,
+                min: plot.X + 2f,
+                max: MathF.Max(x: plot.X + 2f, y: plot.Right - w - 2f)
+            );
+            ty = Math.Clamp(
+                value: ty,
+                min: plot.Y + 2f,
+                max: MathF.Max(x: plot.Y + 2f, y: plot.Bottom - caption - 2f)
+            );
 
             if (a.ShowMarker && hasPoint)
             {
                 paint.AddRect(
-                    new Rect(
-                        ax - 3f,
-                        ay - 3f,
-                        6f,
-                        6f
+                    bounds: new Rect(
+                        x: ax - 3f,
+                        y: ay - 3f,
+                        width: 6f,
+                        height: 6f
                     ),
-                    color,
-                    3f
+                    color: color,
+                    radius: 3f
                 );
                 paint.AddRect(
-                    new Rect(
-                        ax - 3.5f,
-                        ay - 3.5f,
-                        7f,
-                        7f
+                    bounds: new Rect(
+                        x: ax - 3.5f,
+                        y: ay - 3.5f,
+                        width: 7f,
+                        height: 7f
                     ),
-                    _theme.Background.WithAlpha(0.6f),
-                    3.5f
+                    color: _theme.Background.WithAlpha(0.6f),
+                    radius: 3.5f
                 );
                 paint.AddRect(
-                    new Rect(
-                        ax - 3f,
-                        ay - 3f,
-                        6f,
-                        6f
+                    bounds: new Rect(
+                        x: ax - 3f,
+                        y: ay - 3f,
+                        width: 6f,
+                        height: 6f
                     ),
-                    color,
-                    3f
+                    color: color,
+                    radius: 3f
                 );
             }
 
             if (a.Background is { } bgc)
+            {
                 paint.AddRect(
-                    new Rect(
-                        tx - 5f,
-                        ty + caption * 0.15f - caption,
-                        w + 10f,
-                        caption + 6f
+                    bounds: new Rect(
+                        x: tx - 5f,
+                        y: ty + (caption * 0.15f) - caption,
+                        width: w + 10f,
+                        height: caption + 6f
                     ),
-                    bgc,
-                    4f
+                    color: bgc,
+                    radius: 4f
                 );
+            }
+
             if (!string.IsNullOrEmpty(a.Text))
+            {
                 paint.AddText(
-                    a.Text,
-                    tx,
-                    ty + caption * 0.9f,
-                    color,
-                    caption,
+                    text: a.Text,
+                    baselineX: tx,
+                    baselineY: ty + (caption * 0.9f),
+                    color: color,
+                    fontSize: caption,
                     fontWeight: FontWeight.W600
                 );
+            }
         }
     }
 
     private void PaintSelectionBand(PaintList paint, ChartRenderContext ctx, double min, double max)
     {
-        var x0 = Math.Clamp(ctx.MapXNumeric(min), PlotRect.X, PlotRect.Right);
-        var x1 = Math.Clamp(ctx.MapXNumeric(max), PlotRect.X, PlotRect.Right);
+        float x0 = Math.Clamp(value: ctx.MapXNumeric(min), min: PlotRect.X, max: PlotRect.Right);
+        float x1 = Math.Clamp(value: ctx.MapXNumeric(max), min: PlotRect.X, max: PlotRect.Right);
         if (x1 < x0) (x0, x1) = (x1, x0);
         paint.AddRect(
-            new Rect(
-                x0,
-                PlotRect.Y,
-                MathF.Max(1f, x1 - x0),
-                PlotRect.Height
+            bounds: new Rect(
+                x: x0,
+                y: PlotRect.Y,
+                width: MathF.Max(x: 1f, y: x1 - x0),
+                height: PlotRect.Height
             ),
-            _theme.Primary.WithAlpha(0.14f)
+            color: _theme.Primary.WithAlpha(0.14f)
         );
         paint.AddRect(
-            new Rect(
-                x0,
-                PlotRect.Y,
-                1f,
-                PlotRect.Height
+            bounds: new Rect(
+                x: x0,
+                y: PlotRect.Y,
+                width: 1f,
+                height: PlotRect.Height
             ),
-            _theme.Primary.WithAlpha(0.7f)
+            color: _theme.Primary.WithAlpha(0.7f)
         );
         paint.AddRect(
-            new Rect(
-                x1,
-                PlotRect.Y,
-                1f,
-                PlotRect.Height
+            bounds: new Rect(
+                x: x1,
+                y: PlotRect.Y,
+                width: 1f,
+                height: PlotRect.Height
             ),
-            _theme.Primary.WithAlpha(0.7f)
+            color: _theme.Primary.WithAlpha(0.7f)
         );
     }
 
     private void PaintLiveSelection(PaintList paint)
     {
-        var x0 = Math.Min(_selectStartPx, _selectEndPx);
-        var x1 = Math.Max(_selectStartPx, _selectEndPx);
-        x0 = Math.Clamp(x0, PlotRect.X, PlotRect.Right);
-        x1 = Math.Clamp(x1, PlotRect.X, PlotRect.Right);
+        float x0 = Math.Min(val1: _selectStartPx, val2: _selectEndPx);
+        float x1 = Math.Max(val1: _selectStartPx, val2: _selectEndPx);
+        x0 = Math.Clamp(value: x0, min: PlotRect.X, max: PlotRect.Right);
+        x1 = Math.Clamp(value: x1, min: PlotRect.X, max: PlotRect.Right);
         paint.AddRect(
-            new Rect(
-                x0,
-                PlotRect.Y,
-                MathF.Max(1f, x1 - x0),
-                PlotRect.Height
+            bounds: new Rect(
+                x: x0,
+                y: PlotRect.Y,
+                width: MathF.Max(x: 1f, y: x1 - x0),
+                height: PlotRect.Height
             ),
-            _theme.Primary.WithAlpha(0.18f)
+            color: _theme.Primary.WithAlpha(0.18f)
         );
         paint.AddRect(
-            new Rect(
-                x0,
-                PlotRect.Y,
-                1f,
-                PlotRect.Height
+            bounds: new Rect(
+                x: x0,
+                y: PlotRect.Y,
+                width: 1f,
+                height: PlotRect.Height
             ),
-            _theme.Primary.WithAlpha(0.8f)
+            color: _theme.Primary.WithAlpha(0.8f)
         );
         paint.AddRect(
-            new Rect(
-                x1,
-                PlotRect.Y,
-                1f,
-                PlotRect.Height
+            bounds: new Rect(
+                x: x1,
+                y: PlotRect.Y,
+                width: 1f,
+                height: PlotRect.Height
             ),
-            _theme.Primary.WithAlpha(0.8f)
+            color: _theme.Primary.WithAlpha(0.8f)
         );
     }
 
     private void PaintTitles(PaintList paint)
     {
-        var caption = _theme.FontSizeCaption;
+        float caption = _theme.FontSizeCaption;
         if (YAxis.Title is not null)
         {
-            var y = PlotRect.Y - 10f;
-            var x = YAxisSide == ChartYAxisSide.Trailing
-                ? PlotRect.Right - TextMeasure.Width(YAxis.Title, caption)
+            float y = PlotRect.Y - 10f;
+            float x = YAxisSide == ChartYAxisSide.Trailing
+                ? PlotRect.Right - TextMeasure.Width(text: YAxis.Title, fontSize: caption)
                 : PlotRect.X;
             paint.AddText(
-                YAxis.Title,
-                x,
-                y,
-                _theme.TextSecondary,
-                caption
+                text: YAxis.Title,
+                baselineX: x,
+                baselineY: y,
+                color: _theme.TextSecondary,
+                fontSize: caption
             );
         }
 
         if (_ctxSecondary is not null && YAxis2.Title is not null)
         {
-            var y = PlotRect.Y - 10f;
-            var x = YAxisSide == ChartYAxisSide.Trailing
+            float y = PlotRect.Y - 10f;
+            float x = YAxisSide == ChartYAxisSide.Trailing
                 ? PlotRect.X
-                : PlotRect.Right - TextMeasure.Width(YAxis2.Title, caption);
+                : PlotRect.Right - TextMeasure.Width(text: YAxis2.Title, fontSize: caption);
             paint.AddText(
-                YAxis2.Title,
-                x,
-                y,
-                SecondaryAxisColor(),
-                caption
+                text: YAxis2.Title,
+                baselineX: x,
+                baselineY: y,
+                color: SecondaryAxisColor(),
+                fontSize: caption
             );
         }
 
         if (XAxis.Title is not null)
         {
-            var w = TextMeasure.Width(XAxis.Title, caption);
-            var x = PlotRect.X + (PlotRect.Width - w) / 2f;
+            float w = TextMeasure.Width(text: XAxis.Title, fontSize: caption);
+            float x = PlotRect.X + ((PlotRect.Width - w) / 2f);
             paint.AddText(
-                XAxis.Title,
-                x,
-                Bounds.Bottom - 6f,
-                _theme.TextSecondary,
-                caption
+                text: XAxis.Title,
+                baselineX: x,
+                baselineY: Bounds.Bottom - 6f,
+                color: _theme.TextSecondary,
+                fontSize: caption
             );
         }
     }
 
     private void PaintLegend(PaintList paint)
     {
-        var visible = LegendPosition switch {
+        bool visible = LegendPosition switch {
             ChartLegendPosition.Hidden => false,
             ChartLegendPosition.Auto => _legend.Count >= 2,
             _ => _legend.Count > 0,
         };
         if (!visible) return;
 
-        var caption = _theme.FontSizeCaption;
-        var rows = CountLegendRows();
-        var y = LegendPosition == ChartLegendPosition.Bottom
-            ? Bounds.Bottom - rows * LegendRowHeight - 2f
+        float caption = _theme.FontSizeCaption;
+        int rows = CountLegendRows();
+        float y = LegendPosition == ChartLegendPosition.Bottom
+            ? Bounds.Bottom - (rows * LegendRowHeight) - 2f
             : Bounds.Y + 4f;
 
-        var x = Bounds.X + 8f;
-        var maxRight = Bounds.Right - 8f;
+        float x = Bounds.X + 8f;
+        float maxRight = Bounds.Right - 8f;
         foreach (var e in _legend)
         {
-            var w = LegendEntryWidth(e);
+            float w = LegendEntryWidth(e);
             if (x > Bounds.X + 8f && x + w > maxRight)
             {
                 x = Bounds.X + 8f;
@@ -1350,21 +1425,21 @@ public class Chart : Widget
             }
 
             paint.AddRect(
-                new Rect(
-                    x,
-                    y + LegendRowHeight / 2f - 4f,
-                    8f,
-                    8f
+                bounds: new Rect(
+                    x: x,
+                    y: y + (LegendRowHeight / 2f) - 4f,
+                    width: 8f,
+                    height: 8f
                 ),
-                e.Color,
-                4f
+                color: e.Color,
+                radius: 4f
             );
             paint.AddText(
-                e.Label,
-                x + 13f,
-                y + LegendRowHeight / 2f + caption * 0.36f,
-                _theme.TextSecondary,
-                caption
+                text: e.Label,
+                baselineX: x + 13f,
+                baselineY: y + (LegendRowHeight / 2f) + (caption * 0.36f),
+                color: _theme.TextSecondary,
+                fontSize: caption
             );
             x += w;
         }
@@ -1380,42 +1455,42 @@ public class Chart : Widget
         // A pinned column always draws its crosshair (accent-tinted, with a pin dot at the top).
         if (pinned || !_hoverFromRegion)
         {
-            var cx = hover.Points[0].ScreenX;
+            float cx = hover.Points[0].ScreenX;
             paint.AddRect(
-                new Rect(
-                    cx,
-                    plot.Y,
-                    1f,
-                    plot.Height
+                bounds: new Rect(
+                    x: cx,
+                    y: plot.Y,
+                    width: 1f,
+                    height: plot.Height
                 ),
-                pinned ? _theme.Primary.WithAlpha(0.65f) : _theme.TextMuted.WithAlpha(0.5f)
+                color: pinned ? _theme.Primary.WithAlpha(0.65f) : _theme.TextMuted.WithAlpha(0.5f)
             );
             if (pinned)
             {
                 var dot = new Rect(
-                    cx - 3.5f,
-                    plot.Y - 3.5f,
-                    7f,
-                    7f
+                    x: cx - 3.5f,
+                    y: plot.Y - 3.5f,
+                    width: 7f,
+                    height: 7f
                 );
-                paint.AddRect(dot, _theme.Primary, 3.5f);
+                paint.AddRect(bounds: dot, color: _theme.Primary, radius: 3.5f);
             }
 
             foreach (var p in hover.Points)
             {
                 if (p.ScreenY < plot.Y - 2f || p.ScreenY > plot.Bottom + 2f) continue;
                 var ring = new Rect(
-                    p.ScreenX - 5f,
-                    p.ScreenY - 5f,
-                    10f,
-                    10f
+                    x: p.ScreenX - 5f,
+                    y: p.ScreenY - 5f,
+                    width: 10f,
+                    height: 10f
                 );
-                paint.AddRect(ring, _theme.Background, 5f);
+                paint.AddRect(bounds: ring, color: _theme.Background, radius: 5f);
                 paint.AddBorder(
-                    ring,
-                    p.Color,
-                    5f,
-                    2.5f
+                    bounds: ring,
+                    color: p.Color,
+                    radius: 5f,
+                    width: 2.5f
                 );
             }
         }
@@ -1423,86 +1498,98 @@ public class Chart : Widget
         if (!ShowTooltip) return;
 
         // Tooltip card near the cursor, clamped into the widget.
-        var caption = _theme.FontSizeCaption;
+        float caption = _theme.FontSizeCaption;
         const float pad = 9f;
         const float rowH = 17f;
-        var titleW = TextMeasure.Width(hover.XLabel, caption, FontWeight.W600);
-        var maxRowW = titleW;
+        float titleW = TextMeasure.Width(
+            text: hover.XLabel,
+            fontSize: caption,
+            weight: FontWeight.W600
+        );
+        float maxRowW = titleW;
         foreach (var p in hover.Points)
         {
-            var label = p.Series.Length > 0 ? p.Series : hover.XLabel;
-            var w = 11f + TextMeasure.Width(label, caption) + 14f +
-                    TextMeasure.Width(p.ValueLabel, caption, FontWeight.W600);
-            maxRowW = MathF.Max(maxRowW, w);
+            string label = p.Series.Length > 0 ? p.Series : hover.XLabel;
+            float w = 11f + TextMeasure.Width(text: label, fontSize: caption) + 14f +
+                      TextMeasure.Width(
+                          text: p.ValueLabel,
+                          fontSize: caption,
+                          weight: FontWeight.W600
+                      );
+            maxRowW = MathF.Max(x: maxRowW, y: w);
         }
 
-        var cardW = maxRowW + pad * 2f;
-        var cardH = pad * 2f + rowH * (hover.Points.Count + 1) - 4f;
+        float cardW = maxRowW + (pad * 2f);
+        float cardH = (pad * 2f) + (rowH * (hover.Points.Count + 1)) - 4f;
         // A pinned card anchors at its column near the top of the plot (the cursor may be gone);
         // a live card follows the cursor.
-        var anchorX = pinned ? hover.Points[0].ScreenX + 14f : _cursor.X + 14f;
-        var anchorY = pinned ? plot.Y + 6f : _cursor.Y - cardH - 10f;
+        float anchorX = pinned ? hover.Points[0].ScreenX + 14f : _cursor.X + 14f;
+        float anchorY = pinned ? plot.Y + 6f : _cursor.Y - cardH - 10f;
         // Floor each max bound at its min: a tooltip card larger than the (narrow/short) chart would
         // invert the clamp bounds and Math.Clamp throws on min > max — crashes on hover in a small cell.
-        var cardX = Math.Clamp(
-            anchorX,
-            Bounds.X + 2f,
-            MathF.Max(Bounds.X + 2f, Bounds.Right - cardW - 2f)
+        float cardX = Math.Clamp(
+            value: anchorX,
+            min: Bounds.X + 2f,
+            max: MathF.Max(x: Bounds.X + 2f, y: Bounds.Right - cardW - 2f)
         );
-        var cardY = Math.Clamp(
-            anchorY,
-            Bounds.Y + 2f,
-            MathF.Max(Bounds.Y + 2f, Bounds.Bottom - cardH - 2f)
+        float cardY = Math.Clamp(
+            value: anchorY,
+            min: Bounds.Y + 2f,
+            max: MathF.Max(x: Bounds.Y + 2f, y: Bounds.Bottom - cardH - 2f)
         );
         var card = new Rect(
-            cardX,
-            cardY,
-            cardW,
-            cardH
+            x: cardX,
+            y: cardY,
+            width: cardW,
+            height: cardH
         );
 
-        paint.AddElevation(card, 6f, Elevation.Z2);
-        paint.AddRect(card, _theme.CardRaised, 6f);
-        paint.AddBorder(card, _theme.Border, 6f);
+        paint.AddElevation(bounds: card, radius: 6f, style: Elevation.Z2);
+        paint.AddRect(bounds: card, color: _theme.CardRaised, radius: 6f);
+        paint.AddBorder(bounds: card, color: _theme.Border, radius: 6f);
 
-        var textY = cardY + pad + caption * 0.8f;
+        float textY = cardY + pad + (caption * 0.8f);
         paint.AddText(
-            hover.XLabel,
-            cardX + pad,
-            textY,
-            _theme.TextSecondary,
-            caption,
+            text: hover.XLabel,
+            baselineX: cardX + pad,
+            baselineY: textY,
+            color: _theme.TextSecondary,
+            fontSize: caption,
             fontWeight: FontWeight.W600
         );
         foreach (var p in hover.Points)
         {
             textY += rowH;
-            var dotY = textY - caption * 0.36f - 4f;
+            float dotY = textY - (caption * 0.36f) - 4f;
             paint.AddRect(
-                new Rect(
-                    cardX + pad,
-                    dotY,
-                    8f,
-                    8f
+                bounds: new Rect(
+                    x: cardX + pad,
+                    y: dotY,
+                    width: 8f,
+                    height: 8f
                 ),
-                p.Color,
-                4f
+                color: p.Color,
+                radius: 4f
             );
-            var label = p.Series.Length > 0 ? p.Series : hover.XLabel;
+            string label = p.Series.Length > 0 ? p.Series : hover.XLabel;
             paint.AddText(
-                label,
-                cardX + pad + 11f,
-                textY,
-                _theme.TextSecondary,
-                caption
+                text: label,
+                baselineX: cardX + pad + 11f,
+                baselineY: textY,
+                color: _theme.TextSecondary,
+                fontSize: caption
             );
-            var vw = TextMeasure.Width(p.ValueLabel, caption, FontWeight.W600);
+            float vw = TextMeasure.Width(
+                text: p.ValueLabel,
+                fontSize: caption,
+                weight: FontWeight.W600
+            );
             paint.AddText(
-                p.ValueLabel,
-                cardX + cardW - pad - vw,
-                textY,
-                _theme.OnSurface,
-                caption,
+                text: p.ValueLabel,
+                baselineX: cardX + cardW - pad - vw,
+                baselineY: textY,
+                color: _theme.OnSurface,
+                fontSize: caption,
                 fontWeight: FontWeight.W600
             );
         }
@@ -1526,22 +1613,22 @@ public class Chart : Widget
         // Drag-pan the scrollable/zoomed axes; a >3px drag suppresses hover + tap.
         if (_pressed && !EnableXSelection && (_xWin.Active || _yWin.Active))
         {
-            var dx = point.X - _dragStartPoint.X;
-            var dy = point.Y - _dragStartPoint.Y;
+            float dx = point.X - _dragStartPoint.X;
+            float dy = point.Y - _dragStartPoint.Y;
             if (_dragging || MathF.Abs(dx) > 3f || MathF.Abs(dy) > 3f)
             {
                 _dragging = true;
                 if (_xWin.Active)
                 {
-                    var perPx = _xWin.Len / Math.Max(1f, PlotRect.Width);
-                    _xWin.PanTargetTo(_dragStartX - dx * perPx);
+                    double perPx = _xWin.Len / Math.Max(val1: 1f, val2: PlotRect.Width);
+                    _xWin.PanTargetTo(_dragStartX - (dx * perPx));
                 }
 
                 if (_yWin.Active)
                 {
                     // Screen y grows down while the domain grows up: dragging down reveals higher values.
-                    var perPx = _yWin.Len / Math.Max(1f, PlotRect.Height);
-                    _yWin.PanTargetTo(_dragStartY + dy * perPx);
+                    double perPx = _yWin.Len / Math.Max(val1: 1f, val2: PlotRect.Height);
+                    _yWin.PanTargetTo(_dragStartY + (dy * perPx));
                 }
 
                 if (CurrentHover is not null)
@@ -1558,17 +1645,14 @@ public class Chart : Widget
         if (!Interactive) return;
         _hoverPos = point;
         var hover = ResolveHover(point);
-        var changed = !HoverEquals(CurrentHover, hover);
+        bool changed = !HoverEquals(a: CurrentHover, b: hover);
         CurrentHover = hover;
         if (changed)
         {
             OnHoverChanged?.Invoke(hover);
             MarkNeedsPaint();
         }
-        else if (hover is not null && ShowTooltip)
-        {
-            MarkNeedsPaint(); // tooltip follows the cursor
-        }
+        else if (hover is not null && ShowTooltip) MarkNeedsPaint(); // tooltip follows the cursor
     }
 
     public override void OnPointerExit()
@@ -1592,7 +1676,7 @@ public class Chart : Widget
         _dragStartX = _xWin.CurrentOffset;
         _dragStartY = _yWin.CurrentOffset;
 
-        if (EnableXSelection && PlotRect.Contains(point.X, point.Y))
+        if (EnableXSelection && PlotRect.Contains(px: point.X, py: point.Y))
         {
             _selecting = true;
             _selectStartPx = _selectEndPx = point.X;
@@ -1617,21 +1701,19 @@ public class Chart : Widget
                 }
             }
             else
-            {
                 UpdateSelectionFromPixels(true);
-            }
 
             MarkNeedsPaint();
             return;
         }
 
-        var wasDrag = _dragging;
+        bool wasDrag = _dragging;
         _pressed = false;
         _dragging = false;
         if (wasDrag || !Interactive) return;
         var hover = CurrentHover ?? ResolveHover(point);
         if (hover is not null) OnPointTap?.Invoke(hover);
-        if (PinOnTap && PlotRect.Contains(point.X, point.Y)) TogglePin(hover);
+        if (PinOnTap && PlotRect.Contains(px: point.X, py: point.Y)) TogglePin(hover);
     }
 
     private void UpdateSelectionFromPixels(bool commit)
@@ -1639,17 +1721,19 @@ public class Chart : Widget
         if (_ctx is null) return;
         var scale = _ctx.XScale;
         // Invert the plot-x mapping to domain magnitudes.
-        var f0 = Math.Clamp(
-            (Math.Min(_selectStartPx, _selectEndPx) - PlotRect.X) / Math.Max(1f, PlotRect.Width),
-            0f,
-            1f
+        float f0 = Math.Clamp(
+            value: (Math.Min(val1: _selectStartPx, val2: _selectEndPx) - PlotRect.X) /
+                   Math.Max(val1: 1f, val2: PlotRect.Width),
+            min: 0f,
+            max: 1f
         );
-        var f1 = Math.Clamp(
-            (Math.Max(_selectStartPx, _selectEndPx) - PlotRect.X) / Math.Max(1f, PlotRect.Width),
-            0f,
-            1f
+        float f1 = Math.Clamp(
+            value: (Math.Max(val1: _selectStartPx, val2: _selectEndPx) - PlotRect.X) /
+                   Math.Max(val1: 1f, val2: PlotRect.Width),
+            min: 0f,
+            max: 1f
         );
-        var (min, max) = DomainRangeForFractions(scale, f0, f1);
+        (double min, double max) = DomainRangeForFractions(scale: scale, f0: f0, f1: f1);
         _selectedRange = (min, max);
         OnXRangeSelected?.Invoke((min, max));
     }
@@ -1659,21 +1743,18 @@ public class Chart : Widget
     {
         // Windowed continuous scales expose their view via FullExtent + the applied window; recover
         // the visible [min,max] by probing NormalizeNumeric is unnecessary — use the window bounds.
-        var (fullMin, fullMax) = scale.FullExtent;
+        (double fullMin, double fullMax) = scale.FullExtent;
         // For a windowed scale, fraction 0..1 maps across the *visible* window, which equals the
         // scale's current view. Reconstruct it from two probe inversions.
-        var span = fullMax - fullMin;
+        double span = fullMax - fullMin;
         // Binary-free inverse: the scale is affine in the visible window, so sample two known points.
-        var a = scale.NormalizeNumeric(fullMin);
-        var b = scale.NormalizeNumeric(fullMax);
+        float a = scale.NormalizeNumeric(fullMin);
+        float b = scale.NormalizeNumeric(fullMax);
         if (Math.Abs(b - a) < 1e-9)
-            return (fullMin + f0 * span, fullMin + f1 * span);
+            return (fullMin + (f0 * span), fullMin + (f1 * span));
 
         // value = fullMin + (frac - a)/(b - a) * span
-        double Invert(float frac)
-        {
-            return fullMin + (frac - a) / (b - a) * span;
-        }
+        double Invert(float frac) => fullMin + ((frac - a) / (b - a) * span);
 
         return (Invert(f0), Invert(f1));
     }
@@ -1681,28 +1762,28 @@ public class Chart : Widget
     public override void OnScroll(float dx, float dy)
     {
         var mods = Owner?.CurrentModifiers ?? Modifiers.None;
-        var zoomMod = (mods & (Modifiers.Cmd | Modifiers.Ctrl)) != 0;
+        bool zoomMod = (mods & (Modifiers.Cmd | Modifiers.Ctrl)) != 0;
 
         // Modifier + wheel = zoom the enabled axes around the cursor.
         if (zoomMod && (ZoomableX || ZoomableY))
         {
-            var factor = Math.Pow(1.0015, dy * 28f); // wheel up (dy>0) zooms in
-            ZoomBy(factor, _cursor);
+            double factor = Math.Pow(x: 1.0015, y: dy * 28f); // wheel up (dy>0) zooms in
+            ZoomBy(factor: factor, focus: _cursor);
             return;
         }
 
         // Otherwise pan a scrollable window (horizontal delta for x, vertical for y).
-        var handled = false;
+        bool handled = false;
         if (_xWin.Active && MathF.Abs(dx) > 0.01f)
         {
-            var perPx = _xWin.Len / Math.Max(1f, PlotRect.Width);
+            double perPx = _xWin.Len / Math.Max(val1: 1f, val2: PlotRect.Width);
             _xWin.PanTargetBy(dx * 28f * perPx);
             handled = true;
         }
 
         if (_yWin.Active && !_xWin.Active && MathF.Abs(dy) > 0.01f)
         {
-            var perPx = _yWin.Len / Math.Max(1f, PlotRect.Height);
+            double perPx = _yWin.Len / Math.Max(val1: 1f, val2: PlotRect.Height);
             _yWin.PanTargetBy(dy * 28f * perPx);
             handled = true;
         }
@@ -1713,14 +1794,11 @@ public class Chart : Widget
             return;
         }
 
-        base.OnScroll(dx, dy);
+        base.OnScroll(dx: dx, dy: dy);
     }
 
     /// <summary>Pinch zooms the chart wherever ⌘/Ctrl-wheel would (<see cref="ZoomableX" />).</summary>
-    public override bool CanTouchScale()
-    {
-        return ZoomableX || ZoomableY;
-    }
+    public override bool CanTouchScale() => ZoomableX || ZoomableY;
 
     /// <summary>
     ///     The press was taken over (pinch, app background): abandon the pan or the range selection
@@ -1747,14 +1825,12 @@ public class Chart : Widget
         return vertical ? _yWin.Active : _xWin.Active;
     }
 
-    public override void OnTouchScale(float scale, Offset focus)
-    {
-        ZoomBy(scale, focus);
-    }
+    public override void OnTouchScale(float scale, Offset focus) =>
+        ZoomBy(factor: scale, focus: focus);
 
     private static bool HoverEquals(ChartHoverInfo? a, ChartHoverInfo? b)
     {
-        if (ReferenceEquals(a, b)) return true;
+        if (ReferenceEquals(objA: a, objB: b)) return true;
         if (a is null || b is null) return false;
         return a.X == b.X && a.Points.Count == b.Points.Count;
     }
@@ -1766,12 +1842,13 @@ public class Chart : Widget
         EnsureHoverRegistry();
 
         // Region hits first (sectors/cells), topmost mark wins.
-        for (var i = Marks.Count - 1; i >= 0; i--)
+        for (int i = Marks.Count - 1; i >= 0; i--)
+        {
             if (Marks[i].TryHitTest(
-                    ctx,
-                    point.X,
-                    point.Y,
-                    out var hit
+                    ctx: ctx,
+                    x: point.X,
+                    y: point.Y,
+                    point: out var hit
                 ))
             {
                 _hoverFromRegion = true;
@@ -1783,9 +1860,10 @@ public class Chart : Widget
                     Points = [hit],
                 };
             }
+        }
 
         _hoverFromRegion = false;
-        var pad = 24f;
+        float pad = 24f;
         var plot = PlotRect;
         if (point.X < plot.X - pad || point.X > plot.Right + pad ||
             point.Y < plot.Y - pad || point.Y > plot.Bottom + pad) return null;
@@ -1793,10 +1871,10 @@ public class Chart : Widget
 
         // Nearest x column, then every series' point at that x (the lollipop model).
         ChartDataPoint best = default;
-        var bestDist = float.MaxValue;
+        float bestDist = float.MaxValue;
         foreach (var p in ctx.HoverPoints)
         {
-            var d = MathF.Abs(p.ScreenX - point.X);
+            float d = MathF.Abs(p.ScreenX - point.X);
             if (d < bestDist)
             {
                 bestDist = d;
@@ -1808,8 +1886,11 @@ public class Chart : Widget
 
         var cluster = new List<ChartDataPoint>();
         foreach (var p in ctx.HoverPoints)
+        {
             if (p.X == best.X)
                 cluster.Add(p);
+        }
+
         cluster.Sort((a, b) => a.ScreenY.CompareTo(b.ScreenY));
 
         return new ChartHoverInfo {
@@ -1833,8 +1914,8 @@ public class Chart : Widget
     {
         var inv = CultureInfo.InvariantCulture;
         return t.TimeOfDay == TimeSpan.Zero
-            ? t.ToString("MMM d, yyyy", inv)
-            : t.ToString("MMM d, HH:mm", inv);
+            ? t.ToString(format: "MMM d, yyyy", provider: inv)
+            : t.ToString(format: "MMM d, HH:mm", provider: inv);
     }
 
     /// <summary>
@@ -1845,12 +1926,11 @@ public class Chart : Widget
     /// </summary>
     private sealed class AxisWindow
     {
+        public bool StickToEnd;
+        public double Zoom = 1.0;
         private double _fullMin, _fullMax, _baseLen = 1;
         private double _offset = double.NaN; // window start in domain units; NaN = never positioned
         private double _target;
-
-        public bool StickToEnd;
-        public double Zoom = 1.0;
 
         public bool Active { get; private set; }
         public double Len { get; private set; }
@@ -1875,18 +1955,21 @@ public class Chart : Widget
             Active = false;
             if (!(scrollable || zoomable) || !scale.SupportsWindowing) return;
             (_fullMin, _fullMax) = scale.FullExtent;
-            var full = _fullMax - _fullMin;
+            double full = _fullMax - _fullMin;
             if (full <= 1e-9) return;
 
             _baseLen = baseVisibleLen is > 0 ? baseVisibleLen.Value : full;
-            var minLen = full * Math.Clamp(minFraction, 0.001, 1.0);
-            var len = zoomable ? _baseLen / Zoom : _baseLen;
-            len = Math.Clamp(len, minLen, full);
+            double minLen = full * Math.Clamp(value: minFraction, min: 0.001, max: 1.0);
+            double len = zoomable ? _baseLen / Zoom : _baseLen;
+            len = Math.Clamp(value: len, min: minLen, max: full);
             Zoom = _baseLen / len; // keep the factor consistent with the clamped length
 
             if (len >= full - 1e-9)
             {
-                scale.SetVisibleWindow(_fullMin, _fullMax); // everything fits — no scrolling
+                scale.SetVisibleWindow(
+                    min: _fullMin,
+                    max: _fullMax
+                ); // everything fits — no scrolling
                 return;
             }
 
@@ -1898,9 +1981,9 @@ public class Chart : Widget
             if (double.IsNaN(_offset)) _offset = _target = StickToEnd ? Max : Min;
             else if (StickToEnd) _offset = _target = Max;
 
-            _offset = Math.Clamp(_offset, Min, Max);
-            _target = Math.Clamp(_target, Min, Max);
-            scale.SetVisibleWindow(_offset, _offset + len);
+            _offset = Math.Clamp(value: _offset, min: Min, max: Max);
+            _target = Math.Clamp(value: _target, min: Min, max: Max);
+            scale.SetVisibleWindow(min: _offset, max: _offset + len);
         }
 
         /// <summary>
@@ -1910,19 +1993,19 @@ public class Chart : Widget
         public void ApplyZoom(double factor, double focusFraction, double minFraction)
         {
             if (factor <= 0) return;
-            var full = _fullMax - _fullMin;
+            double full = _fullMax - _fullMin;
             if (full <= 1e-9) return;
 
-            var minLen = full * Math.Clamp(minFraction, 0.001, 1.0);
-            var curLen = Active ? Len : full;
-            var curOffset = Active ? CurrentOffset : _fullMin;
-            var newLen = Math.Clamp(curLen / factor, minLen, full);
-            var focusDomain = curOffset + focusFraction * curLen;
+            double minLen = full * Math.Clamp(value: minFraction, min: 0.001, max: 1.0);
+            double curLen = Active ? Len : full;
+            double curOffset = Active ? CurrentOffset : _fullMin;
+            double newLen = Math.Clamp(value: curLen / factor, min: minLen, max: full);
+            double focusDomain = curOffset + (focusFraction * curLen);
 
             _offset = _target = Math.Clamp(
-                focusDomain - focusFraction * newLen,
-                _fullMin,
-                _fullMax - newLen
+                value: focusDomain - (focusFraction * newLen),
+                min: _fullMin,
+                max: _fullMax - newLen
             );
             Zoom = _baseLen / newLen;
             StickToEnd = false;
@@ -1931,22 +2014,22 @@ public class Chart : Widget
         /// <summary>Set the pan target directly (drag); the eased step chases it.</summary>
         public void PanTargetTo(double offset)
         {
-            _target = Math.Clamp(offset, Min, Max);
+            _target = Math.Clamp(value: offset, min: Min, max: Max);
             _offset = _target; // drag pans immediately (no easing lag under the finger)
-            StickToEnd = _target >= Max - Len * 1e-6;
+            StickToEnd = _target >= Max - (Len * 1e-6);
         }
 
         /// <summary>Nudge the eased pan target by a domain delta (wheel).</summary>
         public void PanTargetBy(double delta)
         {
-            _target = Math.Clamp(_target + delta, Min, Max);
-            StickToEnd = _target >= Max - Len * 1e-6;
+            _target = Math.Clamp(value: _target + delta, min: Min, max: Max);
+            StickToEnd = _target >= Max - (Len * 1e-6);
         }
 
         public bool Step(float dt)
         {
             if (!Active || Math.Abs(_target - _offset) <= 1e-12) return false;
-            _offset += (_target - _offset) * Math.Min(1f, dt * 14f);
+            _offset += (_target - _offset) * Math.Min(val1: 1f, val2: dt * 14f);
             if (Math.Abs(_target - _offset) < Len * 0.001)
             {
                 _offset = _target;

@@ -20,30 +20,15 @@ public readonly struct SoundHandle(uint id) : IEquatable<SoundHandle>
     public uint Id { get; } = id;
     public bool IsValid => Id != 0;
 
-    public bool Equals(SoundHandle other)
-    {
-        return Id == other.Id;
-    }
+    public bool Equals(SoundHandle other) => Id == other.Id;
 
-    public override bool Equals(object? obj)
-    {
-        return obj is SoundHandle h && Equals(h);
-    }
+    public override bool Equals(object? obj) => obj is SoundHandle h && Equals(h);
 
-    public override int GetHashCode()
-    {
-        return (int)Id;
-    }
+    public override int GetHashCode() => (int)Id;
 
-    public static bool operator ==(SoundHandle a, SoundHandle b)
-    {
-        return a.Id == b.Id;
-    }
+    public static bool operator ==(SoundHandle a, SoundHandle b) => a.Id == b.Id;
 
-    public static bool operator !=(SoundHandle a, SoundHandle b)
-    {
-        return a.Id != b.Id;
-    }
+    public static bool operator !=(SoundHandle a, SoundHandle b) => a.Id != b.Id;
 }
 
 /// <summary>
@@ -58,30 +43,15 @@ public readonly struct AudioBus(uint id) : IEquatable<AudioBus>
     public uint Id { get; } = id;
     public bool IsValid => Id != 0;
 
-    public bool Equals(AudioBus other)
-    {
-        return Id == other.Id;
-    }
+    public bool Equals(AudioBus other) => Id == other.Id;
 
-    public override bool Equals(object? obj)
-    {
-        return obj is AudioBus b && Equals(b);
-    }
+    public override bool Equals(object? obj) => obj is AudioBus b && Equals(b);
 
-    public override int GetHashCode()
-    {
-        return (int)Id;
-    }
+    public override int GetHashCode() => (int)Id;
 
-    public static bool operator ==(AudioBus a, AudioBus b)
-    {
-        return a.Id == b.Id;
-    }
+    public static bool operator ==(AudioBus a, AudioBus b) => a.Id == b.Id;
 
-    public static bool operator !=(AudioBus a, AudioBus b)
-    {
-        return a.Id != b.Id;
-    }
+    public static bool operator !=(AudioBus a, AudioBus b) => a.Id != b.Id;
 }
 
 /// <summary>
@@ -141,44 +111,25 @@ public interface IAudioBackend
     ///     Create a source fed by <see cref="PushStream" /> rather than from a file — an internet
     ///     radio station, or anything else arriving as bytes over time.
     /// </summary>
-    SoundHandle CreateStream()
-    {
-        return SoundHandle.None;
-    }
+    SoundHandle CreateStream() => SoundHandle.None;
 
     /// <summary>Hand container bytes to a stream source. Returns how many were accepted.</summary>
-    int PushStream(SoundHandle sound, ReadOnlySpan<byte> bytes)
-    {
-        return 0;
-    }
+    int PushStream(SoundHandle sound, ReadOnlySpan<byte> bytes) => 0;
 
     /// <summary>No more bytes are coming; the source plays out what it has and ends.</summary>
-    void FinishStream(SoundHandle sound)
-    {
-    }
+    void FinishStream(SoundHandle sound) { }
 
     /// <summary>Seconds of audio buffered ahead of the play cursor — the underrun early warning.</summary>
-    float StreamBuffered(SoundHandle sound)
-    {
-        return 0f;
-    }
+    float StreamBuffered(SoundHandle sound) => 0f;
 
     /// <summary>Play position in seconds, or −1 when unknown.</summary>
-    float GetCursor(SoundHandle sound)
-    {
-        return -1f;
-    }
+    float GetCursor(SoundHandle sound) => -1f;
 
     /// <summary>Total length in seconds, or −1 for a stream of unknown length.</summary>
-    float GetDuration(SoundHandle sound)
-    {
-        return -1f;
-    }
+    float GetDuration(SoundHandle sound) => -1f;
 
     /// <summary>Jump the play cursor. The lever shared playback uses to correct drift.</summary>
-    void Seek(SoundHandle sound, float seconds)
-    {
-    }
+    void Seek(SoundHandle sound, float seconds) { }
 
     /// <summary>
     ///     Create a mixer bus. <see cref="AudioBus.None" /> on failure. Buses live for the whole
@@ -221,25 +172,20 @@ public static class Audio
 
     public static bool IsAvailable => Backend != null;
 
-    public static void SetListener(Vec3 position, Vec3 forward, Vec3 up)
-    {
-        Backend?.SetListener(position, forward, up);
-    }
+    public static void SetListener(Vec3 position, Vec3 forward, Vec3 up) =>
+        Backend?.SetListener(position: position, forward: forward, up: up);
 
-    public static void SetMasterVolume(float volume)
-    {
-        Backend?.SetMasterVolume(volume);
-    }
+    public static void SetMasterVolume(float volume) => Backend?.SetMasterVolume(volume);
 
     public static void PlayUiTone(float frequencyHz, float durationSeconds = 0.08f,
         float volume = 0.5f,
         SoundWave wave = SoundWave.Sine)
     {
         Backend?.PlayUiTone(
-            frequencyHz,
-            durationSeconds,
-            volume,
-            wave
+            frequencyHz: frequencyHz,
+            durationSeconds: durationSeconds,
+            volume: volume,
+            wave: wave
         );
     }
 
@@ -249,152 +195,93 @@ public static class Audio
         float rolloff = 1f)
     {
         Backend?.PlayToneAt(
-            position,
-            frequencyHz,
-            durationSeconds,
-            volume,
-            wave,
-            minDistance,
-            maxDistance,
-            rolloff
+            position: position,
+            frequencyHz: frequencyHz,
+            durationSeconds: durationSeconds,
+            volume: volume,
+            wave: wave,
+            minDistance: minDistance,
+            maxDistance: maxDistance,
+            rolloff: rolloff
         );
     }
 
-    public static SoundHandle CreateTone(float frequencyHz, SoundWave wave = SoundWave.Sine)
-    {
-        return Backend?.CreateTone(frequencyHz, wave) ?? SoundHandle.None;
-    }
+    public static SoundHandle CreateTone(float frequencyHz, SoundWave wave = SoundWave.Sine) =>
+        Backend?.CreateTone(frequencyHz: frequencyHz, wave: wave) ?? SoundHandle.None;
 
-    public static SoundHandle CreateFile(string path, bool streaming = false)
-    {
-        return Backend?.CreateFile(path, streaming) ?? SoundHandle.None;
-    }
+    public static SoundHandle CreateFile(string path, bool streaming = false) =>
+        Backend?.CreateFile(path: path, streaming: streaming) ?? SoundHandle.None;
 
-    public static void Play(SoundHandle sound)
-    {
-        Backend?.Play(sound);
-    }
+    public static void Play(SoundHandle sound) => Backend?.Play(sound);
 
-    public static void Stop(SoundHandle sound)
-    {
-        Backend?.Stop(sound);
-    }
+    public static void Stop(SoundHandle sound) => Backend?.Stop(sound);
 
-    public static void Destroy(SoundHandle sound)
-    {
-        Backend?.Destroy(sound);
-    }
+    public static void Destroy(SoundHandle sound) => Backend?.Destroy(sound);
 
-    public static void SetVolume(SoundHandle sound, float volume)
-    {
-        Backend?.SetVolume(sound, volume);
-    }
+    public static void SetVolume(SoundHandle sound, float volume) =>
+        Backend?.SetVolume(sound: sound, volume: volume);
 
-    public static void SetPitch(SoundHandle sound, float pitch)
-    {
-        Backend?.SetPitch(sound, pitch);
-    }
+    public static void SetPitch(SoundHandle sound, float pitch) =>
+        Backend?.SetPitch(sound: sound, pitch: pitch);
 
     /// <summary>
     ///     A source fed by <see cref="PushStream" /> instead of a file. Push container bytes as they
     ///     arrive — the decoder identifies the format once enough have landed — and the source plays
     ///     continuously. Spatialise it like any other sound.
     /// </summary>
-    public static SoundHandle CreateStream()
-    {
-        return Backend?.CreateStream() ?? SoundHandle.None;
-    }
+    public static SoundHandle CreateStream() => Backend?.CreateStream() ?? SoundHandle.None;
 
-    public static int PushStream(SoundHandle sound, ReadOnlySpan<byte> bytes)
-    {
-        return Backend?.PushStream(sound, bytes) ?? 0;
-    }
+    public static int PushStream(SoundHandle sound, ReadOnlySpan<byte> bytes) =>
+        Backend?.PushStream(sound: sound, bytes: bytes) ?? 0;
 
-    public static void FinishStream(SoundHandle sound)
-    {
-        Backend?.FinishStream(sound);
-    }
+    public static void FinishStream(SoundHandle sound) => Backend?.FinishStream(sound);
 
-    public static float StreamBuffered(SoundHandle sound)
-    {
-        return Backend?.StreamBuffered(sound) ?? 0f;
-    }
+    public static float StreamBuffered(SoundHandle sound) => Backend?.StreamBuffered(sound) ?? 0f;
 
     /// <summary>Play position in seconds, or −1 when unknown.</summary>
-    public static float GetCursor(SoundHandle sound)
-    {
-        return Backend?.GetCursor(sound) ?? -1f;
-    }
+    public static float GetCursor(SoundHandle sound) => Backend?.GetCursor(sound) ?? -1f;
 
-    public static float GetDuration(SoundHandle sound)
-    {
-        return Backend?.GetDuration(sound) ?? -1f;
-    }
+    public static float GetDuration(SoundHandle sound) => Backend?.GetDuration(sound) ?? -1f;
 
     /// <summary>Jump the play cursor — how shared playback pulls a drifting listener back into line.</summary>
-    public static void Seek(SoundHandle sound, float seconds)
-    {
-        Backend?.Seek(sound, seconds);
-    }
+    public static void Seek(SoundHandle sound, float seconds) =>
+        Backend?.Seek(sound: sound, seconds: seconds);
 
-    public static void SetLooping(SoundHandle sound, bool looping)
-    {
-        Backend?.SetLooping(sound, looping);
-    }
+    public static void SetLooping(SoundHandle sound, bool looping) =>
+        Backend?.SetLooping(sound: sound, looping: looping);
 
-    public static void SetSpatial(SoundHandle sound, bool enabled)
-    {
-        Backend?.SetSpatial(sound, enabled);
-    }
+    public static void SetSpatial(SoundHandle sound, bool enabled) =>
+        Backend?.SetSpatial(sound: sound, enabled: enabled);
 
-    public static void SetPosition(SoundHandle sound, Vec3 position)
-    {
-        Backend?.SetPosition(sound, position);
-    }
+    public static void SetPosition(SoundHandle sound, Vec3 position) =>
+        Backend?.SetPosition(sound: sound, position: position);
 
-    public static void SetVelocity(SoundHandle sound, Vec3 velocity)
-    {
-        Backend?.SetVelocity(sound, velocity);
-    }
+    public static void SetVelocity(SoundHandle sound, Vec3 velocity) =>
+        Backend?.SetVelocity(sound: sound, velocity: velocity);
 
     public static void SetAttenuation(SoundHandle sound, float minDistance, float maxDistance,
         float rolloff)
     {
         Backend?.SetAttenuation(
-            sound,
-            minDistance,
-            maxDistance,
-            rolloff
+            sound: sound,
+            minDistance: minDistance,
+            maxDistance: maxDistance,
+            rolloff: rolloff
         );
     }
 
-    public static bool IsPlaying(SoundHandle sound)
-    {
-        return Backend?.IsPlaying(sound) ?? false;
-    }
+    public static bool IsPlaying(SoundHandle sound) => Backend?.IsPlaying(sound) ?? false;
 
-    public static AudioBus CreateBus()
-    {
-        return Backend?.CreateBus() ?? AudioBus.None;
-    }
+    public static AudioBus CreateBus() => Backend?.CreateBus() ?? AudioBus.None;
 
-    public static void SetBusVolume(AudioBus bus, float volume)
-    {
-        Backend?.SetBusVolume(bus, volume);
-    }
+    public static void SetBusVolume(AudioBus bus, float volume) =>
+        Backend?.SetBusVolume(bus: bus, volume: volume);
 
-    public static void SetBusPitch(AudioBus bus, float pitch)
-    {
-        Backend?.SetBusPitch(bus, pitch);
-    }
+    public static void SetBusPitch(AudioBus bus, float pitch) =>
+        Backend?.SetBusPitch(bus: bus, pitch: pitch);
 
-    public static void SetBus(SoundHandle sound, AudioBus bus)
-    {
-        Backend?.SetBus(sound, bus);
-    }
+    public static void SetBus(SoundHandle sound, AudioBus bus) =>
+        Backend?.SetBus(sound: sound, bus: bus);
 
-    public static void StopAll()
-    {
-        Backend?.StopAll();
-    }
+    public static void StopAll() => Backend?.StopAll();
 }

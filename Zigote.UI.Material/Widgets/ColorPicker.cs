@@ -20,18 +20,12 @@ public sealed class ColorPicker : Widget
     private const float ReadoutHeight = 16f;
     private const int SvResolution = 96; // SV square raster grid (square texture, scaled to fit)
 
-    // Effective metrics: the hue/alpha strips are drag targets, and 14pt of them is thinner than a
-    // fingertip. Widen them (and the hex field) at phone width; the picker's own width is unchanged.
-    private float BarW => _compact ? 28f : BarWidth;
-
-    private float HexH => _compact ? TouchMetrics.MinTarget : HexHeight;
-
     private readonly TextField _hexField;
     private float _a;
-    private bool _compact;
 
     // Layout rects (absolute), computed in Layout.
     private Rect _alphaRect;
+    private bool _compact;
 
     // Active drag target so a drag started on one region keeps routing there.
     private DragTarget _drag = DragTarget.None;
@@ -65,6 +59,12 @@ public sealed class ColorPicker : Widget
         };
     }
 
+    // Effective metrics: the hue/alpha strips are drag targets, and 14pt of them is thinner than a
+    // fingertip. Widen them (and the hex field) at phone width; the picker's own width is unchanged.
+    private float BarW => _compact ? 28f : BarWidth;
+
+    private float HexH => _compact ? TouchMetrics.MinTarget : HexHeight;
+
     /// <summary>Live callback fired (with the current colour) whenever the user changes any channel.</summary>
     public Action<Color>? OnChanged { get; set; }
 
@@ -75,10 +75,10 @@ public sealed class ColorPicker : Widget
     public Color Value
     {
         get => ColorMath.FromHsv(
-            _h,
-            _s,
-            _v,
-            _a
+            h: _h,
+            s: _s,
+            v: _v,
+            a: _a
         );
         set
         {
@@ -106,7 +106,7 @@ public sealed class ColorPicker : Widget
         // Measure the hex field at the width it will occupy (right portion of the hex row).
         _hexField.Measure(new Constraints(maxWidth: _width * 0.6f, maxHeight: HexH));
 
-        var size = c.Constrain(new Size(_width, _height));
+        var size = c.Constrain(new Size(width: _width, height: _height));
         _width = size.Width;
         _height = size.Height;
         return size;
@@ -115,43 +115,43 @@ public sealed class ColorPicker : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _width,
-            _height
+            x: origin.X,
+            y: origin.Y,
+            width: _width,
+            height: _height
         );
 
-        var x = origin.X;
-        var y = origin.Y;
+        float x = origin.X;
+        float y = origin.Y;
 
-        var svW = _width - BarW - BarGap;
+        float svW = _width - BarW - BarGap;
         _svRect = new Rect(
-            x,
-            y,
-            svW,
-            SvHeight
+            x: x,
+            y: y,
+            width: svW,
+            height: SvHeight
         );
         _hueRect = new Rect(
-            x + svW + BarGap,
-            y,
-            BarW,
-            SvHeight
+            x: x + svW + BarGap,
+            y: y,
+            width: BarW,
+            height: SvHeight
         );
 
         y += SvHeight + SectionGap;
         _alphaRect = new Rect(
-            x,
-            y,
-            _width,
-            BarW
+            x: x,
+            y: y,
+            width: _width,
+            height: BarW
         );
 
         y += BarW + SectionGap;
 
         // Hex row: label "#" handled in paint; field takes the right ~60%.
-        var fieldW = _width * 0.6f;
+        float fieldW = _width * 0.6f;
         var fieldSize = _hexField.Measure(new Constraints(maxWidth: fieldW, maxHeight: HexH));
-        _hexField.Layout(new Offset(x + _width - fieldSize.Width, y));
+        _hexField.Layout(new Offset(x: x + _width - fieldSize.Width, y: y));
     }
 
     // ── Paint ──────────────────────────────────────────────────────────────────
@@ -163,15 +163,15 @@ public sealed class ColorPicker : Widget
         PaintAlphaBar(paint);
 
         // Hex row label.
-        var hexRowY = _alphaRect.Bottom + SectionGap;
-        var labelBaseline = hexRowY + (HexH - _theme.FontSizeBody) / 2f +
-                            _theme.FontSizeBody * 0.8f;
+        float hexRowY = _alphaRect.Bottom + SectionGap;
+        float labelBaseline = hexRowY + ((HexH - _theme.FontSizeBody) / 2f) +
+                              (_theme.FontSizeBody * 0.8f);
         paint.AddText(
-            "Hex",
-            Bounds.X,
-            labelBaseline,
-            _theme.Hint,
-            _theme.FontSizeBody
+            text: "Hex",
+            baselineX: Bounds.X,
+            baselineY: labelBaseline,
+            color: _theme.Hint,
+            fontSize: _theme.FontSizeBody
         );
         _hexField.Paint(paint);
 
@@ -183,37 +183,37 @@ public sealed class ColorPicker : Widget
     {
         EnsureSvBuffer();
         paint.AddImage(
-            _svRect,
-            SvResolution,
-            SvResolution,
-            _svBuf
+            bounds: _svRect,
+            pixelWidth: SvResolution,
+            pixelHeight: SvResolution,
+            pixels: _svBuf
         );
-        paint.AddBorder(_svRect, _theme.Separator, Radii.Xs);
+        paint.AddBorder(bounds: _svRect, color: _theme.Separator, radius: Radii.Xs);
 
         // Cursor: ring at (s, 1-v).
-        var cx = _svRect.X + _s * _svRect.Width;
-        var cy = _svRect.Y + (1f - _v) * _svRect.Height;
-        cx = Math.Clamp(cx, _svRect.X, _svRect.Right);
-        cy = Math.Clamp(cy, _svRect.Y, _svRect.Bottom);
+        float cx = _svRect.X + (_s * _svRect.Width);
+        float cy = _svRect.Y + ((1f - _v) * _svRect.Height);
+        cx = Math.Clamp(value: cx, min: _svRect.X, max: _svRect.Right);
+        cy = Math.Clamp(value: cy, min: _svRect.Y, max: _svRect.Bottom);
         const float r = 5f;
         var ring = new Rect(
-            cx - r,
-            cy - r,
-            r * 2f,
-            r * 2f
+            x: cx - r,
+            y: cy - r,
+            width: r * 2f,
+            height: r * 2f
         );
         // White ring with a dark inner edge so it reads on both light and dark cells.
         paint.AddBorder(
-            ring,
-            Color.Black.WithAlpha(0.5f),
-            r,
-            3f
+            bounds: ring,
+            color: Color.Black.WithAlpha(0.5f),
+            radius: r,
+            width: 3f
         );
         paint.AddBorder(
-            ring,
-            Color.White,
-            r,
-            1.5f
+            bounds: ring,
+            color: Color.White,
+            radius: r,
+            width: 1.5f
         );
     }
 
@@ -221,106 +221,106 @@ public sealed class ColorPicker : Widget
     {
         // Stacked colour bands top→bottom across the full hue wheel.
         const int bands = 60;
-        var bandH = _hueRect.Height / bands;
-        for (var i = 0; i < bands; i++)
+        float bandH = _hueRect.Height / bands;
+        for (int i = 0; i < bands; i++)
         {
-            var hue = i / (float)bands * 360f;
-            var col = ColorMath.FromHsv(hue, 1f, 1f);
+            float hue = i / (float)bands * 360f;
+            var col = ColorMath.FromHsv(h: hue, s: 1f, v: 1f);
             // Overlap by 1px to avoid hairline seams between bands.
             paint.AddRect(
-                new Rect(
-                    _hueRect.X,
-                    _hueRect.Y + i * bandH,
-                    _hueRect.Width,
-                    bandH + 1f
+                bounds: new Rect(
+                    x: _hueRect.X,
+                    y: _hueRect.Y + (i * bandH),
+                    width: _hueRect.Width,
+                    height: bandH + 1f
                 ),
-                col
+                color: col
             );
         }
 
-        paint.AddBorder(_hueRect, _theme.Separator, Radii.Xs);
+        paint.AddBorder(bounds: _hueRect, color: _theme.Separator, radius: Radii.Xs);
 
         // Marker at the current hue.
-        var my = _hueRect.Y + _h / 360f * _hueRect.Height;
-        my = Math.Clamp(my, _hueRect.Y, _hueRect.Bottom);
+        float my = _hueRect.Y + (_h / 360f * _hueRect.Height);
+        my = Math.Clamp(value: my, min: _hueRect.Y, max: _hueRect.Bottom);
         PaintBarMarker(
-            paint,
-            new Rect(
-                _hueRect.X - 2f,
-                my - 2f,
-                _hueRect.Width + 4f,
-                4f
+            paint: paint,
+            r: new Rect(
+                x: _hueRect.X - 2f,
+                y: my - 2f,
+                width: _hueRect.Width + 4f,
+                height: 4f
             )
         );
     }
 
     private void PaintAlphaBar(PaintList paint)
     {
-        PaintCheckerboard(paint, _alphaRect);
+        PaintCheckerboard(paint: paint, r: _alphaRect);
 
         // Gradient from transparent → opaque current RGB, left to right.
-        var rgb = ColorMath.FromHsv(_h, _s, _v);
+        var rgb = ColorMath.FromHsv(h: _h, s: _s, v: _v);
         const int steps = 48;
-        var stepW = _alphaRect.Width / steps;
-        for (var i = 0; i < steps; i++)
+        float stepW = _alphaRect.Width / steps;
+        for (int i = 0; i < steps; i++)
         {
-            var t = (i + 0.5f) / steps;
+            float t = (i + 0.5f) / steps;
             paint.AddRect(
-                new Rect(
-                    _alphaRect.X + i * stepW,
-                    _alphaRect.Y,
-                    stepW + 1f,
-                    _alphaRect.Height
+                bounds: new Rect(
+                    x: _alphaRect.X + (i * stepW),
+                    y: _alphaRect.Y,
+                    width: stepW + 1f,
+                    height: _alphaRect.Height
                 ),
-                rgb.WithAlpha(t)
+                color: rgb.WithAlpha(t)
             );
         }
 
-        paint.AddBorder(_alphaRect, _theme.Separator, Radii.Xs);
+        paint.AddBorder(bounds: _alphaRect, color: _theme.Separator, radius: Radii.Xs);
 
-        var mx = _alphaRect.X + _a * _alphaRect.Width;
-        mx = Math.Clamp(mx, _alphaRect.X, _alphaRect.Right);
+        float mx = _alphaRect.X + (_a * _alphaRect.Width);
+        mx = Math.Clamp(value: mx, min: _alphaRect.X, max: _alphaRect.Right);
         PaintBarMarker(
-            paint,
-            new Rect(
-                mx - 2f,
-                _alphaRect.Y - 2f,
-                4f,
-                _alphaRect.Height + 4f
+            paint: paint,
+            r: new Rect(
+                x: mx - 2f,
+                y: _alphaRect.Y - 2f,
+                width: 4f,
+                height: _alphaRect.Height + 4f
             )
         );
     }
 
     private void PaintBarMarker(PaintList paint, Rect r)
     {
-        paint.AddRect(r, Color.White, 1f);
-        paint.AddBorder(r, Color.Black.WithAlpha(0.55f), 1f);
+        paint.AddRect(bounds: r, color: Color.White, radius: 1f);
+        paint.AddBorder(bounds: r, color: Color.Black.WithAlpha(0.55f), radius: 1f);
     }
 
     private void PaintCheckerboard(PaintList paint, Rect r)
     {
         const float cell = 5f;
-        var light = new Color(0.78f, 0.78f, 0.80f);
-        var dark = new Color(0.55f, 0.55f, 0.58f);
-        paint.AddRect(r, light);
+        var light = new Color(r: 0.78f, g: 0.78f, b: 0.80f);
+        var dark = new Color(r: 0.55f, g: 0.55f, b: 0.58f);
+        paint.AddRect(bounds: r, color: light);
 
-        var cols = (int)MathF.Ceiling(r.Width / cell);
-        var rows = (int)MathF.Ceiling(r.Height / cell);
-        for (var yy = 0; yy < rows; yy++)
-        for (var xx = 0; xx < cols; xx++)
+        int cols = (int)MathF.Ceiling(r.Width / cell);
+        int rows = (int)MathF.Ceiling(r.Height / cell);
+        for (int yy = 0; yy < rows; yy++)
+        for (int xx = 0; xx < cols; xx++)
         {
             if ((xx + yy) % 2 == 0) continue;
-            var cw = MathF.Min(cell, r.Right - (r.X + xx * cell));
-            var ch = MathF.Min(cell, r.Bottom - (r.Y + yy * cell));
+            float cw = MathF.Min(x: cell, y: r.Right - (r.X + (xx * cell)));
+            float ch = MathF.Min(x: cell, y: r.Bottom - (r.Y + (yy * cell)));
             if (cw <= 0f || ch <= 0f) continue;
             paint.AddRect(
-                new Rect(
-                    r.X + xx * cell,
-                    r.Y + yy * cell,
-                    cw,
-                    ch
+                bounds: new Rect(
+                    x: r.X + (xx * cell),
+                    y: r.Y + (yy * cell),
+                    width: cw,
+                    height: ch
                 ),
-                dark
+                color: dark
             );
         }
     }
@@ -328,20 +328,20 @@ public sealed class ColorPicker : Widget
     private void PaintReadout(PaintList paint)
     {
         var rgb = Value;
-        var y = _hexField.Bounds.Bottom + SectionGap;
-        var baseline = y + (ReadoutHeight - _theme.FontSizeCaption) / 2f +
-                       _theme.FontSizeCaption * 0.8f;
-        var r = (int)MathF.Round(rgb.R * 255f);
-        var g = (int)MathF.Round(rgb.G * 255f);
-        var b = (int)MathF.Round(rgb.B * 255f);
-        var a = (int)MathF.Round(rgb.A * 255f);
-        var text = $"R {r}   G {g}   B {b}   A {a}";
+        float y = _hexField.Bounds.Bottom + SectionGap;
+        float baseline = y + ((ReadoutHeight - _theme.FontSizeCaption) / 2f) +
+                         (_theme.FontSizeCaption * 0.8f);
+        int r = (int)MathF.Round(rgb.R * 255f);
+        int g = (int)MathF.Round(rgb.G * 255f);
+        int b = (int)MathF.Round(rgb.B * 255f);
+        int a = (int)MathF.Round(rgb.A * 255f);
+        string text = $"R {r}   G {g}   B {b}   A {a}";
         paint.AddText(
-            text,
-            Bounds.X,
-            baseline,
-            _theme.Hint,
-            _theme.FontSizeCaption,
+            text: text,
+            baselineX: Bounds.X,
+            baselineY: baseline,
+            color: _theme.Hint,
+            fontSize: _theme.FontSizeCaption,
             fontFamily: "code"
         );
     }
@@ -354,17 +354,17 @@ public sealed class ColorPicker : Widget
         _svBufHue = _h;
         _svBuf ??= new byte[SvResolution * SvResolution * 4];
 
-        for (var py = 0; py < SvResolution; py++)
+        for (int py = 0; py < SvResolution; py++)
         {
-            var v = 1f - py / (float)(SvResolution - 1);
-            for (var px = 0; px < SvResolution; px++)
+            float v = 1f - (py / (float)(SvResolution - 1));
+            for (int px = 0; px < SvResolution; px++)
             {
-                var s = px / (float)(SvResolution - 1);
-                var col = ColorMath.FromHsv(_h, s, v);
-                var idx = (py * SvResolution + px) * 4;
-                _svBuf[idx + 0] = (byte)Math.Clamp((int)(col.R * 255f), 0, 255);
-                _svBuf[idx + 1] = (byte)Math.Clamp((int)(col.G * 255f), 0, 255);
-                _svBuf[idx + 2] = (byte)Math.Clamp((int)(col.B * 255f), 0, 255);
+                float s = px / (float)(SvResolution - 1);
+                var col = ColorMath.FromHsv(h: _h, s: s, v: v);
+                int idx = ((py * SvResolution) + px) * 4;
+                _svBuf[idx + 0] = (byte)Math.Clamp(value: (int)(col.R * 255f), min: 0, max: 255);
+                _svBuf[idx + 1] = (byte)Math.Clamp(value: (int)(col.G * 255f), min: 0, max: 255);
+                _svBuf[idx + 2] = (byte)Math.Clamp(value: (int)(col.B * 255f), min: 0, max: 255);
                 _svBuf[idx + 3] = 255;
             }
         }
@@ -375,7 +375,7 @@ public sealed class ColorPicker : Widget
     private void CommitHex(string text)
     {
         if (_suppressHexEcho) return;
-        if (ColorMath.TryParseHex(text, out var parsed))
+        if (ColorMath.TryParseHex(s: text, c: out var parsed))
         {
             (_h, _s, _v) = ColorMath.ToHsv(parsed);
             _a = parsed.A;
@@ -393,7 +393,7 @@ public sealed class ColorPicker : Widget
     private void SyncHexField()
     {
         _suppressHexEcho = true;
-        _hexField.Text = ColorMath.ToHex(ColorMath.FromHsv(_h, _s, _v));
+        _hexField.Text = ColorMath.ToHex(ColorMath.FromHsv(h: _h, s: _s, v: _v));
         _suppressHexEcho = false;
     }
 
@@ -401,15 +401,15 @@ public sealed class ColorPicker : Widget
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
 
         // Let the hex field claim its own hits so it keeps caret/selection/focus behaviour.
         var hit = _hexField.HitTest(point);
         if (hit != null) return hit;
 
-        if (_svRect.Contains(point.X, point.Y) ||
-            _hueRect.Contains(point.X, point.Y) ||
-            _alphaRect.Contains(point.X, point.Y))
+        if (_svRect.Contains(px: point.X, py: point.Y) ||
+            _hueRect.Contains(px: point.X, py: point.Y) ||
+            _alphaRect.Contains(px: point.X, py: point.Y))
             return this;
 
         return this;
@@ -417,9 +417,9 @@ public sealed class ColorPicker : Widget
 
     public override void OnPointerDown(Offset point)
     {
-        if (_svRect.Contains(point.X, point.Y)) _drag = DragTarget.Sv;
-        else if (_hueRect.Contains(point.X, point.Y)) _drag = DragTarget.Hue;
-        else if (_alphaRect.Contains(point.X, point.Y)) _drag = DragTarget.Alpha;
+        if (_svRect.Contains(px: point.X, py: point.Y)) _drag = DragTarget.Sv;
+        else if (_hueRect.Contains(px: point.X, py: point.Y)) _drag = DragTarget.Hue;
+        else if (_alphaRect.Contains(px: point.X, py: point.Y)) _drag = DragTarget.Alpha;
         else _drag = DragTarget.None;
 
         if (_drag != DragTarget.None) ApplyDrag(point);
@@ -430,41 +430,32 @@ public sealed class ColorPicker : Widget
         if (_drag != DragTarget.None) ApplyDrag(point);
     }
 
-    public override void OnPointerUp(Offset point)
-    {
-        _drag = DragTarget.None;
-    }
+    public override void OnPointerUp(Offset point) => _drag = DragTarget.None;
 
     /// <summary>The press was taken over (pinch, app background): stop tracking the finger.</summary>
-    public override void OnPointerCancel()
-    {
-        _drag = DragTarget.None;
-    }
+    public override void OnPointerCancel() => _drag = DragTarget.None;
 
     /// <summary>
     ///     A finger on the saturation/value square or one of the strips is picking a colour, not
     ///     scrolling the page: the square is a two-axis surface, and the strips would otherwise lose
     ///     the drag to whichever axis the page happens to scroll.
     /// </summary>
-    public override bool CanTouchDrag(bool vertical)
-    {
-        return _drag != DragTarget.None;
-    }
+    public override bool CanTouchDrag(bool vertical) => _drag != DragTarget.None;
 
     private void ApplyDrag(Offset point)
     {
         switch (_drag)
         {
             case DragTarget.Sv:
-                _s = Clamp01((point.X - _svRect.X) / MathF.Max(_svRect.Width, 1f));
-                _v = 1f - Clamp01((point.Y - _svRect.Y) / MathF.Max(_svRect.Height, 1f));
+                _s = Clamp01((point.X - _svRect.X) / MathF.Max(x: _svRect.Width, y: 1f));
+                _v = 1f - Clamp01((point.Y - _svRect.Y) / MathF.Max(x: _svRect.Height, y: 1f));
                 break;
             case DragTarget.Hue:
-                _h = Clamp01((point.Y - _hueRect.Y) / MathF.Max(_hueRect.Height, 1f)) * 360f;
+                _h = Clamp01((point.Y - _hueRect.Y) / MathF.Max(x: _hueRect.Height, y: 1f)) * 360f;
                 _svBufHue = -1f; // hue changed → SV raster stale
                 break;
             case DragTarget.Alpha:
-                _a = Clamp01((point.X - _alphaRect.X) / MathF.Max(_alphaRect.Width, 1f));
+                _a = Clamp01((point.X - _alphaRect.X) / MathF.Max(x: _alphaRect.Width, y: 1f));
                 break;
             case DragTarget.None:
                 return;
@@ -480,24 +471,18 @@ public sealed class ColorPicker : Widget
         MarkNeedsPaint();
     }
 
-    private static float Clamp01(float v)
-    {
-        return Math.Clamp(v, 0f, 1f);
-    }
+    private static float Clamp01(float v) => Math.Clamp(value: v, min: 0f, max: 1f);
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return [_hexField];
-    }
+    public override IEnumerable<Widget> GetChildren() => [_hexField];
 
     public override int DebugStateHash()
     {
         return HashCode.Combine(
-            _h,
-            _s,
-            _v,
-            _a,
-            _drag
+            value1: _h,
+            value2: _s,
+            value3: _v,
+            value4: _a,
+            value5: _drag
         );
     }
 

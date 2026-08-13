@@ -41,113 +41,54 @@ public readonly struct Tolerance(float value) :
     public static readonly Tolerance Physics = new(PhysicsValue);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool IsZero(float value)
-    {
-        return MathF.Abs(value) <= Value;
-    }
+    public bool IsZero(float value) => MathF.Abs(value) <= Value;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Equals(float a, float b)
-    {
-        return MathF.Abs(a - b) <= Value;
-    }
+    public bool Equals(float a, float b) => MathF.Abs(a - b) <= Value;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool NotEquals(float a, float b)
-    {
-        return MathF.Abs(a - b) > Value;
-    }
+    public bool NotEquals(float a, float b) => MathF.Abs(a - b) > Value;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool LessOrEquals(float a, float b)
-    {
-        return a < b || Equals(a, b);
-    }
+    public bool LessOrEquals(float a, float b) => a < b || Equals(a: a, b: b);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool GreaterOrEquals(float a, float b)
-    {
-        return a > b || Equals(a, b);
-    }
+    public bool GreaterOrEquals(float a, float b) => a > b || Equals(a: a, b: b);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool InRange(float value, float min, float max)
-    {
-        return value >= min - Value && value <= max + Value;
-    }
+    public bool InRange(float value, float min, float max) =>
+        value >= min - Value && value <= max + Value;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Equals(Tolerance other)
-    {
-        return Value.Equals(other.Value);
-    }
+    public bool Equals(Tolerance other) => Value.Equals(other.Value);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public int CompareTo(Tolerance other)
-    {
-        return Value.CompareTo(other.Value);
-    }
+    public int CompareTo(Tolerance other) => Value.CompareTo(other.Value);
 
-    public override bool Equals(object? obj)
-    {
-        return obj is Tolerance other && Equals(other);
-    }
+    public override bool Equals(object? obj) => obj is Tolerance other && Equals(other);
 
-    public override int GetHashCode()
-    {
-        return Value.GetHashCode();
-    }
+    public override int GetHashCode() => Value.GetHashCode();
 
-    public override string ToString()
-    {
-        return Value.ToString("G9");
-    }
+    public override string ToString() => Value.ToString("G9");
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Tolerance From(float value)
-    {
-        return new Tolerance(value);
-    }
+    public static Tolerance From(float value) => new(value);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator Tolerance(float value)
-    {
-        return new Tolerance(value);
-    }
+    public static implicit operator Tolerance(float value) => new(value);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static explicit operator float(Tolerance tolerance)
-    {
-        return tolerance.Value;
-    }
+    public static explicit operator float(Tolerance tolerance) => tolerance.Value;
 
-    public static bool operator ==(Tolerance left, Tolerance right)
-    {
-        return left.Equals(right);
-    }
+    public static bool operator ==(Tolerance left, Tolerance right) => left.Equals(right);
 
-    public static bool operator !=(Tolerance left, Tolerance right)
-    {
-        return !left.Equals(right);
-    }
+    public static bool operator !=(Tolerance left, Tolerance right) => !left.Equals(right);
 
-    public static bool operator <(Tolerance left, Tolerance right)
-    {
-        return left.Value < right.Value;
-    }
+    public static bool operator <(Tolerance left, Tolerance right) => left.Value < right.Value;
 
-    public static bool operator >(Tolerance left, Tolerance right)
-    {
-        return left.Value > right.Value;
-    }
+    public static bool operator >(Tolerance left, Tolerance right) => left.Value > right.Value;
 
-    public static bool operator <=(Tolerance left, Tolerance right)
-    {
-        return left.Value <= right.Value;
-    }
+    public static bool operator <=(Tolerance left, Tolerance right) => left.Value <= right.Value;
 
-    public static bool operator >=(Tolerance left, Tolerance right)
-    {
-        return left.Value >= right.Value;
-    }
+    public static bool operator >=(Tolerance left, Tolerance right) => left.Value >= right.Value;
 }

@@ -20,14 +20,14 @@ public class FocusTraversalTests
     private static Pressable Btn(float w = 40f, float h = 20f, bool enabled = true)
     {
         return new Pressable {
-            Child = new SizedBox(w, h),
+            Child = new SizedBox(width: w, height: h),
             Enabled = enabled,
         };
     }
 
     private static void LayOut(Widget w, float width = 400f, float height = 200f)
     {
-        w.Measure(Constraints.Loose(width, height));
+        w.Measure(Constraints.Loose(width: width, height: height));
         w.Layout(Offset.Zero);
     }
 
@@ -48,12 +48,12 @@ public class FocusTraversalTests
 
         var order = FocusTraversal.Focusables(col);
         Assert.Equal(
-            new Widget[] {
+            expected: new Widget[] {
                 a,
                 b,
                 c,
             },
-            order
+            actual: order
         );
     }
 
@@ -61,7 +61,7 @@ public class FocusTraversalTests
     public void Focusables_SkipCollapsedAndDisabled()
     {
         var visible = Btn();
-        var collapsed = Btn(0f, 0f);
+        var collapsed = Btn(w: 0f, h: 0f);
         var disabled = Btn(enabled: false);
         var col = new Column {
             Children = {
@@ -74,7 +74,7 @@ public class FocusTraversalTests
 
         var order = FocusTraversal.Focusables(col);
         Assert.Single(order);
-        Assert.Same(visible, order[0]);
+        Assert.Same(expected: visible, actual: order[0]);
     }
 
     [Fact]
@@ -93,10 +93,22 @@ public class FocusTraversalTests
         LayOut(col);
         var order = FocusTraversal.Focusables(col);
 
-        Assert.Same(b, FocusTraversal.NextInTab(order, a, false));
-        Assert.Same(a, FocusTraversal.NextInTab(order, c, false)); // forward wrap
-        Assert.Same(c, FocusTraversal.NextInTab(order, a, true)); // backward wrap
-        Assert.Same(a, FocusTraversal.NextInTab(order, null, false)); // nothing focused → first
+        Assert.Same(
+            expected: b,
+            actual: FocusTraversal.NextInTab(order: order, current: a, backwards: false)
+        );
+        Assert.Same(
+            expected: a,
+            actual: FocusTraversal.NextInTab(order: order, current: c, backwards: false)
+        ); // forward wrap
+        Assert.Same(
+            expected: c,
+            actual: FocusTraversal.NextInTab(order: order, current: a, backwards: true)
+        ); // backward wrap
+        Assert.Same(
+            expected: a,
+            actual: FocusTraversal.NextInTab(order: order, current: null, backwards: false)
+        ); // nothing focused → first
     }
 
     [Fact]
@@ -116,29 +128,29 @@ public class FocusTraversalTests
         var order = FocusTraversal.Focusables(row);
 
         Assert.Same(
-            c,
-            FocusTraversal.Directional(
-                order,
-                b,
-                1f,
-                0f
+            expected: c,
+            actual: FocusTraversal.Directional(
+                order: order,
+                current: b,
+                dx: 1f,
+                dy: 0f
             )
         ); // right
         Assert.Same(
-            a,
-            FocusTraversal.Directional(
-                order,
-                b,
-                -1f,
-                0f
+            expected: a,
+            actual: FocusTraversal.Directional(
+                order: order,
+                current: b,
+                dx: -1f,
+                dy: 0f
             )
         ); // left
         Assert.Null(
             FocusTraversal.Directional(
-                order,
-                c,
-                1f,
-                0f
+                order: order,
+                current: c,
+                dx: 1f,
+                dy: 0f
             )
         ); // nothing to the right of the last
     }
@@ -158,21 +170,21 @@ public class FocusTraversalTests
         var order = FocusTraversal.Focusables(col);
 
         Assert.Same(
-            bottom,
-            FocusTraversal.Directional(
-                order,
-                top,
-                0f,
-                1f
+            expected: bottom,
+            actual: FocusTraversal.Directional(
+                order: order,
+                current: top,
+                dx: 0f,
+                dy: 1f
             )
         ); // down
         Assert.Same(
-            top,
-            FocusTraversal.Directional(
-                order,
-                bottom,
-                0f,
-                -1f
+            expected: top,
+            actual: FocusTraversal.Directional(
+                order: order,
+                current: bottom,
+                dx: 0f,
+                dy: -1f
             )
         ); // up
     }

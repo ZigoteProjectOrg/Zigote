@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using Zigote.Core;
 using Zigote.Core.Animation;
+using Zigote.Core.Paint;
 using Zigote.Core.State;
 using Zigote.UI.Host;
 using Zigote.UI.Material;
@@ -7,8 +9,6 @@ using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
-using Zigote.Core;
-using Zigote.Core.Paint;
 
 namespace Zigote.Videoplayer;
 
@@ -60,11 +60,21 @@ public sealed class VideoControls : ComposedWidget
     public VideoControls(VideoPlayer player)
     {
         Player = player;
-        _timeLabel = new Text("0:00 / 0:00", new TextStyle(13));
-        _statusLabel = new Text("", new TextStyle(12));
+        _timeLabel = new Text(data: "0:00 / 0:00", style: new TextStyle(13));
+        _statusLabel = new Text(data: "", style: new TextStyle(12));
         _speedLabel = new Text("1×");
-        _seekBar = new Slider(0, 0, 1, OnScrub);
-        _volumeBar = new Slider(1, 0, 1, OnVolume);
+        _seekBar = new Slider(
+            value: 0,
+            min: 0,
+            max: 1,
+            onChanged: OnScrub
+        );
+        _volumeBar = new Slider(
+            value: 1,
+            min: 0,
+            max: 1,
+            onChanged: OnVolume
+        );
     }
 
     internal VideoPlayer Player { get; }
@@ -88,10 +98,7 @@ public sealed class VideoControls : ComposedWidget
     }
 
     // The ticker itself is owned (disposed on unmount); drop the handle so a re-mount makes a new one.
-    protected override void OnUnmount()
-    {
-        _scrubTicker = null;
-    }
+    protected override void OnUnmount() => _scrubTicker = null;
 
     protected override Widget Build(BuildContext context)
     {
@@ -103,18 +110,20 @@ public sealed class VideoControls : ComposedWidget
 
         _root = new Column(
             crossAxisAlignment: CrossAxisAlignment.Stretch,
-            children:
-            [
+            children: [
                 _seekBar,
                 _bufferBar,
                 new Row(
                     crossAxisAlignment: CrossAxisAlignment.Center,
-                    children:
-                    [
-                        new IconButton(_playGlyph, P.TogglePlayPause, tooltip: "Play / pause"),
+                    children: [
                         new IconButton(
-                            new Icon(MaterialIcons.Replay),
-                            () => P.Seek(TimeSpan.Zero),
+                            icon: _playGlyph,
+                            onPressed: P.TogglePlayPause,
+                            tooltip: "Play / pause"
+                        ),
+                        new IconButton(
+                            icon: new Icon(MaterialIcons.Replay),
+                            onPressed: () => P.Seek(TimeSpan.Zero),
                             tooltip: "Restart"
                         ),
                         new SizedBox(8),
@@ -122,9 +131,9 @@ public sealed class VideoControls : ComposedWidget
                         new Spacer(),
                         _statusLabel,
                         new SizedBox(8),
-                        new TextButton(_speedLabel, CycleSpeed),
-                        new IconButton(_muteGlyph, ToggleMute, tooltip: "Mute"),
-                        new SizedBox(100, child: _volumeBar),
+                        new TextButton(child: _speedLabel, onPressed: CycleSpeed),
+                        new IconButton(icon: _muteGlyph, onPressed: ToggleMute, tooltip: "Mute"),
+                        new SizedBox(width: 100, child: _volumeBar),
                     ]
                 ),
             ]
@@ -144,12 +153,12 @@ public sealed class VideoControls : ComposedWidget
 
     private void SyncTime()
     {
-        var duration = P.Duration.TotalSeconds;
-        var fraction = _pendingScrub ?? (float)P.Progress;
-        var elapsed = duration > 0 ? fraction * duration : P.Position.Value.TotalSeconds;
+        double duration = P.Duration.TotalSeconds;
+        float fraction = _pendingScrub ?? (float)P.Progress;
+        double elapsed = duration > 0 ? fraction * duration : P.Position.Value.TotalSeconds;
 
         _seekBar.Value = fraction;
-        SetText(_timeLabel, $"{Clock(elapsed)} / {Clock(duration)}");
+        SetText(label: _timeLabel, value: $"{Clock(elapsed)} / {Clock(duration)}");
     }
 
     /// <summary>
@@ -159,27 +168,27 @@ public sealed class VideoControls : ComposedWidget
     /// </summary>
     private void SyncBuffer()
     {
-        var duration = P.Duration.TotalSeconds;
+        double duration = P.Duration.TotalSeconds;
         if (duration <= 0)
         {
-            _bufferBar.Set(0, 0);
+            _bufferBar.Set(start: 0, end: 0);
             return;
         }
 
-        var start = (float)P.Progress;
-        var end = (float)Math.Clamp(
-            (P.Position.Value.TotalSeconds + P.Buffered.Value.TotalSeconds) / duration,
-            0,
-            1
+        float start = (float)P.Progress;
+        float end = (float)Math.Clamp(
+            value: (P.Position.Value.TotalSeconds + P.Buffered.Value.TotalSeconds) / duration,
+            min: 0,
+            max: 1
         );
-        _bufferBar.Set(start, end);
+        _bufferBar.Set(start: start, end: end);
     }
 
     private void SyncTransport()
     {
         var state = P.State.Value;
-        SetGlyph(_playGlyph, PlayGlyph(state));
-        SetText(_statusLabel, StatusLabel(state));
+        SetGlyph(icon: _playGlyph, glyph: PlayGlyph(state));
+        SetText(label: _statusLabel, value: StatusLabel(state));
     }
 
     private void SyncSource()
@@ -190,15 +199,12 @@ public sealed class VideoControls : ComposedWidget
 
     private void SyncVolume()
     {
-        var muted = P.Muted.Value;
+        bool muted = P.Muted.Value;
         _volumeBar.Value = muted ? 0 : P.Volume.Value;
-        SetGlyph(_muteGlyph, muted ? MaterialIcons.VolumeOff : MaterialIcons.VolumeUp);
+        SetGlyph(icon: _muteGlyph, glyph: muted ? MaterialIcons.VolumeOff : MaterialIcons.VolumeUp);
     }
 
-    private void SyncSpeed()
-    {
-        SetText(_speedLabel, $"{P.Speed.Value:0.##}×");
-    }
+    private void SyncSpeed() => SetText(label: _speedLabel, value: $"{P.Speed.Value:0.##}×");
 
     /// <summary>Label re-lays out on assignment, so only assign when it would say something new.</summary>
     private static void SetText(Label label, string value)
@@ -230,8 +236,7 @@ public sealed class VideoControls : ComposedWidget
 
     private static string PlayGlyph(PlaybackState state)
     {
-        return state switch
-        {
+        return state switch {
             PlaybackState.Playing or PlaybackState.Buffering => MaterialIcons.Pause,
             _ => MaterialIcons.PlayArrow,
         };
@@ -239,8 +244,7 @@ public sealed class VideoControls : ComposedWidget
 
     private static string StatusLabel(PlaybackState state)
     {
-        return state switch
-        {
+        return state switch {
             PlaybackState.Buffering => "Buffering…",
             PlaybackState.Ended => "Ended",
             PlaybackState.Failed => "Failed",
@@ -257,14 +261,11 @@ public sealed class VideoControls : ComposedWidget
         P.Volume.Value = value;
     }
 
-    private void ToggleMute()
-    {
-        P.Muted.Value = !P.Muted.Value;
-    }
+    private void ToggleMute() => P.Muted.Value = !P.Muted.Value;
 
     private void CycleSpeed()
     {
-        var index = Array.FindIndex(Speeds, s => Math.Abs(s - P.Speed.Value) < 1e-6);
+        int index = Array.FindIndex(array: Speeds, match: s => Math.Abs(s - P.Speed.Value) < 1e-6);
         P.Speed.Value = Speeds[(index + 1) % Speeds.Length];
     }
 
@@ -296,6 +297,16 @@ public sealed class VideoControls : ComposedWidget
         _pendingScrub = null;
     }
 
+    /// <summary>h:mm:ss for anything an hour or longer, m:ss below — how a player shows time.</summary>
+    internal static string Clock(double seconds)
+    {
+        if (!double.IsFinite(seconds) || seconds <= 0) return "0:00";
+        var t = TimeSpan.FromSeconds(seconds);
+        return t.TotalHours >= 1
+            ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}"
+            : $"{t.Minutes}:{t.Seconds:00}";
+    }
+
     /// <summary>
     ///     A two-pixel strip under the scrubber showing the decoded read-ahead as a span, not a
     ///     length: it starts at the play head, so what it draws is how much runway is left.
@@ -318,37 +329,34 @@ public sealed class VideoControls : ComposedWidget
 
         public override Size Measure(Constraints c)
         {
-            _size = c.Constrain(new Size(float.PositiveInfinity, Thickness));
+            _size = c.Constrain(new Size(width: float.PositiveInfinity, height: Thickness));
             return _size;
         }
 
-        public override void Layout(Offset origin)
-        {
-            Bounds = new Rect(origin.X, origin.Y, _size.Width, _size.Height);
-        }
+        public override void Layout(Offset origin) => Bounds = new Rect(
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
+        );
 
         public override void Paint(PaintList paint)
         {
             if (_end <= _start || Bounds.Width <= 0) return;
 
             var theme = ThemeProvider.Of(BuildContext.Current);
-            var x = Bounds.X + Bounds.Width * _start;
-            var width = Bounds.Width * (_end - _start);
+            float x = Bounds.X + (Bounds.Width * _start);
+            float width = Bounds.Width * (_end - _start);
             paint.AddRect(
-                new Rect(x, Bounds.Y, width, Bounds.Height),
-                theme.TextSecondary.WithAlpha(0.35f),
-                Thickness / 2f
+                bounds: new Rect(
+                    x: x,
+                    y: Bounds.Y,
+                    width: width,
+                    height: Bounds.Height
+                ),
+                color: theme.TextSecondary.WithAlpha(0.35f),
+                radius: Thickness / 2f
             );
         }
-    }
-
-    /// <summary>h:mm:ss for anything an hour or longer, m:ss below — how a player shows time.</summary>
-    internal static string Clock(double seconds)
-    {
-        if (!double.IsFinite(seconds) || seconds <= 0) return "0:00";
-        var t = TimeSpan.FromSeconds(seconds);
-        return t.TotalHours >= 1
-            ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}"
-            : $"{t.Minutes}:{t.Seconds:00}";
     }
 }

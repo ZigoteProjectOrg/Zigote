@@ -19,32 +19,34 @@ public sealed class CinematicCamera : Component
     public bool Enabled { get; set; } = true;
 
     [Export]
-    [EditorRange(8, 800)]
+    [EditorRange(min: 8, max: 800)]
     [EditorTooltip("Lens focal length in millimetres")]
     public float FocalLengthMm { get; set; } = 50f;
 
     [Export]
-    [EditorRange(1, 22)]
+    [EditorRange(min: 1, max: 22)]
     [EditorTooltip("Aperture f-stop (lower = shallower depth of field)")]
     public float FStop { get; set; } = 2.8f;
 
-    [Export] [EditorRange(50, 25600)] public float Iso { get; set; } = 100f;
+    [Export]
+    [EditorRange(min: 50, max: 25600)]
+    public float Iso { get; set; } = 100f;
 
     [Export]
     [EditorTooltip("Shutter time in seconds (e.g. 0.02 = 1/50)")]
     public float ShutterSpeed { get; set; } = 1f / 50f;
 
     [Export]
-    [EditorRange(0, 6)]
+    [EditorRange(min: 0, max: 6)]
     [EditorTooltip(
         "Film stock: 0 Neutral, 1 Kodak2383, 2 Vision3, 3 Eterna, 4 Ektachrome, 5 Cineon, 6 B&W"
     )]
     public int FilmStock { get; set; }
 
-    [Export] [EditorRange(0, 1)] public float FilmStrength { get; set; } = 1f;
+    [Export] [EditorRange(min: 0, max: 1)] public float FilmStrength { get; set; } = 1f;
 
     [Export]
-    [EditorRange(0, 2)]
+    [EditorRange(min: 0, max: 2)]
     [EditorTooltip("Focus: 0 Manual, 1 Center AF, 2 Subject AF")]
     public int FocusMode { get; set; } = 1;
 
@@ -61,8 +63,11 @@ public sealed class CinematicCamera : Component
         Camera.SetAperture(FStop);
         Camera.SetIso(Iso);
         Camera.SetShutter(ShutterSpeed);
-        Camera.SetFilmStock((FilmStockKind)Math.Clamp(FilmStock, 0, 6), FilmStrength);
-        Camera.SetFocusMode((FocusModeKind)Math.Clamp(FocusMode, 0, 2));
+        Camera.SetFilmStock(
+            stock: (FilmStockKind)Math.Clamp(value: FilmStock, min: 0, max: 6),
+            strength: FilmStrength
+        );
+        Camera.SetFocusMode((FocusModeKind)Math.Clamp(value: FocusMode, min: 0, max: 2));
         Camera.SetManualFocus(ManualFocusM);
     }
 }

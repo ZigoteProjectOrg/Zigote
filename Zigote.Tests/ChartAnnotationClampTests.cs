@@ -17,13 +17,13 @@ public class ChartAnnotationClampTests
     public void Annotation_InNarrowPlot_DoesNotThrow(float width)
     {
         var rows = new List<Bar> {
-            new("W1", 40),
-            new("W2", 91),
-            new("W3", 66),
+            new(M: "W1", V: 40),
+            new(M: "W2", V: 91),
+            new(M: "W3", V: 66),
         };
         var chart = new Chart {
             Animated = false,
-            Marks = { BarMark.Of(rows, d => d.M, d => d.V) },
+            Marks = { BarMark.Of(data: rows, x: d => d.M, y: d => d.V) },
         };
         chart.Annotations.Add(
             new ChartAnnotation {
@@ -36,10 +36,10 @@ public class ChartAnnotationClampTests
 
         chart.Measure(
             new Constraints(
-                0,
-                width,
-                0,
-                80
+                minWidth: 0,
+                maxWidth: width,
+                minHeight: 0,
+                maxHeight: 80
             )
         );
         chart.Layout(Offset.Zero);
@@ -56,35 +56,37 @@ public class ChartAnnotationClampTests
     public void HoverTooltip_InTinyPlot_DoesNotThrow(float width, float height)
     {
         var data = new List<Pt>();
-        for (var i = 0; i < 6; i++)
+        for (int i = 0; i < 6; i++)
         {
-            data.Add(new Pt(i, 10 + i, "Alpha series"));
-            data.Add(new Pt(i, 20 + i, "Beta series"));
+            data.Add(new Pt(X: i, Y: 10 + i, S: "Alpha series"));
+            data.Add(new Pt(X: i, Y: 20 + i, S: "Beta series"));
         }
 
         var chart = new Chart {
             Animated = false,
             Marks = {
                 LineMark.Of(
-                    data,
-                    d => d.X,
-                    d => d.Y,
-                    d => d.S
+                    data: data,
+                    x: d => d.X,
+                    y: d => d.Y,
+                    series: d => d.S
                 ),
             },
         };
         chart.Measure(
             new Constraints(
-                0,
-                width,
-                0,
-                height
+                minWidth: 0,
+                maxWidth: width,
+                minHeight: 0,
+                maxHeight: height
             )
         );
         chart.Layout(Offset.Zero);
 
         var plot = chart.PlotRect;
-        chart.OnPointerMove(new Offset(plot.X + plot.Width * 0.5f, plot.Y + plot.Height * 0.5f));
+        chart.OnPointerMove(
+            new Offset(x: plot.X + (plot.Width * 0.5f), y: plot.Y + (plot.Height * 0.5f))
+        );
 
         var paint = new PaintList();
         chart.Paint(paint); // was: System.ArgumentException min > max in the tooltip card clamp
@@ -95,10 +97,10 @@ public class ChartAnnotationClampTests
     {
         chart.Measure(
             new Constraints(
-                0,
-                w,
-                0,
-                h
+                minWidth: 0,
+                maxWidth: w,
+                minHeight: 0,
+                maxHeight: h
             )
         );
         chart.Layout(Offset.Zero);
@@ -117,15 +119,15 @@ public class ChartAnnotationClampTests
             ("B", double.NaN),
             ("C", 20),
         };
-        var donut = SectorMark.Of(data, d => d.V, d => d.Name);
+        var donut = SectorMark.Of(data: data, value: d => d.V, category: d => d.Name);
         donut.InnerRadiusFraction = 0.5f;
         PaintOnce(
-            new Chart {
+            chart: new Chart {
                 Animated = false,
                 Marks = { donut },
             },
-            200f,
-            150f
+            w: 200f,
+            h: 150f
         );
     }
 
@@ -138,7 +140,7 @@ public class ChartAnnotationClampTests
             ("B", "R", double.NaN),
             ("C", "R", 8),
         };
-        var heat = RectangleMark.Of(cells, c => c.X, c => c.Y);
+        var heat = RectangleMark.Of(data: cells, x: c => c.X, y: c => c.Y);
         heat.FillBy = c => c.M;
         PaintOnce(
             new Chart {
@@ -160,7 +162,7 @@ public class ChartAnnotationClampTests
         PaintOnce(
             new Chart {
                 Animated = false,
-                Marks = { LineMark.Of(data, d => d.T, d => d.V) },
+                Marks = { LineMark.Of(data: data, x: d => d.T, y: d => d.V) },
             }
         );
     }

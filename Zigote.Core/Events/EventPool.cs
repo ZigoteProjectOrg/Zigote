@@ -40,9 +40,7 @@ public sealed class EventPool
     {
         MouseMoveEvent e;
         if (_mouseMoveNext < _mouseMove.Count)
-        {
             e = _mouseMove[_mouseMoveNext];
-        }
         else
         {
             e = new MouseMoveEvent();
@@ -51,11 +49,11 @@ public sealed class EventPool
 
         _mouseMoveNext++;
         e.Reuse(
-            x,
-            y,
-            windowId,
-            relativeX,
-            relativeY
+            x: x,
+            y: y,
+            windowId: windowId,
+            relativeX: relativeX,
+            relativeY: relativeY
         );
         return e;
     }
@@ -65,9 +63,7 @@ public sealed class EventPool
     {
         TouchMoveEvent e;
         if (_touchMoveNext < _touchMove.Count)
-        {
             e = _touchMove[_touchMoveNext];
-        }
         else
         {
             e = new TouchMoveEvent();
@@ -76,11 +72,11 @@ public sealed class EventPool
 
         _touchMoveNext++;
         e.Reuse(
-            x,
-            y,
-            finger,
-            pressure,
-            windowId
+            x: x,
+            y: y,
+            finger: finger,
+            pressure: pressure,
+            windowId: windowId
         );
         return e;
     }
@@ -90,9 +86,7 @@ public sealed class EventPool
     {
         ScrollEvent e;
         if (_scrollNext < _scroll.Count)
-        {
             e = _scroll[_scrollNext];
-        }
         else
         {
             e = new ScrollEvent();
@@ -101,11 +95,11 @@ public sealed class EventPool
 
         _scrollNext++;
         e.Reuse(
-            x,
-            y,
-            scrollX,
-            scrollY,
-            windowId
+            x: x,
+            y: y,
+            scrollX: scrollX,
+            scrollY: scrollY,
+            windowId: windowId
         );
         return e;
     }

@@ -42,23 +42,19 @@ public static class Scenes
     public static string? Current => Backend?.Current;
 
     /// <summary>Switch to another scene (deferred to the end of the current fixed tick).</summary>
-    public static void Load(string scenePath)
-    {
-        Backend?.Load(scenePath, 0f);
-    }
+    public static void Load(string scenePath) =>
+        Backend?.Load(scenePath: scenePath, fadeSeconds: 0f);
 
     /// <summary>
     ///     Switch to another scene through a black fade: fade out over <paramref name="fadeSeconds" />,
     ///     swap at full black, fade back in over the same duration.
     /// </summary>
-    public static void Load(string scenePath, float fadeSeconds)
-    {
-        Backend?.Load(scenePath, fadeSeconds);
-    }
+    public static void Load(string scenePath, float fadeSeconds) => Backend?.Load(
+        scenePath: scenePath,
+        fadeSeconds: fadeSeconds
+    );
 
     /// <summary>Load a scene's content into the running scene; destroy the returned entity to unload it.</summary>
-    public static EntityHandle LoadAdditive(string scenePath)
-    {
-        return Backend?.LoadAdditive(scenePath) ?? EntityHandle.None;
-    }
+    public static EntityHandle LoadAdditive(string scenePath) =>
+        Backend?.LoadAdditive(scenePath) ?? EntityHandle.None;
 }

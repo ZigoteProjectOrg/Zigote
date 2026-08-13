@@ -17,10 +17,10 @@ public class GameExportTests
 {
     private static string TempDir()
     {
-        var dir = Path.Combine(
-            Path.GetTempPath(),
-            "zigote-export-tests",
-            Guid.NewGuid().ToString("N")
+        string dir = Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: "zigote-export-tests",
+            path3: Guid.NewGuid().ToString("N")
         );
         Directory.CreateDirectory(dir);
         return dir;
@@ -33,65 +33,83 @@ public class GameExportTests
             Name = "My Game",
             ScriptProject = scriptProject,
         };
-        var projPath = Path.Combine(dir, "game.zigoteproj");
+        string projPath = Path.Combine(path1: dir, path2: "game.zigoteproj");
         project.Save(projPath);
         var registry = new ScriptRegistry();
         registry.Register(typeof(Rotator));
         registry.Register(typeof(CameraFollow));
         return new ExportInput(
-            projPath,
-            project,
-            registry,
-            scriptAsm
+            ProjectPath: projPath,
+            Project: project,
+            Scripts: registry,
+            ScriptAssemblyName: scriptAsm
         );
     }
 
     [Fact]
     public void GeneratedRegistration_ListsComponentsSorted()
     {
-        var dir = TempDir();
+        string dir = TempDir();
         GameExporter.GeneratePlayerProject(
-            Input(dir),
-            dir,
-            Path.Combine(dir, "player"),
-            "MyGame"
+            input: Input(dir),
+            sdkRoot: dir,
+            playerDir: Path.Combine(path1: dir, path2: "player"),
+            exeName: "MyGame"
         );
 
-        var reg = File.ReadAllText(Path.Combine(dir, "player", "ScriptRegistration.g.cs"));
-        Assert.Contains("r.Register(typeof(global::Samples.Scripting.CameraFollow));", reg);
-        Assert.Contains("r.Register(typeof(global::Samples.Scripting.Rotator));", reg);
+        string reg = File.ReadAllText(
+            Path.Combine(path1: dir, path2: "player", path3: "ScriptRegistration.g.cs")
+        );
+        Assert.Contains(
+            expectedSubstring: "r.Register(typeof(global::Samples.Scripting.CameraFollow));",
+            actualString: reg
+        );
+        Assert.Contains(
+            expectedSubstring: "r.Register(typeof(global::Samples.Scripting.Rotator));",
+            actualString: reg
+        );
         Assert.True(
-            reg.IndexOf("CameraFollow", StringComparison.Ordinal) <
-            reg.IndexOf("Rotator", StringComparison.Ordinal)
+            reg.IndexOf(value: "CameraFollow", comparisonType: StringComparison.Ordinal) <
+            reg.IndexOf(value: "Rotator", comparisonType: StringComparison.Ordinal)
         );
 
-        var program = File.ReadAllText(Path.Combine(dir, "player", "Program.g.cs"));
-        Assert.Contains("PlayerMain.Run(GameScripts.Register)", program);
+        string program = File.ReadAllText(
+            Path.Combine(path1: dir, path2: "player", path3: "Program.g.cs")
+        );
+        Assert.Contains(
+            expectedSubstring: "PlayerMain.Run(GameScripts.Register)",
+            actualString: program
+        );
     }
 
     [Fact]
     public void GeneratedRegistration_TrimsUnreferencedSamples()
     {
-        var dir = TempDir();
+        string dir = TempDir();
         // Scene references only Rotator; CameraFollow is an unreferenced engine sample → trimmed.
         GameExporter.GeneratePlayerProject(
-            Input(dir),
-            dir,
-            Path.Combine(dir, "player"),
-            "MyGame",
-            new HashSet<string> { "Samples.Scripting.Rotator" }
+            input: Input(dir),
+            sdkRoot: dir,
+            playerDir: Path.Combine(path1: dir, path2: "player"),
+            exeName: "MyGame",
+            sceneScriptClasses: new HashSet<string> { "Samples.Scripting.Rotator" }
         );
 
-        var reg = File.ReadAllText(Path.Combine(dir, "player", "ScriptRegistration.g.cs"));
-        Assert.Contains("r.Register(typeof(global::Samples.Scripting.Rotator));", reg);
-        Assert.DoesNotContain("CameraFollow", reg);
+        string reg = File.ReadAllText(
+            Path.Combine(path1: dir, path2: "player", path3: "ScriptRegistration.g.cs")
+        );
+        Assert.Contains(
+            expectedSubstring: "r.Register(typeof(global::Samples.Scripting.Rotator));",
+            actualString: reg
+        );
+        Assert.DoesNotContain(expectedSubstring: "CameraFollow", actualString: reg);
     }
 
     [Fact]
     public void CollectScriptClasses_WalksTheTree()
     {
         var scene = new SceneGraph();
-        var child = new SceneNode("Car", NodeKind.Mesh) {
+        var child = new SceneNode(name: "Car", kind: NodeKind.Mesh) {
             ScriptClass = "Game.CarController",
             Parent = scene.Root,
         };
@@ -104,57 +122,75 @@ public class GameExportTests
         scene.Root.Children.Add(child);
 
         var classes = GameExporter.CollectScriptClasses(scene);
-        Assert.Equal(["Game.CarController", "Game.ChaseCamera"], classes.OrderBy(c => c));
+        Assert.Equal(
+            expected: ["Game.CarController", "Game.ChaseCamera"],
+            actual: classes.OrderBy(c => c)
+        );
     }
 
     [Fact]
     public void GeneratedCsproj_WiresPlayerAndScripts()
     {
-        var dir = TempDir();
+        string dir = TempDir();
         GameExporter.GeneratePlayerProject(
-            Input(dir, "scripts/Game.Scripts.csproj", "Game.Scripts"),
-            dir,
-            Path.Combine(dir, "player"),
-            "MyGame"
+            input: Input(
+                dir: dir,
+                scriptProject: "scripts/Game.Scripts.csproj",
+                scriptAsm: "Game.Scripts"
+            ),
+            sdkRoot: dir,
+            playerDir: Path.Combine(path1: dir, path2: "player"),
+            exeName: "MyGame"
         );
 
-        var csproj = File.ReadAllText(Path.Combine(dir, "player", "Game.csproj"));
-        Assert.Contains("<AssemblyName>MyGame</AssemblyName>", csproj);
-        Assert.Contains("Zigote.Player.csproj", csproj);
-        Assert.Contains("Game.Scripts.csproj", csproj);
-        Assert.Contains("""<TrimmerRootAssembly Include="Game.Scripts" />""", csproj);
-        Assert.Contains("""<TrimmerRootAssembly Include="Zigote.Runtime" />""", csproj);
-        Assert.Contains("<PublishAot>true</PublishAot>", csproj);
+        string csproj =
+            File.ReadAllText(Path.Combine(path1: dir, path2: "player", path3: "Game.csproj"));
+        Assert.Contains(
+            expectedSubstring: "<AssemblyName>MyGame</AssemblyName>",
+            actualString: csproj
+        );
+        Assert.Contains(expectedSubstring: "Zigote.Player.csproj", actualString: csproj);
+        Assert.Contains(expectedSubstring: "Game.Scripts.csproj", actualString: csproj);
+        Assert.Contains(
+            expectedSubstring: """<TrimmerRootAssembly Include="Game.Scripts" />""",
+            actualString: csproj
+        );
+        Assert.Contains(
+            expectedSubstring: """<TrimmerRootAssembly Include="Zigote.Runtime" />""",
+            actualString: csproj
+        );
+        Assert.Contains(expectedSubstring: "<PublishAot>true</PublishAot>", actualString: csproj);
     }
 
     [Fact]
     public void GeneratedCsproj_NoScriptProject_OmitsReference()
     {
-        var dir = TempDir();
+        string dir = TempDir();
         GameExporter.GeneratePlayerProject(
-            Input(dir),
-            dir,
-            Path.Combine(dir, "player"),
-            "MyGame"
+            input: Input(dir),
+            sdkRoot: dir,
+            playerDir: Path.Combine(path1: dir, path2: "player"),
+            exeName: "MyGame"
         );
 
-        var csproj = File.ReadAllText(Path.Combine(dir, "player", "Game.csproj"));
-        Assert.DoesNotContain("Scripts.csproj", csproj);
-        Assert.Contains("Zigote.Player.csproj", csproj);
+        string csproj =
+            File.ReadAllText(Path.Combine(path1: dir, path2: "player", path3: "Game.csproj"));
+        Assert.DoesNotContain(expectedSubstring: "Scripts.csproj", actualString: csproj);
+        Assert.Contains(expectedSubstring: "Zigote.Player.csproj", actualString: csproj);
     }
 
     [Fact]
     public void BakeVfxGraphs_BakesEmitterAndClearsGraph()
     {
-        var dir = TempDir();
+        string dir = TempDir();
         var scene = new SceneGraph();
         scene.Root.Children.Add(
-            new SceneNode("Sparks", NodeKind.VfxEmitter) { Parent = scene.Root }
+            new SceneNode(name: "Sparks", kind: NodeKind.VfxEmitter) { Parent = scene.Root }
         );
-        var path = Path.Combine(dir, "main.scene");
+        string path = Path.Combine(path1: dir, path2: "main.scene");
         scene.Save(path);
 
-        GameExporter.BakeVfxGraphs(path, new NullProgress());
+        GameExporter.BakeVfxGraphs(scenePath: path, log: new NullProgress());
 
         var baked = SceneGraph.Load(path);
         var emitter = baked.Root.Children.Single(n => n.Kind == NodeKind.VfxEmitter);
@@ -168,53 +204,53 @@ public class GameExportTests
     [Fact]
     public void ContentFiles_RoundTripsCompressed()
     {
-        var dir = TempDir();
-        var src = Path.Combine(dir, "blob.zmesh");
-        var payload = new byte[64 * 1024];
+        string dir = TempDir();
+        string src = Path.Combine(path1: dir, path2: "blob.zmesh");
+        byte[] payload = new byte[64 * 1024];
         new Random(42).NextBytes(payload);
         // Mix in compressible structure so the codec has something to chew on.
         Array.Fill(
-            payload,
-            (byte)7,
-            0,
-            16 * 1024
+            array: payload,
+            value: (byte)7,
+            startIndex: 0,
+            count: 16 * 1024
         );
-        File.WriteAllBytes(src, payload);
+        File.WriteAllBytes(path: src, bytes: payload);
 
-        var shipped = Path.Combine(dir, "shipped", "blob.zmesh");
+        string shipped = Path.Combine(path1: dir, path2: "shipped", path3: "blob.zmesh");
         Directory.CreateDirectory(Path.GetDirectoryName(shipped)!);
-        var compressedSize = ContentFiles.WriteCompressed(src, shipped);
+        long compressedSize = ContentFiles.WriteCompressed(src: src, dst: shipped);
 
         Assert.False(File.Exists(shipped)); // only the .zst variant ships
         Assert.True(File.Exists(shipped + ".zst"));
         Assert.True(compressedSize > 0 && compressedSize < payload.Length);
 
         Assert.True(ContentFiles.Exists(shipped));
-        Assert.Equal(payload, ContentFiles.ReadAllBytes(shipped));
+        Assert.Equal(expected: payload, actual: ContentFiles.ReadAllBytes(shipped));
 
         // Plain files still read as-is (the editor's loose-file path).
-        Assert.Equal(payload, ContentFiles.ReadAllBytes(src));
+        Assert.Equal(expected: payload, actual: ContentFiles.ReadAllBytes(src));
     }
 
     [Fact]
     public void BakeVfxGraphs_NoEmitters_LeavesSceneUntouched()
     {
-        var dir = TempDir();
+        string dir = TempDir();
         var scene = new SceneGraph();
-        scene.Root.Children.Add(new SceneNode("Cube", NodeKind.Mesh) { Parent = scene.Root });
-        var path = Path.Combine(dir, "main.scene");
+        scene.Root.Children.Add(
+            new SceneNode(name: "Cube", kind: NodeKind.Mesh) { Parent = scene.Root }
+        );
+        string path = Path.Combine(path1: dir, path2: "main.scene");
         scene.Save(path);
-        var before = File.ReadAllBytes(path);
+        byte[] before = File.ReadAllBytes(path);
 
-        GameExporter.BakeVfxGraphs(path, new NullProgress());
+        GameExporter.BakeVfxGraphs(scenePath: path, log: new NullProgress());
 
-        Assert.Equal(before, File.ReadAllBytes(path));
+        Assert.Equal(expected: before, actual: File.ReadAllBytes(path));
     }
 
     private sealed class NullProgress : IProgress<string>
     {
-        public void Report(string value)
-        {
-        }
+        public void Report(string value) { }
     }
 }

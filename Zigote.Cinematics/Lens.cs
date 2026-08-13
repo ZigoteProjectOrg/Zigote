@@ -36,20 +36,17 @@ public readonly struct Lens : IEquatable<Lens>
                DistortionK1.Equals(other.DistortionK1) && DistortionK2.Equals(other.DistortionK2);
     }
 
-    public override bool Equals(object? obj)
-    {
-        return obj is Lens o && Equals(o);
-    }
+    public override bool Equals(object? obj) => obj is Lens o && Equals(o);
 
     public override int GetHashCode()
     {
         return HashCode.Combine(
-            FocalLengthMm,
-            FStop,
-            ApertureBlades,
-            Anamorphic,
-            DistortionK1,
-            DistortionK2
+            value1: FocalLengthMm,
+            value2: FStop,
+            value3: ApertureBlades,
+            value4: Anamorphic,
+            value5: DistortionK1,
+            value6: DistortionK2
         );
     }
 }

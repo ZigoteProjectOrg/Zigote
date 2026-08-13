@@ -1,8 +1,8 @@
 using Zigote.Core.Engine;
 using Zigote.Core.Events;
+using Zigote.UI.Host;
 using Zigote.UI.Semantics;
 using Zigote.UI.TextShaping;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.Material;
 
@@ -19,6 +19,7 @@ public class TextField : Widget, ITextInputClient
 
     // Double-click (word select) detection — timing-based (no click-count in the event pipeline).
     private const float DoubleClickSeconds = 0.4f;
+    private readonly TextEditingController? _controller;
     private float[] _adv = [0f]; // cumulative prefix advances: _adv[i] = width of Text[..i]
     private float _advFs;
     private string? _advText;
@@ -32,10 +33,10 @@ public class TextField : Widget, ITextInputClient
     private int _compositionStart;
     private string _compositionText = string.Empty;
     private ContextMenu? _contextMenu;
-    private readonly TextEditingController? _controller;
     private int _cursorPos;
 
     private int _desiredCol = -1; // sticky column for Up/Down navigation; -1 = recompute from caret
+    private string _hint = string.Empty;
     private bool _hovered;
     private bool _isDragging;
     private int _lastClickPos;
@@ -43,15 +44,14 @@ public class TextField : Widget, ITextInputClient
     private TextLayout? _layout;
     private float _layoutFs;
     private string? _layoutText;
+    private bool _multiline;
+    private bool _obscure;
     private float _scrollX;
     private float _scrollY; // multi-line vertical scroll
     private int _selectionAnchor = -1; // -1 means no selection
     private Size _size;
-    private ThemeData _theme = ThemeData.Dark;
     private string _text = string.Empty;
-    private bool _obscure;
-    private string _hint = string.Empty;
-    private bool _multiline;
+    private ThemeData _theme = ThemeData.Dark;
 
     /// <summary>
     ///     Named-argument constructor:
@@ -98,21 +98,9 @@ public class TextField : Widget, ITextInputClient
             };
         }
         else
-        {
             OnChanged = onChanged;
-        }
 
         _obscure = obscureText;
-    }
-
-    /// <summary>
-    ///     Follows an external controller write (<c>controller.Text = …</c> / <c>Clear()</c>) into the
-    ///     field. Edits typed in the field flow back via <see cref="TextEditingController.SetTextSilently" />,
-    ///     so this never re-enters.
-    /// </summary>
-    private void OnControllerChanged(string value)
-    {
-        Text = value;
     }
 
     public string Text
@@ -161,16 +149,16 @@ public class TextField : Widget, ITextInputClient
     public bool Obscure
     {
         get => _obscure;
-        set => SetPaint(ref _obscure, value);
+        set => SetPaint(field: ref _obscure, value: value);
     }
 
     /// <summary>What the field actually renders/measures — the masked form when <see cref="Obscure" />.</summary>
-    private string Visible => Obscure ? new string('•', Text.Length) : Text;
+    private string Visible => Obscure ? new string(c: '•', count: Text.Length) : Text;
 
     public string Hint
     {
         get => _hint;
-        set => SetPaint(ref _hint, value);
+        set => SetPaint(field: ref _hint, value: value);
     }
 
     public Action<string>? OnChanged { get; set; }
@@ -197,11 +185,6 @@ public class TextField : Widget, ITextInputClient
     /// <summary>When true, the field is selectable/copyable but not editable (no caret, no text input).</summary>
     public bool ReadOnly { get; set; }
 
-    public override MouseCursor? GetCursor(Offset point)
-    {
-        return MouseCursor.Text;
-    }
-
     /// <summary>
     ///     When false the field paints no surface fill, hairline border, or focus ring — it renders only
     ///     text + caret. Composite hosts that own the chrome (e.g. <see cref="SearchField" />'s capsule)
@@ -218,7 +201,7 @@ public class TextField : Widget, ITextInputClient
     public bool Multiline
     {
         get => _multiline;
-        set => SetLayout(ref _multiline, value);
+        set => SetLayout(field: ref _multiline, value: value);
     }
 
     /// <summary>
@@ -241,8 +224,8 @@ public class TextField : Widget, ITextInputClient
     // ── Selection helpers ─────────────────────────────────────────────────────
 
     private bool HasSelection => _selectionAnchor >= 0 && _selectionAnchor != _cursorPos;
-    private int SelectionMin => Math.Min(_selectionAnchor, _cursorPos);
-    private int SelectionMax => Math.Max(_selectionAnchor, _cursorPos);
+    private int SelectionMin => Math.Min(val1: _selectionAnchor, val2: _cursorPos);
+    private int SelectionMax => Math.Max(val1: _selectionAnchor, val2: _cursorPos);
     private string SelectedText => HasSelection ? Text[SelectionMin..SelectionMax] : string.Empty;
 
     // ── Multi-line line model ───────────────────────────────────────────────────
@@ -253,13 +236,26 @@ public class TextField : Widget, ITextInputClient
     {
         get
         {
-            var n = 1;
-            for (var i = 0; i < Text.Length; i++)
+            int n = 1;
+            for (int i = 0; i < Text.Length; i++)
+            {
                 if (Text[i] == '\n')
                     n++;
+            }
+
             return n;
         }
     }
+
+    /// <summary>
+    ///     Follows an external controller write (<c>controller.Text = …</c> / <c>Clear()</c>) into the
+    ///     field. Edits typed in the field flow back via
+    ///     <see cref="TextEditingController.SetTextSilently" />,
+    ///     so this never re-enters.
+    /// </summary>
+    private void OnControllerChanged(string value) => Text = value;
+
+    public override MouseCursor? GetCursor(Offset point) => MouseCursor.Text;
 
     public override void DescribeSemantics(SemanticsConfiguration config)
     {
@@ -269,21 +265,15 @@ public class TextField : Widget, ITextInputClient
         config.Actions = SemanticsAction.Focus |
                          (ReadOnly ? SemanticsAction.None : SemanticsAction.SetValue);
         config.AddFlag(SemanticsFlags.Focusable)
-            .AddFlag(SemanticsFlags.Focused, Focused)
-            .AddFlag(SemanticsFlags.ReadOnly, ReadOnly)
-            .AddFlag(SemanticsFlags.Multiline, Multiline);
+            .AddFlag(flag: SemanticsFlags.Focused, on: Focused)
+            .AddFlag(flag: SemanticsFlags.ReadOnly, on: ReadOnly)
+            .AddFlag(flag: SemanticsFlags.Multiline, on: Multiline);
     }
 
-    private void ClearSelection()
-    {
-        _selectionAnchor = -1;
-    }
+    private void ClearSelection() => _selectionAnchor = -1;
 
     /// <summary>Make the caret solid now; it resumes blinking after the dwell interval.</summary>
-    private void ResetCaretBlink()
-    {
-        _caretBase = App.Active?.Time ?? 0f;
-    }
+    private void ResetCaretBlink() => _caretBase = App.Active?.Time ?? 0f;
 
     private void SelectAll()
     {
@@ -295,8 +285,8 @@ public class TextField : Widget, ITextInputClient
     private void DeleteSelection()
     {
         if (ReadOnly || !HasSelection) return;
-        var min = SelectionMin;
-        var max = SelectionMax;
+        int min = SelectionMin;
+        int max = SelectionMax;
         Text = Text[..min] + Text[max..];
         _cursorPos = min;
         ClearSelection();
@@ -311,25 +301,25 @@ public class TextField : Widget, ITextInputClient
             if (_selectionAnchor < 0) _selectionAnchor = _cursorPos;
         }
         else
-        {
             ClearSelection();
-        }
 
-        _cursorPos = TextNavigation.GraphemeBoundaryAtOrBefore(Text, newPos);
+        _cursorPos = TextNavigation.GraphemeBoundaryAtOrBefore(text: Text, index: newPos);
         MarkNeedsPaint();
     }
 
     /// <summary>(line, column) of a flat index — column is the UTF-16 offset within its physical line.</summary>
     private (int Line, int Col) LineColAt(int index)
     {
-        index = Math.Clamp(index, 0, Text.Length);
+        index = Math.Clamp(value: index, min: 0, max: Text.Length);
         int line = 0, lineStart = 0;
-        for (var i = 0; i < index; i++)
+        for (int i = 0; i < index; i++)
+        {
             if (Text[i] == '\n')
             {
                 line++;
                 lineStart = i + 1;
             }
+        }
 
         return (line, index - lineStart);
     }
@@ -340,26 +330,29 @@ public class TextField : Widget, ITextInputClient
         if (line <= 0) return 0;
         int seen = 0, i = 0;
         for (; i < Text.Length; i++)
+        {
             if (Text[i] == '\n' && ++seen == line)
                 return i + 1;
+        }
+
         return Text.Length;
     }
 
     /// <summary>Exclusive end index of <paramref name="line" /> (the '\n' or end of text).</summary>
     private int LineEndIndex(int line)
     {
-        var start = LineStartIndex(line);
-        var nl = Text.IndexOf('\n', start);
+        int start = LineStartIndex(line);
+        int nl = Text.IndexOf(value: '\n', startIndex: start);
         return nl < 0 ? Text.Length : nl;
     }
 
     /// <summary>Flat index for a (line, column), clamping the column to that line's length.</summary>
     private int IndexAt(int line, int col)
     {
-        line = Math.Clamp(line, 0, LineCount - 1);
-        var start = LineStartIndex(line);
-        var end = LineEndIndex(line);
-        return start + Math.Clamp(col, 0, end - start);
+        line = Math.Clamp(value: line, min: 0, max: LineCount - 1);
+        int start = LineStartIndex(line);
+        int end = LineEndIndex(line);
+        return start + Math.Clamp(value: col, min: 0, max: end - start);
     }
 
     // ── Text measurement ──────────────────────────────────────────────────────
@@ -372,18 +365,21 @@ public class TextField : Widget, ITextInputClient
     /// </summary>
     private void EnsureAdvances(float fs)
     {
-        var text = Visible;
+        string text = Visible;
         if (_advText == text && Math.Abs(_advFs - fs) < 0.01f &&
             _adv.Length == text.Length + 1) return;
         _advText = text;
         _advFs = fs;
         _adv = new float[text.Length + 1];
-        var boundaries = TextNavigation.GraphemeBoundaries(text);
-        for (var i = 1; i < boundaries.Length; i++)
+        int[] boundaries = TextNavigation.GraphemeBoundaries(text);
+        for (int i = 1; i < boundaries.Length; i++)
         {
-            var previous = boundaries[i - 1];
-            var current = boundaries[i];
-            _adv[current] = _adv[previous] + TextMeasure.Width(text[previous..current], fs);
+            int previous = boundaries[i - 1];
+            int current = boundaries[i];
+            _adv[current] = _adv[previous] + TextMeasure.Width(
+                text: text[previous..current],
+                fontSize: fs
+            );
         }
     }
 
@@ -394,7 +390,7 @@ public class TextField : Widget, ITextInputClient
         // Return null there so every caller takes its AddText / measured-advance fallback.
         if (Owner is { NativeWindow: not null }) return null;
 
-        var text = Visible;
+        string text = Visible;
         if (_layoutText == text && Math.Abs(_layoutFs - fs) < 0.01f) return _layout;
         _layout?.Dispose();
         _layout = null;
@@ -404,7 +400,7 @@ public class TextField : Widget, ITextInputClient
         if (engine is null || engine.Handle == 0 || text.Length == 0) return null;
         try
         {
-            _layout = engine.CreateTextLayout(text, fs);
+            _layout = engine.CreateTextLayout(text: text, fontSize: fs);
         }
         catch
         {
@@ -417,9 +413,13 @@ public class TextField : Widget, ITextInputClient
     /// <summary>Pixel offset of the caret for a given character index, using real text metrics.</summary>
     private float CaretX(int index)
     {
-        index = TextNavigation.GraphemeBoundaryAtOrBefore(Visible, index);
+        index = TextNavigation.GraphemeBoundaryAtOrBefore(text: Visible, index: index);
         var layout = EnsureTextLayout(_theme.FontSizeBody);
-        if (layout is not null && layout.TryGetCaretPosition(index, out var position, out _))
+        if (layout is not null && layout.TryGetCaretPosition(
+                textOffset: index,
+                position: out var position,
+                height: out _
+            ))
             return position.X;
         EnsureAdvances(_theme.FontSizeBody);
         return _adv[index];
@@ -428,17 +428,17 @@ public class TextField : Widget, ITextInputClient
     private int PositionAtX(float screenX)
     {
         EnsureAdvances(_theme.FontSizeBody);
-        var relX = screenX - (Bounds.X + Spacing.Sm) + _scrollX;
+        float relX = screenX - (Bounds.X + Spacing.Sm) + _scrollX;
         if (relX <= 0f || Text.Length == 0) return 0;
         var layout = EnsureTextLayout(_theme.FontSizeBody);
         if (layout is not null) return layout.HitTest(relX);
 
         // Pick the gap nearest the click via the midpoint between adjacent glyph advances.
-        var boundaries = TextNavigation.GraphemeBoundaries(Visible);
-        for (var i = 1; i < boundaries.Length; i++)
+        int[] boundaries = TextNavigation.GraphemeBoundaries(Visible);
+        for (int i = 1; i < boundaries.Length; i++)
         {
-            var previous = boundaries[i - 1];
-            var current = boundaries[i];
+            int previous = boundaries[i - 1];
+            int current = boundaries[i];
             if (relX < (_adv[previous] + _adv[current]) / 2f)
                 return previous;
         }
@@ -455,17 +455,22 @@ public class TextField : Widget, ITextInputClient
     private void UpdateScroll()
     {
         if (Bounds.Width <= 0f) return;
-        var fs = _theme.FontSizeBody;
-        var padX = Spacing.Sm;
+        float fs = _theme.FontSizeBody;
+        float padX = Spacing.Sm;
         var layout = EnsureTextLayout(fs);
         if (layout is null) EnsureAdvances(fs);
-        var caretX = CaretX(_cursorPos);
-        var inner = Bounds.Width - padX * 2f;
-        var total = layout?.Measure().Width ?? _adv[Text.Length];
-        var old = _scrollX;
+        float caretX = CaretX(_cursorPos);
+        float inner = Bounds.Width - (padX * 2f);
+        float total = layout?.Measure().Width ?? _adv[Text.Length];
+        float old = _scrollX;
         if (caretX - _scrollX > inner - CaretMargin) _scrollX = caretX - inner + CaretMargin;
-        else if (caretX - _scrollX < CaretMargin) _scrollX = Math.Max(0f, caretX - CaretMargin);
-        _scrollX = Math.Clamp(_scrollX, 0f, Math.Max(0f, total - inner));
+        else if (caretX - _scrollX < CaretMargin)
+            _scrollX = Math.Max(val1: 0f, val2: caretX - CaretMargin);
+        _scrollX = Math.Clamp(
+            value: _scrollX,
+            min: 0f,
+            max: Math.Max(val1: 0f, val2: total - inner)
+        );
         if (Math.Abs(_scrollX - old) > 0.01f) MarkNeedsPaint();
     }
 
@@ -492,8 +497,13 @@ public class TextField : Widget, ITextInputClient
     private void PasteAction()
     {
         if (ReadOnly) return;
-        var pasted = ZigoteEngine.Instance?.GetClipboard() ?? string.Empty;
-        if (!Multiline) pasted = pasted.Replace("\r", "").Replace("\n", " ");
+        string pasted = ZigoteEngine.Instance?.GetClipboard() ?? string.Empty;
+        if (!Multiline)
+        {
+            pasted = pasted.Replace(oldValue: "\r", newValue: "")
+                .Replace(oldValue: "\n", newValue: " ");
+        }
+
         if (pasted.Length == 0) return;
         if (HasSelection) DeleteSelection();
         Text = Text[.._cursorPos] + pasted + Text[_cursorPos..];
@@ -508,11 +518,11 @@ public class TextField : Widget, ITextInputClient
     public override int DebugStateHash()
     {
         return HashCode.Combine(
-            Text,
-            Focused,
-            _hovered,
-            _cursorPos,
-            _selectionAnchor
+            value1: Text,
+            value2: Focused,
+            value3: _hovered,
+            value4: _cursorPos,
+            value5: _selectionAnchor
         );
     }
 
@@ -524,10 +534,7 @@ public class TextField : Widget, ITextInputClient
         _layout = null;
     }
 
-    private float LineHeightPx(float fs)
-    {
-        return fs * _theme.LineHeight;
-    }
+    private float LineHeightPx(float fs) => fs * _theme.LineHeight;
 
     public override Size Measure(Constraints c)
     {
@@ -536,25 +543,29 @@ public class TextField : Widget, ITextInputClient
         {
             // A form field is the primary target on a phone; 28pt is too shallow to tap reliably.
             // (A tight parent constraint still wins, so composed hosts keep their own geometry.)
-            _size = c.Constrain(new Size(MinWidth, TouchMetrics.AtLeast(Height)));
+            _size = c.Constrain(new Size(width: MinWidth, height: TouchMetrics.AtLeast(Height)));
             return _size;
         }
 
-        var fs = _theme.FontSizeBody;
-        var rows = Math.Clamp(LineCount, Math.Max(1, MinLines), Math.Max(MinLines, MaxLines));
-        var height = rows * LineHeightPx(fs) + Spacing.Xs * 2f;
-        var width = float.IsFinite(c.MaxWidth) ? MathF.Max(MinWidth, c.MaxWidth) : MinWidth;
-        _size = c.Constrain(new Size(width, height));
+        float fs = _theme.FontSizeBody;
+        int rows = Math.Clamp(
+            value: LineCount,
+            min: Math.Max(val1: 1, val2: MinLines),
+            max: Math.Max(val1: MinLines, val2: MaxLines)
+        );
+        float height = (rows * LineHeightPx(fs)) + (Spacing.Xs * 2f);
+        float width = float.IsFinite(c.MaxWidth) ? MathF.Max(x: MinWidth, y: c.MaxWidth) : MinWidth;
+        _size = c.Constrain(new Size(width: width, height: height));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
@@ -566,96 +577,100 @@ public class TextField : Widget, ITextInputClient
             return;
         }
 
-        var radius = _theme.InputRadius;
+        float radius = _theme.InputRadius;
 
         // Flat opaque surface with a hairline border. On focus we keep the border subtle
         // and let the focus ring carry the emphasis.
         if (ShowBackground)
         {
-            paint.AddRect(Bounds, _theme.Surface, radius);
-            paint.AddBorder(Bounds, _theme.Separator, radius);
+            paint.AddRect(bounds: Bounds, color: _theme.Surface, radius: radius);
+            paint.AddBorder(bounds: Bounds, color: _theme.Separator, radius: radius);
         }
 
         paint.AddClipStart(Bounds);
 
-        var fs = _theme.FontSizeBody;
-        var padX = Spacing.Sm;
+        float fs = _theme.FontSizeBody;
+        float padX = Spacing.Sm;
 
         // Keep the caret visible (symmetric margin + clamp); shared with input so offsets agree.
         UpdateScroll();
 
-        var bx = Bounds.X + padX - _scrollX;
+        float bx = Bounds.X + padX - _scrollX;
 
         // Vertically centre the text on its measured height.
-        var th = TextMeasure.Measure(Text.Length > 0 ? Text : "X", fs).Height;
-        var by = Bounds.Y + (Bounds.Height - th) / 2f + fs * 0.8f;
+        float th = TextMeasure.Measure(text: Text.Length > 0 ? Text : "X", fontSize: fs).Height;
+        float by = Bounds.Y + ((Bounds.Height - th) / 2f) + (fs * 0.8f);
 
         // Selection highlight.
         if (HasSelection)
         {
-            var selX1 = bx + CaretX(SelectionMin);
-            var selX2 = bx + CaretX(SelectionMax);
+            float selX1 = bx + CaretX(SelectionMin);
+            float selX2 = bx + CaretX(SelectionMax);
             paint.AddRect(
-                new Rect(
-                    selX1,
-                    Bounds.Y + Spacing.Xs,
-                    selX2 - selX1,
-                    Bounds.Height - Spacing.Sm
+                bounds: new Rect(
+                    x: selX1,
+                    y: Bounds.Y + Spacing.Xs,
+                    width: selX2 - selX1,
+                    height: Bounds.Height - Spacing.Sm
                 ),
-                _theme.Selection,
-                Radii.Xs
+                color: _theme.Selection,
+                radius: Radii.Xs
             );
         }
 
         if (_compositionText.Length > 0)
         {
-            var display = Text[.._compositionStart] + _compositionText + Text[_compositionEnd..];
+            string display = Text[.._compositionStart] + _compositionText + Text[_compositionEnd..];
             paint.AddText(
-                display,
-                bx,
-                by,
-                _theme.OnSurface,
-                fs
+                text: display,
+                baselineX: bx,
+                baselineY: by,
+                color: _theme.OnSurface,
+                fontSize: fs
             );
-            var compositionX = bx + CaretX(_compositionStart);
-            var compositionWidth = TextMeasure.Width(_compositionText, fs);
+            float compositionX = bx + CaretX(_compositionStart);
+            float compositionWidth = TextMeasure.Width(text: _compositionText, fontSize: fs);
             paint.AddRect(
-                new Rect(
-                    compositionX,
-                    Bounds.Bottom - Spacing.Xs - 1f,
-                    MathF.Max(1f, compositionWidth),
-                    1f
+                bounds: new Rect(
+                    x: compositionX,
+                    y: Bounds.Bottom - Spacing.Xs - 1f,
+                    width: MathF.Max(x: 1f, y: compositionWidth),
+                    height: 1f
                 ),
-                _theme.Primary
+                color: _theme.Primary
             );
         }
         else if (Text.Length > 0)
         {
             var layout = EnsureTextLayout(fs);
             if (layout is { IsValid: true })
+            {
                 paint.AddTextLayout(
-                    layout.Handle,
-                    bx,
-                    by,
-                    _theme.OnSurface
+                    handle: layout.Handle,
+                    x: bx,
+                    y: by,
+                    color: _theme.OnSurface
                 );
+            }
             else
+            {
                 paint.AddText(
-                    Visible,
-                    bx,
-                    by,
-                    _theme.OnSurface,
-                    fs
+                    text: Visible,
+                    baselineX: bx,
+                    baselineY: by,
+                    color: _theme.OnSurface,
+                    fontSize: fs
                 );
+            }
         }
         else if (Hint.Length > 0)
         {
             paint.AddText(
-                Hint,
-                bx,
-                by,
-                _theme.Hint,
-                fs
+                text: Hint,
+                baselineX: bx,
+                baselineY: by,
+                color: _theme.Hint,
+                fontSize: fs
             );
         }
 
@@ -663,48 +678,48 @@ public class TextField : Widget, ITextInputClient
         // Read-only fields stay selectable/copyable but show no caret.
         if (Focused && !ReadOnly)
         {
-            var time = App.Active?.Time ?? 0f;
+            float time = App.Active?.Time ?? 0f;
             if ((time - _caretBase) % 1.06f < 0.6f)
             {
-                var cx = bx + CaretX(_cursorPos);
+                float cx = bx + CaretX(_cursorPos);
                 if (_compositionText.Length > 0)
                 {
-                    var selectedPrefix = TextNavigation.GraphemeBoundaryAtOrBefore(
-                        _compositionText,
-                        _compositionSelectionStart + _compositionSelectionLength
+                    int selectedPrefix = TextNavigation.GraphemeBoundaryAtOrBefore(
+                        text: _compositionText,
+                        index: _compositionSelectionStart + _compositionSelectionLength
                     );
                     cx = bx + CaretX(_compositionStart) +
-                         TextMeasure.Width(_compositionText[..selectedPrefix], fs);
+                         TextMeasure.Width(text: _compositionText[..selectedPrefix], fontSize: fs);
                 }
 
                 paint.AddRect(
-                    new Rect(
-                        cx,
-                        Bounds.Y + Spacing.Xs,
-                        1.5f,
-                        Bounds.Height - Spacing.Sm
+                    bounds: new Rect(
+                        x: cx,
+                        y: Bounds.Y + Spacing.Xs,
+                        width: 1.5f,
+                        height: Bounds.Height - Spacing.Sm
                     ),
-                    _theme.Primary
+                    color: _theme.Primary
                 );
             }
 
-            var imeX = bx + CaretX(_cursorPos);
+            float imeX = bx + CaretX(_cursorPos);
             if (_compositionText.Length > 0)
             {
-                var selectedPrefix = TextNavigation.GraphemeBoundaryAtOrBefore(
-                    _compositionText,
-                    _compositionSelectionStart + _compositionSelectionLength
+                int selectedPrefix = TextNavigation.GraphemeBoundaryAtOrBefore(
+                    text: _compositionText,
+                    index: _compositionSelectionStart + _compositionSelectionLength
                 );
                 imeX = bx + CaretX(_compositionStart) +
-                       TextMeasure.Width(_compositionText[..selectedPrefix], fs);
+                       TextMeasure.Width(text: _compositionText[..selectedPrefix], fontSize: fs);
             }
 
             ZigoteEngine.Instance?.SetTextInputArea(
                 new Rect(
-                    imeX,
-                    Bounds.Y + Spacing.Xs,
-                    1.5f,
-                    Bounds.Height - Spacing.Sm
+                    x: imeX,
+                    y: Bounds.Y + Spacing.Xs,
+                    width: 1.5f,
+                    height: Bounds.Height - Spacing.Sm
                 )
             );
         }
@@ -712,30 +727,35 @@ public class TextField : Widget, ITextInputClient
         paint.AddClipEnd();
 
         if (Focused && ShowBackground)
-            paint.AddFocusRing(Bounds, radius, _theme);
+            paint.AddFocusRing(bounds: Bounds, radius: radius, theme: _theme);
     }
 
     // ── Multi-line paint ────────────────────────────────────────────────────────
 
     private static int CountLines(string s)
     {
-        var n = 1;
-        foreach (var ch in s)
+        int n = 1;
+        foreach (char ch in s)
+        {
             if (ch == '\n')
                 n++;
+        }
+
         return n;
     }
 
     private static (int Line, int Col) DisplayLineCol(string s, int index)
     {
-        index = Math.Clamp(index, 0, s.Length);
+        index = Math.Clamp(value: index, min: 0, max: s.Length);
         int line = 0, start = 0;
-        for (var i = 0; i < index; i++)
+        for (int i = 0; i < index; i++)
+        {
             if (s[i] == '\n')
             {
                 line++;
                 start = i + 1;
             }
+        }
 
         return (line, index - start);
     }
@@ -745,175 +765,199 @@ public class TextField : Widget, ITextInputClient
         int start = 0, cur = 0;
         while (cur < line)
         {
-            var nl = s.IndexOf('\n', start);
+            int nl = s.IndexOf(value: '\n', startIndex: start);
             if (nl < 0) return string.Empty;
             start = nl + 1;
             cur++;
         }
 
-        var end = s.IndexOf('\n', start);
+        int end = s.IndexOf(value: '\n', startIndex: start);
         if (end < 0) end = s.Length;
         return s[start..end];
     }
 
     private void PaintMultiline(PaintList paint)
     {
-        var radius = _theme.InputRadius;
+        float radius = _theme.InputRadius;
         if (ShowBackground)
         {
-            paint.AddRect(Bounds, _theme.Surface, radius);
-            paint.AddBorder(Bounds, _theme.Separator, radius);
+            paint.AddRect(bounds: Bounds, color: _theme.Surface, radius: radius);
+            paint.AddBorder(bounds: Bounds, color: _theme.Separator, radius: radius);
         }
 
-        var fs = _theme.FontSizeBody;
-        var lineH = LineHeightPx(fs);
-        var padX = Spacing.Sm;
-        var padY = Spacing.Xs;
-        var innerX = Bounds.X + padX;
-        var innerTop = Bounds.Y + padY;
-        var innerW = MathF.Max(1f, Bounds.Width - padX * 2f);
-        var innerH = MathF.Max(1f, Bounds.Height - padY * 2f);
+        float fs = _theme.FontSizeBody;
+        float lineH = LineHeightPx(fs);
+        float padX = Spacing.Sm;
+        float padY = Spacing.Xs;
+        float innerX = Bounds.X + padX;
+        float innerTop = Bounds.Y + padY;
+        float innerW = MathF.Max(x: 1f, y: Bounds.Width - (padX * 2f));
+        float innerH = MathF.Max(x: 1f, y: Bounds.Height - (padY * 2f));
 
         // Splice the active IME pre-edit into the rendered string; the caret index follows the
         // composition's selected end so the candidate window anchors correctly.
-        var composing = _compositionText.Length > 0;
-        var display = composing
+        bool composing = _compositionText.Length > 0;
+        string display = composing
             ? Text[.._compositionStart] + _compositionText + Text[_compositionEnd..]
             : Text;
 
         int caretDisplay;
         if (composing)
         {
-            var selectedPrefix = TextNavigation.GraphemeBoundaryAtOrBefore(
-                _compositionText,
-                _compositionSelectionStart + _compositionSelectionLength
+            int selectedPrefix = TextNavigation.GraphemeBoundaryAtOrBefore(
+                text: _compositionText,
+                index: _compositionSelectionStart + _compositionSelectionLength
             );
             caretDisplay = _compositionStart + selectedPrefix;
         }
         else
-        {
             caretDisplay = _cursorPos;
-        }
 
-        var (caretLine, caretCol) = DisplayLineCol(display, caretDisplay);
-        var caretLineText = DisplayLine(display, caretLine);
-        var caretX = TextMeasure.Width(
-            caretLineText[..Math.Min(caretCol, caretLineText.Length)],
-            fs
+        (int caretLine, int caretCol) = DisplayLineCol(s: display, index: caretDisplay);
+        string caretLineText = DisplayLine(s: display, line: caretLine);
+        float caretX = TextMeasure.Width(
+            text: caretLineText[..Math.Min(val1: caretCol, val2: caretLineText.Length)],
+            fontSize: fs
         );
 
-        var totalLines = CountLines(display);
+        int totalLines = CountLines(display);
 
         // Keep the caret line and column inside the viewport.
-        var caretTop = caretLine * lineH;
+        float caretTop = caretLine * lineH;
         if (caretTop - _scrollY < 0f) _scrollY = caretTop;
         else if (caretTop + lineH - _scrollY > innerH) _scrollY = caretTop + lineH - innerH;
-        _scrollY = Math.Clamp(_scrollY, 0f, MathF.Max(0f, totalLines * lineH - innerH));
+        _scrollY = Math.Clamp(
+            value: _scrollY,
+            min: 0f,
+            max: MathF.Max(x: 0f, y: (totalLines * lineH) - innerH)
+        );
 
         if (caretX - _scrollX > innerW - CaretMargin) _scrollX = caretX - innerW + CaretMargin;
-        else if (caretX - _scrollX < CaretMargin) _scrollX = MathF.Max(0f, caretX - CaretMargin);
-        _scrollX = MathF.Max(0f, _scrollX);
+        else if (caretX - _scrollX < CaretMargin)
+            _scrollX = MathF.Max(x: 0f, y: caretX - CaretMargin);
+        _scrollX = MathF.Max(x: 0f, y: _scrollX);
 
         paint.AddClipStart(
             new Rect(
-                innerX,
-                innerTop,
-                innerW,
-                innerH
+                x: innerX,
+                y: innerTop,
+                width: innerW,
+                height: innerH
             )
         );
 
-        var firstVisible = Math.Max(0, (int)(_scrollY / lineH));
-        var lastVisible = Math.Min(totalLines - 1, (int)((_scrollY + innerH) / lineH) + 1);
+        int firstVisible = Math.Max(val1: 0, val2: (int)(_scrollY / lineH));
+        int lastVisible = Math.Min(
+            val1: totalLines - 1,
+            val2: (int)((_scrollY + innerH) / lineH) + 1
+        );
 
         if (!composing && HasSelection)
         {
-            var (sLine, sCol) = LineColAt(SelectionMin);
-            var (eLine, eCol) = LineColAt(SelectionMax);
-            for (var ln = Math.Max(firstVisible, sLine); ln <= Math.Min(lastVisible, eLine); ln++)
+            (int sLine, int sCol) = LineColAt(SelectionMin);
+            (int eLine, int eCol) = LineColAt(SelectionMax);
+            for (int ln = Math.Max(val1: firstVisible, val2: sLine);
+                 ln <= Math.Min(val1: lastVisible, val2: eLine);
+                 ln++)
             {
-                var lt = DisplayLine(Text, ln);
-                var c0 = ln == sLine ? sCol : 0;
-                var c1 = ln == eLine ? eCol : lt.Length;
-                var x0 = innerX - _scrollX + TextMeasure.Width(lt[..Math.Min(c0, lt.Length)], fs);
-                var x1 = innerX - _scrollX + TextMeasure.Width(lt[..Math.Min(c1, lt.Length)], fs);
+                string lt = DisplayLine(s: Text, line: ln);
+                int c0 = ln == sLine ? sCol : 0;
+                int c1 = ln == eLine ? eCol : lt.Length;
+                float x0 = innerX - _scrollX + TextMeasure.Width(
+                    text: lt[..Math.Min(val1: c0, val2: lt.Length)],
+                    fontSize: fs
+                );
+                float x1 = innerX - _scrollX + TextMeasure.Width(
+                    text: lt[..Math.Min(val1: c1, val2: lt.Length)],
+                    fontSize: fs
+                );
                 if (ln < eLine) x1 += fs * 0.3f; // show the selected line break
-                var y = innerTop + ln * lineH - _scrollY;
+                float y = innerTop + (ln * lineH) - _scrollY;
                 paint.AddRect(
-                    new Rect(
-                        x0,
-                        y,
-                        MathF.Max(1f, x1 - x0),
-                        lineH
+                    bounds: new Rect(
+                        x: x0,
+                        y: y,
+                        width: MathF.Max(x: 1f, y: x1 - x0),
+                        height: lineH
                     ),
-                    _theme.Selection,
-                    Radii.Xs
+                    color: _theme.Selection,
+                    radius: Radii.Xs
                 );
             }
         }
 
         if (display.Length == 0 && Hint.Length > 0)
+        {
             paint.AddText(
-                Hint,
-                innerX - _scrollX,
-                innerTop + fs * 0.8f,
-                _theme.Hint,
-                fs
+                text: Hint,
+                baselineX: innerX - _scrollX,
+                baselineY: innerTop + (fs * 0.8f),
+                color: _theme.Hint,
+                fontSize: fs
             );
+        }
         else
-            for (var ln = firstVisible; ln <= lastVisible; ln++)
+        {
+            for (int ln = firstVisible; ln <= lastVisible; ln++)
             {
-                var lt = DisplayLine(display, ln);
+                string lt = DisplayLine(s: display, line: ln);
                 if (lt.Length == 0) continue;
-                var y = innerTop + ln * lineH - _scrollY + fs * 0.8f;
+                float y = innerTop + (ln * lineH) - _scrollY + (fs * 0.8f);
                 paint.AddText(
-                    lt,
-                    innerX - _scrollX,
-                    y,
-                    _theme.OnSurface,
-                    fs
+                    text: lt,
+                    baselineX: innerX - _scrollX,
+                    baselineY: y,
+                    color: _theme.OnSurface,
+                    fontSize: fs
                 );
             }
+        }
 
         if (composing)
         {
-            var (cLine, cCol) = DisplayLineCol(display, _compositionStart);
-            var clt = DisplayLine(display, cLine);
-            var ux0 = innerX - _scrollX + TextMeasure.Width(clt[..Math.Min(cCol, clt.Length)], fs);
-            var uw = TextMeasure.Width(_compositionText, fs);
-            var uy = innerTop + cLine * lineH - _scrollY + lineH - 2f;
+            (int cLine, int cCol) = DisplayLineCol(s: display, index: _compositionStart);
+            string clt = DisplayLine(s: display, line: cLine);
+            float ux0 = innerX - _scrollX + TextMeasure.Width(
+                text: clt[..Math.Min(val1: cCol, val2: clt.Length)],
+                fontSize: fs
+            );
+            float uw = TextMeasure.Width(text: _compositionText, fontSize: fs);
+            float uy = innerTop + (cLine * lineH) - _scrollY + lineH - 2f;
             paint.AddRect(
-                new Rect(
-                    ux0,
-                    uy,
-                    MathF.Max(1f, uw),
-                    1f
+                bounds: new Rect(
+                    x: ux0,
+                    y: uy,
+                    width: MathF.Max(x: 1f, y: uw),
+                    height: 1f
                 ),
-                _theme.Primary
+                color: _theme.Primary
             );
         }
 
         if (Focused && !ReadOnly)
         {
-            var time = App.Active?.Time ?? 0f;
-            var cx = innerX - _scrollX + caretX;
-            var cy = innerTop + caretLine * lineH - _scrollY;
+            float time = App.Active?.Time ?? 0f;
+            float cx = innerX - _scrollX + caretX;
+            float cy = innerTop + (caretLine * lineH) - _scrollY;
             if ((time - _caretBase) % 1.06f < 0.6f)
+            {
                 paint.AddRect(
-                    new Rect(
-                        cx,
-                        cy + 1f,
-                        1.5f,
-                        lineH - 2f
+                    bounds: new Rect(
+                        x: cx,
+                        y: cy + 1f,
+                        width: 1.5f,
+                        height: lineH - 2f
                     ),
-                    _theme.Primary
+                    color: _theme.Primary
                 );
+            }
+
             ZigoteEngine.Instance?.SetTextInputArea(
                 new Rect(
-                    cx,
-                    cy + 1f,
-                    1.5f,
-                    lineH - 2f
+                    x: cx,
+                    y: cy + 1f,
+                    width: 1.5f,
+                    height: lineH - 2f
                 )
             );
         }
@@ -921,7 +965,7 @@ public class TextField : Widget, ITextInputClient
         paint.AddClipEnd();
 
         if (Focused && ShowBackground)
-            paint.AddFocusRing(Bounds, radius, _theme);
+            paint.AddFocusRing(bounds: Bounds, radius: radius, theme: _theme);
     }
 
     // ── Pointer input ─────────────────────────────────────────────────────────
@@ -944,24 +988,24 @@ public class TextField : Widget, ITextInputClient
     private int IndexAtPoint(Offset p)
     {
         if (!Multiline) return PositionAtX(p.X);
-        var fs = _theme.FontSizeBody;
-        var lineH = LineHeightPx(fs);
-        var relY = p.Y - (Bounds.Y + Spacing.Xs) + _scrollY;
-        var line = Math.Clamp((int)(relY / lineH), 0, LineCount - 1);
-        var lt = DisplayLine(Text, line);
-        var relX = p.X - (Bounds.X + Spacing.Sm) + _scrollX;
-        return LineStartIndex(line) + ColAtX(lt, relX, fs);
+        float fs = _theme.FontSizeBody;
+        float lineH = LineHeightPx(fs);
+        float relY = p.Y - (Bounds.Y + Spacing.Xs) + _scrollY;
+        int line = Math.Clamp(value: (int)(relY / lineH), min: 0, max: LineCount - 1);
+        string lt = DisplayLine(s: Text, line: line);
+        float relX = p.X - (Bounds.X + Spacing.Sm) + _scrollX;
+        return LineStartIndex(line) + ColAtX(line: lt, x: relX, fs: fs);
     }
 
     private static int ColAtX(string line, float x, float fs)
     {
         if (x <= 0f || line.Length == 0) return 0;
-        var boundaries = TextNavigation.GraphemeBoundaries(line);
-        var prev = 0f;
-        for (var i = 1; i < boundaries.Length; i++)
+        int[] boundaries = TextNavigation.GraphemeBoundaries(line);
+        float prev = 0f;
+        for (int i = 1; i < boundaries.Length; i++)
         {
-            var c = boundaries[i];
-            var w = TextMeasure.Width(line[..c], fs);
+            int c = boundaries[i];
+            float w = TextMeasure.Width(text: line[..c], fontSize: fs);
             if (x < (prev + w) / 2f) return boundaries[i - 1];
             prev = w;
         }
@@ -971,11 +1015,11 @@ public class TextField : Widget, ITextInputClient
 
     public override void OnPointerDown(Offset point)
     {
-        var pos = IndexAtPoint(point);
+        int pos = IndexAtPoint(point);
         _desiredCol = -1;
 
         // Double-click selects the word under the cursor.
-        var now = App.Active?.Time ?? 0f;
+        float now = App.Active?.Time ?? 0f;
         if (now - _lastClickTime < DoubleClickSeconds && Math.Abs(pos - _lastClickPos) <= 1)
         {
             _lastClickTime = -1f; // consume so a third click doesn't chain
@@ -997,13 +1041,13 @@ public class TextField : Widget, ITextInputClient
     /// <summary>Select the word (or single non-word char) at the given character index.</summary>
     private void SelectWordAt(int pos)
     {
-        var (start, end) = TextNavigation.WordAt(Text, pos);
+        (int start, int end) = TextNavigation.WordAt(text: Text, pos: pos);
 
         _isDragging = false;
         if (start == end)
         {
             ClearSelection();
-            _cursorPos = Math.Clamp(pos, 0, Text.Length);
+            _cursorPos = Math.Clamp(value: pos, min: 0, max: Text.Length);
             MarkNeedsPaint();
             return;
         }
@@ -1035,19 +1079,29 @@ public class TextField : Widget, ITextInputClient
         _contextMenu.Items.Clear();
         _contextMenu.Items.Add(
             new ContextMenuItem(
-                "Cut",
-                HasSelection && !ReadOnly ? CutAction : null,
+                Label: "Cut",
+                OnSelect: HasSelection && !ReadOnly ? CutAction : null,
                 Shortcut: "⌘X"
             )
         );
         _contextMenu.Items.Add(
-            new ContextMenuItem("Copy", HasSelection ? CopyAction : null, Shortcut: "⌘C")
+            new ContextMenuItem(
+                Label: "Copy",
+                OnSelect: HasSelection ? CopyAction : null,
+                Shortcut: "⌘C"
+            )
         );
         _contextMenu.Items.Add(
-            new ContextMenuItem("Paste", ReadOnly ? null : PasteAction, Shortcut: "⌘V")
+            new ContextMenuItem(
+                Label: "Paste",
+                OnSelect: ReadOnly ? null : PasteAction,
+                Shortcut: "⌘V"
+            )
         );
-        _contextMenu.Items.Add(new ContextMenuItem("", null, true));
-        _contextMenu.Items.Add(new ContextMenuItem("Select All", SelectAll, Shortcut: "⌘A"));
+        _contextMenu.Items.Add(new ContextMenuItem(Label: "", OnSelect: null, Separator: true));
+        _contextMenu.Items.Add(
+            new ContextMenuItem(Label: "Select All", OnSelect: SelectAll, Shortcut: "⌘A")
+        );
         _contextMenu.ShowAt(point);
     }
 
@@ -1082,10 +1136,11 @@ public class TextField : Widget, ITextInputClient
             return;
         }
 
-        var shift = mods.HasFlag(Modifiers.Shift);
-        var cmd = mods.HasCommand(); // Ctrl or ⌘
+        bool shift = mods.HasFlag(Modifiers.Shift);
+        bool cmd = mods.HasCommand(); // Ctrl or ⌘
 
         if (cmd)
+        {
             switch (char.ToLower(keyChar))
             {
                 case 'a':
@@ -1101,6 +1156,7 @@ public class TextField : Widget, ITextInputClient
                     PasteAction(); // self-guards ReadOnly
                     return;
             }
+        }
 
         switch (scancode)
         {
@@ -1114,7 +1170,10 @@ public class TextField : Widget, ITextInputClient
 
                 if (_cursorPos > 0)
                 {
-                    var previous = TextNavigation.PreviousGraphemeBoundary(Text, _cursorPos);
+                    int previous = TextNavigation.PreviousGraphemeBoundary(
+                        text: Text,
+                        index: _cursorPos
+                    );
                     Text = Text[..previous] + Text[_cursorPos..];
                     _cursorPos = previous;
                     OnChanged?.Invoke(Text);
@@ -1133,7 +1192,7 @@ public class TextField : Widget, ITextInputClient
 
                 if (_cursorPos < Text.Length)
                 {
-                    var next = TextNavigation.NextGraphemeBoundary(Text, _cursorPos);
+                    int next = TextNavigation.NextGraphemeBoundary(text: Text, index: _cursorPos);
                     Text = Text[.._cursorPos] + Text[next..];
                     OnChanged?.Invoke(Text);
                     MarkNeedsPaint();
@@ -1151,7 +1210,10 @@ public class TextField : Widget, ITextInputClient
                     break;
                 }
 
-                MoveCursor(TextNavigation.PreviousGraphemeBoundary(Text, _cursorPos), shift);
+                MoveCursor(
+                    newPos: TextNavigation.PreviousGraphemeBoundary(text: Text, index: _cursorPos),
+                    extendSelection: shift
+                );
                 break;
 
             case scRight:
@@ -1164,28 +1226,44 @@ public class TextField : Widget, ITextInputClient
                     break;
                 }
 
-                MoveCursor(TextNavigation.NextGraphemeBoundary(Text, _cursorPos), shift);
+                MoveCursor(
+                    newPos: TextNavigation.NextGraphemeBoundary(text: Text, index: _cursorPos),
+                    extendSelection: shift
+                );
                 break;
 
             case scUp when Multiline:
-                MoveVertical(-1, shift);
+                MoveVertical(dir: -1, extend: shift);
                 break;
 
             case scDown when Multiline:
-                MoveVertical(1, shift);
+                MoveVertical(dir: 1, extend: shift);
                 break;
 
             case scHome:
                 _desiredCol = -1;
                 if (Multiline && !cmd)
-                    MoveCursor(LineStartIndex(LineColAt(_cursorPos).Line), shift);
-                else MoveCursor(0, shift);
+                {
+                    MoveCursor(
+                        newPos: LineStartIndex(LineColAt(_cursorPos).Line),
+                        extendSelection: shift
+                    );
+                }
+                else MoveCursor(newPos: 0, extendSelection: shift);
+
                 break;
 
             case scEnd:
                 _desiredCol = -1;
-                if (Multiline && !cmd) MoveCursor(LineEndIndex(LineColAt(_cursorPos).Line), shift);
-                else MoveCursor(Text.Length, shift);
+                if (Multiline && !cmd)
+                {
+                    MoveCursor(
+                        newPos: LineEndIndex(LineColAt(_cursorPos).Line),
+                        extendSelection: shift
+                    );
+                }
+                else MoveCursor(newPos: Text.Length, extendSelection: shift);
+
                 break;
         }
 
@@ -1210,25 +1288,23 @@ public class TextField : Widget, ITextInputClient
     /// </summary>
     private void MoveVertical(int dir, bool extend)
     {
-        var (line, col) = LineColAt(_cursorPos);
+        (int line, int col) = LineColAt(_cursorPos);
         if (_desiredCol < 0) _desiredCol = col;
 
-        var target = line + dir;
+        int target = line + dir;
         int newIndex;
         if (target < 0) newIndex = 0;
         else if (target >= LineCount) newIndex = Text.Length;
-        else newIndex = IndexAt(target, _desiredCol);
+        else newIndex = IndexAt(line: target, col: _desiredCol);
 
         if (extend)
         {
             if (_selectionAnchor < 0) _selectionAnchor = _cursorPos;
         }
         else
-        {
             ClearSelection();
-        }
 
-        _cursorPos = TextNavigation.GraphemeBoundaryAtOrBefore(Text, newIndex);
+        _cursorPos = TextNavigation.GraphemeBoundaryAtOrBefore(text: Text, index: newIndex);
         MarkNeedsPaint();
     }
 
@@ -1272,11 +1348,11 @@ public class TextField : Widget, ITextInputClient
         }
 
         _compositionText = text;
-        _compositionSelectionStart = Math.Clamp(selectionStart, 0, text.Length);
+        _compositionSelectionStart = Math.Clamp(value: selectionStart, min: 0, max: text.Length);
         _compositionSelectionLength = Math.Clamp(
-            selectionLength,
-            0,
-            text.Length - _compositionSelectionStart
+            value: selectionLength,
+            min: 0,
+            max: text.Length - _compositionSelectionStart
         );
         if (text.Length == 0)
             _compositionStart = _compositionEnd = _cursorPos;

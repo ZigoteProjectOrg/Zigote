@@ -7,8 +7,6 @@ namespace Zigote.UI.Material;
 /// </summary>
 public static class FileBrowserPlaces
 {
-    public readonly record struct Place(string Label, string Path, string Icon);
-
     /// <summary>
     ///     Build the places list. <paramref name="pinnedLabel" />/<paramref name="pinnedPath" />
     ///     pin a caller-specific location on top (e.g. the current project).
@@ -23,10 +21,10 @@ public static class FileBrowserPlaces
             if (string.IsNullOrEmpty(path)) return;
             try
             {
-                var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+                string full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
                 if (full.Length == 0) full = path;
                 if (!Directory.Exists(path) || !seen.Add(full)) return;
-                places.Add(new Place(label, path, icon));
+                places.Add(new Place(Label: label, Path: path, Icon: icon));
             }
             catch
             {
@@ -35,25 +33,32 @@ public static class FileBrowserPlaces
         }
 
         if (pinnedPath is not null)
+        {
             Add(
-                pinnedLabel ?? Path.GetFileName(Path.TrimEndingDirectorySeparator(pinnedPath)),
-                pinnedPath,
-                Icons.Folder
+                label: pinnedLabel ??
+                       Path.GetFileName(Path.TrimEndingDirectorySeparator(pinnedPath)),
+                path: pinnedPath,
+                icon: Icons.Folder
             );
+        }
 
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        Add("Home", home, Icons.Home);
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        Add(label: "Home", path: home, icon: Icons.Home);
         Add(
-            "Desktop",
-            Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-            Icons.Computer
+            label: "Desktop",
+            path: Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+            icon: Icons.Computer
         );
         Add(
-            "Documents",
-            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-            Icons.Description
+            label: "Documents",
+            path: Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            icon: Icons.Description
         );
-        Add("Downloads", Path.Combine(home, "Downloads"), Icons.Download);
+        Add(
+            label: "Downloads",
+            path: Path.Combine(path1: home, path2: "Downloads"),
+            icon: Icons.Download
+        );
 
         try
         {
@@ -62,26 +67,30 @@ public static class FileBrowserPlaces
                 foreach (var drive in DriveInfo.GetDrives())
                 {
                     if (!drive.IsReady) continue;
-                    var letter = drive.Name.TrimEnd('\\');
-                    var label = string.IsNullOrEmpty(drive.VolumeLabel)
+                    string letter = drive.Name.TrimEnd('\\');
+                    string label = string.IsNullOrEmpty(drive.VolumeLabel)
                         ? letter
                         : $"{drive.VolumeLabel} ({letter})";
-                    Add(label, drive.RootDirectory.FullName, Icons.Storage);
+                    Add(label: label, path: drive.RootDirectory.FullName, icon: Icons.Storage);
                 }
             }
             else if (OperatingSystem.IsMacOS())
             {
-                Add("Macintosh HD", "/", Icons.Storage);
+                Add(label: "Macintosh HD", path: "/", icon: Icons.Storage);
                 if (Directory.Exists("/Volumes"))
-                    foreach (var volume in Directory.GetDirectories("/Volumes"))
+                {
+                    foreach (string volume in Directory.GetDirectories("/Volumes"))
                     {
-                        var name = Path.GetFileName(volume);
+                        string name = Path.GetFileName(volume);
                         if (name.StartsWith('.')) continue;
                         // "/Volumes/Macintosh HD" is a link back to "/" — the dedupe in Add can't
                         // see through it, so resolve links explicitly.
                         try
                         {
-                            if (Directory.ResolveLinkTarget(volume, true)?.FullName == "/")
+                            if (Directory.ResolveLinkTarget(
+                                    linkPath: volume,
+                                    returnFinalTarget: true
+                                )?.FullName == "/")
                                 continue;
                         }
                         catch
@@ -89,18 +98,19 @@ public static class FileBrowserPlaces
                             // Unresolvable link — list it anyway.
                         }
 
-                        Add(name, volume, Icons.Storage);
+                        Add(label: name, path: volume, icon: Icons.Storage);
                     }
+                }
             }
             else
             {
-                Add("File System", "/", Icons.Storage);
-                var user = Environment.UserName;
-                foreach (var root in (string[])[$"/media/{user}", $"/run/media/{user}", "/mnt"])
+                Add(label: "File System", path: "/", icon: Icons.Storage);
+                string user = Environment.UserName;
+                foreach (string root in (string[])[$"/media/{user}", $"/run/media/{user}", "/mnt"])
                 {
                     if (!Directory.Exists(root)) continue;
-                    foreach (var mount in Directory.GetDirectories(root))
-                        Add(Path.GetFileName(mount), mount, Icons.Storage);
+                    foreach (string mount in Directory.GetDirectories(root))
+                        Add(label: Path.GetFileName(mount), path: mount, icon: Icons.Storage);
                 }
             }
         }
@@ -111,4 +121,6 @@ public static class FileBrowserPlaces
 
         return places;
     }
+
+    public readonly record struct Place(string Label, string Path, string Icon);
 }

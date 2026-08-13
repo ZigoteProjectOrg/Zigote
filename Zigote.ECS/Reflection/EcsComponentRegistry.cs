@@ -4,7 +4,8 @@ namespace Zigote.Ecs.Reflection;
 
 /// <summary>
 ///     One field of a POD component, with reflective get/set over a boxed struct.
-///     PROTOTYPE: reflection-backed. A source generator can later emit the same shape (Name/FieldType +
+///     PROTOTYPE: reflection-backed. A source generator can later emit the same shape (Name/FieldType
+///     +
 ///     get/set delegates) with zero reflection — the consumers (inspector, serializer) bind to this
 ///     surface, not to <see cref="System.Reflection" />, so swapping the backing is invisible to them.
 /// </summary>
@@ -22,15 +23,10 @@ public sealed class EcsField
     public string Name { get; }
     public Type FieldType { get; }
 
-    public object? Get(object boxedComponent)
-    {
-        return _field.GetValue(boxedComponent);
-    }
+    public object? Get(object boxedComponent) => _field.GetValue(boxedComponent);
 
-    public void Set(object boxedComponent, object? value)
-    {
-        _field.SetValue(boxedComponent, value);
-    }
+    public void Set(object boxedComponent, object? value) =>
+        _field.SetValue(obj: boxedComponent, value: value);
 }
 
 /// <summary>Metadata for one registered POD component type: a stable name + its editable fields.</summary>
@@ -47,7 +43,10 @@ public sealed class EcsComponentType
 
     public Type Type { get; }
 
-    /// <summary>Stable identifier used in serialized scenes + the inspector (defaults to the short type name).</summary>
+    /// <summary>
+    ///     Stable identifier used in serialized scenes + the inspector (defaults to the short type
+    ///     name).
+    /// </summary>
     public string Name { get; }
 
     public IReadOnlyList<EcsField> Fields { get; }
@@ -65,27 +64,19 @@ public sealed class EcsComponentRegistry
 
     public IReadOnlyCollection<EcsComponentType> Types => _byType.Values;
 
-    public EcsComponentType Register<T>(string? name = null) where T : unmanaged
-    {
-        return Register(typeof(T), name);
-    }
+    public EcsComponentType Register<T>(string? name = null) where T : unmanaged =>
+        Register(type: typeof(T), name: name);
 
     public EcsComponentType Register(Type type, string? name = null)
     {
-        if (_byType.TryGetValue(type, out var existing)) return existing;
-        var info = new EcsComponentType(type, name ?? type.Name);
+        if (_byType.TryGetValue(key: type, value: out var existing)) return existing;
+        var info = new EcsComponentType(type: type, name: name ?? type.Name);
         _byType[type] = info;
         _byName[info.Name] = info;
         return info;
     }
 
-    public EcsComponentType? ByName(string name)
-    {
-        return _byName.GetValueOrDefault(name);
-    }
+    public EcsComponentType? ByName(string name) => _byName.GetValueOrDefault(name);
 
-    public EcsComponentType? ByType(Type type)
-    {
-        return _byType.GetValueOrDefault(type);
-    }
+    public EcsComponentType? ByType(Type type) => _byType.GetValueOrDefault(type);
 }

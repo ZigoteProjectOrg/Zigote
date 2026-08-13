@@ -25,11 +25,6 @@ public sealed class AdwShortcutLabel : Widget
     private const float SepGap = 6f;
     private const float FontSize = 12.5f;
 
-    private string _accelerator;
-    private string _disabledText = "Disabled";
-    private Size _size;
-    private ThemeData _theme = ThemeData.Dark;
-
     /// <summary>
     ///     Laid-out caps for the current accelerator. TextW is carried alongside Width because Paint
     ///     centres the glyphs in the cap and would otherwise re-shape every key on every frame —
@@ -39,23 +34,25 @@ public sealed class AdwShortcutLabel : Widget
     private readonly List<(string Text, float X, float Width, float TextW, bool Separator)> _caps =
         [];
 
-    public AdwShortcutLabel(string accelerator = "")
-    {
-        _accelerator = accelerator;
-    }
+    private string _accelerator;
+    private string _disabledText = "Disabled";
+    private Size _size;
+    private ThemeData _theme = ThemeData.Dark;
+
+    public AdwShortcutLabel(string accelerator = "") => _accelerator = accelerator;
 
     /// <summary>The accelerator in GTK syntax; space-separated for alternatives.</summary>
     public string Accelerator
     {
         get => _accelerator;
-        set => SetLayout(ref _accelerator, value);
+        set => SetLayout(field: ref _accelerator, value: value);
     }
 
     /// <summary>Shown when <see cref="Accelerator" /> is empty — GNOME's "Disabled".</summary>
     public string DisabledText
     {
         get => _disabledText;
-        set => SetLayout(ref _disabledText, value);
+        set => SetLayout(field: ref _disabledText, value: value);
     }
 
     public override Size Measure(Constraints c)
@@ -63,22 +60,25 @@ public sealed class AdwShortcutLabel : Widget
         _theme = ThemeProvider.Of(BuildContext.Current);
         _caps.Clear();
 
-        var x = 0f;
-        var first = true;
-        foreach (var accel in Accelerator.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        float x = 0f;
+        bool first = true;
+        foreach (string accel in Accelerator.Split(
+                     separator: ' ',
+                     options: StringSplitOptions.RemoveEmptyEntries
+                 ))
         {
             if (!first)
             {
-                var sepW = TextMeasure.Width("/", FontSize);
+                float sepW = TextMeasure.Width(text: "/", fontSize: FontSize);
                 _caps.Add(("/", x + SepGap, sepW, sepW, true));
-                x += SepGap * 2f + sepW;
+                x += (SepGap * 2f) + sepW;
             }
 
             first = false;
-            foreach (var key in Parse(accel))
+            foreach (string key in Parse(accel))
             {
-                var textW = TextMeasure.Width(key, FontSize);
-                var w = MathF.Max(CapMinW, textW + CapPadX * 2f);
+                float textW = TextMeasure.Width(text: key, fontSize: FontSize);
+                float w = MathF.Max(x: CapMinW, y: textW + (CapPadX * 2f));
                 _caps.Add((key, x, w, textW, false));
                 x += w + CapGap;
             }
@@ -88,60 +88,60 @@ public sealed class AdwShortcutLabel : Widget
 
         if (_caps.Count == 0)
         {
-            var w = TextMeasure.Width(DisabledText, FontSize);
+            float w = TextMeasure.Width(text: DisabledText, fontSize: FontSize);
             _caps.Add((DisabledText, 0f, w, w, true));
             x = w;
         }
 
-        _size = c.Constrain(new Size(MathF.Max(0f, x), CapH));
+        _size = c.Constrain(new Size(width: MathF.Max(x: 0f, y: x), height: CapH));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
     public override void Paint(PaintList paint)
     {
         var p = AdwPalette.For(_theme);
-        foreach (var (text, x, width, textW, separator) in _caps)
+        foreach ((string text, float x, float width, float textW, bool separator) in _caps)
         {
             var cap = new Rect(
-                Bounds.X + x,
-                Bounds.Y,
-                width,
-                CapH
+                x: Bounds.X + x,
+                y: Bounds.Y,
+                width: width,
+                height: CapH
             );
             if (!separator)
             {
                 // `.keycap { background: currentColor 10%; box-shadow: inset 0 -2px
                 // var(--card-shade-color); border-radius: 6px }` — a key cap has a shaded FOOT,
                 // not an outline: that bottom bevel is what makes it read as a physical key.
-                paint.AddRect(cap, p.ButtonFill, AdwMetrics.CheckRadius);
+                paint.AddRect(bounds: cap, color: p.ButtonFill, radius: AdwMetrics.CheckRadius);
                 paint.AddRect(
-                    new Rect(
-                        cap.X,
-                        cap.Bottom - 2f,
-                        cap.Width,
-                        2f
+                    bounds: new Rect(
+                        x: cap.X,
+                        y: cap.Bottom - 2f,
+                        width: cap.Width,
+                        height: 2f
                     ),
-                    p.CardShade,
-                    AdwMetrics.CheckRadius
+                    color: p.CardShade,
+                    radius: AdwMetrics.CheckRadius
                 );
             }
 
             paint.AddText(
-                text,
-                cap.X + (width - textW) / 2f,
-                cap.Y + (CapH - FontSize) / 2f + FontSize * 0.8f,
-                separator ? p.DimLabel : _theme.OnBackground,
-                FontSize
+                text: text,
+                baselineX: cap.X + ((width - textW) / 2f),
+                baselineY: cap.Y + ((CapH - FontSize) / 2f) + (FontSize * 0.8f),
+                color: separator ? p.DimLabel : _theme.OnBackground,
+                fontSize: FontSize
             );
         }
     }
@@ -156,14 +156,14 @@ public sealed class AdwShortcutLabel : Widget
         List<string> keys = [];
         if (string.IsNullOrWhiteSpace(accelerator)) return keys;
 
-        var mac = OperatingSystem.IsMacOS();
+        bool mac = OperatingSystem.IsMacOS();
         bool ctrl = false, alt = false, shift = false, super = false;
-        var rest = accelerator;
+        string rest = accelerator;
 
         // <Modifier> tokens in any order and any case, as GTK accepts them.
         while (rest.StartsWith('<') && rest.IndexOf('>') is var close and > 0)
         {
-            var name = rest[1..close].ToLowerInvariant();
+            string name = rest[1..close].ToLowerInvariant();
             rest = rest[(close + 1)..];
             switch (name)
             {
@@ -181,9 +181,6 @@ public sealed class AdwShortcutLabel : Widget
                 case "shift":
                     shift = true;
                     break;
-                default:
-                    // An unknown modifier is dropped rather than shown as a bogus cap.
-                    break;
             }
         }
 
@@ -194,7 +191,7 @@ public sealed class AdwShortcutLabel : Widget
         if (shift) keys.Add(mac ? "⇧" : "Shift");
         if (super) keys.Add(mac ? "⌘" : "Super");
 
-        if (rest.Length > 0) keys.Add(KeyLabel(rest, mac));
+        if (rest.Length > 0) keys.Add(KeyLabel(key: rest, mac: mac));
         return keys;
     }
 

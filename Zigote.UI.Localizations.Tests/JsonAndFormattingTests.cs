@@ -13,8 +13,11 @@ public class LocalizationJsonTests
                                 "count": 3
                             }
                             """;
-        var catalog = LocalizationJson.LoadCatalog(json, Locale.En);
-        Assert.Equal("Hello, Alex!", catalog.Translate("greeting", ("name", "Alex")));
+        var catalog = LocalizationJson.LoadCatalog(json: json, locale: Locale.En);
+        Assert.Equal(
+            expected: "Hello, Alex!",
+            actual: catalog.Translate(key: "greeting", ("name", "Alex"))
+        );
         Assert.False(catalog.Contains("@greeting")); // metadata skipped
         Assert.False(catalog.Contains("count")); // non-string skipped
     }
@@ -31,16 +34,15 @@ public class LocalizationJsonTests
                             }
                             """;
         var bundle = LocalizationJson.LoadBundle(json);
-        Assert.Equal("Hello", bundle.Translate(Locale.En, "hi"));
-        Assert.Equal("Hola", bundle.Translate(Locale.Es, "hi"));
-        Assert.Equal(2, bundle.Locales.Count);
+        Assert.Equal(expected: "Hello", actual: bundle.Translate(locale: Locale.En, key: "hi"));
+        Assert.Equal(expected: "Hola", actual: bundle.Translate(locale: Locale.Es, key: "hi"));
+        Assert.Equal(expected: 2, actual: bundle.Locales.Count);
     }
 
     [Fact]
-    public void Non_object_root_throws()
-    {
-        Assert.Throws<FormatException>(() => LocalizationJson.LoadCatalog("[]", Locale.En));
-    }
+    public void Non_object_root_throws() => Assert.Throws<FormatException>(() =>
+        LocalizationJson.LoadCatalog(json: "[]", locale: Locale.En)
+    );
 }
 
 public class LocaleFormattingTests
@@ -56,21 +58,21 @@ public class LocaleFormattingTests
     public void Number_and_integer_use_grouping()
     {
         var f = LocaleFormatting.For(Locale.EnUs);
-        Assert.Equal("1,000", f.Integer(1000));
-        Assert.Contains("234", f.Number(1234.5));
+        Assert.Equal(expected: "1,000", actual: f.Integer(1000));
+        Assert.Contains(expectedSubstring: "234", actualString: f.Number(1234.5));
     }
 
     [Fact]
-    public void Percent_multiplies_by_hundred()
-    {
-        Assert.Contains("50", LocaleFormatting.For(Locale.EnUs).Percent(0.5));
-    }
+    public void Percent_multiplies_by_hundred() => Assert.Contains(
+        expectedSubstring: "50",
+        actualString: LocaleFormatting.For(Locale.EnUs).Percent(0.5)
+    );
 
     [Fact]
     public void Currency_with_explicit_code_uses_symbol()
     {
-        var s = LocaleFormatting.For(Locale.EnUs).Currency(1234.56m, "USD");
-        Assert.Contains("$", s);
+        string s = LocaleFormatting.For(Locale.EnUs).Currency(value: 1234.56m, currencyCode: "USD");
+        Assert.Contains(expectedSubstring: "$", actualString: s);
     }
 
     [Theory]
@@ -83,32 +85,30 @@ public class LocaleFormattingTests
     {
         var f = LocaleFormatting.For(Locale.Parse(tag));
         var d = new DateTime(
-            2026,
-            10,
-            6,
-            16,
-            7,
-            12
+            year: 2026,
+            month: 10,
+            day: 6,
+            hour: 16,
+            minute: 7,
+            second: 12
         );
-        Assert.False(string.IsNullOrWhiteSpace(f.Date(d, DateStyle.Short)));
+        Assert.False(string.IsNullOrWhiteSpace(f.Date(value: d, style: DateStyle.Short)));
         Assert.False(string.IsNullOrWhiteSpace(f.Date(d)));
-        Assert.False(string.IsNullOrWhiteSpace(f.Date(d, DateStyle.Long)));
+        Assert.False(string.IsNullOrWhiteSpace(f.Date(value: d, style: DateStyle.Long)));
         Assert.False(string.IsNullOrWhiteSpace(f.Time(d)));
         Assert.False(string.IsNullOrWhiteSpace(f.DateTime(d)));
     }
 
     [Fact]
-    public void Formatter_instances_are_cached_per_locale()
-    {
-        Assert.Same(LocaleFormatting.For(Locale.EnUs), LocaleFormatting.For(Locale.EnUs));
-    }
+    public void Formatter_instances_are_cached_per_locale() => Assert.Same(
+        expected: LocaleFormatting.For(Locale.EnUs),
+        actual: LocaleFormatting.For(Locale.EnUs)
+    );
 
     [Theory]
     [InlineData(double.NaN)]
     [InlineData(double.PositiveInfinity)]
     [InlineData(-1234.5)]
-    public void Number_handles_edge_values(double v)
-    {
+    public void Number_handles_edge_values(double v) =>
         Assert.NotNull(LocaleFormatting.For(Locale.EnUs).Number(v));
-    }
 }

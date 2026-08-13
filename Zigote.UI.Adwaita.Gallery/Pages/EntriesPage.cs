@@ -10,23 +10,26 @@ public sealed class EntriesPage : ComposedWidget
         "Apricot", "Blackberry", "Cherry", "Damson", "Elderberry", "Fig", "Greengage",
     ];
 
-    private readonly Signal<string> _text = new("");
     private readonly Signal<string> _query = new("");
+
+    private readonly Signal<string> _text = new("");
 
     protected override Widget Build(BuildContext context)
     {
         var host = GalleryHost.Of(context);
 
         return new GalleryPage(
-            "Entries",
+            title: "Entries",
+            description:
             "Text, search and password fields — on their own, and in the rows GNOME puts them in.",
-            MaterialIcons.TextFields
+            iconName: MaterialIcons.TextFields
         ) {
             Children = {
                 Demo.Titled(
-                    "Entry",
+                    title: "Entry",
+                    description:
                     "Focus it and type: the chip under it is a Watch on the same signal.",
-                    Demo.Specimen(
+                    child: Demo.Specimen(
                         new AdwEntry {
                             Placeholder = "Your name",
                             Width = 280f,
@@ -42,9 +45,9 @@ public sealed class EntriesPage : ComposedWidget
                     )
                 ),
                 Demo.Titled(
-                    "Password",
-                    "The same entry with the reveal button and echo suppressed.",
-                    Demo.Stage(
+                    title: "Password",
+                    description: "The same entry with the reveal button and echo suppressed.",
+                    child: Demo.Stage(
                         new AdwPasswordEntry {
                             Placeholder = "Password",
                             Width = 280f,
@@ -52,9 +55,10 @@ public sealed class EntriesPage : ComposedWidget
                     )
                 ),
                 Demo.Titled(
-                    "Search",
+                    title: "Search",
+                    description:
                     "Filters as you type — the same entry the sidebar's search bar uses.",
-                    Demo.Stage(
+                    child: Demo.Stage(
                         new Column(
                             spacing: Spacing.Lg,
                             mainAxisSize: MainAxisSize.Min,
@@ -71,11 +75,11 @@ public sealed class EntriesPage : ComposedWidget
                     )
                 ),
                 Demo.Group(
-                    "Entry Rows",
-                    "The boxed-list form: the title moves up as the row takes text.",
-                    new AdwEntryRow("Full Name", "Ada Lovelace"),
-                    new AdwEntryRow("Email", "ada@example.org"),
-                    new AdwPasswordEntryRow("Password", "hunter2")
+                    title: "Entry Rows",
+                    description: "The boxed-list form: the title moves up as the row takes text.",
+                    new AdwEntryRow(title: "Full Name", text: "Ada Lovelace"),
+                    new AdwEntryRow(title: "Email", text: "ada@example.org"),
+                    new AdwPasswordEntryRow(title: "Password", text: "hunter2")
                 ),
             },
         };
@@ -83,23 +87,25 @@ public sealed class EntriesPage : ComposedWidget
 
     private Widget Results()
     {
-        var query = _query.Value.Trim();
-        var matches = Fruit
+        string query = _query.Value.Trim();
+        string[] matches = Fruit
             .Where(f => query.Length == 0 ||
-                        f.Contains(query, StringComparison.OrdinalIgnoreCase)
+                        f.Contains(value: query, comparisonType: StringComparison.OrdinalIgnoreCase)
             )
             .ToArray();
 
         if (matches.Length == 0)
+        {
             return new AdwStatusPage {
                 IconName = MaterialIcons.SearchOff,
                 Title = "No Results",
                 Description = $"Nothing matches “{query}”",
                 Compact = true,
             };
+        }
 
         var group = new AdwPreferencesGroup();
-        foreach (var match in matches) group.Rows.Add(new AdwActionRow(match));
+        foreach (string match in matches) group.Rows.Add(new AdwActionRow(match));
         return group;
     }
 }

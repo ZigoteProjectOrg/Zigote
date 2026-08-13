@@ -31,7 +31,7 @@ public struct ScratchBuffer<T>
     {
         var a = Array;
         if (a is null || a.Length < count) Array = a = new T[GrownCapacity(count)];
-        return a.AsSpan(0, count);
+        return a.AsSpan(start: 0, length: count);
     }
 
     /// <summary>Like <see cref="Get" />, but growth copies the previous contents (accumulation buffers).</summary>
@@ -45,12 +45,12 @@ public struct ScratchBuffer<T>
             Array = a = next;
         }
 
-        return a.AsSpan(0, count);
+        return a.AsSpan(start: 0, length: count);
     }
 
     private readonly int GrownCapacity(int count)
     {
-        var doubled = (Array?.Length ?? 0) * 2;
-        return Math.Max(Math.Max(8, doubled), count);
+        int doubled = (Array?.Length ?? 0) * 2;
+        return Math.Max(val1: Math.Max(val1: 8, val2: doubled), val2: count);
     }
 }

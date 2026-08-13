@@ -26,10 +26,7 @@ public static class SignalStreams
     ///         if the consumer cares which one.
     ///     </para>
     /// </summary>
-    public static Observable<T> AsStream<T>(this Signal<T> signal)
-    {
-        return Stream<T>(signal.Subscribe);
-    }
+    public static Observable<T> AsStream<T>(this Signal<T> signal) => Stream<T>(signal.Subscribe);
 
     /// <inheritdoc cref="AsStream{T}(Signal{T})" />
     /// <remarks>
@@ -37,20 +34,16 @@ public static class SignalStreams
     ///     subscribe-and-replay contract as <see cref="Signal{T}" />, it just also survives a
     ///     restart. There is no shared interface declaring <c>Subscribe</c>, hence the overload.
     /// </remarks>
-    public static Observable<T> AsStream<T>(this Preference<T> preference)
-    {
-        return Stream<T>(preference.Subscribe);
-    }
+    public static Observable<T> AsStream<T>(this Preference<T> preference) =>
+        Stream<T>(preference.Subscribe);
 
     /// <summary>
     ///     A signal as a stream of changes only, skipping the value it already holds. For a listener
     ///     that wants edges rather than state — "the user picked a different place", not "this is
     ///     the place".
     /// </summary>
-    public static Observable<T> AsChangeStream<T>(this Signal<T> signal)
-    {
-        return signal.AsStream().Skip(1);
-    }
+    public static Observable<T> AsChangeStream<T>(this Signal<T> signal) =>
+        signal.AsStream().Skip(1);
 
     /// <summary>
     ///     A stream as a signal, seeded with <paramref name="initial" /> until the first value
@@ -66,14 +59,14 @@ public static class SignalStreams
         var signal = new Signal<T>(initial);
         var subscription =
             stream.Subscribe(value => Core.State.Reactive.Sync(() => signal.Value = value));
-        return new SignalSubscription<T>(signal, subscription);
+        return new SignalSubscription<T>(signal: signal, subscription: subscription);
     }
 
     private static Observable<T> Stream<T>(Func<Action<T>, IDisposable> subscribe)
     {
         return Observable.Create<T, Func<Action<T>, IDisposable>>(
-            subscribe,
-            static (observer, source) => source(observer.OnNext)
+            state: subscribe,
+            subscribe: static (observer, source) => source(observer.OnNext)
         );
     }
 
@@ -85,14 +78,8 @@ public static class SignalStreams
 
         public T Value => Signal.Value;
 
-        public void Dispose()
-        {
-            subscription.Dispose();
-        }
+        public void Dispose() => subscription.Dispose();
 
-        public static implicit operator Signal<T>(SignalSubscription<T> handle)
-        {
-            return handle.Signal;
-        }
+        public static implicit operator Signal<T>(SignalSubscription<T> handle) => handle.Signal;
     }
 }

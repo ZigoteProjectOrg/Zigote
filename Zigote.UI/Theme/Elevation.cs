@@ -16,16 +16,16 @@ public readonly record struct ShadowStyle(float Blur, float OffsetY, float Alpha
 /// </summary>
 public static class Elevation
 {
-    public static readonly ShadowStyle None = new(0f, 0f, 0f);
+    public static readonly ShadowStyle None = new(Blur: 0f, OffsetY: 0f, Alpha: 0f);
 
     /// <summary>Resting surfaces — cards, raised rows.</summary>
-    public static readonly ShadowStyle Z1 = new(6f, 1f, 0.10f);
+    public static readonly ShadowStyle Z1 = new(Blur: 6f, OffsetY: 1f, Alpha: 0.10f);
 
     /// <summary>Transient chrome — menus, popovers, tooltips.</summary>
-    public static readonly ShadowStyle Z2 = new(14f, 4f, 0.16f);
+    public static readonly ShadowStyle Z2 = new(Blur: 14f, OffsetY: 4f, Alpha: 0.16f);
 
     /// <summary>Modal surfaces — dialogs, sheets.</summary>
-    public static readonly ShadowStyle Z3 = new(28f, 10f, 0.24f);
+    public static readonly ShadowStyle Z3 = new(Blur: 28f, OffsetY: 10f, Alpha: 0.24f);
 
     // Semantic aliases (match the design-system "Low / Medium / High" shadow scale).
     /// <summary>Resting lift — cards, raised rows. Alias of <see cref="Z1" />.</summary>
@@ -50,22 +50,22 @@ public static class ElevationPaint
     {
         if (style.IsNone) return;
         var shifted = new Rect(
-            bounds.X,
-            bounds.Y + style.OffsetY,
-            bounds.Width,
-            bounds.Height
+            x: bounds.X,
+            y: bounds.Y + style.OffsetY,
+            width: bounds.Width,
+            height: bounds.Height
         );
         paint.AddShadow(
-            shifted,
-            new Color(
-                0f,
-                0f,
-                0f,
-                style.Alpha
+            bounds: shifted,
+            color: new Color(
+                r: 0f,
+                g: 0f,
+                b: 0f,
+                a: style.Alpha
             ),
-            radius,
-            style.Blur,
-            style.Spread
+            borderRadius: radius,
+            blurRadius: style.Blur,
+            spread: style.Spread
         );
     }
 }

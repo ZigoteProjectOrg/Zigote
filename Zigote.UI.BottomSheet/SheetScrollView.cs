@@ -3,7 +3,8 @@ namespace Zigote.UI.BottomSheets;
 /// <summary>
 ///     The scroller a flexible sheet hands to its builder — the counterpart of the
 ///     <c>ScrollController</c> <c>bottom_sheet</c> passes you, and it has to be used the same way: put
-///     the sheet's scrolling content in <see cref="ScrollView.Child" /> (or return this widget from the
+///     the sheet's scrolling content in <see cref="ScrollView.Child" /> (or return this widget from
+///     the
 ///     builder) or the sheet will not resize from the content.
 ///     <para>
 ///         It arbitrates one finger between two things: dragging up grows the sheet until it is fully
@@ -16,24 +17,19 @@ public sealed class SheetScrollView : ScrollView
 {
     private readonly BottomSheetController _sheet;
 
-    public SheetScrollView(BottomSheetController sheet, Widget? child = null) : base(child)
-    {
+    public SheetScrollView(BottomSheetController sheet, Widget? child = null) : base(child) =>
         _sheet = sheet;
-    }
 
     // Claim every vertical drag even when the content itself doesn't overflow: the sheet still has
     // to move, and a target is picked once per gesture from whoever answers this first.
-    public override bool CanTouchScroll(bool vertical)
-    {
-        return vertical || base.CanTouchScroll(vertical);
-    }
+    public override bool CanTouchScroll(bool vertical) => vertical || base.CanTouchScroll(vertical);
 
     public override void OnTouchScroll(float dx, float dy)
     {
         // dy > 0: the finger moved down.
         if (dy < 0f && _sheet.CanGrow)
         {
-            _sheet.DragBy(dy, false);
+            _sheet.DragBy(dyPixels: dy, allowCollapse: false);
             return;
         }
 
@@ -44,18 +40,18 @@ public sealed class SheetScrollView : ScrollView
         // below.
         if (dy > 0f && OffsetY <= 0.5f && _sheet.Value > _sheet.MinExtent + 0.0005f)
         {
-            _sheet.DragBy(dy, false);
+            _sheet.DragBy(dyPixels: dy, allowCollapse: false);
             return;
         }
 
-        base.OnTouchScroll(dx, dy);
+        base.OnTouchScroll(dx: dx, dy: dy);
     }
 
     public override void OnTouchFling(float velocityX, float velocityY)
     {
         // The sheet moved during this gesture: the throw settles the sheet, not the list.
         if (_sheet.EndDragIfActive(velocityY)) return;
-        base.OnTouchFling(velocityX, velocityY);
+        base.OnTouchFling(velocityX: velocityX, velocityY: velocityY);
     }
 
     // ponytail: the wheel scrolls the content only — resizing the sheet with a wheel has no

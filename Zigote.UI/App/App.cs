@@ -1,6 +1,5 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Text;
 using Zigote.Core;
 using Zigote.Core.Animation;
@@ -9,17 +8,16 @@ using Zigote.Core.Engine;
 using Zigote.Core.Events;
 using Zigote.Core.Native;
 using Zigote.Core.Paint;
+using Zigote.Core.Platform;
 using Zigote.Core.Rendering;
 using Zigote.Core.State;
 using Zigote.UI.Debug;
 using Zigote.UI.Licensing;
-using Zigote.UI.Semantics;
 using Zigote.UI.TextShaping;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Focus;
-using MediaQueryData = Zigote.UI.Widgets.MediaQueryData;
 
 namespace Zigote.UI.Host;
 
@@ -38,6 +36,17 @@ public partial class App : IDisposable
     // clips a widget's own decoration. Larger overflow is handled per-widget via Widget.DamageBounds.
     private const float DamageMargin = 24f;
 
+    /// <summary>
+    ///     Width of the macOS close/minimize/zoom cluster plus its margin — where the leading edge
+    ///     of a titlebar's content belongs on macOS. Exposed as a constant so an app that draws the
+    ///     lights itself (client-side decorations) can size its cluster to the same band the OS
+    ///     would have used, instead of guessing a second number.
+    /// </summary>
+    public const float MacTrafficLightInset = 78f;
+
+    /// <summary>Longest edge a capture may reach, in pixels — under every backend's texture limit.</summary>
+    private const float MaxCapturePixels = 8192f;
+
     // Last cursor pushed to the OS. Static because SDL's active cursor is process-global (one for all
     // windows), so a single mirror de-dupes correctly no matter which window's App resolved it.
     private static MouseCursor _appliedCursor = MouseCursor.Default;
@@ -49,6 +58,9 @@ public partial class App : IDisposable
     // Updated silently each layout — no per-frame allocation on the hot path.
     private readonly ThemeProvider _appThemeScope = new(ThemeData.Dark);
 
+    // Scratch list for CaptureUi: root + overlay composited into the single list the capture renders.
+    private readonly PaintList _capturePaint = new();
+
     // Delta-time tracking
     private readonly Stopwatch _clock = Stopwatch.StartNew();
 
@@ -58,19 +70,21 @@ public partial class App : IDisposable
     // keep the frame loop pumping while live metrics are on-screen (see WantsContinuousFrame()).
     private readonly List<Func<bool>> _continuousFrameSources = [];
 
+    // Widgets an off-thread caller asked to re-lay-out; drained on the UI thread each frame (the queue's
+    // memory barrier also publishes the widget's own pending state). See InvalidateLayoutFromAnyThread.
+    private readonly ConcurrentQueue<Widget>
+        _crossThreadInvalidations = new();
+
     // Reused each frame so draining input events allocates nothing on an idle frame — unlike
     // PollEvents().ToList(), which allocated an enumerator + a list every frame.
     private readonly List<InputEvent> _events = [];
     private readonly List<(Widget Overlay, Widget? PrevFocus)> _focusRestore = [];
 
+    // Synthetic input from the inspect socket, joined to the real event batch each frame. A list,
+    // not a queue: only ever touched on the UI thread (InspectServer injects via Post).
+    private readonly List<InputEvent> _injected = [];
+
     private readonly PaintList _overlayPaint = new();
-
-    // Scratch list for CaptureUi: root + overlay composited into the single list the capture renders.
-    private readonly PaintList _capturePaint = new();
-
-    // Last-submitted paint lists, diffed against re-walked lists on partial frames so unmarked
-    // visual changes widen the damage instead of tearing (see PaintAndPresent).
-    private readonly PaintSnapshot _rootSnapshot = new();
     private readonly PaintSnapshot _overlaySnapshot = new();
 
     // Overlay stack — dialogs, tooltips, snackbars painted on top of Root
@@ -81,10 +95,20 @@ public partial class App : IDisposable
     // and the focus to restore when each is popped (modal focus save/restore).
     private readonly List<Widget> _pendingAutoFocus = [];
 
+    private readonly ConcurrentQueue<Action> _posted = new();
+
+    // Like _posted, but drained at the END of the frame — after event dispatch, layout and paint.
+    private readonly ConcurrentQueue<Action>
+        _postedAfterFrame = new();
+
     // Layer-granularity dirty tracking (root vs overlay) — the first increment of dirty-region
     // repaint. Replaces the old single _needsPaint flag so a clean layer's paint walk can be skipped
     // (see RepaintTracker). Both layers start dirty, so the first frame paints everything.
     private readonly RepaintTracker _repaint = new();
+
+    // Last-submitted paint lists, diffed against re-walked lists on partial frames so unmarked
+    // visual changes widen the damage instead of tearing (see PaintAndPresent).
+    private readonly PaintSnapshot _rootSnapshot = new();
 
     // ── Secondary OS windows ──────────────────────────────────────────────────
     // A secondary window is a full App instance sharing the main app's engine: it owns its own
@@ -95,36 +119,20 @@ public partial class App : IDisposable
     private readonly List<Snackbar> _snackbars = [];
 
     private Widget? _capturedWidget;
+
+    private float _csdCornerRadius = 15f;
+
+    private Color _csdOutlineColor = Color.Transparent;
     private Widget? _hoveredWidget;
-    private int _initialFramesToPaint = 10;
 
     // True while the native resize event-watch is driving a live-resize frame — prevents re-entry.
     private bool _inLiveResize;
-
-    // True while the measure/layout pass or the root/overlay paint walk is running. A reactive
-    // subtree swap landing now would mutate the tree mid-walk (shrink a ListView's items between
-    // its VisibleRange and the row loop, grow a ResponsiveGrid's children mid-measure via an
-    // OnScrolled load-more signal) — Watch.OnChanged checks this and defers the swap to the next
-    // frame instead. Watch.Measure's own deferred-apply entry point is unaffected: it swaps at a
-    // point the walk is designed to tolerate.
-    internal bool InTreeWalk { get; private set; }
+    private int _initialFramesToPaint = 10;
 
     private long _lastPaintExplosionLogMs = long.MinValue;
     private long _lastTicks;
     private Offset _mousePos;
     private bool _needsLayout = true;
-
-    // Device safe-area insets (notch / home indicator), fed into MediaQueryData.Padding.
-    // Queried lazily by LayoutTree and re-queried after a resize (rotation moves the notch).
-    private EdgeInsets _safeArea = EdgeInsets.Zero;
-    private bool _safeAreaValid;
-
-    // Widgets an off-thread caller asked to re-lay-out; drained on the UI thread each frame (the queue's
-    // memory barrier also publishes the widget's own pending state). See InvalidateLayoutFromAnyThread.
-    private readonly System.Collections.Concurrent.ConcurrentQueue<Widget>
-        _crossThreadInvalidations = new();
-
-    private readonly System.Collections.Concurrent.ConcurrentQueue<Action> _posted = new();
 
     // ── Viewport FPS controls (for performance testing) ───────────────────────
     private long _paceAnchorTicks;
@@ -134,10 +142,15 @@ public partial class App : IDisposable
     private Widget? _rightCapturedWidget;
 
     private Widget? _root;
-    private Widget? _titleBarLeading;
+
+    // Device safe-area insets (notch / home indicator), fed into MediaQueryData.Padding.
+    // Queried lazily by LayoutTree and re-queried after a resize (rotation moves the notch).
+    private EdgeInsets _safeArea = EdgeInsets.Zero;
+    private bool _safeAreaValid;
     private bool _semanticsDirty = true;
 
     private ThemeData _theme = ThemeData.Dark;
+    private Widget? _titleBarLeading;
     private TooltipBubble? _tooltipOverlay;
 
     // Tooltip system
@@ -149,7 +162,7 @@ public partial class App : IDisposable
         ParentApp = parent;
         Title = title;
         Engine = parent.Engine;
-        NativeWindow = Engine.CreateWindow(title, width, height);
+        NativeWindow = Engine.CreateWindow(title: title, width: width, height: height);
         Theme = parent.Theme;
         _lastTicks = _clock.ElapsedTicks;
         // Secondary windows do not sample DebugStats or host a devtools panel — the devtools package
@@ -193,9 +206,9 @@ public partial class App : IDisposable
         // Prefer bundled, cross-platform fonts in Fonts/ next to the executable so the UI
         // doesn't depend on system fonts. Inter is the default UI face; Iosevka is bundled
         // separately for code-oriented views in the editor. Falls back to caller path / default.
-        var fontsDir = Path.Combine(AppContext.BaseDirectory, "Fonts");
-        var bundledMain = Path.Combine(fontsDir, "Inter-Regular.ttf");
-        var mainFont = fontPath ?? (File.Exists(bundledMain) ? bundledMain : null);
+        string fontsDir = Path.Combine(path1: AppContext.BaseDirectory, path2: "Fonts");
+        string bundledMain = Path.Combine(path1: fontsDir, path2: "Inter-Regular.ttf");
+        string? mainFont = fontPath ?? (File.Exists(bundledMain) ? bundledMain : null);
 
         // Backend override: ZIGOTE_BACKEND=wgpu|auto selects the GPU backend at startup
         // (the device is created once, so this is launch-time only). Defaults to Auto (→ wgpu).
@@ -208,14 +221,14 @@ public partial class App : IDisposable
                 _ => RenderBackend.Auto,
             };
         Engine.Initialize(
-            width,
-            height,
-            title,
-            mainFont,
-            fontName ?? "Inter",
-            backend,
-            gpuPreference,
-            gpuIndex
+            width: width,
+            height: height,
+            title: title,
+            fontPath: mainFont,
+            fontName: fontName ?? "Inter",
+            backend: backend,
+            gpuPreference: gpuPreference,
+            gpuIndex: gpuIndex
         );
 
         // Native file dialogs parent to the focused OS window (macOS sheet / Windows owner) —
@@ -228,34 +241,36 @@ public partial class App : IDisposable
         // weight registers as its own family and FontFaces maps FontWeight → family at the
         // AddText/MeasureText choke points. Only when the default face is in use (fontPath null).
         if (fontPath is null)
-            foreach (var (weight, faceName) in (ReadOnlySpan<(FontWeight, string)>) [
+        {
+            foreach ((var weight, string faceName) in (ReadOnlySpan<(FontWeight, string)>) [
                          (FontWeight.Medium, "Inter-Medium"),
                          (FontWeight.SemiBold, "Inter-SemiBold"),
                          (FontWeight.Bold, "Inter-Bold"),
                          (FontWeight.ExtraBold, "Inter-ExtraBold"),
                      ])
             {
-                var facePath = Path.Combine(fontsDir, faceName + ".ttf");
-                if (File.Exists(facePath) && Engine.LoadFont(faceName, facePath))
-                    FontFaces.RegisterWeight(weight, faceName);
+                string facePath = Path.Combine(path1: fontsDir, path2: faceName + ".ttf");
+                if (File.Exists(facePath) && Engine.LoadFont(name: faceName, path: facePath))
+                    FontFaces.RegisterWeight(weight: weight, family: faceName);
             }
+        }
 
         // Iosevka (monospace) for code/text widgets — registered as a named font so code views
         // can request it; the general UI stays on Inter.
-        var codeFont = Path.Combine(fontsDir, "Iosevka-Regular.ttc");
-        if (File.Exists(codeFont)) Engine.LoadFont("code", codeFont);
+        string codeFont = Path.Combine(path1: fontsDir, path2: "Iosevka-Regular.ttc");
+        if (File.Exists(codeFont)) Engine.LoadFont(name: "code", path: codeFont);
 
         // Material Icons — monochrome UI line-icon face, registered under the family name the
         // Icons token class draws with (PaintList.AddText(..., fontFamily: Icons.Family)). Glyphs
         // live in the Private-Use area, so they never collide with text in the default face.
-        var iconFont = Path.Combine(fontsDir, "MaterialIcons-Regular.ttf");
-        if (File.Exists(iconFont)) Engine.LoadFont("MaterialIcons", iconFont);
+        string iconFont = Path.Combine(path1: fontsDir, path2: "MaterialIcons-Regular.ttf");
+        if (File.Exists(iconFont)) Engine.LoadFont(name: "MaterialIcons", path: iconFont);
 
         // Color-emoji atlas needs a CBDT/CBLC/sbix font. The bundled Noto Emoji is monochrome
         // (incompatible with the color path), so emoji are only enabled if a color font is
         // bundled as Fonts/NotoColorEmoji.ttf — keeping the build free of system-font reliance.
-        var colorEmoji = Path.Combine(fontsDir, "NotoColorEmoji.ttf");
-        if (File.Exists(colorEmoji) && Engine.LoadFont("emoji", colorEmoji))
+        string colorEmoji = Path.Combine(path1: fontsDir, path2: "NotoColorEmoji.ttf");
+        if (File.Exists(colorEmoji) && Engine.LoadFont(name: "emoji", path: colorEmoji))
             Engine.AddEmojiFont("emoji");
 
         // Scripts the bundled face cannot draw — Japanese, Korean, Chinese, Arabic, Thai — come
@@ -283,6 +298,14 @@ public partial class App : IDisposable
         Engine.OnLiveResize += LiveResizeTick;
     }
 
+    // True while the measure/layout pass or the root/overlay paint walk is running. A reactive
+    // subtree swap landing now would mutate the tree mid-walk (shrink a ListView's items between
+    // its VisibleRange and the row loop, grow a ResponsiveGrid's children mid-measure via an
+    // OnScrolled load-more signal) — Watch.OnChanged checks this and defers the swap to the next
+    // frame instead. Watch.Measure's own deferred-apply entry point is unaffected: it swaps at a
+    // point the walk is designed to tolerate.
+    internal bool InTreeWalk { get; private set; }
+
     /// <summary>The main app this secondary window hangs off; null on the main app itself.</summary>
     public App? ParentApp { get; }
 
@@ -305,9 +328,12 @@ public partial class App : IDisposable
         get
         {
             if (WindowFocused) return true;
-            for (var i = 0; i < _secondaryWindows.Count; i++)
+            for (int i = 0; i < _secondaryWindows.Count; i++)
+            {
                 if (_secondaryWindows[i].WindowFocused)
                     return true;
+            }
+
             return false;
         }
     }
@@ -322,9 +348,12 @@ public partial class App : IDisposable
         get
         {
             if (WindowFocused) return WindowId;
-            for (var i = 0; i < _secondaryWindows.Count; i++)
+            for (int i = 0; i < _secondaryWindows.Count; i++)
+            {
                 if (_secondaryWindows[i].WindowFocused)
                     return _secondaryWindows[i].WindowId;
+            }
+
             return WindowId;
         }
     }
@@ -347,7 +376,7 @@ public partial class App : IDisposable
         get => _theme;
         set
         {
-            if (ReferenceEquals(_theme, value)) return;
+            if (ReferenceEquals(objA: _theme, objB: value)) return;
             _theme = value;
             BuildContext.Current.BumpGeneration();
             RequestLayout();
@@ -367,32 +396,32 @@ public partial class App : IDisposable
     public WindowChromeStyle ChromeStyle { get; private set; }
 
     /// <summary>
-    ///     Width of the macOS close/minimize/zoom cluster plus its margin — where the leading edge
-    ///     of a titlebar's content belongs on macOS. Exposed as a constant so an app that draws the
-    ///     lights itself (client-side decorations) can size its cluster to the same band the OS
-    ///     would have used, instead of guessing a second number.
+    ///     Left inset the native traffic lights occupy in MacUnified chrome — top-left
+    ///     content (toolbars) should lead with this much space. 0 in other chromes.
     /// </summary>
-    public const float MacTrafficLightInset = 78f;
-
-    /// <summary>Left inset the native traffic lights occupy in MacUnified chrome — top-left
-    ///     content (toolbars) should lead with this much space. 0 in other chromes.</summary>
     public float TitleBarLeftInset =>
         ChromeStyle == WindowChromeStyle.MacUnified ? MacTrafficLightInset : 0f;
 
-    /// <summary>Suggested top inset for MacUnified windows whose content has no toolbar row to
-    ///     absorb the titlebar band (e.g. the Settings window). 0 in other chromes.</summary>
+    /// <summary>
+    ///     Suggested top inset for MacUnified windows whose content has no toolbar row to
+    ///     absorb the titlebar band (e.g. the Settings window). 0 in other chromes.
+    /// </summary>
     public float TitleBarTopInset =>
         ChromeStyle == WindowChromeStyle.MacUnified ? 28f : 0f;
 
-    /// <summary>MacUnified: the height of the top band that acts as the draggable titlebar
-    ///     wherever no interactive control claims the point.</summary>
+    /// <summary>
+    ///     MacUnified: the height of the top band that acts as the draggable titlebar
+    ///     wherever no interactive control claims the point.
+    /// </summary>
     public float TitleBarDragHeight { get; set; } = 38f;
 
-    /// <summary>Corner radius of the window frame under Adwaita CSD chrome. libadwaita's
+    /// <summary>
+    ///     Corner radius of the window frame under Adwaita CSD chrome. libadwaita's
     ///     <c>--window-radius</c> is <c>$button_radius + 6</c> (15px as of GNOME 51); a rounder or
     ///     squarer corner is the tell that gives away a not-quite-GNOME window sitting next to real
     ///     ones. Only observed while the window is unmaximized, and — where the renderer draws the
-    ///     corner rather than the OS — on a compositor that granted an alpha channel.</summary>
+    ///     corner rather than the OS — on a compositor that granted an alpha channel.
+    /// </summary>
     public float CsdCornerRadius
     {
         get => _csdCornerRadius;
@@ -400,12 +429,10 @@ public partial class App : IDisposable
         {
             if (_csdCornerRadius.Equals(value)) return;
             _csdCornerRadius = value;
-            Engine.WindowChromeSetCornerRadius(WindowId, value);
+            Engine.WindowChromeSetCornerRadius(windowId: WindowId, radius: value);
             RequestPaint();
         }
     }
-
-    private float _csdCornerRadius = 15f;
 
     /// <summary>
     ///     Hairline drawn just inside the CSD window edge — libadwaita's
@@ -423,19 +450,6 @@ public partial class App : IDisposable
             _csdOutlineColor = value;
             RequestPaint();
         }
-    }
-
-    private Color _csdOutlineColor = Color.Transparent;
-
-    /// <summary>
-    ///     Paint <see cref="CsdOutlineColor" /> over the content, inside the same rounded clip. On
-    ///     top, not under: the outline's job is to bound the window, and a headerbar or sidebar
-    ///     painted to the edge would swallow it.
-    /// </summary>
-    private void PaintCsdOutline(bool rounded)
-    {
-        if (!rounded || _csdOutlineColor.A <= 0f) return;
-        _paint.AddBorder(WindowRect, _csdOutlineColor, CsdCornerRadius);
     }
 
     /// <summary>
@@ -462,10 +476,10 @@ public partial class App : IDisposable
     // rounded-corner clip is taken from this, and clipping a 852pt-tall phone to a 760pt window is how
     // the bottom of every tall preview went black.
     private Rect WindowRect => new(
-        0f,
-        0f,
-        LayoutWidth,
-        LayoutHeight
+        x: 0f,
+        y: 0f,
+        width: LayoutWidth,
+        height: LayoutHeight
     );
 
     public Widget? Root
@@ -477,50 +491,9 @@ public partial class App : IDisposable
             if (_root == effective) return;
             _root?.Detach();
             _root = effective;
-            _root?.Attach(this, null);
+            _root?.Attach(owner: this, parent: null);
             RequestLayout();
         }
-    }
-
-    /// <summary>
-    ///     Apply an in-app window chrome to this window and every current/future secondary
-    ///     window: MacUnified keeps the native traffic lights over the app-drawn titlebar strip;
-    ///     AdwaitaCsd draws GNOME-style buttons on a borderless window; System restores the OS
-    ///     decorations. A style the native layer refuses (e.g. MacUnified off-macOS) degrades to
-    ///     System for that window.
-    /// </summary>
-    public void ApplyWindowChrome(WindowChromeStyle style)
-    {
-        var effective = style;
-        if (effective != WindowChromeStyle.System && !Engine.WindowChromeSet(WindowId, effective))
-            effective = WindowChromeStyle.System;
-        if (effective == WindowChromeStyle.System && ChromeStyle != WindowChromeStyle.System)
-            Engine.WindowChromeSet(WindowId, WindowChromeStyle.System);
-
-        if (ChromeStyle != effective)
-        {
-            ChromeStyle = effective;
-            // Re-wrap the current root under the new chrome (the setter early-outs on identical
-            // references, so detach explicitly first).
-            var user = _root is WindowChromeHost host ? host.Content : _root;
-            if (user is not null)
-            {
-                _root?.Detach();
-                _root = null;
-                Root = user;
-            }
-        }
-
-        if (effective != WindowChromeStyle.System) EnsureDragHitProvider(Engine);
-        // After the style, not before: applying one allocates the window's native chrome entry and
-        // resets the radius it remembers to the default.
-        if (effective == WindowChromeStyle.AdwaitaCsd)
-            Engine.WindowChromeSetCornerRadius(WindowId, CsdCornerRadius);
-
-        // Cascade the REQUESTED style — each window degrades independently.
-        for (var i = 0; i < _secondaryWindows.Count; i++)
-            _secondaryWindows[i].ApplyWindowChrome(style);
-        RequestPaint();
     }
 
     /// <summary>
@@ -541,12 +514,12 @@ public partial class App : IDisposable
         get => _titleBarLeading;
         set
         {
-            if (ReferenceEquals(_titleBarLeading, value)) return;
+            if (ReferenceEquals(objA: _titleBarLeading, objB: value)) return;
             _titleBarLeading = value;
             if (_root is WindowChromeHost host)
             {
                 host.Bar.Leading = value;
-                value?.Attach(this, host.Bar);
+                value?.Attach(owner: this, parent: host.Bar);
                 RequestLayout();
             }
         }
@@ -566,15 +539,6 @@ public partial class App : IDisposable
     ///     headerbar widgets on Attach/Detach.
     /// </summary>
     public List<Widget> CsdDragSurfaces { get; } = [];
-
-    /// <summary>Only Adwaita composes a strip — it must host the CSD buttons. MacUnified keeps
-    ///     the content full-bleed (the native traffic lights float over it).</summary>
-    private Widget? WrapWithChrome(Widget? userRoot)
-    {
-        if (userRoot is null || ChromeStyle != WindowChromeStyle.AdwaitaCsd ||
-            SuppressChromeStrip || userRoot is WindowChromeHost) return userRoot;
-        return new WindowChromeHost(this, userRoot) { Bar = { Leading = _titleBarLeading } };
-    }
 
     // ── DevTools seams ────────────────────────────────────────────────────────
     // The devtools package (Zigote.UI.DevTools) is an opt-in host include; it plugs into these
@@ -599,6 +563,59 @@ public partial class App : IDisposable
     /// <summary>The active locale tag and the tags the app supports.</summary>
     public Func<(string Current, IReadOnlyList<string> Supported)>? LocaleInfo { get; set; }
 
+    /// <summary>
+    ///     Consulted before the main window closes. Return true to keep the application alive —
+    ///     the handler is then responsible for what happens instead, which is normally
+    ///     <see cref="Hide" />.
+    ///     <para>
+    ///         This is the seam a background-capable app needs: a media player, a sync client or a
+    ///         chat app closes its window and keeps working, and only an explicit Quit ends the
+    ///         process. It is deliberately <i>not</i> consulted by <see cref="RequestQuit" />, so a
+    ///         Quit from a menu, a media key or a session manager still quits.
+    ///     </para>
+    /// </summary>
+    public Func<bool>? OnCloseRequest { get; set; }
+
+    /// <summary>
+    ///     The main window is hidden but the application is running: no window on screen, no
+    ///     rendering, and the frame loop still turning so whatever the app does in the background
+    ///     keeps happening. Always false for a secondary window, which closes rather than hides.
+    /// </summary>
+    public bool Hidden { get; private set; }
+
+    /// <summary>
+    ///     Lay the tree out at this size rather than the window's, or null for the window's.
+    ///     <para>
+    ///         This is what a device preview is: the live tree — with its state, its animations and its
+    ///         hot-reloaded <c>Build()</c> bodies — measured at an iPhone's logical size, so everything
+    ///         that reads <see cref="Widgets.MediaQuery" /> or a breakpoint behaves as it would on that
+    ///         device. Rendering a fixed-size box inside a desktop window would look similar and adapt
+    ///         to the wrong size, which is the one thing a device preview must not do.
+    ///     </para>
+    ///     <para>
+    ///         Input hit-testing still works in window coordinates, so a preview at a size other than
+    ///         the window's is meant to be viewed with the window hidden.
+    ///     </para>
+    /// </summary>
+    internal Size? PreviewSize { get; set; }
+
+    internal float LayoutWidth => PreviewSize?.Width ?? HostLogicalWidth;
+    internal float LayoutHeight => PreviewSize?.Height ?? HostLogicalHeight;
+
+    /// <summary>
+    ///     Paint the dirty layer(s) and submit + present the frame. Shared by <see cref="Frame" /> and
+    ///     the live-resize path. Partial repaint: re-emit only the layer(s) that changed — the clean
+    ///     layer keeps last frame's command buffer, which is still re-submitted, so the GPU always
+    ///     receives the full frame while a clean layer's paint walk is skipped. Root and overlays stay
+    ///     in separate lists so they composite correctly (overlays above the 3D viewport in Pass 2).
+    /// </summary>
+    /// <summary>
+    ///     Bumped whenever a paint walk actually ran. The inspect stream compares it to skip the
+    ///     whole capture (offscreen render, BMP round-trip, byte compare) on frames where nothing
+    ///     painted — an idle app with a stream attached does no capture work at all.
+    /// </summary>
+    internal int PaintVersion { get; private set; }
+
     public void Dispose()
     {
         // A secondary window doesn't own the engine — just close its OS window.
@@ -609,10 +626,76 @@ public partial class App : IDisposable
             return;
         }
 
-        for (var i = _secondaryWindows.Count - 1; i >= 0; i--) _secondaryWindows[i].Close();
+        for (int i = _secondaryWindows.Count - 1; i >= 0; i--) _secondaryWindows[i].Close();
         if (Active == this) Active = null;
         Engine.Dispose();
         GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    ///     Paint <see cref="CsdOutlineColor" /> over the content, inside the same rounded clip. On
+    ///     top, not under: the outline's job is to bound the window, and a headerbar or sidebar
+    ///     painted to the edge would swallow it.
+    /// </summary>
+    private void PaintCsdOutline(bool rounded)
+    {
+        if (!rounded || _csdOutlineColor.A <= 0f) return;
+        _paint.AddBorder(bounds: WindowRect, color: _csdOutlineColor, radius: CsdCornerRadius);
+    }
+
+    /// <summary>
+    ///     Apply an in-app window chrome to this window and every current/future secondary
+    ///     window: MacUnified keeps the native traffic lights over the app-drawn titlebar strip;
+    ///     AdwaitaCsd draws GNOME-style buttons on a borderless window; System restores the OS
+    ///     decorations. A style the native layer refuses (e.g. MacUnified off-macOS) degrades to
+    ///     System for that window.
+    /// </summary>
+    public void ApplyWindowChrome(WindowChromeStyle style)
+    {
+        var effective = style;
+        if (effective != WindowChromeStyle.System &&
+            !Engine.WindowChromeSet(windowId: WindowId, style: effective))
+            effective = WindowChromeStyle.System;
+        if (effective == WindowChromeStyle.System && ChromeStyle != WindowChromeStyle.System)
+            Engine.WindowChromeSet(windowId: WindowId, style: WindowChromeStyle.System);
+
+        if (ChromeStyle != effective)
+        {
+            ChromeStyle = effective;
+            // Re-wrap the current root under the new chrome (the setter early-outs on identical
+            // references, so detach explicitly first).
+            var user = _root is WindowChromeHost host ? host.Content : _root;
+            if (user is not null)
+            {
+                _root?.Detach();
+                _root = null;
+                Root = user;
+            }
+        }
+
+        if (effective != WindowChromeStyle.System) EnsureDragHitProvider(Engine);
+        // After the style, not before: applying one allocates the window's native chrome entry and
+        // resets the radius it remembers to the default.
+        if (effective == WindowChromeStyle.AdwaitaCsd)
+            Engine.WindowChromeSetCornerRadius(windowId: WindowId, radius: CsdCornerRadius);
+
+        // Cascade the REQUESTED style — each window degrades independently.
+        for (int i = 0; i < _secondaryWindows.Count; i++)
+            _secondaryWindows[i].ApplyWindowChrome(style);
+        RequestPaint();
+    }
+
+    /// <summary>
+    ///     Only Adwaita composes a strip — it must host the CSD buttons. MacUnified keeps
+    ///     the content full-bleed (the native traffic lights float over it).
+    /// </summary>
+    private Widget? WrapWithChrome(Widget? userRoot)
+    {
+        if (userRoot is null || ChromeStyle != WindowChromeStyle.AdwaitaCsd ||
+            SuppressChromeStrip || userRoot is WindowChromeHost) return userRoot;
+        return new WindowChromeHost(window: this, content: userRoot) {
+            Bar = { Leading = _titleBarLeading },
+        };
     }
 
     /// <summary>
@@ -644,12 +727,13 @@ public partial class App : IDisposable
     /// </summary>
     public App CreateWindow(string title, uint width = 720, uint height = 520)
     {
-        if (ParentApp is not null) return ParentApp.CreateWindow(title, width, height);
+        if (ParentApp is not null)
+            return ParentApp.CreateWindow(title: title, width: width, height: height);
         var win = new App(
-            this,
-            title,
-            width,
-            height
+            parent: this,
+            title: title,
+            width: width,
+            height: height
         );
         _secondaryWindows.Add(win);
         // New windows inherit the app-wide chrome (Settings, dialogs, torn-out panels…) — including
@@ -659,26 +743,6 @@ public partial class App : IDisposable
         if (ChromeStyle != WindowChromeStyle.System) win.ApplyWindowChrome(ChromeStyle);
         return win;
     }
-
-    /// <summary>
-    ///     Consulted before the main window closes. Return true to keep the application alive —
-    ///     the handler is then responsible for what happens instead, which is normally
-    ///     <see cref="Hide" />.
-    ///     <para>
-    ///         This is the seam a background-capable app needs: a media player, a sync client or a
-    ///         chat app closes its window and keeps working, and only an explicit Quit ends the
-    ///         process. It is deliberately <i>not</i> consulted by <see cref="RequestQuit" />, so a
-    ///         Quit from a menu, a media key or a session manager still quits.
-    ///     </para>
-    /// </summary>
-    public Func<bool>? OnCloseRequest { get; set; }
-
-    /// <summary>
-    ///     The main window is hidden but the application is running: no window on screen, no
-    ///     rendering, and the frame loop still turning so whatever the app does in the background
-    ///     keeps happening. Always false for a secondary window, which closes rather than hides.
-    /// </summary>
-    public bool Hidden { get; private set; }
 
     /// <summary>
     ///     Take the main window off screen without ending the application. Painting stops (there is
@@ -692,8 +756,10 @@ public partial class App : IDisposable
         Engine.MainWindowSetVisible(false);
     }
 
-    /// <summary>Bring the main window back and redraw it from scratch — it painted nothing while
-    ///     it was away, so every layer is stale.</summary>
+    /// <summary>
+    ///     Bring the main window back and redraw it from scratch — it painted nothing while
+    ///     it was away, so every layer is stale.
+    /// </summary>
     public void Show()
     {
         if (ParentApp is not null || !Hidden) return;
@@ -744,26 +810,29 @@ public partial class App : IDisposable
     private void RequestLayoutAllWindows()
     {
         RequestLayout();
-        for (var i = 0; i < _secondaryWindows.Count; i++)
+        for (int i = 0; i < _secondaryWindows.Count; i++)
             _secondaryWindows[i].RequestLayout();
     }
 
     private static Keymap CreateDefaultKeymap()
     {
         var km = new Keymap();
-        km.Bind(ActionToggleDevTools, new KeyChord(KeyCode.D, Modifiers.Shift));
-        km.Bind(ActionProfilerCapture, new KeyChord(KeyCode.F7));
-        km.Bind(ActionFocusNext, new KeyChord(KeyCode.Tab));
-        km.Bind(ActionFocusPrev, new KeyChord(KeyCode.Tab, Modifiers.Shift));
-        km.Bind(ActionDismiss, new KeyChord(KeyCode.Escape));
+        km.Bind(
+            action: ActionToggleDevTools,
+            chord: new KeyChord(Key: KeyCode.D, Modifiers: Modifiers.Shift)
+        );
+        km.Bind(action: ActionProfilerCapture, chord: new KeyChord(KeyCode.F7));
+        km.Bind(action: ActionFocusNext, chord: new KeyChord(KeyCode.Tab));
+        km.Bind(
+            action: ActionFocusPrev,
+            chord: new KeyChord(Key: KeyCode.Tab, Modifiers: Modifiers.Shift)
+        );
+        km.Bind(action: ActionDismiss, chord: new KeyChord(KeyCode.Escape));
         return km;
     }
 
     /// <summary>Request the application to exit after the current frame.</summary>
-    public void RequestQuit()
-    {
-        Engine.Quit();
-    }
+    public void RequestQuit() => Engine.Quit();
 
     /// <summary>
     ///     Swap a registered font family's face at runtime (e.g. re-point <c>"Inter"</c> or
@@ -775,7 +844,7 @@ public partial class App : IDisposable
     public bool SetFontFace(string family, string path)
     {
         if (!File.Exists(path)) return false;
-        if (!Engine.LoadFont(family, path)) return false;
+        if (!Engine.LoadFont(name: family, path: path)) return false;
         TextMeasure.Invalidate();
         BuildContext.Current.BumpGeneration();
         RequestLayoutAllWindows();
@@ -821,8 +890,10 @@ public partial class App : IDisposable
     private void DrainCrossThreadInvalidations()
     {
         while (_crossThreadInvalidations.TryDequeue(out var w))
+        {
             if (w.Owner is not null) // still attached
                 w.MarkNeedsLayout();
+        }
     }
 
     /// <summary>
@@ -838,9 +909,6 @@ public partial class App : IDisposable
         _posted.Enqueue(action);
         RequestPaint(); // wakes the idle gate; WaitEvents' 16 ms timeout picks it up regardless
     }
-
-    // Like _posted, but drained at the END of the frame — after event dispatch, layout and paint.
-    private readonly System.Collections.Concurrent.ConcurrentQueue<Action> _postedAfterFrame = new();
 
     /// <summary>
     ///     Thread-safe: run <paramref name="action" /> on the UI thread at the <b>end</b> of the next
@@ -862,6 +930,7 @@ public partial class App : IDisposable
     private void DrainPostedAfterFrame()
     {
         while (_postedAfterFrame.TryDequeue(out var action))
+        {
             try
             {
                 action();
@@ -870,40 +939,15 @@ public partial class App : IDisposable
             {
                 DebugLog.Error($"App.PostAfterFrame action threw: {ex}");
             }
+        }
     }
-
-    // Synthetic input from the inspect socket, joined to the real event batch each frame. A list,
-    // not a queue: only ever touched on the UI thread (InspectServer injects via Post).
-    private readonly List<InputEvent> _injected = [];
 
     /// <summary>
     ///     Queue a synthetic input event for the current frame's dispatch. UI thread only (use
     ///     <see cref="Post" /> from elsewhere). Injected events run through the exact pipeline OS
     ///     input does — hit-testing, capture, focus, shortcuts — so a remote click is a click.
     /// </summary>
-    internal void InjectEvent(InputEvent evt)
-    {
-        _injected.Add(evt);
-    }
-
-    /// <summary>
-    ///     Lay the tree out at this size rather than the window's, or null for the window's.
-    ///     <para>
-    ///         This is what a device preview is: the live tree — with its state, its animations and its
-    ///         hot-reloaded <c>Build()</c> bodies — measured at an iPhone's logical size, so everything
-    ///         that reads <see cref="Widgets.MediaQuery" /> or a breakpoint behaves as it would on that
-    ///         device. Rendering a fixed-size box inside a desktop window would look similar and adapt
-    ///         to the wrong size, which is the one thing a device preview must not do.
-    ///     </para>
-    ///     <para>
-    ///         Input hit-testing still works in window coordinates, so a preview at a size other than
-    ///         the window's is meant to be viewed with the window hidden.
-    ///     </para>
-    /// </summary>
-    internal Size? PreviewSize { get; set; }
-
-    internal float LayoutWidth => PreviewSize?.Width ?? HostLogicalWidth;
-    internal float LayoutHeight => PreviewSize?.Height ?? HostLogicalHeight;
+    internal void InjectEvent(InputEvent evt) => _injected.Add(evt);
 
     /// <summary>
     ///     Render the current UI to a 24-bit BMP at <paramref name="path" /> without disturbing the
@@ -922,7 +966,8 @@ public partial class App : IDisposable
     ///         submit — what the window shows is what the BMP shows.
     ///     </para>
     /// </summary>
-    internal bool CaptureUi(string path, float scale = 1f) => CaptureUi(path, scale, out _);
+    internal bool CaptureUi(string path, float scale = 1f) =>
+        CaptureUi(path: path, scale: scale, density: out _);
 
     /// <inheritdoc cref="CaptureUi(string,float)" />
     /// <param name="density">
@@ -941,9 +986,7 @@ public partial class App : IDisposable
 
         if (_paint.Count == 0) return false;
         if (_overlayPaint.Count == 0)
-        {
             Engine.SubmitPaintCommands(_paint);
-        }
         else
         {
             _capturePaint.Clear();
@@ -953,10 +996,10 @@ public partial class App : IDisposable
         }
 
         return Engine.CaptureUiBmp(
-            path,
-            (uint)MathF.Max(1f, LayoutWidth * density),
-            (uint)MathF.Max(1f, LayoutHeight * density),
-            density
+            path: path,
+            width: (uint)MathF.Max(x: 1f, y: LayoutWidth * density),
+            height: (uint)MathF.Max(x: 1f, y: LayoutHeight * density),
+            scale: density
         );
     }
 
@@ -966,16 +1009,17 @@ public partial class App : IDisposable
     ///     first frame of a stream exists to measure.
     /// </summary>
     internal float CaptureDensity(float scale) => MathF.Max(
-        0.1f,
-        MathF.Min(scale, MaxCapturePixels / MathF.Max(1f, MathF.Max(LayoutWidth, LayoutHeight)))
+        x: 0.1f,
+        y: MathF.Min(
+            x: scale,
+            y: MaxCapturePixels / MathF.Max(x: 1f, y: MathF.Max(x: LayoutWidth, y: LayoutHeight))
+        )
     );
-
-    /// <summary>Longest edge a capture may reach, in pixels — under every backend's texture limit.</summary>
-    private const float MaxCapturePixels = 8192f;
 
     private void DrainPosted()
     {
         while (_posted.TryDequeue(out var action))
+        {
             try
             {
                 action();
@@ -984,6 +1028,7 @@ public partial class App : IDisposable
             {
                 DebugLog.Error($"App.Post action threw: {ex}");
             }
+        }
     }
 
     public void RequestPaint()
@@ -997,17 +1042,19 @@ public partial class App : IDisposable
     /// <summary>
     ///     Repaint request scoped to a single widget: damages just that widget's paint region (its
     ///     <see cref="Widget.DamageBounds" /> plus a safety margin) in its own layer, rather than forcing
-    ///     a full-frame clear. This is the precise counterpart of <see cref="RequestPaint" /> — a control's
-    ///     own <see cref="Widget.MarkNeedsPaint" /> (hover glow, slider thumb during a drag, blinking caret)
-    ///     routes here so a self-repaint on a mouse-move / idle frame stays a sub-rectangle blit instead of
-    ///     re-clearing the whole scene texture. Safely degrades to a full repaint when the region is unknown
-    ///     (an unlaid-out widget), <see cref="PartialRepaintEnabled" /> is off, or the widget lives outside
+    ///     a full-frame clear. This is the precise counterpart of <see cref="RequestPaint" /> — a
+    ///     control's
+    ///     own <see cref="Widget.MarkNeedsPaint" /> (hover glow, slider thumb during a drag, blinking
+    ///     caret)
+    ///     routes here so a self-repaint on a mouse-move / idle frame stays a sub-rectangle blit instead
+    ///     of
+    ///     re-clearing the whole scene texture. Safely degrades to a full repaint when the region is
+    ///     unknown
+    ///     (an unlaid-out widget), <see cref="PartialRepaintEnabled" /> is off, or the widget lives
+    ///     outside
     ///     the Root/overlay layers. UI-thread only, exactly like <see cref="Widget.MarkNeedsLayout" />.
     /// </summary>
-    public void RequestPaintFor(Widget widget)
-    {
-        MarkPaintFor(widget);
-    }
+    public void RequestPaintFor(Widget widget) => MarkPaintFor(widget);
 
     /// <summary>
     ///     Keep the frame loop pumping (both layers repainted) for at least <paramref name="count" />
@@ -1016,10 +1063,8 @@ public partial class App : IDisposable
     ///     needs trailing frames to settle after a change — the 3D viewport's temporal passes
     ///     (TAA/SSGI/auto-exposure) — can self-schedule the next frame from inside <c>Paint</c>.
     /// </summary>
-    public void RequestExtraFrames(int count)
-    {
-        _initialFramesToPaint = Math.Max(_initialFramesToPaint, count);
-    }
+    public void RequestExtraFrames(int count) =>
+        _initialFramesToPaint = Math.Max(val1: _initialFramesToPaint, val2: count);
 
     /// <summary>
     ///     Mark the paint layer that <paramref name="w" /> belongs to (root vs overlay) by walking to
@@ -1052,11 +1097,14 @@ public partial class App : IDisposable
         // partial repaint is disabled, treat the mark as an unknown region so the frame full-clears.
         var region = PartialRepaintEnabled ? w.DamageBounds.Inflate(DamageMargin) : Rect.Zero;
         if (DebugDamageLog)
+        {
             Console.Error.WriteLine(
                 FormattableString.Invariant(
                     $"[dmg] mark {w.GetType().Name} bounds=({w.Bounds.X:F1},{w.Bounds.Y:F1} {w.Bounds.Width:F1}x{w.Bounds.Height:F1}) dmg=({region.X:F1},{region.Y:F1} {region.Width:F1}x{region.Height:F1})"
                 )
             );
+        }
+
         if (top == Root) _repaint.AddDamageRoot(region);
         else if (_overlays.Contains(top)) _repaint.AddDamageOverlay(region);
         else _repaint.MarkAll();
@@ -1079,7 +1127,7 @@ public partial class App : IDisposable
     private void FrameCore()
     {
         // Compute dt
-        var now = _clock.ElapsedTicks;
+        long now = _clock.ElapsedTicks;
         DeltaTime = (float)(now - _lastTicks) / Stopwatch.Frequency;
         _lastTicks = now;
 
@@ -1120,10 +1168,10 @@ public partial class App : IDisposable
         // window precisely because it still has work to do — but at a tenth of the rate and with no
         // rendering at all (see PaintAndPresent).
         if (Hidden)
+        {
             using (Profiler.Scope("WaitEvents"))
-            {
                 Engine.WaitEvents(HiddenFrameIntervalMs);
-            }
+        }
         else if (!_repaint.AnyDirty && !_needsLayout && !ContinuousUpdate &&
                  !ForceContinuousRender &&
                  !Ticker.AnyActive &&
@@ -1132,13 +1180,13 @@ public partial class App : IDisposable
                  !Reactive.HasPendingDeferred &&
                  !WantsContinuousFrame() && !HotReload.HasPendingReload &&
                  !AnySecondaryWindowWantsFrame())
+        {
             using (Profiler.Scope("WaitEvents"))
-            {
                 // Time out after one frame budget rather than a hardcoded 16 ms, so the idle
                 // wake-up rate follows the monitor (and any app FPS cap) instead of pinning
                 // everything to ~60 on a 144 Hz panel.
                 Engine.WaitEvents((int)(FrameIntervalTicks * 1000 / Stopwatch.Frequency));
-            }
+        }
 
         Engine.PollEventsInto(_events);
         // Move events belonging to secondary OS windows out of the main batch and into each
@@ -1196,7 +1244,7 @@ public partial class App : IDisposable
         // Advance and prune finished snackbars (transient — repaint while any is showing). Snackbars
         // are overlays, so only the overlay layer needs re-walking.
         if (_snackbars.Count > 0) _repaint.MarkOverlay();
-        for (var i = _snackbars.Count - 1; i >= 0; i--)
+        for (int i = _snackbars.Count - 1; i >= 0; i--)
         {
             var s = _snackbars[i];
             s.Tick(DeltaTime);
@@ -1243,7 +1291,7 @@ public partial class App : IDisposable
         }
 
         _pendingRelayout = false;
-        var discrete = false;
+        bool discrete = false;
         foreach (var evt in events)
         {
             DispatchEvent(evt);
@@ -1261,7 +1309,7 @@ public partial class App : IDisposable
         // alongside input, so a channel listener may touch widgets like any other handler.
         // Deliberately before the IsPaused return: a backgrounded app still has to hear from its
         // media session, which is the whole reason it is still running.
-        Core.Platform.PlatformChannel.Dispatch();
+        PlatformChannel.Dispatch();
 
         // Backgrounded: drain events (the poll above must keep running so the foreground event
         // can arrive) but stop all layout/paint/present work — on iOS, GPU work while suspended
@@ -1314,46 +1362,32 @@ public partial class App : IDisposable
     {
         const int threshold = 100_000;
         if (list.Count <= threshold) return;
-        var now = Environment.TickCount64;
+        long now = Environment.TickCount64;
         if (now - _lastPaintExplosionLogMs < 5000) return;
         _lastPaintExplosionLogMs = now;
 
         Span<int> counts = stackalloc int[32];
         var commands = list.DebugCommands;
-        for (var i = 0; i < commands.Count; i++)
+        for (int i = 0; i < commands.Count; i++)
         {
-            var kind = commands[i].Kind;
+            byte kind = commands[i].Kind;
             if (kind < counts.Length) counts[kind]++;
         }
 
         var sb = new StringBuilder(256);
         sb.Append("PAINT EXPLOSION: ").Append(layer).Append(" layer emitted ")
             .Append(list.Count).Append(" commands this frame —");
-        for (var k = 0; k < counts.Length; k++)
+        for (int k = 0; k < counts.Length; k++)
         {
             if (counts[k] == 0) continue;
             sb.Append(' ').Append((PaintCommandKind)k).Append('=')
                 .Append(counts[k]);
         }
 
-        var message = sb.ToString();
-        DebugLog.Error(message, "paint");
+        string message = sb.ToString();
+        DebugLog.Error(message: message, category: "paint");
         Console.Error.WriteLine(message);
     }
-
-    /// <summary>
-    ///     Paint the dirty layer(s) and submit + present the frame. Shared by <see cref="Frame" /> and
-    ///     the live-resize path. Partial repaint: re-emit only the layer(s) that changed — the clean
-    ///     layer keeps last frame's command buffer, which is still re-submitted, so the GPU always
-    ///     receives the full frame while a clean layer's paint walk is skipped. Root and overlays stay
-    ///     in separate lists so they composite correctly (overlays above the 3D viewport in Pass 2).
-    /// </summary>
-    /// <summary>
-    ///     Bumped whenever a paint walk actually ran. The inspect stream compares it to skip the
-    ///     whole capture (offscreen render, BMP round-trip, byte compare) on frames where nothing
-    ///     painted — an idle app with a stream attached does no capture work at all.
-    /// </summary>
-    internal int PaintVersion { get; private set; }
 
     private void PaintAndPresent()
     {
@@ -1361,11 +1395,11 @@ public partial class App : IDisposable
         // damage is left dirty on purpose — Show() repaints everything anyway.
         if (Root is null || Hidden) return;
 
-        var rootWalked = _repaint.RootDirty;
-        var overlayWalked = _repaint.OverlayDirty;
+        bool rootWalked = _repaint.RootDirty;
+        bool overlayWalked = _repaint.OverlayDirty;
         if (rootWalked || overlayWalked) PaintVersion++;
 
-        var csdRounded = CsdRounded;
+        bool csdRounded = CsdRounded;
         var windowRect = WindowRect;
 
         using (Profiler.Scope("UI.Paint"))
@@ -1376,7 +1410,8 @@ public partial class App : IDisposable
                 if (_repaint.RootDirty)
                 {
                     _paint.Clear();
-                    if (csdRounded) _paint.AddClipStart(windowRect, CsdCornerRadius);
+                    if (csdRounded)
+                        _paint.AddClipStart(bounds: windowRect, radius: CsdCornerRadius);
                     PaintChromeBackdrop();
                     Root.Paint(_paint);
                     PaintCsdOutline(csdRounded);
@@ -1387,7 +1422,8 @@ public partial class App : IDisposable
                 if (_repaint.OverlayDirty)
                 {
                     _overlayPaint.Clear();
-                    if (csdRounded) _overlayPaint.AddClipStart(windowRect, CsdCornerRadius);
+                    if (csdRounded)
+                        _overlayPaint.AddClipStart(bounds: windowRect, radius: CsdCornerRadius);
                     foreach (var ov in _overlays) ov.Paint(_overlayPaint);
                     if (csdRounded) _overlayPaint.AddClipEnd();
                     _repaint.OverlayPainted();
@@ -1412,35 +1448,43 @@ public partial class App : IDisposable
         {
             using var _ = Profiler.Scope("UI.Damage");
             if (rootWalked && _repaint.DamageCount > 0)
-                WidenDamageFromPaintDiff(_rootSnapshot, _paint, false);
+            {
+                WidenDamageFromPaintDiff(
+                    snapshot: _rootSnapshot,
+                    current: _paint,
+                    isOverlay: false
+                );
+            }
+
             if (overlayWalked && _repaint.DamageCount > 0)
-                WidenDamageFromPaintDiff(_overlaySnapshot, _overlayPaint, true);
+            {
+                WidenDamageFromPaintDiff(
+                    snapshot: _overlaySnapshot,
+                    current: _overlayPaint,
+                    isOverlay: true
+                );
+            }
+
             if (rootWalked) _rootSnapshot.Capture(_paint);
             if (overlayWalked) _overlaySnapshot.Capture(_overlayPaint);
         }
 
         DebugStats.UiPaintCommands = _paint.Count;
         DebugStats.OverlayPaintCommands = _overlayPaint.Count;
-        WarnIfPaintExplosion(_paint, "root");
-        WarnIfPaintExplosion(_overlayPaint, "overlay");
+        WarnIfPaintExplosion(list: _paint, layer: "root");
+        WarnIfPaintExplosion(list: _overlayPaint, layer: "overlay");
 
         using (Profiler.Scope("Render.Submit"))
         {
-            using (Profiler.Scope("Render.Begin"))
-            {
-                Engine.BeginFrame(DeltaTime);
-            }
+            using (Profiler.Scope("Render.Begin")) Engine.BeginFrame(DeltaTime);
 
-            using (Profiler.Scope("Render.Submit2D"))
-            {
-                Engine.SubmitPaintCommands(_paint);
-            }
+            using (Profiler.Scope("Render.Submit2D")) Engine.SubmitPaintCommands(_paint);
 
             if (_overlayPaint.Count > 0)
+            {
                 using (Profiler.Scope("Render.SubmitOverlay"))
-                {
                     Engine.SubmitOverlayCommands(_overlayPaint);
-                }
+            }
 
             // Sub-rectangle partial repaint: hand native the precise damaged regions for this frame. When
             // the whole frame is dirty (any non-precise change, continuous mode, ZIGOTE_SHOT) this span is
@@ -1459,11 +1503,14 @@ public partial class App : IDisposable
                 {
                     var sb = new StringBuilder("[dmg] PARTIAL ");
                     foreach (var r in _repaint.Damage)
+                    {
                         sb.Append(
                             FormattableString.Invariant(
                                 $"({r.X:F1},{r.Y:F1} {r.Width:F1}x{r.Height:F1}) "
                             )
                         );
+                    }
+
                     sb.Append(
                         FormattableString.Invariant(
                             $"root={_repaint.RootDirty} overlay={_repaint.OverlayDirty} rootOps={_paint.Count} ovOps={_overlayPaint.Count}"
@@ -1476,15 +1523,9 @@ public partial class App : IDisposable
             // The bulk of a continuous editor/game frame: the full 3D scene render (shadow → G-buffer →
             // SSAO → SSR → bloom → tonemap → TAA → overlay composite) plus the swapchain present. When
             // these dominate, the cost is the scene, not the open debug panel.
-            using (Profiler.Scope("Render.GPU"))
-            {
-                Engine.RenderFrameV2();
-            }
+            using (Profiler.Scope("Render.GPU")) Engine.RenderFrameV2();
 
-            using (Profiler.Scope("Render.Present"))
-            {
-                Engine.EndFrame();
-            }
+            using (Profiler.Scope("Render.Present")) Engine.EndFrame();
 
             // Damage is consumed — clear it so the next frame starts fresh (and only becomes full again
             // if something marks it so). Kept inside the render block so a skipped/early-returned frame
@@ -1501,26 +1542,32 @@ public partial class App : IDisposable
     private void WidenDamageFromPaintDiff(PaintSnapshot snapshot, PaintList current, bool isOverlay)
     {
         Span<Rect> changed = stackalloc Rect[PaintSnapshot.MaxChangedRects];
-        switch (snapshot.Diff(current, changed, out var count))
+        switch (snapshot.Diff(current: current, changed: changed, changedCount: out int count))
         {
             case PaintDiffResult.Identical:
                 return;
             case PaintDiffResult.Bounded:
-                for (var i = 0; i < count; i++)
+                for (int i = 0; i < count; i++)
                     _repaint.AddDamageBoundsOnly(changed[i].Inflate(DamageMargin));
                 if (DebugDamageLog)
+                {
                     Console.Error.WriteLine(
                         FormattableString.Invariant(
                             $"[dmg] diff {(isOverlay ? "overlay" : "root")} widened by {count} rect(s), first=({changed[0].X:F1},{changed[0].Y:F1} {changed[0].Width:F1}x{changed[0].Height:F1})"
                         )
                     );
+                }
+
                 return;
             case PaintDiffResult.Unbounded:
                 _repaint.ForceFullDamage();
                 if (DebugDamageLog)
+                {
                     Console.Error.WriteLine(
                         $"[dmg] diff {(isOverlay ? "overlay" : "root")} UNBOUNDED -> full"
                     );
+                }
+
                 return;
         }
     }
@@ -1550,12 +1597,14 @@ public partial class App : IDisposable
             }
             else
             {
-                for (var i = 0; i < _secondaryWindows.Count; i++)
+                for (int i = 0; i < _secondaryWindows.Count; i++)
+                {
                     if (_secondaryWindows[i].WindowId == windowId)
                     {
                         _secondaryWindows[i].LiveResizeSecondary();
                         break;
                     }
+                }
             }
         }
         finally
@@ -1630,6 +1679,7 @@ public partial class App : IDisposable
                 // Focus is the desktop face of Resumed↔Inactive (never Paused — that's the
                 // mobile suspend pair). Secondary windows don't drive app-level lifecycle.
                 if (ParentApp is null)
+                {
                     switch (wf.Focused)
                     {
                         case false when LifecycleState == AppLifecycleState.Resumed:
@@ -1639,6 +1689,7 @@ public partial class App : IDisposable
                             SetLifecycleState(AppLifecycleState.Resumed);
                             break;
                     }
+                }
 
                 break;
 
@@ -1662,14 +1713,14 @@ public partial class App : IDisposable
                     var target = _capturedWidget ?? FocusedWidget;
                     if (target is not null && (m.RelativeX != 0f || m.RelativeY != 0f))
                     {
-                        target.OnPointerRelative(m.RelativeX, m.RelativeY);
+                        target.OnPointerRelative(deltaX: m.RelativeX, deltaY: m.RelativeY);
                         MarkPaintFor(target);
                     }
 
                     break;
                 }
 
-                _mousePos = new Offset(m.X, m.Y);
+                _mousePos = new Offset(x: m.X, y: m.Y);
                 if (_capturedWidget is not null)
                 {
                     // Drag in progress — the captured widget (e.g. a Slider) updates its
@@ -1716,7 +1767,7 @@ public partial class App : IDisposable
             {
                 PointerIsTouchFlag =
                     false; // a click can arrive without a preceding move (tablet, remote)
-                var point = new Offset(d.X, d.Y);
+                var point = new Offset(x: d.X, y: d.Y);
 
                 // Captured: there is no cursor to hit-test with. The reported position is frozen
                 // wherever it was when capture began — often not even over the widget that asked for
@@ -1746,7 +1797,7 @@ public partial class App : IDisposable
 
             case MouseUpEvent { Button: MouseButton.Left } u:
             {
-                var point = new Offset(u.X, u.Y);
+                var point = new Offset(x: u.X, y: u.Y);
                 _capturedWidget?.OnPointerUp(point);
                 _capturedWidget = null;
                 // Drag ended — re-resolve from whatever is now under the pointer.
@@ -1756,7 +1807,7 @@ public partial class App : IDisposable
 
             case MouseDownEvent { Button: MouseButton.Right } r:
             {
-                var point = new Offset(r.X, r.Y);
+                var point = new Offset(x: r.X, y: r.Y);
                 if (Engine.RelativeMouseMode)
                 {
                     _rightCapturedWidget = FocusedWidget;
@@ -1772,7 +1823,7 @@ public partial class App : IDisposable
 
             case MouseUpEvent { Button: MouseButton.Right } ru:
             {
-                var point = new Offset(ru.X, ru.Y);
+                var point = new Offset(x: ru.X, y: ru.Y);
                 _rightCapturedWidget?.OnRightPointerUp(point);
                 _rightCapturedWidget = null;
                 break;
@@ -1780,8 +1831,8 @@ public partial class App : IDisposable
 
             case ScrollEvent s:
             {
-                var dx = s.ScrollX;
-                var dy = s.ScrollY;
+                float dx = s.ScrollX;
+                float dy = s.ScrollY;
                 // Native normalizes flipped/natural wheel events to a canonical orientation; re-apply the
                 // host's natural-scroll preference so it isn't silently discarded.
                 if (HonorHostScrollOrientation &&
@@ -1792,7 +1843,7 @@ public partial class App : IDisposable
                 }
 
                 var target = Engine.RelativeMouseMode ? FocusedWidget : HitTestAll(_mousePos);
-                target?.OnScroll(dx, dy);
+                target?.OnScroll(dx: dx, dy: dy);
                 break;
             }
 
@@ -1814,7 +1865,7 @@ public partial class App : IDisposable
                         break;
                     }
 
-                    var action = Keymap.Resolve(k.Key, k.Modifiers);
+                    string? action = Keymap.Resolve(key: k.Key, modifiers: k.Modifiers);
 
                     // Global toggles — fire once per physical press (ignore OS auto-repeat), any focus.
                     if (!k.Repeat && action == ActionToggleDevTools)
@@ -1825,7 +1876,7 @@ public partial class App : IDisposable
 
                     if (!k.Repeat && action == ActionProfilerCapture)
                     {
-                        Profiler.Capture(120, "profile_capture.json");
+                        Profiler.Capture(frames: 120, outputPath: "profile_capture.json");
                         break;
                     }
 
@@ -1837,14 +1888,14 @@ public partial class App : IDisposable
                     // key if an app wants F9 mid-search.
                     if (!k.Repeat && action is not null && OnShortcut is { } onShortcut &&
                         action is not (ActionFocusNext or ActionFocusPrev or ActionDismiss) &&
-                        ShortcutOutranksFocus(k.Modifiers, FocusedWidget) &&
+                        ShortcutOutranksFocus(modifiers: k.Modifiers, focused: FocusedWidget) &&
                         onShortcut(action))
                         break;
 
                     // Menu-bar accelerators, after the app's own handler so an explicit binding wins.
                     if (!k.Repeat && Accelerators.Count > 0 &&
-                        ShortcutOutranksFocus(k.Modifiers, FocusedWidget) &&
-                        RunAccelerator(k.Key, k.Modifiers))
+                        ShortcutOutranksFocus(modifiers: k.Modifiers, focused: FocusedWidget) &&
+                        RunAccelerator(key: k.Key, modifiers: k.Modifiers))
                         break;
 
                     // Focus-scoped shortcuts — skipped while a keyboard-trap widget (e.g. the devtools
@@ -1869,11 +1920,11 @@ public partial class App : IDisposable
                         // itself (a button/checkbox/tab moves focus; a text field / slider keeps them).
                         if (FocusedWidget is { HandlesDirectionalKeys: false })
                         {
-                            var handled = k.Key switch {
-                                KeyCode.Right => MoveFocusDirectional(1f, 0f),
-                                KeyCode.Left => MoveFocusDirectional(-1f, 0f),
-                                KeyCode.Down => MoveFocusDirectional(0f, 1f),
-                                KeyCode.Up => MoveFocusDirectional(0f, -1f),
+                            bool handled = k.Key switch {
+                                KeyCode.Right => MoveFocusDirectional(dirX: 1f, dirY: 0f),
+                                KeyCode.Left => MoveFocusDirectional(dirX: -1f, dirY: 0f),
+                                KeyCode.Down => MoveFocusDirectional(dirX: 0f, dirY: 1f),
+                                KeyCode.Up => MoveFocusDirectional(dirX: 0f, dirY: -1f),
                                 _ => false,
                             };
                             if (handled) break;
@@ -1882,10 +1933,10 @@ public partial class App : IDisposable
                 }
 
                 FocusedWidget?.OnKey(
-                    k.KeyChar,
-                    k.Scancode,
-                    k.Down,
-                    k.Modifiers
+                    keyChar: k.KeyChar,
+                    scancode: k.Scancode,
+                    down: k.Down,
+                    mods: k.Modifiers
                 );
                 break;
 
@@ -1897,9 +1948,9 @@ public partial class App : IDisposable
 
             case TextCompositionEvent composition:
                 FocusedWidget?.OnTextComposition(
-                    composition.Text,
-                    composition.SelectionStart,
-                    composition.SelectionLength
+                    text: composition.Text,
+                    selectionStart: composition.SelectionStart,
+                    selectionLength: composition.SelectionLength
                 );
                 break;
 
@@ -1951,7 +2002,7 @@ public partial class App : IDisposable
     private Widget? HitTestAll(Offset point)
     {
         Widget.CurrentScrollParent = null;
-        for (var i = _overlays.Count - 1; i >= 0; i--)
+        for (int i = _overlays.Count - 1; i >= 0; i--)
         {
             var hit = _overlays[i].HitTest(point);
             if (hit is not null)

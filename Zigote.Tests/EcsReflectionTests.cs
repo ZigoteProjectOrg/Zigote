@@ -23,39 +23,45 @@ public sealed class EcsReflectionTests : IDisposable
         _reg.Register<Health>();
     }
 
-    public void Dispose()
-    {
-        _w.Dispose();
-    }
+    public void Dispose() => _w.Dispose();
 
     [Fact]
     public void Inspect_Discovers_Components_And_Field_Values_Generically()
     {
         var e = _w.CreateEntity();
         _w.Set(
-            e,
-            new Position {
+            e: e,
+            c: new Position {
                 X = 1,
                 Y = 2,
                 Z = 3,
             }
         );
         _w.Set(
-            e,
-            new Health {
+            e: e,
+            c: new Health {
                 Current = 70,
                 Max = 100,
                 Regen = 1.5f,
             }
         );
 
-        var views = EcsEntitySerializer.Inspect(_w, _reg, e);
-        Assert.Equal(2, views.Count);
+        var views = EcsEntitySerializer.Inspect(world: _w, registry: _reg, entity: e);
+        Assert.Equal(expected: 2, actual: views.Count);
 
         var health = views.Single(v => v.Type.Name == "Health");
-        Assert.Equal(["Current", "Max", "Regen"], health.Type.Fields.Select(f => f.Name));
-        Assert.Equal(70, health.Type.Fields.Single(f => f.Name == "Current").Get(health.Boxed));
-        Assert.Equal(1.5f, health.Type.Fields.Single(f => f.Name == "Regen").Get(health.Boxed));
+        Assert.Equal(
+            expected: ["Current", "Max", "Regen"],
+            actual: health.Type.Fields.Select(f => f.Name)
+        );
+        Assert.Equal(
+            expected: 70,
+            actual: health.Type.Fields.Single(f => f.Name == "Current").Get(health.Boxed)
+        );
+        Assert.Equal(
+            expected: 1.5f,
+            actual: health.Type.Fields.Single(f => f.Name == "Regen").Get(health.Boxed)
+        );
     }
 
     [Fact]
@@ -63,8 +69,8 @@ public sealed class EcsReflectionTests : IDisposable
     {
         var e = _w.CreateEntity();
         _w.Set(
-            e,
-            new Health {
+            e: e,
+            c: new Health {
                 Current = 50,
                 Max = 100,
                 Regen = 0f,
@@ -73,15 +79,18 @@ public sealed class EcsReflectionTests : IDisposable
 
         var ct = _reg.ByType(typeof(Health))!;
         EcsEntitySerializer.SetField(
-            _w,
-            e,
-            ct,
-            ct.Fields.Single(f => f.Name == "Current"),
-            88
+            world: _w,
+            entity: e,
+            type: ct,
+            field: ct.Fields.Single(f => f.Name == "Current"),
+            value: 88
         );
 
-        Assert.Equal(88, _w.Get<Health>(e).Current); // typed read confirms the native blob changed
-        Assert.Equal(100, _w.Get<Health>(e).Max); // other fields untouched
+        Assert.Equal(
+            expected: 88,
+            actual: _w.Get<Health>(e).Current
+        ); // typed read confirms the native blob changed
+        Assert.Equal(expected: 100, actual: _w.Get<Health>(e).Max); // other fields untouched
     }
 
     [Fact]
@@ -89,33 +98,33 @@ public sealed class EcsReflectionTests : IDisposable
     {
         var src = _w.CreateEntity();
         _w.Set(
-            src,
-            new Position {
+            e: src,
+            c: new Position {
                 X = 4,
                 Y = 5,
                 Z = 6,
             }
         );
         _w.Set(
-            src,
-            new Health {
+            e: src,
+            c: new Health {
                 Current = 30,
                 Max = 120,
                 Regen = 2.5f,
             }
         );
 
-        var json = EcsEntitySerializer.Serialize(_w, _reg, src);
+        var json = EcsEntitySerializer.Serialize(world: _w, registry: _reg, entity: src);
         // survives a string round-trip (the scene file path)
         var reparsed = (JsonObject)JsonNode.Parse(json.ToJsonString())!;
 
-        var dst = EcsEntitySerializer.Deserialize(_w, _reg, reparsed);
+        var dst = EcsEntitySerializer.Deserialize(world: _w, registry: _reg, data: reparsed);
 
         Assert.True(_w.Has<Position>(dst));
-        Assert.Equal(5f, _w.Get<Position>(dst).Y);
-        Assert.Equal(30, _w.Get<Health>(dst).Current);
-        Assert.Equal(120, _w.Get<Health>(dst).Max);
-        Assert.Equal(2.5f, _w.Get<Health>(dst).Regen);
+        Assert.Equal(expected: 5f, actual: _w.Get<Position>(dst).Y);
+        Assert.Equal(expected: 30, actual: _w.Get<Health>(dst).Current);
+        Assert.Equal(expected: 120, actual: _w.Get<Health>(dst).Max);
+        Assert.Equal(expected: 2.5f, actual: _w.Get<Health>(dst).Regen);
     }
 
     [Fact]
@@ -123,19 +132,19 @@ public sealed class EcsReflectionTests : IDisposable
     {
         var captured = new List<(ulong ent, int current)>();
         _w.RegisterObserver<Health>(
-            "watch",
-            EcsEvent.OnSet,
-            (entities, data) =>
+            name: "watch",
+            evt: EcsEvent.OnSet,
+            body: (entities, data) =>
             {
-                for (var i = 0; i < entities.Length; i++)
+                for (int i = 0; i < entities.Length; i++)
                     captured.Add((entities[i].Raw, data[i].Current));
             }
         );
 
         var e = _w.CreateEntity();
         _w.Set(
-            e,
-            new Health {
+            e: e,
+            c: new Health {
                 Current = 10,
                 Max = 10,
                 Regen = 0f,
@@ -144,16 +153,16 @@ public sealed class EcsReflectionTests : IDisposable
 
         var ct = _reg.ByType(typeof(Health))!;
         EcsEntitySerializer.SetField(
-            _w,
-            e,
-            ct,
-            ct.Fields.Single(f => f.Name == "Current"),
-            99
+            world: _w,
+            entity: e,
+            type: ct,
+            field: ct.Fields.Single(f => f.Name == "Current"),
+            value: 99
         ); // fires again
 
-        Assert.Equal(2, captured.Count);
-        Assert.Equal(e.Raw, captured[^1].ent);
-        Assert.Equal(99, captured[^1].current); // observer saw the edited value
+        Assert.Equal(expected: 2, actual: captured.Count);
+        Assert.Equal(expected: e.Raw, actual: captured[^1].ent);
+        Assert.Equal(expected: 99, actual: captured[^1].current); // observer saw the edited value
     }
 
     [StructLayout(LayoutKind.Sequential)]

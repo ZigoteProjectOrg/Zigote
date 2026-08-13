@@ -34,7 +34,7 @@ public sealed class AnimatedContainer : Widget
         _beginH = _endH = _curH = height;
         _beginColor = _endColor = _curColor = color;
         Child = child;
-        Controller = new AnimationController(durationSeconds, vsync);
+        Controller = new AnimationController(durationSeconds: durationSeconds, vsync: vsync);
         Controller.OnTick += UpdateInterpolated;
         _selfDriven = vsync is null;
         if (_selfDriven) _ticker = new Ticker(Step);
@@ -45,7 +45,7 @@ public sealed class AnimatedContainer : Widget
 
     public override void Attach(App owner, Widget? parent)
     {
-        base.Attach(owner, parent);
+        base.Attach(owner: owner, parent: parent);
         if (!_selfDriven) return;
         _ticker?.Dispose();
         _ticker = new Ticker(Step);
@@ -83,44 +83,44 @@ public sealed class AnimatedContainer : Widget
 
     private void UpdateInterpolated()
     {
-        var t = Controller.Value;
-        _curW = _beginW + (_endW - _beginW) * t;
-        _curH = _beginH + (_endH - _beginH) * t;
+        float t = Controller.Value;
+        _curW = _beginW + ((_endW - _beginW) * t);
+        _curH = _beginH + ((_endH - _beginH) * t);
         _curColor = new Color(
-            _beginColor.R + (_endColor.R - _beginColor.R) * t,
-            _beginColor.G + (_endColor.G - _beginColor.G) * t,
-            _beginColor.B + (_endColor.B - _beginColor.B) * t,
-            _beginColor.A + (_endColor.A - _beginColor.A) * t
+            r: _beginColor.R + ((_endColor.R - _beginColor.R) * t),
+            g: _beginColor.G + ((_endColor.G - _beginColor.G) * t),
+            b: _beginColor.B + ((_endColor.B - _beginColor.B) * t),
+            a: _beginColor.A + ((_endColor.A - _beginColor.A) * t)
         );
     }
 
     public override Size Measure(Constraints c)
     {
-        _size = c.Constrain(new Size(_curW, _curH));
-        Child?.Measure(Constraints.Tight(_size.Width, _size.Height));
+        _size = c.Constrain(new Size(width: _curW, height: _curH));
+        Child?.Measure(Constraints.Tight(width: _size.Width, height: _size.Height));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         Child?.Layout(origin);
     }
 
     public override void Paint(PaintList paint)
     {
-        paint.AddRect(Bounds, _curColor);
+        paint.AddRect(bounds: Bounds, color: _curColor);
         Child?.Paint(paint);
     }
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return Child?.HitTest(point) ?? this;
     }
 }

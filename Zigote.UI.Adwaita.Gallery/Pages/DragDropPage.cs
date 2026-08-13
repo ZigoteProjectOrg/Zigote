@@ -25,27 +25,34 @@ public sealed class DragDropPage : ComposedWidget
         var host = GalleryHost.Of(context);
 
         return new GalleryPage(
-            "Drag and Drop",
+            title: "Drag and Drop",
+            description:
             "Pick a task up and drop it in Done — a typed payload, a drop target and a ghost.",
-            MaterialIcons.OpenWith
+            iconName: MaterialIcons.OpenWith
         ) {
             ClampWidth = 760f,
             Children = {
-                new LayoutBuilder((_, c) => Board(host, c.MaxWidth < 520f)),
+                new LayoutBuilder((_, c) => Board(host: host, stacked: c.MaxWidth < 520f)),
                 Demo.Group(
-                    "The Pieces",
-                    null,
-                    new AdwActionRow("Draggable<T>", "Arms after 6 px of travel, then carries T"),
+                    title: "The Pieces",
+                    description: null,
                     new AdwActionRow(
-                        "DragTarget<T>",
-                        "Rebuilds with a highlight flag while hovered"
+                        title: "Draggable<T>",
+                        subtitle: "Arms after 6 px of travel, then carries T"
                     ),
-                    new AdwActionRow("Feedback", "Any widget, painted under the pointer")
+                    new AdwActionRow(
+                        title: "DragTarget<T>",
+                        subtitle: "Rebuilds with a highlight flag while hovered"
+                    ),
+                    new AdwActionRow(
+                        title: "Feedback",
+                        subtitle: "Any widget, painted under the pointer"
+                    )
                 ),
                 Demo.Bar(
                     new AdwButton(
-                        "Reset",
-                        () =>
+                        label: "Reset",
+                        onPressed: () =>
                         {
                             _backlog.Value = [
                                 "Write the release notes",
@@ -64,21 +71,22 @@ public sealed class DragDropPage : ComposedWidget
     private Widget Board(GalleryHost host, bool stacked)
     {
         Widget backlog = new Watch(() => Column(
-                "Backlog",
-                _backlog.Value,
-                true,
-                host
+                title: "Backlog",
+                items: _backlog.Value,
+                isBacklog: true,
+                host: host
             )
         );
         Widget done = new Watch(() => Column(
-                "Done",
-                _done.Value,
-                false,
-                host
+                title: "Done",
+                items: _done.Value,
+                isBacklog: false,
+                host: host
             )
         );
 
         if (stacked)
+        {
             return new Column(
                 spacing: Spacing.Md,
                 mainAxisSize: MainAxisSize.Min,
@@ -89,6 +97,7 @@ public sealed class DragDropPage : ComposedWidget
                     done,
                 },
             };
+        }
 
         return new Row(spacing: Spacing.Md, crossAxisAlignment: CrossAxisAlignment.Start) {
             Children = {
@@ -104,7 +113,7 @@ public sealed class DragDropPage : ComposedWidget
         // One retained zone, highlighted by recolouring it: the builder runs on every hover change,
         // mid-drag, and handing back a new widget there would remount the cards — including the
         // Draggable under the pointer, whose capture the drag depends on.
-        var zone = new DropZone(title, items.Count, Cards(items));
+        var zone = new DropZone(title: title, count: items.Count, child: Cards(items));
         return new DragTarget<string>(hovering =>
             {
                 zone.Hovering = hovering;
@@ -133,16 +142,22 @@ public sealed class DragDropPage : ComposedWidget
             mainAxisSize: MainAxisSize.Min,
             crossAxisAlignment: CrossAxisAlignment.Stretch
         );
-        foreach (var item in items)
+        foreach (string item in items)
+        {
             column.Children.Add(
                 new Draggable<string>(
-                    item,
-                    new TaskCard(item),
+                    data: item,
+                    child: new TaskCard(item),
                     // The ghost is measured against the whole window, so it has to bring its own
                     // width — a card that fills its column would otherwise fill the screen.
-                    () => new SizedBox(240f, child: new TaskCard(item) { Ghost = true })
+                    feedbackBuilder: () => new SizedBox(
+                        width: 240f,
+                        child: new TaskCard(item) { Ghost = true }
+                    )
                 ) { DragText = item }
             );
+        }
+
         if (items.Count == 0) column.Children.Add(Demo.Caption("Drop something here"));
         return column;
     }
@@ -165,17 +180,21 @@ internal sealed class TaskCard(string text) : ComposedWidget
             BorderWidth = 1f,
             Elevation = Ghost ? Elevation.Z2 : null,
             Child = new Padding(
-                EdgeInsets.Symmetric(Spacing.Md, Spacing.Sm),
+                padding: EdgeInsets.Symmetric(horizontal: Spacing.Md, vertical: Spacing.Sm),
                 // MainAxisSize.Min: in the column the surrounding stretch gives the card its width,
                 // and as a ghost it hugs its label instead of running the width it is offered.
-                new Row(spacing: Spacing.Sm, mainAxisSize: MainAxisSize.Min) {
+                child: new Row(spacing: Spacing.Sm, mainAxisSize: MainAxisSize.Min) {
                     Children = {
                         new IconGlyph(
-                            MaterialIcons.DragIndicator,
-                            AdwMetrics.IconSize,
-                            theme.TextSecondary
+                            glyph: MaterialIcons.DragIndicator,
+                            size: AdwMetrics.IconSize,
+                            color: theme.TextSecondary
                         ),
-                        new Label(text, AdwTypography.Body, theme.OnBackground) {
+                        new Label(
+                            text: text,
+                            style: AdwTypography.Body,
+                            color: theme.OnBackground
+                        ) {
                             MaxLines = 2,
                             Overflow = TextOverflow.Ellipsis,
                         },
@@ -229,8 +248,8 @@ internal sealed class DropZone(string title, int count, Widget child) : Composed
             BorderColor = _hovering ? theme.Accent : p.CardShade,
             BorderWidth = _hovering ? 2f : 1f,
             Child = new Padding(
-                EdgeInsets.All(Spacing.Md),
-                new Column(
+                padding: EdgeInsets.All(Spacing.Md),
+                child: new Column(
                     spacing: Spacing.Sm,
                     mainAxisSize: MainAxisSize.Min,
                     crossAxisAlignment: CrossAxisAlignment.Stretch
@@ -239,7 +258,11 @@ internal sealed class DropZone(string title, int count, Widget child) : Composed
                         new Row {
                             Children = {
                                 new Expanded(
-                                    new Label(title, AdwTypography.Heading, theme.OnBackground)
+                                    new Label(
+                                        text: title,
+                                        style: AdwTypography.Heading,
+                                        color: theme.OnBackground
+                                    )
                                 ),
                                 Demo.Value(count.ToString()),
                             },

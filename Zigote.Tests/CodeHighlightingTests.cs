@@ -14,9 +14,13 @@ public class CodeHighlightingTests
     private static (string Text, TokenKind Kind)[] Lex(ILineTokenizer t, string line, int state = 0)
     {
         var buf = new List<Token>();
-        t.Tokenize(line, state, buf);
+        t.Tokenize(line: line, state: state, output: buf);
         return buf
-            .Select(x => (line.Substring(x.Start, Math.Min(x.Length, line.Length - x.Start)),
+            .Select(x => (
+                line.Substring(
+                    startIndex: x.Start,
+                    length: Math.Min(val1: x.Length, val2: line.Length - x.Start)
+                ),
                 x.Kind)
             )
             .ToArray();
@@ -25,75 +29,87 @@ public class CodeHighlightingTests
     [Fact]
     public void CSharp_ClassifiesKeywordsTypesNumbersAndComment()
     {
-        var lex = Lex(Highlighting.CSharp, "public int Count = 42; // note");
+        var lex = Lex(t: Highlighting.CSharp, line: "public int Count = 42; // note");
 
-        Assert.Contains(("public", TokenKind.Keyword), lex);
-        Assert.Contains(("int", TokenKind.Type), lex); // primitive type set
-        Assert.Contains(("Count", TokenKind.Type), lex); // PascalCase heuristic
-        Assert.Contains(("=", TokenKind.Operator), lex);
-        Assert.Contains(("42", TokenKind.Number), lex);
-        Assert.Contains((";", TokenKind.Punctuation), lex);
-        Assert.Contains(("// note", TokenKind.Comment), lex);
+        Assert.Contains(expected: ("public", TokenKind.Keyword), collection: lex);
+        Assert.Contains(expected: ("int", TokenKind.Type), collection: lex); // primitive type set
+        Assert.Contains(
+            expected: ("Count", TokenKind.Type),
+            collection: lex
+        ); // PascalCase heuristic
+        Assert.Contains(expected: ("=", TokenKind.Operator), collection: lex);
+        Assert.Contains(expected: ("42", TokenKind.Number), collection: lex);
+        Assert.Contains(expected: (";", TokenKind.Punctuation), collection: lex);
+        Assert.Contains(expected: ("// note", TokenKind.Comment), collection: lex);
     }
 
     [Fact]
     public void CSharp_StringsCharsAndVerbatimAreStrings()
     {
-        var lex = Lex(Highlighting.CSharp, "var s = @\"a\"\"b\"; var c = '\\n';");
+        var lex = Lex(t: Highlighting.CSharp, line: "var s = @\"a\"\"b\"; var c = '\\n';");
 
         Assert.Contains(
-            ("@\"a\"\"b\"", TokenKind.String),
-            lex
+            expected: ("@\"a\"\"b\"", TokenKind.String),
+            collection: lex
         ); // verbatim with "" escape stays one token
-        Assert.Contains(("'\\n'", TokenKind.String), lex);
+        Assert.Contains(expected: ("'\\n'", TokenKind.String), collection: lex);
     }
 
     [Fact]
     public void CSharp_BlockCommentStateThreadsAcrossLines()
     {
         var buf = new List<Token>();
-        var s = ILineTokenizer.StateDefault;
+        int s = ILineTokenizer.StateDefault;
 
-        s = Highlighting.CSharp.Tokenize("code /* open", s, buf);
-        Assert.Equal(1, s); // entered block comment
+        s = Highlighting.CSharp.Tokenize(line: "code /* open", state: s, output: buf);
+        Assert.Equal(expected: 1, actual: s); // entered block comment
 
         buf.Clear();
-        s = Highlighting.CSharp.Tokenize("still inside", s, buf);
-        Assert.Equal(1, s);
-        Assert.All(buf, t => Assert.Equal(TokenKind.Comment, t.Kind)); // whole line is comment
+        s = Highlighting.CSharp.Tokenize(line: "still inside", state: s, output: buf);
+        Assert.Equal(expected: 1, actual: s);
+        Assert.All(
+            collection: buf,
+            action: t => Assert.Equal(expected: TokenKind.Comment, actual: t.Kind)
+        ); // whole line is comment
 
         // Empty line while inside a block comment must terminate cleanly (no infinite loop) and stay in-block.
         buf.Clear();
-        s = Highlighting.CSharp.Tokenize("", s, buf);
-        Assert.Equal(1, s);
+        s = Highlighting.CSharp.Tokenize(line: "", state: s, output: buf);
+        Assert.Equal(expected: 1, actual: s);
 
         buf.Clear();
-        s = Highlighting.CSharp.Tokenize("close */ more", s, buf);
-        Assert.Equal(0, s); // block closed
-        Assert.Contains(buf, t => t.Kind == TokenKind.Comment);
+        s = Highlighting.CSharp.Tokenize(line: "close */ more", state: s, output: buf);
+        Assert.Equal(expected: 0, actual: s); // block closed
+        Assert.Contains(collection: buf, filter: t => t.Kind == TokenKind.Comment);
     }
 
     [Fact]
     public void Json_KeysAreTypesValuesAreTyped()
     {
-        var lex = Lex(Highlighting.Json, "{ \"key\": 42, \"flag\": true, \"s\": \"hi\" }");
+        var lex = Lex(t: Highlighting.Json, line: "{ \"key\": 42, \"flag\": true, \"s\": \"hi\" }");
 
-        Assert.Contains(("\"key\"", TokenKind.Type), lex); // string before ':' = key
-        Assert.Contains(("\"hi\"", TokenKind.String), lex); // string value
-        Assert.Contains(("42", TokenKind.Number), lex);
-        Assert.Contains(("true", TokenKind.Keyword), lex);
+        Assert.Contains(
+            expected: ("\"key\"", TokenKind.Type),
+            collection: lex
+        ); // string before ':' = key
+        Assert.Contains(expected: ("\"hi\"", TokenKind.String), collection: lex); // string value
+        Assert.Contains(expected: ("42", TokenKind.Number), collection: lex);
+        Assert.Contains(expected: ("true", TokenKind.Keyword), collection: lex);
     }
 
     [Fact]
     public void ForExtension_MapsAndReturnsNullForUnknown()
     {
-        Assert.Same(Highlighting.CSharp, Highlighting.ForExtension(".cs"));
-        Assert.Same(Highlighting.Json, Highlighting.ForExtension("json")); // no leading dot
+        Assert.Same(expected: Highlighting.CSharp, actual: Highlighting.ForExtension(".cs"));
         Assert.Same(
-            Highlighting.Wgsl,
-            Highlighting.ForExtension(".frag")
+            expected: Highlighting.Json,
+            actual: Highlighting.ForExtension("json")
+        ); // no leading dot
+        Assert.Same(
+            expected: Highlighting.Wgsl,
+            actual: Highlighting.ForExtension(".frag")
         ); // GLSL-family → WGSL lexer
-        Assert.Same(Highlighting.Zig, Highlighting.ForExtension(".zig"));
+        Assert.Same(expected: Highlighting.Zig, actual: Highlighting.ForExtension(".zig"));
         Assert.Null(Highlighting.ForExtension(".txt"));
         Assert.Null(Highlighting.ForExtension(""));
     }

@@ -13,14 +13,18 @@ public class Radio<T> : ComposedWidget where T : IEquatable<T>
     private readonly DecoratedBox _box = new();
     private readonly RadioDotGlyph _glyph = new();
 
-    // Phone hit box: the dot keeps its 16pt look, centred in a finger-sized press area.
-    private readonly SizedBox _touchBox = new(TouchMetrics.MinTarget, TouchMetrics.MinTarget);
     private readonly Pressable _root;
-    private ThemeData _theme = ThemeData.Dark;
+
+    // Phone hit box: the dot keeps its 16pt look, centred in a finger-sized press area.
+    private readonly SizedBox _touchBox = new(
+        width: TouchMetrics.MinTarget,
+        height: TouchMetrics.MinTarget
+    );
 
     private bool _enabled = true;
     private T _groupValue;
     private float _size = ControlMetrics.RadioSize;
+    private ThemeData _theme = ThemeData.Dark;
     private T _value;
 
     public Radio(T value, T groupValue, Action<T>? onChanged = null)
@@ -51,7 +55,7 @@ public class Radio<T> : ComposedWidget where T : IEquatable<T>
     public T GroupValue
     {
         get => _groupValue;
-        set => SetBuild(ref _groupValue, value);
+        set => SetBuild(field: ref _groupValue, value: value);
     }
 
     public Action<T>? OnChanged { get; set; }
@@ -70,7 +74,7 @@ public class Radio<T> : ComposedWidget where T : IEquatable<T>
     public bool Enabled
     {
         get => _enabled;
-        set => SetBuild(ref _enabled, value);
+        set => SetBuild(field: ref _enabled, value: value);
     }
 
     public bool IsSelected => Value.Equals(GroupValue);
@@ -89,15 +93,16 @@ public class Radio<T> : ComposedWidget where T : IEquatable<T>
         }
     }
 
-    public override int DebugStateHash()
-    {
-        return HashCode.Combine(IsSelected, Enabled, base.DebugStateHash());
-    }
+    public override int DebugStateHash() => HashCode.Combine(
+        value1: IsSelected,
+        value2: Enabled,
+        value3: base.DebugStateHash()
+    );
 
     protected override Widget Build(BuildContext context)
     {
         _theme = ThemeProvider.Of(context);
-        var d = Size;
+        float d = Size;
 
         _glyph.GlyphSize = d;
         _box.Radius = d / 2f;
@@ -119,8 +124,8 @@ public class Radio<T> : ComposedWidget where T : IEquatable<T>
 
     private void ApplyColors()
     {
-        var hovered = _root.Hovered;
-        var pressed = _root.Pressed;
+        bool hovered = _root.Hovered;
+        bool pressed = _root.Pressed;
 
         if (!Enabled)
         {
@@ -131,7 +136,11 @@ public class Radio<T> : ComposedWidget where T : IEquatable<T>
         }
         else if (IsSelected)
         {
-            var accent = StateStyle.Fill(_theme.Primary, hovered, pressed);
+            var accent = StateStyle.Fill(
+                baseColor: _theme.Primary,
+                hovered: hovered,
+                pressed: pressed
+            );
             _box.Fill = accent;
             _box.BorderColor = accent;
             _glyph.Color = _theme.OnPrimary;

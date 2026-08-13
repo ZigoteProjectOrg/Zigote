@@ -1,11 +1,11 @@
 using Zigote.Core;
 using Zigote.Core.Animation;
 using Zigote.Core.Paint;
+using Zigote.UI.Host;
 using Zigote.UI.Semantics;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets.Focus;
 using Zigote.UI.Widgets.Layout;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.Widgets.Controls;
 
@@ -20,6 +20,10 @@ public class Dialog : Widget, IDismissableOverlay
     private readonly Card _card;
     private readonly AnimationController _enter;
     private Size _contentSize;
+
+    // Resolved at Show(): with secondary OS windows, the window presenting the dialog is the one
+    // whose dispatch is running (App.Active), which may differ from the window active at construction.
+    private App? _host;
     private Size _size;
     private ThemeData _theme = ThemeData.Dark;
 
@@ -32,14 +36,10 @@ public class Dialog : Widget, IDismissableOverlay
         };
         _app = app ?? App.Active ??
             throw new InvalidOperationException("No active UiApp found.");
-        _enter = new AnimationController(Motion.Standard, this) { Curve = Curves.EaseOut };
+        _enter = new AnimationController(durationSeconds: Motion.Standard, vsync: this) {
+            Curve = Curves.EaseOut,
+        };
         _enter.OnTick += MarkNeedsLayout;
-    }
-
-    // The ticker CreateTicker hands out is owned by the mount period, so a re-attach just rebinds.
-    protected override void OnMount()
-    {
-        _enter.AttachTicker(this);
     }
 
     /// <summary>When true (default), clicking the scrim dismisses the dialog.</summary>
@@ -61,6 +61,13 @@ public class Dialog : Widget, IDismissableOverlay
     public float HeightFraction { get; set; }
 
     /// <summary>
+    ///     Invoked whenever the dialog leaves the overlay stack, whatever closed it (a button,
+    ///     the scrim, Esc). Hosts that must settle async state (e.g. complete a Task) hook this
+    ///     instead of duplicating the logic across every close path.
+    /// </summary>
+    public Action? OnClosed { get; set; }
+
+    /// <summary>
     ///     Esc closes the sheet when it is dismissible (and consumes the key regardless, as a modal
     ///     barrier).
     /// </summary>
@@ -70,9 +77,8 @@ public class Dialog : Widget, IDismissableOverlay
         return true;
     }
 
-    // Resolved at Show(): with secondary OS windows, the window presenting the dialog is the one
-    // whose dispatch is running (App.Active), which may differ from the window active at construction.
-    private App? _host;
+    // The ticker CreateTicker hands out is owned by the mount period, so a re-attach just rebinds.
+    protected override void OnMount() => _enter.AttachTicker(this);
 
     /// <summary>Show this dialog as an overlay.</summary>
     public void Show()
@@ -82,13 +88,6 @@ public class Dialog : Widget, IDismissableOverlay
         _enter.Dismiss();
         _enter.Forward();
     }
-
-    /// <summary>
-    ///     Invoked whenever the dialog leaves the overlay stack, whatever closed it (a button,
-    ///     the scrim, Esc). Hosts that must settle async state (e.g. complete a Task) hook this
-    ///     instead of duplicating the logic across every close path.
-    /// </summary>
-    public Action? OnClosed { get; set; }
 
     /// <summary>Remove this dialog from the overlay stack.</summary>
     public void Dismiss()
@@ -108,7 +107,7 @@ public class Dialog : Widget, IDismissableOverlay
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
 
-        _size = c.Constrain(new Size(c.MaxWidth, c.MaxHeight));
+        _size = c.Constrain(new Size(width: c.MaxWidth, height: c.MaxHeight));
         // Loose caps so the card sizes to its content (content columns are MainAxisSize.Min and
         // width is bounded by a ConstrainedBox), with an absolute width cap for large monitors.
         // A *Fraction (when set) instead sizes the card to a fixed fraction of the window — for large
@@ -116,20 +115,20 @@ public class Dialog : Widget, IDismissableOverlay
         // A phone-width window has no room to give 20% away: the 0.8 fraction leaves 312 px of 390
         // for a card whose content minimum is 280. Below Compact the sheet takes the whole width
         // less a real edge margin instead.
-        var maxW = WidthFraction > 0f
+        float maxW = WidthFraction > 0f
             ? _size.Width * WidthFraction
             : _size.Width < WindowSize.CompactMax
-                ? MathF.Max(0f, _size.Width - Spacing.Xl * 2f)
-                : MathF.Min(_size.Width * 0.8f, 560f);
-        var maxH = HeightFraction > 0f ? _size.Height * HeightFraction : _size.Height * 0.85f;
-        var minW = WidthFraction > 0f ? maxW : 0f;
-        var minH = HeightFraction > 0f ? maxH : 0f;
+                ? MathF.Max(x: 0f, y: _size.Width - (Spacing.Xl * 2f))
+                : MathF.Min(x: _size.Width * 0.8f, y: 560f);
+        float maxH = HeightFraction > 0f ? _size.Height * HeightFraction : _size.Height * 0.85f;
+        float minW = WidthFraction > 0f ? maxW : 0f;
+        float minH = HeightFraction > 0f ? maxH : 0f;
         _contentSize = _card.Measure(
             new Constraints(
-                minW,
-                maxW,
-                minH,
-                maxH
+                minWidth: minW,
+                maxWidth: maxW,
+                minHeight: minH,
+                maxHeight: maxH
             )
         );
         return _size;
@@ -138,36 +137,36 @@ public class Dialog : Widget, IDismissableOverlay
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
-        var cx = origin.X + (_size.Width - _contentSize.Width) / 2f;
-        var cy = origin.Y + (_size.Height - _contentSize.Height) / 2f;
-        _card.Layout(new Offset(cx, cy));
+        float cx = origin.X + ((_size.Width - _contentSize.Width) / 2f);
+        float cy = origin.Y + ((_size.Height - _contentSize.Height) / 2f);
+        _card.Layout(new Offset(x: cx, y: cy));
     }
 
     public override void Paint(PaintList paint)
     {
-        var t = _enter.Value;
+        float t = _enter.Value;
 
         // Dimming scrim across the whole window; the card carries its own Z3 elevation shadow.
         paint.AddRect(
-            Bounds,
-            new Color(
-                0f,
-                0f,
-                0f,
-                Scrim * t
+            bounds: Bounds,
+            color: new Color(
+                r: 0f,
+                g: 0f,
+                b: 0f,
+                a: Scrim * t
             )
         );
 
         // The card fades in and rises a few points into place.
-        var rise = (1f - t) * 12f;
-        var fade = t < 0.999f;
+        float rise = (1f - t) * 12f;
+        bool fade = t < 0.999f;
         if (fade) paint.PushAlpha(t);
-        if (rise > 0.01f) paint.PushTranslate(0f, rise);
+        if (rise > 0.01f) paint.PushTranslate(dx: 0f, dy: rise);
         _card.Paint(paint);
         if (rise > 0.01f) paint.PopTranslate();
         if (fade) paint.PopAlpha();
@@ -175,7 +174,7 @@ public class Dialog : Widget, IDismissableOverlay
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return _card.HitTest(point) ?? this;
     }
 
@@ -186,10 +185,7 @@ public class Dialog : Widget, IDismissableOverlay
             Dismiss();
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(_card);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(_card);
 
     // ── Static helpers ────────────────────────────────────────────────────────
 
@@ -200,10 +196,10 @@ public class Dialog : Widget, IDismissableOverlay
         string buttonLabel = "OK")
     {
         return Alert(
-            App.Active!,
-            title,
-            message,
-            buttonLabel
+            app: App.Active!,
+            title: title,
+            message: message,
+            buttonLabel: buttonLabel
         );
     }
 
@@ -213,13 +209,13 @@ public class Dialog : Widget, IDismissableOverlay
         string confirmLabel = "OK", string cancelLabel = "Cancel")
     {
         return Confirm(
-            App.Active!,
-            title,
-            message,
-            onConfirm,
-            onCancel,
-            confirmLabel,
-            cancelLabel
+            app: App.Active!,
+            title: title,
+            message: message,
+            onConfirm: onConfirm,
+            onCancel: onCancel,
+            confirmLabel: confirmLabel,
+            cancelLabel: cancelLabel
         );
     }
 
@@ -241,10 +237,16 @@ public class Dialog : Widget, IDismissableOverlay
                 new SizedBox(height: Spacing.Md),
                 new Label(message) { Style = Label.LabelStyle.Body },
                 new SizedBox(height: Spacing.Xl),
-                new Button(buttonLabel, () => dlg?.Dismiss()),
+                new Button(label: buttonLabel, onPressed: () => dlg?.Dismiss()),
             },
         };
-        dlg = new Dialog(new ConstrainedBox(new Constraints(280f, 420f), content), app);
+        dlg = new Dialog(
+            content: new ConstrainedBox(
+                constraints: new Constraints(minWidth: 280f, maxWidth: 420f),
+                child: content
+            ),
+            app: app
+        );
         return dlg;
     }
 
@@ -273,8 +275,8 @@ public class Dialog : Widget, IDismissableOverlay
                     CrossAxisAlignment = CrossAxisAlignment.Center,
                     Children = {
                         new Button(
-                            confirmLabel,
-                            () =>
+                            label: confirmLabel,
+                            onPressed: () =>
                             {
                                 onConfirm();
                                 dlg?.Dismiss();
@@ -282,8 +284,8 @@ public class Dialog : Widget, IDismissableOverlay
                         ),
                         new SizedBox(Spacing.Sm),
                         new Button(
-                            cancelLabel,
-                            () =>
+                            label: cancelLabel,
+                            onPressed: () =>
                             {
                                 onCancel?.Invoke();
                                 dlg?.Dismiss();
@@ -295,7 +297,13 @@ public class Dialog : Widget, IDismissableOverlay
                 },
             },
         };
-        dlg = new Dialog(new ConstrainedBox(new Constraints(280f, 420f), content), app);
+        dlg = new Dialog(
+            content: new ConstrainedBox(
+                constraints: new Constraints(minWidth: 280f, maxWidth: 420f),
+                child: content
+            ),
+            app: app
+        );
         return dlg;
     }
 }

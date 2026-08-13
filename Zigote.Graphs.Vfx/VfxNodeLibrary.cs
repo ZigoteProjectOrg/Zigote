@@ -57,11 +57,11 @@ public static class VfxNodeLibrary
         ["Constant", "Fade In", "Fade Out", "Fade In-Out", "Grow", "Shrink", "Grow-Shrink"];
 
     public static IReadOnlyList<GraphTypeDefinition> TypeDefinitions { get; } = [
-        Type(SpawnType, "Spawn", 0xFF6FCF97),
-        Type(ShapeType, "Shape", 0xFF56CCF2),
-        Type(InitType, "Initialize", 0xFFF2C94C),
-        Type(UpdateType, "Update", 0xFFEB5757),
-        Type(RenderType, "Render", 0xFFBB6BD9),
+        Type(id: SpawnType, name: "Spawn", wire: 0xFF6FCF97),
+        Type(id: ShapeType, name: "Shape", wire: 0xFF56CCF2),
+        Type(id: InitType, name: "Initialize", wire: 0xFFF2C94C),
+        Type(id: UpdateType, name: "Update", wire: 0xFFEB5757),
+        Type(id: RenderType, name: "Render", wire: 0xFFBB6BD9),
     ];
 
     public static IReadOnlyList<NodeDefinition> Definitions { get; } = BuildDefinitions();
@@ -70,492 +70,492 @@ public static class VfxNodeLibrary
     {
         return [
             Def(
-                Output,
-                "VFX Output",
-                "Output",
-                [
+                id: Output,
+                name: "VFX Output",
+                category: "Output",
+                inputs: [
                     InPin(
-                        "in.spawn",
-                        "Spawn",
-                        SpawnType,
-                        true
+                        id: "in.spawn",
+                        name: "Spawn",
+                        typeId: SpawnType,
+                        multi: true
                     ),
-                    InPin("in.shape", "Shape", ShapeType),
+                    InPin(id: "in.shape", name: "Shape", typeId: ShapeType),
                     InPin(
-                        "in.init",
-                        "Initialize",
-                        InitType,
-                        true
+                        id: "in.init",
+                        name: "Initialize",
+                        typeId: InitType,
+                        multi: true
                     ),
                     InPin(
-                        "in.update",
-                        "Update",
-                        UpdateType,
-                        true
+                        id: "in.update",
+                        name: "Update",
+                        typeId: UpdateType,
+                        multi: true
                     ),
-                    InPin("in.render", "Render", RenderType),
+                    InPin(id: "in.render", name: "Render", typeId: RenderType),
                 ],
-                [],
-                [
+                outputs: [],
+                props: [
                     PropI(
-                        "capacity",
-                        "Capacity",
-                        1024,
-                        1,
-                        1_000_000
+                        id: "capacity",
+                        name: "Capacity",
+                        def: 1024,
+                        min: 1,
+                        max: 1_000_000
                     ),
-                    PropB("looping", "Looping", true),
+                    PropB(id: "looping", name: "Looping", def: true),
                     PropF(
-                        "duration",
-                        "Duration",
-                        0f,
-                        0f,
-                        60f
+                        id: "duration",
+                        name: "Duration",
+                        def: 0f,
+                        min: 0f,
+                        max: 60f
                     ),
-                    PropEnum("space", "Simulation Space", SpaceLabels),
+                    PropEnum(id: "space", name: "Simulation Space", labels: SpaceLabels),
                     PropI(
-                        "seed",
-                        "Seed",
-                        12345,
-                        0,
-                        int.MaxValue
+                        id: "seed",
+                        name: "Seed",
+                        def: 12345,
+                        min: 0,
+                        max: int.MaxValue
                     ),
                 ]
             ),
 
             Def(
-                SpawnRate,
-                "Spawn Rate",
-                "Spawn",
-                [],
-                [OutPin("out.spawn", "Spawn", SpawnType)],
-                [
+                id: SpawnRate,
+                name: "Spawn Rate",
+                category: "Spawn",
+                inputs: [],
+                outputs: [OutPin(id: "out.spawn", name: "Spawn", typeId: SpawnType)],
+                props: [
                     PropF(
-                        "rate",
-                        "Rate",
-                        24f,
-                        0f,
-                        5000f
+                        id: "rate",
+                        name: "Rate",
+                        def: 24f,
+                        min: 0f,
+                        max: 5000f
                     ),
                 ]
             ),
 
             Def(
-                Burst,
-                "Burst",
-                "Spawn",
-                [],
-                [OutPin("out.spawn", "Spawn", SpawnType)],
-                [
+                id: Burst,
+                name: "Burst",
+                category: "Spawn",
+                inputs: [],
+                outputs: [OutPin(id: "out.spawn", name: "Spawn", typeId: SpawnType)],
+                props: [
                     PropF(
-                        "time",
-                        "Time",
-                        0f,
-                        0f,
-                        60f
+                        id: "time",
+                        name: "Time",
+                        def: 0f,
+                        min: 0f,
+                        max: 60f
                     ),
                     PropI(
-                        "count",
-                        "Count",
-                        30,
-                        0,
-                        100_000
+                        id: "count",
+                        name: "Count",
+                        def: 30,
+                        min: 0,
+                        max: 100_000
                     ),
                 ]
             ),
 
             Def(
-                Shape,
-                "Emission Shape",
-                "Shape",
-                [],
-                [OutPin("out.shape", "Shape", ShapeType)],
-                [
+                id: Shape,
+                name: "Emission Shape",
+                category: "Shape",
+                inputs: [],
+                outputs: [OutPin(id: "out.shape", name: "Shape", typeId: ShapeType)],
+                props: [
                     PropEnum(
-                        "shape",
-                        "Shape",
-                        ShapeLabels,
-                        4
+                        id: "shape",
+                        name: "Shape",
+                        labels: ShapeLabels,
+                        def: 4
                     ),
                     PropF(
-                        "radius",
-                        "Radius",
-                        0.25f,
-                        0f,
-                        20f
+                        id: "radius",
+                        name: "Radius",
+                        def: 0.25f,
+                        min: 0f,
+                        max: 20f
                     ),
                     PropF(
-                        "cone_angle",
-                        "Cone Angle",
-                        25f,
-                        0f,
-                        90f
+                        id: "cone_angle",
+                        name: "Cone Angle",
+                        def: 25f,
+                        min: 0f,
+                        max: 90f
                     ),
                     PropV3(
-                        "box",
-                        "Box Half-Extents",
-                        0.5f,
-                        0.5f,
-                        0.5f
+                        id: "box",
+                        name: "Box Half-Extents",
+                        x: 0.5f,
+                        y: 0.5f,
+                        z: 0.5f
                     ),
                     PropV3(
-                        "direction",
-                        "Direction",
-                        0f,
-                        1f,
-                        0f
+                        id: "direction",
+                        name: "Direction",
+                        x: 0f,
+                        y: 1f,
+                        z: 0f
                     ),
                 ]
             ),
 
             Def(
-                InitVelocity,
-                "Initial Velocity",
-                "Initialize",
-                [InPin("in.speed", "Speed", GraphTypeRef.Float.Id)],
-                [OutPin("out.init", "Init", InitType)],
-                [
+                id: InitVelocity,
+                name: "Initial Velocity",
+                category: "Initialize",
+                inputs: [InPin(id: "in.speed", name: "Speed", typeId: GraphTypeRef.Float.Id)],
+                outputs: [OutPin(id: "out.init", name: "Init", typeId: InitType)],
+                props: [
                     PropF(
-                        "speed_min",
-                        "Speed Min",
-                        2f,
-                        0f,
-                        100f
+                        id: "speed_min",
+                        name: "Speed Min",
+                        def: 2f,
+                        min: 0f,
+                        max: 100f
                     ),
                     PropF(
-                        "speed_max",
-                        "Speed Max",
-                        4f,
-                        0f,
-                        100f
-                    ),
-                ]
-            ),
-
-            Def(
-                InitSize,
-                "Initial Size",
-                "Initialize",
-                [],
-                [OutPin("out.init", "Init", InitType)],
-                [
-                    PropF(
-                        "size_min",
-                        "Size Min",
-                        0.15f,
-                        0f,
-                        20f
-                    ),
-                    PropF(
-                        "size_max",
-                        "Size Max",
-                        0.3f,
-                        0f,
-                        20f
+                        id: "speed_max",
+                        name: "Speed Max",
+                        def: 4f,
+                        min: 0f,
+                        max: 100f
                     ),
                 ]
             ),
 
             Def(
-                InitColor,
-                "Initial Color",
-                "Initialize",
-                [InPin("in.color", "Color", GraphTypeRef.Color.Id)],
-                [OutPin("out.init", "Init", InitType)],
-                [
+                id: InitSize,
+                name: "Initial Size",
+                category: "Initialize",
+                inputs: [],
+                outputs: [OutPin(id: "out.init", name: "Init", typeId: InitType)],
+                props: [
+                    PropF(
+                        id: "size_min",
+                        name: "Size Min",
+                        def: 0.15f,
+                        min: 0f,
+                        max: 20f
+                    ),
+                    PropF(
+                        id: "size_max",
+                        name: "Size Max",
+                        def: 0.3f,
+                        min: 0f,
+                        max: 20f
+                    ),
+                ]
+            ),
+
+            Def(
+                id: InitColor,
+                name: "Initial Color",
+                category: "Initialize",
+                inputs: [InPin(id: "in.color", name: "Color", typeId: GraphTypeRef.Color.Id)],
+                outputs: [OutPin(id: "out.init", name: "Init", typeId: InitType)],
+                props: [
                     Prop(
-                        "color",
-                        "Color",
-                        GraphTypeRef.Color,
-                        GraphValue.FromFloat4(
-                            1f,
-                            1f,
-                            1f,
-                            1f
+                        id: "color",
+                        name: "Color",
+                        type: GraphTypeRef.Color,
+                        def: GraphValue.FromFloat4(
+                            x: 1f,
+                            y: 1f,
+                            z: 1f,
+                            w: 1f
                         )
                     ),
                     Prop(
-                        "variation",
-                        "Variation",
-                        GraphTypeRef.Color,
-                        GraphValue.FromFloat4(
-                            1f,
-                            1f,
-                            1f,
-                            1f
-                        )
-                    ),
-                ]
-            ),
-
-            Def(
-                InitLifetime,
-                "Initial Lifetime",
-                "Initialize",
-                [],
-                [OutPin("out.init", "Init", InitType)],
-                [
-                    PropF(
-                        "life_min",
-                        "Lifetime Min",
-                        1.5f,
-                        0.01f,
-                        60f
-                    ),
-                    PropF(
-                        "life_max",
-                        "Lifetime Max",
-                        2.5f,
-                        0.01f,
-                        60f
-                    ),
-                ]
-            ),
-
-            Def(
-                InitRotation,
-                "Initial Rotation",
-                "Initialize",
-                [],
-                [OutPin("out.init", "Init", InitType)],
-                [
-                    PropF(
-                        "rot_min",
-                        "Rotation Min",
-                        0f,
-                        -360f,
-                        360f
-                    ),
-                    PropF(
-                        "rot_max",
-                        "Rotation Max",
-                        0f,
-                        -360f,
-                        360f
-                    ),
-                    PropF(
-                        "spin_min",
-                        "Spin Min",
-                        0f,
-                        -720f,
-                        720f
-                    ),
-                    PropF(
-                        "spin_max",
-                        "Spin Max",
-                        0f,
-                        -720f,
-                        720f
-                    ),
-                ]
-            ),
-
-            Def(
-                Gravity,
-                "Gravity",
-                "Update · Force",
-                [InPin("in.gravity", "Gravity", GraphTypeRef.Float3.Id)],
-                [OutPin("out.update", "Update", UpdateType)],
-                [
-                    PropV3(
-                        "gravity",
-                        "Gravity",
-                        0f,
-                        -9.8f,
-                        0f
-                    ),
-                ]
-            ),
-
-            Def(
-                Drag,
-                "Drag",
-                "Update · Force",
-                [],
-                [OutPin("out.update", "Update", UpdateType)],
-                [
-                    PropF(
-                        "drag",
-                        "Drag",
-                        0.5f,
-                        0f,
-                        20f
-                    ),
-                ]
-            ),
-
-            Def(
-                Turbulence,
-                "Turbulence",
-                "Update · Force",
-                [],
-                [OutPin("out.update", "Update", UpdateType)],
-                [
-                    PropF(
-                        "strength",
-                        "Strength",
-                        1f,
-                        0f,
-                        50f
-                    ),
-                    PropF(
-                        "frequency",
-                        "Frequency",
-                        1f,
-                        0f,
-                        10f
-                    ),
-                ]
-            ),
-
-            Def(
-                Vortex,
-                "Vortex",
-                "Update · Force",
-                [],
-                [OutPin("out.update", "Update", UpdateType)],
-                [
-                    PropV3(
-                        "axis",
-                        "Axis",
-                        0f,
-                        1f,
-                        0f
-                    ),
-                    PropF(
-                        "strength",
-                        "Strength",
-                        2f,
-                        -50f,
-                        50f
-                    ),
-                ]
-            ),
-
-            Def(
-                ColorOverLife,
-                "Color over Life",
-                "Update",
-                [],
-                [OutPin("out.update", "Update", UpdateType)],
-                [PropRamp("ramp", "Ramp")]
-            ),
-
-            Def(
-                SizeOverLife,
-                "Size over Life",
-                "Update",
-                [],
-                [OutPin("out.update", "Update", UpdateType)],
-                [
-                    PropEnum(
-                        "profile",
-                        "Profile",
-                        LifeProfileLabels,
-                        5
-                    ),
-                    PropF(
-                        "scale",
-                        "Scale",
-                        1f,
-                        0f,
-                        10f
-                    ),
-                ]
-            ),
-
-            Def(
-                AlphaOverLife,
-                "Alpha over Life",
-                "Update",
-                [],
-                [OutPin("out.update", "Update", UpdateType)],
-                [
-                    PropEnum(
-                        "profile",
-                        "Profile",
-                        LifeProfileLabels,
-                        2
-                    ),
-                    PropF(
-                        "scale",
-                        "Scale",
-                        1f,
-                        0f,
-                        1f
-                    ),
-                ]
-            ),
-
-            Def(
-                Render,
-                "Render Settings",
-                "Render",
-                [],
-                [OutPin("out.render", "Render", RenderType)],
-                [
-                    PropEnum("blend", "Blend", BlendLabels),
-                    Prop(
-                        "texture",
-                        "Texture",
-                        GraphTypeRef.String,
-                        GraphValue.FromString("")
-                    ),
-                    PropB("soft", "Soft Particles", true),
-                ]
-            ),
-
-            Def(
-                FloatValue,
-                "Float",
-                "Input",
-                [],
-                [OutPin("out.value", "Value", GraphTypeRef.Float.Id)],
-                [
-                    PropF(
-                        "value",
-                        "Value",
-                        1f,
-                        -100f,
-                        100f
-                    ),
-                ]
-            ),
-
-            Def(
-                ColorValue,
-                "Color",
-                "Input",
-                [],
-                [OutPin("out.color", "Color", GraphTypeRef.Color.Id)],
-                [
-                    Prop(
-                        "color",
-                        "Color",
-                        GraphTypeRef.Color,
-                        GraphValue.FromFloat4(
-                            1f,
-                            1f,
-                            1f,
-                            1f
+                        id: "variation",
+                        name: "Variation",
+                        type: GraphTypeRef.Color,
+                        def: GraphValue.FromFloat4(
+                            x: 1f,
+                            y: 1f,
+                            z: 1f,
+                            w: 1f
                         )
                     ),
                 ]
             ),
 
             Def(
-                VectorValue,
-                "Vector",
-                "Input",
-                [],
-                [OutPin("out.vector", "Vector", GraphTypeRef.Float3.Id)],
-                [
+                id: InitLifetime,
+                name: "Initial Lifetime",
+                category: "Initialize",
+                inputs: [],
+                outputs: [OutPin(id: "out.init", name: "Init", typeId: InitType)],
+                props: [
+                    PropF(
+                        id: "life_min",
+                        name: "Lifetime Min",
+                        def: 1.5f,
+                        min: 0.01f,
+                        max: 60f
+                    ),
+                    PropF(
+                        id: "life_max",
+                        name: "Lifetime Max",
+                        def: 2.5f,
+                        min: 0.01f,
+                        max: 60f
+                    ),
+                ]
+            ),
+
+            Def(
+                id: InitRotation,
+                name: "Initial Rotation",
+                category: "Initialize",
+                inputs: [],
+                outputs: [OutPin(id: "out.init", name: "Init", typeId: InitType)],
+                props: [
+                    PropF(
+                        id: "rot_min",
+                        name: "Rotation Min",
+                        def: 0f,
+                        min: -360f,
+                        max: 360f
+                    ),
+                    PropF(
+                        id: "rot_max",
+                        name: "Rotation Max",
+                        def: 0f,
+                        min: -360f,
+                        max: 360f
+                    ),
+                    PropF(
+                        id: "spin_min",
+                        name: "Spin Min",
+                        def: 0f,
+                        min: -720f,
+                        max: 720f
+                    ),
+                    PropF(
+                        id: "spin_max",
+                        name: "Spin Max",
+                        def: 0f,
+                        min: -720f,
+                        max: 720f
+                    ),
+                ]
+            ),
+
+            Def(
+                id: Gravity,
+                name: "Gravity",
+                category: "Update · Force",
+                inputs: [InPin(id: "in.gravity", name: "Gravity", typeId: GraphTypeRef.Float3.Id)],
+                outputs: [OutPin(id: "out.update", name: "Update", typeId: UpdateType)],
+                props: [
                     PropV3(
-                        "vector",
-                        "Vector",
-                        0f,
-                        0f,
-                        0f
+                        id: "gravity",
+                        name: "Gravity",
+                        x: 0f,
+                        y: -9.8f,
+                        z: 0f
+                    ),
+                ]
+            ),
+
+            Def(
+                id: Drag,
+                name: "Drag",
+                category: "Update · Force",
+                inputs: [],
+                outputs: [OutPin(id: "out.update", name: "Update", typeId: UpdateType)],
+                props: [
+                    PropF(
+                        id: "drag",
+                        name: "Drag",
+                        def: 0.5f,
+                        min: 0f,
+                        max: 20f
+                    ),
+                ]
+            ),
+
+            Def(
+                id: Turbulence,
+                name: "Turbulence",
+                category: "Update · Force",
+                inputs: [],
+                outputs: [OutPin(id: "out.update", name: "Update", typeId: UpdateType)],
+                props: [
+                    PropF(
+                        id: "strength",
+                        name: "Strength",
+                        def: 1f,
+                        min: 0f,
+                        max: 50f
+                    ),
+                    PropF(
+                        id: "frequency",
+                        name: "Frequency",
+                        def: 1f,
+                        min: 0f,
+                        max: 10f
+                    ),
+                ]
+            ),
+
+            Def(
+                id: Vortex,
+                name: "Vortex",
+                category: "Update · Force",
+                inputs: [],
+                outputs: [OutPin(id: "out.update", name: "Update", typeId: UpdateType)],
+                props: [
+                    PropV3(
+                        id: "axis",
+                        name: "Axis",
+                        x: 0f,
+                        y: 1f,
+                        z: 0f
+                    ),
+                    PropF(
+                        id: "strength",
+                        name: "Strength",
+                        def: 2f,
+                        min: -50f,
+                        max: 50f
+                    ),
+                ]
+            ),
+
+            Def(
+                id: ColorOverLife,
+                name: "Color over Life",
+                category: "Update",
+                inputs: [],
+                outputs: [OutPin(id: "out.update", name: "Update", typeId: UpdateType)],
+                props: [PropRamp(id: "ramp", name: "Ramp")]
+            ),
+
+            Def(
+                id: SizeOverLife,
+                name: "Size over Life",
+                category: "Update",
+                inputs: [],
+                outputs: [OutPin(id: "out.update", name: "Update", typeId: UpdateType)],
+                props: [
+                    PropEnum(
+                        id: "profile",
+                        name: "Profile",
+                        labels: LifeProfileLabels,
+                        def: 5
+                    ),
+                    PropF(
+                        id: "scale",
+                        name: "Scale",
+                        def: 1f,
+                        min: 0f,
+                        max: 10f
+                    ),
+                ]
+            ),
+
+            Def(
+                id: AlphaOverLife,
+                name: "Alpha over Life",
+                category: "Update",
+                inputs: [],
+                outputs: [OutPin(id: "out.update", name: "Update", typeId: UpdateType)],
+                props: [
+                    PropEnum(
+                        id: "profile",
+                        name: "Profile",
+                        labels: LifeProfileLabels,
+                        def: 2
+                    ),
+                    PropF(
+                        id: "scale",
+                        name: "Scale",
+                        def: 1f,
+                        min: 0f,
+                        max: 1f
+                    ),
+                ]
+            ),
+
+            Def(
+                id: Render,
+                name: "Render Settings",
+                category: "Render",
+                inputs: [],
+                outputs: [OutPin(id: "out.render", name: "Render", typeId: RenderType)],
+                props: [
+                    PropEnum(id: "blend", name: "Blend", labels: BlendLabels),
+                    Prop(
+                        id: "texture",
+                        name: "Texture",
+                        type: GraphTypeRef.String,
+                        def: GraphValue.FromString("")
+                    ),
+                    PropB(id: "soft", name: "Soft Particles", def: true),
+                ]
+            ),
+
+            Def(
+                id: FloatValue,
+                name: "Float",
+                category: "Input",
+                inputs: [],
+                outputs: [OutPin(id: "out.value", name: "Value", typeId: GraphTypeRef.Float.Id)],
+                props: [
+                    PropF(
+                        id: "value",
+                        name: "Value",
+                        def: 1f,
+                        min: -100f,
+                        max: 100f
+                    ),
+                ]
+            ),
+
+            Def(
+                id: ColorValue,
+                name: "Color",
+                category: "Input",
+                inputs: [],
+                outputs: [OutPin(id: "out.color", name: "Color", typeId: GraphTypeRef.Color.Id)],
+                props: [
+                    Prop(
+                        id: "color",
+                        name: "Color",
+                        type: GraphTypeRef.Color,
+                        def: GraphValue.FromFloat4(
+                            x: 1f,
+                            y: 1f,
+                            z: 1f,
+                            w: 1f
+                        )
+                    ),
+                ]
+            ),
+
+            Def(
+                id: VectorValue,
+                name: "Vector",
+                category: "Input",
+                inputs: [],
+                outputs: [OutPin(id: "out.vector", name: "Vector", typeId: GraphTypeRef.Float3.Id)],
+                props: [
+                    PropV3(
+                        id: "vector",
+                        name: "Vector",
+                        x: 0f,
+                        y: 0f,
+                        z: 0f
                     ),
                 ]
             ),
@@ -570,8 +570,10 @@ public static class VfxNodeLibrary
             if (def.Id != definitionId) continue;
             var pins = direction == PinDirection.Input ? def.Inputs : def.Outputs;
             foreach (var p in pins)
+            {
                 if (p.Id == pinId)
                     return p.Type;
+            }
         }
 
         return null;
@@ -583,8 +585,10 @@ public static class VfxNodeLibrary
         {
             if (def.Id != definitionId) continue;
             foreach (var p in def.Inputs)
+            {
                 if (p.Id == pinId)
                     return p.AllowsMultipleConnections;
+            }
         }
 
         return false;
@@ -704,7 +708,7 @@ public static class VfxNodeLibrary
             Id = id,
             DisplayName = name,
             Type = GraphTypeRef.Float3,
-            DefaultValue = GraphValue.FromFloat3(x, y, z),
+            DefaultValue = GraphValue.FromFloat3(x: x, y: y, z: z),
         };
     }
 

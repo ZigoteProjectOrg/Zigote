@@ -17,25 +17,34 @@ public sealed class ToastsPage : ComposedWidget
         var host = GalleryHost.Of(context);
 
         return new GalleryPage(
-            "Toasts",
+            title: "Toasts",
+            description:
             "A message that says what happened, optionally with the one action that undoes it.",
-            MaterialIcons.Notifications
+            iconName: MaterialIcons.Notifications
         ) {
             Children = {
                 Demo.Group(
-                    "Show a Toast",
-                    "They queue: raise several and they take their turn.",
-                    Row("Simple", "Just a message", () => host.Toast("File saved")),
-                    Row("With an action", "The Undo pattern", () => Undo(host)),
+                    title: "Show a Toast",
+                    description: "They queue: raise several and they take their turn.",
                     Row(
-                        "Long title",
-                        "Wraps to two lines and stays readable",
-                        () => host.Toast(LongTitle)
+                        title: "Simple",
+                        subtitle: "Just a message",
+                        show: () => host.Toast("File saved")
                     ),
                     Row(
-                        "Three at once",
-                        "The overlay stacks them",
-                        () =>
+                        title: "With an action",
+                        subtitle: "The Undo pattern",
+                        show: () => Undo(host)
+                    ),
+                    Row(
+                        title: "Long title",
+                        subtitle: "Wraps to two lines and stays readable",
+                        show: () => host.Toast(LongTitle)
+                    ),
+                    Row(
+                        title: "Three at once",
+                        subtitle: "The overlay stacks them",
+                        show: () =>
                         {
                             host.Toast("Copied to clipboard");
                             host.Toast("Upload finished");
@@ -44,15 +53,16 @@ public sealed class ToastsPage : ComposedWidget
                     )
                 ),
                 Demo.Group(
-                    "Where They Belong",
-                    null,
+                    title: "Where They Belong",
+                    description: null,
                     new AdwActionRow(
-                        "One host per window",
+                        title: "One host per window",
+                        subtitle:
                         "The shell owns it, so a toast from a dialog lands in the same place"
                     ) { IconName = MaterialIcons.Notifications },
                     new AdwActionRow(
-                        "Never for errors that need a decision",
-                        "That is an alert dialog"
+                        title: "Never for errors that need a decision",
+                        subtitle: "That is an alert dialog"
                     ) {
                         IconName = MaterialIcons.WebAsset,
                         ShowChevron = true,
@@ -65,8 +75,8 @@ public sealed class ToastsPage : ComposedWidget
 
     private static Widget Row(string title, string subtitle, Action show)
     {
-        return new AdwActionRow(title, subtitle) {
-            Suffixes = { new AdwButton("Show", show) },
+        return new AdwActionRow(title: title, subtitle: subtitle) {
+            Suffixes = { new AdwButton(label: "Show", onPressed: show) },
         };
     }
 
@@ -74,13 +84,13 @@ public sealed class ToastsPage : ComposedWidget
     private void Undo(GalleryHost host)
     {
         _deleted++;
-        var title = _deleted == 1 ? "‘Lorem Ipsum’ deleted" : $"{_deleted} items deleted";
+        string title = _deleted == 1 ? "‘Lorem Ipsum’ deleted" : $"{_deleted} items deleted";
         host.Toast(
-            title,
-            "Undo",
-            () =>
+            title: title,
+            buttonLabel: "Undo",
+            onButtonClicked: () =>
             {
-                var items = _deleted;
+                int items = _deleted;
                 _deleted = 0;
                 host.Toast(items == 1 ? "Restored 1 item" : $"Restored {items} items");
             }

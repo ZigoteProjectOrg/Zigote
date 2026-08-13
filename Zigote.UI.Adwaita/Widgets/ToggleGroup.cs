@@ -31,9 +31,11 @@ public sealed class AdwToggleGroup : ComposedWidget
 
     public AdwToggleGroup(IReadOnlyList<string> labels, int active = 0,
         Action<int>? onActive = null)
-        : this([.. labels.Select(l => new AdwToggle(l))], active, onActive)
-    {
-    }
+        : this(
+            toggles: [.. labels.Select(l => new AdwToggle(l))],
+            active: active,
+            onActive: onActive
+        ) { }
 
     public int Active
     {
@@ -52,14 +54,14 @@ public sealed class AdwToggleGroup : ComposedWidget
     public bool Flat
     {
         get => _flat;
-        set => this.Set(ref _flat, value);
+        set => this.Set(field: ref _flat, value: value);
     }
 
     /// <summary>Pill-shaped group instead of the 9px control radius.</summary>
     public bool Round
     {
         get => _round;
-        set => this.Set(ref _round, value);
+        set => this.Set(field: ref _round, value: value);
     }
 
     /// <summary>
@@ -69,7 +71,7 @@ public sealed class AdwToggleGroup : ComposedWidget
     public bool Enabled
     {
         get => _enabled;
-        set => this.Set(ref _enabled, value);
+        set => this.Set(field: ref _enabled, value: value);
     }
 
     protected override Widget Build(BuildContext context)
@@ -79,14 +81,14 @@ public sealed class AdwToggleGroup : ComposedWidget
         // libadwaita insets the toggles by --group-padding (3px) inside the group's own box and
         // shrinks their radius by the same amount, so the active toggle reads as a card sitting IN
         // the group rather than a segment cut out of it. Flat groups have no box, so no inset.
-        var pad = Flat ? 0f : AdwMetrics.ToggleGroupPadding;
-        var groupRadius = Round ? AdwMetrics.RoundToggleRadius : AdwMetrics.ControlRadius;
-        var radius = MathF.Max(0f, groupRadius - pad);
+        float pad = Flat ? 0f : AdwMetrics.ToggleGroupPadding;
+        float groupRadius = Round ? AdwMetrics.RoundToggleRadius : AdwMetrics.ControlRadius;
+        float radius = MathF.Max(x: 0f, y: groupRadius - pad);
         // `> toggle { min-height: calc(34px - var(---group-padding) * 2) }` — the toggles shrink so
         // the GROUP still stands 34px tall, the height of every other control on the row.
-        var height = AdwMetrics.ButtonHeight - pad * 2f;
+        float height = AdwMetrics.ButtonHeight - (pad * 2f);
         // .text-button padding is 11px minus the group padding; .round widens it to 15px.
-        var paddingX = MathF.Max(0f, (Round ? 15f : 11f) - pad);
+        float paddingX = MathF.Max(x: 0f, y: (Round ? 15f : 11f) - pad);
 
         var boxes = new DecoratedBox[_toggles.Count];
         var contents = new AdwButtonContent[_toggles.Count];
@@ -94,7 +96,7 @@ public sealed class AdwToggleGroup : ComposedWidget
         var separators = new Container[_toggles.Count];
 
         var row = new Row(mainAxisSize: MainAxisSize.Min);
-        for (var i = 0; i < _toggles.Count; i++)
+        for (int i = 0; i < _toggles.Count; i++)
         {
             if (i > 0)
             {
@@ -103,23 +105,26 @@ public sealed class AdwToggleGroup : ComposedWidget
                 // which is what stops the raised segment from being visually fenced in.
                 separators[i] = new Container {
                     Width = 1f,
-                    Height = MathF.Max(0f, height - ((Round ? 9f : 6f) - pad) * 2f),
+                    Height = MathF.Max(x: 0f, y: height - (((Round ? 9f : 6f) - pad) * 2f)),
                     Background = Flat ? Color.Transparent : p.Border,
                 };
                 row.Children.Add(separators[i]);
             }
 
-            var index = i;
+            int index = i;
             var toggle = _toggles[i];
-            contents[i] = new AdwButtonContent(toggle.IconName, toggle.Label ?? "");
+            contents[i] = new AdwButtonContent(
+                iconName: toggle.IconName,
+                label: toggle.Label ?? ""
+            );
             boxes[i] = new DecoratedBox {
                 // The segment's OWN radius — the group box doesn't clip, so without this the
                 // active and hover fills paint as square blocks inside a rounded group.
                 Radius = radius,
                 Child = AdwStyle.ButtonBody(
-                    contents[i],
-                    height,
-                    toggle.Label is { Length: > 0 } ? paddingX : AdwMetrics.ToolbarPadding
+                    content: contents[i],
+                    height: height,
+                    paddingX: toggle.Label is { Length: > 0 } ? paddingX : AdwMetrics.ToolbarPadding
                 ),
             };
             pressables[i] = new Pressable {
@@ -136,12 +141,14 @@ public sealed class AdwToggleGroup : ComposedWidget
             };
             pressables[i].OnStateChanged = () => _applyColors!.Invoke();
             row.Children.Add(
-                toggle.Tooltip is { } tip ? new Tooltip(tip, pressables[i]) : pressables[i]
+                toggle.Tooltip is { } tip
+                    ? new Tooltip(message: tip, child: pressables[i])
+                    : pressables[i]
             );
         }
 
         var fills = new FillTransition[boxes.Length];
-        for (var i = 0; i < boxes.Length; i++)
+        for (int i = 0; i < boxes.Length; i++)
         {
             var box = boxes[i];
             fills[i] = new FillTransition(c =>
@@ -154,11 +161,11 @@ public sealed class AdwToggleGroup : ComposedWidget
 
         _applyColors = () =>
         {
-            for (var i = 0; i < boxes.Length; i++)
+            for (int i = 0; i < boxes.Length; i++)
             {
                 // Selection lives here, not in OnPressed: this runs for a programmatic Active
                 // change too, which otherwise left the segments reporting the old selection.
-                var active = i == Active;
+                bool active = i == Active;
                 pressables[i].SelectedState = active;
 
                 // The checked segment of a non-flat group is --active-toggle-bg-color: a raised
@@ -174,15 +181,19 @@ public sealed class AdwToggleGroup : ComposedWidget
                             : pressables[i].Hovered ? p.SelectedFillHover
                             : p.SelectedFill
                             : p.ActiveToggleBg
-                        : pressables[i].Pressed ? p.ActiveFill
-                        : pressables[i].Hovered ? p.HoverFill
-                        : Color.Transparent
+                        : pressables[i].Pressed
+                            ? p.ActiveFill
+                            : pressables[i].Hovered
+                                ? p.HoverFill
+                                : Color.Transparent
                 );
 
                 if (separators[i] is { } sep)
+                {
                     sep.Background = Flat || active || i - 1 == Active
                         ? Color.Transparent
                         : p.Border;
+                }
             }
         };
         _applyColors();
@@ -190,8 +201,8 @@ public sealed class AdwToggleGroup : ComposedWidget
         Widget group = new DecoratedBox {
             Radius = groupRadius,
             Fill = Flat ? Color.Transparent : p.ButtonFill,
-            Child = pad > 0f ? new Padding(EdgeInsets.All(pad), row) : row,
+            Child = pad > 0f ? new Padding(padding: EdgeInsets.All(pad), child: row) : row,
         };
-        return Enabled ? group : new Opacity(AdwStyle.DisabledOpacity, group);
+        return Enabled ? group : new Opacity(opacity: AdwStyle.DisabledOpacity, child: group);
     }
 }

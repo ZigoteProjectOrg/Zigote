@@ -25,14 +25,14 @@ public sealed class AdwColorButton : Widget
         AdwAccentColors.Bg(AdwAccent.Pink),
         AdwAccentColors.Bg(AdwAccent.Purple),
         AdwAccentColors.Bg(AdwAccent.Slate),
-        Color.Rgb(0, 0, 0),
-        Color.Rgb(119, 118, 123),
-        Color.Rgb(255, 255, 255),
+        Color.Rgb(r: 0, g: 0, b: 0),
+        Color.Rgb(r: 119, g: 118, b: 123),
+        Color.Rgb(r: 255, g: 255, b: 255),
     ];
 
     private readonly AppInstance? _app;
-    private ColorPicker? _picker;
     private float _height = AdwMetrics.CompactControlHeight;
+    private ColorPicker? _picker;
     private Size _size;
     private ThemeData _theme = ThemeData.Dark;
     private Color _value;
@@ -66,23 +66,27 @@ public sealed class AdwColorButton : Widget
     public float Width
     {
         get => _width;
-        set => SetLayout(ref _width, value);
+        set => SetLayout(field: ref _width, value: value);
     }
 
     public float Height
     {
         get => _height;
-        set => SetLayout(ref _height, value);
+        set => SetLayout(field: ref _height, value: value);
     }
+
     public override bool Focusable => true;
 
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
         // The swatch is the entire trigger for the chooser; a 28px button is not a finger target.
-        var compact = MediaQuery.Of(BuildContext.Current).SizeClass == WindowSizeClass.Compact;
+        bool compact = MediaQuery.Of(BuildContext.Current).SizeClass == WindowSizeClass.Compact;
         _size = c.Constrain(
-            new Size(Width, compact ? MathF.Max(Height, ControlMetrics.MinTouchTarget) : Height)
+            new Size(
+                width: Width,
+                height: compact ? MathF.Max(x: Height, y: ControlMetrics.MinTouchTarget) : Height
+            )
         );
         return _size;
     }
@@ -90,10 +94,10 @@ public sealed class AdwColorButton : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
@@ -106,30 +110,25 @@ public sealed class AdwColorButton : Widget
         const float pad = 5f;
         var p = AdwPalette.For(_theme);
         var swatch = new Rect(
-            Bounds.X + pad,
-            Bounds.Y + pad,
-            MathF.Max(0f, Bounds.Width - pad * 2f),
-            MathF.Max(0f, Bounds.Height - pad * 2f)
+            x: Bounds.X + pad,
+            y: Bounds.Y + pad,
+            width: MathF.Max(x: 0f, y: Bounds.Width - (pad * 2f)),
+            height: MathF.Max(x: 0f, y: Bounds.Height - (pad * 2f))
         );
-        var swatchRadius = AdwMetrics.ControlRadius - 4.5f;
+        float swatchRadius = AdwMetrics.ControlRadius - 4.5f;
 
-        paint.AddRect(Bounds, p.ButtonFill, AdwMetrics.ControlRadius);
-        paint.AddRect(swatch, _value.WithAlpha(1f), swatchRadius);
+        paint.AddRect(bounds: Bounds, color: p.ButtonFill, radius: AdwMetrics.ControlRadius);
+        paint.AddRect(bounds: swatch, color: _value.WithAlpha(1f), radius: swatchRadius);
         // `.light > overlay { border-color: view-fg 10% }` — a hairline so a white swatch still
         // reads as a swatch.
-        paint.AddBorder(swatch, p.ViewFg.WithAlpha(0.1f), swatchRadius);
-        if (Focused) paint.AddFocusRing(Bounds, AdwMetrics.ControlRadius, _theme);
+        paint.AddBorder(bounds: swatch, color: p.ViewFg.WithAlpha(0.1f), radius: swatchRadius);
+        if (Focused)
+            paint.AddFocusRing(bounds: Bounds, radius: AdwMetrics.ControlRadius, theme: _theme);
     }
 
-    public override void OnPointerDown(Offset point)
-    {
-        OpenChooser();
-    }
+    public override void OnPointerDown(Offset point) => OpenChooser();
 
-    public override MouseCursor? GetCursor(Offset point)
-    {
-        return MouseCursor.Pointer;
-    }
+    public override MouseCursor? GetCursor(Offset point) => MouseCursor.Pointer;
 
     private void Set(Color c)
     {
@@ -150,13 +149,15 @@ public sealed class AdwColorButton : Widget
         };
 
         // Palette grid: two rows of six, GNOME's colour-chooser layout.
-        for (var r = 0; r < 2; r++)
+        for (int r = 0; r < 2; r++)
         {
             var row = new Row(spacing: 4f, mainAxisSize: MainAxisSize.Min);
-            for (var i = 0; i < 6; i++)
+            for (int i = 0; i < 6; i++)
             {
-                var c = Palette[r * 6 + i];
-                row.Children.Add(new Swatch(c, _theme, () => SetFromPalette(c)));
+                var c = Palette[(r * 6) + i];
+                row.Children.Add(
+                    new Swatch(color: c, theme: _theme, onTap: () => SetFromPalette(c))
+                );
             }
 
             col.Children.Add(row);
@@ -164,10 +165,10 @@ public sealed class AdwColorButton : Widget
         }
 
         col.Children.Add(new SizedBox(height: Spacing.Sm));
-        _picker = new ColorPicker(_value, Set);
+        _picker = new ColorPicker(initial: _value, onChanged: Set);
         col.Children.Add(_picker);
 
-        new Popover(new SizedBox(220f, child: col), Bounds).Show();
+        new Popover(child: new SizedBox(width: 220f, child: col), anchor: Bounds).Show();
     }
 
     /// <summary>Apply a palette entry to both our value and (while open) the picker's HSV state.</summary>
@@ -186,36 +187,30 @@ public sealed class AdwColorButton : Widget
         {
             // 24px cells with 4px gutters fit the 220px popover on a pointer; a finger gets the
             // full minimum target, which overflows to a scrollable popover rather than misfiring.
-            var compact = MediaQuery.Of(BuildContext.Current).SizeClass == WindowSizeClass.Compact;
-            var d = compact ? ControlMetrics.MinTouchTarget : 24f;
-            _s = new Size(d, d);
+            bool compact = MediaQuery.Of(BuildContext.Current).SizeClass == WindowSizeClass.Compact;
+            float d = compact ? ControlMetrics.MinTouchTarget : 24f;
+            _s = new Size(width: d, height: d);
             return _s;
         }
 
         public override void Layout(Offset origin)
         {
             Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                _s.Width,
-                _s.Height
+                x: origin.X,
+                y: origin.Y,
+                width: _s.Width,
+                height: _s.Height
             );
         }
 
         public override void Paint(PaintList paint)
         {
-            paint.AddRect(Bounds, color, 6f);
-            paint.AddBorder(Bounds, theme.Separator, 6f);
+            paint.AddRect(bounds: Bounds, color: color, radius: 6f);
+            paint.AddBorder(bounds: Bounds, color: theme.Separator, radius: 6f);
         }
 
-        public override void OnPointerDown(Offset point)
-        {
-            onTap();
-        }
+        public override void OnPointerDown(Offset point) => onTap();
 
-        public override MouseCursor? GetCursor(Offset point)
-        {
-            return MouseCursor.Pointer;
-        }
+        public override MouseCursor? GetCursor(Offset point) => MouseCursor.Pointer;
     }
 }

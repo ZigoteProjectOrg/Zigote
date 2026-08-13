@@ -23,13 +23,10 @@ public sealed class EcsPrefabTests : IDisposable
     {
         _reg.Register<Health>();
         _reg.Register<Speed>();
-        _lib = new EcsPrefabLibrary(_w, _reg);
+        _lib = new EcsPrefabLibrary(world: _w, registry: _reg);
     }
 
-    public void Dispose()
-    {
-        _w.Dispose();
-    }
+    public void Dispose() => _w.Dispose();
 
     [Fact]
     public void Instance_Inherits_Prefab_Components()
@@ -43,9 +40,11 @@ public sealed class EcsPrefabTests : IDisposable
         var inst = _lib.Instantiate("Enemy");
 
         Assert.True(_w.Has<Health>(inst));
-        Assert.False(_lib.IsOverridden(inst, typeof(Health))); // inherited, not owned
-        Assert.Equal(100, Hp(inst));
-        Assert.Equal(3f, Spd(inst));
+        Assert.False(
+            _lib.IsOverridden(instance: inst, type: typeof(Health))
+        ); // inherited, not owned
+        Assert.Equal(expected: 100, actual: Hp(inst));
+        Assert.Equal(expected: 3f, actual: Spd(inst));
     }
 
     [Fact]
@@ -60,14 +59,14 @@ public sealed class EcsPrefabTests : IDisposable
         var inst = _lib.Instantiate("Enemy");
 
         _w.Set(
-            inst,
-            new Health {
+            e: inst,
+            c: new Health {
                 Current = 25,
                 Max = 100,
             }
         ); // override
-        Assert.True(_lib.IsOverridden(inst, typeof(Health)));
-        Assert.Equal(25, Hp(inst));
+        Assert.True(_lib.IsOverridden(instance: inst, type: typeof(Health)));
+        Assert.Equal(expected: 25, actual: Hp(inst));
 
         enemy.With(
             new Health {
@@ -75,7 +74,7 @@ public sealed class EcsPrefabTests : IDisposable
                 Max = 999,
             }
         ); // edit prefab
-        Assert.Equal(25, Hp(inst)); // override shields the instance
+        Assert.Equal(expected: 25, actual: Hp(inst)); // override shields the instance
     }
 
     [Fact]
@@ -90,8 +89,8 @@ public sealed class EcsPrefabTests : IDisposable
         var a = _lib.Instantiate("Enemy");
         var b = _lib.Instantiate("Enemy");
         _w.Set(
-            b,
-            new Health {
+            e: b,
+            c: new Health {
                 Current = 10,
                 Max = 100,
             }
@@ -104,9 +103,9 @@ public sealed class EcsPrefabTests : IDisposable
             }
         ); // edit prefab
 
-        Assert.Equal(50, Hp(a)); // a inherits the new prefab value
-        Assert.Equal(200, HpMax(a));
-        Assert.Equal(10, Hp(b)); // b keeps its override
+        Assert.Equal(expected: 50, actual: Hp(a)); // a inherits the new prefab value
+        Assert.Equal(expected: 200, actual: HpMax(a));
+        Assert.Equal(expected: 10, actual: Hp(b)); // b keeps its override
     }
 
     [Fact]
@@ -120,17 +119,17 @@ public sealed class EcsPrefabTests : IDisposable
         );
         var inst = _lib.Instantiate("Enemy");
         _w.Set(
-            inst,
-            new Health {
+            e: inst,
+            c: new Health {
                 Current = 1,
                 Max = 1,
             }
         );
-        Assert.True(_lib.IsOverridden(inst, typeof(Health)));
+        Assert.True(_lib.IsOverridden(instance: inst, type: typeof(Health)));
 
-        Assert.True(_lib.Revert(inst, typeof(Health)));
-        Assert.False(_lib.IsOverridden(inst, typeof(Health)));
-        Assert.Equal(100, Hp(inst)); // inherits the prefab again
+        Assert.True(_lib.Revert(instance: inst, type: typeof(Health)));
+        Assert.False(_lib.IsOverridden(instance: inst, type: typeof(Health)));
+        Assert.Equal(expected: 100, actual: Hp(inst)); // inherits the prefab again
     }
 
     [Fact]
@@ -143,14 +142,14 @@ public sealed class EcsPrefabTests : IDisposable
             }
         ).With(new Speed { Value = 3f });
         var inst = _lib.Instantiate("Enemy");
-        _w.Set(inst, new Speed { Value = 9f }); // override Speed only
+        _w.Set(e: inst, c: new Speed { Value = 9f }); // override Speed only
 
-        var json = _lib.SerializeInstance(inst, "Enemy");
+        var json = _lib.SerializeInstance(instance: inst, prefabName: "Enemy");
 
-        Assert.Equal("Enemy", (string?)json["prefab"]);
+        Assert.Equal(expected: "Enemy", actual: (string?)json["prefab"]);
         var overrides = (JsonArray)json["overrides"]!;
         Assert.Single(overrides); // Health inherited → not stored; only Speed
-        Assert.Equal("Speed", (string?)overrides[0]!["type"]);
+        Assert.Equal(expected: "Speed", actual: (string?)overrides[0]!["type"]);
     }
 
     [Fact]
@@ -163,16 +162,18 @@ public sealed class EcsPrefabTests : IDisposable
             }
         ).With(new Speed { Value = 3f });
         var original = _lib.Instantiate("Enemy");
-        _w.Set(original, new Speed { Value = 9f });
+        _w.Set(e: original, c: new Speed { Value = 9f });
 
         var json =
-            (JsonObject)JsonNode.Parse(_lib.SerializeInstance(original, "Enemy").ToJsonString())!;
+            (JsonObject)JsonNode.Parse(
+                _lib.SerializeInstance(instance: original, prefabName: "Enemy").ToJsonString()
+            )!;
         var restored = _lib.DeserializeInstance(json);
 
-        Assert.Equal(9f, Spd(restored)); // override restored + owned
-        Assert.True(_lib.IsOverridden(restored, typeof(Speed)));
-        Assert.Equal(100, Hp(restored)); // Health still inherited
-        Assert.False(_lib.IsOverridden(restored, typeof(Health)));
+        Assert.Equal(expected: 9f, actual: Spd(restored)); // override restored + owned
+        Assert.True(_lib.IsOverridden(instance: restored, type: typeof(Speed)));
+        Assert.Equal(expected: 100, actual: Hp(restored)); // Health still inherited
+        Assert.False(_lib.IsOverridden(instance: restored, type: typeof(Health)));
 
         enemy.With(
             new Health {
@@ -180,24 +181,15 @@ public sealed class EcsPrefabTests : IDisposable
                 Max = 7,
             }
         ); // prefab edit still reaches the restored instance
-        Assert.Equal(7, Hp(restored));
+        Assert.Equal(expected: 7, actual: Hp(restored));
     }
 
     // Read-only accessors (never trigger copy-on-write override).
-    private int Hp(Entity e)
-    {
-        return _w.TryGet<Health>(e, out var h) ? h.Current : -1;
-    }
+    private int Hp(Entity e) => _w.TryGet<Health>(e: e, value: out var h) ? h.Current : -1;
 
-    private int HpMax(Entity e)
-    {
-        return _w.TryGet<Health>(e, out var h) ? h.Max : -1;
-    }
+    private int HpMax(Entity e) => _w.TryGet<Health>(e: e, value: out var h) ? h.Max : -1;
 
-    private float Spd(Entity e)
-    {
-        return _w.TryGet<Speed>(e, out var s) ? s.Value : -1f;
-    }
+    private float Spd(Entity e) => _w.TryGet<Speed>(e: e, value: out var s) ? s.Value : -1f;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct Health

@@ -42,13 +42,13 @@ public sealed class Panel : Widget
     // Visual state
     private bool _closeHovered;
 
+    // Screen dimensions — captured from Constraints during Measure, used for clamping
+    private bool _compact;
+
     // Drag/resize tracking
     private ResizeDir _dragDir = ResizeDir.None;
     private Offset _dragOrigin;
     private float _hAt, _wAt, _xAt, _yAt;
-
-    // Screen dimensions — captured from Constraints during Measure, used for clamping
-    private bool _compact;
     private float _screenH = 768f;
     private float _screenW = 1024f;
 
@@ -63,24 +63,22 @@ public sealed class Panel : Widget
         Title = title;
         PanelX = x;
         PanelY = y;
-        _w = MathF.Max(MinWidth, width);
-        _h = MathF.Max(MinHeight, height);
+        _w = MathF.Max(x: MinWidth, y: width);
+        _h = MathF.Max(x: MinHeight, y: height);
     }
 
     /// <summary>Convenience constructor using <see cref="App.Active" />.</summary>
     public Panel(ThemeData theme, string title,
         float x, float y, float width, float height)
         : this(
-            App.Active!,
-            theme,
-            title,
-            x,
-            y,
-            width,
-            height
-        )
-    {
-    }
+            app: App.Active!,
+            theme: theme,
+            title: title,
+            x: x,
+            y: y,
+            width: width,
+            height: height
+        ) { }
 
     // ── Configuration ─────────────────────────────────────────────────────────
 
@@ -100,14 +98,14 @@ public sealed class Panel : Widget
     public float PanelWidth
     {
         get => _w;
-        set => _w = Math.Clamp(value, MinWidth, MaxWidth);
+        set => _w = Math.Clamp(value: value, min: MinWidth, max: MaxWidth);
     }
 
     /// <summary>Current panel height. Clamped to [<see cref="MinHeight" />, <see cref="MaxHeight" />].</summary>
     public float PanelHeight
     {
         get => _h;
-        set => _h = Math.Clamp(value, MinHeight, MaxHeight);
+        set => _h = Math.Clamp(value: value, min: MinHeight, max: MaxHeight);
     }
 
     public float MinWidth { get; set; } = 120f;
@@ -122,51 +120,46 @@ public sealed class Panel : Widget
     ///     where the panel is full-screen and the title bar is the only chrome left — it grows to a
     ///     finger target.
     /// </summary>
-    private float TitleH => _compact ? MathF.Max(TitleHeight, TouchMetrics.MinTarget) : TitleHeight;
+    private float TitleH =>
+        _compact ? MathF.Max(x: TitleHeight, y: TouchMetrics.MinTarget) : TitleHeight;
 
     private Rect PanelRect => new(
-        PanelX,
-        PanelY,
-        _w,
-        _h
+        x: PanelX,
+        y: PanelY,
+        width: _w,
+        height: _h
     );
 
     private Rect TitleBarRect => new(
-        PanelX,
-        PanelY,
-        _w,
-        TitleH
+        x: PanelX,
+        y: PanelY,
+        width: _w,
+        height: TitleH
     );
 
     private Rect ContentRect =>
         new(
-            PanelX,
-            PanelY + TitleH,
-            _w,
-            MathF.Max(0f, _h - TitleH)
+            x: PanelX,
+            y: PanelY + TitleH,
+            width: _w,
+            height: MathF.Max(x: 0f, y: _h - TitleH)
         );
 
     private Rect CloseButtonRect =>
         new(
-            PanelX + _w - TitleH + 4f,
-            PanelY + 4f,
-            TitleH - 8f,
-            TitleH - 8f
+            x: PanelX + _w - TitleH + 4f,
+            y: PanelY + 4f,
+            width: TitleH - 8f,
+            height: TitleH - 8f
         );
 
     // ── Overlay helpers ───────────────────────────────────────────────────────
 
     /// <summary>Push this panel onto the overlay stack so it appears on top of the UI.</summary>
-    public void Show()
-    {
-        _app.PushOverlay(this);
-    }
+    public void Show() => _app.PushOverlay(this);
 
     /// <summary>Remove this panel from the overlay stack.</summary>
-    public void Dismiss()
-    {
-        _app.PopOverlay(this);
-    }
+    public void Dismiss() => _app.PopOverlay(this);
 
     // ── Widget protocol ───────────────────────────────────────────────────────
 
@@ -187,21 +180,21 @@ public sealed class Panel : Widget
             _h = _screenH;
         }
 
-        Content?.Measure(Constraints.Tight(_w, MathF.Max(0f, _h - TitleH)));
+        Content?.Measure(Constraints.Tight(width: _w, height: MathF.Max(x: 0f, y: _h - TitleH)));
 
         // Full-screen size — we are a non-blocking overlay (HitTest limits capture to panel rect)
-        return new Size(_screenW, _screenH);
+        return new Size(width: _screenW, height: _screenH);
     }
 
     public override void Layout(Offset _)
     {
         Bounds = new Rect(
-            0,
-            0,
-            _screenW,
-            _screenH
+            x: 0,
+            y: 0,
+            width: _screenW,
+            height: _screenH
         );
-        Content?.Layout(new Offset(PanelX, PanelY + TitleH));
+        Content?.Layout(new Offset(x: PanelX, y: PanelY + TitleH));
     }
 
     public override void Paint(PaintList paint)
@@ -210,37 +203,37 @@ public sealed class Panel : Widget
 
         // Drop shadow
         paint.AddShadow(
-            pr,
-            new Color(
-                0f,
-                0f,
-                0f,
-                0.4f
+            bounds: pr,
+            color: new Color(
+                r: 0f,
+                g: 0f,
+                b: 0f,
+                a: 0.4f
             ),
-            6f,
-            14f,
-            4f
+            borderRadius: 6f,
+            blurRadius: 14f,
+            spread: 4f
         );
 
         // Body background
-        paint.AddRect(pr, _theme.Surface, 4f);
+        paint.AddRect(bounds: pr, color: _theme.Surface, radius: 4f);
 
         // Title bar background (slightly lighter / accent)
-        paint.AddRect(TitleBarRect, _theme.SurfaceAlt, 4f);
+        paint.AddRect(bounds: TitleBarRect, color: _theme.SurfaceAlt, radius: 4f);
 
         // Grip dots (visual drag indicator, centred on left side of title bar)
         PaintGripDots(paint);
 
         // Title text
-        var fs = _theme.FontSizeBody;
-        var titleX = PanelX + 22f; // leave room for grip dots
-        var titleMaxW = _w - 22f - (CanClose ? TitleH : 0f);
+        float fs = _theme.FontSizeBody;
+        float titleX = PanelX + 22f; // leave room for grip dots
+        float titleMaxW = _w - 22f - (CanClose ? TitleH : 0f);
         paint.AddText(
-            Title,
-            titleX,
-            PanelY + TitleH * 0.8f,
-            _theme.OnSurface,
-            fs
+            text: Title,
+            baselineX: titleX,
+            baselineY: PanelY + (TitleH * 0.8f),
+            color: _theme.OnSurface,
+            fontSize: fs
         );
         _ = titleMaxW; // measured for reference; clipping is handled by the renderer
 
@@ -249,13 +242,13 @@ public sealed class Panel : Widget
         {
             var cr = CloseButtonRect;
             if (_closeHovered)
-                paint.AddRect(cr, _theme.Error.WithAlpha(0.85f), 3f);
+                paint.AddRect(bounds: cr, color: _theme.Error.WithAlpha(0.85f), radius: 3f);
             paint.AddText(
-                "×",
-                cr.X + (cr.Width - fs * 0.6f) / 2f,
-                cr.Y + cr.Height * 0.75f,
-                _closeHovered ? _theme.OnPrimary : _theme.OnSurface.WithAlpha(0.45f),
-                fs - 2f
+                text: "×",
+                baselineX: cr.X + ((cr.Width - (fs * 0.6f)) / 2f),
+                baselineY: cr.Y + (cr.Height * 0.75f),
+                color: _closeHovered ? _theme.OnPrimary : _theme.OnSurface.WithAlpha(0.45f),
+                fontSize: fs - 2f
             );
         }
 
@@ -268,7 +261,7 @@ public sealed class Panel : Widget
         }
 
         // Outer border
-        paint.AddBorder(pr, _theme.Primary.WithAlpha(0.18f), 4f);
+        paint.AddBorder(bounds: pr, color: _theme.Primary.WithAlpha(0.18f), radius: 4f);
 
         // Resize corner indicators
         PaintResizeCorners(paint);
@@ -279,20 +272,22 @@ public sealed class Panel : Widget
         var dotColor = _theme.OnSurface.WithAlpha(0.2f);
         const float dotR = 1.5f;
         const float dotGap = 4f;
-        var gx = PanelX + 8f;
-        var gy = PanelY + TitleH / 2f - dotGap;
-        for (var row = 0; row < 3; row++)
-        for (var col = 0; col < 2; col++)
+        float gx = PanelX + 8f;
+        float gy = PanelY + (TitleH / 2f) - dotGap;
+        for (int row = 0; row < 3; row++)
+        for (int col = 0; col < 2; col++)
+        {
             paint.AddRect(
-                new Rect(
-                    gx + col * dotGap - dotR,
-                    gy + row * dotGap - dotR,
-                    dotR * 2f,
-                    dotR * 2f
+                bounds: new Rect(
+                    x: gx + (col * dotGap) - dotR,
+                    y: gy + (row * dotGap) - dotR,
+                    width: dotR * 2f,
+                    height: dotR * 2f
                 ),
-                dotColor,
-                dotR
+                color: dotColor,
+                radius: dotR
             );
+        }
     }
 
     private void PaintResizeCorners(PaintList paint)
@@ -300,59 +295,59 @@ public sealed class Panel : Widget
         const float sz = 8f;
         var c = _theme.OnSurface.WithAlpha(0.12f);
         // Draw a small L-shaped indicator at SE and SW corners
-        var seX = PanelX + _w - sz;
-        var seY = PanelY + _h - sz;
+        float seX = PanelX + _w - sz;
+        float seY = PanelY + _h - sz;
         paint.AddRect(
-            new Rect(
-                seX,
-                seY + sz - 2f,
-                sz,
-                2f
+            bounds: new Rect(
+                x: seX,
+                y: seY + sz - 2f,
+                width: sz,
+                height: 2f
             ),
-            c
+            color: c
         );
         paint.AddRect(
-            new Rect(
-                seX + sz - 2f,
-                seY,
-                2f,
-                sz
+            bounds: new Rect(
+                x: seX + sz - 2f,
+                y: seY,
+                width: 2f,
+                height: sz
             ),
-            c
+            color: c
         );
 
-        var swX = PanelX;
-        var swY = PanelY + _h - sz;
+        float swX = PanelX;
+        float swY = PanelY + _h - sz;
         paint.AddRect(
-            new Rect(
-                swX,
-                swY + sz - 2f,
-                sz,
-                2f
+            bounds: new Rect(
+                x: swX,
+                y: swY + sz - 2f,
+                width: sz,
+                height: 2f
             ),
-            c
+            color: c
         );
         paint.AddRect(
-            new Rect(
-                swX,
-                swY,
-                2f,
-                sz
+            bounds: new Rect(
+                x: swX,
+                y: swY,
+                width: 2f,
+                height: sz
             ),
-            c
+            color: c
         );
     }
 
     public override Widget? HitTest(Offset point)
     {
         // Non-blocking overlay: only capture within the visual panel rect
-        if (!PanelRect.Contains(point.X, point.Y)) return null;
+        if (!PanelRect.Contains(px: point.X, py: point.Y)) return null;
 
         var dir = HitDir(point);
         if (dir != ResizeDir.None)
             return this; // resize edge or corner
 
-        if (TitleBarRect.Contains(point.X, point.Y))
+        if (TitleBarRect.Contains(px: point.X, py: point.Y))
             return this; // title bar drag or close button
 
         // Delegate to content
@@ -374,10 +369,10 @@ public sealed class Panel : Widget
             return;
         }
 
-        if (TitleBarRect.Contains(point.X, point.Y))
+        if (TitleBarRect.Contains(px: point.X, py: point.Y))
         {
             // Close button takes priority over dragging
-            if (CanClose && CloseButtonRect.Contains(point.X, point.Y))
+            if (CanClose && CloseButtonRect.Contains(px: point.X, py: point.Y))
             {
                 Dismiss();
                 OnClose?.Invoke();
@@ -390,18 +385,18 @@ public sealed class Panel : Widget
 
     public override void OnPointerMove(Offset point)
     {
-        var dx = point.X - _dragOrigin.X;
-        var dy = point.Y - _dragOrigin.Y;
+        float dx = point.X - _dragOrigin.X;
+        float dy = point.Y - _dragOrigin.Y;
 
         switch (_dragDir)
         {
             case ResizeDir.None:
-                _closeHovered = CanClose && CloseButtonRect.Contains(point.X, point.Y);
+                _closeHovered = CanClose && CloseButtonRect.Contains(px: point.X, py: point.Y);
                 break;
 
             case ResizeDir.TitleDrag:
-                PanelX = Math.Clamp(_xAt + dx, 0f, _screenW - _w);
-                PanelY = Math.Clamp(_yAt + dy, 0f, _screenH - TitleH);
+                PanelX = Math.Clamp(value: _xAt + dx, min: 0f, max: _screenW - _w);
+                PanelY = Math.Clamp(value: _yAt + dy, min: 0f, max: _screenH - TitleH);
                 // Relayout so the inner Content tracks the panel this frame: Content is only
                 // (re)positioned in Layout, and a captured mouse-move otherwise just repaints —
                 // leaving the content at its stale absolute Bounds while the chrome moves.
@@ -409,50 +404,35 @@ public sealed class Panel : Widget
                 break;
 
             default:
-                ApplyResize(_dragDir, dx, dy);
+                ApplyResize(dir: _dragDir, dx: dx, dy: dy);
                 MarkNeedsLayout(); // resize must reflow + reposition Content too
                 break;
         }
     }
 
-    public override void OnPointerUp(Offset _)
-    {
-        _dragDir = ResizeDir.None;
-    }
+    public override void OnPointerUp(Offset _) => _dragDir = ResizeDir.None;
 
     /// <summary>The press was taken over (pinch, app background): stop moving/resizing.</summary>
-    public override void OnPointerCancel()
-    {
-        _dragDir = ResizeDir.None;
-    }
+    public override void OnPointerCancel() => _dragDir = ResizeDir.None;
 
     /// <summary>
     ///     Moving or resizing the panel runs in both axes, so a grabbed title bar or edge owns the
     ///     gesture; a press that grabbed neither still leaves it to whatever scrolls behind.
     /// </summary>
-    public override bool CanTouchDrag(bool vertical)
-    {
-        return _dragDir != ResizeDir.None;
-    }
+    public override bool CanTouchDrag(bool vertical) => _dragDir != ResizeDir.None;
 
-    public override void OnPointerExit()
-    {
-        _closeHovered = false;
-    }
+    public override void OnPointerExit() => _closeHovered = false;
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return Content is not null ? [Content] : [];
-    }
+    public override IEnumerable<Widget> GetChildren() => Content is not null ? [Content] : [];
 
     public override int DebugStateHash()
     {
         return HashCode.Combine(
-            (int)PanelX,
-            (int)PanelY,
-            (int)_w,
-            (int)_h,
-            Content?.DebugStateHash() ?? 0
+            value1: (int)PanelX,
+            value2: (int)PanelY,
+            value3: (int)_w,
+            value4: (int)_h,
+            value5: Content?.DebugStateHash() ?? 0
         );
     }
 
@@ -463,16 +443,16 @@ public sealed class Panel : Widget
         if (_compact) return ResizeDir.None; // full-screen: nothing to resize
 
         // Corner zones (larger grab area for usability)
-        var inL = p.X < PanelX + CornerGrab;
-        var inR = p.X > PanelX + _w - CornerGrab;
-        var inT = p.Y < PanelY + CornerGrab;
-        var inB = p.Y > PanelY + _h - CornerGrab;
+        bool inL = p.X < PanelX + CornerGrab;
+        bool inR = p.X > PanelX + _w - CornerGrab;
+        bool inT = p.Y < PanelY + CornerGrab;
+        bool inB = p.Y > PanelY + _h - CornerGrab;
 
         // Narrow edge zones (must be very close to the edge)
-        var onL = p.X < PanelX + EdgeGrab;
-        var onR = p.X > PanelX + _w - EdgeGrab;
-        var onT = p.Y < PanelY + EdgeGrab;
-        var onB = p.Y > PanelY + _h - EdgeGrab;
+        bool onL = p.X < PanelX + EdgeGrab;
+        bool onR = p.X > PanelX + _w - EdgeGrab;
+        bool onT = p.Y < PanelY + EdgeGrab;
+        bool onB = p.Y > PanelY + _h - EdgeGrab;
 
         // Corners take priority
         if (inT && inL) return ResizeDir.Nw;
@@ -491,15 +471,9 @@ public sealed class Panel : Widget
 
     private void ApplyResize(ResizeDir dir, float dx, float dy)
     {
-        float Cw(float w)
-        {
-            return Math.Clamp(w, MinWidth, MaxWidth);
-        }
+        float Cw(float w) => Math.Clamp(value: w, min: MinWidth, max: MaxWidth);
 
-        float Ch(float h)
-        {
-            return Math.Clamp(h, MinHeight, MaxHeight);
-        }
+        float Ch(float h) => Math.Clamp(value: h, min: MinHeight, max: MaxHeight);
 
         switch (dir)
         {
@@ -509,7 +483,7 @@ public sealed class Panel : Widget
 
             case ResizeDir.W:
             {
-                var nw = Cw(_wAt - dx);
+                float nw = Cw(_wAt - dx);
                 PanelX = _xAt + (_wAt - nw);
                 _w = nw;
                 break;
@@ -521,7 +495,7 @@ public sealed class Panel : Widget
 
             case ResizeDir.N:
             {
-                var nh = Ch(_hAt - dy);
+                float nh = Ch(_hAt - dy);
                 PanelY = _yAt + (_hAt - nh);
                 _h = nh;
                 break;
@@ -534,7 +508,7 @@ public sealed class Panel : Widget
 
             case ResizeDir.Sw:
             {
-                var nw = Cw(_wAt - dx);
+                float nw = Cw(_wAt - dx);
                 PanelX = _xAt + (_wAt - nw);
                 _w = nw;
                 _h = Ch(_hAt + dy);
@@ -544,7 +518,7 @@ public sealed class Panel : Widget
             case ResizeDir.Ne:
             {
                 _w = Cw(_wAt + dx);
-                var nh = Ch(_hAt - dy);
+                float nh = Ch(_hAt - dy);
                 PanelY = _yAt + (_hAt - nh);
                 _h = nh;
                 break;
@@ -552,10 +526,10 @@ public sealed class Panel : Widget
 
             case ResizeDir.Nw:
             {
-                var nw = Cw(_wAt - dx);
+                float nw = Cw(_wAt - dx);
                 PanelX = _xAt + (_wAt - nw);
                 _w = nw;
-                var nh = Ch(_hAt - dy);
+                float nh = Ch(_hAt - dy);
                 PanelY = _yAt + (_hAt - nh);
                 _h = nh;
                 break;
@@ -563,7 +537,7 @@ public sealed class Panel : Widget
         }
 
         // Keep panel within screen bounds
-        PanelX = Math.Clamp(PanelX, 0f, _screenW - _w);
-        PanelY = Math.Clamp(PanelY, 0f, _screenH - TitleH);
+        PanelX = Math.Clamp(value: PanelX, min: 0f, max: _screenW - _w);
+        PanelY = Math.Clamp(value: PanelY, min: 0f, max: _screenH - TitleH);
     }
 }

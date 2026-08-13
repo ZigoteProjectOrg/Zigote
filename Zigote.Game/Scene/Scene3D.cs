@@ -13,17 +13,20 @@ public sealed class Scene3D
     public SceneNode3D Add(string name, Node3DKind kind = Node3DKind.Empty,
         SceneNode3D? parent = null)
     {
-        var node = new SceneNode3D(name, kind) {
-            Handle = ZigoteEngine.Instance!.SceneAddChildNode(0, name, (byte)kind),
+        var node = new SceneNode3D(name: name, kind: kind) {
+            Handle = ZigoteEngine.Instance!.SceneAddChildNode(
+                parentHandle: 0,
+                name: name,
+                kind: (byte)kind
+            ),
         };
         (parent ?? Root).AddChild(node);
         return node;
     }
 
-    public SceneNode3D? Find(string name)
-    {
-        return Root.Name == name ? Root : Root.Descendants().FirstOrDefault(n => n.Name == name);
-    }
+    public SceneNode3D? Find(string name) => Root.Name == name
+        ? Root
+        : Root.Descendants().FirstOrDefault(n => n.Name == name);
 
     public void Remove(SceneNode3D node)
     {

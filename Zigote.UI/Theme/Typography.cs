@@ -45,11 +45,11 @@ public readonly record struct TextStyle(
         double letterSpacing = 0,
         string? fontFamily = null)
         : this(
-            (float)fontSize,
-            fontWeight ?? FontWeight.Normal,
-            (float)(height ?? 1.3),
-            fontStyle ?? FontStyle.Normal,
-            fontFamily
+            Size: (float)fontSize,
+            Weight: fontWeight ?? FontWeight.Normal,
+            LineHeight: (float)(height ?? 1.3),
+            Style: fontStyle ?? FontStyle.Normal,
+            FontFamily: fontFamily
         )
     {
         Color = color;
@@ -63,53 +63,51 @@ public readonly record struct TextStyle(
     public float LetterSpacing { get; init; }
 
     /// <summary>This style with a different colour.</summary>
-    public TextStyle WithColor(Color color)
-    {
-        return this with { Color = color };
-    }
+    public TextStyle WithColor(Color color) => this with { Color = color };
 
     /// <summary>This style with a different weight (e.g. <c>Typography.Body.Bold()</c>).</summary>
-    public TextStyle With(FontWeight weight)
-    {
-        return this with { Weight = weight };
-    }
+    public TextStyle With(FontWeight weight) => this with { Weight = weight };
 
     /// <summary>
     ///     This style rendered in a different registered font family (e.g. <c>"code"</c>,
     ///     <c>"MaterialIcons"</c>); <c>null</c> uses the default UI face (Inter).
     /// </summary>
-    public TextStyle WithFamily(string? family)
-    {
-        return this with { FontFamily = family };
-    }
+    public TextStyle WithFamily(string? family) => this with { FontFamily = family };
 
-    public TextStyle Bold()
-    {
-        return this with { Weight = FontWeight.Bold };
-    }
+    public TextStyle Bold() => this with { Weight = FontWeight.Bold };
 
-    public TextStyle Semibold()
-    {
-        return this with { Weight = FontWeight.SemiBold };
-    }
+    public TextStyle Semibold() => this with { Weight = FontWeight.SemiBold };
 
-    public TextStyle Italic()
-    {
-        return this with { Style = FontStyle.Italic };
-    }
+    public TextStyle Italic() => this with { Style = FontStyle.Italic };
 }
 
 /// <summary>
-///     The macOS / SF-style type ramp. Sizes follow the standard macOS metrics (13 pt body). Use a named
+///     The macOS / SF-style type ramp. Sizes follow the standard macOS metrics (13 pt body). Use a
+///     named
 ///     role instead of a raw font size so typography stays hierarchical and consistent.
 /// </summary>
 public static class Typography
 {
-    public static readonly TextStyle LargeTitle = new(26f, FontWeight.Bold, 1.2f);
-    public static readonly TextStyle Title1 = new(22f, FontWeight.SemiBold, 1.2f);
-    public static readonly TextStyle Title2 = new(17f, FontWeight.SemiBold, 1.25f);
-    public static readonly TextStyle Title3 = new(15f, FontWeight.SemiBold);
-    public static readonly TextStyle Headline = new(13f, FontWeight.SemiBold);
+    public static readonly TextStyle LargeTitle = new(
+        Size: 26f,
+        Weight: FontWeight.Bold,
+        LineHeight: 1.2f
+    );
+
+    public static readonly TextStyle Title1 = new(
+        Size: 22f,
+        Weight: FontWeight.SemiBold,
+        LineHeight: 1.2f
+    );
+
+    public static readonly TextStyle Title2 = new(
+        Size: 17f,
+        Weight: FontWeight.SemiBold,
+        LineHeight: 1.25f
+    );
+
+    public static readonly TextStyle Title3 = new(Size: 15f, Weight: FontWeight.SemiBold);
+    public static readonly TextStyle Headline = new(Size: 13f, Weight: FontWeight.SemiBold);
     public static readonly TextStyle Body = new(13f);
     public static readonly TextStyle Callout = new(12f);
     public static readonly TextStyle Subheadline = new(11f);
@@ -121,10 +119,10 @@ public static class Typography
     ///     bundled Iosevka face (registered as the <c>"code"</c> family). A touch more leading than body.
     /// </summary>
     public static readonly TextStyle Code = new(
-        13f,
-        FontWeight.Normal,
-        1.4f,
-        FontStyle.Normal,
-        "code"
+        Size: 13f,
+        Weight: FontWeight.Normal,
+        LineHeight: 1.4f,
+        Style: FontStyle.Normal,
+        FontFamily: "code"
     );
 }

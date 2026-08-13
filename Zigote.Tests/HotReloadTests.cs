@@ -19,7 +19,7 @@ public class HotReloadTests
 {
     private static void Pump(Widget w)
     {
-        w.Measure(Constraints.Loose(200, 200));
+        w.Measure(Constraints.Loose(width: 200, height: 200));
         w.Layout(Offset.Zero);
     }
 
@@ -28,14 +28,14 @@ public class HotReloadTests
     {
         var w = new CountingStateless();
         Pump(w);
-        Assert.Equal(1, w.Builds);
+        Assert.Equal(expected: 1, actual: w.Builds);
 
         Pump(w); // cached — Build not re-run
-        Assert.Equal(1, w.Builds);
+        Assert.Equal(expected: 1, actual: w.Builds);
 
         HotReload.MarkSubtreeForRebuild(w);
         Pump(w);
-        Assert.Equal(2, w.Builds);
+        Assert.Equal(expected: 2, actual: w.Builds);
     }
 
     [Fact]
@@ -43,15 +43,15 @@ public class HotReloadTests
     {
         var w = new CountingMounted();
         Pump(w);
-        Assert.Equal(1, w.Mounts);
-        Assert.Equal(1, w.Builds);
+        Assert.Equal(expected: 1, actual: w.Mounts);
+        Assert.Equal(expected: 1, actual: w.Builds);
 
         HotReload.MarkSubtreeForRebuild(w);
         Pump(w);
 
         // The widget instance IS the state, so a reload cannot lose it; only Build re-runs.
-        Assert.Equal(1, w.Mounts); // OnMount NOT re-run
-        Assert.Equal(2, w.Builds); // Build re-ran against the new code
+        Assert.Equal(expected: 1, actual: w.Mounts); // OnMount NOT re-run
+        Assert.Equal(expected: 2, actual: w.Builds); // Build re-ran against the new code
     }
 
     [Fact]
@@ -88,7 +88,7 @@ public class HotReloadTests
         Assert.True(HotReload.HasPendingReload);
 
         Assert.True(HotReload.TryTakePending(out var types));
-        Assert.Contains(typeof(int), types!);
+        Assert.Contains(expected: typeof(int), collection: types!);
         Assert.False(HotReload.HasPendingReload);
         Assert.False(HotReload.TryTakePending(out _)); // already taken
     }
@@ -102,8 +102,8 @@ public class HotReloadTests
         HotReload.Request([typeof(string)]);
 
         Assert.True(HotReload.TryTakePending(out var types));
-        Assert.Contains(typeof(int), types!);
-        Assert.Contains(typeof(string), types!);
+        Assert.Contains(expected: typeof(int), collection: types!);
+        Assert.Contains(expected: typeof(string), collection: types!);
     }
 
     [Fact]
@@ -132,7 +132,7 @@ public class HotReloadTests
         {
             HotReload.RaiseReloaded([typeof(string)]);
             Assert.NotNull(got);
-            Assert.Contains(typeof(string), got!);
+            Assert.Contains(expected: typeof(string), collection: got!);
         }
         finally
         {
@@ -145,19 +145,22 @@ public class HotReloadTests
     {
         // The runtime resolves UpdateApplication by name + signature (static, single Type[] param); a
         // rename/typo would compile fine but silently disable hot reload. Guard the convention.
-        var attrs = typeof(HotReload).Assembly
-            .GetCustomAttributes(typeof(MetadataUpdateHandlerAttribute), false);
+        object[] attrs = typeof(HotReload).Assembly
+            .GetCustomAttributes(
+                attributeType: typeof(MetadataUpdateHandlerAttribute),
+                inherit: false
+            );
         Assert.Single(attrs);
         var handler = ((MetadataUpdateHandlerAttribute)attrs[0]).HandlerType;
 
         var update = handler.GetMethod(
-            "UpdateApplication",
-            BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic
+            name: "UpdateApplication",
+            bindingAttr: BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic
         );
         Assert.NotNull(update);
         var ps = update!.GetParameters();
         Assert.Single(ps);
-        Assert.Equal(typeof(Type[]), ps[0].ParameterType);
+        Assert.Equal(expected: typeof(Type[]), actual: ps[0].ParameterType);
     }
 
     private sealed class CountingStateless : ComposedWidget
@@ -167,7 +170,7 @@ public class HotReloadTests
         protected override Widget Build(BuildContext context)
         {
             Builds++;
-            return new SizedBox(10, 10);
+            return new SizedBox(width: 10, height: 10);
         }
     }
 
@@ -176,15 +179,12 @@ public class HotReloadTests
         public int Builds;
         public int Mounts;
 
-        protected override void OnMount()
-        {
-            Mounts++;
-        }
+        protected override void OnMount() => Mounts++;
 
         protected override Widget Build(BuildContext context)
         {
             Builds++;
-            return new SizedBox(5, 5);
+            return new SizedBox(width: 5, height: 5);
         }
     }
 }

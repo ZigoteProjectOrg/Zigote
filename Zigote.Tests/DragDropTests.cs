@@ -27,9 +27,9 @@ public class DragDropTests
     [Fact]
     public void DragData_ForPayload_SetsPayloadAndText()
     {
-        var d = DragData.ForPayload("hello", "hello");
-        Assert.Equal("hello", d.Payload);
-        Assert.Equal("hello", d.Text);
+        var d = DragData.ForPayload(payload: "hello", text: "hello");
+        Assert.Equal(expected: "hello", actual: d.Payload);
+        Assert.Equal(expected: "hello", actual: d.Text);
         Assert.False(d.IsExternal);
         Assert.False(d.HasFiles);
     }
@@ -45,7 +45,7 @@ public class DragDropTests
     [Fact]
     public void DragTarget_WillAccept_Filters()
     {
-        var target = StringTarget(_ => { }, s => s.StartsWith('y'));
+        var target = StringTarget(onAccept: _ => { }, will: s => s.StartsWith('y'));
         Assert.True(target.CanAcceptDrop(DragData.ForPayload("yes")));
         Assert.False(target.CanAcceptDrop(DragData.ForPayload("no")));
     }
@@ -55,8 +55,8 @@ public class DragDropTests
     {
         string? got = null;
         var target = StringTarget(s => got = s);
-        target.OnDrop(DragData.ForPayload("payload"), Offset.Zero);
-        Assert.Equal("payload", got);
+        target.OnDrop(data: DragData.ForPayload("payload"), point: Offset.Zero);
+        Assert.Equal(expected: "payload", actual: got);
     }
 
     [Fact]
@@ -73,8 +73,8 @@ public class DragDropTests
         };
 
         Assert.True(target.CanAcceptDrop(data));
-        target.OnDrop(data, Offset.Zero);
-        Assert.Equal(["/a.png", "/b.png"], got);
+        target.OnDrop(data: data, point: Offset.Zero);
+        Assert.Equal(expected: ["/a.png", "/b.png"], actual: got);
     }
 
     [Fact]
@@ -103,66 +103,72 @@ public class DragDropTests
         );
 
         // Initial build (ctor) is idle.
-        Assert.Equal([false], hoverStates);
+        Assert.Equal(expected: [false], actual: hoverStates);
 
         target.OnDragEnter(DragData.ForPayload("x"));
         target.OnDragLeave();
-        Assert.Equal([false, true, false], hoverStates);
+        Assert.Equal(expected: [false, true, false], actual: hoverStates);
     }
 
     [Fact]
     public void Draggable_DelegatesLayoutToChild()
     {
-        var child = new SizedBox(40f, 24f);
-        var drag = new Draggable<string>("item", child);
+        var child = new SizedBox(width: 40f, height: 24f);
+        var drag = new Draggable<string>(data: "item", child: child);
         drag.Measure(
             new Constraints(
-                0f,
-                200f,
-                0f,
-                200f
+                minWidth: 0f,
+                maxWidth: 200f,
+                minHeight: 0f,
+                maxHeight: 200f
             )
         );
-        drag.Layout(new Offset(5f, 7f));
+        drag.Layout(new Offset(x: 5f, y: 7f));
 
-        Assert.Equal(40f, drag.Bounds.Width);
-        Assert.Equal(24f, drag.Bounds.Height);
-        Assert.Equal(5f, child.Bounds.X);
-        Assert.Equal(7f, child.Bounds.Y);
+        Assert.Equal(expected: 40f, actual: drag.Bounds.Width);
+        Assert.Equal(expected: 24f, actual: drag.Bounds.Height);
+        Assert.Equal(expected: 5f, actual: child.Bounds.X);
+        Assert.Equal(expected: 7f, actual: child.Bounds.Y);
     }
 
     [Fact]
     public void Draggable_HitTest_ReturnsSelf_ForGestureCapture()
     {
-        var drag = new Draggable<string>("item", new SizedBox(40f, 24f));
+        var drag = new Draggable<string>(
+            data: "item",
+            child: new SizedBox(width: 40f, height: 24f)
+        );
         drag.Measure(
             new Constraints(
-                0f,
-                200f,
-                0f,
-                200f
+                minWidth: 0f,
+                maxWidth: 200f,
+                minHeight: 0f,
+                maxHeight: 200f
             )
         );
         drag.Layout(Offset.Zero);
-        Assert.Same(drag, drag.HitTest(new Offset(10f, 10f)));
-        Assert.Null(drag.HitTest(new Offset(100f, 100f)));
+        Assert.Same(expected: drag, actual: drag.HitTest(new Offset(x: 10f, y: 10f)));
+        Assert.Null(drag.HitTest(new Offset(x: 100f, y: 100f)));
     }
 
     [Fact]
     public void Draggable_BelowThreshold_DoesNotThrow_WithoutOwner()
     {
-        var drag = new Draggable<string>("item", new SizedBox(40f, 24f));
+        var drag = new Draggable<string>(
+            data: "item",
+            child: new SizedBox(width: 40f, height: 24f)
+        );
         drag.Measure(
             new Constraints(
-                0f,
-                200f,
-                0f,
-                200f
+                minWidth: 0f,
+                maxWidth: 200f,
+                minHeight: 0f,
+                maxHeight: 200f
             )
         );
         drag.Layout(Offset.Zero);
-        drag.OnPointerDown(new Offset(10f, 10f));
-        drag.OnPointerMove(new Offset(12f, 11f)); // < threshold, no Owner → no drag started
-        drag.OnPointerUp(new Offset(12f, 11f));
+        drag.OnPointerDown(new Offset(x: 10f, y: 10f));
+        drag.OnPointerMove(new Offset(x: 12f, y: 11f)); // < threshold, no Owner → no drag started
+        drag.OnPointerUp(new Offset(x: 12f, y: 11f));
     }
 }

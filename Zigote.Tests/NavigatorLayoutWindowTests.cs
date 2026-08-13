@@ -23,27 +23,27 @@ public class NavigatorLayoutWindowTests
     {
         var home = new CountingBox();
         var nav = new Navigator { Home = home };
-        nav.Measure(Constraints.Tight(200, 200));
+        nav.Measure(Constraints.Tight(width: 200, height: 200));
         nav.Layout(Offset.Zero);
         var state = nav;
-        var measures = home.Measures;
-        var layouts = home.Layouts;
+        int measures = home.Measures;
+        int layouts = home.Layouts;
         Assert.True(measures > 0);
 
         // An instant (opaque, settled) route fully covers home — home must not re-measure.
         var top = new CountingBox();
         state.Push(new InstantRoute<object?>(_ => top));
-        nav.Measure(Constraints.Tight(201, 201));
+        nav.Measure(Constraints.Tight(width: 201, height: 201));
         nav.Layout(Offset.Zero);
 
-        Assert.Equal(measures, home.Measures);
-        Assert.Equal(layouts, home.Layouts);
+        Assert.Equal(expected: measures, actual: home.Measures);
+        Assert.Equal(expected: layouts, actual: home.Layouts);
         Assert.True(top.Measures > 0);
         Assert.True(top.Layouts > 0);
 
         // Popping reveals home — it must get fresh geometry again.
         state.Pop();
-        nav.Measure(Constraints.Tight(202, 202));
+        nav.Measure(Constraints.Tight(width: 202, height: 202));
         nav.Layout(Offset.Zero);
 
         Assert.True(home.Measures > measures);
@@ -55,15 +55,15 @@ public class NavigatorLayoutWindowTests
     {
         var home = new CountingBox();
         var nav = new Navigator { Home = home };
-        nav.Measure(Constraints.Tight(200, 200));
+        nav.Measure(Constraints.Tight(width: 200, height: 200));
         nav.Layout(Offset.Zero);
         var state = nav;
-        var measures = home.Measures;
+        int measures = home.Measures;
 
         // An animated route stays Pushing (no ticker runs in tests) — the whole stack must keep
         // measuring while the transition is in flight.
         state.Push(new MaterialPageRoute<object?>(_ => new CountingBox()));
-        nav.Measure(Constraints.Tight(210, 210));
+        nav.Measure(Constraints.Tight(width: 210, height: 210));
         nav.Layout(Offset.Zero);
 
         Assert.True(home.Measures > measures);
@@ -85,22 +85,20 @@ public class NavigatorLayoutWindowTests
         public override Size Measure(Constraints c)
         {
             Measures++;
-            return new Size(10f, 10f);
+            return new Size(width: 10f, height: 10f);
         }
 
         public override void Layout(Offset origin)
         {
             Layouts++;
             Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                10f,
-                10f
+                x: origin.X,
+                y: origin.Y,
+                width: 10f,
+                height: 10f
             );
         }
 
-        public override void Paint(PaintList paint)
-        {
-        }
+        public override void Paint(PaintList paint) { }
     }
 }

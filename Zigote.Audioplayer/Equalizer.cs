@@ -2,7 +2,10 @@ using Zigote.Core.Engine;
 
 namespace Zigote.Audioplayer;
 
-/// <summary>One band of an <see cref="Equalizer" />. Shelves take Q, the way every parametric EQ UI specifies them.</summary>
+/// <summary>
+///     One band of an <see cref="Equalizer" />. Shelves take Q, the way every parametric EQ UI
+///     specifies them.
+/// </summary>
 public readonly record struct EqualizerBand(
     AudioBandKind Kind,
     float FreqHz,
@@ -33,12 +36,15 @@ public sealed class Equalizer : IDisposable
     public Equalizer(IAudioApi audio, params EqualizerBand[] bands)
     {
         _audio = audio;
-        _bands = bands.Length <= 16 ? [..bands] : bands[..16];
+        _bands = bands.Length <= 16 ? [.. bands] : bands[..16];
         Id = _audio.EqCreate(_bands.Length);
-        for (var i = 0; i < _bands.Length; i++) Apply(i);
+        for (int i = 0; i < _bands.Length; i++) Apply(i);
     }
 
-    /// <summary>The engine-side chain id; 0 when the device refused it. Pass to <see cref="IAudioApi.SetEq" />.</summary>
+    /// <summary>
+    ///     The engine-side chain id; 0 when the device refused it. Pass to
+    ///     <see cref="IAudioApi.SetEq" />.
+    /// </summary>
     public uint Id { get; private set; }
 
     public IReadOnlyList<EqualizerBand> Bands => _bands;
@@ -50,7 +56,7 @@ public sealed class Equalizer : IDisposable
         set
         {
             _enabled = value;
-            if (Id != 0) _audio.EqSetEnabled(Id, value);
+            if (Id != 0) _audio.EqSetEnabled(eqId: Id, enabled: value);
         }
     }
 
@@ -65,8 +71,16 @@ public sealed class Equalizer : IDisposable
     public static Equalizer TenBand(IAudioApi audio)
     {
         return new Equalizer(
-            audio,
-            [.. TenBandFrequencies.Select(f => new EqualizerBand(AudioBandKind.Peak, f, 0f))]);
+            audio: audio,
+            bands: [
+                .. TenBandFrequencies.Select(f => new EqualizerBand(
+                        Kind: AudioBandKind.Peak,
+                        FreqHz: f,
+                        GainDb: 0f
+                    )
+                ),
+            ]
+        );
     }
 
     /// <summary>Retune one band. Out-of-range indexes are ignored, like every other id in this API.</summary>
@@ -81,7 +95,7 @@ public sealed class Equalizer : IDisposable
     public void SetGain(int index, float gainDb)
     {
         if ((uint)index >= (uint)_bands.Length) return;
-        SetBand(index, _bands[index] with { GainDb = gainDb });
+        SetBand(index: index, band: _bands[index] with { GainDb = gainDb });
     }
 
     private void Apply(int index)
@@ -89,12 +103,12 @@ public sealed class Equalizer : IDisposable
         if (Id == 0) return;
         var b = _bands[index];
         _audio.EqSetBand(
-            Id,
-            index,
-            b.Kind,
-            b.FreqHz,
-            b.GainDb,
-            b.Q
+            eqId: Id,
+            index: index,
+            kind: b.Kind,
+            freqHz: b.FreqHz,
+            gainDb: b.GainDb,
+            q: b.Q
         );
     }
 }

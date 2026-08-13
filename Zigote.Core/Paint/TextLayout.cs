@@ -29,8 +29,8 @@ public sealed class TextLayout : IDisposable
     {
         if (Handle != 0)
         {
-            var eng = ZigoteEngine.Instance?.Handle ?? 0;
-            if (eng != 0) NativeEngine.TextLayoutRelease(eng, Handle);
+            ulong eng = ZigoteEngine.Instance?.Handle ?? 0;
+            if (eng != 0) NativeEngine.TextLayoutRelease(eng: eng, layoutHandle: Handle);
             Handle = 0;
         }
     }
@@ -39,28 +39,28 @@ public sealed class TextLayout : IDisposable
     public Size Measure()
     {
         if (Handle == 0) return Size.Zero;
-        var eng = ZigoteEngine.Instance!.Handle;
+        ulong eng = ZigoteEngine.Instance!.Handle;
         NativeEngine.TextLayoutMeasure(
-            eng,
-            Handle,
-            out var w,
-            out var h
+            eng: eng,
+            layoutHandle: Handle,
+            outW: out float w,
+            outH: out float h
         );
-        return new Size(w, h);
+        return new Size(width: w, height: h);
     }
 
     /// <summary>Return the nearest valid caret offset for a point in layout-local coordinates.</summary>
     public int HitTest(float x, float y = 0f)
     {
         if (Handle == 0) return 0;
-        var eng = ZigoteEngine.Instance?.Handle ?? 0;
+        ulong eng = ZigoteEngine.Instance?.Handle ?? 0;
         if (eng == 0) return 0;
         return Utf8ToUtf16(
             NativeEngine.TextLayoutHitTest(
-                eng,
-                Handle,
-                x,
-                y
+                eng: eng,
+                layoutHandle: Handle,
+                x: x,
+                y: y
             )
         );
     }
@@ -71,19 +71,19 @@ public sealed class TextLayout : IDisposable
         position = Offset.Zero;
         height = 0;
         if (Handle == 0) return false;
-        var eng = ZigoteEngine.Instance?.Handle ?? 0;
+        ulong eng = ZigoteEngine.Instance?.Handle ?? 0;
         if (eng == 0) return false;
-        var utf8 = Utf16ToUtf8(textOffset);
+        uint utf8 = Utf16ToUtf8(textOffset);
         if (!NativeEngine.TextLayoutCaretPosition(
-                eng,
-                Handle,
-                utf8,
-                out var x,
-                out var y,
-                out height
+                eng: eng,
+                layoutHandle: Handle,
+                textOffset: utf8,
+                outX: out float x,
+                outY: out float y,
+                outH: out height
             ))
             return false;
-        position = new Offset(x, y);
+        position = new Offset(x: x, y: y);
         return true;
     }
 
@@ -91,21 +91,21 @@ public sealed class TextLayout : IDisposable
     public int MoveCaretVisual(int textOffset, int direction)
     {
         if (Handle == 0) return textOffset;
-        var eng = ZigoteEngine.Instance?.Handle ?? 0;
+        ulong eng = ZigoteEngine.Instance?.Handle ?? 0;
         if (eng == 0) return textOffset;
-        var moved = NativeEngine.TextLayoutMoveCaret(
-            eng,
-            Handle,
-            Utf16ToUtf8(textOffset),
-            Math.Sign(direction)
+        uint moved = NativeEngine.TextLayoutMoveCaret(
+            eng: eng,
+            layoutHandle: Handle,
+            textOffset: Utf16ToUtf8(textOffset),
+            direction: Math.Sign(direction)
         );
         return Utf8ToUtf16(moved);
     }
 
     private uint Utf16ToUtf8(int offset)
     {
-        offset = Math.Clamp(offset, 0, _text.Length);
-        return (uint)Encoding.UTF8.GetByteCount(_text.AsSpan(0, offset));
+        offset = Math.Clamp(value: offset, min: 0, max: _text.Length);
+        return (uint)Encoding.UTF8.GetByteCount(_text.AsSpan(start: 0, length: offset));
     }
 
     private int Utf8ToUtf16(uint offset)
@@ -114,12 +114,12 @@ public sealed class TextLayout : IDisposable
         // materialising the whole document as bytes on every caret query. Walk runes, accumulating
         // each one's UTF-8/UTF-16 length, and stop at the last rune boundary that does not exceed the
         // byte offset (matching the old "back up to the lead byte" behaviour, allocation-free).
-        var target = (int)offset;
-        var utf8 = 0;
-        var utf16 = 0;
+        int target = (int)offset;
+        int utf8 = 0;
+        int utf16 = 0;
         foreach (var rune in _text.EnumerateRunes())
         {
-            var next = utf8 + rune.Utf8SequenceLength;
+            int next = utf8 + rune.Utf8SequenceLength;
             if (next > target) break;
             utf8 = next;
             utf16 += rune.Utf16SequenceLength;

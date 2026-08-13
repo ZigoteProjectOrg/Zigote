@@ -49,21 +49,21 @@ public class ZigoteProject
     public static ZigoteProject Load(string path)
     {
         if (!File.Exists(path)) return new ZigoteProject();
-        var json = File.ReadAllText(path);
-        var project = JsonSerializer.Deserialize<ZigoteProject>(json, JsonOptions) ??
+        string json = File.ReadAllText(path);
+        var project = JsonSerializer.Deserialize<ZigoteProject>(json: json, options: JsonOptions) ??
                       new ZigoteProject();
         // Manifests authored on Windows may carry backslashes; keep the canonical separator so the
         // same project file opens everywhere.
-        project.AssetRoot = project.AssetRoot.Replace('\\', '/');
-        project.StartupScene = project.StartupScene.Replace('\\', '/');
-        project.ScriptProject = project.ScriptProject?.Replace('\\', '/');
+        project.AssetRoot = project.AssetRoot.Replace(oldChar: '\\', newChar: '/');
+        project.StartupScene = project.StartupScene.Replace(oldChar: '\\', newChar: '/');
+        project.ScriptProject = project.ScriptProject?.Replace(oldChar: '\\', newChar: '/');
         return project;
     }
 
     public void Save(string path)
     {
-        var json = JsonSerializer.Serialize(this, JsonOptions);
-        File.WriteAllText(path, json);
+        string json = JsonSerializer.Serialize(value: this, options: JsonOptions);
+        File.WriteAllText(path: path, contents: json);
     }
 
     /// <summary>
@@ -74,7 +74,7 @@ public class ZigoteProject
     public static string Scaffold(string projectDir, string name)
     {
         Directory.CreateDirectory(projectDir);
-        Directory.CreateDirectory(Path.Combine(projectDir, "assets"));
+        Directory.CreateDirectory(Path.Combine(path1: projectDir, path2: "assets"));
 
         var project = new ZigoteProject {
             Name = name,
@@ -82,9 +82,9 @@ public class ZigoteProject
             StartupScene = "assets/main.scene",
         };
 
-        var projPath = Path.Combine(projectDir, name + ".zigoteproj");
+        string projPath = Path.Combine(path1: projectDir, path2: name + ".zigoteproj");
         project.Save(projPath);
-        SceneGraph.Demo().Save(Path.Combine(projectDir, project.StartupScene));
+        SceneGraph.Demo().Save(Path.Combine(path1: projectDir, path2: project.StartupScene));
         return Path.GetFullPath(projPath);
     }
 }

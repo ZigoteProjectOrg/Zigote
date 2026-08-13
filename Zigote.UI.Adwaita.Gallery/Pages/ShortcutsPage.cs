@@ -26,28 +26,32 @@ public sealed class ShortcutsPage : ComposedWidget
     protected override Widget Build(BuildContext context)
     {
         return new GalleryPage(
-            "Shortcuts",
-            "Accelerators drawn as key caps, and the dialog that lists them.",
-            MaterialIcons.Keyboard
+            title: "Shortcuts",
+            description: "Accelerators drawn as key caps, and the dialog that lists them.",
+            iconName: MaterialIcons.Keyboard
         ) {
             ClampWidth = 720f,
             Children = {
                 Demo.Group(
-                    "Shortcut Label",
+                    title: "Shortcut Label",
+                    description:
                     "Modifiers always render Ctrl · Alt · Shift · Super, whatever order the " +
                     "accelerator string lists them in.",
-                    Row("Save", "<Primary>s"),
-                    Row("Save As", "<Primary><Shift>s"),
-                    Row("Same shortcut, typed backwards", "<Shift><Primary>s"),
-                    Row("Named keys", "<Primary>Return"),
-                    Row("Alternatives", "<Primary>plus <Primary>equal"),
-                    Row("Unset", "")
+                    Row(title: "Save", accel: "<Primary>s"),
+                    Row(title: "Save As", accel: "<Primary><Shift>s"),
+                    Row(title: "Same shortcut, typed backwards", accel: "<Shift><Primary>s"),
+                    Row(title: "Named keys", accel: "<Primary>Return"),
+                    Row(title: "Alternatives", accel: "<Primary>plus <Primary>equal"),
+                    Row(title: "Unset", accel: "")
                 ),
                 Demo.Titled(
-                    "Shortcuts Dialog",
+                    title: "Shortcuts Dialog",
+                    description:
                     "The window every GNOME app opens on Ctrl+? — sections of boxed-list rows.",
-                    Demo.Specimen(
-                        new AdwButton("Show Shortcuts", ShowDialog) { Pill = true },
+                    child: Demo.Specimen(
+                        new AdwButton(label: "Show Shortcuts", onPressed: ShowDialog) {
+                            Pill = true,
+                        },
                         Demo.Caption("Escape closes it, like any Adwaita dialog.")
                     )
                 ),
@@ -57,7 +61,10 @@ public sealed class ShortcutsPage : ComposedWidget
 
     private static Widget Row(string title, string accel)
     {
-        return new AdwActionRow(title, accel.Length > 0 ? accel : "(no accelerator)") {
+        return new AdwActionRow(
+            title: title,
+            subtitle: accel.Length > 0 ? accel : "(no accelerator)"
+        ) {
             Suffixes = { new AdwShortcutLabel(accel) },
         };
     }
@@ -67,14 +74,26 @@ public sealed class ShortcutsPage : ComposedWidget
         var dialog = new AdwShortcutsDialog();
         dialog.Add(
             new AdwShortcutsSection(
-                "General",
-                [.. General.Select(s => new AdwShortcutsItem(s.Title, s.Accel))]
+                title: "General",
+                items: [
+                    .. General.Select(s => new AdwShortcutsItem(
+                            title: s.Title,
+                            accelerator: s.Accel
+                        )
+                    ),
+                ]
             )
         );
         dialog.Add(
             new AdwShortcutsSection(
-                "Editing",
-                [.. Editing.Select(s => new AdwShortcutsItem(s.Title, s.Accel))]
+                title: "Editing",
+                items: [
+                    .. Editing.Select(s => new AdwShortcutsItem(
+                            title: s.Title,
+                            accelerator: s.Accel
+                        )
+                    ),
+                ]
             )
         );
         dialog.Show();

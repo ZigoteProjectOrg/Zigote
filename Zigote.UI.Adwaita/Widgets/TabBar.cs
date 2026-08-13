@@ -18,10 +18,7 @@ public sealed class AdwTabBar : ComposedWidget
 
     private readonly AdwTabView _view;
 
-    public AdwTabBar(AdwTabView view)
-    {
-        _view = view;
-    }
+    public AdwTabBar(AdwTabView view) => _view = view;
 
     protected override Widget Build(BuildContext context)
     {
@@ -35,7 +32,7 @@ public sealed class AdwTabBar : ComposedWidget
                 new Container {
                     Height = StripHeight,
                     Background = theme.TitleBar,
-                    Child = new ClipRect(new Watch(() => BuildStrip(theme, p))),
+                    Child = new ClipRect(new Watch(() => BuildStrip(theme: theme, p: p))),
                 },
                 new Container {
                     Height = 1f,
@@ -48,40 +45,45 @@ public sealed class AdwTabBar : ComposedWidget
     private Widget BuildStrip(ThemeData theme, AdwColors p)
     {
         _view.PagesChanged.Depend();
-        var selected = _view.Selected.Value;
+        int selected = _view.Selected.Value;
         if (_view.Pages.Count == 0) return new SizedBox();
 
         return new LayoutBuilder((_, bc) =>
             {
-                var pinned = _view.Pages.Count(page => page.Pinned);
-                var regular = _view.Pages.Count - pinned;
-                var separators = _view.Pages.Count - 1;
-                var avail = float.IsFinite(bc.MaxWidth) ? bc.MaxWidth : regular * 200f;
-                avail -= pinned * PinnedWidth + separators;
-                var tabWidth = regular > 0 ? Math.Clamp(avail / regular, 100f, 200f) : 0f;
+                int pinned = _view.Pages.Count(page => page.Pinned);
+                int regular = _view.Pages.Count - pinned;
+                int separators = _view.Pages.Count - 1;
+                float avail = float.IsFinite(bc.MaxWidth) ? bc.MaxWidth : regular * 200f;
+                avail -= (pinned * PinnedWidth) + separators;
+                float tabWidth = regular > 0
+                    ? Math.Clamp(value: avail / regular, min: 100f, max: 200f)
+                    : 0f;
 
                 var row = new Row(mainAxisSize: MainAxisSize.Min);
-                for (var i = 0; i < _view.Pages.Count; i++)
+                for (int i = 0; i < _view.Pages.Count; i++)
                 {
                     if (i > 0)
                         // `tabbox > separator { margin-top: 3px; margin-bottom: 3px }`, hidden
                         // where it would fence in the selected tab's own rounded fill.
+                    {
                         row.Children.Add(
                             new Container {
                                 Width = 1f,
-                                Height = StripHeight - AdwMetrics.ToggleGroupPadding * 2f,
+                                Height = StripHeight - (AdwMetrics.ToggleGroupPadding * 2f),
                                 Background = i == selected || i - 1 == selected
                                     ? Color.Transparent
                                     : theme.Separator,
                             }
                         );
+                    }
+
                     row.Children.Add(
                         Tab(
-                            theme,
-                            p,
-                            i,
-                            i == selected,
-                            tabWidth
+                            theme: theme,
+                            p: p,
+                            index: i,
+                            selected: i == selected,
+                            tabWidth: tabWidth
                         )
                     );
                 }
@@ -98,15 +100,17 @@ public sealed class AdwTabBar : ComposedWidget
 
         var content = new Row(spacing: 6f, mainAxisSize: MainAxisSize.Min);
         if (page.IconName is { } icon)
-            content.Children.Add(new IconGlyph(icon, 14f, fg));
+            content.Children.Add(new IconGlyph(glyph: icon, size: 14f, color: fg));
         if (!page.Pinned)
+        {
             content.Children.Add(
-                new Label(page.Title, 13f, fg) {
+                new Label(text: page.Title, fontSize: 13f, color: fg) {
                     FontWeight = selected ? FontWeight.Medium : FontWeight.Normal,
                     MaxLines = 1,
                     Overflow = TextOverflow.Ellipsis,
                 }
             );
+        }
 
         // `tab { border-radius: $button_radius }` — an Adwaita tab is a rounded chip on the strip,
         // not a notebook page fused to the content below it.
@@ -114,7 +118,10 @@ public sealed class AdwTabBar : ComposedWidget
             Radius = AdwMetrics.ControlRadius,
             Child = new Center {
                 // Symmetric side padding keeps a centered title clear of the close button.
-                Child = new Padding(EdgeInsets.Symmetric(page.Pinned ? 0f : 22f), content),
+                Child = new Padding(
+                    padding: EdgeInsets.Symmetric(page.Pinned ? 0f : 22f),
+                    child: content
+                ),
             },
         };
         var select = new Pressable {
@@ -133,17 +140,25 @@ public sealed class AdwTabBar : ComposedWidget
                 body.MarkNeedsPaint();
             }
         );
-        tabFill.Snap(AdwStyle.SidebarRowFill(theme, false, false, selected));
+        tabFill.Snap(
+            AdwStyle.SidebarRowFill(
+                theme: theme,
+                hovered: false,
+                pressed: false,
+                selected: selected
+            )
+        );
         select.OnStateChanged = () => tabFill.Target(
             AdwStyle.SidebarRowFill(
-                theme,
-                select.Hovered,
-                select.Pressed,
-                selected
+                theme: theme,
+                hovered: select.Hovered,
+                pressed: select.Pressed,
+                selected: selected
             )
         );
 
-        if (page.Pinned) return new SizedBox(PinnedWidth, StripHeight, select);
+        if (page.Pinned)
+            return new SizedBox(width: PinnedWidth, height: StripHeight, child: select);
 
         // Close button — overlaid (not nested: Pressable captures its whole rect) and revealed on
         // hover or selection via a retained Opacity.
@@ -152,8 +167,10 @@ public sealed class AdwTabBar : ComposedWidget
             Radius = AdwMetrics.Pill,
             Fill = Color.Transparent,
             Child = SizedBox.Square(
-                24f,
-                new Center { Child = new IconGlyph(Icons.Close, 12f, p.DimLabel) }
+                size: 24f,
+                child: new Center {
+                    Child = new IconGlyph(glyph: Icons.Close, size: 12f, color: p.DimLabel),
+                }
             ),
         };
         var close = new Pressable {
@@ -162,8 +179,8 @@ public sealed class AdwTabBar : ComposedWidget
             SemanticsLabel = "Close tab",
             OnPressed = () => _view.Close(page),
         };
-        var closeReveal = new Opacity(selected ? 1f : 0f, close);
-        close.WireFill(closeBox, theme);
+        var closeReveal = new Opacity(opacity: selected ? 1f : 0f, child: close);
+        close.WireFill(box: closeBox, theme: theme);
 
         // Hovering either pressable reveals the close button, so chain onto whatever handler
         // the tab fill / WireFill installed rather than overwriting it.
@@ -171,14 +188,14 @@ public sealed class AdwTabBar : ComposedWidget
         Chain(close);
 
         return new SizedBox(
-            tabWidth,
-            StripHeight,
-            new Stack {
+            width: tabWidth,
+            height: StripHeight,
+            child: new Stack {
                 Children = {
                     select,
                     new Align(
-                        Alignment.CenterRight,
-                        new Padding(EdgeInsets.Only(right: 6f), closeReveal)
+                        alignment: Alignment.CenterRight,
+                        child: new Padding(padding: EdgeInsets.Only(right: 6f), child: closeReveal)
                     ),
                 },
             }

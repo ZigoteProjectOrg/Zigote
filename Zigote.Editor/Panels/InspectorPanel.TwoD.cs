@@ -14,18 +14,18 @@ public sealed partial class InspectorPanel
     private void BuildTilemapRows(SceneNode node)
     {
         _rows.Add(PropRow.Spacer(4f));
-        _rows.Add(SectionRow("Tilemap", _theme));
+        _rows.Add(SectionRow(title: "Tilemap", theme: _theme));
 
         _rows.Add(
             PropRow.Path(
-                "Tileset",
-                node.TilesetPath ?? "",
-                v => _state.History.Execute(
+                label: "Tileset",
+                value: node.TilesetPath ?? "",
+                onChange: v => _state.History.Execute(
                     new ChangePropertyCommand<string?>(
-                        _state,
-                        node.TilesetPath,
-                        v,
-                        val =>
+                        state: _state,
+                        oldValue: node.TilesetPath,
+                        newValue: v,
+                        setter: val =>
                         {
                             node.TilesetPath = val;
                             // The tileset cache keys on path; a reassignment must re-read from disk.
@@ -33,124 +33,128 @@ public sealed partial class InspectorPanel
                         }
                     )
                 ),
-                _state.AssetRoot,
-                [".tileset"],
-                _theme,
-                _app
+                rootPath: _state.AssetRoot,
+                extensions: [".tileset"],
+                theme: _theme,
+                app: _app
             )
         );
 
         _rows.Add(
             PropRow.Float(
-                "Tile Size",
-                NodeBind.To(
-                    _state,
-                    node,
-                    n => n.TileWorldSize,
-                    (n, v) => n.TileWorldSize = MathF.Max(0.001f, v)
+                label: "Tile Size",
+                bind: NodeBind.To(
+                    state: _state,
+                    node: node,
+                    getter: n => n.TileWorldSize,
+                    setter: (n, v) => n.TileWorldSize = MathF.Max(x: 0.001f, y: v)
                 ),
-                _theme,
-                0.01f,
-                16f,
-                0.01f
+                theme: _theme,
+                min: 0.01f,
+                max: 16f,
+                step: 0.01f
             )
         );
 
         _rows.Add(
             PropRow.Vec3Color(
-                "Tint",
-                NodeBind.To(
-                    _state,
-                    node,
-                    n => new Vec3(n.TilemapColor.X, n.TilemapColor.Y, n.TilemapColor.Z),
-                    (n, v) => n.TilemapColor = new Vec4(
-                        v.X,
-                        v.Y,
-                        v.Z,
-                        n.TilemapColor.W
+                label: "Tint",
+                bind: NodeBind.To(
+                    state: _state,
+                    node: node,
+                    getter: n => new Vec3(
+                        x: n.TilemapColor.X,
+                        y: n.TilemapColor.Y,
+                        z: n.TilemapColor.Z
+                    ),
+                    setter: (n, v) => n.TilemapColor = new Vec4(
+                        x: v.X,
+                        y: v.Y,
+                        z: v.Z,
+                        w: n.TilemapColor.W
                     )
                 ),
-                _theme
+                theme: _theme
             )
         );
 
         _rows.Add(
             PropRow.Float(
-                "Opacity",
-                NodeBind.To(
-                    _state,
-                    node,
-                    n => n.TilemapColor.W,
-                    (n, v) => n.TilemapColor = new Vec4(
-                        n.TilemapColor.X,
-                        n.TilemapColor.Y,
-                        n.TilemapColor.Z,
-                        Math.Clamp(v, 0f, 1f)
+                label: "Opacity",
+                bind: NodeBind.To(
+                    state: _state,
+                    node: node,
+                    getter: n => n.TilemapColor.W,
+                    setter: (n, v) => n.TilemapColor = new Vec4(
+                        x: n.TilemapColor.X,
+                        y: n.TilemapColor.Y,
+                        z: n.TilemapColor.Z,
+                        w: Math.Clamp(value: v, min: 0f, max: 1f)
                     )
                 ),
-                _theme,
-                0f,
-                1f,
-                0.01f
+                theme: _theme,
+                min: 0f,
+                max: 1f,
+                step: 0.01f
             )
         );
 
         _rows.Add(
             PropRow.DropdownRow(
-                "Blend",
-                ["Alpha", "Additive", "Opaque"],
-                Math.Clamp(node.TilemapBlend, 0, 2),
-                i => _state.History.Execute(
+                label: "Blend",
+                items: ["Alpha", "Additive", "Opaque"],
+                selectedIndex: Math.Clamp(value: node.TilemapBlend, min: 0, max: 2),
+                onChange: i => _state.History.Execute(
                     new ChangePropertyCommand<int>(
-                        _state,
-                        node.TilemapBlend,
-                        i,
-                        val => node.TilemapBlend = val
+                        state: _state,
+                        oldValue: node.TilemapBlend,
+                        newValue: i,
+                        setter: val => node.TilemapBlend = val
                     )
                 ),
-                _theme
+                theme: _theme
             )
         );
 
         _rows.Add(
             PropRow.DropdownRow(
-                "Stage",
-                ["Scene (HDR)", "Overlay (exact)"],
-                Math.Clamp(node.TilemapStage, 0, 1),
-                i => _state.History.Execute(
+                label: "Stage",
+                items: ["Scene (HDR)", "Overlay (exact)"],
+                selectedIndex: Math.Clamp(value: node.TilemapStage, min: 0, max: 1),
+                onChange: i => _state.History.Execute(
                     new ChangePropertyCommand<int>(
-                        _state,
-                        node.TilemapStage,
-                        i,
-                        val => node.TilemapStage = val
+                        state: _state,
+                        oldValue: node.TilemapStage,
+                        newValue: i,
+                        setter: val => node.TilemapStage = val
                     )
                 ),
-                _theme
+                theme: _theme
             )
         );
 
         _rows.Add(
             PropRow.Toggle(
-                "Tile Collision",
-                NodeBind.To(
-                    _state,
-                    node,
-                    n => n.TilemapCollision,
-                    (n, v) => n.TilemapCollision = v
+                label: "Tile Collision",
+                bind: NodeBind.To(
+                    state: _state,
+                    node: node,
+                    getter: n => n.TilemapCollision,
+                    setter: (n, v) => n.TilemapCollision = v
                 ),
-                _theme
+                theme: _theme
             )
         );
 
         // A read-only summary beats a second layer editor — the Tiles panel owns layer management.
         var set = _state.Sprites2D.GetTileset(node.TilesetPath)?.Set;
-        var painted = node.TilemapLayers.Sum(l => l.Width * l.Height);
+        int painted = node.TilemapLayers.Sum(l => l.Width * l.Height);
         _rows.Add(
             PropRow.StatusLine(
-                $"{node.TilemapLayers.Count} layer(s) · {painted} cells" +
-                (set is null ? " · no tileset" : $" · {set.Columns}×{set.Rows} tiles"),
-                _theme.TextSecondary,
-                _theme
+                text: $"{node.TilemapLayers.Count} layer(s) · {painted} cells" +
+                      (set is null ? " · no tileset" : $" · {set.Columns}×{set.Rows} tiles"),
+                color: _theme.TextSecondary,
+                theme: _theme
             )
         );
     }
@@ -159,25 +163,25 @@ public sealed partial class InspectorPanel
     private void BuildCollider2DRows(SceneNode node)
     {
         _rows.Add(PropRow.Spacer(4f));
-        _rows.Add(SectionRow("Collider 2D", _theme));
+        _rows.Add(SectionRow(title: "Collider 2D", theme: _theme));
 
         _rows.Add(
             PropRow.Toggle(
-                "Enabled",
-                node.Collider2DEnabled,
-                v => _state.History.Execute(
+                label: "Enabled",
+                value: node.Collider2DEnabled,
+                onChange: v => _state.History.Execute(
                     new ChangePropertyCommand<bool>(
-                        _state,
-                        node.Collider2DEnabled,
-                        v,
-                        val =>
+                        state: _state,
+                        oldValue: node.Collider2DEnabled,
+                        newValue: v,
+                        setter: val =>
                         {
                             node.Collider2DEnabled = val;
                             Rebuild(); // show/hide the shape rows
                         }
                     )
                 ),
-                _theme
+                theme: _theme
             )
         );
 
@@ -187,53 +191,53 @@ public sealed partial class InspectorPanel
         // the shapes it can actually simulate.
         _rows.Add(
             PropRow.DropdownRow(
-                "Shape",
-                ["Box", "Circle"],
-                Math.Clamp(node.Collider2DShape, 0, 1),
-                i => _state.History.Execute(
+                label: "Shape",
+                items: ["Box", "Circle"],
+                selectedIndex: Math.Clamp(value: node.Collider2DShape, min: 0, max: 1),
+                onChange: i => _state.History.Execute(
                     new ChangePropertyCommand<int>(
-                        _state,
-                        node.Collider2DShape,
-                        i,
-                        val =>
+                        state: _state,
+                        oldValue: node.Collider2DShape,
+                        newValue: i,
+                        setter: val =>
                         {
                             node.Collider2DShape = val;
                             Rebuild();
                         }
                     )
                 ),
-                _theme
+                theme: _theme
             )
         );
 
         _rows.Add(
             PropRow.Float(
-                "Offset X",
-                NodeBind.To(
-                    _state,
-                    node,
-                    n => n.Collider2DOffset.X,
-                    (n, v) => n.Collider2DOffset = new Vec2(v, n.Collider2DOffset.Y)
+                label: "Offset X",
+                bind: NodeBind.To(
+                    state: _state,
+                    node: node,
+                    getter: n => n.Collider2DOffset.X,
+                    setter: (n, v) => n.Collider2DOffset = new Vec2(x: v, y: n.Collider2DOffset.Y)
                 ),
-                _theme,
-                -50f,
-                50f,
-                0.01f
+                theme: _theme,
+                min: -50f,
+                max: 50f,
+                step: 0.01f
             )
         );
         _rows.Add(
             PropRow.Float(
-                "Offset Y",
-                NodeBind.To(
-                    _state,
-                    node,
-                    n => n.Collider2DOffset.Y,
-                    (n, v) => n.Collider2DOffset = new Vec2(n.Collider2DOffset.X, v)
+                label: "Offset Y",
+                bind: NodeBind.To(
+                    state: _state,
+                    node: node,
+                    getter: n => n.Collider2DOffset.Y,
+                    setter: (n, v) => n.Collider2DOffset = new Vec2(x: n.Collider2DOffset.X, y: v)
                 ),
-                _theme,
-                -50f,
-                50f,
-                0.01f
+                theme: _theme,
+                min: -50f,
+                max: 50f,
+                step: 0.01f
             )
         );
 
@@ -241,17 +245,17 @@ public sealed partial class InspectorPanel
         {
             _rows.Add(
                 PropRow.Float(
-                    "Radius",
-                    NodeBind.To(
-                        _state,
-                        node,
-                        n => n.Collider2DRadius,
-                        (n, v) => n.Collider2DRadius = MathF.Max(0.001f, v)
+                    label: "Radius",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: node,
+                        getter: n => n.Collider2DRadius,
+                        setter: (n, v) => n.Collider2DRadius = MathF.Max(x: 0.001f, y: v)
                     ),
-                    _theme,
-                    0.01f,
-                    50f,
-                    0.01f
+                    theme: _theme,
+                    min: 0.01f,
+                    max: 50f,
+                    step: 0.01f
                 )
             );
         }
@@ -259,79 +263,79 @@ public sealed partial class InspectorPanel
         {
             _rows.Add(
                 PropRow.Float(
-                    "Half Width",
-                    NodeBind.To(
-                        _state,
-                        node,
-                        n => n.Collider2DSize.X,
-                        (n, v) => n.Collider2DSize =
-                            new Vec2(MathF.Max(0.001f, v), n.Collider2DSize.Y)
+                    label: "Half Width",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: node,
+                        getter: n => n.Collider2DSize.X,
+                        setter: (n, v) => n.Collider2DSize =
+                            new Vec2(x: MathF.Max(x: 0.001f, y: v), y: n.Collider2DSize.Y)
                     ),
-                    _theme,
-                    0.01f,
-                    50f,
-                    0.01f
+                    theme: _theme,
+                    min: 0.01f,
+                    max: 50f,
+                    step: 0.01f
                 )
             );
             _rows.Add(
                 PropRow.Float(
-                    "Half Height",
-                    NodeBind.To(
-                        _state,
-                        node,
-                        n => n.Collider2DSize.Y,
-                        (n, v) => n.Collider2DSize =
-                            new Vec2(n.Collider2DSize.X, MathF.Max(0.001f, v))
+                    label: "Half Height",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: node,
+                        getter: n => n.Collider2DSize.Y,
+                        setter: (n, v) => n.Collider2DSize =
+                            new Vec2(x: n.Collider2DSize.X, y: MathF.Max(x: 0.001f, y: v))
                     ),
-                    _theme,
-                    0.01f,
-                    50f,
-                    0.01f
+                    theme: _theme,
+                    min: 0.01f,
+                    max: 50f,
+                    step: 0.01f
                 )
             );
             _rows.Add(
                 PropRow.Toggle(
-                    "One-Way (up)",
-                    NodeBind.To(
-                        _state,
-                        node,
-                        n => n.Collider2DOneWayUp,
-                        (n, v) => n.Collider2DOneWayUp = v
+                    label: "One-Way (up)",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: node,
+                        getter: n => n.Collider2DOneWayUp,
+                        setter: (n, v) => n.Collider2DOneWayUp = v
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
         }
 
         _rows.Add(
             PropRow.Toggle(
-                "Trigger",
-                NodeBind.To(
-                    _state,
-                    node,
-                    n => n.Collider2DIsTrigger,
-                    (n, v) => n.Collider2DIsTrigger = v
+                label: "Trigger",
+                bind: NodeBind.To(
+                    state: _state,
+                    node: node,
+                    getter: n => n.Collider2DIsTrigger,
+                    setter: (n, v) => n.Collider2DIsTrigger = v
                 ),
-                _theme
+                theme: _theme
             )
         );
 
         _rows.Add(
             PropRow.Float(
-                "Layer Mask",
-                node.Collider2DLayer,
-                v => _state.History.Execute(
+                label: "Layer Mask",
+                value: node.Collider2DLayer,
+                onChange: v => _state.History.Execute(
                     new ChangePropertyCommand<uint>(
-                        _state,
-                        node.Collider2DLayer,
-                        (uint)MathF.Max(0f, v),
-                        val => node.Collider2DLayer = val
+                        state: _state,
+                        oldValue: node.Collider2DLayer,
+                        newValue: (uint)MathF.Max(x: 0f, y: v),
+                        setter: val => node.Collider2DLayer = val
                     )
                 ),
-                _theme,
-                0f,
-                65535f,
-                1f
+                theme: _theme,
+                min: 0f,
+                max: 65535f,
+                step: 1f
             )
         );
     }

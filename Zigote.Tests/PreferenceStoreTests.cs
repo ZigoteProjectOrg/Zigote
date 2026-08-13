@@ -15,9 +15,7 @@ public enum PrefTheme
 public sealed record WindowPlacement(int X, int Y, int Width, int Height);
 
 [JsonSerializable(typeof(WindowPlacement))]
-internal sealed partial class PreferenceTestJsonContext : JsonSerializerContext
-{
-}
+internal sealed partial class PreferenceTestJsonContext : JsonSerializerContext { }
 
 /// <summary>Counts backend writes so equality gating can be asserted at the storage boundary.</summary>
 internal sealed class CountingKeyValueStore : IKeyValueStore
@@ -26,45 +24,25 @@ internal sealed class CountingKeyValueStore : IKeyValueStore
 
     public int SetCount { get; private set; }
 
-    public bool TryGet(string key, out string value)
-    {
-        return _inner.TryGet(key, out value);
-    }
+    public bool TryGet(string key, out string value) => _inner.TryGet(key: key, value: out value);
 
     public void Set(string key, string value)
     {
         SetCount++;
-        _inner.Set(key, value);
+        _inner.Set(key: key, value: value);
     }
 
-    public bool Remove(string key)
-    {
-        return _inner.Remove(key);
-    }
+    public bool Remove(string key) => _inner.Remove(key);
 
-    public bool Contains(string key)
-    {
-        return _inner.Contains(key);
-    }
+    public bool Contains(string key) => _inner.Contains(key);
 
-    public IReadOnlyList<string> Keys()
-    {
-        return _inner.Keys();
-    }
+    public IReadOnlyList<string> Keys() => _inner.Keys();
 
-    public void Clear()
-    {
-        _inner.Clear();
-    }
+    public void Clear() => _inner.Clear();
 
-    public void Flush()
-    {
-    }
+    public void Flush() { }
 
-    public void Dispose()
-    {
-        _inner.Dispose();
-    }
+    public void Dispose() => _inner.Dispose();
 }
 
 [Collection("Reactive-serial")] // preferences sit on the reactive graph's process-static state
@@ -73,7 +51,7 @@ public sealed class PreferenceStoreTests : IDisposable
     private readonly DirectoryInfo _dir =
         Directory.CreateTempSubdirectory("zigote-preferences-tests");
 
-    private string FilePath => Path.Combine(_dir.FullName, "prefs.json");
+    private string FilePath => Path.Combine(path1: _dir.FullName, path2: "prefs.json");
 
     public void Dispose()
     {
@@ -81,20 +59,18 @@ public sealed class PreferenceStoreTests : IDisposable
         {
             _dir.Delete(true);
         }
-        catch (IOException)
-        {
-        }
+        catch (IOException) { }
     }
 
     [Fact]
     public void Unset_YieldsDefault_IsSetFalse()
     {
         using var store = new PreferenceStore(new InMemoryKeyValueStore());
-        var scale = store.Preference("ui.scale", 1.0);
+        var scale = store.Preference(key: "ui.scale", defaultValue: 1.0);
 
-        Assert.Equal(1.0, scale.Value);
+        Assert.Equal(expected: 1.0, actual: scale.Value);
         Assert.False(scale.IsSet);
-        Assert.Equal(1.0, scale.Default);
+        Assert.Equal(expected: 1.0, actual: scale.Default);
     }
 
     [Fact]
@@ -102,16 +78,17 @@ public sealed class PreferenceStoreTests : IDisposable
     {
         using (var store = new PreferenceStore(new JsonFileKeyValueStore(FilePath)))
         {
-            store.Preference("editor.theme", PrefTheme.Dark).Value = PrefTheme.Light;
-            store.Preference("ui.scale", 1.0).Value = 1.25;
+            store.Preference(key: "editor.theme", defaultValue: PrefTheme.Dark).Value =
+                PrefTheme.Light;
+            store.Preference(key: "ui.scale", defaultValue: 1.0).Value = 1.25;
         }
 
         using var reopened = new PreferenceStore(new JsonFileKeyValueStore(FilePath));
-        var theme = reopened.Preference("editor.theme", PrefTheme.Dark);
-        var scale = reopened.Preference("ui.scale", 1.0);
+        var theme = reopened.Preference(key: "editor.theme", defaultValue: PrefTheme.Dark);
+        var scale = reopened.Preference(key: "ui.scale", defaultValue: 1.0);
 
-        Assert.Equal(PrefTheme.Light, theme.Value);
-        Assert.Equal(1.25, scale.Value);
+        Assert.Equal(expected: PrefTheme.Light, actual: theme.Value);
+        Assert.Equal(expected: 1.25, actual: scale.Value);
         Assert.True(theme.IsSet);
     }
 
@@ -119,46 +96,50 @@ public sealed class PreferenceStoreTests : IDisposable
     public void SameKey_ReturnsSameInstance()
     {
         using var store = new PreferenceStore(new InMemoryKeyValueStore());
-        var first = store.Preference("a", 1);
-        var second = store.Preference("a", 999);
+        var first = store.Preference(key: "a", defaultValue: 1);
+        var second = store.Preference(key: "a", defaultValue: 999);
 
-        Assert.Same(first, second);
-        Assert.Equal(1, second.Default); // the first call's default wins
+        Assert.Same(expected: first, actual: second);
+        Assert.Equal(expected: 1, actual: second.Default); // the first call's default wins
     }
 
     [Fact]
     public void SameKey_DifferentType_Throws()
     {
         using var store = new PreferenceStore(new InMemoryKeyValueStore());
-        _ = store.Preference("a", 1);
+        _ = store.Preference(key: "a", defaultValue: 1);
 
-        Assert.Throws<InvalidOperationException>(() => store.Preference("a", "text"));
+        Assert.Throws<InvalidOperationException>(() => store.Preference(
+                key: "a",
+                defaultValue: "text"
+            )
+        );
     }
 
     [Fact]
     public void Computed_TracksPreference()
     {
         using var store = new PreferenceStore(new InMemoryKeyValueStore());
-        var scale = store.Preference("ui.scale", 1.0);
+        var scale = store.Preference(key: "ui.scale", defaultValue: 1.0);
         using var doubled = Computed.From(() => scale.Value * 2);
 
-        Assert.Equal(2.0, doubled.Value);
+        Assert.Equal(expected: 2.0, actual: doubled.Value);
         scale.Value = 1.5;
-        Assert.Equal(3.0, doubled.Value);
+        Assert.Equal(expected: 3.0, actual: doubled.Value);
     }
 
     [Fact]
     public void Subscribe_FiresImmediately_ThenOnChange()
     {
         using var store = new PreferenceStore(new InMemoryKeyValueStore());
-        var grid = store.Preference("editor.showGrid", true);
+        var grid = store.Preference(key: "editor.showGrid", defaultValue: true);
 
         var seen = new List<bool>();
         using var subscription = grid.Subscribe(seen.Add);
         grid.Value = false;
         grid.Value = false; // equality-gated: no second notification
 
-        Assert.Equal([true, false], seen);
+        Assert.Equal(expected: [true, false], actual: seen);
     }
 
     [Fact]
@@ -166,13 +147,13 @@ public sealed class PreferenceStoreTests : IDisposable
     {
         var counting = new CountingKeyValueStore();
         using var store = new PreferenceStore(counting);
-        var scale = store.Preference("ui.scale", 1.0);
+        var scale = store.Preference(key: "ui.scale", defaultValue: 1.0);
 
         scale.Value = 2.0;
         scale.Value = 2.0;
         scale.Value = 2.0;
 
-        Assert.Equal(1, counting.SetCount);
+        Assert.Equal(expected: 1, actual: counting.SetCount);
     }
 
     [Fact]
@@ -180,11 +161,11 @@ public sealed class PreferenceStoreTests : IDisposable
     {
         var counting = new CountingKeyValueStore();
         using var store = new PreferenceStore(counting);
-        var grid = store.Preference("editor.showGrid", true);
+        var grid = store.Preference(key: "editor.showGrid", defaultValue: true);
 
         grid.Value = true; // unchanged vs. default, but the user chose it
 
-        Assert.Equal(1, counting.SetCount);
+        Assert.Equal(expected: 1, actual: counting.SetCount);
         Assert.True(grid.IsSet);
     }
 
@@ -192,12 +173,12 @@ public sealed class PreferenceStoreTests : IDisposable
     public void Update_ReadsModifiesWrites()
     {
         using var store = new PreferenceStore(new InMemoryKeyValueStore());
-        var scale = store.Preference("ui.scale", 1.0);
+        var scale = store.Preference(key: "ui.scale", defaultValue: 1.0);
 
         scale.Update(s => s + 0.5);
         scale.Update(s => s + 0.5);
 
-        Assert.Equal(2.0, scale.Value);
+        Assert.Equal(expected: 2.0, actual: scale.Value);
         Assert.True(scale.IsSet);
     }
 
@@ -206,7 +187,7 @@ public sealed class PreferenceStoreTests : IDisposable
     {
         var backing = new InMemoryKeyValueStore();
         using var store = new PreferenceStore(backing);
-        var scale = store.Preference("ui.scale", 1.0);
+        var scale = store.Preference(key: "ui.scale", defaultValue: 1.0);
         scale.Value = 2.0;
         Assert.True(backing.Contains("ui.scale"));
 
@@ -214,22 +195,22 @@ public sealed class PreferenceStoreTests : IDisposable
         using var subscription = scale.Subscribe(seen.Add);
         scale.Reset();
 
-        Assert.Equal(1.0, scale.Value);
+        Assert.Equal(expected: 1.0, actual: scale.Value);
         Assert.False(scale.IsSet);
         Assert.False(backing.Contains("ui.scale"));
-        Assert.Equal([2.0, 1.0], seen);
+        Assert.Equal(expected: [2.0, 1.0], actual: seen);
     }
 
     [Fact]
     public void CorruptPersistedValue_FallsBackToDefault_EntryLeftInPlace()
     {
         var backing = new InMemoryKeyValueStore();
-        backing.Set("ui.scale", "not a number");
+        backing.Set(key: "ui.scale", value: "not a number");
 
         using var store = new PreferenceStore(backing);
-        var scale = store.Preference("ui.scale", 1.0);
+        var scale = store.Preference(key: "ui.scale", defaultValue: 1.0);
 
-        Assert.Equal(1.0, scale.Value);
+        Assert.Equal(expected: 1.0, actual: scale.Value);
         Assert.False(scale.IsSet);
         Assert.True(backing.Contains("ui.scale")); // quarantine-in-place, not deletion
     }
@@ -240,41 +221,41 @@ public sealed class PreferenceStoreTests : IDisposable
         using (var store = new PreferenceStore(new JsonFileKeyValueStore(FilePath)))
         {
             var placement = store.Preference(
-                "window.placement",
-                new WindowPlacement(
-                    0,
-                    0,
-                    1280,
-                    720
+                key: "window.placement",
+                defaultValue: new WindowPlacement(
+                    X: 0,
+                    Y: 0,
+                    Width: 1280,
+                    Height: 720
                 )
             );
             placement.Value = new WindowPlacement(
-                50,
-                60,
-                1920,
-                1080
+                X: 50,
+                Y: 60,
+                Width: 1920,
+                Height: 1080
             );
         }
 
         using var reopened = new PreferenceStore(new JsonFileKeyValueStore(FilePath));
         var reloaded = reopened.Preference(
-            "window.placement",
-            new WindowPlacement(
-                0,
-                0,
-                1280,
-                720
+            key: "window.placement",
+            defaultValue: new WindowPlacement(
+                X: 0,
+                Y: 0,
+                Width: 1280,
+                Height: 720
             )
         );
 
         Assert.Equal(
-            new WindowPlacement(
-                50,
-                60,
-                1920,
-                1080
+            expected: new WindowPlacement(
+                X: 50,
+                Y: 60,
+                Width: 1920,
+                Height: 1080
             ),
-            reloaded.Value
+            actual: reloaded.Value
         );
     }
 
@@ -284,40 +265,40 @@ public sealed class PreferenceStoreTests : IDisposable
         var backing = new InMemoryKeyValueStore();
         using var store = new PreferenceStore(backing);
         var placement = store.Preference(
-            "window.placement",
-            new WindowPlacement(
-                0,
-                0,
-                1280,
-                720
+            key: "window.placement",
+            defaultValue: new WindowPlacement(
+                X: 0,
+                Y: 0,
+                Width: 1280,
+                Height: 720
             ),
-            PreferenceTestJsonContext.Default.WindowPlacement
+            typeInfo: PreferenceTestJsonContext.Default.WindowPlacement
         );
 
         placement.Value = new WindowPlacement(
-            10,
-            20,
-            800,
-            600
+            X: 10,
+            Y: 20,
+            Width: 800,
+            Height: 600
         );
 
-        Assert.True(backing.TryGet("window.placement", out var raw));
-        Assert.Contains("800", raw);
+        Assert.True(backing.TryGet(key: "window.placement", value: out string raw));
+        Assert.Contains(expectedSubstring: "800", actualString: raw);
     }
 
     [Fact]
     public void ResetAll_ClearsStorage_IncludingUnmaterializedKeys()
     {
         var backing = new InMemoryKeyValueStore();
-        backing.Set("orphan.key", "\"left over from an old run\"");
+        backing.Set(key: "orphan.key", value: "\"left over from an old run\"");
 
         using var store = new PreferenceStore(backing);
-        var scale = store.Preference("ui.scale", 1.0);
+        var scale = store.Preference(key: "ui.scale", defaultValue: 1.0);
         scale.Value = 3.0;
 
         store.ResetAll();
 
-        Assert.Equal(1.0, scale.Value);
+        Assert.Equal(expected: 1.0, actual: scale.Value);
         Assert.False(scale.IsSet);
         Assert.Empty(backing.Keys());
     }
@@ -326,9 +307,9 @@ public sealed class PreferenceStoreTests : IDisposable
     public void Effect_ReactsToPreferenceChange()
     {
         using var store = new PreferenceStore(new InMemoryKeyValueStore());
-        var grid = store.Preference("editor.showGrid", true);
+        var grid = store.Preference(key: "editor.showGrid", defaultValue: true);
 
-        var runs = 0;
+        int runs = 0;
         using var effect = new Effect(() =>
             {
                 _ = grid.Value;
@@ -336,8 +317,8 @@ public sealed class PreferenceStoreTests : IDisposable
             }
         );
 
-        Assert.Equal(1, runs);
+        Assert.Equal(expected: 1, actual: runs);
         grid.Value = false;
-        Assert.Equal(2, runs);
+        Assert.Equal(expected: 2, actual: runs);
     }
 }

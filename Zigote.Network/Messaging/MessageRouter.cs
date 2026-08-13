@@ -13,14 +13,14 @@ public sealed class MessageRouter(MessageRegistry registry)
 
     public void Handle<T>(Action<NetConnection, T> handler) where T : INetMessage, new()
     {
-        var id = registry.Register<T>();
-        _handlers[id] = (conn, msg) => handler(conn, (T)msg);
+        ushort id = registry.Register<T>();
+        _handlers[id] = (conn, msg) => handler(arg1: conn, arg2: (T)msg);
     }
 
     public void Send<T>(NetConnection conn, T message, DeliveryMethod delivery)
         where T : INetMessage, new()
     {
-        var id = registry.Register<T>();
+        ushort id = registry.Register<T>();
         var writer = conn.BeginSend(NetChannel.Message);
         writer.WriteUInt16(id);
         message.Serialize(writer);
@@ -29,12 +29,13 @@ public sealed class MessageRouter(MessageRegistry registry)
 
     internal void Dispatch(NetConnection conn, NetReader reader)
     {
-        var id = reader.ReadUInt16();
+        ushort id = reader.ReadUInt16();
         var message = registry.Create(id);
         if (message is null) return;
 
         message.Deserialize(reader);
         if (reader.Overflow) return;
-        if (_handlers.TryGetValue(id, out var handler)) handler(conn, message);
+        if (_handlers.TryGetValue(key: id, value: out var handler))
+            handler(arg1: conn, arg2: message);
     }
 }

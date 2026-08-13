@@ -48,24 +48,25 @@ public sealed class BuiltInCodeTokenizer(CodeLanguage language) : ILineTokenizer
 
     public int Tokenize(string line, int state, List<Token> output)
     {
-        var i = 0;
+        int i = 0;
         if (language == CodeLanguage.CSharp && state == 1)
         {
-            var close = line.IndexOf("*/", StringComparison.Ordinal);
+            int close = line.IndexOf(value: "*/", comparisonType: StringComparison.Ordinal);
             if (close < 0)
             {
-                if (line.Length > 0) output.Add(new Token(0, line.Length, TokenKind.Comment));
+                if (line.Length > 0)
+                    output.Add(new Token(start: 0, length: line.Length, kind: TokenKind.Comment));
                 return 1;
             }
 
-            output.Add(new Token(0, close + 2, TokenKind.Comment));
+            output.Add(new Token(start: 0, length: close + 2, kind: TokenKind.Comment));
             i = close + 2;
             state = 0;
         }
 
         while (i < line.Length)
         {
-            var c = line[i];
+            char c = line[i];
             if (char.IsWhiteSpace(c))
             {
                 i++;
@@ -76,20 +77,28 @@ public sealed class BuiltInCodeTokenizer(CodeLanguage language) : ILineTokenizer
             {
                 if (line[i + 1] == '/')
                 {
-                    output.Add(new Token(i, line.Length - i, TokenKind.Comment));
+                    output.Add(
+                        new Token(start: i, length: line.Length - i, kind: TokenKind.Comment)
+                    );
                     break;
                 }
 
                 if (language == CodeLanguage.CSharp && line[i + 1] == '*')
                 {
-                    var close = line.IndexOf("*/", i + 2, StringComparison.Ordinal);
+                    int close = line.IndexOf(
+                        value: "*/",
+                        startIndex: i + 2,
+                        comparisonType: StringComparison.Ordinal
+                    );
                     if (close < 0)
                     {
-                        output.Add(new Token(i, line.Length - i, TokenKind.Comment));
+                        output.Add(
+                            new Token(start: i, length: line.Length - i, kind: TokenKind.Comment)
+                        );
                         return 1;
                     }
 
-                    output.Add(new Token(i, close + 2 - i, TokenKind.Comment));
+                    output.Add(new Token(start: i, length: close + 2 - i, kind: TokenKind.Comment));
                     i = close + 2;
                     continue;
                 }
@@ -98,9 +107,9 @@ public sealed class BuiltInCodeTokenizer(CodeLanguage language) : ILineTokenizer
             if (c is '"' or '\'' || (language == CodeLanguage.CSharp && c == '@' &&
                                      i + 1 < line.Length && line[i + 1] == '"'))
             {
-                var start = i;
-                var verbatim = c == '@';
-                var quote = verbatim ? '"' : c;
+                int start = i;
+                bool verbatim = c == '@';
+                char quote = verbatim ? '"' : c;
                 i += verbatim ? 2 : 1;
                 while (i < line.Length)
                 {
@@ -122,45 +131,45 @@ public sealed class BuiltInCodeTokenizer(CodeLanguage language) : ILineTokenizer
                 var kind = TokenKind.String;
                 if (language == CodeLanguage.Json)
                 {
-                    var lookahead = i;
+                    int lookahead = i;
                     while (lookahead < line.Length && char.IsWhiteSpace(line[lookahead]))
                         lookahead++;
                     if (lookahead < line.Length && line[lookahead] == ':') kind = TokenKind.Type;
                 }
 
-                output.Add(new Token(start, i - start, kind));
+                output.Add(new Token(start: start, length: i - start, kind: kind));
                 continue;
             }
 
             if (char.IsDigit(c))
             {
-                var start = i++;
+                int start = i++;
                 while (i < line.Length &&
                        (char.IsLetterOrDigit(line[i]) || line[i] is '_' or '.')) i++;
-                output.Add(new Token(start, i - start, TokenKind.Number));
+                output.Add(new Token(start: start, length: i - start, kind: TokenKind.Number));
                 continue;
             }
 
             if (char.IsLetter(c) || c is '_' or '@')
             {
-                var start = i++;
+                int start = i++;
                 while (i < line.Length && (char.IsLetterOrDigit(line[i]) || line[i] == '_')) i++;
-                var word = line[start..i];
+                string word = line[start..i];
                 var kind = ClassifyIdentifier(word);
-                output.Add(new Token(start, i - start, kind));
+                output.Add(new Token(start: start, length: i - start, kind: kind));
                 continue;
             }
 
             if ("+-*/%=<>!&|^~?".Contains(c))
             {
-                var start = i++;
+                int start = i++;
                 while (i < line.Length && "+-*/%=<>!&|^~?".Contains(line[i])) i++;
-                output.Add(new Token(start, i - start, TokenKind.Operator));
+                output.Add(new Token(start: start, length: i - start, kind: TokenKind.Operator));
                 continue;
             }
 
             if ("()[]{},:;.".Contains(c))
-                output.Add(new Token(i, 1, TokenKind.Punctuation));
+                output.Add(new Token(start: i, length: 1, kind: TokenKind.Punctuation));
             i++;
         }
 

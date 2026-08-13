@@ -13,25 +13,25 @@ namespace Zigote.Tests;
 public class WrapLayoutTests
 {
     private static readonly Constraints Room = new(
-        0f,
-        200f,
-        0f,
-        200f
+        minWidth: 0f,
+        maxWidth: 200f,
+        minHeight: 0f,
+        maxHeight: 200f
     );
 
     [Fact]
     public void LayoutSurvivesChildrenAddedAfterMeasure()
     {
         var wrap = new Wrap(spacing: 4, runSpacing: 4);
-        wrap.Children.Add(new SizedBox(50f, 20f));
-        wrap.Children.Add(new SizedBox(50f, 20f));
+        wrap.Children.Add(new SizedBox(width: 50f, height: 20f));
+        wrap.Children.Add(new SizedBox(width: 50f, height: 20f));
         wrap.Measure(Room);
 
-        wrap.Children.Add(new SizedBox(50f, 20f)); // no Measure in between
+        wrap.Children.Add(new SizedBox(width: 50f, height: 20f)); // no Measure in between
         wrap.Layout(Offset.Zero);
 
         // The measured prefix is placed, and the widget asked to be laid out again for the rest.
-        Assert.Equal(0f, wrap.Children[0].Bounds.X, 3);
+        Assert.Equal(expected: 0f, actual: wrap.Children[0].Bounds.X, precision: 3);
         Assert.True(wrap.NeedsLayout);
     }
 
@@ -39,7 +39,7 @@ public class WrapLayoutTests
     public void LayoutBeforeAnyMeasureDoesNotThrow()
     {
         var wrap = new Wrap(spacing: 4, runSpacing: 4);
-        wrap.Children.Add(new SizedBox(50f, 20f));
+        wrap.Children.Add(new SizedBox(width: 50f, height: 20f));
 
         wrap.Layout(Offset.Zero); // freshly built subtree laid out before its first measure
 

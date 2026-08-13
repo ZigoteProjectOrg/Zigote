@@ -14,10 +14,7 @@ public sealed class GraphCommandStack
     // new branch replaced the old redo history. Null means "saved at the empty document".
     private IGraphCommand? _savedTop;
 
-    public GraphCommandStack(GraphDocument graph)
-    {
-        _graph = graph;
-    }
+    public GraphCommandStack(GraphDocument graph) => _graph = graph;
 
     public bool CanUndo => _undo.Count > 0;
     public bool CanRedo => _redo.Count > 0;
@@ -27,10 +24,7 @@ public sealed class GraphCommandStack
 
     public event Action? Changed;
 
-    private IGraphCommand? CurrentTop()
-    {
-        return _undo.Count > 0 ? _undo.Peek() : null;
-    }
+    private IGraphCommand? CurrentTop() => _undo.Count > 0 ? _undo.Peek() : null;
 
     public void Execute(IGraphCommand command)
     {
@@ -58,10 +52,7 @@ public sealed class GraphCommandStack
         Changed?.Invoke();
     }
 
-    public void MarkClean()
-    {
-        _savedTop = CurrentTop();
-    }
+    public void MarkClean() => _savedTop = CurrentTop();
 
     public void Clear()
     {

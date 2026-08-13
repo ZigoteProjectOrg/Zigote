@@ -1,3 +1,4 @@
+using Zigote.Core.Engine;
 using Zigote.Core.Events;
 using Zigote.UI.Host;
 using Zigote.UI.Widgets.Navigation;
@@ -17,6 +18,9 @@ public class AdwaitaApp : ZigoteApp
     private readonly bool _explicitTheme;
     private readonly bool _followSystem;
 
+    /// <summary>Secondary windows and the theme scope wrapping each one's content.</summary>
+    private readonly List<(App Window, ThemeProvider Scope)> _windows = [];
+
     public AdwaitaApp(
         Widget? home = null,
         string title = "Zigote App",
@@ -34,7 +38,7 @@ public class AdwaitaApp : ZigoteApp
         _followSystem = followSystem;
         // Rounded window corners need an alpha-composited window, which is a creation-time
         // property — decide from the chrome that WILL be applied in OnInit.
-        TransparentWindow = ResolveChrome() == Core.Engine.WindowChromeStyle.AdwaitaCsd;
+        TransparentWindow = ResolveChrome() == WindowChromeStyle.AdwaitaCsd;
         Theme = theme ?? AdwTheme.Light;
         Routes = routes;
         InitialRoute = initialRoute;
@@ -42,6 +46,12 @@ public class AdwaitaApp : ZigoteApp
         Pages = pages;
         OnPopPage = onPopPage;
     }
+
+    /// <summary>The system accent hue (GNOME 47+); Blue where unavailable.</summary>
+    public AdwAccent SystemAccent { get; private set; } = AdwAccent.Blue;
+
+    /// <summary>The system's current dark-appearance preference.</summary>
+    public bool SystemPrefersDark { get; private set; }
 
     /// <summary>
     ///     The chrome an Adwaita app wants: its own headerbars ARE its titlebars, so it asks for
@@ -51,18 +61,12 @@ public class AdwaitaApp : ZigoteApp
     ///     <see cref="WindowChrome.Resolve" /> policy stands, and an explicit
     ///     <see cref="WindowChrome.Preference" /> always wins over both.
     /// </summary>
-    private static Core.Engine.WindowChromeStyle ResolveChrome()
+    private static WindowChromeStyle ResolveChrome()
     {
         return WindowChrome.Preference == WindowChromePreference.Auto && OperatingSystem.IsMacOS()
-            ? Core.Engine.WindowChromeStyle.AdwaitaCsd
+            ? WindowChromeStyle.AdwaitaCsd
             : WindowChrome.Resolve();
     }
-
-    /// <summary>The system accent hue (GNOME 47+); Blue where unavailable.</summary>
-    public AdwAccent SystemAccent { get; private set; } = AdwAccent.Blue;
-
-    /// <summary>The system's current dark-appearance preference.</summary>
-    public bool SystemPrefersDark { get; private set; }
 
     /// <summary>
     ///     The system appearance or accent changed (and, unless an explicit theme was passed,
@@ -118,9 +122,9 @@ public class AdwaitaApp : ZigoteApp
     {
         if (App is not { } app) return null;
         var win = app.CreateWindow(
-            title ?? Title,
-            width == 0 ? Width : width,
-            height == 0 ? Height : height
+            title: title ?? Title,
+            width: width == 0 ? Width : width,
+            height: height == 0 ? Height : height
         );
         var scope = new ThemeProvider(Theme) { Child = content };
         // A second window is a peer, not a satellite: same corner, same outline, same drag band —
@@ -134,16 +138,13 @@ public class AdwaitaApp : ZigoteApp
         return win;
     }
 
-    /// <summary>Secondary windows and the theme scope wrapping each one's content.</summary>
-    private readonly List<(App Window, ThemeProvider Scope)> _windows = [];
-
     /// <summary>
     ///     Push the live theme into every open secondary window (the base class syncs the main one)
     ///     and drop the ones that have closed themselves.
     /// </summary>
     private void SyncWindowThemes()
     {
-        for (var i = _windows.Count - 1; i >= 0; i--)
+        for (int i = _windows.Count - 1; i >= 0; i--)
         {
             var (win, scope) = _windows[i];
             if (!win.IsOpen)
@@ -152,7 +153,7 @@ public class AdwaitaApp : ZigoteApp
                 continue;
             }
 
-            if (ReferenceEquals(scope.Data, Theme)) continue;
+            if (ReferenceEquals(objA: scope.Data, objB: Theme)) continue;
             scope.Data = Theme;
             win.Theme = Theme;
         }
@@ -164,7 +165,7 @@ public class AdwaitaApp : ZigoteApp
         SystemPrefersDark = sdl == SystemTheme.Dark ||
                             (sdl == SystemTheme.Unknown && GnomeDesktop.PrefersDark);
         SystemAccent = GnomeDesktop.Accent;
-        if (!_explicitTheme) Theme = AdwTheme.Create(SystemAccent, SystemPrefersDark);
+        if (!_explicitTheme) Theme = AdwTheme.Create(accent: SystemAccent, dark: SystemPrefersDark);
         SystemStyleChanged?.Invoke();
     }
 }

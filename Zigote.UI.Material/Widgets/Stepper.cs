@@ -64,11 +64,11 @@ public class Stepper : Widget
     public override int DebugStateHash()
     {
         return HashCode.Combine(
-            Value,
-            _hoverHalf,
-            _pressHalf,
-            Enabled,
-            Focused
+            value1: Value,
+            value2: _hoverHalf,
+            value3: _pressHalf,
+            value4: Enabled,
+            value5: Focused
         );
     }
 
@@ -78,7 +78,10 @@ public class Stepper : Widget
         // 18×22 halves are the smallest targets in the set. Give each half a full finger box on a
         // phone — Paint and HalfAt both derive from Bounds, so the geometry follows for free.
         _size = c.Constrain(
-            new Size(TouchMetrics.Pick(GroupWidth), TouchMetrics.Pick(HalfHeight) * 2f)
+            new Size(
+                width: TouchMetrics.Pick(GroupWidth),
+                height: TouchMetrics.Pick(HalfHeight) * 2f
+            )
         );
         return _size;
     }
@@ -86,81 +89,81 @@ public class Stepper : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
     public override void Paint(PaintList paint)
     {
-        var radius = Radii.Sm;
-        var halfH = Bounds.Height / 2f;
+        float radius = Radii.Sm;
+        float halfH = Bounds.Height / 2f;
         var upRect = new Rect(
-            Bounds.X,
-            Bounds.Y,
-            Bounds.Width,
-            halfH
+            x: Bounds.X,
+            y: Bounds.Y,
+            width: Bounds.Width,
+            height: halfH
         );
         var downRect = new Rect(
-            Bounds.X,
-            Bounds.Y + halfH,
-            Bounds.Width,
-            Bounds.Height - halfH
+            x: Bounds.X,
+            y: Bounds.Y + halfH,
+            width: Bounds.Width,
+            height: Bounds.Height - halfH
         );
 
         // Group surface.
         var baseFill = Enabled ? _theme.Fill2 : _theme.Fill3;
-        paint.AddRect(Bounds, baseFill, radius);
+        paint.AddRect(bounds: Bounds, color: baseFill, radius: radius);
 
         // Per-half interaction tint.
         if (Enabled)
         {
             PaintHalfState(
-                paint,
-                upRect,
-                0,
-                radius,
-                true
+                paint: paint,
+                half: upRect,
+                index: 0,
+                radius: radius,
+                top: true
             );
             PaintHalfState(
-                paint,
-                downRect,
-                1,
-                radius,
-                false
+                paint: paint,
+                half: downRect,
+                index: 1,
+                radius: radius,
+                top: false
             );
         }
 
         // Hairline divider between the two halves.
         var sep = new Rect(
-            Bounds.X,
-            Bounds.Y + halfH - 0.5f,
-            Bounds.Width,
-            1f
+            x: Bounds.X,
+            y: Bounds.Y + halfH - 0.5f,
+            width: Bounds.Width,
+            height: 1f
         );
-        paint.AddBorder(Bounds, _theme.Separator, radius);
-        paint.AddRect(sep, _theme.Separator);
+        paint.AddBorder(bounds: Bounds, color: _theme.Separator, radius: radius);
+        paint.AddRect(bounds: sep, color: _theme.Separator);
 
         // Chevron glyphs.
-        var upColor = GlyphColor(0, CanIncrement);
-        var downColor = GlyphColor(1, CanDecrement);
+        var upColor = GlyphColor(index: 0, enabledForDir: CanIncrement);
+        var downColor = GlyphColor(index: 1, enabledForDir: CanDecrement);
         PaintChevron(
-            paint,
-            upRect,
-            true,
-            upColor
+            paint: paint,
+            box: upRect,
+            up: true,
+            color: upColor
         );
         PaintChevron(
-            paint,
-            downRect,
-            false,
-            downColor
+            paint: paint,
+            box: downRect,
+            up: false,
+            color: downColor
         );
 
         if (Focused && Enabled)
-            paint.AddFocusRing(Bounds, radius, _theme);
+            paint.AddFocusRing(bounds: Bounds, radius: radius, theme: _theme);
     }
 
     private void PaintHalfState(PaintList paint, Rect half, int index, float radius, bool top)
@@ -174,18 +177,18 @@ public class Stepper : Widget
         // A simple rounded rect reads fine at this size; keep it lean.
         var inset = top
             ? new Rect(
-                half.X,
-                half.Y,
-                half.Width,
-                half.Height - 0.5f
+                x: half.X,
+                y: half.Y,
+                width: half.Width,
+                height: half.Height - 0.5f
             )
             : new Rect(
-                half.X,
-                half.Y + 0.5f,
-                half.Width,
-                half.Height - 0.5f
+                x: half.X,
+                y: half.Y + 0.5f,
+                width: half.Width,
+                height: half.Height - 0.5f
             );
-        paint.AddRect(inset, t, radius);
+        paint.AddRect(bounds: inset, color: t, radius: radius);
     }
 
     private Color GlyphColor(int index, bool enabledForDir)
@@ -199,35 +202,35 @@ public class Stepper : Widget
     /// <summary>Draws a chevron (▲ / ▼) from two short dabbed strokes meeting at the apex.</summary>
     private static void PaintChevron(PaintList paint, Rect box, bool up, Color color)
     {
-        var s = MathF.Min(box.Width, box.Height);
-        var stroke = MathF.Max(1.25f, s * 0.1f);
+        float s = MathF.Min(x: box.Width, y: box.Height);
+        float stroke = MathF.Max(x: 1.25f, y: s * 0.1f);
 
-        var cx = box.X + box.Width / 2f;
-        var cy = box.Y + box.Height / 2f;
-        var halfW = box.Width * 0.22f;
-        var halfH = box.Height * 0.16f;
+        float cx = box.X + (box.Width / 2f);
+        float cy = box.Y + (box.Height / 2f);
+        float halfW = box.Width * 0.22f;
+        float halfH = box.Height * 0.16f;
 
         // Apex sits towards the pointing direction; the two legs splay to the base.
-        var apexY = up ? cy - halfH : cy + halfH;
-        var baseY = up ? cy + halfH : cy - halfH;
+        float apexY = up ? cy - halfH : cy + halfH;
+        float baseY = up ? cy + halfH : cy - halfH;
 
         StrokeLine(
-            paint,
-            cx - halfW,
-            baseY,
-            cx,
-            apexY,
-            stroke,
-            color
+            paint: paint,
+            x0: cx - halfW,
+            y0: baseY,
+            x1: cx,
+            y1: apexY,
+            w: stroke,
+            color: color
         );
         StrokeLine(
-            paint,
-            cx,
-            apexY,
-            cx + halfW,
-            baseY,
-            stroke,
-            color
+            paint: paint,
+            x0: cx,
+            y0: apexY,
+            x1: cx + halfW,
+            y1: baseY,
+            w: stroke,
+            color: color
         );
     }
 
@@ -235,26 +238,26 @@ public class Stepper : Widget
     private static void StrokeLine(PaintList paint, float x0, float y0, float x1, float y1, float w,
         Color color)
     {
-        var dx = x1 - x0;
-        var dy = y1 - y0;
-        var len = MathF.Sqrt(dx * dx + dy * dy);
-        var steps = MathF.Max(1f, MathF.Ceiling(len / (w * 0.4f)));
-        var half = w / 2f;
+        float dx = x1 - x0;
+        float dy = y1 - y0;
+        float len = MathF.Sqrt((dx * dx) + (dy * dy));
+        float steps = MathF.Max(x: 1f, y: MathF.Ceiling(len / (w * 0.4f)));
+        float half = w / 2f;
 
-        for (var i = 0f; i <= steps; i++)
+        for (float i = 0f; i <= steps; i++)
         {
-            var t = i / steps;
-            var px = x0 + dx * t;
-            var py = y0 + dy * t;
+            float t = i / steps;
+            float px = x0 + (dx * t);
+            float py = y0 + (dy * t);
             paint.AddRect(
-                new Rect(
-                    px - half,
-                    py - half,
-                    w,
-                    w
+                bounds: new Rect(
+                    x: px - half,
+                    y: py - half,
+                    width: w,
+                    height: w
                 ),
-                color,
-                half
+                color: color,
+                radius: half
             );
         }
     }
@@ -269,7 +272,7 @@ public class Stepper : Widget
     private void Bump(float delta)
     {
         if (!Enabled) return;
-        var next = Clamp(Value + delta);
+        float next = Clamp(Value + delta);
         if (next == Value) return;
         Value = next;
         OnChanged?.Invoke(Value);
@@ -278,8 +281,8 @@ public class Stepper : Widget
 
     private int HalfAt(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return -1;
-        return point.Y < Bounds.Y + Bounds.Height / 2f ? 0 : 1;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return -1;
+        return point.Y < Bounds.Y + (Bounds.Height / 2f) ? 0 : 1;
     }
 
     public override void OnPointerEnter()
@@ -297,7 +300,7 @@ public class Stepper : Widget
 
     public override void OnPointerMove(Offset point)
     {
-        var half = Enabled ? HalfAt(point) : -1;
+        int half = Enabled ? HalfAt(point) : -1;
         if (half == _hoverHalf) return;
         _hoverHalf = half;
         MarkNeedsPaint();
@@ -306,7 +309,7 @@ public class Stepper : Widget
     public override void OnPointerDown(Offset point)
     {
         if (!Enabled) return;
-        var half = HalfAt(point);
+        int half = HalfAt(point);
         if (half == -1) return;
         _pressHalf = half;
         MarkNeedsPaint();

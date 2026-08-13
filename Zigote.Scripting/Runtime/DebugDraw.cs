@@ -34,10 +34,7 @@ public static class DebugDraw
     public static bool Enabled { get; set; }
 
     /// <summary>Host: clear the queue at the start of each frame, before scripts run.</summary>
-    public static void BeginFrame()
-    {
-        Lines.Clear();
-    }
+    public static void BeginFrame() => Lines.Clear();
 
     /// <summary>Host: drop the queue and disable on stop so nothing lingers.</summary>
     public static void Clear()
@@ -51,14 +48,15 @@ public static class DebugDraw
     {
         if (!Enabled) return;
         if (!IsFinite(a) || !IsFinite(b)) return;
-        Lines.Add(new DebugLine(a, b, color));
+        Lines.Add(new DebugLine(a: a, b: b, color: color));
     }
 
     /// <summary>Queue a ray from <paramref name="origin" /> along <paramref name="dir" /> for a length.</summary>
-    public static void Ray(Vec3 origin, Vec3 dir, float length, Color color)
-    {
-        Line(origin, origin + dir * length, color);
-    }
+    public static void Ray(Vec3 origin, Vec3 dir, float length, Color color) => Line(
+        a: origin,
+        b: origin + (dir * length),
+        color: color
+    );
 
     /// <summary>
     ///     Queue a circle of <paramref name="segments" /> segments centred at <paramref name="center" />
@@ -69,18 +67,16 @@ public static class DebugDraw
         int segments = 24)
     {
         if (!Enabled || radius <= 0f || segments < 3) return;
-        var prev = center + u * radius;
-        for (var i = 1; i <= segments; i++)
+        var prev = center + (u * radius);
+        for (int i = 1; i <= segments; i++)
         {
-            var t = MathF.Tau * (i / (float)segments);
-            var cur = center + u * (MathF.Cos(t) * radius) + v * (MathF.Sin(t) * radius);
-            Line(prev, cur, color);
+            float t = MathF.Tau * (i / (float)segments);
+            var cur = center + (u * (MathF.Cos(t) * radius)) + (v * (MathF.Sin(t) * radius));
+            Line(a: prev, b: cur, color: color);
             prev = cur;
         }
     }
 
-    private static bool IsFinite(Vec3 v)
-    {
-        return float.IsFinite(v.X) && float.IsFinite(v.Y) && float.IsFinite(v.Z);
-    }
+    private static bool IsFinite(Vec3 v) =>
+        float.IsFinite(v.X) && float.IsFinite(v.Y) && float.IsFinite(v.Z);
 }

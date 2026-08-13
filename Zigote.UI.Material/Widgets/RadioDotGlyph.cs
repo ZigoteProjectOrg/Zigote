@@ -8,14 +8,21 @@ public sealed class RadioDotGlyph() : ToggleGlyph(Motion.Fast)
 {
     protected override void PaintGlyph(PaintList paint, float t)
     {
-        var radius = MathF.Min(Bounds.Width, Bounds.Height) / 2f;
-        var inner = radius * 2f * 0.28f * MathF.Max(0f, t); // scale the dot about the centre
+        float radius = MathF.Min(x: Bounds.Width, y: Bounds.Height) / 2f;
+        float inner = radius * 2f * 0.28f * MathF.Max(
+            x: 0f,
+            y: t
+        ); // scale the dot about the centre
         var dot = new Rect(
-            Bounds.X + radius - inner,
-            Bounds.Y + radius - inner,
-            inner * 2f,
-            inner * 2f
+            x: Bounds.X + radius - inner,
+            y: Bounds.Y + radius - inner,
+            width: inner * 2f,
+            height: inner * 2f
         );
-        paint.AddRect(dot, Color.WithAlpha(Math.Clamp(t, 0f, 1f)), inner);
+        paint.AddRect(
+            bounds: dot,
+            color: Color.WithAlpha(Math.Clamp(value: t, min: 0f, max: 1f)),
+            radius: inner
+        );
     }
 }

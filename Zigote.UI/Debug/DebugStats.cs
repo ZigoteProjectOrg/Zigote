@@ -22,24 +22,6 @@ public static class DebugStats
     private static float _metricTimer = 1f; // force first-frame sample
     private static float _statTimer = 1f;
 
-    /// <summary>
-    ///     <see cref="Process.TotalProcessorTime" /> throws PlatformNotSupported on iOS/Android.
-    ///     The per-sample reads are already try/guarded; this keeps the TYPE INITIALIZER from
-    ///     throwing there too (a cctor exception takes the whole app down, and it did — the
-    ///     CPU% readout just stays 0 on those platforms).
-    /// </summary>
-    private static TimeSpan SafeCpuTime()
-    {
-        try
-        {
-            return Proc.TotalProcessorTime;
-        }
-        catch (Exception)
-        {
-            return TimeSpan.Zero;
-        }
-    }
-
     public static float Fps { get; private set; } = 60f;
     public static float FpsMin { get; private set; } = 60f;
     public static float FpsMax { get; private set; } = 60f;
@@ -63,7 +45,25 @@ public static class DebugStats
 
     public static int FrameWriteIndex { get; private set; }
 
-    public static int FrameRingCount => Math.Min(FrameWriteIndex, FpsRing);
+    public static int FrameRingCount => Math.Min(val1: FrameWriteIndex, val2: FpsRing);
+
+    /// <summary>
+    ///     <see cref="Process.TotalProcessorTime" /> throws PlatformNotSupported on iOS/Android.
+    ///     The per-sample reads are already try/guarded; this keeps the TYPE INITIALIZER from
+    ///     throwing there too (a cctor exception takes the whole app down, and it did — the
+    ///     CPU% readout just stays 0 on those platforms).
+    /// </summary>
+    private static TimeSpan SafeCpuTime()
+    {
+        try
+        {
+            return Proc.TotalProcessorTime;
+        }
+        catch (Exception)
+        {
+            return TimeSpan.Zero;
+        }
+    }
 
     /// <summary>
     ///     Fired at the end of every <see cref="Sample" /> with the frame's dt. External diagnostics
@@ -81,14 +81,14 @@ public static class DebugStats
         _fpsTimer += dt;
         if (_fpsTimer >= 0.25f)
         {
-            var count = Math.Min(FrameWriteIndex, FpsRing);
+            int count = Math.Min(val1: FrameWriteIndex, val2: FpsRing);
             float sum = 0f, worst = 0f, best = float.MaxValue;
-            for (var i = 0; i < count; i++)
+            for (int i = 0; i < count; i++)
             {
-                var t = FrameTimes[i];
+                float t = FrameTimes[i];
                 sum += t;
-                worst = MathF.Max(worst, t);
-                best = MathF.Min(best, t);
+                worst = MathF.Max(x: worst, y: t);
+                best = MathF.Min(x: best, y: t);
             }
 
             Fps = sum > 0f ? count / sum : 0f;
@@ -106,7 +106,7 @@ public static class DebugStats
                 Proc.Refresh();
                 MemMb = Proc.WorkingSet64 / (1024f * 1024f);
                 var cpu = Proc.TotalProcessorTime;
-                var elapsed = (cpu - _lastCpu).TotalMilliseconds;
+                double elapsed = (cpu - _lastCpu).TotalMilliseconds;
                 CpuPct = (float)(elapsed / (_metricTimer * 1000.0 * Environment.ProcessorCount) *
                                  100.0);
                 _lastCpu = cpu;
@@ -135,9 +135,7 @@ public static class DebugStats
                     EngineOk = true;
                 }
                 else
-                {
                     EngineOk = false;
-                }
             }
             catch
             {

@@ -1,5 +1,4 @@
 using Zigote.Core.Animation;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.Adwaita;
 
@@ -13,16 +12,18 @@ namespace Zigote.UI.Adwaita;
 public sealed class AdwBanner : ComposedWidget
 {
     private readonly AnimationController _anim;
-    private string _title;
     private string? _buttonLabel;
     private bool _revealed = true;
+    private string _title;
 
     public AdwBanner(string title = "", string? buttonLabel = null, Action? onButtonClicked = null)
     {
         _title = title;
         _buttonLabel = buttonLabel;
         OnButtonClicked = onButtonClicked;
-        _anim = new AnimationController(0.25f, this) { Curve = Curves.EaseOut };
+        _anim = new AnimationController(durationSeconds: 0.25f, vsync: this) {
+            Curve = Curves.EaseOut,
+        };
         _anim.OnTick += MarkNeedsLayout;
         // Jump to the initial position without animating.
         if (_revealed) _anim.Complete();
@@ -32,13 +33,13 @@ public sealed class AdwBanner : ComposedWidget
     public string Title
     {
         get => _title;
-        set => this.Set(ref _title, value);
+        set => this.Set(field: ref _title, value: value);
     }
 
     public string? ButtonLabel
     {
         get => _buttonLabel;
-        set => this.Set(ref _buttonLabel, value);
+        set => this.Set(field: ref _buttonLabel, value: value);
     }
 
     public Action? OnButtonClicked { get; set; }
@@ -62,10 +63,7 @@ public sealed class AdwBanner : ComposedWidget
 
     // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
     // re-attach rebinds instead of leaking one per attach cascade.
-    protected override void OnMount()
-    {
-        _anim.AttachTicker(this);
-    }
+    protected override void OnMount() => _anim.AttachTicker(this);
 
 
     // ── Tree ───────────────────────────────────────────────────────────────────
@@ -73,10 +71,12 @@ public sealed class AdwBanner : ComposedWidget
     protected override Widget Build(BuildContext context)
     {
         var theme = ThemeProvider.Of(context);
-        var title = new Label(Title, AdwTypography.Heading, theme.OnBackground);
+        var title = new Label(text: Title, style: AdwTypography.Heading, color: theme.OnBackground);
         var button = string.IsNullOrEmpty(ButtonLabel)
             ? null
-            : new AdwButton(ButtonLabel!, () => OnButtonClicked?.Invoke()) { Compact = true };
+            : new AdwButton(label: ButtonLabel!, onPressed: () => OnButtonClicked?.Invoke()) {
+                Compact = true,
+            };
 
         Widget content;
         // At phone width a title sharing its row with a button is squeezed into a narrow wrapping
@@ -102,7 +102,7 @@ public sealed class AdwBanner : ComposedWidget
                 Children = {
                     // Invisible strut: keeps the bar at min-height 44 (28 + 2×8 padding) even
                     // when the title fits one line and there is no button.
-                    new SizedBox(0f, AdwMetrics.CompactControlHeight),
+                    new SizedBox(width: 0f, height: AdwMetrics.CompactControlHeight),
                     new Flexible(title),
                 },
             };
@@ -119,14 +119,17 @@ public sealed class AdwBanner : ComposedWidget
         // NEUTRAL grey band that says "read me", not an accent-tinted one — the accent is reserved
         // for the button inside it.
         return new HeightReveal(
-            _anim,
-            new Container {
+            anim: _anim,
+            child: new Container {
                 Background = AdwPalette.Mix(
-                    Color.Rgb(125, 125, 131),
-                    AdwPalette.For(theme).WindowBg,
-                    0.30f
+                    a: Color.Rgb(r: 125, g: 125, b: 131),
+                    b: AdwPalette.For(theme).WindowBg,
+                    t: 0.30f
                 ),
-                Padding = EdgeInsets.Symmetric(AdwMetrics.RowPaddingX, AdwMetrics.RowSpacing),
+                Padding = EdgeInsets.Symmetric(
+                    horizontal: AdwMetrics.RowPaddingX,
+                    vertical: AdwMetrics.RowSpacing
+                ),
                 Child = content,
             }
         );
@@ -147,26 +150,26 @@ public sealed class AdwBanner : ComposedWidget
         public override Size Measure(Constraints c)
         {
             _full = child.Measure(c);
-            _size = c.Constrain(new Size(_full.Width, _full.Height * anim.Value));
+            _size = c.Constrain(new Size(width: _full.Width, height: _full.Height * anim.Value));
             return _size;
         }
 
         public override void Layout(Offset origin)
         {
             Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                _size.Width,
-                _size.Height
+                x: origin.X,
+                y: origin.Y,
+                width: _size.Width,
+                height: _size.Height
             );
             // Pin the content to the bottom edge of the revealed strip so it slides down into
             // place rather than being wiped in.
-            child.Layout(new Offset(origin.X, origin.Y + _size.Height - _full.Height));
+            child.Layout(new Offset(x: origin.X, y: origin.Y + _size.Height - _full.Height));
         }
 
         public override void Paint(PaintList paint)
         {
-            var t = anim.Value;
+            float t = anim.Value;
             if (t <= 0.001f) return;
             if (t >= 0.999f)
             {
@@ -182,12 +185,9 @@ public sealed class AdwBanner : ComposedWidget
         public override Widget? HitTest(Offset point)
         {
             if (anim.Value <= 0.001f) return null;
-            return Bounds.Contains(point.X, point.Y) ? child.HitTest(point) : null;
+            return Bounds.Contains(px: point.X, py: point.Y) ? child.HitTest(point) : null;
         }
 
-        public override IEnumerable<Widget> GetChildren()
-        {
-            return ChildOrEmpty(child);
-        }
+        public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(child);
     }
 }

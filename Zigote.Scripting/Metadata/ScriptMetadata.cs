@@ -26,7 +26,7 @@ public sealed class ScriptMetadata
         try
         {
             if (Activator.CreateInstance(Type) is Component instance)
-                return ScriptSerializer.Serialize(instance, this);
+                return ScriptSerializer.Serialize(instance: instance, meta: this);
         }
         catch (Exception ex)
         {
@@ -82,7 +82,7 @@ public sealed class ScriptMetadata
         if (t == typeof(float)) return ExportedFieldKind.Float;
         if (t == typeof(double)) return ExportedFieldKind.Double;
         if (t == typeof(string)) return ExportedFieldKind.String;
-        var name = t.FullName ?? t.Name;
+        string name = t.FullName ?? t.Name;
         if (name.EndsWith("Vec2")) return ExportedFieldKind.Vec2;
         if (name.EndsWith("Vec3")) return ExportedFieldKind.Vec3;
         if (name.EndsWith("Color")) return ExportedFieldKind.Color;

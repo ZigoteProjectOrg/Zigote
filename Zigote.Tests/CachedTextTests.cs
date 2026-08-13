@@ -15,67 +15,71 @@ public class CachedTextTests
     public void Update_RendersInterpolation_InvariantCulture()
     {
         var t = new CachedText();
-        Assert.Equal("60 fps", t.Update($"{60.4f:F0} fps"));
-        Assert.Equal("16.67 ms", t.Update($"{16.666:F2} ms"));
-        Assert.Equal("a=true b=x c=1.5K", t.Update($"a={true} b={'x'} c={1.5:0.#}K"));
+        Assert.Equal(expected: "60 fps", actual: t.Update($"{60.4f:F0} fps"));
+        Assert.Equal(expected: "16.67 ms", actual: t.Update($"{16.666:F2} ms"));
+        Assert.Equal(
+            expected: "a=true b=x c=1.5K",
+            actual: t.Update($"a={true} b={'x'} c={1.5:0.#}K")
+        );
     }
 
     [Fact]
     public void Update_SameText_ReturnsSameInstance()
     {
         var t = new CachedText();
-        var a = t.Update($"{60f:F0} fps");
-        var b = t.Update($"{60.2f:F0} fps"); // renders identically
-        Assert.Same(a, b);
+        string a = t.Update($"{60f:F0} fps");
+        string b = t.Update($"{60.2f:F0} fps"); // renders identically
+        Assert.Same(expected: a, actual: b);
     }
 
     [Fact]
     public void Update_ChangedText_ReturnsNewValue()
     {
         var t = new CachedText();
-        var a = t.Update($"{60f:F0} fps");
-        var b = t.Update($"{30f:F0} fps");
-        Assert.NotSame(a, b);
-        Assert.Equal("30 fps", b);
+        string a = t.Update($"{60f:F0} fps");
+        string b = t.Update($"{30f:F0} fps");
+        Assert.NotSame(expected: a, actual: b);
+        Assert.Equal(expected: "30 fps", actual: b);
     }
 
     [Fact]
     public void Update_GrowsPastInitialCapacity_KeepsPrefix()
     {
         var t = new CachedText(16);
-        var longTail = new string('y', 300);
-        var s = t.Update($"prefix-{longTail}-{123456:N0}");
-        Assert.StartsWith("prefix-yyy", s);
-        Assert.EndsWith("-123,456", s);
-        Assert.Equal(7 + 300 + 1 + 7, s.Length);
+        string longTail = new(c: 'y', count: 300);
+        string s = t.Update($"prefix-{longTail}-{123456:N0}");
+        Assert.StartsWith(expectedStartString: "prefix-yyy", actualString: s);
+        Assert.EndsWith(expectedEndString: "-123,456", actualString: s);
+        Assert.Equal(expected: 7 + 300 + 1 + 7, actual: s.Length);
     }
 
     [Fact]
     public void Update_SpanOverload_CachesByContent()
     {
         var t = new CachedText();
-        var a = t.Update("hello".AsSpan());
-        var b = t.Update("hello".AsSpan());
-        Assert.Same(a, b);
+        string a = t.Update("hello".AsSpan());
+        string b = t.Update("hello".AsSpan());
+        Assert.Same(expected: a, actual: b);
     }
 
     [Fact]
     public void Update_SteadyState_AllocatesZero()
     {
         var t = new CachedText();
-        var fps = 60.2f;
-        var ms = 16.61;
+        float fps = 60.2f;
+        double ms = 16.61;
 
         // Warm up: first render allocates the string + JIT.
-        for (var i = 0; i < 100; i++) _ = t.Update($"{fps:F0} fps · {ms:F1} ms");
+        for (int i = 0; i < 100; i++) _ = t.Update($"{fps:F0} fps · {ms:F1} ms");
 
         const int frames = 1000;
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var i = 0; i < frames; i++) _ = t.Update($"{fps:F0} fps · {ms:F1} ms");
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < frames; i++) _ = t.Update($"{fps:F0} fps · {ms:F1} ms");
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
         Assert.True(
-            allocated == 0,
+            condition: allocated == 0,
+            userMessage:
             $"CachedText.Update allocated {allocated} B over {frames} unchanged renders; expected 0."
         );
     }

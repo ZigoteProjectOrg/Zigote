@@ -30,44 +30,39 @@ public sealed class ConsolePanel : Widget
     private bool _filterDirty = true;
     private Size _size;
 
-    public ConsolePanel(ThemeData theme)
-    {
-        _theme = theme;
-    }
+    public ConsolePanel(ThemeData theme) => _theme = theme;
 
     /// <summary>Log font size in points; 0/negative = follow the theme caption size.</summary>
     public float FontSize { get; set; }
 
     private float EffectiveFontSize => FontSize > 0 ? FontSize : _theme.FontSizeCaption;
 
-    private float RowHeight => MathF.Max(RowH, EffectiveFontSize * 1.6f);
+    private float RowHeight => MathF.Max(x: RowH, y: EffectiveFontSize * 1.6f);
 
     public override Size Measure(Constraints c)
     {
-        _size = c.Constrain(new Size(c.MaxWidth, c.MaxHeight));
+        _size = c.Constrain(new Size(width: c.MaxWidth, height: c.MaxHeight));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
     // Debug lines follow the Info filter.
-    private static LogSeverity FilterKey(LogSeverity s)
-    {
-        return s == LogSeverity.Debug ? LogSeverity.Info : s;
-    }
+    private static LogSeverity FilterKey(LogSeverity s) =>
+        s == LogSeverity.Debug ? LogSeverity.Info : s;
 
     public override void Paint(PaintList paint)
     {
-        var fs = EffectiveFontSize;
-        var (err, warn, info) = EditorLog.Counts();
+        float fs = EffectiveFontSize;
+        (int err, int warn, int info) = EditorLog.Counts();
 
         // Rebuild the filtered view only when the log or the filter actually changed — not every frame.
         if (EditorLog.Version != _cachedVersion || _filterDirty)
@@ -77,26 +72,28 @@ public sealed class ConsolePanel : Widget
             EditorLog.CopyInto(_all);
             _visible.Clear();
             foreach (var e in _all)
+            {
                 if (!_hidden.Contains(FilterKey(e.Severity)))
                     _visible.Add(e);
+            }
         }
 
         // ── Top bar: filter chips + clear ─────────────────────────────────────
         var bar = new Rect(
-            Bounds.X,
-            Bounds.Y,
-            Bounds.Width,
-            BarH
+            x: Bounds.X,
+            y: Bounds.Y,
+            width: Bounds.Width,
+            height: BarH
         );
-        paint.AddRect(bar, _theme.PanelSunken);
+        paint.AddRect(bounds: bar, color: _theme.PanelSunken);
         paint.AddRect(
-            new Rect(
-                bar.X,
-                bar.Bottom - 1f,
-                bar.Width,
-                1f
+            bounds: new Rect(
+                x: bar.X,
+                y: bar.Bottom - 1f,
+                width: bar.Width,
+                height: 1f
             ),
-            _theme.Border
+            color: _theme.Border
         );
 
         var chips = new (LogSeverity Sev, string Icon, Color Col, int Count)[] {
@@ -105,102 +102,102 @@ public sealed class ConsolePanel : Widget
             (LogSeverity.Info, Icons.Info, _theme.Info, info),
         };
 
-        var cx = Bounds.X + 8f;
-        for (var i = 0; i < chips.Length; i++)
+        float cx = Bounds.X + 8f;
+        for (int i = 0; i < chips.Length; i++)
         {
-            var (sev, icon, col, count) = chips[i];
-            var label = count.ToString();
-            var w = 16f + 4f + label.Length * fs * 0.62f + 14f;
+            (var sev, string icon, var col, int count) = chips[i];
+            string label = count.ToString();
+            float w = 16f + 4f + (label.Length * fs * 0.62f) + 14f;
             var r = new Rect(
-                cx,
-                bar.Y + (BarH - 20f) / 2f,
-                w,
-                20f
+                x: cx,
+                y: bar.Y + ((BarH - 20f) / 2f),
+                width: w,
+                height: 20f
             );
             _chipRects[i] = (sev, r);
 
-            var on = !_hidden.Contains(sev);
-            if (on) paint.AddRect(r, col.WithAlpha(0.16f), 5f);
+            bool on = !_hidden.Contains(sev);
+            if (on) paint.AddRect(bounds: r, color: col.WithAlpha(0.16f), radius: 5f);
             Icons.Draw(
-                paint,
-                icon,
-                new Rect(
-                    r.X + 5f,
-                    r.Y,
-                    16f,
-                    r.Height
+                paint: paint,
+                glyph: icon,
+                box: new Rect(
+                    x: r.X + 5f,
+                    y: r.Y,
+                    width: 16f,
+                    height: r.Height
                 ),
-                on ? col : _theme.TextDisabled,
-                14f
+                color: on ? col : _theme.TextDisabled,
+                size: 14f
             );
             paint.AddText(
-                label,
-                r.X + 25f,
-                r.Y + (20f - fs) / 2f + fs * 0.8f,
-                on ? _theme.OnSurface : _theme.TextDisabled,
-                fs
+                text: label,
+                baselineX: r.X + 25f,
+                baselineY: r.Y + ((20f - fs) / 2f) + (fs * 0.8f),
+                color: on ? _theme.OnSurface : _theme.TextDisabled,
+                fontSize: fs
             );
             cx += w + 6f;
         }
 
         _clearRect = new Rect(
-            Bounds.Right - 56f,
-            bar.Y + (BarH - 20f) / 2f,
-            50f,
-            20f
+            x: Bounds.Right - 56f,
+            y: bar.Y + ((BarH - 20f) / 2f),
+            width: 50f,
+            height: 20f
         );
         Icons.Draw(
-            paint,
-            Icons.Delete,
-            new Rect(
-                _clearRect.X + 2f,
-                _clearRect.Y,
-                14f,
-                20f
+            paint: paint,
+            glyph: Icons.Delete,
+            box: new Rect(
+                x: _clearRect.X + 2f,
+                y: _clearRect.Y,
+                width: 14f,
+                height: 20f
             ),
-            _theme.TextMuted,
-            13f
+            color: _theme.TextMuted,
+            size: 13f
         );
         paint.AddText(
-            "Clear",
-            _clearRect.X + 18f,
-            _clearRect.Y + (20f - fs) / 2f + fs * 0.8f,
-            _theme.TextMuted,
-            fs
+            text: "Clear",
+            baselineX: _clearRect.X + 18f,
+            baselineY: _clearRect.Y + ((20f - fs) / 2f) + (fs * 0.8f),
+            color: _theme.TextMuted,
+            fontSize: fs
         );
 
         // ── Log rows (latest that fit, top→bottom) ────────────────────────────
-        var areaTop = Bounds.Y + BarH;
-        var areaH = MathF.Max(0f, Bounds.Bottom - areaTop);
+        float areaTop = Bounds.Y + BarH;
+        float areaH = MathF.Max(x: 0f, y: Bounds.Bottom - areaTop);
 
         if (_visible.Count == 0)
         {
             paint.AddText(
-                "Console output appears here.",
-                Bounds.X + 12f,
-                areaTop + 18f,
-                _theme.TextMuted,
-                fs
+                text: "Console output appears here.",
+                baselineX: Bounds.X + 12f,
+                baselineY: areaTop + 18f,
+                color: _theme.TextMuted,
+                fontSize: fs
             );
             return;
         }
 
         paint.AddClipStart(
             new Rect(
-                Bounds.X,
-                areaTop,
-                Bounds.Width,
-                areaH
+                x: Bounds.X,
+                y: areaTop,
+                width: Bounds.Width,
+                height: areaH
             )
         );
-        var rowH = RowHeight;
-        var maxRows = Math.Max(0, (int)(areaH / rowH));
-        var start = Math.Max(0, _visible.Count - maxRows);
-        for (var i = start; i < _visible.Count; i++)
+        float rowH = RowHeight;
+        int maxRows = Math.Max(val1: 0, val2: (int)(areaH / rowH));
+        int start = Math.Max(val1: 0, val2: _visible.Count - maxRows);
+        for (int i = start; i < _visible.Count; i++)
         {
             var e = _visible[i];
-            var ry = areaTop + (i - start) * rowH;
-            var (icon, col) = e.Severity switch {
+            float ry = areaTop + ((i - start) * rowH);
+            (string icon, var col) = e.Severity switch {
                 LogSeverity.Error => (Icons.Error, _theme.Error),
                 LogSeverity.Warning => (Icons.Warning, _theme.Warning),
                 LogSeverity.Debug => (Icons.Dot, _theme.TextMuted),
@@ -208,34 +205,36 @@ public sealed class ConsolePanel : Widget
             };
 
             if (e.Severity == LogSeverity.Error)
+            {
                 paint.AddRect(
-                    new Rect(
-                        Bounds.X,
-                        ry,
-                        Bounds.Width,
-                        rowH
+                    bounds: new Rect(
+                        x: Bounds.X,
+                        y: ry,
+                        width: Bounds.Width,
+                        height: rowH
                     ),
-                    _theme.Error.WithAlpha(0.07f)
+                    color: _theme.Error.WithAlpha(0.07f)
                 );
+            }
 
             Icons.Draw(
-                paint,
-                icon,
-                new Rect(
-                    Bounds.X + 8f,
-                    ry,
-                    14f,
-                    rowH
+                paint: paint,
+                glyph: icon,
+                box: new Rect(
+                    x: Bounds.X + 8f,
+                    y: ry,
+                    width: 14f,
+                    height: rowH
                 ),
-                col,
-                12f
+                color: col,
+                size: 12f
             );
             paint.AddText(
-                e.Message,
-                Bounds.X + 28f,
-                ry + rowH * 0.72f,
-                _theme.OnSurface,
-                fs,
+                text: e.Message,
+                baselineX: Bounds.X + 28f,
+                baselineY: ry + (rowH * 0.72f),
+                color: _theme.OnSurface,
+                fontSize: fs,
                 fontFamily: "code"
             );
         }
@@ -243,14 +242,12 @@ public sealed class ConsolePanel : Widget
         paint.AddClipEnd();
     }
 
-    public override Widget? HitTest(Offset point)
-    {
-        return Bounds.Contains(point.X, point.Y) ? this : null;
-    }
+    public override Widget? HitTest(Offset point) =>
+        Bounds.Contains(px: point.X, py: point.Y) ? this : null;
 
     public override void OnPointerDown(Offset point)
     {
-        if (_clearRect.Contains(point.X, point.Y))
+        if (_clearRect.Contains(px: point.X, py: point.Y))
         {
             EditorLog.Clear();
             App.Active?.RequestPaint();
@@ -258,12 +255,14 @@ public sealed class ConsolePanel : Widget
         }
 
         foreach (var (sev, r) in _chipRects)
-            if (r.Contains(point.X, point.Y))
+        {
+            if (r.Contains(px: point.X, py: point.Y))
             {
                 if (!_hidden.Remove(sev)) _hidden.Add(sev);
                 _filterDirty = true;
                 App.Active?.RequestPaint();
                 return;
             }
+        }
     }
 }

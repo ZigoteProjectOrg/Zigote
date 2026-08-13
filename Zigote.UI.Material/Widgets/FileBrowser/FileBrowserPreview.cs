@@ -33,26 +33,21 @@ internal sealed class FileBrowserPreview : Widget
     private Size _size;
     private uint _texH;
     private uint _texW;
-    private bool _triedLoad;
     private ThemeData _theme = ThemeData.Dark;
+    private bool _triedLoad;
 
-    public FileBrowserPreview(FileBrowserEntry entry)
-    {
-        _entry = entry;
-    }
+    public FileBrowserPreview(FileBrowserEntry entry) => _entry = entry;
 
-    public static bool CanPreview(string name)
-    {
-        return ImageExts.Contains(Path.GetExtension(name).TrimStart('.'));
-    }
+    public static bool CanPreview(string name) =>
+        ImageExts.Contains(Path.GetExtension(name).TrimStart('.'));
 
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
         _size = c.Constrain(
             new Size(
-                float.IsFinite(c.MaxWidth) ? c.MaxWidth : 220f,
-                float.IsFinite(c.MaxHeight) ? c.MaxHeight : 300f
+                width: float.IsFinite(c.MaxWidth) ? c.MaxWidth : 220f,
+                height: float.IsFinite(c.MaxHeight) ? c.MaxHeight : 300f
             )
         );
         return _size;
@@ -61,10 +56,10 @@ internal sealed class FileBrowserPreview : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
@@ -72,7 +67,7 @@ internal sealed class FileBrowserPreview : Widget
     {
         if (_triedLoad) return;
         _triedLoad = true;
-        if (Cache.TryGetValue(_entry.FullPath, out var cached))
+        if (Cache.TryGetValue(key: _entry.FullPath, value: out var cached))
         {
             (_handle, _texW, _texH) = cached;
             return;
@@ -80,12 +75,12 @@ internal sealed class FileBrowserPreview : Widget
 
         try
         {
-            var bytes = File.ReadAllBytes(_entry.FullPath);
+            byte[] bytes = File.ReadAllBytes(_entry.FullPath);
             _handle = ZigoteEngine.LoadTextureFromMemoryScaled(
-                bytes,
-                MaxDecodeDim,
-                out _texW,
-                out _texH
+                data: bytes,
+                maxDim: MaxDecodeDim,
+                outW: out _texW,
+                outH: out _texH
             );
         }
         catch
@@ -101,89 +96,90 @@ internal sealed class FileBrowserPreview : Widget
     public override void Paint(PaintList paint)
     {
         EnsureLoaded();
-        var pad = 12f;
-        var fs = _theme.FontSizeCaption;
+        float pad = 12f;
+        float fs = _theme.FontSizeCaption;
         var imageBox = new Rect(
-            Bounds.X + pad,
-            Bounds.Y + pad,
-            _size.Width - pad * 2f,
-            MathF.Max(60f, MathF.Min(_size.Width - pad * 2f, _size.Height * 0.55f))
+            x: Bounds.X + pad,
+            y: Bounds.Y + pad,
+            width: _size.Width - (pad * 2f),
+            height: MathF.Max(
+                x: 60f,
+                y: MathF.Min(x: _size.Width - (pad * 2f), y: _size.Height * 0.55f)
+            )
         );
 
         if (_handle != 0 && _texW > 0 && _texH > 0)
         {
-            var scale = MathF.Min(imageBox.Width / _texW, imageBox.Height / _texH);
-            var w = _texW * scale;
-            var h = _texH * scale;
+            float scale = MathF.Min(x: imageBox.Width / _texW, y: imageBox.Height / _texH);
+            float w = _texW * scale;
+            float h = _texH * scale;
             var fit = new Rect(
-                imageBox.X + (imageBox.Width - w) / 2f,
-                imageBox.Y + (imageBox.Height - h) / 2f,
-                w,
-                h
+                x: imageBox.X + ((imageBox.Width - w) / 2f),
+                y: imageBox.Y + ((imageBox.Height - h) / 2f),
+                width: w,
+                height: h
             );
-            paint.AddRect(imageBox, _theme.PanelSunken, Radii.Sm);
+            paint.AddRect(bounds: imageBox, color: _theme.PanelSunken, radius: Radii.Sm);
             paint.AddImage(
-                fit,
-                (int)_texW,
-                (int)_texH,
-                null,
-                _handle
+                bounds: fit,
+                pixelWidth: (int)_texW,
+                pixelHeight: (int)_texH,
+                pixels: null,
+                cacheKey: _handle
             );
         }
         else
         {
-            paint.AddRect(imageBox, _theme.PanelSunken, Radii.Sm);
+            paint.AddRect(bounds: imageBox, color: _theme.PanelSunken, radius: Radii.Sm);
             paint.AddText(
-                "No preview",
-                imageBox.X + 12f,
-                imageBox.Y + imageBox.Height / 2f,
-                _theme.TextMuted,
-                fs
+                text: "No preview",
+                baselineX: imageBox.X + 12f,
+                baselineY: imageBox.Y + (imageBox.Height / 2f),
+                color: _theme.TextMuted,
+                fontSize: fs
             );
         }
 
-        var textY = imageBox.Bottom + 18f;
+        float textY = imageBox.Bottom + 18f;
         paint.AddClipStart(Bounds);
         paint.AddText(
-            _entry.Name,
-            Bounds.X + pad,
-            textY,
-            _theme.OnSurface,
-            fs
+            text: _entry.Name,
+            baselineX: Bounds.X + pad,
+            baselineY: textY,
+            color: _theme.OnSurface,
+            fontSize: fs
         );
         textY += fs + 8f;
         if (_texW > 0)
         {
             paint.AddText(
-                $"{_texW} × {_texH}",
-                Bounds.X + pad,
-                textY,
-                _theme.TextSecondary,
-                fs
+                text: $"{_texW} × {_texH}",
+                baselineX: Bounds.X + pad,
+                baselineY: textY,
+                color: _theme.TextSecondary,
+                fontSize: fs
             );
             textY += fs + 6f;
         }
 
         paint.AddText(
-            FileBrowserList.FormatSize(_entry.Size),
-            Bounds.X + pad,
-            textY,
-            _theme.TextSecondary,
-            fs
+            text: FileBrowserList.FormatSize(_entry.Size),
+            baselineX: Bounds.X + pad,
+            baselineY: textY,
+            color: _theme.TextSecondary,
+            fontSize: fs
         );
         textY += fs + 6f;
         paint.AddText(
-            FileBrowserList.FormatDate(_entry.Modified, DateTime.Now),
-            Bounds.X + pad,
-            textY,
-            _theme.TextMuted,
-            fs
+            text: FileBrowserList.FormatDate(modified: _entry.Modified, now: DateTime.Now),
+            baselineX: Bounds.X + pad,
+            baselineY: textY,
+            color: _theme.TextMuted,
+            fontSize: fs
         );
         paint.AddClipEnd();
     }
 
-    public override int DebugStateHash()
-    {
-        return HashCode.Combine(_entry.FullPath, _handle);
-    }
+    public override int DebugStateHash() =>
+        HashCode.Combine(value1: _entry.FullPath, value2: _handle);
 }

@@ -1,19 +1,22 @@
 using Zigote.Core;
 using Zigote.Core.Paint;
 using Zigote.UI.Adwaita;
+using Zigote.UI.Host;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.DevTools.Widgets;
 
 /// <summary>
 ///     Retained-widget building blocks for devtools panels, drawn in the Adwaita idiom: the GNOME type
-///     ramp (<see cref="AdwTypography" />), the named-colour palette (<see cref="AdwPalette" />) and the
-///     libadwaita control metrics. Panels compose these instead of hand-painting, keep references to the
-///     ones they mutate (e.g. a <see cref="DevKeyValue" />'s <see cref="DevKeyValue.Value" />) and update
+///     ramp (<see cref="AdwTypography" />), the named-colour palette (<see cref="AdwPalette" />) and
+///     the
+///     libadwaita control metrics. Panels compose these instead of hand-painting, keep references to
+///     the
+///     ones they mutate (e.g. a <see cref="DevKeyValue" />'s <see cref="DevKeyValue.Value" />) and
+///     update
 ///     them in <see cref="IDevPanel.Refresh" />.
 /// </summary>
 public static class DevKit
@@ -31,6 +34,22 @@ public static class DevKit
     /// <summary>Below this the surface is a phone, not merely a narrow pane or a small window.</summary>
     private const float PhoneWidth = 400f;
 
+    /// <summary>Horizontal inset of a readout row — matches the Adwaita boxed-list inset.</summary>
+    public const float RowInset = AdwMetrics.RowPaddingX;
+
+    // Twelve hues spread so neighbouring depths never read as the same colour — the same idea as the
+    // overlay's repaint rainbow, reused for tree-depth guides.
+    private static readonly Color[] Depths = [
+        Color.Rgb(r: 0xE0, g: 0x6C, b: 0x75), Color.Rgb(r: 0xE5, g: 0xA5, b: 0x4B),
+        Color.Rgb(r: 0xD8, g: 0xCF, b: 0x54),
+        Color.Rgb(r: 0x98, g: 0xC3, b: 0x79), Color.Rgb(r: 0x56, g: 0xC2, b: 0x8E),
+        Color.Rgb(r: 0x56, g: 0xB6, b: 0xC2),
+        Color.Rgb(r: 0x61, g: 0xAF, b: 0xEF), Color.Rgb(r: 0x82, g: 0x8B, b: 0xF0),
+        Color.Rgb(r: 0xB0, g: 0x77, b: 0xE8),
+        Color.Rgb(r: 0xD4, g: 0x70, b: 0xD0), Color.Rgb(r: 0xEA, g: 0x6F, b: 0xA8),
+        Color.Rgb(r: 0xC0, g: 0x92, b: 0x6B),
+    ];
+
     /// <summary>
     ///     True when controls should be finger-sized: a touch pointer is driving, or the surface is
     ///     phone-sized. Deliberately not "the pane is narrow" — a 408px docked column and a 520px
@@ -43,23 +62,9 @@ public static class DevKit
     /// <summary>Dense row height on a pointer screen, a finger-sized target on a phone.</summary>
     public static float Row => Compact ? ControlMetrics.MinTouchTarget : RowHeight;
 
-    /// <summary>Horizontal inset of a readout row — matches the Adwaita boxed-list inset.</summary>
-    public const float RowInset = AdwMetrics.RowPaddingX;
-
-    // Twelve hues spread so neighbouring depths never read as the same colour — the same idea as the
-    // overlay's repaint rainbow, reused for tree-depth guides.
-    private static readonly Color[] Depths = [
-        Color.Rgb(0xE0, 0x6C, 0x75), Color.Rgb(0xE5, 0xA5, 0x4B), Color.Rgb(0xD8, 0xCF, 0x54),
-        Color.Rgb(0x98, 0xC3, 0x79), Color.Rgb(0x56, 0xC2, 0x8E), Color.Rgb(0x56, 0xB6, 0xC2),
-        Color.Rgb(0x61, 0xAF, 0xEF), Color.Rgb(0x82, 0x8B, 0xF0), Color.Rgb(0xB0, 0x77, 0xE8),
-        Color.Rgb(0xD4, 0x70, 0xD0), Color.Rgb(0xEA, 0x6F, 0xA8), Color.Rgb(0xC0, 0x92, 0x6B),
-    ];
-
     /// <summary>The guide colour for a tree depth — cycles every 12 levels.</summary>
-    public static Color DepthColor(int depth)
-    {
-        return Depths[(depth % Depths.Length + Depths.Length) % Depths.Length];
-    }
+    public static Color DepthColor(int depth) =>
+        Depths[((depth % Depths.Length) + Depths.Length) % Depths.Length];
 }
 
 /// <summary>A boxed-list group heading: Adwaita <c>.heading</c> over the rows it introduces.</summary>
@@ -69,8 +74,10 @@ public sealed class DevSectionHeader(string title) : ComposedWidget
     {
         var t = ThemeProvider.Of(context);
         return new Padding(
-            EdgeInsets.Only(top: Spacing.Lg, bottom: Spacing.Sm),
-            new Label(title, AdwTypography.Heading, t.OnBackground) { MaxLines = 1 }
+            padding: EdgeInsets.Only(top: Spacing.Lg, bottom: Spacing.Sm),
+            child: new Label(text: title, style: AdwTypography.Heading, color: t.OnBackground) {
+                MaxLines = 1,
+            }
         );
     }
 }
@@ -86,8 +93,8 @@ public sealed class DevFillBox(Color color, float radius = 0f) : LeafWidget
     public override Size Measure(Constraints c)
     {
         _size = new Size(
-            float.IsFinite(c.MaxWidth) ? c.MaxWidth : c.MinWidth,
-            float.IsFinite(c.MaxHeight) ? c.MaxHeight : c.MinHeight
+            width: float.IsFinite(c.MaxWidth) ? c.MaxWidth : c.MinWidth,
+            height: float.IsFinite(c.MaxHeight) ? c.MaxHeight : c.MinHeight
         );
         return _size;
     }
@@ -95,27 +102,29 @@ public sealed class DevFillBox(Color color, float radius = 0f) : LeafWidget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
     public override void Paint(PaintList paint)
     {
         if (Color.A > 0f && Bounds is { Width: > 0f, Height: > 0f })
-            paint.AddRect(Bounds, Color, Radius);
+            paint.AddRect(bounds: Bounds, color: Color, radius: Radius);
     }
 
-    public override int DebugStateHash()
-    {
-        return HashCode.Combine(Color, Radius, Bounds.Width);
-    }
+    public override int DebugStateHash() => HashCode.Combine(
+        value1: Color,
+        value2: Radius,
+        value3: Bounds.Width
+    );
 }
 
 /// <summary>
-///     A key → value readout row, laid out like an <see cref="AdwActionRow" /> but at devtools density:
+///     A key → value readout row, laid out like an <see cref="AdwActionRow" /> but at devtools
+///     density:
 ///     the key in body text on the left, a monospace value on the right. The <see cref="Value" /> and
 ///     <see cref="ValueColor" /> are live-mutable so panels update them each frame without a rebuild.
 /// </summary>
@@ -127,12 +136,13 @@ public sealed class DevKeyValue : ComposedWidget
     public DevKeyValue(string key, string value = "", Color? valueColor = null, bool mono = true)
     {
         _key = key;
-        _valueLabel = new Label(value, mono ? AdwTypography.Monospace : AdwTypography.Caption) {
-            MaxLines = 1,
-            Overflow = TextOverflow.Ellipsis,
-            Align = TextAlign.Right,
-            Color = valueColor,
-        };
+        _valueLabel =
+            new Label(text: value, style: mono ? AdwTypography.Monospace : AdwTypography.Caption) {
+                MaxLines = 1,
+                Overflow = TextOverflow.Ellipsis,
+                Align = TextAlign.Right,
+                Color = valueColor,
+            };
     }
 
     public string Value
@@ -154,14 +164,18 @@ public sealed class DevKeyValue : ComposedWidget
         return new SizedBox(
             height: DevKit.Row,
             child: new Padding(
-                EdgeInsets.Symmetric(DevKit.RowInset),
-                new Row(crossAxisAlignment: CrossAxisAlignment.Center) {
+                padding: EdgeInsets.Symmetric(DevKit.RowInset),
+                child: new Row(crossAxisAlignment: CrossAxisAlignment.Center) {
                     Children = {
                         // Key at its natural width, value takes everything left and ellipsizes if it
                         // still does not fit. Sharing the row between two Flexibles and a Spacer (as
                         // this did) gave the value a third of the row, which clipped every long
                         // readout — flex children split what is left AFTER the fixed ones.
-                        new Label(_key, AdwTypography.Caption, t.TextSecondary) {
+                        new Label(
+                            text: _key,
+                            style: AdwTypography.Caption,
+                            color: t.TextSecondary
+                        ) {
                             MaxLines = 1,
                             Overflow = TextOverflow.Ellipsis,
                         },
@@ -174,15 +188,16 @@ public sealed class DevKeyValue : ComposedWidget
     }
 }
 
-/// <summary>A dim caption line (hints / notes), Adwaita <c>.caption</c>. <see cref="Text" /> is live-mutable.</summary>
+/// <summary>
+///     A dim caption line (hints / notes), Adwaita <c>.caption</c>. <see cref="Text" /> is
+///     live-mutable.
+/// </summary>
 public sealed class DevNote : ComposedWidget
 {
     private readonly Label _label;
 
-    public DevNote(string text, Color? color = null)
-    {
-        _label = new Label(text, AdwTypography.Caption) { Color = color };
-    }
+    public DevNote(string text, Color? color = null) =>
+        _label = new Label(text: text, style: AdwTypography.Caption) { Color = color };
 
     public string Text
     {
@@ -199,7 +214,10 @@ public sealed class DevNote : ComposedWidget
     protected override Widget Build(BuildContext context)
     {
         _label.Color ??= AdwPalette.For(ThemeProvider.Of(context)).DimLabel;
-        return new Padding(EdgeInsets.Symmetric(DevKit.RowInset, Spacing.Sm), _label);
+        return new Padding(
+            padding: EdgeInsets.Symmetric(horizontal: DevKit.RowInset, vertical: Spacing.Sm),
+            child: _label
+        );
     }
 }
 
@@ -209,7 +227,7 @@ public sealed class DevNote : ComposedWidget
 /// </summary>
 public sealed class DevMeter : ComposedWidget
 {
-    private readonly DevFillBox _fill = new(Color.Transparent, AdwMetrics.Pill);
+    private readonly DevFillBox _fill = new(color: Color.Transparent, radius: AdwMetrics.Pill);
     private readonly string _key;
     private readonly Label _valueLabel;
     private FractionBox _fraction = null!;
@@ -217,7 +235,7 @@ public sealed class DevMeter : ComposedWidget
     public DevMeter(string key, Color color)
     {
         _key = key;
-        _valueLabel = new Label("", AdwTypography.Monospace) {
+        _valueLabel = new Label(text: "", style: AdwTypography.Monospace) {
             MaxLines = 1,
             Overflow = TextOverflow.Ellipsis,
             Align = TextAlign.Right,
@@ -248,17 +266,21 @@ public sealed class DevMeter : ComposedWidget
         var t = ThemeProvider.Of(context);
         var p = AdwPalette.For(t);
         _valueLabel.Color ??= t.OnSurface;
-        _fraction = new FractionBox(_fill, p.ButtonFill, AdwMetrics.ProgressBarHeight);
+        _fraction = new FractionBox(
+            fill: _fill,
+            track: p.ButtonFill,
+            height: AdwMetrics.ProgressBarHeight
+        );
         return new Padding(
-            EdgeInsets.Symmetric(DevKit.RowInset, Spacing.Sm),
-            new Column(
+            padding: EdgeInsets.Symmetric(horizontal: DevKit.RowInset, vertical: Spacing.Sm),
+            child: new Column(
                 crossAxisAlignment: CrossAxisAlignment.Stretch,
                 mainAxisSize: MainAxisSize.Min
             ) {
                 Children = {
                     new Row(crossAxisAlignment: CrossAxisAlignment.Center) {
                         Children = {
-                            new Label(_key, AdwTypography.Caption, p.DimLabel) {
+                            new Label(text: _key, style: AdwTypography.Caption, color: p.DimLabel) {
                                 MaxLines = 1,
                                 Overflow = TextOverflow.Ellipsis,
                             },
@@ -276,7 +298,7 @@ public sealed class DevMeter : ComposedWidget
     /// <summary>A track rect with a proportional fill of <see cref="Fill" />; sizes to full width.</summary>
     private sealed class FractionBox(DevFillBox fill, Color track, float height) : Widget
     {
-        private readonly DevFillBox _track = new(track, AdwMetrics.Pill);
+        private readonly DevFillBox _track = new(color: track, radius: AdwMetrics.Pill);
         private Size _size;
 
         public DevFillBox Fill { get; } = fill;
@@ -284,24 +306,24 @@ public sealed class DevMeter : ComposedWidget
 
         public override Size Measure(Constraints c)
         {
-            var w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : c.MinWidth;
-            _size = new Size(w, height);
-            _track.Measure(Constraints.Tight(w, height));
-            Fill.Measure(Constraints.Tight(w, height));
+            float w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : c.MinWidth;
+            _size = new Size(width: w, height: height);
+            _track.Measure(Constraints.Tight(width: w, height: height));
+            Fill.Measure(Constraints.Tight(width: w, height: height));
             return _size;
         }
 
         public override void Layout(Offset origin)
         {
             Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                _size.Width,
-                _size.Height
+                x: origin.X,
+                y: origin.Y,
+                width: _size.Width,
+                height: _size.Height
             );
             _track.Layout(origin);
-            var fw = _size.Width * Math.Clamp(Fraction, 0f, 1f);
-            Fill.Measure(Constraints.Tight(fw, _size.Height));
+            float fw = _size.Width * Math.Clamp(value: Fraction, min: 0f, max: 1f);
+            Fill.Measure(Constraints.Tight(width: fw, height: _size.Height));
             Fill.Layout(origin);
         }
 
@@ -311,16 +333,14 @@ public sealed class DevMeter : ComposedWidget
             if (Fraction > 0f) Fill.Paint(paint);
         }
 
-        public override IEnumerable<Widget> GetChildren()
-        {
-            return [_track, Fill];
-        }
+        public override IEnumerable<Widget> GetChildren() => [_track, Fill];
     }
 }
 
 /// <summary>
 ///     A label + switch row — an <see cref="AdwSwitchRow" />, so the whole row is the (finger-sized)
-///     target and the state reaches a screen reader. <see cref="OnChanged" /> fires with the new value.
+///     target and the state reaches a screen reader. <see cref="OnChanged" /> fires with the new
+///     value.
 /// </summary>
 public sealed class DevToggle : ComposedWidget
 {
@@ -330,7 +350,9 @@ public sealed class DevToggle : ComposedWidget
     {
         Label = label;
         OnChanged = onChanged;
-        _row = new AdwSwitchRow(label, value: value, onChanged: onChanged) { Enabled = enabled };
+        _row = new AdwSwitchRow(title: label, value: value, onChanged: onChanged) {
+            Enabled = enabled,
+        };
     }
 
     public string Label { get; }
@@ -348,10 +370,7 @@ public sealed class DevToggle : ComposedWidget
         set => _row.Value = value;
     }
 
-    protected override Widget Build(BuildContext context)
-    {
-        return _row;
-    }
+    protected override Widget Build(BuildContext context) => _row;
 }
 
 /// <summary>
@@ -360,6 +379,12 @@ public sealed class DevToggle : ComposedWidget
 /// </summary>
 public sealed class DevStepper : ComposedWidget
 {
+    private readonly Label _valueLabel = new(text: "", style: AdwTypography.Monospace) {
+        MaxLines = 1,
+        Overflow = TextOverflow.Ellipsis,
+        Align = TextAlign.Center,
+    };
+
     private string _value;
 
     public DevStepper(string label, string value, Action onPrev, Action onNext)
@@ -385,34 +410,32 @@ public sealed class DevStepper : ComposedWidget
         }
     }
 
-    private readonly Label _valueLabel = new("", AdwTypography.Monospace) {
-        MaxLines = 1,
-        Overflow = TextOverflow.Ellipsis,
-        Align = TextAlign.Center,
-    };
-
     protected override Widget Build(BuildContext context)
     {
         var t = ThemeProvider.Of(context);
         _valueLabel.Text = Value;
         _valueLabel.Color = t.OnSurface;
         return new SizedBox(
-            height: MathF.Max(AdwMetrics.RowMinHeight, DevKit.Row),
+            height: MathF.Max(x: AdwMetrics.RowMinHeight, y: DevKit.Row),
             child: new Padding(
-                EdgeInsets.Symmetric(DevKit.RowInset),
-                new Row(crossAxisAlignment: CrossAxisAlignment.Center) {
+                padding: EdgeInsets.Symmetric(DevKit.RowInset),
+                child: new Row(crossAxisAlignment: CrossAxisAlignment.Center) {
                     Children = {
                         new Flexible(
-                            new Label(Label, AdwTypography.Body, t.OnSurface) {
+                            child: new Label(
+                                text: Label,
+                                style: AdwTypography.Body,
+                                color: t.OnSurface
+                            ) {
                                 MaxLines = 1,
                                 Overflow = TextOverflow.Ellipsis,
                             },
                             fit: FlexFit.Loose
                         ),
                         new Spacer(),
-                        Chip(Icons.ChevronLeft, "Previous", OnPrev),
-                        new SizedBox(88f, child: _valueLabel),
-                        Chip(Icons.ChevronRight, "Next", OnNext),
+                        Chip(icon: Icons.ChevronLeft, label: "Previous", onTap: OnPrev),
+                        new SizedBox(width: 88f, child: _valueLabel),
+                        Chip(icon: Icons.ChevronRight, label: "Next", onTap: OnNext),
                     },
                 }
             )
@@ -421,7 +444,7 @@ public sealed class DevStepper : ComposedWidget
 
     private static AdwButton Chip(string icon, string label, Action onTap)
     {
-        return new AdwButton(label, onTap) {
+        return new AdwButton(label: label, onPressed: onTap) {
             IconName = icon,
             Style = AdwButtonStyle.Flat,
             Circular = true,

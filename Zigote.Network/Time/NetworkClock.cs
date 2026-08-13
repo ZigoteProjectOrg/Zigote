@@ -41,10 +41,7 @@ public sealed class NetworkClock(NetConfig config)
     }
 
     /// <summary>Client: true when it's time to send another clock-sync ping.</summary>
-    public bool ShouldPing()
-    {
-        return _pingTimer <= 0f;
-    }
+    public bool ShouldPing() => _pingTimer <= 0f;
 
     public void SendPing(NetConnection conn)
     {
@@ -60,7 +57,7 @@ public sealed class NetworkClock(NetConfig config)
         var kind = (Kind)reader.ReadByte();
         if (kind == Kind.Ping)
         {
-            var clientTime = reader.ReadDouble();
+            double clientTime = reader.ReadDouble();
             var writer = conn.BeginSend(NetChannel.TimeSync);
             writer.WriteByte((byte)Kind.Pong);
             writer.WriteDouble(clientTime);
@@ -69,16 +66,16 @@ public sealed class NetworkClock(NetConfig config)
             return;
         }
 
-        var sentAt = reader.ReadDouble();
-        var serverTime = reader.ReadDouble();
+        double sentAt = reader.ReadDouble();
+        double serverTime = reader.ReadDouble();
         if (reader.Overflow) return;
 
-        var rtt = (float)(LocalTime - sentAt);
+        float rtt = (float)(LocalTime - sentAt);
         if (rtt < 0f) return;
 
-        RoundTripTime = RoundTripTime <= 0f ? rtt : RoundTripTime * 0.9f + rtt * 0.1f;
-        var sampleOffset = serverTime + rtt / 2.0 - LocalTime;
-        _offset = IsSynced ? _offset * 0.9 + sampleOffset * 0.1 : sampleOffset;
+        RoundTripTime = RoundTripTime <= 0f ? rtt : (RoundTripTime * 0.9f) + (rtt * 0.1f);
+        double sampleOffset = serverTime + (rtt / 2.0) - LocalTime;
+        _offset = IsSynced ? (_offset * 0.9) + (sampleOffset * 0.1) : sampleOffset;
         IsSynced = true;
     }
 

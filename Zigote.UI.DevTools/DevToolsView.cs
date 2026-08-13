@@ -23,11 +23,14 @@ public enum DevToolsChrome
 /// <summary>
 ///     The devtools UI itself — header bar, category switcher, panel strip and the active
 ///     <see cref="IDevPanel" />'s widget — with no opinion about where it lives. The docked/fullscreen
-///     overlay (<see cref="DevToolsPanel" />) and the torn-off OS window both host one of these, so the
+///     overlay (<see cref="DevToolsPanel" />) and the torn-off OS window both host one of these, so
+///     the
 ///     three presentations never drift apart.
 ///     <para>
-///         Layout follows the width it is actually given, not the window's: the category switcher is an
-///         icon AdwViewSwitcher in the header (so the chrome is one bar shorter and fits a phone as well
+///         Layout follows the width it is actually given, not the window's: the category switcher is
+///         an
+///         icon AdwViewSwitcher in the header (so the chrome is one bar shorter and fits a phone as
+///         well
 ///         as a 408px dock), the panel strip below it scrolls horizontally when it does not fit, and a
 ///         wide pane clamps its content instead of stretching readouts across a 2000px window.
 ///     </para>
@@ -42,10 +45,8 @@ public sealed class DevToolsView(DevToolsController controller, DevToolsChrome c
     // crosses a breakpoint — a torn-off window being resized, or the host window shrinking to
     // phone width. The ambient MediaQuery is not an inherited widget, so a plain Build() would
     // keep whatever layout it chose on the first frame.
-    protected override Widget Build(BuildContext context)
-    {
-        return new AdaptiveBuilder(BuildArm, 0f);
-    }
+    protected override Widget Build(BuildContext context) =>
+        new AdaptiveBuilder(builder: BuildArm, transitionDuration: 0f);
 
     private Widget BuildArm(BuildContext context, WindowSizeClass cls)
     {
@@ -53,42 +54,44 @@ public sealed class DevToolsView(DevToolsController controller, DevToolsChrome c
         var mq = MediaQuery.Of(context);
         // Whether the surface is a real phone (no windows to open, safe-area insets to honour);
         // `cls` is the class of the width this view actually got, which drives the content clamp.
-        var phone = mq.Width < 400f;
+        bool phone = mq.Width < 400f;
 
         var panels = controller.PanelsIn(controller.Category);
         var panelStrip = new DevTabStrip(
-            panels.ConvertAll(p => p.Title),
-            controller.SelectedIndex(controller.Category),
-            i =>
+            tabs: panels.ConvertAll(p => p.Title),
+            selected: controller.SelectedIndex(controller.Category),
+            onSelect: i =>
             {
-                controller.SetSelected(controller.Category, i);
+                controller.SetSelected(category: controller.Category, index: i);
                 MarkNeedsBuild();
             }
         );
 
         var active = controller.ActivePanel;
         var body = active is not null
-            ? controller.WidgetFor(active, context)
+            ? controller.WidgetFor(panel: active, context: context)
             : new DevNote("No panels in this category.");
 
         var view = new AdwToolbarView(
             new ScrollView(
                 new Padding(
-                    EdgeInsets.Only(
-                        Spacing.Md,
+                    padding: EdgeInsets.Only(
+                        left: Spacing.Md,
                         right: Spacing.Md,
                         top: Spacing.Md,
                         // Clears the home indicator on a phone as well as the last row.
                         bottom: Spacing.Xl + mq.Padding.Bottom
                     ),
                     // Only a wide pane needs clamping; narrower ones already read fine.
-                    cls == WindowSizeClass.Expanded ? new AdwClamp(body, ClampWidth) : body
+                    child: cls == WindowSizeClass.Expanded
+                        ? new AdwClamp(child: body, maximumSize: ClampWidth)
+                        : body
                 )
             ) { ScrollVertical = true }
         ) {
             RaisedTopBar = true,
             TopBars = {
-                Header(mq, phone),
+                Header(mq: mq, phone: phone),
                 Bar(panelStrip),
             },
         };
@@ -100,10 +103,10 @@ public sealed class DevToolsView(DevToolsController controller, DevToolsChrome c
     }
 
     /// <summary>The standard inset around a toolbar strip — aligned with the content below it.</summary>
-    private static Widget Bar(Widget child)
-    {
-        return new Padding(EdgeInsets.Symmetric(Spacing.Md, Spacing.Xs), child);
-    }
+    private static Widget Bar(Widget child) => new Padding(
+        padding: EdgeInsets.Symmetric(horizontal: Spacing.Md, vertical: Spacing.Xs),
+        child: child
+    );
 
     // An Adwaita header bar's shape and type, hand-rolled rather than an AdwHeaderBar: that one
     // registers itself as a CSD drag surface, and dragging a docked in-app panel's title should
@@ -120,68 +123,80 @@ public sealed class DevToolsView(DevToolsController controller, DevToolsChrome c
         // Windows and fullscreen are desktop ideas; a phone gets the close button only. A narrow
         // desktop window still keeps its actions — dropping the dock button would strand it.
         if (!phone)
+        {
             switch (chrome)
             {
                 case DevToolsChrome.Docked:
                     actions.Children.Add(
                         Action(
-                            MaterialIcons.OpenInFull,
-                            "Fullscreen",
-                            controller.ToggleFullscreen
+                            icon: MaterialIcons.OpenInFull,
+                            label: "Fullscreen",
+                            onPressed: controller.ToggleFullscreen
                         )
                     );
                     actions.Children.Add(
                         Action(
-                            MaterialIcons.OpenInNew,
-                            "Open in a window",
-                            controller.OpenWindow
+                            icon: MaterialIcons.OpenInNew,
+                            label: "Open in a window",
+                            onPressed: controller.OpenWindow
                         )
                     );
                     break;
                 case DevToolsChrome.Fullscreen:
                     actions.Children.Add(
                         Action(
-                            MaterialIcons.CloseFullscreen,
-                            "Leave fullscreen",
-                            controller.ToggleFullscreen
+                            icon: MaterialIcons.CloseFullscreen,
+                            label: "Leave fullscreen",
+                            onPressed: controller.ToggleFullscreen
                         )
                     );
                     actions.Children.Add(
                         Action(
-                            MaterialIcons.OpenInNew,
-                            "Open in a window",
-                            controller.OpenWindow
+                            icon: MaterialIcons.OpenInNew,
+                            label: "Open in a window",
+                            onPressed: controller.OpenWindow
                         )
                     );
                     break;
                 case DevToolsChrome.Window:
                     actions.Children.Add(
                         Action(
-                            MaterialIcons.Dock,
-                            "Dock back into the app",
-                            controller.DockWindow
+                            icon: MaterialIcons.Dock,
+                            label: "Dock back into the app",
+                            onPressed: controller.DockWindow
                         )
                     );
                     break;
             }
+        }
 
         if (chrome != DevToolsChrome.Window)
-            actions.Children.Add(Action(Icons.Close, "Close devtools", controller.TogglePanel));
+        {
+            actions.Children.Add(
+                Action(
+                    icon: Icons.Close,
+                    label: "Close devtools",
+                    onPressed: controller.TogglePanel
+                )
+            );
+        }
 
         // Torn-off window: the real thing, so it carries the window buttons on whichever side
         // the system's button-layout puts them and drags the window like any GNOME headerbar.
         if (chrome == DevToolsChrome.Window)
+        {
             return new AdwHeaderBar {
                 Flat = true,
                 TitleWidget = CategorySwitcher(),
                 End = { actions },
             };
+        }
 
         var header = new SizedBox(
             height: AdwMetrics.HeaderBarHeight,
             child: new Padding(
-                EdgeInsets.Symmetric(6f),
-                new Row(crossAxisAlignment: CrossAxisAlignment.Center) {
+                padding: EdgeInsets.Symmetric(6f),
+                child: new Row(crossAxisAlignment: CrossAxisAlignment.Center) {
                     Children = {
                         // Balances the actions so the switcher stays centred on the bar.
                         new SizedBox(buttonSize * actions.Children.Count),
@@ -194,7 +209,7 @@ public sealed class DevToolsView(DevToolsController controller, DevToolsChrome c
 
         // Under a status bar / notch the header has to start below it.
         return mq.Padding.Top > 0f
-            ? new Padding(EdgeInsets.Only(top: mq.Padding.Top), header)
+            ? new Padding(padding: EdgeInsets.Only(top: mq.Padding.Top), child: header)
             : header;
     }
 
@@ -207,9 +222,14 @@ public sealed class DevToolsView(DevToolsController controller, DevToolsChrome c
     {
         var cats = controller.VisibleCategories();
         return new AdwToggleGroup(
-            cats.ConvertAll(c => new AdwToggle(null, c.Icon(), c.Label())),
-            Math.Max(0, cats.IndexOf(controller.Category)),
-            i =>
+            toggles: cats.ConvertAll(c => new AdwToggle(
+                    Label: null,
+                    IconName: c.Icon(),
+                    Tooltip: c.Label()
+                )
+            ),
+            active: Math.Max(val1: 0, val2: cats.IndexOf(controller.Category)),
+            onActive: i =>
             {
                 controller.SetCategory(cats[i]);
                 MarkNeedsBuild();
@@ -219,7 +239,7 @@ public sealed class DevToolsView(DevToolsController controller, DevToolsChrome c
 
     private static AdwButton Action(string icon, string label, Action onPressed)
     {
-        return new AdwButton(label, onPressed) {
+        return new AdwButton(label: label, onPressed: onPressed) {
             IconName = icon,
             Style = AdwButtonStyle.Flat,
             Circular = true,

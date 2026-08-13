@@ -16,7 +16,7 @@ public static class PhysicalCameraMapping
     public static PhysicalCamera ToPhysicalCamera(SceneNode node)
     {
         var pc = new PhysicalCamera();
-        Apply(node, pc);
+        Apply(node: node, into: pc);
         return pc;
     }
 
@@ -48,7 +48,10 @@ public static class PhysicalCameraMapping
             ManualDistanceM = node.PhysManualFocusM,
             SpeedPerSec = node.PhysFocusSpeed,
         };
-        into.Film = FilmStock.Of((FilmStockKind)node.PhysFilmStock, node.PhysFilmStrength);
+        into.Film = FilmStock.Of(
+            kind: (FilmStockKind)node.PhysFilmStock,
+            strength: node.PhysFilmStrength
+        );
         into.NearM = node.CameraNear;
         into.FarM = node.CameraFar;
         into.AffectExposure = node.PhysAffectExposure;

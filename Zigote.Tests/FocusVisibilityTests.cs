@@ -23,7 +23,7 @@ public class FocusVisibilityTests
 
         // Lay out with tab 0 selected, then switch to tab 1 and lay out again — tab 0's
         // focusable keeps its stale non-zero bounds, exactly the post-switch state.
-        tabs.Measure(Constraints.Tight(200f, 100f));
+        tabs.Measure(Constraints.Tight(width: 200f, height: 100f));
         tabs.Layout(Offset.Zero);
         return tabs;
     }
@@ -31,14 +31,14 @@ public class FocusVisibilityTests
     [Fact]
     public void HiddenTabPage_IsNotFocusReachable()
     {
-        var tabs = LaidOutTabView(out var inTab0, out var inTab1);
+        var tabs = LaidOutTabView(inTab0: out var inTab0, inTab1: out var inTab1);
 
         var focusables = FocusTraversal.Focusables(tabs);
-        Assert.Contains(inTab0, focusables);
-        Assert.DoesNotContain(inTab1, focusables);
+        Assert.Contains(expected: inTab0, collection: focusables);
+        Assert.DoesNotContain(expected: inTab1, collection: focusables);
 
         tabs.SelectedIndex = 1;
-        tabs.Measure(Constraints.Tight(200f, 100f));
+        tabs.Measure(Constraints.Tight(width: 200f, height: 100f));
         tabs.Layout(Offset.Zero);
 
         // Tab 0's focusable still has non-zero bounds from its last layout — visibility must come
@@ -46,46 +46,47 @@ public class FocusVisibilityTests
         Assert.True(inTab0.Bounds.Width > 0f);
 
         focusables = FocusTraversal.Focusables(tabs);
-        Assert.DoesNotContain(inTab0, focusables);
-        Assert.Contains(inTab1, focusables);
+        Assert.DoesNotContain(expected: inTab0, collection: focusables);
+        Assert.Contains(expected: inTab1, collection: focusables);
     }
 
     [Fact]
     public void TabTraversal_AfterSwitch_MovesWithinActivePage()
     {
-        var tabs = LaidOutTabView(out _, out var inTab1);
+        var tabs = LaidOutTabView(inTab0: out _, inTab1: out var inTab1);
         tabs.SelectedIndex = 1;
-        tabs.Measure(Constraints.Tight(200f, 100f));
+        tabs.Measure(Constraints.Tight(width: 200f, height: 100f));
         tabs.Layout(Offset.Zero);
 
         var order = FocusTraversal.Focusables(tabs);
         // With no current focus, Tab lands on the active page's control — never a hidden one.
-        Assert.Same(inTab1, FocusTraversal.NextInTab(order, null, false));
+        Assert.Same(
+            expected: inTab1,
+            actual: FocusTraversal.NextInTab(order: order, current: null, backwards: false)
+        );
         // And traversal from it wraps within the visible set instead of resetting into tab 0.
-        Assert.Same(inTab1, FocusTraversal.NextInTab(order, inTab1, false));
+        Assert.Same(
+            expected: inTab1,
+            actual: FocusTraversal.NextInTab(order: order, current: inTab1, backwards: false)
+        );
     }
 
     private sealed class FakeFocusable : Widget
     {
         public override bool Focusable => true;
 
-        public override Size Measure(Constraints c)
-        {
-            return new Size(50f, 20f);
-        }
+        public override Size Measure(Constraints c) => new(width: 50f, height: 20f);
 
         public override void Layout(Offset origin)
         {
             Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                50f,
-                20f
+                x: origin.X,
+                y: origin.Y,
+                width: 50f,
+                height: 20f
             );
         }
 
-        public override void Paint(PaintList paint)
-        {
-        }
+        public override void Paint(PaintList paint) { }
     }
 }

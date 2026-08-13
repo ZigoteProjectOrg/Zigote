@@ -32,7 +32,6 @@ public sealed class TilePalettePanel : Widget
 
     private readonly EditorState _state;
     private readonly ThemeData _theme;
-    private readonly ViewportPanel _viewport;
 
     private readonly (TileTool Tool, string Label)[] _tools = [
         (TileTool.Paint, "Paint"),
@@ -42,16 +41,18 @@ public sealed class TilePalettePanel : Widget
         (TileTool.Pick, "Pick"),
     ];
 
+    private readonly ViewportPanel _viewport;
+    private Rect _addLayerRect;
+    private Rect[] _layerRects = [];
+
     // Cached engine texture for the tileset sheet, keyed by the path we loaded it from.
     private string? _loadedTexturePath;
     private ulong _sheetHandle;
-    private uint _sheetW, _sheetH;
 
     private Rect _sheetRect;
+    private uint _sheetW, _sheetH;
     private Size _size;
     private Rect[] _toolRects = [];
-    private Rect[] _layerRects = [];
-    private Rect _addLayerRect;
 
     public TilePalettePanel(EditorState state, ThemeData theme, ViewportPanel viewport)
     {
@@ -79,37 +80,37 @@ public sealed class TilePalettePanel : Widget
 
     public override Size Measure(Constraints c)
     {
-        var w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 260f;
-        var h = RowH + Gap + ToolH + Gap; // header + tool row
+        float w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 260f;
+        float h = RowH + Gap + ToolH + Gap; // header + tool row
         h += RowH + Gap; // toggles
 
         if (ActiveTileset is { } set && set.TileCount > 0)
-            h += SheetHeight(w, set) + Gap;
+            h += SheetHeight(width: w, set: set) + Gap;
 
         if (Target is { } node)
-            h += RowH + node.TilemapLayers.Count * RowH + Gap; // layer header + rows + add
+            h += RowH + (node.TilemapLayers.Count * RowH) + Gap; // layer header + rows + add
 
-        _size = new Size(w, MathF.Max(120f, h));
+        _size = new Size(width: w, height: MathF.Max(x: 120f, y: h));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
     /// <summary>Height the sheet needs when scaled to fit the panel width, preserving aspect.</summary>
     private float SheetHeight(float width, Tileset set)
     {
-        var texW = MathF.Max(1, set.EffectiveTextureWidth);
-        var texH = MathF.Max(1, set.EffectiveTextureHeight);
+        float texW = MathF.Max(x: 1, y: set.EffectiveTextureWidth);
+        float texH = MathF.Max(x: 1, y: set.EffectiveTextureHeight);
         // Never shrink a tile below a clickable size — a big sheet scrolls rather than becoming dust.
-        var scale = MathF.Max((width - 8f) / texW, SwatchMin * set.Columns / texW);
+        float scale = MathF.Max(x: (width - 8f) / texW, y: SwatchMin * set.Columns / texW);
         return texH * scale;
     }
 
@@ -117,63 +118,67 @@ public sealed class TilePalettePanel : Widget
 
     public override void Paint(PaintList paint)
     {
-        var y = Bounds.Y;
+        float y = Bounds.Y;
         var node = Target;
 
         if (node is null)
         {
             paint.AddText(
-                "Select a Tilemap node",
-                Bounds.X + 6f,
-                y + 16f,
-                _theme.TextSecondary,
-                _theme.FontSizeBody
+                text: "Select a Tilemap node",
+                baselineX: Bounds.X + 6f,
+                baselineY: y + 16f,
+                color: _theme.TextSecondary,
+                fontSize: _theme.FontSizeBody
             );
             return;
         }
 
         paint.AddText(
-            node.Name,
-            Bounds.X + 6f,
-            y + 16f,
-            _theme.OnSurface,
-            _theme.FontSizeBody,
+            text: node.Name,
+            baselineX: Bounds.X + 6f,
+            baselineY: y + 16f,
+            color: _theme.OnSurface,
+            fontSize: _theme.FontSizeBody,
             fontWeight: FontWeight.SemiBold
         );
         y += RowH + Gap;
 
-        y = PaintTools(paint, y);
-        y = PaintToggles(paint, y);
-        y = PaintSheet(paint, y, node);
-        PaintLayers(paint, y, node);
+        y = PaintTools(paint: paint, y: y);
+        y = PaintToggles(paint: paint, y: y);
+        y = PaintSheet(paint: paint, y: y, node: node);
+        PaintLayers(paint: paint, y: y, node: node);
     }
 
     private float PaintTools(PaintList paint, float y)
     {
-        var w = (Bounds.Width - 8f - (_tools.Length - 1) * 3f) / _tools.Length;
+        float w = (Bounds.Width - 8f - ((_tools.Length - 1) * 3f)) / _tools.Length;
         _toolRects = new Rect[_tools.Length];
 
-        for (var i = 0; i < _tools.Length; i++)
+        for (int i = 0; i < _tools.Length; i++)
         {
             var r = new Rect(
-                Bounds.X + 4f + i * (w + 3f),
-                y,
-                w,
-                ToolH
+                x: Bounds.X + 4f + (i * (w + 3f)),
+                y: y,
+                width: w,
+                height: ToolH
             );
             _toolRects[i] = r;
-            var active = _viewport.ActiveTool == _tools[i].Tool;
-            paint.AddRect(r, active ? _theme.Accent : _theme.Surface, Radii.Sm);
-            if (!active) paint.AddBorder(r, _theme.Border, Radii.Sm);
+            bool active = _viewport.ActiveTool == _tools[i].Tool;
+            paint.AddRect(
+                bounds: r,
+                color: active ? _theme.Accent : _theme.Surface,
+                radius: Radii.Sm
+            );
+            if (!active) paint.AddBorder(bounds: r, color: _theme.Border, radius: Radii.Sm);
 
-            var label = _tools[i].Label;
-            var tw = label.Length * _theme.FontSizeCaption * 0.54f;
+            string label = _tools[i].Label;
+            float tw = label.Length * _theme.FontSizeCaption * 0.54f;
             paint.AddText(
-                label,
-                r.X + (r.Width - tw) * 0.5f,
-                r.Y + r.Height * 0.5f + _theme.FontSizeCaption * 0.36f,
-                active ? _theme.OnPrimary : _theme.TextSecondary,
-                _theme.FontSizeCaption
+                text: label,
+                baselineX: r.X + ((r.Width - tw) * 0.5f),
+                baselineY: r.Y + (r.Height * 0.5f) + (_theme.FontSizeCaption * 0.36f),
+                color: active ? _theme.OnPrimary : _theme.TextSecondary,
+                fontSize: _theme.FontSizeCaption
             );
         }
 
@@ -182,22 +187,19 @@ public sealed class TilePalettePanel : Widget
 
     private float PaintToggles(PaintList paint, float y)
     {
-        var text = $"Grid {OnOff(_viewport.ShowGrid)}   " +
-                   $"Snap {OnOff(_viewport.SnapToGrid)}   " +
-                   $"Colliders {OnOff(_viewport.ShowColliders2D)}";
+        string text = $"Grid {OnOff(_viewport.ShowGrid)}   " +
+                      $"Snap {OnOff(_viewport.SnapToGrid)}   " +
+                      $"Colliders {OnOff(_viewport.ShowColliders2D)}";
         paint.AddText(
-            text,
-            Bounds.X + 6f,
-            y + 15f,
-            _theme.TextSecondary,
-            _theme.FontSizeCaption
+            text: text,
+            baselineX: Bounds.X + 6f,
+            baselineY: y + 15f,
+            color: _theme.TextSecondary,
+            fontSize: _theme.FontSizeCaption
         );
         return y + RowH + Gap;
 
-        static string OnOff(bool b)
-        {
-            return b ? "on" : "off";
-        }
+        static string OnOff(bool b) => b ? "on" : "off";
     }
 
     /// <summary>
@@ -210,92 +212,99 @@ public sealed class TilePalettePanel : Widget
         if (ActiveTileset is not { } set || set.TileCount == 0)
         {
             paint.AddText(
-                node.TilesetPath is null ? "No tileset assigned" : "Tileset failed to load",
-                Bounds.X + 6f,
-                y + 15f,
-                _theme.TextSecondary,
-                _theme.FontSizeCaption
+                text: node.TilesetPath is null ? "No tileset assigned" : "Tileset failed to load",
+                baselineX: Bounds.X + 6f,
+                baselineY: y + 15f,
+                color: _theme.TextSecondary,
+                fontSize: _theme.FontSizeCaption
             );
             return y + RowH + Gap;
         }
 
         EnsureSheetTexture(set);
 
-        var h = SheetHeight(Bounds.Width, set);
+        float h = SheetHeight(width: Bounds.Width, set: set);
         _sheetRect = new Rect(
-            Bounds.X + 4f,
-            y,
-            Bounds.Width - 8f,
-            h
+            x: Bounds.X + 4f,
+            y: y,
+            width: Bounds.Width - 8f,
+            height: h
         );
 
         paint.AddRect(
-            _sheetRect,
-            new Color(
-                0f,
-                0f,
-                0f,
-                0.25f
+            bounds: _sheetRect,
+            color: new Color(
+                r: 0f,
+                g: 0f,
+                b: 0f,
+                a: 0.25f
             )
         );
         if (_sheetHandle != 0)
+        {
             paint.AddImage(
-                _sheetRect,
-                (int)_sheetW,
-                (int)_sheetH,
-                null,
-                _sheetHandle
+                bounds: _sheetRect,
+                pixelWidth: (int)_sheetW,
+                pixelHeight: (int)_sheetH,
+                pixels: null,
+                cacheKey: _sheetHandle
             );
+        }
 
-        var cellW = _sheetRect.Width / set.Columns;
-        var cellH = _sheetRect.Height / set.Rows;
+        float cellW = _sheetRect.Width / set.Columns;
+        float cellH = _sheetRect.Height / set.Rows;
         var line = new Color(
-            1f,
-            1f,
-            1f,
-            0.12f
+            r: 1f,
+            g: 1f,
+            b: 1f,
+            a: 0.12f
         );
-        for (var c = 1; c < set.Columns; c++)
+        for (int c = 1; c < set.Columns; c++)
+        {
             paint.AddRect(
-                new Rect(
-                    _sheetRect.X + c * cellW,
-                    _sheetRect.Y,
-                    1f,
-                    _sheetRect.Height
+                bounds: new Rect(
+                    x: _sheetRect.X + (c * cellW),
+                    y: _sheetRect.Y,
+                    width: 1f,
+                    height: _sheetRect.Height
                 ),
-                line
+                color: line
             );
-        for (var r = 1; r < set.Rows; r++)
+        }
+
+        for (int r = 1; r < set.Rows; r++)
+        {
             paint.AddRect(
-                new Rect(
-                    _sheetRect.X,
-                    _sheetRect.Y + r * cellH,
-                    _sheetRect.Width,
-                    1f
+                bounds: new Rect(
+                    x: _sheetRect.X,
+                    y: _sheetRect.Y + (r * cellH),
+                    width: _sheetRect.Width,
+                    height: 1f
                 ),
-                line
+                color: line
             );
+        }
 
         // Selection highlight.
-        var tile = _viewport.ActiveTile;
+        int tile = _viewport.ActiveTile;
         if (tile >= 0 && tile < set.TileCount)
         {
             var sel = new Rect(
-                _sheetRect.X + tile % set.Columns * cellW,
-                _sheetRect.Y + tile / set.Columns * cellH,
-                cellW,
-                cellH
+                x: _sheetRect.X + (tile % set.Columns * cellW),
+                y: _sheetRect.Y + (tile / set.Columns * cellH),
+                width: cellW,
+                height: cellH
             );
-            paint.AddBorder(sel, _theme.Accent, 0f);
+            paint.AddBorder(bounds: sel, color: _theme.Accent, radius: 0f);
             paint.AddBorder(
-                new Rect(
-                    sel.X + 1f,
-                    sel.Y + 1f,
-                    sel.Width - 2f,
-                    sel.Height - 2f
+                bounds: new Rect(
+                    x: sel.X + 1f,
+                    y: sel.Y + 1f,
+                    width: sel.Width - 2f,
+                    height: sel.Height - 2f
                 ),
-                _theme.Accent,
-                0f
+                color: _theme.Accent,
+                radius: 0f
             );
         }
 
@@ -305,58 +314,58 @@ public sealed class TilePalettePanel : Widget
     private void PaintLayers(PaintList paint, float y, SceneNode node)
     {
         paint.AddText(
-            "Layers",
-            Bounds.X + 6f,
-            y + 15f,
-            _theme.TextSecondary,
-            _theme.FontSizeCaption,
+            text: "Layers",
+            baselineX: Bounds.X + 6f,
+            baselineY: y + 15f,
+            color: _theme.TextSecondary,
+            fontSize: _theme.FontSizeCaption,
             fontWeight: FontWeight.SemiBold
         );
         _addLayerRect = new Rect(
-            Bounds.X + Bounds.Width - 30f,
-            y + 3f,
-            26f,
-            RowH - 6f
+            x: Bounds.X + Bounds.Width - 30f,
+            y: y + 3f,
+            width: 26f,
+            height: RowH - 6f
         );
-        paint.AddRect(_addLayerRect, _theme.Surface, Radii.Sm);
-        paint.AddBorder(_addLayerRect, _theme.Border, Radii.Sm);
+        paint.AddRect(bounds: _addLayerRect, color: _theme.Surface, radius: Radii.Sm);
+        paint.AddBorder(bounds: _addLayerRect, color: _theme.Border, radius: Radii.Sm);
         paint.AddText(
-            "+",
-            _addLayerRect.X + 9f,
-            _addLayerRect.Y + 14f,
-            _theme.OnSurface,
-            _theme.FontSizeCaption
+            text: "+",
+            baselineX: _addLayerRect.X + 9f,
+            baselineY: _addLayerRect.Y + 14f,
+            color: _theme.OnSurface,
+            fontSize: _theme.FontSizeCaption
         );
         y += RowH;
 
         _layerRects = new Rect[node.TilemapLayers.Count];
-        for (var i = 0; i < node.TilemapLayers.Count; i++)
+        for (int i = 0; i < node.TilemapLayers.Count; i++)
         {
             var layer = node.TilemapLayers[i];
             var r = new Rect(
-                Bounds.X + 4f,
-                y,
-                Bounds.Width - 8f,
-                RowH
+                x: Bounds.X + 4f,
+                y: y,
+                width: Bounds.Width - 8f,
+                height: RowH
             );
             _layerRects[i] = r;
 
             if (i == _viewport.ActiveLayerIndex)
-                paint.AddRect(r, _theme.Accent.WithAlpha(0.22f), Radii.Sm);
+                paint.AddRect(bounds: r, color: _theme.Accent.WithAlpha(0.22f), radius: Radii.Sm);
 
             paint.AddText(
-                layer.Visible ? "◉" : "○",
-                r.X + 6f,
-                r.Y + 17f,
-                _theme.TextSecondary,
-                _theme.FontSizeCaption
+                text: layer.Visible ? "◉" : "○",
+                baselineX: r.X + 6f,
+                baselineY: r.Y + 17f,
+                color: _theme.TextSecondary,
+                fontSize: _theme.FontSizeCaption
             );
             paint.AddText(
-                layer.Name,
-                r.X + 24f,
-                r.Y + 17f,
-                _theme.OnSurface,
-                _theme.FontSizeCaption
+                text: layer.Name,
+                baselineX: r.X + 24f,
+                baselineY: r.Y + 17f,
+                color: _theme.OnSurface,
+                fontSize: _theme.FontSizeCaption
             );
             y += RowH;
         }
@@ -365,9 +374,9 @@ public sealed class TilePalettePanel : Widget
     /// <summary>Upload the sheet through the engine's UI texture cache, reloading when the path changes.</summary>
     private void EnsureSheetTexture(Tileset set)
     {
-        var path = set.TexturePath;
+        string path = set.TexturePath;
         if (string.IsNullOrEmpty(path)) return;
-        var abs = Path.IsPathRooted(path) ? path : Path.GetFullPath(path);
+        string abs = Path.IsPathRooted(path) ? path : Path.GetFullPath(path);
         if (_loadedTexturePath == abs && _sheetHandle != 0) return;
 
         try
@@ -376,7 +385,11 @@ public sealed class TilePalettePanel : Widget
             // The outgoing sheet is ours to free: texture handles are caller-owned, so switching
             // tilesets used to strand the previous sheet on the GPU for the editor's lifetime.
             if (_sheetHandle != 0) ZigoteEngine.ReleaseTexture(_sheetHandle);
-            _sheetHandle = ZigoteEngine.LoadTexture(abs, out _sheetW, out _sheetH);
+            _sheetHandle = ZigoteEngine.LoadTexture(
+                path: abs,
+                outW: out _sheetW,
+                outH: out _sheetH
+            );
             _loadedTexturePath = abs;
         }
         catch (Exception e) when (e is IOException or InvalidOperationException)
@@ -392,23 +405,25 @@ public sealed class TilePalettePanel : Widget
     {
         App.Active?.RequestFocus(this);
 
-        for (var i = 0; i < _toolRects.Length; i++)
-            if (_toolRects[i].Contains(point.X, point.Y))
+        for (int i = 0; i < _toolRects.Length; i++)
+        {
+            if (_toolRects[i].Contains(px: point.X, py: point.Y))
             {
                 _viewport.ActiveTool = _tools[i].Tool;
                 MarkNeedsPaint();
                 return;
             }
+        }
 
         if (Target is not { } node) return;
 
-        if (_addLayerRect.Contains(point.X, point.Y))
+        if (_addLayerRect.Contains(px: point.X, py: point.Y))
         {
             _state.History.Execute(
                 TilemapLayerCommand.Add(
-                    _state,
-                    node,
-                    new TilemapLayer { Name = $"Layer {node.TilemapLayers.Count + 1}" }
+                    state: _state,
+                    node: node,
+                    layer: new TilemapLayer { Name = $"Layer {node.TilemapLayers.Count + 1}" }
                 )
             );
             _viewport.ActiveLayerIndex = node.TilemapLayers.Count - 1;
@@ -416,8 +431,9 @@ public sealed class TilePalettePanel : Widget
             return;
         }
 
-        for (var i = 0; i < _layerRects.Length; i++)
-            if (_layerRects[i].Contains(point.X, point.Y))
+        for (int i = 0; i < _layerRects.Length; i++)
+        {
+            if (_layerRects[i].Contains(px: point.X, py: point.Y))
             {
                 // The eye column toggles visibility; anywhere else selects the layer to paint into.
                 if (point.X < _layerRects[i].X + 22f)
@@ -426,21 +442,21 @@ public sealed class TilePalettePanel : Widget
                     _state.NotifySceneChanged();
                 }
                 else
-                {
                     _viewport.ActiveLayerIndex = i;
-                }
 
                 MarkNeedsPaint();
                 return;
             }
+        }
 
-        if (_sheetRect.Contains(point.X, point.Y) && ActiveTileset is { } set && set.TileCount > 0)
+        if (_sheetRect.Contains(px: point.X, py: point.Y) && ActiveTileset is { } set &&
+            set.TileCount > 0)
         {
-            var col = (int)((point.X - _sheetRect.X) / (_sheetRect.Width / set.Columns));
-            var row = (int)((point.Y - _sheetRect.Y) / (_sheetRect.Height / set.Rows));
-            col = Math.Clamp(col, 0, set.Columns - 1);
-            row = Math.Clamp(row, 0, set.Rows - 1);
-            _viewport.ActiveTile = row * set.Columns + col;
+            int col = (int)((point.X - _sheetRect.X) / (_sheetRect.Width / set.Columns));
+            int row = (int)((point.Y - _sheetRect.Y) / (_sheetRect.Height / set.Rows));
+            col = Math.Clamp(value: col, min: 0, max: set.Columns - 1);
+            row = Math.Clamp(value: row, min: 0, max: set.Rows - 1);
+            _viewport.ActiveTile = (row * set.Columns) + col;
             // Picking a tile means you want to place it.
             if (_viewport.ActiveTool == TileTool.Pick) _viewport.ActiveTool = TileTool.Paint;
             MarkNeedsPaint();

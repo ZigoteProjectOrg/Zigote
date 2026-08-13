@@ -60,19 +60,20 @@ public sealed class LocaleFormatting
     public CultureInfo Culture { get; }
 
     /// <summary>The (cached) formatter for a locale.</summary>
-    public static LocaleFormatting For(Locale locale)
-    {
-        return Cache.GetOrAdd(locale, static l => new LocaleFormatting(l, ResolveCulture(l)));
-    }
+    public static LocaleFormatting For(Locale locale) => Cache.GetOrAdd(
+        key: locale,
+        valueFactory: static l => new LocaleFormatting(locale: l, culture: ResolveCulture(l))
+    );
 
     private static CultureInfo ResolveCulture(Locale locale)
     {
         if (locale.IsEmpty) return CultureInfo.InvariantCulture;
-        foreach (var tag in new[] {
+        foreach (string tag in new[] {
                      locale.ToBcp47(),
                      locale.WithoutScript().ToBcp47(),
                      locale.Language,
                  })
+        {
             try
             {
                 return CultureInfo.GetCultureInfo(tag);
@@ -81,6 +82,7 @@ public sealed class LocaleFormatting
             {
                 // try the next, looser tag
             }
+        }
 
         // Falling back is correct — a formatter that threw on an exotic tag would take the screen
         // down over a date — but it is never what the caller wanted, and it is invisible: the app
@@ -92,10 +94,11 @@ public sealed class LocaleFormatting
         // catalog and sets that flag gets correct words (catalog lookup and PluralRules are both
         // ICU-free by design) and wrong numbers, with nothing else to say so.
         DebugLog.Warn(
+            message:
             $"no CultureInfo for '{locale.ToBcp47()}' — dates, numbers and currency will format as " +
             "invariant. If the app sets InvariantGlobalization=true, that is the cause: clear it to " +
             "format for this locale, or ignore this if the app never shows a formatted date or number.",
-            "localizations"
+            category: "localizations"
         );
         return CultureInfo.InvariantCulture;
     }
@@ -106,22 +109,19 @@ public sealed class LocaleFormatting
     ///     Format a number with grouping. <paramref name="pattern" /> is a raw .NET numeric format
     ///     string.
     /// </summary>
-    public string Number(double value, string? pattern = null)
-    {
-        return value.ToString(pattern ?? "#,0.###############", Culture);
-    }
+    public string Number(double value, string? pattern = null) => value.ToString(
+        format: pattern ?? "#,0.###############",
+        provider: Culture
+    );
 
     /// <summary>Format an integer with grouping separators.</summary>
-    public string Integer(long value)
-    {
-        return value.ToString("#,0", Culture);
-    }
+    public string Integer(long value) => value.ToString(format: "#,0", provider: Culture);
 
     /// <summary>Format a fraction as a percentage (0.5 → "50%"). Multiplies by 100, matching ICU/.NET.</summary>
-    public string Percent(double value, int decimals = 0)
-    {
-        return value.ToString("P" + Math.Clamp(decimals, 0, 15), Culture);
-    }
+    public string Percent(double value, int decimals = 0) => value.ToString(
+        format: "P" + Math.Clamp(value: decimals, min: 0, max: 15),
+        provider: Culture
+    );
 
     /// <summary>
     ///     Format a monetary amount. An explicit ISO 4217 <paramref name="currencyCode" /> overrides the
@@ -131,11 +131,14 @@ public sealed class LocaleFormatting
     public string Currency(decimal value, string? currencyCode = null)
     {
         if (string.IsNullOrEmpty(currencyCode))
-            return value.ToString("C", Culture);
+            return value.ToString(format: "C", provider: Culture);
 
         var nf = (NumberFormatInfo)Culture.NumberFormat.Clone();
-        nf.CurrencySymbol = CurrencySymbols.GetValueOrDefault(currencyCode, currencyCode + " ");
-        return value.ToString("C", nf);
+        nf.CurrencySymbol = CurrencySymbols.GetValueOrDefault(
+            key: currencyCode,
+            defaultValue: currencyCode + " "
+        );
+        return value.ToString(format: "C", provider: nf);
     }
 
     // ── Dates ────────────────────────────────────────────────────────────────
@@ -146,12 +149,12 @@ public sealed class LocaleFormatting
     /// </summary>
     public string Date(DateTime value, DateStyle style = DateStyle.Medium, string? pattern = null)
     {
-        if (pattern is not null) return value.ToString(pattern, Culture);
+        if (pattern is not null) return value.ToString(format: pattern, provider: Culture);
         return style switch {
-            DateStyle.Short => value.ToString("d", Culture),
-            DateStyle.Long => value.ToString("D", Culture),
-            DateStyle.Full => value.ToString("D", Culture),
-            _ => value.ToString(MediumDatePattern(Culture), Culture),
+            DateStyle.Short => value.ToString(format: "d", provider: Culture),
+            DateStyle.Long => value.ToString(format: "D", provider: Culture),
+            DateStyle.Full => value.ToString(format: "D", provider: Culture),
+            _ => value.ToString(format: MediumDatePattern(Culture), provider: Culture),
         };
     }
 
@@ -161,19 +164,17 @@ public sealed class LocaleFormatting
     /// </summary>
     public string Time(DateTime value, DateStyle style = DateStyle.Short, string? pattern = null)
     {
-        if (pattern is not null) return value.ToString(pattern, Culture);
+        if (pattern is not null) return value.ToString(format: pattern, provider: Culture);
         return style switch {
-            DateStyle.Short or DateStyle.Medium => value.ToString("t", Culture),
-            _ => value.ToString("T", Culture),
+            DateStyle.Short or DateStyle.Medium => value.ToString(format: "t", provider: Culture),
+            _ => value.ToString(format: "T", provider: Culture),
         };
     }
 
     /// <summary>Format both date and time.</summary>
     public string DateTime(DateTime value, DateStyle date = DateStyle.Medium,
-        DateStyle time = DateStyle.Short)
-    {
-        return Date(value, date) + " " + Time(value, time);
-    }
+        DateStyle time = DateStyle.Short) =>
+        Date(value: value, style: date) + " " + Time(value: value, style: time);
 
     // Derive an abbreviated-month "medium" pattern by widening the numeric month in the culture's SHORT
     // date pattern to an abbreviated month name — preserving the culture's field order and separators.
@@ -181,13 +182,13 @@ public sealed class LocaleFormatting
     // artifacts that stripping tokens out of the long date pattern produces for cultures like th/mn/ba.
     private static string MediumDatePattern(CultureInfo c)
     {
-        var sp = c.DateTimeFormat.ShortDatePattern;
+        string sp = c.DateTimeFormat.ShortDatePattern;
         var sb = new StringBuilder(sp.Length + 2);
-        var inQuote = false;
-        var i = 0;
+        bool inQuote = false;
+        int i = 0;
         while (i < sp.Length)
         {
-            var ch = sp[i];
+            char ch = sp[i];
             if (ch == '\'')
             {
                 inQuote = !inQuote;
@@ -196,10 +197,13 @@ public sealed class LocaleFormatting
             }
             else if (ch == 'M' && !inQuote)
             {
-                var j = i;
+                int j = i;
                 while (j < sp.Length && sp[j] == 'M') j++;
-                var run = j - i;
-                sb.Append('M', run < 3 ? 3 : run); // widen M/MM (numeric) → MMM (abbreviated name)
+                int run = j - i;
+                sb.Append(
+                    value: 'M',
+                    repeatCount: run < 3 ? 3 : run
+                ); // widen M/MM (numeric) → MMM (abbreviated name)
                 i = j;
             }
             else
@@ -209,7 +213,7 @@ public sealed class LocaleFormatting
             }
         }
 
-        var p = sb.ToString();
+        string p = sb.ToString();
         return string.IsNullOrWhiteSpace(p) ? "MMM d, yyyy" : p;
     }
 }

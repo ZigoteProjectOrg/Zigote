@@ -33,10 +33,10 @@ public sealed class InkWell : ComposedWidget
     protected override Widget Build(BuildContext context)
     {
         return new GestureDetector(
-            _child,
-            OnTap,
-            OnDoubleTap,
-            OnLongPressed
+            child: _child,
+            onTap: OnTap,
+            onDoubleTap: OnDoubleTap,
+            onLongPress: OnLongPressed
         );
     }
 }

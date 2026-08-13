@@ -14,14 +14,14 @@ public class TimeInterpolationAlphaTests
 
         Time.Reset();
 
-        Assert.Equal(0f, Time.InterpolationAlpha);
+        Assert.Equal(expected: 0f, actual: Time.InterpolationAlpha);
     }
 
     [Fact]
     public void InterpolationAlpha_Reads_The_Host_Written_Fraction()
     {
         Time._interpolationAlpha = 0.25f;
-        Assert.Equal(0.25f, Time.InterpolationAlpha);
+        Assert.Equal(expected: 0.25f, actual: Time.InterpolationAlpha);
         Time.Reset();
     }
 }

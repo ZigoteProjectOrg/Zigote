@@ -65,11 +65,11 @@ public sealed class FunctionLineMark : ChartMark
         xs.IncludeNumeric(XMax);
 
         // Estimate the y extent by coarse sampling the full domain (finite samples only).
-        var ys = domain.Y(ChartValue.Number(0), UseSecondaryYAxis);
-        for (var i = 0; i < DomainSamples; i++)
+        var ys = domain.Y(sample: ChartValue.Number(0), secondary: UseSecondaryYAxis);
+        for (int i = 0; i < DomainSamples; i++)
         {
-            var x = XMin + (XMax - XMin) * i / (DomainSamples - 1);
-            var y = Function(x);
+            double x = XMin + ((XMax - XMin) * i / (DomainSamples - 1));
+            double y = Function(x);
             if (double.IsFinite(y)) ys.IncludeNumeric(y);
         }
 
@@ -85,7 +85,14 @@ public sealed class FunctionLineMark : ChartMark
     public override void CollectLegend(ChartRenderContext ctx, List<LegendEntry> entries)
     {
         if (Name is { Length: > 0 } n)
-            entries.Add(new LegendEntry(n, ctx.ColorFor(n, Color, MarkIndex)));
+        {
+            entries.Add(
+                new LegendEntry(
+                    Label: n,
+                    Color: ctx.ColorFor(series: n, markOverride: Color, markIndex: MarkIndex)
+                )
+            );
+        }
     }
 
     public override void CollectInteractive(ChartRenderContext ctx)
@@ -93,27 +100,31 @@ public sealed class FunctionLineMark : ChartMark
         // Sparse samples across the visible window so hover/tooltips resolve onto the curve.
         const int hoverSamples = 48;
         if (XMax <= XMin || Function is null) return;
-        var color = ctx.ColorFor(Name ?? string.Empty, Color, MarkIndex);
-        for (var i = 0; i <= hoverSamples; i++)
+        var color = ctx.ColorFor(
+            series: Name ?? string.Empty,
+            markOverride: Color,
+            markIndex: MarkIndex
+        );
+        for (int i = 0; i <= hoverSamples; i++)
         {
-            var t = i / (float)hoverSamples;
-            var x = ctx.XScale.NumericAt(t);
+            float t = i / (float)hoverSamples;
+            double x = ctx.XScale.NumericAt(t);
             if (x < XMin || x > XMax) continue;
-            var y = Function(x);
+            double y = Function(x);
             if (!double.IsFinite(y)) continue;
             // Register only on-plot samples — a pole's huge magnitudes would otherwise dominate
             // nearest-point hover resolution from far off-screen.
-            var sy = ctx.MapYNumeric(y);
+            float sy = ctx.MapYNumeric(y);
             if (sy < ctx.PlotRect.Y || sy > ctx.PlotRect.Bottom) continue;
             ctx.HoverPoints.Add(
                 new ChartDataPoint(
-                    ctx.PlotRect.X + t * ctx.PlotRect.Width,
-                    sy,
-                    ChartValue.Number(x),
-                    ChartValue.Number(y),
-                    Name ?? string.Empty,
-                    NiceScale.FormatNumber(y),
-                    color
+                    screenX: ctx.PlotRect.X + (t * ctx.PlotRect.Width),
+                    screenY: sy,
+                    x: ChartValue.Number(x),
+                    y: ChartValue.Number(y),
+                    series: Name ?? string.Empty,
+                    valueLabel: NiceScale.FormatNumber(y),
+                    color: color
                 )
             );
         }
@@ -127,25 +138,31 @@ public sealed class FunctionLineMark : ChartMark
         EnsureSamples(ctx);
         if (_count < 2) return;
 
-        var color = ctx.ColorFor(Name ?? string.Empty, Color, MarkIndex);
+        var color = ctx.ColorFor(
+            series: Name ?? string.Empty,
+            markOverride: Color,
+            markIndex: MarkIndex
+        );
 
         // Entrance animation: reveal the plot left→right (matches LineMark).
-        var reveal = ctx.Progress < 1f;
+        bool reveal = ctx.Progress < 1f;
         if (reveal)
+        {
             paint.AddClipStart(
                 new Rect(
-                    ctx.PlotRect.X,
-                    ctx.PlotRect.Y - StrokeWidth,
-                    MathF.Max(0.01f, ctx.PlotRect.Width * ctx.Progress),
-                    ctx.PlotRect.Height + StrokeWidth * 2
+                    x: ctx.PlotRect.X,
+                    y: ctx.PlotRect.Y - StrokeWidth,
+                    width: MathF.Max(x: 0.01f, y: ctx.PlotRect.Width * ctx.Progress),
+                    height: ctx.PlotRect.Height + (StrokeWidth * 2)
                 )
             );
+        }
 
         // Stroke each finite run; NaN samples (poles, out-of-domain) break the polyline.
-        var runStart = -1;
-        for (var i = 0; i <= _count; i++)
+        int runStart = -1;
+        for (int i = 0; i <= _count; i++)
         {
-            var finite = i < _count && float.IsFinite(_sy[i]);
+            bool finite = i < _count && float.IsFinite(_sy[i]);
             if (finite)
             {
                 if (runStart < 0) runStart = i;
@@ -153,16 +170,19 @@ public sealed class FunctionLineMark : ChartMark
             }
 
             if (runStart >= 0 && i - runStart >= 2)
+            {
                 LineMark<ChartSample>.StrokePolyline(
-                    ctx,
-                    _sx.AsSpan(runStart, i - runStart),
-                    _sy.AsSpan(runStart, i - runStart),
-                    color,
-                    StrokeWidth,
-                    ChartInterpolation.Linear,
-                    Dash,
-                    DashGap
+                    ctx: ctx,
+                    sx: _sx.AsSpan(start: runStart, length: i - runStart),
+                    sy: _sy.AsSpan(start: runStart, length: i - runStart),
+                    color: color,
+                    width: StrokeWidth,
+                    interpolation: ChartInterpolation.Linear,
+                    dash: Dash,
+                    dashGap: DashGap
                 );
+            }
+
             runStart = -1;
         }
 
@@ -176,10 +196,10 @@ public sealed class FunctionLineMark : ChartMark
     private void EnsureSamples(ChartRenderContext ctx)
     {
         var plot = ctx.PlotRect;
-        var x0 = ctx.XScale.NumericAt(0f);
-        var x1 = ctx.XScale.NumericAt(1f);
-        var y0 = ctx.YScale.NumericAt(0f);
-        var y1 = ctx.YScale.NumericAt(1f);
+        double x0 = ctx.XScale.NumericAt(0f);
+        double x1 = ctx.XScale.NumericAt(1f);
+        double y0 = ctx.YScale.NumericAt(0f);
+        double y1 = ctx.YScale.NumericAt(1f);
         if (plot == _sampledPlot && x0 == _sampledX0 && x1 == _sampledX1 &&
             y0 == _sampledY0 && y1 == _sampledY1)
             return;
@@ -190,10 +210,10 @@ public sealed class FunctionLineMark : ChartMark
         _sampledY0 = y0;
         _sampledY1 = y1;
 
-        var count = Math.Clamp(
-            (int)(plot.Width / MathF.Max(0.5f, PixelsPerSample)) + 1,
-            2,
-            Math.Max(2, MaxSamples)
+        int count = Math.Clamp(
+            value: (int)(plot.Width / MathF.Max(x: 0.5f, y: PixelsPerSample)) + 1,
+            min: 2,
+            max: Math.Max(val1: 2, val2: MaxSamples)
         );
         if (_sx.Length < count)
         {
@@ -206,21 +226,23 @@ public sealed class FunctionLineMark : ChartMark
         // segment length into dash/tessellation cost — millions of commands in one frame, enough
         // to blow past wgpu's 256 MB vertex-buffer cap. Inside the band the curve is exact; a
         // clamped exit still reads as a vertical asymptote (±2 plot heights ≈ slope 500:1).
-        var yLo = plot.Y - 2f * plot.Height;
-        var yHi = plot.Bottom + 2f * plot.Height;
-        for (var i = 0; i < count; i++)
+        float yLo = plot.Y - (2f * plot.Height);
+        float yHi = plot.Bottom + (2f * plot.Height);
+        for (int i = 0; i < count; i++)
         {
-            var t = i / (float)(count - 1);
-            _sx[i] = plot.X + t * plot.Width;
-            var x = ctx.XScale.NumericAt(t);
+            float t = i / (float)(count - 1);
+            _sx[i] = plot.X + (t * plot.Width);
+            double x = ctx.XScale.NumericAt(t);
             if (x < XMin || x > XMax)
             {
                 _sy[i] = float.NaN;
                 continue;
             }
 
-            var y = Function(x);
-            _sy[i] = double.IsFinite(y) ? Math.Clamp(ctx.MapYNumeric(y), yLo, yHi) : float.NaN;
+            double y = Function(x);
+            _sy[i] = double.IsFinite(y)
+                ? Math.Clamp(value: ctx.MapYNumeric(y), min: yLo, max: yHi)
+                : float.NaN;
         }
 
         _count = count;

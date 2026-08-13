@@ -41,22 +41,19 @@ public sealed class Directionality : InheritedWidget
         }
     }
 
-    /// <summary>The text direction in scope (registers a dependency); defaults to <see cref="TextDirection.Ltr" />.</summary>
-    public static TextDirection Of(BuildContext ctx)
-    {
-        return ctx.DependOn<Directionality>()?.Direction ?? TextDirection.Ltr;
-    }
+    /// <summary>
+    ///     The text direction in scope (registers a dependency); defaults to
+    ///     <see cref="TextDirection.Ltr" />.
+    /// </summary>
+    public static TextDirection Of(BuildContext ctx) =>
+        ctx.DependOn<Directionality>()?.Direction ?? TextDirection.Ltr;
 
     /// <summary>The text direction in scope, or <c>null</c> when none is provided.</summary>
-    public static TextDirection? MaybeOf(BuildContext ctx)
-    {
-        return ctx.DependOn<Directionality>()?.Direction;
-    }
+    public static TextDirection? MaybeOf(BuildContext ctx) =>
+        ctx.DependOn<Directionality>()?.Direction;
 
-    public override bool UpdateShouldNotify(InheritedWidget oldWidget)
-    {
-        return oldWidget is not Directionality old || old.Direction != Direction;
-    }
+    public override bool UpdateShouldNotify(InheritedWidget oldWidget) =>
+        oldWidget is not Directionality old || old.Direction != Direction;
 }
 
 /// <summary>
@@ -74,20 +71,20 @@ public readonly struct EdgeInsetsDirectional(float start, float top, float end, 
     public static EdgeInsetsDirectional All(float v)
     {
         return new EdgeInsetsDirectional(
-            v,
-            v,
-            v,
-            v
+            start: v,
+            top: v,
+            end: v,
+            bottom: v
         );
     }
 
     public static EdgeInsetsDirectional Symmetric(float horizontal, float vertical)
     {
         return new EdgeInsetsDirectional(
-            horizontal,
-            vertical,
-            horizontal,
-            vertical
+            start: horizontal,
+            top: vertical,
+            end: horizontal,
+            bottom: vertical
         );
     }
 
@@ -98,10 +95,10 @@ public readonly struct EdgeInsetsDirectional(float start, float top, float end, 
         float bottom = 0f)
     {
         return new EdgeInsetsDirectional(
-            start,
-            top,
-            end,
-            bottom
+            start: start,
+            top: top,
+            end: end,
+            bottom: bottom
         );
     }
 
@@ -110,16 +107,16 @@ public readonly struct EdgeInsetsDirectional(float start, float top, float end, 
     {
         return direction == TextDirection.Rtl
             ? new EdgeInsets(
-                End,
-                Top,
-                Start,
-                Bottom
+                left: End,
+                top: Top,
+                right: Start,
+                bottom: Bottom
             )
             : new EdgeInsets(
-                Start,
-                Top,
-                End,
-                Bottom
+                left: Start,
+                top: Top,
+                right: End,
+                bottom: Bottom
             );
     }
 }

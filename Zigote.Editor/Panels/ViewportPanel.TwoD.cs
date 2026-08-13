@@ -35,18 +35,26 @@ public sealed partial class ViewportPanel
     /// <summary>Grid lines fade out below this on-screen spacing (px) to avoid a solid wash.</summary>
     private const float MinGridPixels = 6f;
 
-    private bool _isPanning2D;
+    /// <summary>Raised when the Pick tool adopts a tile, so the palette can highlight it.</summary>
+    public Action<int>? OnTilePicked;
+
     private object? _framedScene;
+    private (int X, int Y)? _hoverCell;
+
+    private bool _isPanning2D;
+    private (int X, int Y)? _rectAnchor;
     private PaintTilesCommand? _stroke;
     private bool _strokePainting;
-    private (int X, int Y)? _rectAnchor;
-    private (int X, int Y)? _hoverCell;
 
     /// <summary>True while the viewport is in 2D authoring mode.</summary>
     public bool Is2D => _cameraMode == CameraNavigationMode.TwoD;
 
     /// <summary>Visible world height of the 2D camera.</summary>
-    private float Ortho2DHeight => Math.Clamp(_orbitDistance, Min2DHeight, Max2DHeight);
+    private float Ortho2DHeight => Math.Clamp(
+        value: _orbitDistance,
+        min: Min2DHeight,
+        max: Max2DHeight
+    );
 
     // ── Palette state (driven by TilePalettePanel) ────────────────────────────
 
@@ -70,16 +78,19 @@ public sealed partial class ViewportPanel
     /// <summary>Draw authored 2D colliders and baked tile collision.</summary>
     public bool ShowColliders2D { get; set; }
 
-    /// <summary>Raised when the Pick tool adopts a tile, so the palette can highlight it.</summary>
-    public Action<int>? OnTilePicked;
-
     /// <summary>World size of one grid cell — the active tilemap's tile size, else one unit.</summary>
-    private float GridWorldSize => ActiveTilemap is { } t ? MathF.Max(1e-3f, t.TileWorldSize) : 1f;
+    private float GridWorldSize =>
+        ActiveTilemap is { } t ? MathF.Max(x: 1e-3f, y: t.TileWorldSize) : 1f;
 
     private TilemapLayer? ActiveLayer =>
         ActiveTilemap is { } t && ActiveLayerIndex >= 0 && ActiveLayerIndex < t.TilemapLayers.Count
             ? t.TilemapLayers[ActiveLayerIndex]
             : null;
+
+    // ── Tile painting ─────────────────────────────────────────────────────────
+
+    /// <summary>Does this pointer event belong to a tile tool rather than selection/gizmos?</summary>
+    private bool TileToolsActive => Is2D && !_state.IsPlaying && ActiveLayer is not null;
 
     // ── Camera ────────────────────────────────────────────────────────────────
 
@@ -91,16 +102,19 @@ public sealed partial class ViewportPanel
     {
         // Opening a different scene re-frames onto its 2D camera. Keyed on the SceneGraph identity,
         // not on SceneChanged — that fires on every edit, and re-framing mid-paint would be hostile.
-        if (!ReferenceEquals(_framedScene, _state.Scene))
+        if (!ReferenceEquals(objA: _framedScene, objB: _state.Scene))
         {
             _framedScene = _state.Scene;
             Enter2DMode();
         }
 
         return new Camera2D {
-            Position = new Vec2(_orbitTarget.X, _orbitTarget.Y),
+            Position = new Vec2(x: _orbitTarget.X, y: _orbitTarget.Y),
             OrthoHeight = Ortho2DHeight,
-        }.ViewProjection(MathF.Max(1f, Bounds.Width), MathF.Max(1f, Bounds.Height));
+        }.ViewProjection(
+            viewportW: MathF.Max(x: 1f, y: Bounds.Width),
+            viewportH: MathF.Max(x: 1f, y: Bounds.Height)
+        );
     }
 
     /// <summary>
@@ -114,12 +128,16 @@ public sealed partial class ViewportPanel
         _orbitPitch = 0f;
         if (FindOrthoCamera2D(_state.Scene.Root) is { } cam)
         {
-            _orbitTarget = new Vec3(cam.Position.X, cam.Position.Y, 0f);
-            _orbitDistance = Math.Clamp(cam.CameraOrthoSize.Y, Min2DHeight, Max2DHeight);
+            _orbitTarget = new Vec3(x: cam.Position.X, y: cam.Position.Y, z: 0f);
+            _orbitDistance = Math.Clamp(
+                value: cam.CameraOrthoSize.Y,
+                min: Min2DHeight,
+                max: Max2DHeight
+            );
         }
         else
         {
-            _orbitTarget = new Vec3(_orbitTarget.X, _orbitTarget.Y, 0f);
+            _orbitTarget = new Vec3(x: _orbitTarget.X, y: _orbitTarget.Y, z: 0f);
             if (_orbitDistance is < Min2DHeight or > Max2DHeight) _orbitDistance = 10f;
         }
 
@@ -132,47 +150,50 @@ public sealed partial class ViewportPanel
     {
         if (node is { Kind: NodeKind.Camera, CameraProjection: 1 }) return node;
         foreach (var child in node.Children)
+        {
             if (FindOrthoCamera2D(child) is { } found)
                 return found;
+        }
+
         return null;
     }
 
     /// <summary>World point on the Z=0 plane under a viewport-space point.</summary>
     private Vec2 ScreenToWorld2D(Offset p)
     {
-        var w = MathF.Max(1f, Bounds.Width);
-        var h = MathF.Max(1f, Bounds.Height);
-        var halfH = Ortho2DHeight * 0.5f;
-        var halfW = halfH * (w / h);
-        var nx = (p.X - Bounds.X) / w * 2f - 1f;
-        var ny = 1f - (p.Y - Bounds.Y) / h * 2f; // screen Y down → world Y up
-        return new Vec2(_orbitTarget.X + nx * halfW, _orbitTarget.Y + ny * halfH);
+        float w = MathF.Max(x: 1f, y: Bounds.Width);
+        float h = MathF.Max(x: 1f, y: Bounds.Height);
+        float halfH = Ortho2DHeight * 0.5f;
+        float halfW = halfH * (w / h);
+        float nx = ((p.X - Bounds.X) / w * 2f) - 1f;
+        float ny = 1f - ((p.Y - Bounds.Y) / h * 2f); // screen Y down → world Y up
+        return new Vec2(x: _orbitTarget.X + (nx * halfW), y: _orbitTarget.Y + (ny * halfH));
     }
 
     /// <summary>Viewport-space point for a world point on the Z=0 plane.</summary>
     private Vec2 WorldToScreen2D(Vec2 world)
     {
-        var w = MathF.Max(1f, Bounds.Width);
-        var h = MathF.Max(1f, Bounds.Height);
-        var halfH = Ortho2DHeight * 0.5f;
-        var halfW = halfH * (w / h);
-        var nx = (world.X - _orbitTarget.X) / halfW;
-        var ny = (world.Y - _orbitTarget.Y) / halfH;
+        float w = MathF.Max(x: 1f, y: Bounds.Width);
+        float h = MathF.Max(x: 1f, y: Bounds.Height);
+        float halfH = Ortho2DHeight * 0.5f;
+        float halfW = halfH * (w / h);
+        float nx = (world.X - _orbitTarget.X) / halfW;
+        float ny = (world.Y - _orbitTarget.Y) / halfH;
         return new Vec2(
-            Bounds.X + (nx + 1f) * 0.5f * w,
-            Bounds.Y + (1f - ny) * 0.5f * h
+            x: Bounds.X + ((nx + 1f) * 0.5f * w),
+            y: Bounds.Y + ((1f - ny) * 0.5f * h)
         );
     }
 
     /// <summary>Drag the world with the cursor: one screen pixel moves one screen pixel of world.</summary>
     private void Pan2D(Offset delta)
     {
-        var h = MathF.Max(1f, Bounds.Height);
-        var worldPerPixel = Ortho2DHeight / h;
+        float h = MathF.Max(x: 1f, y: Bounds.Height);
+        float worldPerPixel = Ortho2DHeight / h;
         _orbitTarget = new Vec3(
-            _orbitTarget.X - delta.X * worldPerPixel,
-            _orbitTarget.Y + delta.Y * worldPerPixel, // screen Y down → world Y up
-            0f
+            x: _orbitTarget.X - (delta.X * worldPerPixel),
+            y: _orbitTarget.Y + (delta.Y * worldPerPixel), // screen Y down → world Y up
+            z: 0f
         );
         MarkNeedsPaint();
     }
@@ -185,15 +206,15 @@ public sealed partial class ViewportPanel
     {
         var before = ScreenToWorld2D(cursor);
         _orbitDistance = Math.Clamp(
-            Ortho2DHeight * MathF.Pow(1.15f, -steps),
-            Min2DHeight,
-            Max2DHeight
+            value: Ortho2DHeight * MathF.Pow(x: 1.15f, y: -steps),
+            min: Min2DHeight,
+            max: Max2DHeight
         );
         var after = ScreenToWorld2D(cursor);
         _orbitTarget = new Vec3(
-            _orbitTarget.X + (before.X - after.X),
-            _orbitTarget.Y + (before.Y - after.Y),
-            0f
+            x: _orbitTarget.X + (before.X - after.X),
+            y: _orbitTarget.Y + (before.Y - after.Y),
+            z: 0f
         );
         MarkNeedsPaint();
     }
@@ -202,11 +223,11 @@ public sealed partial class ViewportPanel
     private Vec3 SnapWorld2D(Vec3 world)
     {
         if (!SnapToGrid) return world;
-        var g = GridWorldSize;
+        float g = GridWorldSize;
         return new Vec3(
-            MathF.Round(world.X / g) * g,
-            MathF.Round(world.Y / g) * g,
-            world.Z
+            x: MathF.Round(world.X / g) * g,
+            y: MathF.Round(world.Y / g) * g,
+            z: world.Z
         );
     }
 
@@ -218,7 +239,7 @@ public sealed partial class ViewportPanel
         if (ActiveTilemap is not { } map) return null;
         var world = ScreenToWorld2D(p);
         var origin = WorldOrigin2D(map);
-        var step = MathF.Max(1e-4f, map.TileWorldSize);
+        float step = MathF.Max(x: 1e-4f, y: map.TileWorldSize);
         return (
             (int)MathF.Floor((world.X - origin.X) / step),
             (int)MathF.Floor((world.Y - origin.Y) / step)
@@ -230,18 +251,16 @@ public sealed partial class ViewportPanel
     {
         var pos = node.Position;
         for (var p = node.Parent; p is not null; p = p.Parent)
+        {
             pos = new Vec3(
-                p.Position.X + pos.X * p.Scale.X,
-                p.Position.Y + pos.Y * p.Scale.Y,
-                p.Position.Z + pos.Z * p.Scale.Z
+                x: p.Position.X + (pos.X * p.Scale.X),
+                y: p.Position.Y + (pos.Y * p.Scale.Y),
+                z: p.Position.Z + (pos.Z * p.Scale.Z)
             );
-        return new Vec2(pos.X, pos.Y);
+        }
+
+        return new Vec2(x: pos.X, y: pos.Y);
     }
-
-    // ── Tile painting ─────────────────────────────────────────────────────────
-
-    /// <summary>Does this pointer event belong to a tile tool rather than selection/gizmos?</summary>
-    private bool TileToolsActive => Is2D && !_state.IsPlaying && ActiveLayer is not null;
 
     /// <summary>Begin a stroke. Returns true when the tile tool consumed the press.</summary>
     private bool BeginTileStroke(Offset point)
@@ -251,7 +270,7 @@ public sealed partial class ViewportPanel
 
         if (ActiveTool == TileTool.Pick)
         {
-            var picked = layer.GetTile(cell.X, cell.Y);
+            int picked = layer.GetTile(x: cell.X, y: cell.Y);
             if (picked != Tileset.EmptyTile)
             {
                 ActiveTile = picked;
@@ -267,10 +286,10 @@ public sealed partial class ViewportPanel
             return true;
         }
 
-        _stroke = new PaintTilesCommand(_state, layer);
+        _stroke = new PaintTilesCommand(state: _state, layer: layer);
         _strokePainting = true;
 
-        if (ActiveTool == TileTool.Fill) FloodFill(layer, cell);
+        if (ActiveTool == TileTool.Fill) FloodFill(layer: layer, start: cell);
         else PaintCell(cell);
         return true;
     }
@@ -296,11 +315,15 @@ public sealed partial class ViewportPanel
         if (ActiveTool == TileTool.Rect && _rectAnchor is { } anchor && CellAt(point) is { } end)
         {
             var layer = ActiveLayer!;
-            _stroke = new PaintTilesCommand(_state, layer);
-            var tile = ActiveTile;
-            for (var y = Math.Min(anchor.Y, end.Y); y <= Math.Max(anchor.Y, end.Y); y++)
-            for (var x = Math.Min(anchor.X, end.X); x <= Math.Max(anchor.X, end.X); x++)
-                _stroke.Paint(x, y, tile);
+            _stroke = new PaintTilesCommand(state: _state, layer: layer);
+            int tile = ActiveTile;
+            for (int y = Math.Min(val1: anchor.Y, val2: end.Y);
+                 y <= Math.Max(val1: anchor.Y, val2: end.Y);
+                 y++)
+            for (int x = Math.Min(val1: anchor.X, val2: end.X);
+                 x <= Math.Max(val1: anchor.X, val2: end.X);
+                 x++)
+                _stroke.Paint(x: x, y: y, tile: tile);
         }
 
         PushStroke();
@@ -309,8 +332,8 @@ public sealed partial class ViewportPanel
 
     private void PaintCell((int X, int Y) cell)
     {
-        var tile = ActiveTool == TileTool.Erase ? Tileset.EmptyTile : ActiveTile;
-        if (_stroke?.Paint(cell.X, cell.Y, tile) == true) MarkNeedsPaint();
+        int tile = ActiveTool == TileTool.Erase ? Tileset.EmptyTile : ActiveTile;
+        if (_stroke?.Paint(x: cell.X, y: cell.Y, tile: tile) == true) MarkNeedsPaint();
     }
 
     /// <summary>
@@ -319,18 +342,18 @@ public sealed partial class ViewportPanel
     /// </summary>
     private void FloodFill(TilemapLayer layer, (int X, int Y) start)
     {
-        var target = layer.GetTile(start.X, start.Y);
-        var tile = ActiveTool == TileTool.Erase ? Tileset.EmptyTile : ActiveTile;
+        int target = layer.GetTile(x: start.X, y: start.Y);
+        int tile = ActiveTool == TileTool.Erase ? Tileset.EmptyTile : ActiveTile;
         if (target == tile) return;
 
-        var minX = layer.IsEmpty ? start.X : Math.Min(layer.OriginX, start.X) - 1;
-        var minY = layer.IsEmpty ? start.Y : Math.Min(layer.OriginY, start.Y) - 1;
-        var maxX = layer.IsEmpty
+        int minX = layer.IsEmpty ? start.X : Math.Min(val1: layer.OriginX, val2: start.X) - 1;
+        int minY = layer.IsEmpty ? start.Y : Math.Min(val1: layer.OriginY, val2: start.Y) - 1;
+        int maxX = layer.IsEmpty
             ? start.X
-            : Math.Max(layer.OriginX + layer.Width - 1, start.X) + 1;
-        var maxY = layer.IsEmpty
+            : Math.Max(val1: layer.OriginX + layer.Width - 1, val2: start.X) + 1;
+        int maxY = layer.IsEmpty
             ? start.Y
-            : Math.Max(layer.OriginY + layer.Height - 1, start.Y) + 1;
+            : Math.Max(val1: layer.OriginY + layer.Height - 1, val2: start.Y) + 1;
 
         var seen = new HashSet<(int, int)>();
         var queue = new Queue<(int X, int Y)>();
@@ -339,19 +362,21 @@ public sealed partial class ViewportPanel
 
         while (queue.Count > 0)
         {
-            var (x, y) = queue.Dequeue();
+            (int x, int y) = queue.Dequeue();
             if (x < minX || y < minY || x > maxX || y > maxY) continue;
-            if (layer.GetTile(x, y) != target) continue;
-            _stroke?.Paint(x, y, tile);
+            if (layer.GetTile(x: x, y: y) != target) continue;
+            _stroke?.Paint(x: x, y: y, tile: tile);
 
-            foreach (var (nx, ny) in new[] {
+            foreach ((int nx, int ny) in new[] {
                          (x + 1, y),
                          (x - 1, y),
                          (x, y + 1),
                          (x, y - 1),
                      })
+            {
                 if (seen.Add((nx, ny)))
                     queue.Enqueue((nx, ny));
+            }
         }
 
         MarkNeedsPaint();
@@ -393,9 +418,9 @@ public sealed partial class ViewportPanel
 
     private void DrawGrid2D(PaintList paint)
     {
-        var step = GridWorldSize;
-        var h = MathF.Max(1f, Bounds.Height);
-        var pixelsPerCell = step / Ortho2DHeight * h;
+        float step = GridWorldSize;
+        float h = MathF.Max(x: 1f, y: Bounds.Height);
+        float pixelsPerCell = step / Ortho2DHeight * h;
         // Coarsen the grid until lines are readable, so zooming out never paints a solid block.
         while (pixelsPerCell < MinGridPixels && step < Max2DHeight)
         {
@@ -403,50 +428,50 @@ public sealed partial class ViewportPanel
             pixelsPerCell *= 4f;
         }
 
-        var min = ScreenToWorld2D(new Offset(Bounds.X, Bounds.Y + Bounds.Height));
-        var max = ScreenToWorld2D(new Offset(Bounds.X + Bounds.Width, Bounds.Y));
+        var min = ScreenToWorld2D(new Offset(x: Bounds.X, y: Bounds.Y + Bounds.Height));
+        var max = ScreenToWorld2D(new Offset(x: Bounds.X + Bounds.Width, y: Bounds.Y));
         var color = new Color(
-            1f,
-            1f,
-            1f,
-            0.07f
+            r: 1f,
+            g: 1f,
+            b: 1f,
+            a: 0.07f
         );
         var axisColor = new Color(
-            1f,
-            1f,
-            1f,
-            0.22f
+            r: 1f,
+            g: 1f,
+            b: 1f,
+            a: 0.22f
         );
 
-        var x0 = MathF.Floor(min.X / step) * step;
-        for (var x = x0; x <= max.X; x += step)
+        float x0 = MathF.Floor(min.X / step) * step;
+        for (float x = x0; x <= max.X; x += step)
         {
-            var sx = WorldToScreen2D(new Vec2(x, 0f)).X;
-            var isAxis = MathF.Abs(x) < step * 0.5f;
+            float sx = WorldToScreen2D(new Vec2(x: x, y: 0f)).X;
+            bool isAxis = MathF.Abs(x) < step * 0.5f;
             paint.AddRect(
-                new Rect(
-                    sx,
-                    Bounds.Y,
-                    1f,
-                    Bounds.Height
+                bounds: new Rect(
+                    x: sx,
+                    y: Bounds.Y,
+                    width: 1f,
+                    height: Bounds.Height
                 ),
-                isAxis ? axisColor : color
+                color: isAxis ? axisColor : color
             );
         }
 
-        var y0 = MathF.Floor(min.Y / step) * step;
-        for (var y = y0; y <= max.Y; y += step)
+        float y0 = MathF.Floor(min.Y / step) * step;
+        for (float y = y0; y <= max.Y; y += step)
         {
-            var sy = WorldToScreen2D(new Vec2(0f, y)).Y;
-            var isAxis = MathF.Abs(y) < step * 0.5f;
+            float sy = WorldToScreen2D(new Vec2(x: 0f, y: y)).Y;
+            bool isAxis = MathF.Abs(y) < step * 0.5f;
             paint.AddRect(
-                new Rect(
-                    Bounds.X,
-                    sy,
-                    Bounds.Width,
-                    1f
+                bounds: new Rect(
+                    x: Bounds.X,
+                    y: sy,
+                    width: Bounds.Width,
+                    height: 1f
                 ),
-                isAxis ? axisColor : color
+                color: isAxis ? axisColor : color
             );
         }
     }
@@ -456,52 +481,50 @@ public sealed partial class ViewportPanel
     {
         if (!TileToolsActive || ActiveTilemap is not { } map) return;
 
-        var (cx, cy) = (0, 0);
-        var (w, h) = (1, 1);
+        (int cx, int cy) = (0, 0);
+        (int w, int h) = (1, 1);
         if (_rectAnchor is { } anchor && _hoverCell is { } drag)
         {
-            cx = Math.Min(anchor.X, drag.X);
-            cy = Math.Min(anchor.Y, drag.Y);
+            cx = Math.Min(val1: anchor.X, val2: drag.X);
+            cy = Math.Min(val1: anchor.Y, val2: drag.Y);
             w = Math.Abs(drag.X - anchor.X) + 1;
             h = Math.Abs(drag.Y - anchor.Y) + 1;
         }
         else if (_hoverCell is { } cell)
-        {
             (cx, cy) = cell;
-        }
         else
-        {
             return;
-        }
 
         var origin = WorldOrigin2D(map);
-        var step = MathF.Max(1e-4f, map.TileWorldSize);
+        float step = MathF.Max(x: 1e-4f, y: map.TileWorldSize);
         // World rect → screen: Y flips, so the world top-left is the screen top-left.
-        var topLeft = WorldToScreen2D(new Vec2(origin.X + cx * step, origin.Y + (cy + h) * step));
+        var topLeft = WorldToScreen2D(
+            new Vec2(x: origin.X + (cx * step), y: origin.Y + ((cy + h) * step))
+        );
         var bottomRight = WorldToScreen2D(
-            new Vec2(origin.X + (cx + w) * step, origin.Y + cy * step)
+            new Vec2(x: origin.X + ((cx + w) * step), y: origin.Y + (cy * step))
         );
 
         StrokeRect(
-            paint,
-            new Rect(
-                topLeft.X,
-                topLeft.Y,
-                MathF.Max(1f, bottomRight.X - topLeft.X),
-                MathF.Max(1f, bottomRight.Y - topLeft.Y)
+            paint: paint,
+            r: new Rect(
+                x: topLeft.X,
+                y: topLeft.Y,
+                width: MathF.Max(x: 1f, y: bottomRight.X - topLeft.X),
+                height: MathF.Max(x: 1f, y: bottomRight.Y - topLeft.Y)
             ),
-            ActiveTool == TileTool.Erase
+            color: ActiveTool == TileTool.Erase
                 ? new Color(
-                    1f,
-                    0.45f,
-                    0.4f,
-                    0.95f
+                    r: 1f,
+                    g: 0.45f,
+                    b: 0.4f,
+                    a: 0.95f
                 )
                 : new Color(
-                    0.45f,
-                    0.85f,
-                    1f,
-                    0.95f
+                    r: 0.45f,
+                    g: 0.85f,
+                    b: 1f,
+                    a: 0.95f
                 )
         );
     }
@@ -513,50 +536,50 @@ public sealed partial class ViewportPanel
     private void DrawColliders2D(PaintList paint)
     {
         var solid = new Color(
-            0.35f,
-            1f,
-            0.55f,
-            0.85f
+            r: 0.35f,
+            g: 1f,
+            b: 0.55f,
+            a: 0.85f
         );
         var trigger = new Color(
-            1f,
-            0.85f,
-            0.3f,
-            0.85f
+            r: 1f,
+            g: 0.85f,
+            b: 0.3f,
+            a: 0.85f
         );
         var oneWay = new Color(
-            0.45f,
-            0.75f,
-            1f,
-            0.85f
+            r: 0.45f,
+            g: 0.75f,
+            b: 1f,
+            a: 0.85f
         );
 
         Scene2DPhysics.Bake(
-            _state.Scene.Root,
-            path => _state.Sprites2D.GetTileset(path)?.Set,
-            shape =>
+            root: _state.Scene.Root,
+            tilesetLoader: path => _state.Sprites2D.GetTileset(path)?.Set,
+            emit: shape =>
             {
                 var topLeft = WorldToScreen2D(
                     new Vec2(
-                        shape.Center.X - shape.HalfExtents.X,
-                        shape.Center.Y + shape.HalfExtents.Y
+                        x: shape.Center.X - shape.HalfExtents.X,
+                        y: shape.Center.Y + shape.HalfExtents.Y
                     )
                 );
                 var bottomRight = WorldToScreen2D(
                     new Vec2(
-                        shape.Center.X + shape.HalfExtents.X,
-                        shape.Center.Y - shape.HalfExtents.Y
+                        x: shape.Center.X + shape.HalfExtents.X,
+                        y: shape.Center.Y - shape.HalfExtents.Y
                     )
                 );
                 StrokeRect(
-                    paint,
-                    new Rect(
-                        topLeft.X,
-                        topLeft.Y,
-                        MathF.Max(1f, bottomRight.X - topLeft.X),
-                        MathF.Max(1f, bottomRight.Y - topLeft.Y)
+                    paint: paint,
+                    r: new Rect(
+                        x: topLeft.X,
+                        y: topLeft.Y,
+                        width: MathF.Max(x: 1f, y: bottomRight.X - topLeft.X),
+                        height: MathF.Max(x: 1f, y: bottomRight.Y - topLeft.Y)
                     ),
-                    shape.IsTrigger ? trigger : shape.OneWayUp ? oneWay : solid
+                    color: shape.IsTrigger ? trigger : shape.OneWayUp ? oneWay : solid
                 );
             }
         );
@@ -565,40 +588,40 @@ public sealed partial class ViewportPanel
     private static void StrokeRect(PaintList paint, Rect r, Color color)
     {
         paint.AddRect(
-            new Rect(
-                r.X,
-                r.Y,
-                r.Width,
-                1f
+            bounds: new Rect(
+                x: r.X,
+                y: r.Y,
+                width: r.Width,
+                height: 1f
             ),
-            color
+            color: color
         );
         paint.AddRect(
-            new Rect(
-                r.X,
-                r.Y + r.Height - 1f,
-                r.Width,
-                1f
+            bounds: new Rect(
+                x: r.X,
+                y: r.Y + r.Height - 1f,
+                width: r.Width,
+                height: 1f
             ),
-            color
+            color: color
         );
         paint.AddRect(
-            new Rect(
-                r.X,
-                r.Y,
-                1f,
-                r.Height
+            bounds: new Rect(
+                x: r.X,
+                y: r.Y,
+                width: 1f,
+                height: r.Height
             ),
-            color
+            color: color
         );
         paint.AddRect(
-            new Rect(
-                r.X + r.Width - 1f,
-                r.Y,
-                1f,
-                r.Height
+            bounds: new Rect(
+                x: r.X + r.Width - 1f,
+                y: r.Y,
+                width: 1f,
+                height: r.Height
             ),
-            color
+            color: color
         );
     }
 }

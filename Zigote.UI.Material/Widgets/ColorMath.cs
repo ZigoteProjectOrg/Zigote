@@ -15,16 +15,16 @@ public static class ColorMath
     /// </summary>
     public static (float h, float s, float v) ToHsv(Color c)
     {
-        var r = Math.Clamp(c.R, 0f, 1f);
-        var g = Math.Clamp(c.G, 0f, 1f);
-        var b = Math.Clamp(c.B, 0f, 1f);
+        float r = Math.Clamp(value: c.R, min: 0f, max: 1f);
+        float g = Math.Clamp(value: c.G, min: 0f, max: 1f);
+        float b = Math.Clamp(value: c.B, min: 0f, max: 1f);
 
-        var max = MathF.Max(r, MathF.Max(g, b));
-        var min = MathF.Min(r, MathF.Min(g, b));
-        var delta = max - min;
+        float max = MathF.Max(x: r, y: MathF.Max(x: g, y: b));
+        float min = MathF.Min(x: r, y: MathF.Min(x: g, y: b));
+        float delta = max - min;
 
-        var v = max;
-        var s = max <= 0f ? 0f : delta / max;
+        float v = max;
+        float s = max <= 0f ? 0f : delta / max;
 
         float h;
         if (delta <= 1e-6f)
@@ -32,9 +32,9 @@ public static class ColorMath
         else if (max == r)
             h = 60f * ((g - b) / delta % 6f);
         else if (max == g)
-            h = 60f * ((b - r) / delta + 2f);
+            h = 60f * (((b - r) / delta) + 2f);
         else
-            h = 60f * ((r - g) / delta + 4f);
+            h = 60f * (((r - g) / delta) + 4f);
 
         if (h < 0f) h += 360f;
         return (h, s, v);
@@ -47,12 +47,12 @@ public static class ColorMath
     public static Color FromHsv(float h, float s, float v, float a = 1f)
     {
         h = WrapHue(h);
-        s = Math.Clamp(s, 0f, 1f);
-        v = Math.Clamp(v, 0f, 1f);
+        s = Math.Clamp(value: s, min: 0f, max: 1f);
+        v = Math.Clamp(value: v, min: 0f, max: 1f);
 
-        var c = v * s;
-        var x = c * (1f - MathF.Abs(h / 60f % 2f - 1f));
-        var m = v - c;
+        float c = v * s;
+        float x = c * (1f - MathF.Abs((h / 60f % 2f) - 1f));
+        float m = v - c;
 
         float r, g, b;
         if (h < 60f) (r, g, b) = (c, x, 0f);
@@ -63,10 +63,10 @@ public static class ColorMath
         else (r, g, b) = (c, 0f, x);
 
         return new Color(
-            r + m,
-            g + m,
-            b + m,
-            Math.Clamp(a, 0f, 1f)
+            r: r + m,
+            g: g + m,
+            b: b + m,
+            a: Math.Clamp(value: a, min: 0f, max: 1f)
         );
     }
 
@@ -76,11 +76,11 @@ public static class ColorMath
     /// </summary>
     public static string ToHex(Color c, bool includeAlpha = false)
     {
-        var r = ToByte(c.R);
-        var g = ToByte(c.G);
-        var b = ToByte(c.B);
+        byte r = ToByte(c.R);
+        byte g = ToByte(c.G);
+        byte b = ToByte(c.B);
         if (!includeAlpha) return $"#{r:X2}{g:X2}{b:X2}";
-        var a = ToByte(c.A);
+        byte a = ToByte(c.A);
         return $"#{r:X2}{g:X2}{b:X2}{a:X2}";
     }
 
@@ -93,44 +93,46 @@ public static class ColorMath
         c = Color.Black;
         if (string.IsNullOrWhiteSpace(s)) return false;
 
-        var t = s.Trim();
+        string t = s.Trim();
         if (t.StartsWith('#')) t = t[1..];
         if (t.Length == 0) return false;
 
         // Validate hex digits.
-        foreach (var ch in t)
+        foreach (char ch in t)
+        {
             if (!Uri.IsHexDigit(ch))
                 return false;
+        }
 
         switch (t.Length)
         {
             case 3: // RGB → expand each nibble (e.g. "abc" → "aabbcc")
             {
-                var r = ParseNibble(t[0]);
-                var g = ParseNibble(t[1]);
-                var b = ParseNibble(t[2]);
-                c = new Color(r / 255f, g / 255f, b / 255f);
+                int r = ParseNibble(t[0]);
+                int g = ParseNibble(t[1]);
+                int b = ParseNibble(t[2]);
+                c = new Color(r: r / 255f, g: g / 255f, b: b / 255f);
                 return true;
             }
             case 6: // RRGGBB
             {
-                var r = ParseByte(t, 0);
-                var g = ParseByte(t, 2);
-                var b = ParseByte(t, 4);
-                c = new Color(r / 255f, g / 255f, b / 255f);
+                int r = ParseByte(s: t, index: 0);
+                int g = ParseByte(s: t, index: 2);
+                int b = ParseByte(s: t, index: 4);
+                c = new Color(r: r / 255f, g: g / 255f, b: b / 255f);
                 return true;
             }
             case 8: // RRGGBBAA
             {
-                var r = ParseByte(t, 0);
-                var g = ParseByte(t, 2);
-                var b = ParseByte(t, 4);
-                var a = ParseByte(t, 6);
+                int r = ParseByte(s: t, index: 0);
+                int g = ParseByte(s: t, index: 2);
+                int b = ParseByte(s: t, index: 4);
+                int a = ParseByte(s: t, index: 6);
                 c = new Color(
-                    r / 255f,
-                    g / 255f,
-                    b / 255f,
-                    a / 255f
+                    r: r / 255f,
+                    g: g / 255f,
+                    b: b / 255f,
+                    a: a / 255f
                 );
                 return true;
             }
@@ -148,19 +150,21 @@ public static class ColorMath
         return h;
     }
 
-    private static byte ToByte(float v)
-    {
-        return (byte)Math.Clamp((int)MathF.Round(v * 255f), 0, 255);
-    }
+    private static byte ToByte(float v) => (byte)Math.Clamp(
+        value: (int)MathF.Round(v * 255f),
+        min: 0,
+        max: 255
+    );
 
     private static int ParseNibble(char c)
     {
-        var n = Convert.ToInt32(c.ToString(), 16);
-        return n * 16 + n; // duplicate nibble so "a" → 0xAA
+        int n = Convert.ToInt32(value: c.ToString(), fromBase: 16);
+        return (n * 16) + n; // duplicate nibble so "a" → 0xAA
     }
 
-    private static int ParseByte(string s, int index)
-    {
-        return int.Parse(s.AsSpan(index, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
-    }
+    private static int ParseByte(string s, int index) => int.Parse(
+        s: s.AsSpan(start: index, length: 2),
+        style: NumberStyles.HexNumber,
+        provider: CultureInfo.InvariantCulture
+    );
 }

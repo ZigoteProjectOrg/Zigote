@@ -16,7 +16,10 @@ namespace Zigote.Tests;
 ///     steady-state managed allocation. The heavier <see cref="Fact" />s double as loose regression
 ///     guards (a 60 Hz frame budget) — the numbers themselves are logged so a run can be diffed
 ///     against a prior one. Run with:
-///     <c>dotnet test Zigote.Tests/Zigote.Tests.csproj --filter UiPerformanceTests -l "console;verbosity=detailed"</c>
+///     <c>
+///         dotnet test Zigote.Tests/Zigote.Tests.csproj --filter UiPerformanceTests -l
+///         "console;verbosity=detailed"
+///     </c>
 /// </summary>
 public class UiPerformanceTests
 {
@@ -27,10 +30,7 @@ public class UiPerformanceTests
 
     private readonly ITestOutputHelper _output;
 
-    public UiPerformanceTests(ITestOutputHelper output)
-    {
-        _output = output;
-    }
+    public UiPerformanceTests(ITestOutputHelper output) => _output = output;
 
     // A rows×cols grid of text cells — a Column of Rows, each cell a centered Label inside a fixed
     // SizedBox. This exercises the flex layout kernel (Row/Column main+cross axis), a fixed-size box,
@@ -38,23 +38,28 @@ public class UiPerformanceTests
     private static Widget BuildGrid(int rows, int cols)
     {
         var column = new Column();
-        for (var r = 0; r < rows; r++)
+        for (int r = 0; r < rows; r++)
         {
             var row = new Row();
-            for (var c = 0; c < cols; c++)
-                row.Children.Add(new SizedBox(52f, 22f, new Center(new Label($"R{r}C{c}"))));
+            for (int c = 0; c < cols; c++)
+            {
+                row.Children.Add(
+                    new SizedBox(width: 52f, height: 22f, child: new Center(new Label($"R{r}C{c}")))
+                );
+            }
+
             column.Children.Add(row);
         }
 
-        return new ColoredBox(Color.White, new Padding(EdgeInsets.All(8f), column));
+        return new ColoredBox(
+            color: Color.White,
+            child: new Padding(padding: EdgeInsets.All(8f), child: column)
+        );
     }
 
     // Per-cell widget cost: SizedBox → Center → Label = 3. Plus ColoredBox + Padding + Column + one
     // Row per grid row. Kept as a formula so the reported "total widgets" needs no tree walk.
-    private static int TotalWidgets(int rows, int cols)
-    {
-        return 3 + rows + rows * cols * 3;
-    }
+    private static int TotalWidgets(int rows, int cols) => 3 + rows + (rows * cols * 3);
 
     private static void Frame(Widget root, PaintList paint, Constraints c)
     {
@@ -67,20 +72,20 @@ public class UiPerformanceTests
     private static double TimeMsPerIter(int iterations, Action body)
     {
         var watch = Stopwatch.StartNew();
-        for (var i = 0; i < iterations; i++) body();
+        for (int i = 0; i < iterations; i++) body();
         watch.Stop();
         return watch.Elapsed.TotalMilliseconds / iterations;
     }
 
-    private static string F(double v)
-    {
-        return v.ToString("F4", CultureInfo.InvariantCulture);
-    }
+    private static string F(double v) => v.ToString(
+        format: "F4",
+        provider: CultureInfo.InvariantCulture
+    );
 
     [Fact]
     public void Scaling_MeasureLayoutPaint_CollectsMetrics()
     {
-        var viewport = Constraints.Tight(1920f, 1080f);
+        var viewport = Constraints.Tight(width: 1920f, height: 1080f);
         (int rows, int cols)[] sizes = [
             (10, 6),
             (25, 10),
@@ -96,47 +101,57 @@ public class UiPerformanceTests
             "  -------+---------+-----------+-----------+------------+------------+------------+-----------+-------"
         );
 
-        foreach (var (rows, cols) in sizes)
+        foreach ((int rows, int cols) in sizes)
         {
-            var leaves = rows * cols;
+            int leaves = rows * cols;
 
-            var buildMs = TimeMsPerIter(1, () => _ = BuildGrid(rows, cols));
+            double buildMs = TimeMsPerIter(
+                iterations: 1,
+                body: () => _ = BuildGrid(rows: rows, cols: cols)
+            );
 
-            var root = BuildGrid(rows, cols);
+            var root = BuildGrid(rows: rows, cols: cols);
             var paint = new PaintList();
 
             // Warm past tiered JIT and populate the TextMeasure / Utf8 / PaintList-capacity caches.
-            for (var i = 0; i < 100; i++) Frame(root, paint, viewport);
-            var paintCmds = paint.Count;
-            Assert.True(paintCmds > 0, "the grid must produce paint commands");
+            for (int i = 0; i < 100; i++) Frame(root: root, paint: paint, c: viewport);
+            int paintCmds = paint.Count;
+            Assert.True(
+                condition: paintCmds > 0,
+                userMessage: "the grid must produce paint commands"
+            );
 
             // Full frame (all three phases).
-            var frameMs = TimeMsPerIter(300, () => Frame(root, paint, viewport));
+            double frameMs = TimeMsPerIter(
+                iterations: 300,
+                body: () => Frame(root: root, paint: paint, c: viewport)
+            );
 
             // Isolated phases. Measure feeds Layout feeds Paint, so re-run the prerequisites once and
             // then loop the phase under test — each phase reads state the previous one stored.
-            var measureMs = TimeMsPerIter(300, () => root.Measure(viewport));
+            double measureMs = TimeMsPerIter(iterations: 300, body: () => root.Measure(viewport));
             root.Measure(viewport);
-            var layoutMs = TimeMsPerIter(300, () => root.Layout(Offset.Zero));
+            double layoutMs = TimeMsPerIter(iterations: 300, body: () => root.Layout(Offset.Zero));
             root.Layout(Offset.Zero);
-            var paintMs = TimeMsPerIter(
-                300,
-                () =>
+            double paintMs = TimeMsPerIter(
+                iterations: 300,
+                body: () =>
                 {
                     paint.Clear();
                     root.Paint(paint);
                 }
             );
 
-            var nsPerCmd = paintMs * 1_000_000.0 / paintCmds;
+            double nsPerCmd = paintMs * 1_000_000.0 / paintCmds;
 
             _output.WriteLine(
-                $"  {leaves,6} | {TotalWidgets(rows, cols),7} | {paintCmds,9} | {F(buildMs),9} | " +
+                $"  {leaves,6} | {TotalWidgets(rows: rows, cols: cols),7} | {paintCmds,9} | {F(buildMs),9} | " +
                 $"{F(measureMs),10} | {F(layoutMs),10} | {F(paintMs),10} | {F(frameMs),9} | {nsPerCmd,6:F0}"
             );
 
             Assert.True(
-                frameMs < FrameBudgetMs,
+                condition: frameMs < FrameBudgetMs,
+                userMessage:
                 $"{leaves}-cell grid frame cost {F(frameMs)} ms exceeded the {FrameBudgetMs} ms budget"
             );
         }
@@ -145,7 +160,7 @@ public class UiPerformanceTests
     [Fact]
     public void SteadyState_ZeroAllocation_AcrossSizes()
     {
-        var viewport = Constraints.Tight(1440f, 900f);
+        var viewport = Constraints.Tight(width: 1440f, height: 900f);
         (int rows, int cols)[] sizes = [
             (10, 6),
             (40, 14),
@@ -155,24 +170,25 @@ public class UiPerformanceTests
         _output.WriteLine("  leaves | frames | total B | B/frame");
         _output.WriteLine("  -------+--------+---------+--------");
 
-        foreach (var (rows, cols) in sizes)
+        foreach ((int rows, int cols) in sizes)
         {
-            var root = BuildGrid(rows, cols);
+            var root = BuildGrid(rows: rows, cols: cols);
             var paint = new PaintList();
 
-            for (var i = 0; i < 200; i++) Frame(root, paint, viewport);
+            for (int i = 0; i < 200; i++) Frame(root: root, paint: paint, c: viewport);
 
             const int frames = 500;
-            var before = GC.GetAllocatedBytesForCurrentThread();
-            for (var i = 0; i < frames; i++) Frame(root, paint, viewport);
-            var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int i = 0; i < frames; i++) Frame(root: root, paint: paint, c: viewport);
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
             _output.WriteLine(
                 $"  {rows * cols,6} | {frames,6} | {allocated,7} | {allocated / (double)frames,7:F2}"
             );
 
             Assert.True(
-                allocated == 0,
+                condition: allocated == 0,
+                userMessage:
                 $"{rows * cols}-cell grid allocated {allocated} B over {frames} frames " +
                 $"({allocated / (double)frames:F2} B/frame); the hot path must be zero-GC."
             );
@@ -182,23 +198,31 @@ public class UiPerformanceTests
     [Fact]
     public void DeepVsWide_LayoutCost_CollectsMetrics()
     {
-        var viewport = Constraints.Tight(1280f, 800f);
+        var viewport = Constraints.Tight(width: 1280f, height: 800f);
 
         // Same leaf count (~600), two extreme shapes: one deeply nested column-of-rows vs one flat
         // wide row. Reveals whether cost tracks widget count or tree depth.
-        var deep = BuildGrid(60, 10); // 60 nested rows
-        var wide = BuildGrid(6, 100); //  6 rows, very wide
+        var deep = BuildGrid(rows: 60, cols: 10); // 60 nested rows
+        var wide = BuildGrid(rows: 6, cols: 100); //  6 rows, very wide
 
         var paint = new PaintList();
         foreach (var root in new[] {
                      deep,
                      wide,
                  })
-            for (var i = 0; i < 100; i++)
-                Frame(root, paint, viewport);
+        {
+            for (int i = 0; i < 100; i++)
+                Frame(root: root, paint: paint, c: viewport);
+        }
 
-        var deepMs = TimeMsPerIter(300, () => Frame(deep, paint, viewport));
-        var wideMs = TimeMsPerIter(300, () => Frame(wide, paint, viewport));
+        double deepMs = TimeMsPerIter(
+            iterations: 300,
+            body: () => Frame(root: deep, paint: paint, c: viewport)
+        );
+        double wideMs = TimeMsPerIter(
+            iterations: 300,
+            body: () => Frame(root: wide, paint: paint, c: viewport)
+        );
 
         _output.WriteLine("Tree shape — frame cost at ~600 leaves");
         _output.WriteLine($"  deep (60×10 nested) : {F(deepMs)} ms/frame");

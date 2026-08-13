@@ -5,24 +5,15 @@ namespace Zigote.UI.Widgets;
 /// <summary>A single corner radius. Only circular radii are modelled.</summary>
 public readonly struct Radius
 {
-    private Radius(float value)
-    {
-        Value = value;
-    }
+    private Radius(float value) => Value = value;
 
     public float Value { get; }
 
-    public static Radius Circular(double radius)
-    {
-        return new Radius((float)radius);
-    }
+    public static Radius Circular(double radius) => new((float)radius);
 
     public static readonly Radius Zero = new(0f);
 
-    public static implicit operator Radius(double v)
-    {
-        return new Radius((float)v);
-    }
+    public static implicit operator Radius(double v) => new((float)v);
 }
 
 /// <summary>
@@ -47,35 +38,35 @@ public readonly struct BorderRadius
 
     /// <summary>The single radius the renderer applies (max of the four corners).</summary>
     public float Uniform => MathF.Max(
-        MathF.Max(TopLeft, TopRight),
-        MathF.Max(BottomRight, BottomLeft)
+        x: MathF.Max(x: TopLeft, y: TopRight),
+        y: MathF.Max(x: BottomRight, y: BottomLeft)
     );
 
     public static readonly BorderRadius Zero = new(
-        0,
-        0,
-        0,
-        0
+        topLeft: 0,
+        topRight: 0,
+        bottomRight: 0,
+        bottomLeft: 0
     );
 
     public static BorderRadius Circular(double radius)
     {
-        var r = (float)radius;
+        float r = (float)radius;
         return new BorderRadius(
-            r,
-            r,
-            r,
-            r
+            topLeft: r,
+            topRight: r,
+            bottomRight: r,
+            bottomLeft: r
         );
     }
 
     public static BorderRadius All(Radius radius)
     {
         return new BorderRadius(
-            radius.Value,
-            radius.Value,
-            radius.Value,
-            radius.Value
+            topLeft: radius.Value,
+            topRight: radius.Value,
+            bottomRight: radius.Value,
+            bottomLeft: radius.Value
         );
     }
 
@@ -83,37 +74,34 @@ public readonly struct BorderRadius
         double topLeft = 0, double topRight = 0, double bottomRight = 0, double bottomLeft = 0)
     {
         return new BorderRadius(
-            (float)topLeft,
-            (float)topRight,
-            (float)bottomRight,
-            (float)bottomLeft
+            topLeft: (float)topLeft,
+            topRight: (float)topRight,
+            bottomRight: (float)bottomRight,
+            bottomLeft: (float)bottomLeft
         );
     }
 
     public static BorderRadius Vertical(double top = 0, double bottom = 0)
     {
         return new BorderRadius(
-            (float)top,
-            (float)top,
-            (float)bottom,
-            (float)bottom
+            topLeft: (float)top,
+            topRight: (float)top,
+            bottomRight: (float)bottom,
+            bottomLeft: (float)bottom
         );
     }
 
     public static BorderRadius Horizontal(double left = 0, double right = 0)
     {
         return new BorderRadius(
-            (float)left,
-            (float)right,
-            (float)right,
-            (float)left
+            topLeft: (float)left,
+            topRight: (float)right,
+            bottomRight: (float)right,
+            bottomLeft: (float)left
         );
     }
 
-    public static implicit operator BorderRadius(double uniform)
-    {
-        return Circular(uniform);
-    }
+    public static implicit operator BorderRadius(double uniform) => Circular(uniform);
 }
 
 /// <summary>Colour + width of one edge.</summary>
@@ -128,7 +116,7 @@ public readonly struct BorderSide
     public Color Color { get; }
     public float Width { get; }
 
-    public static readonly BorderSide None = new(Color.Transparent, 0);
+    public static readonly BorderSide None = new(color: Color.Transparent, width: 0);
 }
 
 /// <summary>
@@ -153,15 +141,10 @@ public readonly struct Border
     public Color Color { get; }
     public float Width { get; }
 
-    public static Border All(Color? color = null, double width = 1.0)
-    {
-        return new Border(color ?? Color.Black, width);
-    }
+    public static Border All(Color? color = null, double width = 1.0) =>
+        new(color: color ?? Color.Black, width: width);
 
-    public static Border FromBorderSide(BorderSide side)
-    {
-        return new Border(side);
-    }
+    public static Border FromBorderSide(BorderSide side) => new(side);
 }
 
 /// <summary>

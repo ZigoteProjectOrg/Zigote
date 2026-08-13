@@ -18,22 +18,22 @@ public sealed class Options
     {
         positional = [];
         string? dir = null, engine = null, id = null;
-        var force = false;
-        var list = false;
-        var noWatch = false;
+        bool force = false;
+        bool list = false;
+        bool noWatch = false;
 
-        for (var i = 0; i < args.Length; i++)
+        for (int i = 0; i < args.Length; i++)
         {
             switch (args[i])
             {
                 case "--dir":
-                    dir = Next(args, ref i, "--dir");
+                    dir = Next(args: args, i: ref i, flag: "--dir");
                     break;
                 case "--engine":
-                    engine = Next(args, ref i, "--engine");
+                    engine = Next(args: args, i: ref i, flag: "--engine");
                     break;
                 case "--id":
-                    id = Next(args, ref i, "--id");
+                    id = Next(args: args, i: ref i, flag: "--id");
                     break;
                 case "--force":
                     force = true;
@@ -51,14 +51,13 @@ public sealed class Options
             }
         }
 
-        return new Options
-        {
+        return new Options {
             Directory = Path.GetFullPath(dir ?? System.IO.Directory.GetCurrentDirectory()),
             Engine = engine,
             AppId = id,
             Force = force,
             ListTargets = list,
-            NoWatch = noWatch
+            NoWatch = noWatch,
         };
     }
 
@@ -80,21 +79,30 @@ public sealed class Options
     /// </summary>
     public string ResolveEngine(string projectRoot)
     {
-        var found = Engine
-                    ?? SearchUpwards(projectRoot)
-                    ?? Environment.GetEnvironmentVariable("ZIGOTE_ROOT")
-                    ?? throw new CliError(
-                        "cannot find a Zigote checkout. Pass --engine <path> or set ZIGOTE_ROOT.");
+        string found = Engine
+                       ?? SearchUpwards(projectRoot)
+                       ?? Environment.GetEnvironmentVariable("ZIGOTE_ROOT")
+                       ?? throw new CliError(
+                           "cannot find a Zigote checkout. Pass --engine <path> or set ZIGOTE_ROOT."
+                       );
 
-        var full = Path.GetFullPath(found);
-        if (!File.Exists(Path.Combine(full, "Zigote.UI", "Zigote.UI.csproj")))
-            throw new CliError($"'{full}' does not look like a Zigote checkout (no Zigote.UI/Zigote.UI.csproj).");
+        string full = Path.GetFullPath(found);
+        if (!File.Exists(Path.Combine(path1: full, path2: "Zigote.UI", path3: "Zigote.UI.csproj")))
+        {
+            throw new CliError(
+                $"'{full}' does not look like a Zigote checkout (no Zigote.UI/Zigote.UI.csproj)."
+            );
+        }
 
         // Relative to the directory the generated csproj sits in — always one level under the
         // project root, for both the app project and a platform head — because the path is
         // consumed as $(MSBuildThisFileDirectory)<this>. Measuring from the root instead is off by
         // exactly one level, which resolves to a plausible-looking path that does not exist.
-        return Path.GetRelativePath(Path.Combine(projectRoot, "head"), full).Replace('\\', '/');
+        return Path
+            .GetRelativePath(
+                relativeTo: Path.Combine(path1: projectRoot, path2: "head"),
+                path: full
+            ).Replace(oldChar: '\\', newChar: '/');
     }
 
     private static string? SearchUpwards(string start)
@@ -102,13 +110,24 @@ public sealed class Options
         var dir = new DirectoryInfo(start);
         while (dir is not null)
         {
-            if (File.Exists(Path.Combine(dir.FullName, "Zigote.UI", "Zigote.UI.csproj"))) return dir.FullName;
+            if (File.Exists(
+                    Path.Combine(path1: dir.FullName, path2: "Zigote.UI", path3: "Zigote.UI.csproj")
+                )) return dir.FullName;
             // A sibling checkout is as common as an ancestor one: apps usually live next to the
             // engine, not inside it.
-            foreach (var sibling in new[] { "Zigote", "zigote" })
+            foreach (string sibling in new[] {
+                         "Zigote",
+                         "zigote",
+                     })
             {
-                var candidate = Path.Combine(dir.FullName, sibling);
-                if (File.Exists(Path.Combine(candidate, "Zigote.UI", "Zigote.UI.csproj"))) return candidate;
+                string candidate = Path.Combine(path1: dir.FullName, path2: sibling);
+                if (File.Exists(
+                        Path.Combine(
+                            path1: candidate,
+                            path2: "Zigote.UI",
+                            path3: "Zigote.UI.csproj"
+                        )
+                    )) return candidate;
             }
 
             dir = dir.Parent;
@@ -126,7 +145,12 @@ public static class Identifier
         if (name.Length == 0) throw new CliError("the name cannot be empty");
         if (!char.IsLetter(name[0])) throw new CliError($"'{name}' must start with a letter");
         if (!name.All(c => char.IsLetterOrDigit(c) || c == '_'))
-            throw new CliError($"'{name}' may only contain letters, digits and underscores — it becomes a C# namespace and an Android package segment.");
+        {
+            throw new CliError(
+                $"'{name}' may only contain letters, digits and underscores — it becomes a C# namespace and an Android package segment."
+            );
+        }
+
         return name;
     }
 }
@@ -137,12 +161,12 @@ public static class Identifier
 /// </summary>
 public sealed class Scaffolder(string root, bool force)
 {
-    private readonly List<string> _written = [];
     private readonly List<string> _skipped = [];
+    private readonly List<string> _written = [];
 
     public void Write(string relativePath, string content)
     {
-        var path = Path.Combine(root, relativePath);
+        string path = Path.Combine(path1: root, path2: relativePath);
         if (File.Exists(path) && !force)
         {
             _skipped.Add(relativePath);
@@ -152,13 +176,14 @@ public sealed class Scaffolder(string root, bool force)
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         // Normalized to the platform's line endings so the generated sources do not show up as a
         // whole-file diff on the first commit from a different OS.
-        File.WriteAllText(path, content.ReplaceLineEndings());
+        File.WriteAllText(path: path, contents: content.ReplaceLineEndings());
         _written.Add(relativePath);
     }
 
     public void Report()
     {
-        foreach (var f in _written) Console.WriteLine($"  created  {f}");
-        foreach (var f in _skipped) Console.WriteLine($"  exists   {f}  (use --force to overwrite)");
+        foreach (string f in _written) Console.WriteLine($"  created  {f}");
+        foreach (string f in _skipped)
+            Console.WriteLine($"  exists   {f}  (use --force to overwrite)");
     }
 }

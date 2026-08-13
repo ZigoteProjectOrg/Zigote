@@ -12,37 +12,42 @@ public sealed class AdaptivePage : ComposedWidget
         var media = MediaQuery.Of(context);
 
         return new GalleryPage(
-            "Adaptive",
+            title: "Adaptive",
+            description:
             "One layout, three widths — decided at measure time, not by a media query file.",
-            MaterialIcons.Devices
+            iconName: MaterialIcons.Devices
         ) {
             ClampWidth = 760f,
             ShowHero = true,
             Children = {
-                new LayoutBuilder((_, c) => Readout(c.MaxWidth, media)),
+                new LayoutBuilder((_, c) => Readout(width: c.MaxWidth, media: media)),
                 Demo.Titled(
-                    "Reflowing Content",
-                    "Wide: a row of cards. Narrow: the same cards stacked.",
-                    new LayoutBuilder((_, c) => Cards(c.MaxWidth < 520f))
+                    title: "Reflowing Content",
+                    description: "Wide: a row of cards. Narrow: the same cards stacked.",
+                    child: new LayoutBuilder((_, c) => Cards(c.MaxWidth < 520f))
                 ),
                 Demo.Titled(
-                    "Shedding Detail",
+                    title: "Shedding Detail",
+                    description:
                     "The toolbar keeps its labels while there is room and drops to icons when there is not.",
-                    Demo.Stage(new LayoutBuilder((_, c) => Toolbar(c.MaxWidth < 420f)))
+                    child: Demo.Stage(new LayoutBuilder((_, c) => Toolbar(c.MaxWidth < 420f)))
                 ),
                 Demo.Group(
-                    "How It Is Done",
-                    null,
+                    title: "How It Is Done",
+                    description: null,
                     new AdwActionRow(
-                        "LayoutBuilder",
-                        "Builds from the constraints it is measured with"
+                        title: "LayoutBuilder",
+                        subtitle: "Builds from the constraints it is measured with"
                     ) { IconName = MaterialIcons.Straighten },
-                    new AdwActionRow("MediaQuery", "Window size, scale and safe-area insets") {
+                    new AdwActionRow(
+                        title: "MediaQuery",
+                        subtitle: "Window size, scale and safe-area insets"
+                    ) {
                         IconName = MaterialIcons.Devices,
                     },
                     new AdwActionRow(
-                        "AdwNavigationSplitView",
-                        "Folds its panes below a breakpoint"
+                        title: "AdwNavigationSplitView",
+                        subtitle: "Folds its panes below a breakpoint"
                     ) { IconName = MaterialIcons.VerticalSplit }
                 ),
             },
@@ -51,7 +56,7 @@ public sealed class AdaptivePage : ComposedWidget
 
     private static Widget Readout(float width, MediaQueryData media)
     {
-        var band = width switch {
+        string band = width switch {
             < 420f => "compact",
             < 520f => "medium",
             _ => "expanded",
@@ -66,10 +71,18 @@ public sealed class AdaptivePage : ComposedWidget
 
     private static Widget Cards(bool stacked)
     {
-        var cards = new Widget[] {
-            Card(MaterialIcons.Bolt, "Fast", "Only what changed is measured"),
-            Card(MaterialIcons.Palette, "Native", "The Adwaita palette, not an approximation"),
-            Card(MaterialIcons.Devices, "Adaptive", "The same tree at any width"),
+        var cards = new[] {
+            Card(icon: MaterialIcons.Bolt, title: "Fast", body: "Only what changed is measured"),
+            Card(
+                icon: MaterialIcons.Palette,
+                title: "Native",
+                body: "The Adwaita palette, not an approximation"
+            ),
+            Card(
+                icon: MaterialIcons.Devices,
+                title: "Adaptive",
+                body: "The same tree at any width"
+            ),
         };
 
         if (!stacked)
@@ -88,10 +101,8 @@ public sealed class AdaptivePage : ComposedWidget
         return column;
     }
 
-    private static Widget Card(string icon, string title, string body)
-    {
-        return new AdaptiveCard(icon, title, body);
-    }
+    private static Widget Card(string icon, string title, string body) =>
+        new AdaptiveCard(icon: icon, title: title, body: body);
 
     private static Widget Toolbar(bool iconsOnly)
     {
@@ -103,12 +114,15 @@ public sealed class AdaptivePage : ComposedWidget
         };
 
         var row = new Row(spacing: Spacing.Sm, mainAxisSize: MainAxisSize.Min);
-        foreach (var (icon, label) in actions)
+        foreach ((string icon, string label) in actions)
+        {
             row.Children.Add(
                 iconsOnly
-                    ? new Tooltip(label, new AdwButton { IconName = icon })
-                    : new AdwButton { Content = new AdwButtonContent(icon, label) }
+                    ? new Tooltip(message: label, child: new AdwButton { IconName = icon })
+                    : new AdwButton { Content = new AdwButtonContent(iconName: icon, label: label) }
             );
+        }
+
         return row;
     }
 }
@@ -125,20 +139,24 @@ internal sealed class AdaptiveCard(string icon, string title, string body) : Com
             BorderColor = p.CardShade,
             BorderWidth = 1f,
             Child = new Padding(
-                EdgeInsets.All(Spacing.Lg),
-                new Column(
+                padding: EdgeInsets.All(Spacing.Lg),
+                child: new Column(
                     spacing: Spacing.Xs,
                     mainAxisSize: MainAxisSize.Min,
                     crossAxisAlignment: CrossAxisAlignment.Start
                 ) {
                     Children = {
-                        new IconGlyph(icon, 24f, theme.Accent),
+                        new IconGlyph(glyph: icon, size: 24f, color: theme.Accent),
                         new SizedBox(height: Spacing.Xs),
-                        new Label(title, AdwTypography.Heading, theme.OnBackground),
                         new Label(
-                            body,
-                            AdwTypography.Caption,
-                            theme.TextSecondary
+                            text: title,
+                            style: AdwTypography.Heading,
+                            color: theme.OnBackground
+                        ),
+                        new Label(
+                            text: body,
+                            style: AdwTypography.Caption,
+                            color: theme.TextSecondary
                         ) { MaxLines = 3 },
                     },
                 }

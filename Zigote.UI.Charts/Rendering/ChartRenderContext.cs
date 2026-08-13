@@ -60,9 +60,17 @@ public sealed class ChartRenderContext
     public List<ChartDataPoint> HoverPoints { get; init; } = [];
 
     /// <summary>Screen y of the value-axis zero line, clamped into the plot (bar/area baseline).</summary>
-    public float BaselineY => Math.Clamp(MapYNumeric(0), PlotRect.Y, PlotRect.Bottom);
+    public float BaselineY => Math.Clamp(
+        value: MapYNumeric(0),
+        min: PlotRect.Y,
+        max: PlotRect.Bottom
+    );
 
-    public float BaselineX => Math.Clamp(MapXNumeric(0), PlotRect.X, PlotRect.Right);
+    public float BaselineX => Math.Clamp(
+        value: MapXNumeric(0),
+        min: PlotRect.X,
+        max: PlotRect.Right
+    );
 
     public IReadOnlyDictionary<string, int> SeriesSlots => SeriesSlotsShared;
 
@@ -87,26 +95,16 @@ public sealed class ChartRenderContext
 
     // ── Mapping ──────────────────────────────────────────────────────────────
 
-    public float MapX(ChartValue v)
-    {
-        return PlotRect.X + XScale.Normalize(v) * PlotRect.Width;
-    }
+    public float MapX(ChartValue v) => PlotRect.X + (XScale.Normalize(v) * PlotRect.Width);
 
     /// <summary>Y is flipped: larger values render higher (screen y grows downward).</summary>
-    public float MapY(ChartValue v)
-    {
-        return PlotRect.Bottom - YScale.Normalize(v) * PlotRect.Height;
-    }
+    public float MapY(ChartValue v) => PlotRect.Bottom - (YScale.Normalize(v) * PlotRect.Height);
 
-    public float MapXNumeric(double v)
-    {
-        return PlotRect.X + XScale.NormalizeNumeric(v) * PlotRect.Width;
-    }
+    public float MapXNumeric(double v) =>
+        PlotRect.X + (XScale.NormalizeNumeric(v) * PlotRect.Width);
 
-    public float MapYNumeric(double v)
-    {
-        return PlotRect.Bottom - YScale.NormalizeNumeric(v) * PlotRect.Height;
-    }
+    public float MapYNumeric(double v) =>
+        PlotRect.Bottom - (YScale.NormalizeNumeric(v) * PlotRect.Height);
 
     // ── Series colors ─────────────────────────────────────────────────────────
 
@@ -114,7 +112,7 @@ public sealed class ChartRenderContext
     public void RegisterSeries(string series)
     {
         if (series.Length == 0) return;
-        SeriesSlotsShared.TryAdd(series, SeriesSlotsShared.Count);
+        SeriesSlotsShared.TryAdd(key: series, value: SeriesSlotsShared.Count);
     }
 
     /// <summary>
@@ -124,7 +122,7 @@ public sealed class ChartRenderContext
     public Color ColorFor(string series, Color? markOverride, int markIndex)
     {
         if (markOverride.HasValue) return markOverride.Value;
-        if (series.Length > 0 && SeriesSlotsShared.TryGetValue(series, out var slot))
+        if (series.Length > 0 && SeriesSlotsShared.TryGetValue(key: series, value: out int slot))
             return Palette[slot];
         return Palette[markIndex];
     }
@@ -137,34 +135,36 @@ public sealed class ChartRenderContext
         var paint = Paint;
         if (paint is null) return;
         foreach (var s in segments)
+        {
             paint.AddBezier(
-                s.X0,
-                s.Y0,
-                s.X1,
-                s.Y1,
-                s.X2,
-                s.Y2,
-                s.X3,
-                s.Y3,
-                color,
-                width
+                x0: s.X0,
+                y0: s.Y0,
+                x1: s.X1,
+                y1: s.Y1,
+                x2: s.X2,
+                y2: s.Y2,
+                x3: s.X3,
+                y3: s.Y3,
+                color: color,
+                width: width
             );
+        }
     }
 
     /// <summary>Stroke one cubic segment (used on the hot path to avoid building a segment list).</summary>
     public void StrokeCubic(in CubicSegment s, Color color, float width)
     {
         Paint?.AddBezier(
-            s.X0,
-            s.Y0,
-            s.X1,
-            s.Y1,
-            s.X2,
-            s.Y2,
-            s.X3,
-            s.Y3,
-            color,
-            width
+            x0: s.X0,
+            y0: s.Y0,
+            x1: s.X1,
+            y1: s.Y1,
+            x2: s.X2,
+            y2: s.Y2,
+            x3: s.X3,
+            y3: s.Y3,
+            color: color,
+            width: width
         );
     }
 
@@ -174,54 +174,58 @@ public sealed class ChartRenderContext
     {
         var paint = Paint;
         if (paint is null) return;
-        var dx = x1 - x0;
-        var dy = y1 - y0;
-        var len = MathF.Sqrt(dx * dx + dy * dy);
+        float dx = x1 - x0;
+        float dy = y1 - y0;
+        float len = MathF.Sqrt((dx * dx) + (dy * dy));
         if (len < 0.01f) return;
         if (dash <= 0f)
         {
             var s = CubicSegment.Line(
-                x0,
-                y0,
-                x1,
-                y1
+                x0: x0,
+                y0: y0,
+                x1: x1,
+                y1: y1
             );
             paint.AddBezier(
-                s.X0,
-                s.Y0,
-                s.X1,
-                s.Y1,
-                s.X2,
-                s.Y2,
-                s.X3,
-                s.Y3,
-                color,
-                width
+                x0: s.X0,
+                y0: s.Y0,
+                x1: s.X1,
+                y1: s.Y1,
+                x2: s.X2,
+                y2: s.Y2,
+                x3: s.X3,
+                y3: s.Y3,
+                color: color,
+                width: width
             );
             return;
         }
 
-        var ux = dx / len;
-        var uy = dy / len;
-        foreach (var (start, end) in ChartGeometry.Dashes(len, dash, gap))
+        float ux = dx / len;
+        float uy = dy / len;
+        foreach ((float start, float end) in ChartGeometry.Dashes(
+                     length: len,
+                     dash: dash,
+                     gap: gap
+                 ))
         {
             var s = CubicSegment.Line(
-                x0 + ux * start,
-                y0 + uy * start,
-                x0 + ux * end,
-                y0 + uy * end
+                x0: x0 + (ux * start),
+                y0: y0 + (uy * start),
+                x1: x0 + (ux * end),
+                y1: y0 + (uy * end)
             );
             paint.AddBezier(
-                s.X0,
-                s.Y0,
-                s.X1,
-                s.Y1,
-                s.X2,
-                s.Y2,
-                s.X3,
-                s.Y3,
-                color,
-                width
+                x0: s.X0,
+                y0: s.Y0,
+                x1: s.X1,
+                y1: s.Y1,
+                x2: s.X2,
+                y2: s.Y2,
+                x3: s.X3,
+                y3: s.Y3,
+                color: color,
+                width: width
             );
         }
     }

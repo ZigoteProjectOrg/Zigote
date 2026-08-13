@@ -9,6 +9,4 @@ namespace Zigote.Persistence;
 /// </summary>
 [JsonSourceGenerationOptions(WriteIndented = true)]
 [JsonSerializable(typeof(SortedDictionary<string, string>))]
-internal sealed partial class PersistenceJsonContext : JsonSerializerContext
-{
-}
+internal sealed partial class PersistenceJsonContext : JsonSerializerContext { }

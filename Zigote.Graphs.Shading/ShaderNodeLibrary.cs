@@ -79,659 +79,675 @@ public static class ShaderNodeLibrary
     {
         return [
             Def(
-                Output,
-                "Material Output",
-                "Output",
-                [
-                    In("in.surface", "Surface", BsdfType), In("in.volume", "Volume", BsdfType),
-                    In("in.displacement", "Displacement", GraphTypeRef.Float.Id),
+                id: Output,
+                name: "Material Output",
+                category: "Output",
+                inputs: [
+                    In(id: "in.surface", name: "Surface", typeId: BsdfType),
+                    In(id: "in.volume", name: "Volume", typeId: BsdfType),
+                    In(id: "in.displacement", name: "Displacement", typeId: GraphTypeRef.Float.Id),
                 ],
-                []
+                outputs: []
             ),
 
             Def(
-                Principled,
-                "Principled BSDF",
-                "Shader",
-                [
-                    In("in.base_color", "Base Color", GraphTypeRef.Color.Id),
-                    In("in.metallic", "Metallic", GraphTypeRef.Float.Id),
-                    In("in.roughness", "Roughness", GraphTypeRef.Float.Id),
-                    In("in.specular", "Specular", GraphTypeRef.Float.Id),
-                    In("in.emission", "Emission Color", GraphTypeRef.Color.Id),
-                    In("in.emission_strength", "Emission Strength", GraphTypeRef.Float.Id),
-                    In("in.clearcoat", "Coat Weight", GraphTypeRef.Float.Id),
-                    In("in.clearcoat_roughness", "Coat Roughness", GraphTypeRef.Float.Id),
-                    In("in.normal", "Normal", GraphTypeRef.Float3.Id),
+                id: Principled,
+                name: "Principled BSDF",
+                category: "Shader",
+                inputs: [
+                    In(id: "in.base_color", name: "Base Color", typeId: GraphTypeRef.Color.Id),
+                    In(id: "in.metallic", name: "Metallic", typeId: GraphTypeRef.Float.Id),
+                    In(id: "in.roughness", name: "Roughness", typeId: GraphTypeRef.Float.Id),
+                    In(id: "in.specular", name: "Specular", typeId: GraphTypeRef.Float.Id),
+                    In(id: "in.emission", name: "Emission Color", typeId: GraphTypeRef.Color.Id),
+                    In(
+                        id: "in.emission_strength",
+                        name: "Emission Strength",
+                        typeId: GraphTypeRef.Float.Id
+                    ),
+                    In(id: "in.clearcoat", name: "Coat Weight", typeId: GraphTypeRef.Float.Id),
+                    In(
+                        id: "in.clearcoat_roughness",
+                        name: "Coat Roughness",
+                        typeId: GraphTypeRef.Float.Id
+                    ),
+                    In(id: "in.normal", name: "Normal", typeId: GraphTypeRef.Float3.Id),
                 ],
-                [Out("out.bsdf", "BSDF", BsdfType)],
-                [
+                outputs: [Out(id: "out.bsdf", name: "BSDF", typeId: BsdfType)],
+                props: [
                     Prop(
-                        "in.base_color",
-                        "Base Color",
-                        GraphTypeRef.Color,
-                        GraphValue.FromFloat4(
-                            0.8f,
-                            0.8f,
-                            0.8f,
-                            1f
+                        id: "in.base_color",
+                        name: "Base Color",
+                        type: GraphTypeRef.Color,
+                        def: GraphValue.FromFloat4(
+                            x: 0.8f,
+                            y: 0.8f,
+                            z: 0.8f,
+                            w: 1f
                         )
                     ),
                     PropF(
-                        "in.metallic",
-                        "Metallic",
-                        0f,
-                        0f,
-                        1f
+                        id: "in.metallic",
+                        name: "Metallic",
+                        def: 0f,
+                        min: 0f,
+                        max: 1f
                     ),
                     PropF(
-                        "in.roughness",
-                        "Roughness",
-                        0.5f,
-                        0f,
-                        1f
+                        id: "in.roughness",
+                        name: "Roughness",
+                        def: 0.5f,
+                        min: 0f,
+                        max: 1f
                     ),
                     PropF(
-                        "in.specular",
-                        "Specular",
-                        1f,
-                        0f,
-                        2f
+                        id: "in.specular",
+                        name: "Specular",
+                        def: 1f,
+                        min: 0f,
+                        max: 2f
                     ),
                     Prop(
-                        "in.emission",
-                        "Emission Color",
-                        GraphTypeRef.Color,
-                        GraphValue.FromFloat4(
-                            0f,
-                            0f,
-                            0f,
-                            1f
+                        id: "in.emission",
+                        name: "Emission Color",
+                        type: GraphTypeRef.Color,
+                        def: GraphValue.FromFloat4(
+                            x: 0f,
+                            y: 0f,
+                            z: 0f,
+                            w: 1f
                         )
                     ),
                     PropF(
-                        "in.emission_strength",
-                        "Emission Strength",
-                        0f,
-                        0f,
-                        50f
+                        id: "in.emission_strength",
+                        name: "Emission Strength",
+                        def: 0f,
+                        min: 0f,
+                        max: 50f
                     ),
                     PropF(
-                        "in.clearcoat",
-                        "Coat Weight",
-                        0f,
-                        0f,
-                        1f
+                        id: "in.clearcoat",
+                        name: "Coat Weight",
+                        def: 0f,
+                        min: 0f,
+                        max: 1f
                     ),
                     PropF(
-                        "in.clearcoat_roughness",
-                        "Coat Roughness",
-                        0.03f,
-                        0f,
-                        1f
+                        id: "in.clearcoat_roughness",
+                        name: "Coat Roughness",
+                        def: 0.03f,
+                        min: 0f,
+                        max: 1f
                     ),
                 ]
             ),
 
             Def(
-                TexImage,
-                "Image Texture",
-                "Texture",
-                [],
-                [
-                    Out("out.color", "Color", GraphTypeRef.Color.Id),
-                    Out("out.alpha", "Alpha", GraphTypeRef.Float.Id),
+                id: TexImage,
+                name: "Image Texture",
+                category: "Texture",
+                inputs: [],
+                outputs: [
+                    Out(id: "out.color", name: "Color", typeId: GraphTypeRef.Color.Id),
+                    Out(id: "out.alpha", name: "Alpha", typeId: GraphTypeRef.Float.Id),
                 ],
-                [
+                props: [
                     Prop(
-                        "path",
-                        "Image",
-                        GraphTypeRef.String,
-                        GraphValue.FromString("")
+                        id: "path",
+                        name: "Image",
+                        type: GraphTypeRef.String,
+                        def: GraphValue.FromString("")
                     ),
                 ]
             ),
 
             Def(
-                Rgb,
-                "RGB",
-                "Input",
-                [],
-                [Out("out.color", "Color", GraphTypeRef.Color.Id)],
-                [
+                id: Rgb,
+                name: "RGB",
+                category: "Input",
+                inputs: [],
+                outputs: [Out(id: "out.color", name: "Color", typeId: GraphTypeRef.Color.Id)],
+                props: [
                     Prop(
-                        "color",
-                        "Color",
-                        GraphTypeRef.Color,
-                        GraphValue.FromFloat4(
-                            0.8f,
-                            0.8f,
-                            0.8f,
-                            1f
+                        id: "color",
+                        name: "Color",
+                        type: GraphTypeRef.Color,
+                        def: GraphValue.FromFloat4(
+                            x: 0.8f,
+                            y: 0.8f,
+                            z: 0.8f,
+                            w: 1f
                         )
                     ),
                 ]
             ),
 
             Def(
-                Value,
-                "Value",
-                "Input",
-                [],
-                [Out("out.value", "Value", GraphTypeRef.Float.Id)],
-                [
+                id: Value,
+                name: "Value",
+                category: "Input",
+                inputs: [],
+                outputs: [Out(id: "out.value", name: "Value", typeId: GraphTypeRef.Float.Id)],
+                props: [
                     PropF(
-                        "value",
-                        "Value",
-                        0.5f,
-                        0f,
-                        1f
+                        id: "value",
+                        name: "Value",
+                        def: 0.5f,
+                        min: 0f,
+                        max: 1f
                     ),
                 ]
             ),
 
             Def(
-                Math,
-                "Math",
-                "Converter",
-                [In("in.a", "A", GraphTypeRef.Float.Id), In("in.b", "B", GraphTypeRef.Float.Id)],
-                [Out("out.result", "Result", GraphTypeRef.Float.Id)],
-                [
-                    PropF(
-                        "in.a",
-                        "A",
-                        0f,
-                        0f,
-                        1f
-                    ),
-                    PropF(
-                        "in.b",
-                        "B",
-                        0f,
-                        0f,
-                        1f
-                    ),
-                    PropEnum("op", "Operation", MathOpLabels),
-                ]
-            ),
-
-            Def(
-                MixColor,
-                "Mix Color",
-                "Color",
-                [
-                    In("in.factor", "Factor", GraphTypeRef.Float.Id),
-                    In("in.a", "A", GraphTypeRef.Color.Id),
-                    In("in.b", "B", GraphTypeRef.Color.Id),
+                id: Math,
+                name: "Math",
+                category: "Converter",
+                inputs: [
+                    In(id: "in.a", name: "A", typeId: GraphTypeRef.Float.Id),
+                    In(id: "in.b", name: "B", typeId: GraphTypeRef.Float.Id),
                 ],
-                [Out("out.result", "Result", GraphTypeRef.Color.Id)],
-                [
+                outputs: [Out(id: "out.result", name: "Result", typeId: GraphTypeRef.Float.Id)],
+                props: [
                     PropF(
-                        "in.factor",
-                        "Factor",
-                        0.5f,
-                        0f,
-                        1f
+                        id: "in.a",
+                        name: "A",
+                        def: 0f,
+                        min: 0f,
+                        max: 1f
                     ),
-                    Prop(
-                        "in.a",
-                        "A",
-                        GraphTypeRef.Color,
-                        GraphValue.FromFloat4(
-                            0f,
-                            0f,
-                            0f,
-                            1f
-                        )
+                    PropF(
+                        id: "in.b",
+                        name: "B",
+                        def: 0f,
+                        min: 0f,
+                        max: 1f
                     ),
-                    Prop(
-                        "in.b",
-                        "B",
-                        GraphTypeRef.Color,
-                        GraphValue.FromFloat4(
-                            1f,
-                            1f,
-                            1f,
-                            1f
-                        )
-                    ),
+                    PropEnum(id: "op", name: "Operation", labels: MathOpLabels),
                 ]
             ),
 
             Def(
-                MulColor,
-                "Multiply Color",
-                "Color",
-                [In("in.a", "A", GraphTypeRef.Color.Id), In("in.b", "B", GraphTypeRef.Color.Id)],
-                [Out("out.result", "Result", GraphTypeRef.Color.Id)],
-                [
-                    Prop(
-                        "in.a",
-                        "A",
-                        GraphTypeRef.Color,
-                        GraphValue.FromFloat4(
-                            1f,
-                            1f,
-                            1f,
-                            1f
-                        )
-                    ),
-                    Prop(
-                        "in.b",
-                        "B",
-                        GraphTypeRef.Color,
-                        GraphValue.FromFloat4(
-                            1f,
-                            1f,
-                            1f,
-                            1f
-                        )
-                    ),
-                ]
-            ),
-
-            Def(
-                Clamp,
-                "Clamp",
-                "Converter",
-                [
-                    In("in.value", "Value", GraphTypeRef.Float.Id),
-                    In("in.min", "Min", GraphTypeRef.Float.Id),
-                    In("in.max", "Max", GraphTypeRef.Float.Id),
+                id: MixColor,
+                name: "Mix Color",
+                category: "Color",
+                inputs: [
+                    In(id: "in.factor", name: "Factor", typeId: GraphTypeRef.Float.Id),
+                    In(id: "in.a", name: "A", typeId: GraphTypeRef.Color.Id),
+                    In(id: "in.b", name: "B", typeId: GraphTypeRef.Color.Id),
                 ],
-                [Out("out.result", "Result", GraphTypeRef.Float.Id)],
-                [
+                outputs: [Out(id: "out.result", name: "Result", typeId: GraphTypeRef.Color.Id)],
+                props: [
                     PropF(
-                        "in.value",
-                        "Value",
-                        0.5f,
-                        0f,
-                        1f
+                        id: "in.factor",
+                        name: "Factor",
+                        def: 0.5f,
+                        min: 0f,
+                        max: 1f
                     ),
-                    PropF(
-                        "in.min",
-                        "Min",
-                        0f,
-                        0f,
-                        1f
+                    Prop(
+                        id: "in.a",
+                        name: "A",
+                        type: GraphTypeRef.Color,
+                        def: GraphValue.FromFloat4(
+                            x: 0f,
+                            y: 0f,
+                            z: 0f,
+                            w: 1f
+                        )
                     ),
-                    PropF(
-                        "in.max",
-                        "Max",
-                        1f,
-                        0f,
-                        1f
+                    Prop(
+                        id: "in.b",
+                        name: "B",
+                        type: GraphTypeRef.Color,
+                        def: GraphValue.FromFloat4(
+                            x: 1f,
+                            y: 1f,
+                            z: 1f,
+                            w: 1f
+                        )
                     ),
                 ]
             ),
 
             Def(
-                NormalMap,
-                "Normal Map",
-                "Vector",
-                [In("in.color", "Color", GraphTypeRef.Color.Id)],
-                [Out("out.normal", "Normal", GraphTypeRef.Float3.Id)],
-                [
+                id: MulColor,
+                name: "Multiply Color",
+                category: "Color",
+                inputs: [
+                    In(id: "in.a", name: "A", typeId: GraphTypeRef.Color.Id),
+                    In(id: "in.b", name: "B", typeId: GraphTypeRef.Color.Id),
+                ],
+                outputs: [Out(id: "out.result", name: "Result", typeId: GraphTypeRef.Color.Id)],
+                props: [
                     Prop(
-                        "path",
-                        "Image",
-                        GraphTypeRef.String,
-                        GraphValue.FromString("")
+                        id: "in.a",
+                        name: "A",
+                        type: GraphTypeRef.Color,
+                        def: GraphValue.FromFloat4(
+                            x: 1f,
+                            y: 1f,
+                            z: 1f,
+                            w: 1f
+                        )
+                    ),
+                    Prop(
+                        id: "in.b",
+                        name: "B",
+                        type: GraphTypeRef.Color,
+                        def: GraphValue.FromFloat4(
+                            x: 1f,
+                            y: 1f,
+                            z: 1f,
+                            w: 1f
+                        )
+                    ),
+                ]
+            ),
+
+            Def(
+                id: Clamp,
+                name: "Clamp",
+                category: "Converter",
+                inputs: [
+                    In(id: "in.value", name: "Value", typeId: GraphTypeRef.Float.Id),
+                    In(id: "in.min", name: "Min", typeId: GraphTypeRef.Float.Id),
+                    In(id: "in.max", name: "Max", typeId: GraphTypeRef.Float.Id),
+                ],
+                outputs: [Out(id: "out.result", name: "Result", typeId: GraphTypeRef.Float.Id)],
+                props: [
+                    PropF(
+                        id: "in.value",
+                        name: "Value",
+                        def: 0.5f,
+                        min: 0f,
+                        max: 1f
+                    ),
+                    PropF(
+                        id: "in.min",
+                        name: "Min",
+                        def: 0f,
+                        min: 0f,
+                        max: 1f
+                    ),
+                    PropF(
+                        id: "in.max",
+                        name: "Max",
+                        def: 1f,
+                        min: 0f,
+                        max: 1f
+                    ),
+                ]
+            ),
+
+            Def(
+                id: NormalMap,
+                name: "Normal Map",
+                category: "Vector",
+                inputs: [In(id: "in.color", name: "Color", typeId: GraphTypeRef.Color.Id)],
+                outputs: [Out(id: "out.normal", name: "Normal", typeId: GraphTypeRef.Float3.Id)],
+                props: [
+                    Prop(
+                        id: "path",
+                        name: "Image",
+                        type: GraphTypeRef.String,
+                        def: GraphValue.FromString("")
                     ),
                 ]
             ),
 
             // ── Core procedural nodes ──────────────────────────────────────────
             Def(
-                TexCoord,
-                "Texture Coordinate",
-                "Input",
-                [],
-                [
-                    Out("out.generated", "Generated", GraphTypeRef.Float3.Id),
-                    Out("out.uv", "UV", GraphTypeRef.Float3.Id),
-                    Out("out.object", "Object", GraphTypeRef.Float3.Id),
-                    Out("out.normal", "Normal", GraphTypeRef.Float3.Id),
-                    Out("out.position", "Position", GraphTypeRef.Float3.Id),
+                id: TexCoord,
+                name: "Texture Coordinate",
+                category: "Input",
+                inputs: [],
+                outputs: [
+                    Out(id: "out.generated", name: "Generated", typeId: GraphTypeRef.Float3.Id),
+                    Out(id: "out.uv", name: "UV", typeId: GraphTypeRef.Float3.Id),
+                    Out(id: "out.object", name: "Object", typeId: GraphTypeRef.Float3.Id),
+                    Out(id: "out.normal", name: "Normal", typeId: GraphTypeRef.Float3.Id),
+                    Out(id: "out.position", name: "Position", typeId: GraphTypeRef.Float3.Id),
                 ]
             ),
 
             Def(
-                Mapping,
-                "Mapping",
-                "Vector",
-                [
-                    In("in.vector", "Vector", GraphTypeRef.Float3.Id),
-                    In("in.location", "Location", GraphTypeRef.Float3.Id),
-                    In("in.rotation", "Rotation", GraphTypeRef.Float3.Id),
-                    In("in.scale", "Scale", GraphTypeRef.Float3.Id),
+                id: Mapping,
+                name: "Mapping",
+                category: "Vector",
+                inputs: [
+                    In(id: "in.vector", name: "Vector", typeId: GraphTypeRef.Float3.Id),
+                    In(id: "in.location", name: "Location", typeId: GraphTypeRef.Float3.Id),
+                    In(id: "in.rotation", name: "Rotation", typeId: GraphTypeRef.Float3.Id),
+                    In(id: "in.scale", name: "Scale", typeId: GraphTypeRef.Float3.Id),
                 ],
-                [Out("out.vector", "Vector", GraphTypeRef.Float3.Id)],
-                [
-                    PropEnum("type", "Type", MappingTypeLabels),
+                outputs: [Out(id: "out.vector", name: "Vector", typeId: GraphTypeRef.Float3.Id)],
+                props: [
+                    PropEnum(id: "type", name: "Type", labels: MappingTypeLabels),
                     PropV3(
-                        "in.location",
-                        "Location",
-                        0f,
-                        0f,
-                        0f
+                        id: "in.location",
+                        name: "Location",
+                        x: 0f,
+                        y: 0f,
+                        z: 0f
                     ),
                     PropV3(
-                        "in.rotation",
-                        "Rotation",
-                        0f,
-                        0f,
-                        0f
+                        id: "in.rotation",
+                        name: "Rotation",
+                        x: 0f,
+                        y: 0f,
+                        z: 0f
                     ),
                     PropV3(
-                        "in.scale",
-                        "Scale",
-                        1f,
-                        1f,
-                        1f
+                        id: "in.scale",
+                        name: "Scale",
+                        x: 1f,
+                        y: 1f,
+                        z: 1f
                     ),
                 ]
             ),
 
             Def(
-                Noise,
-                "Noise Texture",
-                "Texture",
-                [
-                    In("in.vector", "Vector", GraphTypeRef.Float3.Id),
-                    In("in.scale", "Scale", GraphTypeRef.Float.Id),
-                    In("in.detail", "Detail", GraphTypeRef.Float.Id),
-                    In("in.roughness", "Roughness", GraphTypeRef.Float.Id),
-                    In("in.distortion", "Distortion", GraphTypeRef.Float.Id),
+                id: Noise,
+                name: "Noise Texture",
+                category: "Texture",
+                inputs: [
+                    In(id: "in.vector", name: "Vector", typeId: GraphTypeRef.Float3.Id),
+                    In(id: "in.scale", name: "Scale", typeId: GraphTypeRef.Float.Id),
+                    In(id: "in.detail", name: "Detail", typeId: GraphTypeRef.Float.Id),
+                    In(id: "in.roughness", name: "Roughness", typeId: GraphTypeRef.Float.Id),
+                    In(id: "in.distortion", name: "Distortion", typeId: GraphTypeRef.Float.Id),
                 ],
-                [
-                    Out("out.fac", "Fac", GraphTypeRef.Float.Id),
-                    Out("out.color", "Color", GraphTypeRef.Color.Id),
+                outputs: [
+                    Out(id: "out.fac", name: "Fac", typeId: GraphTypeRef.Float.Id),
+                    Out(id: "out.color", name: "Color", typeId: GraphTypeRef.Color.Id),
                 ],
-                [
+                props: [
                     PropEnum(
-                        "dimensions",
-                        "Dimensions",
-                        NoiseDimLabels,
-                        2
+                        id: "dimensions",
+                        name: "Dimensions",
+                        labels: NoiseDimLabels,
+                        def: 2
                     ),
                     PropF(
-                        "in.scale",
-                        "Scale",
-                        5f,
-                        0f,
-                        50f
+                        id: "in.scale",
+                        name: "Scale",
+                        def: 5f,
+                        min: 0f,
+                        max: 50f
                     ),
                     PropF(
-                        "in.detail",
-                        "Detail",
-                        2f,
-                        0f,
-                        16f
+                        id: "in.detail",
+                        name: "Detail",
+                        def: 2f,
+                        min: 0f,
+                        max: 16f
                     ),
                     PropF(
-                        "in.roughness",
-                        "Roughness",
-                        0.5f,
-                        0f,
-                        1f
+                        id: "in.roughness",
+                        name: "Roughness",
+                        def: 0.5f,
+                        min: 0f,
+                        max: 1f
                     ),
                     PropF(
-                        "in.distortion",
-                        "Distortion",
-                        0f,
-                        0f,
-                        10f
+                        id: "in.distortion",
+                        name: "Distortion",
+                        def: 0f,
+                        min: 0f,
+                        max: 10f
                     ),
                 ]
             ),
 
             Def(
-                Gradient,
-                "Gradient Texture",
-                "Texture",
-                [In("in.vector", "Vector", GraphTypeRef.Float3.Id)],
-                [
-                    Out("out.fac", "Fac", GraphTypeRef.Float.Id),
-                    Out("out.color", "Color", GraphTypeRef.Color.Id),
+                id: Gradient,
+                name: "Gradient Texture",
+                category: "Texture",
+                inputs: [In(id: "in.vector", name: "Vector", typeId: GraphTypeRef.Float3.Id)],
+                outputs: [
+                    Out(id: "out.fac", name: "Fac", typeId: GraphTypeRef.Float.Id),
+                    Out(id: "out.color", name: "Color", typeId: GraphTypeRef.Color.Id),
                 ],
-                [PropEnum("gradient_type", "Type", GradientTypeLabels)]
+                props: [PropEnum(id: "gradient_type", name: "Type", labels: GradientTypeLabels)]
             ),
 
             Def(
-                Checker,
-                "Checker Texture",
-                "Texture",
-                [
-                    In("in.vector", "Vector", GraphTypeRef.Float3.Id),
-                    In("in.color1", "Color1", GraphTypeRef.Color.Id),
-                    In("in.color2", "Color2", GraphTypeRef.Color.Id),
-                    In("in.scale", "Scale", GraphTypeRef.Float.Id),
+                id: Checker,
+                name: "Checker Texture",
+                category: "Texture",
+                inputs: [
+                    In(id: "in.vector", name: "Vector", typeId: GraphTypeRef.Float3.Id),
+                    In(id: "in.color1", name: "Color1", typeId: GraphTypeRef.Color.Id),
+                    In(id: "in.color2", name: "Color2", typeId: GraphTypeRef.Color.Id),
+                    In(id: "in.scale", name: "Scale", typeId: GraphTypeRef.Float.Id),
                 ],
-                [
-                    Out("out.color", "Color", GraphTypeRef.Color.Id),
-                    Out("out.fac", "Fac", GraphTypeRef.Float.Id),
+                outputs: [
+                    Out(id: "out.color", name: "Color", typeId: GraphTypeRef.Color.Id),
+                    Out(id: "out.fac", name: "Fac", typeId: GraphTypeRef.Float.Id),
                 ],
-                [
+                props: [
                     Prop(
-                        "in.color1",
-                        "Color1",
-                        GraphTypeRef.Color,
-                        GraphValue.FromFloat4(
-                            0.8f,
-                            0.8f,
-                            0.8f,
-                            1f
+                        id: "in.color1",
+                        name: "Color1",
+                        type: GraphTypeRef.Color,
+                        def: GraphValue.FromFloat4(
+                            x: 0.8f,
+                            y: 0.8f,
+                            z: 0.8f,
+                            w: 1f
                         )
                     ),
                     Prop(
-                        "in.color2",
-                        "Color2",
-                        GraphTypeRef.Color,
-                        GraphValue.FromFloat4(
-                            0.2f,
-                            0.2f,
-                            0.2f,
-                            1f
+                        id: "in.color2",
+                        name: "Color2",
+                        type: GraphTypeRef.Color,
+                        def: GraphValue.FromFloat4(
+                            x: 0.2f,
+                            y: 0.2f,
+                            z: 0.2f,
+                            w: 1f
                         )
                     ),
                     PropF(
-                        "in.scale",
-                        "Scale",
-                        5f,
-                        0f,
-                        50f
+                        id: "in.scale",
+                        name: "Scale",
+                        def: 5f,
+                        min: 0f,
+                        max: 50f
                     ),
                 ]
             ),
 
             Def(
-                Wave,
-                "Wave Texture",
-                "Texture",
-                [
-                    In("in.vector", "Vector", GraphTypeRef.Float3.Id),
-                    In("in.scale", "Scale", GraphTypeRef.Float.Id),
-                    In("in.distortion", "Distortion", GraphTypeRef.Float.Id),
-                    In("in.detail", "Detail", GraphTypeRef.Float.Id),
+                id: Wave,
+                name: "Wave Texture",
+                category: "Texture",
+                inputs: [
+                    In(id: "in.vector", name: "Vector", typeId: GraphTypeRef.Float3.Id),
+                    In(id: "in.scale", name: "Scale", typeId: GraphTypeRef.Float.Id),
+                    In(id: "in.distortion", name: "Distortion", typeId: GraphTypeRef.Float.Id),
+                    In(id: "in.detail", name: "Detail", typeId: GraphTypeRef.Float.Id),
                 ],
-                [
-                    Out("out.color", "Color", GraphTypeRef.Color.Id),
-                    Out("out.fac", "Fac", GraphTypeRef.Float.Id),
+                outputs: [
+                    Out(id: "out.color", name: "Color", typeId: GraphTypeRef.Color.Id),
+                    Out(id: "out.fac", name: "Fac", typeId: GraphTypeRef.Float.Id),
                 ],
-                [
-                    PropEnum("wave_type", "Type", WaveTypeLabels),
-                    PropEnum("wave_profile", "Profile", WaveProfileLabels),
+                props: [
+                    PropEnum(id: "wave_type", name: "Type", labels: WaveTypeLabels),
+                    PropEnum(id: "wave_profile", name: "Profile", labels: WaveProfileLabels),
                     PropF(
-                        "in.scale",
-                        "Scale",
-                        5f,
-                        0f,
-                        50f
+                        id: "in.scale",
+                        name: "Scale",
+                        def: 5f,
+                        min: 0f,
+                        max: 50f
                     ),
                     PropF(
-                        "in.distortion",
-                        "Distortion",
-                        0f,
-                        0f,
-                        50f
+                        id: "in.distortion",
+                        name: "Distortion",
+                        def: 0f,
+                        min: 0f,
+                        max: 50f
                     ),
                     PropF(
-                        "in.detail",
-                        "Detail",
-                        2f,
-                        0f,
-                        16f
+                        id: "in.detail",
+                        name: "Detail",
+                        def: 2f,
+                        min: 0f,
+                        max: 16f
                     ),
                 ]
             ),
 
             Def(
-                VecMath,
-                "Vector Math",
-                "Converter",
-                [
-                    In("in.a", "A", GraphTypeRef.Float3.Id),
-                    In("in.b", "B", GraphTypeRef.Float3.Id),
-                    In("in.scale", "Scale", GraphTypeRef.Float.Id),
+                id: VecMath,
+                name: "Vector Math",
+                category: "Converter",
+                inputs: [
+                    In(id: "in.a", name: "A", typeId: GraphTypeRef.Float3.Id),
+                    In(id: "in.b", name: "B", typeId: GraphTypeRef.Float3.Id),
+                    In(id: "in.scale", name: "Scale", typeId: GraphTypeRef.Float.Id),
                 ],
-                [
-                    Out("out.vector", "Vector", GraphTypeRef.Float3.Id),
-                    Out("out.value", "Value", GraphTypeRef.Float.Id),
+                outputs: [
+                    Out(id: "out.vector", name: "Vector", typeId: GraphTypeRef.Float3.Id),
+                    Out(id: "out.value", name: "Value", typeId: GraphTypeRef.Float.Id),
                 ],
-                [
-                    PropEnum("op", "Operation", VecMathOpLabels), PropF(
-                        "in.scale",
-                        "Scale",
-                        1f,
-                        -10f,
-                        10f
+                props: [
+                    PropEnum(id: "op", name: "Operation", labels: VecMathOpLabels), PropF(
+                        id: "in.scale",
+                        name: "Scale",
+                        def: 1f,
+                        min: -10f,
+                        max: 10f
                     ),
                 ]
             ),
 
             Def(
-                MapRange,
-                "Map Range",
-                "Converter",
-                [
-                    In("in.value", "Value", GraphTypeRef.Float.Id),
-                    In("in.from_min", "From Min", GraphTypeRef.Float.Id),
-                    In("in.from_max", "From Max", GraphTypeRef.Float.Id),
-                    In("in.to_min", "To Min", GraphTypeRef.Float.Id),
-                    In("in.to_max", "To Max", GraphTypeRef.Float.Id),
+                id: MapRange,
+                name: "Map Range",
+                category: "Converter",
+                inputs: [
+                    In(id: "in.value", name: "Value", typeId: GraphTypeRef.Float.Id),
+                    In(id: "in.from_min", name: "From Min", typeId: GraphTypeRef.Float.Id),
+                    In(id: "in.from_max", name: "From Max", typeId: GraphTypeRef.Float.Id),
+                    In(id: "in.to_min", name: "To Min", typeId: GraphTypeRef.Float.Id),
+                    In(id: "in.to_max", name: "To Max", typeId: GraphTypeRef.Float.Id),
                 ],
-                [Out("out.result", "Result", GraphTypeRef.Float.Id)],
-                [
+                outputs: [Out(id: "out.result", name: "Result", typeId: GraphTypeRef.Float.Id)],
+                props: [
                     Prop(
-                        "clamp",
-                        "Clamp",
-                        GraphTypeRef.Bool,
-                        GraphValue.FromBool(true)
+                        id: "clamp",
+                        name: "Clamp",
+                        type: GraphTypeRef.Bool,
+                        def: GraphValue.FromBool(true)
                     ),
                     PropF(
-                        "in.value",
-                        "Value",
-                        0f,
-                        -10f,
-                        10f
+                        id: "in.value",
+                        name: "Value",
+                        def: 0f,
+                        min: -10f,
+                        max: 10f
                     ),
                     PropF(
-                        "in.from_min",
-                        "From Min",
-                        0f,
-                        -10f,
-                        10f
+                        id: "in.from_min",
+                        name: "From Min",
+                        def: 0f,
+                        min: -10f,
+                        max: 10f
                     ),
                     PropF(
-                        "in.from_max",
-                        "From Max",
-                        1f,
-                        -10f,
-                        10f
+                        id: "in.from_max",
+                        name: "From Max",
+                        def: 1f,
+                        min: -10f,
+                        max: 10f
                     ),
                     PropF(
-                        "in.to_min",
-                        "To Min",
-                        0f,
-                        -10f,
-                        10f
+                        id: "in.to_min",
+                        name: "To Min",
+                        def: 0f,
+                        min: -10f,
+                        max: 10f
                     ),
                     PropF(
-                        "in.to_max",
-                        "To Max",
-                        1f,
-                        -10f,
-                        10f
+                        id: "in.to_max",
+                        name: "To Max",
+                        def: 1f,
+                        min: -10f,
+                        max: 10f
                     ),
                 ]
             ),
 
             Def(
-                SeparateXyz,
-                "Separate XYZ",
-                "Converter",
-                [In("in.vector", "Vector", GraphTypeRef.Float3.Id)],
-                [
-                    Out("out.x", "X", GraphTypeRef.Float.Id),
-                    Out("out.y", "Y", GraphTypeRef.Float.Id),
-                    Out("out.z", "Z", GraphTypeRef.Float.Id),
+                id: SeparateXyz,
+                name: "Separate XYZ",
+                category: "Converter",
+                inputs: [In(id: "in.vector", name: "Vector", typeId: GraphTypeRef.Float3.Id)],
+                outputs: [
+                    Out(id: "out.x", name: "X", typeId: GraphTypeRef.Float.Id),
+                    Out(id: "out.y", name: "Y", typeId: GraphTypeRef.Float.Id),
+                    Out(id: "out.z", name: "Z", typeId: GraphTypeRef.Float.Id),
                 ]
             ),
 
             Def(
-                CombineXyz,
-                "Combine XYZ",
-                "Converter",
-                [
-                    In("in.x", "X", GraphTypeRef.Float.Id), In("in.y", "Y", GraphTypeRef.Float.Id),
-                    In("in.z", "Z", GraphTypeRef.Float.Id),
+                id: CombineXyz,
+                name: "Combine XYZ",
+                category: "Converter",
+                inputs: [
+                    In(id: "in.x", name: "X", typeId: GraphTypeRef.Float.Id),
+                    In(id: "in.y", name: "Y", typeId: GraphTypeRef.Float.Id),
+                    In(id: "in.z", name: "Z", typeId: GraphTypeRef.Float.Id),
                 ],
-                [Out("out.vector", "Vector", GraphTypeRef.Float3.Id)],
-                [
+                outputs: [Out(id: "out.vector", name: "Vector", typeId: GraphTypeRef.Float3.Id)],
+                props: [
                     PropF(
-                        "in.x",
-                        "X",
-                        0f,
-                        -10f,
-                        10f
+                        id: "in.x",
+                        name: "X",
+                        def: 0f,
+                        min: -10f,
+                        max: 10f
                     ),
                     PropF(
-                        "in.y",
-                        "Y",
-                        0f,
-                        -10f,
-                        10f
+                        id: "in.y",
+                        name: "Y",
+                        def: 0f,
+                        min: -10f,
+                        max: 10f
                     ),
                     PropF(
-                        "in.z",
-                        "Z",
-                        0f,
-                        -10f,
-                        10f
+                        id: "in.z",
+                        name: "Z",
+                        def: 0f,
+                        min: -10f,
+                        max: 10f
                     ),
                 ]
             ),
 
             Def(
-                ColorRamp,
-                "Color Ramp",
-                "Converter",
-                [In("in.fac", "Fac", GraphTypeRef.Float.Id)],
-                [
-                    Out("out.color", "Color", GraphTypeRef.Color.Id),
-                    Out("out.alpha", "Alpha", GraphTypeRef.Float.Id),
+                id: ColorRamp,
+                name: "Color Ramp",
+                category: "Converter",
+                inputs: [In(id: "in.fac", name: "Fac", typeId: GraphTypeRef.Float.Id)],
+                outputs: [
+                    Out(id: "out.color", name: "Color", typeId: GraphTypeRef.Color.Id),
+                    Out(id: "out.alpha", name: "Alpha", typeId: GraphTypeRef.Float.Id),
                 ],
-                [
-                    PropEnum("interpolation", "Interpolation", RampInterpLabels),
+                props: [
+                    PropEnum(id: "interpolation", name: "Interpolation", labels: RampInterpLabels),
                     PropF(
-                        "in.fac",
-                        "Fac",
-                        0.5f,
-                        0f,
-                        1f
+                        id: "in.fac",
+                        name: "Fac",
+                        def: 0.5f,
+                        min: 0f,
+                        max: 1f
                     ),
-                    PropRamp("ramp", "Ramp"),
+                    PropRamp(id: "ramp", name: "Ramp"),
                 ]
             ),
         ];
@@ -819,7 +835,7 @@ public static class ShaderNodeLibrary
             Id = id,
             DisplayName = name,
             Type = GraphTypeRef.Float3,
-            DefaultValue = GraphValue.FromFloat3(x, y, z),
+            DefaultValue = GraphValue.FromFloat3(x: x, y: y, z: z),
         };
     }
 

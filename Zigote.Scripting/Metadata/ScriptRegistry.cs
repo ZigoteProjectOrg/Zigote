@@ -4,7 +4,8 @@ namespace Zigote.Scripting.Metadata;
 
 /// <summary>
 ///     Discovers and caches <see cref="ScriptMetadata" /> for every <see cref="Component" />
-///     subtype found in a loaded <see cref="Assembly" />. One registry per <see cref="Loading.ScriptDomain" />.
+///     subtype found in a loaded <see cref="Assembly" />. One registry per
+///     <see cref="Loading.ScriptDomain" />.
 /// </summary>
 public sealed class ScriptRegistry
 {
@@ -34,15 +35,13 @@ public sealed class ScriptRegistry
         _byFullName[meta.FullName] = meta;
     }
 
-    public ScriptMetadata? Find(string fullName)
-    {
-        return _byFullName.TryGetValue(fullName, out var m) ? m : null;
-    }
+    public ScriptMetadata? Find(string fullName) =>
+        _byFullName.TryGetValue(key: fullName, value: out var m) ? m : null;
 
     /// <summary>Creates a new instance of the named component. Returns null on failure.</summary>
     public Component? CreateInstance(string fullName)
     {
-        if (_byFullName.TryGetValue(fullName, out var meta))
+        if (_byFullName.TryGetValue(key: fullName, value: out var meta))
             return TryCreate(meta.Type);
         return null;
     }

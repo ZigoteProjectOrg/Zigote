@@ -4,6 +4,7 @@ using Zigote.Core.Assets;
 using Zigote.Core.Engine;
 using Zigote.Core.Native;
 using Zigote.Core.State;
+using Zigote.Core.Threading;
 using Zigote.Editor.Assets;
 using Zigote.Editor.History;
 using Zigote.Editor.Prefab;
@@ -14,6 +15,7 @@ using Zigote.Scripting;
 using Zigote.Scripting.Compilation;
 using Zigote.Scripting.Loading;
 using Zigote.Scripting.Metadata;
+using Zigote.UI.Host;
 
 namespace Zigote.Editor.Scene;
 
@@ -38,14 +40,6 @@ public sealed class EditorState : IDisposable
     private readonly List<SceneNode> _savedPlaySelection = [];
     private readonly HashSet<SceneNode> _selectedNodes = [];
 
-    private bool _reducedEditorGraphics;
-
-    // Reactive primary selection — panels subscribe to SelectionSignal instead of an event.
-    private SceneNode? _savedPlayPrimary;
-    private FileSystemWatcher? _scriptWatcher;
-    private string? _watchedProjectPath;
-    private Timer? _watcherDebounce;
-
     /// <summary>
     ///     The authored render settings — project defaults + Settings-panel edits — independent of the
     ///     edit-mode reduced-graphics preset. <see cref="PushEffective3D" /> derives what the engine runs
@@ -54,16 +48,13 @@ public sealed class EditorState : IDisposable
     /// </summary>
     public ZgRenderSettings3D Authored3D;
 
-    /// <summary>
-    ///     Where the editor's off-thread work runs, and the frame budget deferred UI work spends.
-    ///     Panels take a <see cref="Zigote.Core.Threading.Background.Child" /> of it, so a failed
-    ///     project scan is reported as <c>app/assets</c> and does not stop anything else. The host
-    ///     wires the UI-thread hop and the per-frame drain (see <c>Program</c>).
-    /// </summary>
-    public Core.Threading.Background Background { get; } = new(
-        action => UI.Host.App.Active?.Post(action),
-        () => UI.Host.App.Active?.RequestLayout()
-    );
+    private bool _reducedEditorGraphics;
+
+    // Reactive primary selection — panels subscribe to SelectionSignal instead of an event.
+    private SceneNode? _savedPlayPrimary;
+    private FileSystemWatcher? _scriptWatcher;
+    private string? _watchedProjectPath;
+    private Timer? _watcherDebounce;
 
     public EditorState()
     {
@@ -75,30 +66,40 @@ public sealed class EditorState : IDisposable
 
         // Reads Assets/ProjectDir through delegates so it always sees the current registry (reassigned
         // by LoadAssets) and the open project's root.
-        Prefabs = new PrefabService(() => Assets, () => ProjectDir);
+        Prefabs = new PrefabService(assets: () => Assets, projectDir: () => ProjectDir);
 
         // Streaming: resolve an AssetId back to an absolute .zmesh path; the mesh sink registers a node's
         // mesh path to an AssetId and uploads the loaded blob (main thread) / hides on unload. Off by
         // default (StreamDistance == 0), so the synchronous mesh path is unchanged until streaming is enabled.
         AssetLoader = new AssetManager(id =>
             {
-                var rel = Assets.Resolve(id);
-                return rel is null ? null : AssetPath.ToAbsolute(rel, ProjectDir);
+                string? rel = Assets.Resolve(id);
+                return rel is null
+                    ? null
+                    : AssetPath.ToAbsolute(relativePath: rel, contentRoot: ProjectDir);
             }
         );
         MeshStreamer = new MeshStreamer(
-            AssetLoader,
-            node => node.MeshPath is null
+            assets: AssetLoader,
+            resolve: node => node.MeshPath is null
                 ? AssetId.Empty
-                : Assets.Register(AssetPath.ToRelative(node.MeshPath, ProjectDir)),
-            (node, bytes) =>
-            {
-                if (node.Handle != 0) ZigoteEngine.Instance?.SceneSetMeshBlob(node.Handle, bytes);
-            },
-            node =>
+                : Assets.Register(
+                    AssetPath.ToRelative(path: node.MeshPath, contentRoot: ProjectDir)
+                ),
+            upload: (node, bytes) =>
             {
                 if (node.Handle != 0)
-                    ZigoteEngine.Instance?.SceneSetNodeVisible(node.Handle, false);
+                    ZigoteEngine.Instance?.SceneSetMeshBlob(nodeHandle: node.Handle, data: bytes);
+            },
+            unload: node =>
+            {
+                if (node.Handle != 0)
+                {
+                    ZigoteEngine.Instance?.SceneSetNodeVisible(
+                        nodeHandle: node.Handle,
+                        visible: false
+                    );
+                }
             }
         );
 
@@ -108,6 +109,17 @@ public sealed class EditorState : IDisposable
         // Initial sync of demo scene
         NotifySceneChanged();
     }
+
+    /// <summary>
+    ///     Where the editor's off-thread work runs, and the frame budget deferred UI work spends.
+    ///     Panels take a <see cref="Zigote.Core.Threading.Background.Child" /> of it, so a failed
+    ///     project scan is reported as <c>app/assets</c> and does not stop anything else. The host
+    ///     wires the UI-thread hop and the per-frame drain (see <c>Program</c>).
+    /// </summary>
+    public Background Background { get; } = new(
+        toUi: action => App.Active?.Post(action),
+        requestFrame: () => App.Active?.RequestLayout()
+    );
 
     public CommandHistory History { get; } = new();
     public SceneGraph Scene { get; private set; } = SceneGraph.Demo();
@@ -252,7 +264,7 @@ public sealed class EditorState : IDisposable
 
     // ── Asset registry ────────────────────────────────────────────────────────
 
-    private string RegistryPath => Path.Combine(ProjectDir ?? ".", "assets.registry");
+    private string RegistryPath => Path.Combine(path1: ProjectDir ?? ".", path2: "assets.registry");
 
     /// <summary>
     ///     Edit-mode reduced graphics: render the viewport without TAA / bloom / SSR / DoF while
@@ -302,16 +314,10 @@ public sealed class EditorState : IDisposable
     }
 
     /// <summary>Force the viewport to re-render the 3D scene on its next paint.</summary>
-    public void InvalidateViewport()
-    {
-        ViewportVersion++;
-    }
+    public void InvalidateViewport() => ViewportVersion++;
 
     /// <summary>Load the per-project asset GUID registry from disk (call on project open).</summary>
-    public void LoadAssets()
-    {
-        Assets = AssetRegistry.Load(RegistryPath);
-    }
+    public void LoadAssets() => Assets = AssetRegistry.Load(RegistryPath);
 
     /// <summary>Persist the asset GUID registry to disk (call alongside scene save).</summary>
     public void SaveAssets()
@@ -446,7 +452,7 @@ public sealed class EditorState : IDisposable
         ScriptBuildStatusChanged?.Invoke();
         try
         {
-            var result = await ScriptCompiler.BuildAsync(projectPath, force: force);
+            var result = await ScriptCompiler.BuildAsync(projectPath: projectPath, force: force);
             ScriptDiagnostics = result.Diagnostics;
             if (result.Success && result.OutputAssemblyPath != null)
             {
@@ -480,10 +486,10 @@ public sealed class EditorState : IDisposable
     public void StartScriptWatcher(string projectPath)
     {
         StopScriptWatcher();
-        var dir = Path.GetDirectoryName(Path.GetFullPath(projectPath));
+        string? dir = Path.GetDirectoryName(Path.GetFullPath(projectPath));
         if (dir == null || !Directory.Exists(dir)) return;
         _watchedProjectPath = projectPath;
-        _scriptWatcher = new FileSystemWatcher(dir, "*.cs") {
+        _scriptWatcher = new FileSystemWatcher(path: dir, filter: "*.cs") {
             IncludeSubdirectories = true,
             NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName,
             EnableRaisingEvents = true,
@@ -506,10 +512,10 @@ public sealed class EditorState : IDisposable
     {
         _watcherDebounce?.Dispose();
         _watcherDebounce = new Timer(
-            _ => { _ = BuildScriptsAsync(_watchedProjectPath!); },
-            null,
-            700,
-            Timeout.Infinite
+            callback: _ => { _ = BuildScriptsAsync(_watchedProjectPath!); },
+            state: null,
+            dueTime: 700,
+            period: Timeout.Infinite
         );
     }
 
@@ -545,20 +551,22 @@ public sealed class EditorState : IDisposable
         SelectionSignal.Set(null);
 
         LoadProfile.Reset();
-        var syncT = LoadProfile.Mark();
+        long syncT = LoadProfile.Mark();
         NotifySceneChanged();
-        var syncMs = LoadProfile.Ms(LoadProfile.Since(syncT));
+        double syncMs = LoadProfile.Ms(LoadProfile.Since(syncT));
 
-        var envT = LoadProfile.Mark();
+        long envT = LoadProfile.Mark();
         ApplySceneEnvironment();
-        var envMs = LoadProfile.Ms(LoadProfile.Since(envT));
+        double envMs = LoadProfile.Ms(LoadProfile.Since(envT));
 
         if (LoadProfile.Enabled)
+        {
             Console.Error.WriteLine(
                 $"[LoadProfile] sync={syncMs:F0}ms (mesh {LoadProfile.Ms(LoadProfile.MeshTicks):F0}ms/" +
                 $"{LoadProfile.MeshCount}n/{LoadProfile.MeshBytes / 1024}KB, normalMaps {LoadProfile.Ms(LoadProfile.NormalTicks):F0}ms/" +
                 $"{LoadProfile.NormalCount}n, texBatch {LoadProfile.Ms(LoadProfile.TexBatchTicks):F0}ms) env={envMs:F0}ms"
             );
+        }
 
         RefreshAnimations();
     }
@@ -572,7 +580,7 @@ public sealed class EditorState : IDisposable
     public void RefreshAnimations(bool autoPlay = false)
     {
         _animClips.Clear();
-        CollectAnimations(Scene.Root, _animClips);
+        CollectAnimations(node: Scene.Root, outClips: _animClips);
         AnimationPlayer.Clip = _animClips.Count > 0 ? _animClips[0] : null;
         if (autoPlay && AnimationPlayer.Clip is not null) AnimationPlayer.Play();
         SceneChanged?.Invoke();
@@ -607,7 +615,7 @@ public sealed class EditorState : IDisposable
     private static void CollectAnimations(SceneNode node, List<AnimationClip> outClips)
     {
         outClips.AddRange(node.Animations);
-        foreach (var c in node.Children) CollectAnimations(c, outClips);
+        foreach (var c in node.Children) CollectAnimations(node: c, outClips: outClips);
     }
 
     /// <summary>Advance + apply the active animation clip. Call each frame from the main loop.</summary>
@@ -626,7 +634,7 @@ public sealed class EditorState : IDisposable
         if (ZigoteEngine.Instance is not { } engine) return;
         try
         {
-            var resolved = ResolveAssetPath(Scene.EnvironmentPath);
+            string? resolved = ResolveAssetPath(Scene.EnvironmentPath);
             if (resolved is not null)
             {
                 engine.SetEnvironmentHdri(File.ReadAllBytes(resolved));
@@ -635,9 +643,12 @@ public sealed class EditorState : IDisposable
             else
             {
                 if (!string.IsNullOrEmpty(Scene.EnvironmentPath))
+                {
                     Console.Error.WriteLine(
                         $"[Editor] environment '{Scene.EnvironmentPath}' not found; using procedural."
                     );
+                }
+
                 engine.SetEnvironmentProcedural();
             }
         }
@@ -656,12 +667,15 @@ public sealed class EditorState : IDisposable
         if (string.IsNullOrEmpty(path)) return null;
         string[] candidates = [
             path,
-            Path.Combine(ProjectDir ?? ".", path),
-            Path.Combine("examples", "PorscheDemo", path),
+            Path.Combine(path1: ProjectDir ?? ".", path2: path),
+            Path.Combine(path1: "examples", path2: "PorscheDemo", path3: path),
         ];
-        foreach (var c in candidates)
+        foreach (string c in candidates)
+        {
             if (File.Exists(c))
                 return c;
+        }
+
         return null;
     }
 
@@ -685,13 +699,13 @@ public sealed class EditorState : IDisposable
         try
         {
             var session = new GameSession(
-                Scene.Root,
-                ScriptRegistry,
-                Sprites2D,
-                new GameSessionHostInfo {
+                root: Scene.Root,
+                registry: ScriptRegistry,
+                sprites: Sprites2D,
+                host: new GameSessionHostInfo {
                     ScenePath = ScenePath,
                     SaveDirectory = ProjectDir is { } saveRoot
-                        ? Path.Combine(saveRoot, ".saves")
+                        ? Path.Combine(path1: saveRoot, path2: ".saves")
                         : null,
                 }
             );
@@ -755,8 +769,11 @@ public sealed class EditorState : IDisposable
         // Restore the editor selection captured at play start (skip any node deleted during play).
         _selectedNodes.Clear();
         foreach (var n in _savedPlaySelection)
+        {
             if (n.Parent != null)
                 _selectedNodes.Add(n);
+        }
+
         SelectionSignal.Set(_savedPlayPrimary is { Parent: not null } ? _savedPlayPrimary : null);
         _savedPlaySelection.Clear();
         _savedPlayPrimary = null;
@@ -773,7 +790,7 @@ public sealed class EditorState : IDisposable
     public void ApplyLiveScriptExport(SceneNode node, ExportedField field, string json)
     {
         if (!IsPlaying) return;
-        ActivePlay?.ApplyExportedField(node.Id, field, json);
+        ActivePlay?.ApplyExportedField(nodeId: node.Id, field: field, json: json);
     }
 
     /// <summary>Run one physics+camera tick. Call from the main loop after app.Frame().</summary>
@@ -784,7 +801,7 @@ public sealed class EditorState : IDisposable
         if (dt > MaxPlayStep) dt = MaxPlayStep;
         // Tell game scripts whether anything will render their debug lines this frame, before they run.
         DebugDraw.Enabled = ShowPhysicsWireframe;
-        ActivePlay.Update(Scene.Root, dt);
+        ActivePlay.Update(root: Scene.Root, dt: dt);
         SceneChanged?.Invoke();
     }
 
@@ -823,9 +840,7 @@ public sealed class EditorState : IDisposable
             primary = node;
         }
         else
-        {
             primary = _selectedNodes.Count > 0 ? _selectedNodes.Last() : null;
-        }
 
         SelectionSignal.Set(primary);
     }
@@ -853,17 +868,15 @@ public sealed class EditorState : IDisposable
         SceneChanged?.Invoke();
     }
 
-    public void NotifyAssetsChanged()
-    {
-        AssetsChanged?.Invoke();
-    }
+    public void NotifyAssetsChanged() => AssetsChanged?.Invoke();
 
     /// <summary>Report an on-disk rename observed by the asset browser's watcher (any-thread safe).</summary>
     public void QueueAssetRenamed(string oldFullPath, string newFullPath)
     {
         if (ProjectDir is not { } dir) return;
         _pendingAssetRenames.Enqueue(
-            (AssetPath.ToRelative(oldFullPath, dir), AssetPath.ToRelative(newFullPath, dir))
+            (AssetPath.ToRelative(path: oldFullPath, contentRoot: dir),
+                AssetPath.ToRelative(path: newFullPath, contentRoot: dir))
         );
     }
 
@@ -874,28 +887,32 @@ public sealed class EditorState : IDisposable
     public bool RenameAsset(string oldRelativePath, string newRelativePath)
     {
         if (ProjectDir is not { } dir) return false;
-        var oldAbs = AssetPath.ToAbsolute(oldRelativePath, dir);
-        var newAbs = AssetPath.ToAbsolute(newRelativePath, dir);
+        string oldAbs = AssetPath.ToAbsolute(relativePath: oldRelativePath, contentRoot: dir);
+        string newAbs = AssetPath.ToAbsolute(relativePath: newRelativePath, contentRoot: dir);
         if (!File.Exists(oldAbs) || File.Exists(newAbs)) return false;
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(newAbs)!);
-            File.Move(oldAbs, newAbs);
+            File.Move(sourceFileName: oldAbs, destFileName: newAbs);
         }
         catch (IOException ex)
         {
-            EditorLog.Add(LogSeverity.Warning, $"Rename failed: {ex.Message}");
+            EditorLog.Add(severity: LogSeverity.Warning, message: $"Rename failed: {ex.Message}");
             return false;
         }
 
-        ApplyAssetRename(oldRelativePath, newRelativePath);
+        ApplyAssetRename(oldRel: oldRelativePath, newRel: newRelativePath);
         return true;
     }
 
     private void ApplyAssetRename(string oldRel, string newRel)
     {
-        Assets.RenamePath(oldRel, newRel);
-        var changed = AssetReferenceRewriter.RewriteScene(Scene, oldRel, newRel);
+        Assets.RenamePath(oldPath: oldRel, newPath: newRel);
+        bool changed = AssetReferenceRewriter.RewriteScene(
+            scene: Scene,
+            oldRelativePath: oldRel,
+            newRelativePath: newRel
+        );
         SaveAssets();
         if (changed) NotifySceneChanged();
         NotifyAssetsChanged();
@@ -909,10 +926,10 @@ public sealed class EditorState : IDisposable
     public bool PumpAssets(long frame)
     {
         // Heal watcher-observed renames first (main thread — scene rewrites push to native).
-        var healed = false;
+        bool healed = false;
         while (_pendingAssetRenames.TryDequeue(out var rename))
         {
-            ApplyAssetRename(rename.OldRel, rename.NewRel);
+            ApplyAssetRename(oldRel: rename.OldRel, newRel: rename.NewRel);
             healed = true;
         }
 
@@ -921,25 +938,17 @@ public sealed class EditorState : IDisposable
         return true;
     }
 
-    public void NotifyAssetDropped(string path, Offset screenPos)
-    {
-        AssetDropped?.Invoke(path, screenPos);
-    }
+    public void NotifyAssetDropped(string path, Offset screenPos) =>
+        AssetDropped?.Invoke(arg1: path, arg2: screenPos);
 
     /// <summary>Raised when a file row is selected in the asset browser (drives the Asset preview panel).</summary>
-    public void NotifyAssetSelected(string path)
-    {
-        AssetSelected?.Invoke(path);
-    }
+    public void NotifyAssetSelected(string path) => AssetSelected?.Invoke(path);
 
     /// <summary>
     ///     Raised when a file should be opened in the code editor (double-click on a text/code
     ///     asset).
     /// </summary>
-    public void NotifyOpenFile(string path)
-    {
-        OpenFileRequested?.Invoke(path);
-    }
+    public void NotifyOpenFile(string path) => OpenFileRequested?.Invoke(path);
 
     public void DeleteSelected()
     {
@@ -948,14 +957,14 @@ public sealed class EditorState : IDisposable
             .Where(n => n.Parent != null && !_selectedNodes.Contains(n.Parent))
             .ToList();
         if (roots.Count == 0) return;
-        foreach (var n in roots) History.Execute(new DeleteNodeCommand(this, n));
+        foreach (var n in roots) History.Execute(new DeleteNodeCommand(state: this, node: n));
     }
 
     public SceneNode AddNode(string name, NodeKind kind)
     {
         var parent = Selected ?? Scene.Root;
-        var node = new SceneNode(name, kind);
-        History.Execute(new AddNodeCommand(this, parent, node));
+        var node = new SceneNode(name: name, kind: kind);
+        History.Execute(new AddNodeCommand(state: this, parent: parent, node: node));
         return node;
     }
 
@@ -963,7 +972,7 @@ public sealed class EditorState : IDisposable
     {
         if (Selected is null || Selected.Parent is null) return;
         var copy = Selected.DeepClone(Selected.Name + " Copy");
-        History.Execute(new AddNodeCommand(this, Selected.Parent, copy));
+        History.Execute(new AddNodeCommand(state: this, parent: Selected.Parent, node: copy));
     }
 
     /// <summary>
@@ -973,7 +982,7 @@ public sealed class EditorState : IDisposable
     public AssetId CreatePrefabFromSelected()
     {
         if (Selected is null) return AssetId.Empty;
-        var cmd = new CreatePrefabCommand(this, Selected);
+        var cmd = new CreatePrefabCommand(state: this, source: Selected);
         History.Execute(cmd);
         return cmd.PrefabId;
     }
@@ -985,7 +994,11 @@ public sealed class EditorState : IDisposable
     public SceneNode? InstantiatePrefab(AssetId prefab, SceneNode? parent = null)
     {
         if (prefab.IsEmpty) return null;
-        var cmd = new InstantiatePrefabCommand(this, prefab, parent ?? Selected ?? Scene.Root);
+        var cmd = new InstantiatePrefabCommand(
+            state: this,
+            prefab: prefab,
+            parent: parent ?? Selected ?? Scene.Root
+        );
         History.Execute(cmd);
         return cmd.Node;
     }

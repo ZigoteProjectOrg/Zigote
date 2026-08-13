@@ -13,24 +13,32 @@ public sealed class ButtonsPage : ComposedWidget
         var host = GalleryHost.Of(context);
 
         return new GalleryPage(
-            "Buttons",
+            title: "Buttons",
+            description:
             "One widget, five style classes and three shapes — the whole GNOME button vocabulary.",
-            MaterialIcons.SmartButton
+            iconName: MaterialIcons.SmartButton
         ) {
             Children = {
                 Demo.Titled(
-                    "Style Classes",
+                    title: "Style Classes",
+                    description:
                     "Regular, suggested and destructive carry weight; flat is for toolbars.",
-                    Demo.Stage(
+                    child: Demo.Stage(
                         Demo.Bar(
-                            new AdwButton("Regular", () => host.Toast("Regular")),
-                            new AdwButton("Suggested", () => host.Toast("Suggested")) {
+                            new AdwButton(label: "Regular", onPressed: () => host.Toast("Regular")),
+                            new AdwButton(
+                                label: "Suggested",
+                                onPressed: () => host.Toast("Suggested")
+                            ) {
                                 Style = AdwButtonStyle.Suggested,
                             },
-                            new AdwButton("Destructive", () => host.Toast("Destructive")) {
+                            new AdwButton(
+                                label: "Destructive",
+                                onPressed: () => host.Toast("Destructive")
+                            ) {
                                 Style = AdwButtonStyle.Destructive,
                             },
-                            new AdwButton("Flat", () => host.Toast("Flat")) {
+                            new AdwButton(label: "Flat", onPressed: () => host.Toast("Flat")) {
                                 Style = AdwButtonStyle.Flat,
                             },
                             new AdwButton("Disabled") { Enabled = false }
@@ -38,9 +46,10 @@ public sealed class ButtonsPage : ComposedWidget
                     )
                 ),
                 Demo.Titled(
-                    "Shapes and Sizes",
+                    title: "Shapes and Sizes",
+                    description:
                     "Pills for status pages and dialogs, circles for icons, compact for toolbars.",
-                    Demo.Stage(
+                    child: Demo.Stage(
                         Demo.Bar(
                             new AdwButton("Pill") { Pill = true },
                             new AdwButton("Pill Suggested") {
@@ -61,29 +70,39 @@ public sealed class ButtonsPage : ComposedWidget
                     )
                 ),
                 Demo.Titled(
-                    "Content",
+                    title: "Content",
+                    description:
                     "An icon and a label in one button — AdwButtonContent, as GNOME packs it.",
-                    Demo.Stage(
+                    child: Demo.Stage(
                         Demo.Bar(
                             new AdwButton {
-                                Content = new AdwButtonContent(MaterialIcons.FolderOpen, "Open"),
+                                Content = new AdwButtonContent(
+                                    iconName: MaterialIcons.FolderOpen,
+                                    label: "Open"
+                                ),
                             },
                             new AdwButton {
-                                Content = new AdwButtonContent(MaterialIcons.Send, "Send"),
+                                Content = new AdwButtonContent(
+                                    iconName: MaterialIcons.Send,
+                                    label: "Send"
+                                ),
                                 Style = AdwButtonStyle.Suggested,
                             },
-                            new AdwLinkButton("A link button", () => host.Toast("Link activated"))
+                            new AdwLinkButton(
+                                label: "A link button",
+                                onPressed: () => host.Toast("Link activated")
+                            )
                         )
                     )
                 ),
                 Demo.Titled(
-                    "Split Buttons",
-                    "A default action next to the menu of everything else.",
-                    Demo.Stage(
+                    title: "Split Buttons",
+                    description: "A default action next to the menu of everything else.",
+                    child: Demo.Stage(
                         Demo.Bar(
                             new Tooltip(
-                                "Open",
-                                new AdwSplitButton {
+                                message: "Open",
+                                child: new AdwSplitButton {
                                     IconName = MaterialIcons.FolderOpen,
                                     MenuItems = SampleMenu,
                                     OnPressed = () => host.Toast("Open"),
@@ -106,12 +125,18 @@ public sealed class ButtonsPage : ComposedWidget
                     )
                 ),
                 Demo.Group(
-                    "Button Rows",
-                    "The full-width button inside a boxed list.",
-                    new AdwButtonRow("Add Account", () => host.Toast("Account added")) {
+                    title: "Button Rows",
+                    description: "The full-width button inside a boxed list.",
+                    new AdwButtonRow(
+                        title: "Add Account",
+                        onPressed: () => host.Toast("Account added")
+                    ) {
                         IconName = MaterialIcons.Add,
                     },
-                    new AdwButtonRow("Remove Account", () => host.Toast("Account removed")) {
+                    new AdwButtonRow(
+                        title: "Remove Account",
+                        onPressed: () => host.Toast("Account removed")
+                    ) {
                         IconName = MaterialIcons.Delete,
                         Destructive = true,
                     }

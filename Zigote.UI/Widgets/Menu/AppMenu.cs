@@ -1,3 +1,4 @@
+using Zigote.UI.Host;
 using Zigote.UI.Widgets.Controls;
 
 namespace Zigote.UI.Widgets.Menu;
@@ -36,8 +37,10 @@ public interface INativeMenuBar
     /// <summary>Install the menus into the OS-native menu bar. Returns true if the OS now owns it.</summary>
     bool TryInstall(IReadOnlyList<AppMenu> menus);
 
-    /// <summary>Drop app menus from the native bar, leaving the platform's minimal bar (macOS:
-    ///     the bare app menu). Used when a host switches to the in-window bar.</summary>
+    /// <summary>
+    ///     Drop app menus from the native bar, leaving the platform's minimal bar (macOS:
+    ///     the bare app menu). Used when a host switches to the in-window bar.
+    /// </summary>
     void Uninstall();
 }
 
@@ -66,16 +69,13 @@ public static class NativeMenuBar
     /// </summary>
     public static bool TryInstall(IReadOnlyList<AppMenu> menus)
     {
-        var native = Enabled && Backend?.TryInstall(menus) == true;
+        bool native = Enabled && Backend?.TryInstall(menus) == true;
         // A native bar dispatches its own key equivalents; every bar we draw ourselves needs the
         // shortcuts bound as app accelerators, or they are painted text that does nothing.
-        MenuAccelerators.Install(Host.App.Active, native ? [] : menus);
+        MenuAccelerators.Install(app: App.Active, menus: native ? [] : menus);
         return native;
     }
 
     /// <summary>Reset the native bar to the platform's minimal state (no-op without a backend).</summary>
-    public static void Uninstall()
-    {
-        Backend?.Uninstall();
-    }
+    public static void Uninstall() => Backend?.Uninstall();
 }

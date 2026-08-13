@@ -35,15 +35,16 @@ public static class VfxGpuParams
 
         uint mask = 0;
         var gravity = Vec3.Zero;
-        var drag = 0f;
+        float drag = 0f;
         float turbStrength = 0f, turbFreq = 0f;
         var vortexAxis = Vec3.Up;
-        var vortexStrength = 0f;
+        float vortexStrength = 0f;
         ColorRamp? ramp = null;
         FloatCurve? sizeCurve = null;
         FloatCurve? alphaCurve = null;
 
         foreach (var m in asset.UpdateModules)
+        {
             switch (m)
             {
                 case GravityModule g:
@@ -77,6 +78,7 @@ public static class VfxGpuParams
                     alphaCurve = a.Curve;
                     break;
             }
+        }
 
         dst[0] = asset.Capacity; // counts
         dst[1] = spawnCount;
@@ -145,18 +147,18 @@ public static class VfxGpuParams
         dst[62] = vortexAxis.Z;
         dst[63] = vortexStrength;
 
-        for (var i = 0; i < 8; i++) // ramp (8 stops)
+        for (int i = 0; i < 8; i++) // ramp (8 stops)
         {
             var c = ramp?.Evaluate(i / 7f) ?? Color.White;
-            var o = 64 + i * 4;
+            int o = 64 + (i * 4);
             dst[o] = c.R;
             dst[o + 1] = c.G;
             dst[o + 2] = c.B;
             dst[o + 3] = c.A;
         }
 
-        for (var i = 0; i < 8; i++) dst[96 + i] = sizeCurve?.Evaluate(i / 7f) ?? 1f; // size curve
-        for (var i = 0; i < 8; i++)
+        for (int i = 0; i < 8; i++) dst[96 + i] = sizeCurve?.Evaluate(i / 7f) ?? 1f; // size curve
+        for (int i = 0; i < 8; i++)
             dst[104 + i] = alphaCurve?.Evaluate(i / 7f) ?? 1f; // alpha curve
     }
 
@@ -164,16 +166,16 @@ public static class VfxGpuParams
         float time,
         Vec3 position, Quat orientation)
     {
-        var dst = new float[FloatCount];
+        float[] dst = new float[FloatCount];
         Build(
-            asset,
-            spawnCount,
-            frameSeed,
-            dt,
-            time,
-            position,
-            orientation,
-            dst
+            asset: asset,
+            spawnCount: spawnCount,
+            frameSeed: frameSeed,
+            dt: dt,
+            time: time,
+            position: position,
+            orientation: orientation,
+            dst: dst
         );
         return dst;
     }

@@ -24,7 +24,7 @@ public static class PlayerMain
         // registers RunCore via MobileHost.SetAndroidMain instead.
         if (OperatingSystem.IsIOS())
         {
-            var exit = 1;
+            int exit = 1;
             MobileHost.RunApp(() => exit = RunCore(registerScripts));
             return exit;
         }
@@ -34,7 +34,7 @@ public static class PlayerMain
 
     private static int RunCore(Action<ScriptRegistry> registerScripts)
     {
-        var content = ResolveContentDir();
+        string? content = ResolveContentDir();
         if (content is null)
         {
             Console.Error.WriteLine("[Zigote] Content directory not found next to the executable.");
@@ -44,7 +44,7 @@ public static class PlayerMain
         GameHost host;
         try
         {
-            host = GameHost.Load(Path.Combine(content, "game.zigoteproj"));
+            host = GameHost.Load(Path.Combine(path1: content, path2: "game.zigoteproj"));
         }
         catch (Exception ex)
         {
@@ -55,9 +55,9 @@ public static class PlayerMain
         // The player runs the game's 3D scene, so it takes the fastest GPU on a multi-GPU machine
         // (a plain UI App defaults to the power-efficient one).
         using var app = new App(
-            host.Project.Name,
-            (uint)Math.Max(320, host.Project.WindowWidth),
-            (uint)Math.Max(240, host.Project.WindowHeight),
+            title: host.Project.Name,
+            width: (uint)Math.Max(val1: 320, val2: host.Project.WindowWidth),
+            height: (uint)Math.Max(val1: 240, val2: host.Project.WindowHeight),
             gpuPreference: GpuPowerPreference.Performance
         );
         app.Theme = ThemeData.Dark;
@@ -70,20 +70,20 @@ public static class PlayerMain
         host.ApplyEnvironment();
         host.Start();
 
-        var viewport = new GameViewport(host, app.Theme);
+        var viewport = new GameViewport(host: host, theme: app.Theme);
         app.Root = viewport;
         app.RequestFocus(viewport);
 
         var clock = Stopwatch.StartNew();
         while (!app.ShouldQuit)
         {
-            var frameStart = clock.ElapsedTicks;
+            long frameStart = clock.ElapsedTicks;
             app.Frame();
             host.Tick(app.DeltaTime);
 
             // Re-read each frame: the target follows whichever monitor the window is on (and the
             // project's own FPS cap, when it asks for something slower).
-            var remaining = app.FrameIntervalTicks - (clock.ElapsedTicks - frameStart);
+            long remaining = app.FrameIntervalTicks - (clock.ElapsedTicks - frameStart);
             if (remaining > 0) Thread.Sleep((int)(remaining * 1000 / Stopwatch.Frequency));
         }
 
@@ -102,10 +102,16 @@ public static class PlayerMain
         try
         {
             var type = Type.GetType("Zigote.UI.DevTools.DevTools, Zigote.UI.DevTools");
-            var install = type?.GetMethod("Install", BindingFlags.Public | BindingFlags.Static);
+            var install = type?.GetMethod(
+                name: "Install",
+                bindingAttr: BindingFlags.Public | BindingFlags.Static
+            );
             var profile = Type.GetType("Zigote.UI.DevTools.DevToolsProfile, Zigote.UI.DevTools");
             if (install is null || profile is null) return;
-            install.Invoke(null, [app, Enum.Parse(profile, "ThreeD")]);
+            install.Invoke(
+                obj: null,
+                parameters: [app, Enum.Parse(enumType: profile, value: "ThreeD")]
+            );
         }
         catch
         {
@@ -129,16 +135,17 @@ public static class PlayerMain
         return baseDirs
             .OfType<string>()
             .SelectMany(dir => new[] {
-                Path.Combine(dir, "Content"),
-                Path.GetFullPath(
-                    Path.Combine(
-                        dir,
-                        "..",
-                        "Resources",
-                        "Content"
-                    )
-                ),
-            })
+                    Path.Combine(path1: dir, path2: "Content"),
+                    Path.GetFullPath(
+                        Path.Combine(
+                            path1: dir,
+                            path2: "..",
+                            path3: "Resources",
+                            path4: "Content"
+                        )
+                    ),
+                }
+            )
             .FirstOrDefault(Directory.Exists);
     }
 }

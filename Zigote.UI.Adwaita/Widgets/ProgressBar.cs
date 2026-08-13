@@ -1,5 +1,4 @@
 using Zigote.Core.Animation;
-using Zigote.UI.Host;
 using Zigote.UI.Semantics;
 
 namespace Zigote.UI.Adwaita;
@@ -18,7 +17,7 @@ public sealed class AdwProgressBar : Widget
 
     public AdwProgressBar(float value = 0f)
     {
-        _value = Math.Clamp(value, 0f, 1f);
+        _value = Math.Clamp(value: value, min: 0f, max: 1f);
         // No vsync here on purpose: a Ticker joins a static running list the moment it starts, so an
         // indeterminate bar that is built and dropped without ever being attached would pin the
         // frame loop awake forever. Indeterminate only parks the status at Forward; Attach's
@@ -33,7 +32,7 @@ public sealed class AdwProgressBar : Widget
         get => _value;
         set
         {
-            var v = Math.Clamp(value, 0f, 1f);
+            float v = Math.Clamp(value: value, min: 0f, max: 1f);
             if (v == _value) return;
             _value = v;
             MarkNeedsPaint();
@@ -69,69 +68,75 @@ public sealed class AdwProgressBar : Widget
         if (!Indeterminate) config.Value = $"{Value * 100f:F0}%";
     }
 
-    public override int DebugStateHash()
-    {
-        return HashCode.Combine(_value, _indeterminate, _anim.Progress.GetHashCode());
-    }
+    public override int DebugStateHash() => HashCode.Combine(
+        value1: _value,
+        value2: _indeterminate,
+        value3: _anim.Progress.GetHashCode()
+    );
 
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        var w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 200f;
-        _size = c.Constrain(new Size(w, AdwMetrics.ProgressBarHeight));
+        float w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 200f;
+        _size = c.Constrain(new Size(width: w, height: AdwMetrics.ProgressBarHeight));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
     public override void Paint(PaintList paint)
     {
-        var radius = Bounds.Height / 2f;
+        float radius = Bounds.Height / 2f;
         // progressbar > trough @extends %scale_trough — the same currentColor 15% every trough in
         // the stylesheet uses, not a lighter fill of its own.
-        paint.AddRect(Bounds, AdwStyle.TroughFill(_theme), radius);
+        paint.AddRect(bounds: Bounds, color: AdwStyle.TroughFill(_theme), radius: radius);
 
         if (!Indeterminate)
         {
-            var fillW = Value * Bounds.Width;
+            float fillW = Value * Bounds.Width;
             if (fillW > 0f)
+            {
                 paint.AddRect(
-                    new Rect(
-                        Bounds.X,
-                        Bounds.Y,
-                        fillW,
-                        Bounds.Height
+                    bounds: new Rect(
+                        x: Bounds.X,
+                        y: Bounds.Y,
+                        width: fillW,
+                        height: Bounds.Height
                     ),
-                    _theme.Accent,
-                    radius
+                    color: _theme.Accent,
+                    radius: radius
                 );
+            }
+
             return;
         }
 
         // Sliding 30% segment, position driven by the repeating animation.
-        var blockW = Bounds.Width * 0.30f;
-        var startX = Bounds.X + (Bounds.Width + blockW) * _anim.Value - blockW;
-        var visX = MathF.Max(Bounds.X, startX);
-        var visW = MathF.Min(Bounds.Right, startX + blockW) - visX;
+        float blockW = Bounds.Width * 0.30f;
+        float startX = Bounds.X + ((Bounds.Width + blockW) * _anim.Value) - blockW;
+        float visX = MathF.Max(x: Bounds.X, y: startX);
+        float visW = MathF.Min(x: Bounds.Right, y: startX + blockW) - visX;
         if (visW > 0f)
+        {
             paint.AddRect(
-                new Rect(
-                    visX,
-                    Bounds.Y,
-                    visW,
-                    Bounds.Height
+                bounds: new Rect(
+                    x: visX,
+                    y: Bounds.Y,
+                    width: visW,
+                    height: Bounds.Height
                 ),
-                _theme.Accent,
-                radius
+                color: _theme.Accent,
+                radius: radius
             );
+        }
     }
 }
 
@@ -145,10 +150,7 @@ public sealed class AdwLevelBar : LeafWidget
     private ThemeData _theme = ThemeData.Dark;
     private float _value;
 
-    public AdwLevelBar(float value = 0f)
-    {
-        _value = Math.Clamp(value, 0f, 1f);
-    }
+    public AdwLevelBar(float value = 0f) => _value = Math.Clamp(value: value, min: 0f, max: 1f);
 
     /// <summary>Level in [0, 1].</summary>
     public float Value
@@ -156,7 +158,7 @@ public sealed class AdwLevelBar : LeafWidget
         get => _value;
         set
         {
-            var v = Math.Clamp(value, 0f, 1f);
+            float v = Math.Clamp(value: value, min: 0f, max: 1f);
             if (v == _value) return;
             _value = v;
             MarkNeedsPaint();
@@ -169,35 +171,32 @@ public sealed class AdwLevelBar : LeafWidget
         config.Value = $"{Value * 100f:F0}%";
     }
 
-    public override int DebugStateHash()
-    {
-        return HashCode.Combine(_value, Bounds.Width);
-    }
+    public override int DebugStateHash() => HashCode.Combine(value1: _value, value2: Bounds.Width);
 
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        var w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 200f;
-        _size = c.Constrain(new Size(w, 6f));
+        float w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 200f;
+        _size = c.Constrain(new Size(width: w, height: 6f));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
     public override void Paint(PaintList paint)
     {
-        var radius = Bounds.Height / 2f;
-        paint.AddRect(Bounds, AdwStyle.TroughFill(_theme), radius);
+        float radius = Bounds.Height / 2f;
+        paint.AddRect(bounds: Bounds, color: AdwStyle.TroughFill(_theme), radius: radius);
 
-        var fillW = Value * Bounds.Width;
+        float fillW = Value * Bounds.Width;
         if (fillW <= 0f) return;
 
         var p = AdwPalette.For(_theme);
@@ -206,14 +205,14 @@ public sealed class AdwLevelBar : LeafWidget
             : Value >= 0.15f ? p.WarningBg
             : p.DestructiveBg;
         paint.AddRect(
-            new Rect(
-                Bounds.X,
-                Bounds.Y,
-                fillW,
-                Bounds.Height
+            bounds: new Rect(
+                x: Bounds.X,
+                y: Bounds.Y,
+                width: fillW,
+                height: Bounds.Height
             ),
-            color,
-            radius
+            color: color,
+            radius: radius
         );
     }
 }

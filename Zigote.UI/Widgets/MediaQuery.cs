@@ -14,7 +14,7 @@ public readonly struct MediaQueryData(
     EdgeInsets? padding = null,
     EdgeInsets? viewInsets = null)
 {
-    public static readonly MediaQueryData Default = new(960f, 640f);
+    public static readonly MediaQueryData Default = new(width: 960f, height: 640f);
 
     /// <summary>Logical width of the window/screen.</summary>
     public float Width { get; } = width;
@@ -32,7 +32,7 @@ public readonly struct MediaQueryData(
     public EdgeInsets ViewInsets { get; } = viewInsets ?? EdgeInsets.Zero;
 
     /// <summary>Logical size as a <see cref="Zigote.Core.Size" />.</summary>
-    public Size Size => new(Width, Height);
+    public Size Size => new(width: Width, height: Height);
 
     /// <summary>
     ///     The window's <see cref="WindowSizeClass" /> (Compact = phone, Medium = tablet,
@@ -89,10 +89,8 @@ public sealed class MediaQuery : InheritedWidget
     ///     as a dependent. Falls back to <see cref="BuildContext.MediaQuery" /> (set by the app) if no
     ///     <see cref="MediaQuery" /> widget ancestor exists.
     /// </summary>
-    public static MediaQueryData Of(BuildContext ctx)
-    {
-        return ctx.DependOn<MediaQuery>()?.Data ?? ctx.MediaQuery;
-    }
+    public static MediaQueryData Of(BuildContext ctx) =>
+        ctx.DependOn<MediaQuery>()?.Data ?? ctx.MediaQuery;
 
     public override bool UpdateShouldNotify(InheritedWidget oldWidget)
     {

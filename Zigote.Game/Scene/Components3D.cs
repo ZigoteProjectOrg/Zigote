@@ -37,24 +37,24 @@ public sealed class Camera3D
     public float Near { get; set; } = 0.1f;
     public float Far { get; set; } = 1000f;
     public ProjectionKind Kind { get; set; } = ProjectionKind.Perspective;
-    public Vec2 OrthographicSize { get; set; } = new(2f, 2f);
+    public Vec2 OrthographicSize { get; set; } = new(x: 2f, y: 2f);
 
     public Mat4 ProjMatrix(float aspect)
     {
         return Kind switch {
             ProjectionKind.Perspective => Mat4.PerspectiveRhZo(
-                FovyDegrees * (MathF.PI / 180f),
-                aspect,
-                Near,
-                Far
+                fovyRadians: FovyDegrees * (MathF.PI / 180f),
+                aspect: aspect,
+                near: Near,
+                far: Far
             ),
             _ => Mat4.OrthographicRhZo(
-                -OrthographicSize.X * 0.5f,
-                OrthographicSize.X * 0.5f,
-                -OrthographicSize.Y * 0.5f,
-                OrthographicSize.Y * 0.5f,
-                Near,
-                Far
+                left: -OrthographicSize.X * 0.5f,
+                right: OrthographicSize.X * 0.5f,
+                bottom: -OrthographicSize.Y * 0.5f,
+                top: OrthographicSize.Y * 0.5f,
+                near: Near,
+                far: Far
             ),
         };
     }
@@ -82,7 +82,7 @@ public sealed class Light3D
 public sealed class RigidBody3D
 {
     public PhysicsShapeType ShapeType { get; set; } = PhysicsShapeType.Box;
-    public Vec3 HalfExtents { get; set; } = new(0.5f, 0.5f, 0.5f);
+    public Vec3 HalfExtents { get; set; } = new(x: 0.5f, y: 0.5f, z: 0.5f);
     public float Mass { get; set; } = 1f;
     public bool IsStatic { get; set; }
     public bool UseGravity { get; set; } = true;

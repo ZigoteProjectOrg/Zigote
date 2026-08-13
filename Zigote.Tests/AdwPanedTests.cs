@@ -22,78 +22,94 @@ public class AdwPanedTests
     {
         var first = new SizedBox();
         var second = new SizedBox();
-        var paned = new AdwPaned(first, second, vertical) {
+        var paned = new AdwPaned(first: first, second: second, vertical: vertical) {
             Position = position,
             MinPaneSize = min,
         };
-        var wrapper = new ThemeProvider(ThemeData.Dark, paned);
-        wrapper.Measure(Constraints.Tight(W, H));
-        wrapper.Layout(new Offset(0f, 0f));
+        var wrapper = new ThemeProvider(data: ThemeData.Dark, child: paned);
+        wrapper.Measure(Constraints.Tight(width: W, height: H));
+        wrapper.Layout(new Offset(x: 0f, y: 0f));
         return (paned, first, second);
     }
 
     [Fact]
     public void Horizontal_SplitsTheBoxAtThePositionAndLeavesNoGap()
     {
-        var (paned, first, second) = Laid(false, 0.25f);
+        var (paned, first, second) = Laid(vertical: false, position: 0.25f);
 
-        Assert.Equal(0f, first.Bounds.X, 3);
-        Assert.Equal(H, first.Bounds.Height, 3);
+        Assert.Equal(expected: 0f, actual: first.Bounds.X, precision: 3);
+        Assert.Equal(expected: H, actual: first.Bounds.Height, precision: 3);
         // Handle gutter sits between the panes, and the three spans tile the box exactly.
-        Assert.Equal(first.Bounds.Right + paned.HandleWidth, second.Bounds.X, 3);
-        Assert.Equal(W, second.Bounds.Right, 3);
+        Assert.Equal(
+            expected: first.Bounds.Right + paned.HandleWidth,
+            actual: second.Bounds.X,
+            precision: 3
+        );
+        Assert.Equal(expected: W, actual: second.Bounds.Right, precision: 3);
         // Floored, not rounded: panes land on whole pixels so the hairline handle never straddles
         // two of them. The remainder goes to the second pane, which is why the box still tiles.
-        Assert.Equal(MathF.Floor((W - paned.HandleWidth) * 0.25f), first.Bounds.Width, 3);
+        Assert.Equal(
+            expected: MathF.Floor((W - paned.HandleWidth) * 0.25f),
+            actual: first.Bounds.Width,
+            precision: 3
+        );
     }
 
     [Fact]
     public void Vertical_SplitsTheOtherAxis()
     {
-        var (paned, first, second) = Laid(true, 0.6f);
+        var (paned, first, second) = Laid(vertical: true, position: 0.6f);
 
-        Assert.Equal(W, first.Bounds.Width, 3);
-        Assert.Equal(first.Bounds.Bottom + paned.HandleWidth, second.Bounds.Y, 3);
-        Assert.Equal(H, second.Bounds.Bottom, 3);
-        Assert.Equal(MathF.Floor((H - paned.HandleWidth) * 0.6f), first.Bounds.Height, 3);
+        Assert.Equal(expected: W, actual: first.Bounds.Width, precision: 3);
+        Assert.Equal(
+            expected: first.Bounds.Bottom + paned.HandleWidth,
+            actual: second.Bounds.Y,
+            precision: 3
+        );
+        Assert.Equal(expected: H, actual: second.Bounds.Bottom, precision: 3);
+        Assert.Equal(
+            expected: MathF.Floor((H - paned.HandleWidth) * 0.6f),
+            actual: first.Bounds.Height,
+            precision: 3
+        );
     }
 
     [Fact]
     public void DraggingTheHandleMovesThePositionAndReportsItOnce()
     {
-        var (paned, first, _) = Laid(false, 0.5f);
+        var (paned, first, _) = Laid(vertical: false, position: 0.5f);
         var reported = new List<float>();
         paned.OnPositionChanged = p => reported.Add(p);
 
-        var handleX = first.Bounds.Right + paned.HandleWidth / 2f;
-        paned.OnPointerDown(new Offset(handleX, H / 2f));
-        paned.OnPointerMove(new Offset(handleX - 100f, H / 2f));
+        float handleX = first.Bounds.Right + (paned.HandleWidth / 2f);
+        paned.OnPointerDown(new Offset(x: handleX, y: H / 2f));
+        paned.OnPointerMove(new Offset(x: handleX - 100f, y: H / 2f));
 
         // Live during the drag, so panes track the pointer...
         Assert.True(paned.Position < 0.5f);
         Assert.Empty(reported);
 
         // ...but the persistence callback fires once, on release.
-        paned.OnPointerUp(new Offset(handleX - 100f, H / 2f));
+        paned.OnPointerUp(new Offset(x: handleX - 100f, y: H / 2f));
         Assert.Single(reported);
-        Assert.Equal(paned.Position, reported[0], 4);
+        Assert.Equal(expected: paned.Position, actual: reported[0], precision: 4);
     }
 
     [Fact]
     public void ADragPastTheEndStopsAtTheMinimumPaneSize()
     {
-        var (paned, first, second) = Laid(false, 0.5f, 180f);
-        var handleX = first.Bounds.Right + paned.HandleWidth / 2f;
+        var (paned, first, second) = Laid(vertical: false, position: 0.5f, min: 180f);
+        float handleX = first.Bounds.Right + (paned.HandleWidth / 2f);
 
-        paned.OnPointerDown(new Offset(handleX, H / 2f));
-        paned.OnPointerMove(new Offset(-4000f, H / 2f)); // yank it far off the left edge
+        paned.OnPointerDown(new Offset(x: handleX, y: H / 2f));
+        paned.OnPointerMove(new Offset(x: -4000f, y: H / 2f)); // yank it far off the left edge
 
         // Re-lay out: the clamp lives in Layout, which is what a MarkNeedsLayout would run.
-        var wrapper = new ThemeProvider(ThemeData.Dark, paned);
-        wrapper.Measure(Constraints.Tight(W, H));
-        wrapper.Layout(new Offset(0f, 0f));
+        var wrapper = new ThemeProvider(data: ThemeData.Dark, child: paned);
+        wrapper.Measure(Constraints.Tight(width: W, height: H));
+        wrapper.Layout(new Offset(x: 0f, y: 0f));
 
-        Assert.InRange(first.Bounds.Width, 179f, 181f);
+        Assert.InRange(actual: first.Bounds.Width, low: 179f, high: 181f);
         Assert.True(second.Bounds.Width >= 180f);
     }
 
@@ -106,13 +122,16 @@ public class AdwPanedTests
     {
         var first = new SizedBox();
         var second = new SizedBox();
-        var paned = new AdwPaned(first, second) { Position = 0f, MinPaneSize = 180f };
-        var wrapper = new ThemeProvider(ThemeData.Dark, paned);
-        wrapper.Measure(Constraints.Tight(200f, 100f));
-        wrapper.Layout(new Offset(0f, 0f));
+        var paned = new AdwPaned(first: first, second: second) {
+            Position = 0f,
+            MinPaneSize = 180f,
+        };
+        var wrapper = new ThemeProvider(data: ThemeData.Dark, child: paned);
+        wrapper.Measure(Constraints.Tight(width: 200f, height: 100f));
+        wrapper.Layout(new Offset(x: 0f, y: 0f));
 
         Assert.True(first.Bounds.Width > 0f);
         Assert.True(second.Bounds.Width > 0f);
-        Assert.Equal(200f, second.Bounds.Right, 3);
+        Assert.Equal(expected: 200f, actual: second.Bounds.Right, precision: 3);
     }
 }

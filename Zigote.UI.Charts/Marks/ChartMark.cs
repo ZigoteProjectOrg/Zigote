@@ -24,10 +24,7 @@ public sealed class ChartDomain
     /// </summary>
     public int DataEpoch { get; set; }
 
-    public ChartScale X(ChartValue sample)
-    {
-        return XScale ??= CreateFor(sample);
-    }
+    public ChartScale X(ChartValue sample) => XScale ??= CreateFor(sample);
 
     /// <summary>The y scale for a mark; <paramref name="secondary" /> selects the opposite axis.</summary>
     public ChartScale Y(ChartValue sample, bool secondary = false)
@@ -95,7 +92,7 @@ public abstract class ChartMark
     /// </summary>
     protected bool EpochChanged(ChartDomain domain)
     {
-        var changed = domain.DataEpoch != _seenEpoch;
+        bool changed = domain.DataEpoch != _seenEpoch;
         _seenEpoch = domain.DataEpoch;
         return changed;
     }
@@ -103,19 +100,13 @@ public abstract class ChartMark
     public abstract void IncludeDomain(ChartDomain domain);
 
     /// <summary>Register series names (in paint order) so palette assignment is stable across marks.</summary>
-    public virtual void CollectSeries(ChartRenderContext ctx)
-    {
-    }
+    public virtual void CollectSeries(ChartRenderContext ctx) { }
 
     /// <summary>Contribute legend entries. Default: one entry per registered series of this mark.</summary>
-    public virtual void CollectLegend(ChartRenderContext ctx, List<LegendEntry> entries)
-    {
-    }
+    public virtual void CollectLegend(ChartRenderContext ctx, List<LegendEntry> entries) { }
 
     /// <summary>Register hover/tap targets into <see cref="ChartRenderContext.HoverPoints" />.</summary>
-    public virtual void CollectInteractive(ChartRenderContext ctx)
-    {
-    }
+    public virtual void CollectInteractive(ChartRenderContext ctx) { }
 
     /// <summary>
     ///     Region-based hit test (sectors, cells). Marks with an area larger than their registered
@@ -138,8 +129,8 @@ public abstract class ChartMark
 /// </summary>
 public abstract class SeriesMark<T> : ChartMark
 {
-    private Dictionary<string, List<ResolvedPoint>>? _groups;
     private readonly HashSet<string> _seenSeries = [];
+    private Dictionary<string, List<ResolvedPoint>>? _groups;
     private Dictionary<(string Series, ChartValue X), double>? _prevValues;
 
     private List<ResolvedPoint>? _resolved;
@@ -172,9 +163,12 @@ public abstract class SeriesMark<T> : ChartMark
     protected int IndexOfSeries(string series)
     {
         var order = SeriesOrder;
-        for (var i = 0; i < order.Count; i++)
+        for (int i = 0; i < order.Count; i++)
+        {
             if (order[i] == series)
                 return i;
+        }
+
         return -1;
     }
 
@@ -186,8 +180,10 @@ public abstract class SeriesMark<T> : ChartMark
             _prevValues ??= new Dictionary<(string, ChartValue), double>();
             _prevValues.Clear();
             foreach (var p in _resolved)
+            {
                 if (p.Y.Kind != ChartValueKind.Category)
                     _prevValues[(p.Series, p.X)] = p.Y.Numeric;
+            }
         }
 
         // Reuse the resolve scratch across resolves — a live chart re-resolves many times a second,
@@ -202,12 +198,12 @@ public abstract class SeriesMark<T> : ChartMark
         var seen = _seenSeries;
         foreach (var datum in Data)
         {
-            var series = SeriesBy?.Invoke(datum) ?? Name ?? string.Empty;
+            string series = SeriesBy?.Invoke(datum) ?? Name ?? string.Empty;
             if (series.Length > 0 && seen.Add(series)) _seriesOrder.Add(series);
-            var p = new ResolvedPoint(X(datum), Y(datum), series);
+            var p = new ResolvedPoint(X: X(datum), Y: Y(datum), Series: series);
             _resolved.Add(p);
             // Group as we resolve so Paint never re-allocates the grouping (per-frame hot path).
-            if (!_groups.TryGetValue(series, out var g)) _groups[series] = g = [];
+            if (!_groups.TryGetValue(key: series, value: out var g)) _groups[series] = g = [];
             g.Add(p);
         }
 
@@ -217,15 +213,20 @@ public abstract class SeriesMark<T> : ChartMark
 
     public override void CollectSeries(ChartRenderContext ctx)
     {
-        foreach (var s in SeriesOrder) ctx.RegisterSeries(s);
+        foreach (string s in SeriesOrder) ctx.RegisterSeries(s);
     }
 
     public override void CollectLegend(ChartRenderContext ctx, List<LegendEntry> entries)
     {
-        foreach (var s in SeriesOrder)
+        foreach (string s in SeriesOrder)
         {
             if (s.Length == 0) continue;
-            entries.Add(new LegendEntry(s, ctx.ColorFor(s, Color, MarkIndex)));
+            entries.Add(
+                new LegendEntry(
+                    Label: s,
+                    Color: ctx.ColorFor(series: s, markOverride: Color, markIndex: MarkIndex)
+                )
+            );
         }
     }
 
@@ -235,10 +236,7 @@ public abstract class SeriesMark<T> : ChartMark
     ///     A series present last resolve but absent now yields an empty (cleared) list; callers skip
     ///     empties.
     /// </summary>
-    protected Dictionary<string, List<ResolvedPoint>> GroupBySeries()
-    {
-        return _groups ?? [];
-    }
+    protected Dictionary<string, List<ResolvedPoint>> GroupBySeries() => _groups ?? [];
 
     /// <summary>
     ///     The datum's numeric y, interpolated from its previous-epoch value while a data-update
@@ -246,19 +244,18 @@ public abstract class SeriesMark<T> : ChartMark
     /// </summary>
     protected double MorphedY(ChartRenderContext ctx, in ResolvedPoint p)
     {
-        var target = p.Y.Numeric;
+        double target = p.Y.Numeric;
         if (ctx.DataProgress >= 1f || _prevValues is null || p.Y.Kind == ChartValueKind.Category)
             return target;
-        return _prevValues.TryGetValue((p.Series, p.X), out var old)
-            ? old + (target - old) * ctx.DataProgress
+        return _prevValues.TryGetValue(key: (p.Series, p.X), value: out double old)
+            ? old + ((target - old) * ctx.DataProgress)
             : target;
     }
 
     /// <summary>Default numeric label for tooltips.</summary>
-    protected static string FormatValue(ChartValue v)
-    {
-        return v.Kind == ChartValueKind.Number ? NiceScale.FormatNumber(v.Numeric) : v.ToString();
-    }
+    protected static string FormatValue(ChartValue v) => v.Kind == ChartValueKind.Number
+        ? NiceScale.FormatNumber(v.Numeric)
+        : v.ToString();
 
     protected internal readonly record struct ResolvedPoint(
         ChartValue X,

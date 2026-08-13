@@ -7,12 +7,16 @@ namespace Samples.Scripting;
 /// <summary>Smoothly follows a target node. Set TargetEntityId at runtime.</summary>
 public sealed class CameraFollow : Component
 {
-    [Export] [EditorRange(0, 50)] public float Distance { get; set; } = 5f;
-
-    [Export] [EditorRange(0, 20)] public float Height { get; set; } = 2f;
+    [Export]
+    [EditorRange(min: 0, max: 50)]
+    public float Distance { get; set; } = 5f;
 
     [Export]
-    [EditorRange(0.01f, 1f)]
+    [EditorRange(min: 0, max: 20)]
+    public float Height { get; set; } = 2f;
+
+    [Export]
+    [EditorRange(min: 0.01f, max: 1f)]
     [EditorTooltip("Lower = smoother, higher = snappier")]
     public float Smoothing { get; set; } = 0.1f;
 

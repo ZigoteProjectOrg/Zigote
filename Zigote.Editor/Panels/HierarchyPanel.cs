@@ -36,9 +36,6 @@ public sealed class HierarchyPanel : Widget
     private readonly List<NodeRow> _rows = [];
     private readonly EditorState _state;
     private readonly ThemeData _theme;
-    private SceneNode? _lastClickedNode;
-    private Size _size;
-    private int _structuralSig;
 
     /// <summary>
     ///     Raised when the selected node should be scrolled into view — <c>(top, height)</c> in the
@@ -46,6 +43,10 @@ public sealed class HierarchyPanel : Widget
     ///     <see cref="ScrollView.EnsureVisible" />.
     /// </summary>
     public Action<float, float>? OnRevealRequested;
+
+    private SceneNode? _lastClickedNode;
+    private Size _size;
+    private int _structuralSig;
 
     public HierarchyPanel(EditorState state, ThemeData theme)
     {
@@ -79,8 +80,8 @@ public sealed class HierarchyPanel : Widget
     private void RevealSelected()
     {
         if (OnRevealRequested is null || _state.Selected is not { } sel) return;
-        var idx = _rows.FindIndex(r => r.Node == sel);
-        if (idx >= 0) OnRevealRequested(idx * RowH, RowH);
+        int idx = _rows.FindIndex(r => r.Node == sel);
+        if (idx >= 0) OnRevealRequested(arg1: idx * RowH, arg2: RowH);
     }
 
     // ── Keyboard navigation (panel focused) ─────────────────────────────────────
@@ -120,10 +121,10 @@ public sealed class HierarchyPanel : Widget
     private void MoveSelection(int dir)
     {
         if (_rows.Count == 0) return;
-        var cur = _state.Selected is { } s ? _rows.FindIndex(r => r.Node == s) : -1;
-        var next = cur < 0
+        int cur = _state.Selected is { } s ? _rows.FindIndex(r => r.Node == s) : -1;
+        int next = cur < 0
             ? dir > 0 ? 0 : _rows.Count - 1
-            : Math.Clamp(cur + dir, 0, _rows.Count - 1);
+            : Math.Clamp(value: cur + dir, min: 0, max: _rows.Count - 1);
         _lastClickedNode = _rows[next].Node;
         _state.Select(_rows[next].Node); // fires SelectionSignal → OnSelectionChanged reveals it
     }
@@ -136,19 +137,14 @@ public sealed class HierarchyPanel : Widget
             _collapsed.Add(sel);
             Rebuild();
         }
-        else if (sel.Parent is { } p && p != _state.Scene.Root)
-        {
-            _state.Select(p);
-        }
+        else if (sel.Parent is { } p && p != _state.Scene.Root) _state.Select(p);
     }
 
     private void ExpandOrSelectChild()
     {
         if (_state.Selected is not { } sel || sel.Children.Count == 0) return;
         if (_collapsed.Remove(sel))
-        {
             Rebuild();
-        }
         else
         {
             var firstVisible = sel.Children.FirstOrDefault(c => !c.IsHidden);
@@ -164,7 +160,7 @@ public sealed class HierarchyPanel : Widget
         // NodeRows each frame without a relayout would paint un-laid-out rows (Bounds = 0) until the
         // next layout pass intermittently catches up, so the panel flickers and is unusable in play.
         // Only a structural change (add/remove/reorder/reparent/expand/collapse/hide) needs new rows.
-        var sig = ComputeStructuralSignature();
+        int sig = ComputeStructuralSignature();
         if (_rows.Count > 0 && sig == _structuralSig)
         {
             MarkNeedsPaint(); // selection / name / eye repaint without rebuilding the row widgets
@@ -173,7 +169,7 @@ public sealed class HierarchyPanel : Widget
 
         _structuralSig = sig;
         _rows.Clear();
-        AddRows(_state.Scene.Root, 0);
+        AddRows(node: _state.Scene.Root, depth: 0);
         MarkNeedsLayout(); // new rows must be measured + laid out before paint (play rebuilds aren't event-driven)
     }
 
@@ -183,27 +179,27 @@ public sealed class HierarchyPanel : Widget
 
         if (node != _state.Scene.Root)
         {
-            var isExpanded = !_collapsed.Contains(node);
+            bool isExpanded = !_collapsed.Contains(node);
             _rows.Add(
                 new NodeRow(
-                    node,
-                    depth,
-                    isExpanded,
-                    _state,
-                    _theme,
-                    ToggleExpand,
-                    _drag,
-                    GetNodeAtY,
-                    HandleNodeClick,
-                    ShowRenameDialog
+                    node: node,
+                    depth: depth,
+                    isExpanded: isExpanded,
+                    state: _state,
+                    theme: _theme,
+                    toggleExpand: ToggleExpand,
+                    drag: _drag,
+                    getNodeAtY: GetNodeAtY,
+                    onNodeClick: HandleNodeClick,
+                    renameNode: ShowRenameDialog
                 )
             );
             if (!isExpanded) return;
         }
 
-        var childDepth = depth + (node == _state.Scene.Root ? 0 : 1);
+        int childDepth = depth + (node == _state.Scene.Root ? 0 : 1);
         foreach (var child in node.Children)
-            AddRows(child, childDepth);
+            AddRows(node: child, depth: childDepth);
     }
 
     /// <summary>
@@ -216,10 +212,10 @@ public sealed class HierarchyPanel : Widget
     {
         var hash = new HashCode();
         AccumulateSignature(
-            ref hash,
-            _state.Scene.Root,
-            0,
-            true
+            hash: ref hash,
+            node: _state.Scene.Root,
+            depth: 0,
+            isRoot: true
         );
         return hash.ToHashCode();
     }
@@ -230,21 +226,23 @@ public sealed class HierarchyPanel : Widget
 
         if (!isRoot)
         {
-            var collapsed = _collapsed.Contains(node);
+            bool collapsed = _collapsed.Contains(node);
             hash.Add(node.Id);
             hash.Add(depth);
             hash.Add(collapsed);
             if (collapsed) return; // collapsed → descendants aren't rows (mirror AddRows)
         }
 
-        var childDepth = depth + (isRoot ? 0 : 1);
+        int childDepth = depth + (isRoot ? 0 : 1);
         foreach (var child in node.Children)
+        {
             AccumulateSignature(
-                ref hash,
-                child,
-                childDepth,
-                false
+                hash: ref hash,
+                node: child,
+                depth: childDepth,
+                isRoot: false
             );
+        }
     }
 
     private void ToggleExpand(SceneNode node)
@@ -256,7 +254,7 @@ public sealed class HierarchyPanel : Widget
 
     private SceneNode? GetNodeAtY(float y)
     {
-        var idx = (int)((y - Bounds.Y) / RowH);
+        int idx = (int)((y - Bounds.Y) / RowH);
         return idx >= 0 && idx < _rows.Count ? _rows[idx].Node : null;
     }
 
@@ -270,12 +268,12 @@ public sealed class HierarchyPanel : Widget
         }
         else if (shift && _lastClickedNode != null)
         {
-            var fromIdx = _rows.FindIndex(r => r.Node == _lastClickedNode);
-            var toIdx = _rows.FindIndex(r => r.Node == node);
+            int fromIdx = _rows.FindIndex(r => r.Node == _lastClickedNode);
+            int toIdx = _rows.FindIndex(r => r.Node == node);
             if (fromIdx >= 0 && toIdx >= 0)
             {
-                var lo = Math.Min(fromIdx, toIdx);
-                var hi = Math.Max(fromIdx, toIdx);
+                int lo = Math.Min(val1: fromIdx, val2: toIdx);
+                int hi = Math.Max(val1: fromIdx, val2: toIdx);
                 _state.SetSelection(_rows.Skip(lo).Take(hi - lo + 1).Select(r => r.Node));
             }
             else
@@ -299,18 +297,18 @@ public sealed class HierarchyPanel : Widget
             DefaultResponse = "rename",
             CloseResponse = "cancel",
         };
-        dlg.AddResponse("cancel", "Cancel");
-        dlg.AddResponse("rename", "Rename", AdwResponseAppearance.Suggested);
+        dlg.AddResponse(id: "cancel", label: "Cancel");
+        dlg.AddResponse(id: "rename", label: "Rename", appearance: AdwResponseAppearance.Suggested);
         dlg.OnResponse = id =>
         {
-            var trimmed = entry.Text.Trim();
+            string trimmed = entry.Text.Trim();
             if (id != "rename" || trimmed.Length == 0 || trimmed == node.Name) return;
             _state.History.Execute(
                 new ChangePropertyCommand<string>(
-                    _state,
-                    node.Name,
-                    trimmed,
-                    v => node.Name = v
+                    state: _state,
+                    oldValue: node.Name,
+                    newValue: trimmed,
+                    setter: v => node.Name = v
                 )
             );
         };
@@ -319,8 +317,8 @@ public sealed class HierarchyPanel : Widget
 
     public override Size Measure(Constraints c)
     {
-        var h = RowH * _rows.Count;
-        _size = c.Constrain(new Size(c.MaxWidth, h));
+        float h = RowH * _rows.Count;
+        _size = c.Constrain(new Size(width: c.MaxWidth, height: h));
         foreach (var r in _rows)
             r.Measure(new Constraints(maxWidth: _size.Width, maxHeight: RowH));
         return _size;
@@ -329,15 +327,15 @@ public sealed class HierarchyPanel : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
-        var y = origin.Y;
+        float y = origin.Y;
         foreach (var r in _rows)
         {
-            r.Layout(new Offset(origin.X, y));
+            r.Layout(new Offset(x: origin.X, y: y));
             y += RowH;
         }
     }
@@ -349,7 +347,7 @@ public sealed class HierarchyPanel : Widget
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         foreach (var r in _rows)
         {
             var hit = r.HitTest(point);
@@ -361,10 +359,10 @@ public sealed class HierarchyPanel : Widget
 
     private sealed class DragState
     {
-        private float _startX, _startY;
         public bool Active;
         public SceneNode? DropTarget;
         public SceneNode? Source;
+        private float _startX, _startY;
 
         public void Begin(SceneNode source, float x, float y)
         {
@@ -377,13 +375,13 @@ public sealed class HierarchyPanel : Widget
 
         public void Move(float x, float y, Func<float, SceneNode?> getAt)
         {
-            var dx = x - _startX;
-            var dy = y - _startY;
-            if (!Active && dx * dx + dy * dy > 36f) Active = true;
+            float dx = x - _startX;
+            float dy = y - _startY;
+            if (!Active && (dx * dx) + (dy * dy) > 36f) Active = true;
             if (Active)
             {
                 var candidate = getAt(y);
-                DropTarget = IsValidDrop(Source!, candidate) ? candidate : null;
+                DropTarget = IsValidDrop(src: Source!, target: candidate) ? candidate : null;
             }
         }
 
@@ -434,15 +432,15 @@ public sealed class HierarchyPanel : Widget
         private Color KindColor()
         {
             return node.Kind switch {
-                NodeKind.Mesh => new Color(0.4f, 0.75f, 1f),
-                NodeKind.Light => new Color(1f, 0.88f, 0.3f),
-                NodeKind.Camera => new Color(0.35f, 0.9f, 0.5f),
-                NodeKind.Script => new Color(0.75f, 0.45f, 1f),
-                NodeKind.ReflectionProbe => new Color(0.4f, 0.95f, 0.9f),
-                NodeKind.AudioSource => new Color(1f, 0.6f, 0.3f),
-                NodeKind.VfxEmitter => new Color(0.85f, 0.5f, 1f),
-                NodeKind.Sprite => new Color(0.5f, 0.85f, 1f),
-                NodeKind.Tilemap => new Color(0.6f, 0.9f, 0.7f),
+                NodeKind.Mesh => new Color(r: 0.4f, g: 0.75f, b: 1f),
+                NodeKind.Light => new Color(r: 1f, g: 0.88f, b: 0.3f),
+                NodeKind.Camera => new Color(r: 0.35f, g: 0.9f, b: 0.5f),
+                NodeKind.Script => new Color(r: 0.75f, g: 0.45f, b: 1f),
+                NodeKind.ReflectionProbe => new Color(r: 0.4f, g: 0.95f, b: 0.9f),
+                NodeKind.AudioSource => new Color(r: 1f, g: 0.6f, b: 0.3f),
+                NodeKind.VfxEmitter => new Color(r: 0.85f, g: 0.5f, b: 1f),
+                NodeKind.Sprite => new Color(r: 0.5f, g: 0.85f, b: 1f),
+                NodeKind.Tilemap => new Color(r: 0.6f, g: 0.9f, b: 0.7f),
                 _ => theme.Hint.WithAlpha(0.6f),
             };
         }
@@ -465,108 +463,112 @@ public sealed class HierarchyPanel : Widget
 
         public override Size Measure(Constraints c)
         {
-            _size = c.Constrain(new Size(c.MaxWidth, RowH));
+            _size = c.Constrain(new Size(width: c.MaxWidth, height: RowH));
             return _size;
         }
 
         public override void Layout(Offset origin)
         {
             Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                _size.Width,
-                _size.Height
+                x: origin.X,
+                y: origin.Y,
+                width: _size.Width,
+                height: _size.Height
             );
         }
 
         public override void Paint(PaintList paint)
         {
-            var isPrimary = state.Selected == node;
-            var isAnySelected = state.SelectedNodes.Contains(node);
-            var isDropTarget = drag.Active && drag.DropTarget == node;
+            bool isPrimary = state.Selected == node;
+            bool isAnySelected = state.SelectedNodes.Contains(node);
+            bool isDropTarget = drag.Active && drag.DropTarget == node;
             // Adwaita list selection is a translucent accent wash (SelectionTint), not a filled
             // accent bar with inverted text; hover is the same neutral wash every other row-like
             // surface uses, so the hierarchy, the asset list and the menus all feel identical.
             var bg = isDropTarget ? theme.SelectionTint.WithAlpha(theme.SelectionTint.A * 1.4f)
                 : isPrimary ? theme.SelectionTint
                 : isAnySelected ? theme.SelectionTint.WithAlpha(theme.SelectionTint.A * 0.5f)
-                : AdwStyle.RowFill(theme, _hovered, false);
+                : AdwStyle.RowFill(theme: theme, hovered: _hovered, pressed: false);
 
             // macOS-style inset rounded selection/hover pill (not a full-bleed bar).
             if (bg.A > 0)
+            {
                 paint.AddRect(
-                    new Rect(
-                        Bounds.X + 4f,
-                        Bounds.Y + 1f,
-                        Bounds.Width - 8f,
-                        Bounds.Height - 2f
+                    bounds: new Rect(
+                        x: Bounds.X + 4f,
+                        y: Bounds.Y + 1f,
+                        width: Bounds.Width - 8f,
+                        height: Bounds.Height - 2f
                     ),
-                    bg,
-                    6f
+                    color: bg,
+                    radius: 6f
                 );
+            }
 
             // Drop target indicator line at top of row
             if (isDropTarget)
+            {
                 paint.AddRect(
-                    new Rect(
-                        Bounds.X + 4f,
-                        Bounds.Y,
-                        Bounds.Width - 8f,
-                        2f
+                    bounds: new Rect(
+                        x: Bounds.X + 4f,
+                        y: Bounds.Y,
+                        width: Bounds.Width - 8f,
+                        height: 2f
                     ),
-                    theme.Primary,
-                    1f
+                    color: theme.Primary,
+                    radius: 1f
                 );
+            }
 
-            var indent = 14f + depth * 14f;
-            var fs = theme.FontSizeCaption;
+            float indent = 14f + (depth * 14f);
+            float fs = theme.FontSizeCaption;
             var fg = isPrimary ? theme.OnSurface
                 : isAnySelected ? theme.OnSurface.WithAlpha(0.85f)
                 : !node.Visible ? theme.TextMuted.WithAlpha(0.55f)
                 : theme.OnSurface;
-            var textY = Bounds.Y + (RowH - fs) / 2f + fs * 0.8f;
+            float textY = Bounds.Y + ((RowH - fs) / 2f) + (fs * 0.8f);
 
             // Disclosure chevron (Material) — only when the node has children.
             if (HasChildren)
             {
-                var chevron = isExpanded ? Icons.ChevronDown : Icons.ChevronRight;
+                string chevron = isExpanded ? Icons.ChevronDown : Icons.ChevronRight;
                 Icons.Draw(
-                    paint,
-                    chevron,
-                    new Rect(
-                        Bounds.X + indent,
-                        Bounds.Y,
-                        14f,
-                        RowH
+                    paint: paint,
+                    glyph: chevron,
+                    box: new Rect(
+                        x: Bounds.X + indent,
+                        y: Bounds.Y,
+                        width: 14f,
+                        height: RowH
                     ),
-                    theme.TextMuted,
-                    14f
+                    color: theme.TextMuted,
+                    size: 14f
                 );
             }
 
             // Type icon, kind-coloured (dimmed when the node is hidden).
-            var iconX = Bounds.X + indent + 16f;
+            float iconX = Bounds.X + indent + 16f;
             var iconTint = node.Visible ? KindColor() : KindColor().WithAlpha(0.45f);
             Icons.Draw(
-                paint,
-                KindGlyph(),
-                new Rect(
-                    iconX,
-                    Bounds.Y,
-                    16f,
-                    RowH
+                paint: paint,
+                glyph: KindGlyph(),
+                box: new Rect(
+                    x: iconX,
+                    y: Bounds.Y,
+                    width: 16f,
+                    height: RowH
                 ),
-                iconTint,
-                15f
+                color: iconTint,
+                size: 15f
             );
 
             // Node name.
             paint.AddText(
-                node.Name,
-                iconX + 20f,
-                textY,
-                fg,
-                fs
+                text: node.Name,
+                baselineX: iconX + 20f,
+                baselineY: textY,
+                color: fg,
+                fontSize: fs
             );
 
             // Visibility toggle (Material eye), right-aligned.
@@ -574,28 +576,22 @@ public sealed class HierarchyPanel : Widget
                 ? theme.TextMuted.WithAlpha(0.7f)
                 : theme.TextMuted.WithAlpha(0.3f);
             Icons.Draw(
-                paint,
-                node.Visible ? Icons.Visibility : Icons.VisibilityOff,
-                new Rect(
-                    Bounds.Right - 22f,
-                    Bounds.Y,
-                    16f,
-                    RowH
+                paint: paint,
+                glyph: node.Visible ? Icons.Visibility : Icons.VisibilityOff,
+                box: new Rect(
+                    x: Bounds.Right - 22f,
+                    y: Bounds.Y,
+                    width: 16f,
+                    height: RowH
                 ),
-                eyeColor,
-                15f
+                color: eyeColor,
+                size: 15f
             );
         }
 
-        public override void OnPointerEnter()
-        {
-            _hovered = true;
-        }
+        public override void OnPointerEnter() => _hovered = true;
 
-        public override void OnPointerExit()
-        {
-            _hovered = false;
-        }
+        public override void OnPointerExit() => _hovered = false;
 
         public override void OnPointerDown(Offset point)
         {
@@ -608,7 +604,7 @@ public sealed class HierarchyPanel : Widget
                 return;
             }
 
-            var indent = 14f + depth * 14f;
+            float indent = 14f + (depth * 14f);
             if (HasChildren && point.X >= Bounds.X + indent && point.X <= Bounds.X + indent + 14f)
             {
                 toggleExpand(node);
@@ -616,23 +612,32 @@ public sealed class HierarchyPanel : Widget
             }
 
             var mods = App.Active?.CurrentModifiers ?? Modifiers.None;
-            onNodeClick(node, mods.HasFlag(Modifiers.Ctrl), mods.HasFlag(Modifiers.Shift));
+            onNodeClick(
+                arg1: node,
+                arg2: mods.HasFlag(Modifiers.Ctrl),
+                arg3: mods.HasFlag(Modifiers.Shift)
+            );
 
             // Begin potential drag (only for non-root nodes that have a parent)
             if (node.Parent != null)
-                drag.Begin(node, point.X, point.Y);
+                drag.Begin(source: node, x: point.X, y: point.Y);
         }
 
         public override void OnPointerMove(Offset point)
         {
             if (drag.Source == node)
-                drag.Move(point.X, point.Y, getNodeAtY);
+                drag.Move(x: point.X, y: point.Y, getAt: getNodeAtY);
         }
 
         public override void OnPointerUp(Offset point)
         {
             if (drag.Active && drag.Source == node && drag.DropTarget != null)
-                state.History.Execute(new ReparentNodeCommand(state, node, drag.DropTarget));
+            {
+                state.History.Execute(
+                    new ReparentNodeCommand(state: state, node: node, newParent: drag.DropTarget)
+                );
+            }
+
             drag.Clear();
         }
 
@@ -646,83 +651,102 @@ public sealed class HierarchyPanel : Widget
         {
             return new ContextMenu(
                 new ContextMenuItem(
-                    "Add Empty Child",
-                    () => state.History.Execute(
-                        new AddNodeCommand(state, node, new SceneNode("Node"))
+                    Label: "Add Empty Child",
+                    OnSelect: () => state.History.Execute(
+                        new AddNodeCommand(state: state, parent: node, node: new SceneNode("Node"))
                     )
                 ),
                 new ContextMenuItem(
-                    "Add Mesh Child",
-                    () => state.History.Execute(
-                        new AddNodeCommand(state, node, new SceneNode("Mesh", NodeKind.Mesh))
-                    )
-                ),
-                new ContextMenuItem(
-                    "Add Light",
-                    () => state.History.Execute(
-                        new AddNodeCommand(state, node, new SceneNode("Light", NodeKind.Light))
-                    )
-                ),
-                new ContextMenuItem(
-                    "Add Reflection Probe",
-                    () => state.History.Execute(
+                    Label: "Add Mesh Child",
+                    OnSelect: () => state.History.Execute(
                         new AddNodeCommand(
-                            state,
-                            node,
-                            new SceneNode("Reflection Probe", NodeKind.ReflectionProbe)
+                            state: state,
+                            parent: node,
+                            node: new SceneNode(name: "Mesh", kind: NodeKind.Mesh)
                         )
                     )
                 ),
                 new ContextMenuItem(
-                    "Add Audio Source",
-                    () => state.History.Execute(
+                    Label: "Add Light",
+                    OnSelect: () => state.History.Execute(
                         new AddNodeCommand(
-                            state,
-                            node,
-                            new SceneNode("Audio Source", NodeKind.AudioSource)
+                            state: state,
+                            parent: node,
+                            node: new SceneNode(name: "Light", kind: NodeKind.Light)
                         )
                     )
                 ),
                 new ContextMenuItem(
-                    "Add VFX Emitter",
-                    () =>
+                    Label: "Add Reflection Probe",
+                    OnSelect: () => state.History.Execute(
+                        new AddNodeCommand(
+                            state: state,
+                            parent: node,
+                            node: new SceneNode(
+                                name: "Reflection Probe",
+                                kind: NodeKind.ReflectionProbe
+                            )
+                        )
+                    )
+                ),
+                new ContextMenuItem(
+                    Label: "Add Audio Source",
+                    OnSelect: () => state.History.Execute(
+                        new AddNodeCommand(
+                            state: state,
+                            parent: node,
+                            node: new SceneNode(name: "Audio Source", kind: NodeKind.AudioSource)
+                        )
+                    )
+                ),
+                new ContextMenuItem(
+                    Label: "Add VFX Emitter",
+                    OnSelect: () =>
                     {
-                        var vfx = new SceneNode("VFX", NodeKind.VfxEmitter);
+                        var vfx = new SceneNode(name: "VFX", kind: NodeKind.VfxEmitter);
                         VfxNodeEditor.SeedDefault(vfx);
-                        state.History.Execute(new AddNodeCommand(state, node, vfx));
+                        state.History.Execute(
+                            new AddNodeCommand(state: state, parent: node, node: vfx)
+                        );
                     }
                 ),
                 new ContextMenuItem(
-                    "Add Sprite",
-                    () => state.History.Execute(
-                        new AddNodeCommand(state, node, new SceneNode("Sprite", NodeKind.Sprite))
+                    Label: "Add Sprite",
+                    OnSelect: () => state.History.Execute(
+                        new AddNodeCommand(
+                            state: state,
+                            parent: node,
+                            node: new SceneNode(name: "Sprite", kind: NodeKind.Sprite)
+                        )
                     )
                 ),
                 new ContextMenuItem(
-                    "Add Tilemap",
-                    () =>
+                    Label: "Add Tilemap",
+                    OnSelect: () =>
                     {
                         // Seed one layer so the palette has somewhere to paint immediately.
-                        var map = new SceneNode("Tilemap", NodeKind.Tilemap);
+                        var map = new SceneNode(name: "Tilemap", kind: NodeKind.Tilemap);
                         map.TilemapLayers.Add(new TilemapLayer { Name = "Ground" });
-                        state.History.Execute(new AddNodeCommand(state, node, map));
+                        state.History.Execute(
+                            new AddNodeCommand(state: state, parent: node, node: map)
+                        );
                     }
                 ),
-                new ContextMenuItem("", null, true),
-                new ContextMenuItem("Rename...", () => renameNode(node)),
-                new ContextMenuItem("Duplicate", DuplicateNode),
+                new ContextMenuItem(Label: "", OnSelect: null, Separator: true),
+                new ContextMenuItem(Label: "Rename...", OnSelect: () => renameNode(node)),
+                new ContextMenuItem(Label: "Duplicate", OnSelect: DuplicateNode),
                 new ContextMenuItem(
-                    "Create Prefab",
-                    () =>
-                        state.History.Execute(new CreatePrefabCommand(state, node))
+                    Label: "Create Prefab",
+                    OnSelect: () =>
+                        state.History.Execute(new CreatePrefabCommand(state: state, source: node))
                 ),
-                new ContextMenuItem("", null, true),
+                new ContextMenuItem(Label: "", OnSelect: null, Separator: true),
                 new ContextMenuItem(
-                    "Delete",
-                    () =>
+                    Label: "Delete",
+                    OnSelect: () =>
                     {
                         if (node.Parent != null)
-                            state.History.Execute(new DeleteNodeCommand(state, node));
+                            state.History.Execute(new DeleteNodeCommand(state: state, node: node));
                     }
                 )
             );
@@ -732,7 +756,7 @@ public sealed class HierarchyPanel : Widget
         {
             var parent = node.Parent ?? state.Scene.Root;
             var copy = node.DeepClone(node.Name + " Copy");
-            state.History.Execute(new AddNodeCommand(state, parent, copy));
+            state.History.Execute(new AddNodeCommand(state: state, parent: parent, node: copy));
         }
     }
 }

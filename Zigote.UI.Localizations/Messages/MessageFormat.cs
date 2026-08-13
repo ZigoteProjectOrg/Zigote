@@ -17,8 +17,8 @@ public sealed class MessageFormat
     public MessageFormat(string pattern)
     {
         Pattern = pattern ?? throw new ArgumentNullException(nameof(pattern));
-        var i = 0;
-        _parts = Parser.ParseMessage(pattern, ref i, false);
+        int i = 0;
+        _parts = Parser.ParseMessage(s: pattern, i: ref i, nested: false);
     }
 
     public string Pattern { get; }
@@ -27,29 +27,30 @@ public sealed class MessageFormat
     public string Format(Locale locale, IReadOnlyDictionary<string, object?> arguments)
     {
         var sb = new StringBuilder(Pattern.Length + 16);
-        var ctx = new MessageContext(locale, arguments, null);
-        foreach (var p in _parts) p.Append(sb, in ctx);
+        var ctx = new MessageContext(locale: locale, args: arguments, pound: null);
+        foreach (var p in _parts) p.Append(sb: sb, ctx: in ctx);
         return sb.ToString();
     }
 
     /// <summary>Format with inline <c>(name, value)</c> argument tuples.</summary>
-    public string Format(Locale locale, params (string Name, object? Value)[] arguments)
-    {
-        return Format(locale, ToDictionary(arguments));
-    }
+    public string Format(Locale locale, params (string Name, object? Value)[] arguments) => Format(
+        locale: locale,
+        arguments: ToDictionary(arguments)
+    );
 
     /// <summary>Parse-and-format in one call (no reuse — prefer caching a <see cref="MessageFormat" />).</summary>
     public static string Format(string pattern, Locale locale,
-        IReadOnlyDictionary<string, object?> arguments)
-    {
-        return new MessageFormat(pattern).Format(locale, arguments);
-    }
+        IReadOnlyDictionary<string, object?> arguments) =>
+        new MessageFormat(pattern).Format(locale: locale, arguments: arguments);
 
     internal static Dictionary<string, object?> ToDictionary(
         (string Name, object? Value)[] arguments)
     {
-        var dict = new Dictionary<string, object?>(arguments.Length, StringComparer.Ordinal);
-        foreach (var (name, value) in arguments) dict[name] = value;
+        var dict = new Dictionary<string, object?>(
+            capacity: arguments.Length,
+            comparer: StringComparer.Ordinal
+        );
+        foreach ((string name, object? value) in arguments) dict[name] = value;
         return dict;
     }
 
@@ -66,15 +67,11 @@ public sealed class MessageFormat
         /// <summary>The number the enclosing plural's <c>#</c> token renders, or null outside a plural.</summary>
         public readonly double? Pound = pound;
 
-        public object? Arg(string name)
-        {
-            return Args.TryGetValue(name, out var v) ? v : null;
-        }
+        public object? Arg(string name) =>
+            Args.TryGetValue(key: name, value: out object? v) ? v : null;
 
-        public MessageContext WithPound(double value)
-        {
-            return new MessageContext(Locale, Args, value);
-        }
+        public MessageContext WithPound(double value) =>
+            new(locale: Locale, args: Args, pound: value);
     }
 
     // ── AST ──────────────────────────────────────────────────────────────────
@@ -86,10 +83,7 @@ public sealed class MessageFormat
 
     private sealed class LiteralPart(string text) : MessagePart
     {
-        public override void Append(StringBuilder sb, in MessageContext ctx)
-        {
-            sb.Append(text);
-        }
+        public override void Append(StringBuilder sb, in MessageContext ctx) => sb.Append(text);
     }
 
     private sealed class PoundPart : MessagePart
@@ -107,7 +101,7 @@ public sealed class MessageFormat
     {
         public override void Append(StringBuilder sb, in MessageContext ctx)
         {
-            var value = ctx.Arg(name);
+            object? value = ctx.Arg(name);
             if (value is null)
             {
                 sb.Append('{').Append(name).Append('}'); // visible, debuggable missing-arg marker
@@ -116,7 +110,7 @@ public sealed class MessageFormat
 
             if (type is null)
             {
-                AppendPlain(sb, value, ctx.Locale);
+                AppendPlain(sb: sb, value: value, locale: ctx.Locale);
                 return;
             }
 
@@ -125,42 +119,46 @@ public sealed class MessageFormat
             {
                 case "number":
                     AppendNumber(
-                        sb,
-                        fmt,
-                        value,
-                        style
+                        sb: sb,
+                        fmt: fmt,
+                        value: value,
+                        style: style
                     );
                     break;
                 case "date":
                     sb.Append(
                         fmt.Date(
-                            ToDateTime(value),
-                            ParseDateStyle(style, out var datePattern),
-                            datePattern
+                            value: ToDateTime(value),
+                            style: ParseDateStyle(style: style, pattern: out string? datePattern),
+                            pattern: datePattern
                         )
                     );
                     break;
                 case "time":
                     sb.Append(
                         fmt.Time(
-                            ToDateTime(value),
-                            ParseDateStyle(style, out var timePattern),
-                            timePattern
+                            value: ToDateTime(value),
+                            style: ParseDateStyle(style: style, pattern: out string? timePattern),
+                            pattern: timePattern
                         )
                     );
                     break;
                 default:
-                    AppendPlain(sb, value, ctx.Locale);
+                    AppendPlain(sb: sb, value: value, locale: ctx.Locale);
                     break;
             }
         }
 
         private static void AppendPlain(StringBuilder sb, object value, Locale locale)
         {
-            if (Numbers.IsNumeric(value) && Numbers.TryToDouble(value, out var d))
+            if (Numbers.IsNumeric(value) && Numbers.TryToDouble(value: value, result: out double d))
                 sb.Append(LocaleFormatting.For(locale).Number(d));
             else if (value is IFormattable f)
-                sb.Append(f.ToString(null, LocaleFormatting.For(locale).Culture));
+            {
+                sb.Append(
+                    f.ToString(format: null, formatProvider: LocaleFormatting.For(locale).Culture)
+                );
+            }
             else
                 sb.Append(value);
         }
@@ -168,14 +166,16 @@ public sealed class MessageFormat
         private static void AppendNumber(StringBuilder sb, LocaleFormatting fmt, object value,
             string? style)
         {
-            Numbers.TryToDouble(value, out var d);
+            Numbers.TryToDouble(value: value, result: out double d);
             switch (style)
             {
                 case null or "" or "decimal":
                     sb.Append(fmt.Number(d));
                     break;
                 case "integer":
-                    sb.Append(fmt.Integer((long)Math.Round(d, MidpointRounding.AwayFromZero)));
+                    sb.Append(
+                        fmt.Integer((long)Math.Round(value: d, mode: MidpointRounding.AwayFromZero))
+                    );
                     break;
                 case "percent":
                     sb.Append(fmt.Percent(d));
@@ -184,7 +184,9 @@ public sealed class MessageFormat
                     sb.Append(fmt.Currency(Numbers.ToDecimal(value)));
                     break;
                 default:
-                    sb.Append(fmt.Number(d, style)); // a raw .NET numeric format string
+                    sb.Append(
+                        fmt.Number(value: d, pattern: style)
+                    ); // a raw .NET numeric format string
                     break;
             }
         }
@@ -210,10 +212,10 @@ public sealed class MessageFormat
                 DateTime dt => dt,
                 DateTimeOffset dto => dto.LocalDateTime,
                 _ => DateTime.TryParse(
-                    value.ToString(),
-                    CultureInfo.InvariantCulture,
-                    DateTimeStyles.None,
-                    out var p
+                    s: value.ToString(),
+                    provider: CultureInfo.InvariantCulture,
+                    styles: DateTimeStyles.None,
+                    result: out var p
                 )
                     ? p
                     : default,
@@ -227,10 +229,10 @@ public sealed class MessageFormat
     {
         public override void Append(StringBuilder sb, in MessageContext ctx)
         {
-            var key = ctx.Arg(name)?.ToString() ?? "other";
+            string key = ctx.Arg(name)?.ToString() ?? "other";
             var sub = cases.GetValueOrDefault(key) ?? cases.GetValueOrDefault("other");
             if (sub is null) return;
-            foreach (var p in sub) p.Append(sb, in ctx);
+            foreach (var p in sub) p.Append(sb: sb, ctx: in ctx);
         }
     }
 
@@ -243,26 +245,27 @@ public sealed class MessageFormat
     {
         public override void Append(StringBuilder sb, in MessageContext ctx)
         {
-            Numbers.TryToDouble(ctx.Arg(name), out var value);
+            Numbers.TryToDouble(value: ctx.Arg(name), result: out double value);
 
             MessagePart[]? sub = null;
-            if (explicitCases.Count > 0 && explicitCases.TryGetValue(value, out var exact))
+            if (explicitCases.Count > 0 &&
+                explicitCases.TryGetValue(key: value, value: out var exact))
                 sub = exact;
 
-            var pound = value - offset;
+            double pound = value - offset;
             if (sub is null)
             {
                 var op = PluralOperands.FromDouble(pound);
                 var cat = ordinal
-                    ? PluralRules.Ordinal(ctx.Locale.Language, op)
-                    : PluralRules.Cardinal(ctx.Locale.Language, op);
+                    ? PluralRules.Ordinal(language: ctx.Locale.Language, op: op)
+                    : PluralRules.Cardinal(language: ctx.Locale.Language, op: op);
                 sub = keywordCases.GetValueOrDefault(cat)
                       ?? keywordCases.GetValueOrDefault(PluralCategory.Other);
             }
 
             if (sub is null) return;
             var inner = ctx.WithPound(pound);
-            foreach (var p in sub) p.Append(sb, in inner);
+            foreach (var p in sub) p.Append(sb: sb, ctx: in inner);
         }
     }
 
@@ -286,17 +289,17 @@ public sealed class MessageFormat
 
             while (i < s.Length)
             {
-                var c = s[i];
+                char c = s[i];
                 if (c == '\'')
                 {
-                    ConsumeQuoted(s, ref i, lit);
+                    ConsumeQuoted(s: s, i: ref i, lit: lit);
                     continue;
                 }
 
                 if (c == '{')
                 {
                     Flush();
-                    parts.Add(ParseArgument(s, ref i));
+                    parts.Add(ParseArgument(s: s, i: ref i));
                     continue;
                 }
 
@@ -370,77 +373,74 @@ public sealed class MessageFormat
             }
         }
 
-        private static bool IsSyntax(char c)
-        {
-            return c is '{' or '}' or '#' or '|';
-        }
+        private static bool IsSyntax(char c) => c is '{' or '}' or '#' or '|';
 
         private static MessagePart ParseArgument(string s, ref int i)
         {
             i++; // consume '{'
-            SkipWs(s, ref i);
-            var name = ReadName(s, ref i);
-            SkipWs(s, ref i);
+            SkipWs(s: s, i: ref i);
+            string name = ReadName(s: s, i: ref i);
+            SkipWs(s: s, i: ref i);
 
-            if (Peek(s, i) == '}')
+            if (Peek(s: s, i: i) == '}')
             {
                 i++;
-                return new SimpleArgPart(name, null, null);
+                return new SimpleArgPart(name: name, type: null, style: null);
             }
 
-            Expect(s, ref i, ',');
-            SkipWs(s, ref i);
-            var type = ReadName(s, ref i);
-            SkipWs(s, ref i);
+            Expect(s: s, i: ref i, c: ',');
+            SkipWs(s: s, i: ref i);
+            string type = ReadName(s: s, i: ref i);
+            SkipWs(s: s, i: ref i);
 
             // The second comma introduces the style (number/date) or the case list (plural/select).
-            var hasComma = Peek(s, i) == ',';
+            bool hasComma = Peek(s: s, i: i) == ',';
             if (hasComma)
             {
                 i++;
-                SkipWs(s, ref i);
+                SkipWs(s: s, i: ref i);
             }
 
             switch (type)
             {
                 case "plural":
                     return ParsePlural(
-                        s,
-                        ref i,
-                        name,
-                        false
+                        s: s,
+                        i: ref i,
+                        name: name,
+                        ordinal: false
                     );
                 case "selectordinal":
                     return ParsePlural(
-                        s,
-                        ref i,
-                        name,
-                        true
+                        s: s,
+                        i: ref i,
+                        name: name,
+                        ordinal: true
                     );
                 case "select":
-                    return ParseSelect(s, ref i, name);
+                    return ParseSelect(s: s, i: ref i, name: name);
                 default:
                     // number / date / time (or unknown) — capture the optional style up to the close.
-                    var style = hasComma ? ReadStyle(s, ref i) : null;
-                    Expect(s, ref i, '}');
+                    string? style = hasComma ? ReadStyle(s: s, i: ref i) : null;
+                    Expect(s: s, i: ref i, c: '}');
                     return new SimpleArgPart(
-                        name,
-                        type,
-                        string.IsNullOrWhiteSpace(style) ? null : style.Trim()
+                        name: name,
+                        type: type,
+                        style: string.IsNullOrWhiteSpace(style) ? null : style.Trim()
                     );
             }
         }
 
         private static MessagePart ParsePlural(string s, ref int i, string name, bool ordinal)
         {
-            SkipWs(s, ref i);
+            SkipWs(s: s, i: ref i);
 
             double offset = 0;
-            if (MatchKeyword(s, ref i, "offset:"))
+            if (MatchKeyword(s: s, i: ref i, keyword: "offset:"))
             {
-                SkipWs(s, ref i);
-                offset = ReadNumber(s, ref i);
-                SkipWs(s, ref i);
+                SkipWs(s: s, i: ref i);
+                offset = ReadNumber(s: s, i: ref i);
+                SkipWs(s: s, i: ref i);
             }
 
             var explicitCases = new Dictionary<double, MessagePart[]>();
@@ -448,35 +448,35 @@ public sealed class MessageFormat
 
             while (i < s.Length && s[i] != '}')
             {
-                SkipWs(s, ref i);
+                SkipWs(s: s, i: ref i);
                 if (i >= s.Length || s[i] == '}') break;
 
                 if (s[i] == '=')
                 {
                     i++;
-                    var value = ReadNumber(s, ref i);
-                    SkipWs(s, ref i);
-                    explicitCases[value] = ReadSubmessage(s, ref i);
+                    double value = ReadNumber(s: s, i: ref i);
+                    SkipWs(s: s, i: ref i);
+                    explicitCases[value] = ReadSubmessage(s: s, i: ref i);
                 }
                 else
                 {
-                    var keyword = ReadName(s, ref i);
-                    SkipWs(s, ref i);
-                    var body = ReadSubmessage(s, ref i);
-                    if (PluralCategoryNames.TryParse(keyword, out var cat))
+                    string keyword = ReadName(s: s, i: ref i);
+                    SkipWs(s: s, i: ref i);
+                    var body = ReadSubmessage(s: s, i: ref i);
+                    if (PluralCategoryNames.TryParse(keyword: keyword, category: out var cat))
                         keywordCases[cat] = body;
                 }
 
-                SkipWs(s, ref i);
+                SkipWs(s: s, i: ref i);
             }
 
-            Expect(s, ref i, '}');
+            Expect(s: s, i: ref i, c: '}');
             return new PluralPart(
-                name,
-                offset,
-                ordinal,
-                explicitCases,
-                keywordCases
+                name: name,
+                offset: offset,
+                ordinal: ordinal,
+                explicitCases: explicitCases,
+                keywordCases: keywordCases
             );
         }
 
@@ -485,23 +485,23 @@ public sealed class MessageFormat
             var cases = new Dictionary<string, MessagePart[]>(StringComparer.Ordinal);
             while (i < s.Length && s[i] != '}')
             {
-                SkipWs(s, ref i);
+                SkipWs(s: s, i: ref i);
                 if (i >= s.Length || s[i] == '}') break;
-                var keyword = ReadName(s, ref i);
-                SkipWs(s, ref i);
-                cases[keyword] = ReadSubmessage(s, ref i);
-                SkipWs(s, ref i);
+                string keyword = ReadName(s: s, i: ref i);
+                SkipWs(s: s, i: ref i);
+                cases[keyword] = ReadSubmessage(s: s, i: ref i);
+                SkipWs(s: s, i: ref i);
             }
 
-            Expect(s, ref i, '}');
-            return new SelectPart(name, cases);
+            Expect(s: s, i: ref i, c: '}');
+            return new SelectPart(name: name, cases: cases);
         }
 
         private static MessagePart[] ReadSubmessage(string s, ref int i)
         {
-            Expect(s, ref i, '{');
-            var body = ParseMessage(s, ref i, true);
-            Expect(s, ref i, '}');
+            Expect(s: s, i: ref i, c: '{');
+            var body = ParseMessage(s: s, i: ref i, nested: true);
+            Expect(s: s, i: ref i, c: '}');
             return body;
         }
 
@@ -512,10 +512,7 @@ public sealed class MessageFormat
             while (i < s.Length && char.IsWhiteSpace(s[i])) i++;
         }
 
-        private static char Peek(string s, int i)
-        {
-            return i < s.Length ? s[i] : '\0';
-        }
+        private static char Peek(string s, int i) => i < s.Length ? s[i] : '\0';
 
         private static void Expect(string s, ref int i, char c)
         {
@@ -526,29 +523,30 @@ public sealed class MessageFormat
 
         private static string ReadName(string s, ref int i)
         {
-            var start = i;
+            int start = i;
             while (i < s.Length && !char.IsWhiteSpace(s[i]) && s[i] != ',' && s[i] != '{' &&
                    s[i] != '}')
                 i++;
             if (i == start)
+            {
                 throw new FormatException(
                     $"Expected an identifier at position {i} in message \"{s}\"."
                 );
+            }
+
             return s[start..i];
         }
 
         // Style text runs to the matching '}', tolerating nested braces (e.g. a date skeleton).
         private static string ReadStyle(string s, ref int i)
         {
-            var start = i;
-            var depth = 0;
+            int start = i;
+            int depth = 0;
             while (i < s.Length)
             {
-                var c = s[i];
+                char c = s[i];
                 if (c == '{')
-                {
                     depth++;
-                }
                 else if (c == '}')
                 {
                     if (depth == 0) break;
@@ -563,15 +561,15 @@ public sealed class MessageFormat
 
         private static double ReadNumber(string s, ref int i)
         {
-            var start = i;
+            int start = i;
             if (i < s.Length && (s[i] == '-' || s[i] == '+')) i++;
             while (i < s.Length && (char.IsAsciiDigit(s[i]) || s[i] == '.')) i++;
-            var text = s[start..i];
+            string text = s[start..i];
             return double.TryParse(
-                text,
-                NumberStyles.Float,
-                CultureInfo.InvariantCulture,
-                out var v
+                s: text,
+                style: NumberStyles.Float,
+                provider: CultureInfo.InvariantCulture,
+                result: out double v
             )
                 ? v
                 : throw new FormatException(
@@ -583,11 +581,11 @@ public sealed class MessageFormat
         {
             if (i + keyword.Length > s.Length) return false;
             if (string.CompareOrdinal(
-                    s,
-                    i,
-                    keyword,
-                    0,
-                    keyword.Length
+                    strA: s,
+                    indexA: i,
+                    strB: keyword,
+                    indexB: 0,
+                    length: keyword.Length
                 ) != 0) return false;
             i += keyword.Length;
             return true;
@@ -645,10 +643,10 @@ public sealed class MessageFormat
                     result = (double)m;
                     return true;
                 case string str when double.TryParse(
-                    str,
-                    NumberStyles.Any,
-                    CultureInfo.InvariantCulture,
-                    out var p
+                    s: str,
+                    style: NumberStyles.Any,
+                    provider: CultureInfo.InvariantCulture,
+                    result: out double p
                 ):
                     result = p;
                     return true;
@@ -665,13 +663,13 @@ public sealed class MessageFormat
                 return value switch {
                     decimal m => m,
                     string str when decimal.TryParse(
-                            str,
-                            NumberStyles.Any,
-                            CultureInfo.InvariantCulture,
-                            out var p
+                            s: str,
+                            style: NumberStyles.Any,
+                            provider: CultureInfo.InvariantCulture,
+                            result: out decimal p
                         )
                         => p,
-                    _ => TryToDouble(value, out var d) ? (decimal)d : 0m,
+                    _ => TryToDouble(value: value, result: out double d) ? (decimal)d : 0m,
                 };
             }
             catch (OverflowException)

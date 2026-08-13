@@ -24,7 +24,7 @@ public readonly record struct StreamingPolicy(float LoadDistance, float EvictDis
 {
     /// <summary>Editor default: load everything, never evict (full residency for authoring).</summary>
     public static readonly StreamingPolicy Unbounded =
-        new(float.PositiveInfinity, float.PositiveInfinity);
+        new(LoadDistance: float.PositiveInfinity, EvictDistance: float.PositiveInfinity);
 
     /// <summary>False when this policy loads everything (no demand streaming) — the editor default.</summary>
     public bool Enabled => !float.IsPositiveInfinity(LoadDistance);
@@ -48,7 +48,7 @@ public readonly record struct StreamingPolicy(float LoadDistance, float EvictDis
     /// </summary>
     public static StreamingPolicy WithHysteresis(float loadDistance, float hysteresis = 1.25f)
     {
-        var evict = loadDistance * MathF.Max(1f, hysteresis);
-        return new StreamingPolicy(loadDistance, evict);
+        float evict = loadDistance * MathF.Max(x: 1f, y: hysteresis);
+        return new StreamingPolicy(LoadDistance: loadDistance, EvictDistance: evict);
     }
 }

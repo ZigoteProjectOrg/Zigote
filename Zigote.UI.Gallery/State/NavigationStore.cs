@@ -4,7 +4,8 @@ namespace Gallery;
 
 /// <summary>
 ///     The whole navigation state of the gallery: home, or home with one demo pushed on top.
-///     Immutable — every transition is a new value written to the <see cref="NavigationStore" />'s signal.
+///     Immutable — every transition is a new value written to the <see cref="NavigationStore" />'s
+///     signal.
 /// </summary>
 internal sealed record GalleryRoute(string? DemoId)
 {
@@ -20,13 +21,7 @@ internal sealed class NavigationStore
 {
     public Signal<GalleryRoute> Route { get; } = new(GalleryRoute.Home);
 
-    public void OpenDemo(string demoId)
-    {
-        Route.Value = new GalleryRoute(demoId);
-    }
+    public void OpenDemo(string demoId) => Route.Value = new GalleryRoute(demoId);
 
-    public void GoHome()
-    {
-        Route.Value = GalleryRoute.Home;
-    }
+    public void GoHome() => Route.Value = GalleryRoute.Home;
 }

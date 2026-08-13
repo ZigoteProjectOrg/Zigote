@@ -32,40 +32,35 @@ public sealed class SaveStore(
     private readonly Dictionary<int, Func<JsonNode, JsonNode>> _migrations = new();
     private readonly JsonSerializerOptions _options = options ?? JsonSerializerOptions.Default;
 
-    public void RegisterMigration(int fromVersion, Func<JsonNode, JsonNode> migrate)
-    {
+    public void RegisterMigration(int fromVersion, Func<JsonNode, JsonNode> migrate) =>
         _migrations[fromVersion] = migrate;
-    }
 
-    public SaveWriteResult Write<T>(string slot, T state)
-    {
-        return WriteCore(slot, () => JsonSerializer.SerializeToNode(state, _options));
-    }
+    public SaveWriteResult Write<T>(string slot, T state) => WriteCore(
+        slot: slot,
+        serializePayload: () => JsonSerializer.SerializeToNode(value: state, options: _options)
+    );
 
-    public SaveWriteResult Write<T>(string slot, T state, JsonTypeInfo<T> typeInfo)
-    {
-        return WriteCore(slot, () => JsonSerializer.SerializeToNode(state, typeInfo));
-    }
+    public SaveWriteResult Write<T>(string slot, T state, JsonTypeInfo<T> typeInfo) => WriteCore(
+        slot: slot,
+        serializePayload: () => JsonSerializer.SerializeToNode(value: state, jsonTypeInfo: typeInfo)
+    );
 
-    public SaveReadResult<T> Read<T>(string slot)
-    {
-        return ReadCore<T>(slot, node => node is null ? default : node.Deserialize<T>(_options));
-    }
+    public SaveReadResult<T> Read<T>(string slot) => ReadCore<T>(
+        slot: slot,
+        deserializePayload: node => node is null ? default : node.Deserialize<T>(_options)
+    );
 
-    public SaveReadResult<T> Read<T>(string slot, JsonTypeInfo<T> typeInfo)
-    {
-        return ReadCore<T>(slot, node => node is null ? default : node.Deserialize(typeInfo));
-    }
+    public SaveReadResult<T> Read<T>(string slot, JsonTypeInfo<T> typeInfo) => ReadCore<T>(
+        slot: slot,
+        deserializePayload: node => node is null ? default : node.Deserialize(typeInfo)
+    );
 
-    public bool Exists(string slot)
-    {
-        return IsValidSlot(slot) && File.Exists(PathOf(slot));
-    }
+    public bool Exists(string slot) => IsValidSlot(slot) && File.Exists(PathOf(slot));
 
     public bool Delete(string slot)
     {
         if (!IsValidSlot(slot)) return false;
-        var path = PathOf(slot);
+        string path = PathOf(slot);
         try
         {
             if (!File.Exists(path)) return false;
@@ -86,7 +81,7 @@ public sealed class SaveStore(
         string[] files;
         try
         {
-            files = Directory.GetFiles(directory, "*" + Extension);
+            files = Directory.GetFiles(path: directory, searchPattern: "*" + Extension);
         }
         catch (Exception)
         {
@@ -94,7 +89,8 @@ public sealed class SaveStore(
         }
 
         var infos = new List<SaveSlotInfo>(files.Length);
-        foreach (var file in files)
+        foreach (string file in files)
+        {
             try
             {
                 if (JsonNode.Parse(File.ReadAllText(file)) is not JsonObject envelope
@@ -106,10 +102,10 @@ public sealed class SaveStore(
 
                 infos.Add(
                     new SaveSlotInfo(
-                        Path.GetFileNameWithoutExtension(file),
-                        version,
-                        DateTimeOffset.FromUnixTimeMilliseconds(savedAtMs),
-                        new FileInfo(file).Length
+                        Slot: Path.GetFileNameWithoutExtension(file),
+                        Version: version,
+                        SavedAt: DateTimeOffset.FromUnixTimeMilliseconds(savedAtMs),
+                        SizeBytes: new FileInfo(file).Length
                     )
                 );
             }
@@ -117,6 +113,7 @@ public sealed class SaveStore(
             {
                 // Skip: List is a browse operation, not a validator — Read reports the real status.
             }
+        }
 
         infos.Sort(static (a, b) => b.SavedAt.CompareTo(a.SavedAt));
         return infos;
@@ -125,7 +122,12 @@ public sealed class SaveStore(
     private SaveWriteResult WriteCore(string slot, Func<JsonNode?> serializePayload)
     {
         if (!IsValidSlot(slot))
-            return new SaveWriteResult(SaveStatus.InvalidSlot, $"Invalid slot name '{slot}'.");
+        {
+            return new SaveWriteResult(
+                Status: SaveStatus.InvalidSlot,
+                Error: $"Invalid slot name '{slot}'."
+            );
+        }
 
         JsonNode? payload;
         try
@@ -134,7 +136,7 @@ public sealed class SaveStore(
         }
         catch (Exception e)
         {
-            return new SaveWriteResult(SaveStatus.IoError, e.Message);
+            return new SaveWriteResult(Status: SaveStatus.IoError, Error: e.Message);
         }
 
         var envelope = new JsonObject {
@@ -143,21 +145,19 @@ public sealed class SaveStore(
             ["payload"] = payload,
         };
 
-        var path = PathOf(slot);
-        var tmpPath = path + ".tmp";
+        string path = PathOf(slot);
+        string tmpPath = path + ".tmp";
         try
         {
             Directory.CreateDirectory(directory);
             using (var stream = File.Create(tmpPath))
             using (var writer = new Utf8JsonWriter(
-                       stream,
-                       new JsonWriterOptions { Indented = _options.WriteIndented }
+                       utf8Json: stream,
+                       options: new JsonWriterOptions { Indented = _options.WriteIndented }
                    ))
-            {
-                envelope.WriteTo(writer, _options);
-            }
+                envelope.WriteTo(writer: writer, options: _options);
 
-            File.Move(tmpPath, path, true);
+            File.Move(sourceFileName: tmpPath, destFileName: path, overwrite: true);
         }
         catch (Exception e)
         {
@@ -170,7 +170,7 @@ public sealed class SaveStore(
                 // Best effort — the next successful Write overwrites it anyway.
             }
 
-            return new SaveWriteResult(SaveStatus.IoError, e.Message);
+            return new SaveWriteResult(Status: SaveStatus.IoError, Error: e.Message);
         }
 
         return new SaveWriteResult(SaveStatus.Ok);
@@ -179,22 +179,28 @@ public sealed class SaveStore(
     private SaveReadResult<T> ReadCore<T>(string slot, Func<JsonNode?, T?> deserializePayload)
     {
         if (!IsValidSlot(slot))
+        {
             return new SaveReadResult<T>(
-                SaveStatus.InvalidSlot,
-                default,
-                $"Invalid slot name '{slot}'."
+                Status: SaveStatus.InvalidSlot,
+                State: default,
+                Error: $"Invalid slot name '{slot}'."
             );
+        }
 
         string text;
         try
         {
-            var path = PathOf(slot);
+            string path = PathOf(slot);
             if (!File.Exists(path)) return new SaveReadResult<T>(SaveStatus.NotFound);
             text = File.ReadAllText(path);
         }
         catch (Exception e)
         {
-            return new SaveReadResult<T>(SaveStatus.IoError, default, e.Message);
+            return new SaveReadResult<T>(
+                Status: SaveStatus.IoError,
+                State: default,
+                Error: e.Message
+            );
         }
 
         int version;
@@ -204,42 +210,56 @@ public sealed class SaveStore(
             if (JsonNode.Parse(text) is not JsonObject envelope
                 || envelope["version"] is not JsonValue versionValue
                 || !versionValue.TryGetValue(out version)
-                || !envelope.TryGetPropertyValue("payload", out payload))
+                || !envelope.TryGetPropertyValue(propertyName: "payload", jsonNode: out payload))
+            {
                 return new SaveReadResult<T>(
-                    SaveStatus.Corrupt,
-                    default,
-                    "Malformed save envelope."
+                    Status: SaveStatus.Corrupt,
+                    State: default,
+                    Error: "Malformed save envelope."
                 );
+            }
 
             // Detach so migrations can move the payload's children into a rebuilt node.
             envelope.Remove("payload");
         }
         catch (JsonException e)
         {
-            return new SaveReadResult<T>(SaveStatus.Corrupt, default, e.Message);
+            return new SaveReadResult<T>(
+                Status: SaveStatus.Corrupt,
+                State: default,
+                Error: e.Message
+            );
         }
 
         if (version > currentVersion)
+        {
             return new SaveReadResult<T>(
-                SaveStatus.FutureVersion,
-                default,
-                $"Save is version {version}; this build reads up to {currentVersion}."
+                Status: SaveStatus.FutureVersion,
+                State: default,
+                Error: $"Save is version {version}; this build reads up to {currentVersion}."
             );
+        }
 
         while (version < currentVersion)
         {
             if (payload is null)
+            {
                 return new SaveReadResult<T>(
-                    SaveStatus.Corrupt,
-                    default,
-                    "Null payload cannot be migrated."
+                    Status: SaveStatus.Corrupt,
+                    State: default,
+                    Error: "Null payload cannot be migrated."
                 );
-            if (!_migrations.TryGetValue(version, out var migrate))
+            }
+
+            if (!_migrations.TryGetValue(key: version, value: out var migrate))
+            {
                 return new SaveReadResult<T>(
-                    SaveStatus.MigrationMissing,
-                    default,
-                    $"No migration registered from version {version}."
+                    Status: SaveStatus.MigrationMissing,
+                    State: default,
+                    Error: $"No migration registered from version {version}."
                 );
+            }
+
             try
             {
                 payload = migrate(payload);
@@ -247,9 +267,9 @@ public sealed class SaveStore(
             catch (Exception e)
             {
                 return new SaveReadResult<T>(
-                    SaveStatus.MigrationFailed,
-                    default,
-                    $"Migration {version}→{version + 1} failed: {e.Message}"
+                    Status: SaveStatus.MigrationFailed,
+                    State: default,
+                    Error: $"Migration {version}→{version + 1} failed: {e.Message}"
                 );
             }
 
@@ -258,27 +278,31 @@ public sealed class SaveStore(
 
         try
         {
-            return new SaveReadResult<T>(SaveStatus.Ok, deserializePayload(payload));
+            return new SaveReadResult<T>(Status: SaveStatus.Ok, State: deserializePayload(payload));
         }
         catch (Exception e)
         {
-            return new SaveReadResult<T>(SaveStatus.Corrupt, default, e.Message);
+            return new SaveReadResult<T>(
+                Status: SaveStatus.Corrupt,
+                State: default,
+                Error: e.Message
+            );
         }
     }
 
-    private string PathOf(string slot)
-    {
-        return Path.Combine(directory, slot + Extension);
-    }
+    private string PathOf(string slot) => Path.Combine(path1: directory, path2: slot + Extension);
 
     // A slot is a bare file stem, never a path: separators, "..", drive colons, and any char the
     // filesystem rejects all fail here so a slot can never address outside the store directory.
     private static bool IsValidSlot(string? slot)
     {
         if (string.IsNullOrWhiteSpace(slot) || slot.Contains("..")) return false;
-        foreach (var c in slot)
-            if (c is '/' or '\\' or ':' || Array.IndexOf(InvalidSlotChars, c) >= 0)
+        foreach (char c in slot)
+        {
+            if (c is '/' or '\\' or ':' || Array.IndexOf(array: InvalidSlotChars, value: c) >= 0)
                 return false;
+        }
+
         return true;
     }
 }

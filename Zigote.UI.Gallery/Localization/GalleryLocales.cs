@@ -27,22 +27,22 @@ internal static class GalleryFonts
     public static void RegisterPanUnicodeFamily(App? app)
     {
         if (app is null || _intlRegistered || !File.Exists(PanUnicodeFace)) return;
-        _intlRegistered = app.SetFontFace("intl", PanUnicodeFace);
+        _intlRegistered = app.SetFontFace(family: "intl", path: PanUnicodeFace);
     }
 
     public static void Apply(App? app, Locale locale)
     {
         if (app is null) return;
 
-        var needsPanUnicode = locale.Language is "zh" or "ja" or "ar";
-        var inter = Path.Combine(
-            AppContext.BaseDirectory,
-            "Fonts",
-            "Inter-Regular.ttf"
+        bool needsPanUnicode = locale.Language is "zh" or "ja" or "ar";
+        string inter = Path.Combine(
+            path1: AppContext.BaseDirectory,
+            path2: "Fonts",
+            path3: "Inter-Regular.ttf"
         );
-        var path = needsPanUnicode && File.Exists(PanUnicodeFace) ? PanUnicodeFace : inter;
+        string path = needsPanUnicode && File.Exists(PanUnicodeFace) ? PanUnicodeFace : inter;
 
         if (path == _current || !File.Exists(path)) return;
-        if (app.SetFontFace("Inter", path)) _current = path;
+        if (app.SetFontFace(family: "Inter", path: path)) _current = path;
     }
 }

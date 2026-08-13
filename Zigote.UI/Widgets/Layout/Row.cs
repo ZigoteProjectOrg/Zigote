@@ -7,6 +7,9 @@ public class Row : MultiChildWidget
 {
     private FlexLayout.ChildMetrics[] _metrics = [];
 
+    // Resolved during Measure (BuildContext is valid there) and reused by Layout.
+    private bool _rtl;
+
     private Size _size;
 
     /// <summary>
@@ -65,21 +68,18 @@ public class Row : MultiChildWidget
     /// </summary>
     public TextDirection? LayoutDirection { get; set; }
 
-    // Resolved during Measure (BuildContext is valid there) and reused by Layout.
-    private bool _rtl;
-
     public override Size Measure(Constraints c)
     {
         _rtl = (LayoutDirection ?? Directionality.Of(BuildContext.Current)) == TextDirection.Rtl;
         _size = FlexLayout.Measure(
-            Children,
-            c,
-            0,
-            MainAxisAlignment,
-            CrossAxisAlignment,
-            MainAxisSize,
-            Spacing,
-            ref _metrics
+            children: Children,
+            c: c,
+            axis: 0,
+            mainAlign: MainAxisAlignment,
+            crossAlign: CrossAxisAlignment,
+            mainSize: MainAxisSize,
+            spacing: Spacing,
+            metrics: ref _metrics
         );
         return _size;
     }
@@ -87,29 +87,28 @@ public class Row : MultiChildWidget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         FlexLayout.Layout(
-            Children,
-            _metrics,
-            Bounds,
-            0,
-            MainAxisAlignment,
-            Spacing,
-            _rtl
+            children: Children,
+            metrics: _metrics,
+            bounds: Bounds,
+            axis: 0,
+            mainAlign: MainAxisAlignment,
+            spacing: Spacing,
+            rtl: _rtl
         );
     }
 
-    public override void Paint(PaintList paint)
-    {
-        FlexLayout.Paint(Children, paint);
-    }
+    public override void Paint(PaintList paint) =>
+        FlexLayout.Paint(children: Children, paint: paint);
 
-    public override Widget? HitTest(Offset point)
-    {
-        return FlexLayout.HitTest(Children, Bounds, point);
-    }
+    public override Widget? HitTest(Offset point) => FlexLayout.HitTest(
+        children: Children,
+        bounds: Bounds,
+        point: point
+    );
 }

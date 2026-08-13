@@ -53,7 +53,11 @@ public sealed class LocalizationsController
             resources[d.ResourceType] = d.LoadResource(locale); // later delegate of a type wins
         }
 
-        return new LocalizationsData(locale, locale.TextDirection, resources);
+        return new LocalizationsData(
+            locale: locale,
+            textDirection: locale.TextDirection,
+            resources: resources
+        );
     }
 
     internal void Bind(Localizations provider, Directionality directionality)
@@ -70,7 +74,11 @@ public sealed class LocalizationsController
     public bool SetLocale(Locale requested)
     {
         var pool = SupportedLocales.Count > 0 ? SupportedLocales : new[] { requested };
-        var resolved = LocaleResolution.Resolve(requested, pool, FallbackLocale);
+        var resolved = LocaleResolution.Resolve(
+            preferred: requested,
+            supported: pool,
+            fallback: FallbackLocale
+        );
 
         if (resolved == Locale && _provider is not null) return false;
 

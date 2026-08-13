@@ -4,7 +4,8 @@ namespace Zigote.UI.Material;
 
 /// <summary>
 ///     Paint-only leaf that pops a mark in and eases it back out as <see cref="Visible" /> toggles —
-///     the shared half of <see cref="CheckGlyph" /> and <see cref="RadioDotGlyph" />. Subclasses supply
+///     the shared half of <see cref="CheckGlyph" /> and <see cref="RadioDotGlyph" />. Subclasses
+///     supply
 ///     only the drawing, in <see cref="PaintGlyph" />.
 ///     <para>
 ///         The composed control (<see cref="Checkbox" />, <see cref="Radio{T}" />) puts one of these
@@ -23,7 +24,9 @@ public abstract class ToggleGlyph : LeafWidget
     /// <param name="duration">Entrance/exit duration — the one thing the two glyphs disagree on.</param>
     protected ToggleGlyph(float duration)
     {
-        _anim = new AnimationController(duration, this) { Curve = Curves.EaseOutBack };
+        _anim = new AnimationController(durationSeconds: duration, vsync: this) {
+            Curve = Curves.EaseOutBack,
+        };
         _anim.OnTick += MarkNeedsPaint;
     }
 
@@ -44,44 +47,37 @@ public abstract class ToggleGlyph : LeafWidget
                 else _anim.Dismiss();
             }
             else if (value)
-            {
                 _anim.Forward();
-            }
             else
-            {
                 _anim.Reverse();
-            }
         }
     }
 
     // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a re-attach rebinds
     // instead of leaking one per attach cascade.
-    protected override void OnMount()
-    {
-        _anim.AttachTicker(this);
-    }
+    protected override void OnMount() => _anim.AttachTicker(this);
 
     public override Size Measure(Constraints c)
     {
-        _size = c.Constrain(new Size(GlyphSize, GlyphSize));
+        _size = c.Constrain(new Size(width: GlyphSize, height: GlyphSize));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
     public sealed override void Paint(PaintList paint)
     {
-        var t = _anim.Value;
+        float t = _anim.Value;
         if (t <= 0.001f) return;
-        PaintGlyph(paint, t);
+        PaintGlyph(paint: paint, t: t);
     }
 
     /// <summary>
@@ -93,10 +89,10 @@ public abstract class ToggleGlyph : LeafWidget
     public override int DebugStateHash()
     {
         return HashCode.Combine(
-            _visible,
-            _anim.Value,
-            Color,
-            Bounds.Width
+            value1: _visible,
+            value2: _anim.Value,
+            value3: Color,
+            value4: Bounds.Width
         );
     }
 }

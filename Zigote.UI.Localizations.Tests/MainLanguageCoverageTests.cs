@@ -9,10 +9,11 @@ namespace Zigote.UI.Localizations.Tests;
 /// </summary>
 public class MainLanguageCoverageTests
 {
-    private static PluralCategory Card(string lang, double n, int? fractionDigits = null)
-    {
-        return PluralRules.Cardinal(lang, PluralOperands.FromDouble(n, fractionDigits));
-    }
+    private static PluralCategory Card(string lang, double n, int? fractionDigits = null) =>
+        PluralRules.Cardinal(
+            language: lang,
+            op: PluralOperands.FromDouble(value: n, fractionDigits: fractionDigits)
+        );
 
     // ── Cardinal plurals across the main languages ────────────────────────────
 
@@ -109,25 +110,21 @@ public class MainLanguageCoverageTests
     [InlineData("id", 1, PluralCategory.Other)]
     [InlineData("in", 1, PluralCategory.Other)]
     [InlineData("ms", 1, PluralCategory.Other)]
-    public void Cardinal_matches_cldr(string lang, double n, PluralCategory expected)
-    {
-        Assert.Equal(expected, Card(lang, n));
-    }
+    public void Cardinal_matches_cldr(string lang, double n, PluralCategory expected) =>
+        Assert.Equal(expected: expected, actual: Card(lang: lang, n: n));
 
     [Theory]
     [InlineData("ru", PluralCategory.Other)] // 1.5 файла
     [InlineData("cs", PluralCategory.Many)] // 1,5 dne
     [InlineData("da", PluralCategory.One)] // 1,5 time — t != 0 and i is 0 or 1
-    public void Fractions_select_the_right_category(string lang, PluralCategory expected)
-    {
-        Assert.Equal(expected, Card(lang, 1.5));
-    }
+    public void Fractions_select_the_right_category(string lang, PluralCategory expected) =>
+        Assert.Equal(expected: expected, actual: Card(lang: lang, n: 1.5));
 
     [Fact]
     public void Danish_half_is_singular()
     {
-        Assert.Equal(PluralCategory.One, Card("da", 0.5));
-        Assert.Equal(PluralCategory.Other, Card("da", 2));
+        Assert.Equal(expected: PluralCategory.One, actual: Card(lang: "da", n: 0.5));
+        Assert.Equal(expected: PluralCategory.Other, actual: Card(lang: "da", n: 2));
     }
 
     // ── Ordinals ──────────────────────────────────────────────────────────────
@@ -144,10 +141,10 @@ public class MainLanguageCoverageTests
     [InlineData("sv", 11, PluralCategory.Other)]
     [InlineData("ru", 1, PluralCategory.Other)]
     [InlineData("ja", 1, PluralCategory.Other)]
-    public void Ordinal_matches_cldr(string lang, long n, PluralCategory expected)
-    {
-        Assert.Equal(expected, PluralRules.Ordinal(lang, PluralOperands.FromLong(n)));
-    }
+    public void Ordinal_matches_cldr(string lang, long n, PluralCategory expected) => Assert.Equal(
+        expected: expected,
+        actual: PluralRules.Ordinal(language: lang, op: PluralOperands.FromLong(n))
+    );
 
     // ── RTL detection ─────────────────────────────────────────────────────────
 
@@ -161,16 +158,19 @@ public class MainLanguageCoverageTests
     [InlineData("ru", TextDirection.Ltr)]
     [InlineData("zh", TextDirection.Ltr)]
     [InlineData("hi", TextDirection.Ltr)]
-    public void Direction_by_language(string lang, TextDirection expected)
-    {
-        Assert.Equal(expected, TextDirectionInfo.ForLanguage(lang));
-    }
+    public void Direction_by_language(string lang, TextDirection expected) => Assert.Equal(
+        expected: expected,
+        actual: TextDirectionInfo.ForLanguage(lang)
+    );
 
     [Fact]
     public void Script_subtag_overrides_language_direction()
     {
-        Assert.Equal(TextDirection.Rtl, TextDirectionInfo.ForLanguage("az", "Arab"));
-        Assert.Equal(TextDirection.Ltr, TextDirectionInfo.ForLanguage("az"));
+        Assert.Equal(
+            expected: TextDirection.Rtl,
+            actual: TextDirectionInfo.ForLanguage(language: "az", script: "Arab")
+        );
+        Assert.Equal(expected: TextDirection.Ltr, actual: TextDirectionInfo.ForLanguage("az"));
     }
 
     // ── Parsing + formatting never throw for any main language ────────────────
@@ -217,11 +217,14 @@ public class MainLanguageCoverageTests
 
         var fmt = LocaleFormatting.For(locale);
         Assert.False(string.IsNullOrEmpty(fmt.Number(1234567.89)));
-        Assert.False(string.IsNullOrEmpty(fmt.Currency(9.99m, "USD")));
-        Assert.False(string.IsNullOrEmpty(fmt.Date(new DateTime(2026, 7, 5))));
+        Assert.False(string.IsNullOrEmpty(fmt.Currency(value: 9.99m, currencyCode: "USD")));
+        Assert.False(string.IsNullOrEmpty(fmt.Date(new DateTime(year: 2026, month: 7, day: 5))));
 
         // Plural selection must resolve to a category for any language, listed or not.
-        var category = PluralRules.Cardinal(locale.Language, PluralOperands.FromLong(3));
+        var category = PluralRules.Cardinal(
+            language: locale.Language,
+            op: PluralOperands.FromLong(3)
+        );
         Assert.True(Enum.IsDefined(category));
     }
 
@@ -232,17 +235,23 @@ public class MainLanguageCoverageTests
     {
         // A made-up language code so the test never collides with a built-in rule.
         PluralRules.Register(
-            "zxx",
-            op => op.N == 2 ? PluralCategory.Two : PluralCategory.Other
+            language: "zxx",
+            cardinal: op => op.N == 2 ? PluralCategory.Two : PluralCategory.Other
         );
         try
         {
             var locale = Locale.Parse("zxx");
-            var pattern = "{n, plural, two {a pair} other {# things}}";
+            string pattern = "{n, plural, two {a pair} other {# things}}";
 
             // The custom rule routes 2 → "two" through the whole MessageFormat pipeline…
-            Assert.Equal("a pair", new MessageFormat(pattern).Format(locale, ("n", 2)));
-            Assert.Equal("3 things", new MessageFormat(pattern).Format(locale, ("n", 3)));
+            Assert.Equal(
+                expected: "a pair",
+                actual: new MessageFormat(pattern).Format(locale: locale, ("n", 2))
+            );
+            Assert.Equal(
+                expected: "3 things",
+                actual: new MessageFormat(pattern).Format(locale: locale, ("n", 3))
+            );
         }
         finally
         {
@@ -251,8 +260,8 @@ public class MainLanguageCoverageTests
 
         // …and unregistering restores the default English-like shape (2 → other).
         Assert.Equal(
-            PluralCategory.Other,
-            PluralRules.Cardinal("zxx", PluralOperands.FromLong(2))
+            expected: PluralCategory.Other,
+            actual: PluralRules.Cardinal(language: "zxx", op: PluralOperands.FromLong(2))
         );
     }
 
@@ -260,20 +269,20 @@ public class MainLanguageCoverageTests
     public void Registered_ordinal_rule_is_used()
     {
         PluralRules.Register(
-            "zxx",
-            null,
-            op => op.N == 1 ? PluralCategory.One : PluralCategory.Other
+            language: "zxx",
+            cardinal: null,
+            ordinal: op => op.N == 1 ? PluralCategory.One : PluralCategory.Other
         );
         try
         {
             Assert.Equal(
-                PluralCategory.One,
-                PluralRules.Ordinal("zxx", PluralOperands.FromLong(1))
+                expected: PluralCategory.One,
+                actual: PluralRules.Ordinal(language: "zxx", op: PluralOperands.FromLong(1))
             );
             // Cardinal was not overridden — the built-in fallback still applies.
             Assert.Equal(
-                PluralCategory.One,
-                PluralRules.Cardinal("zxx", PluralOperands.FromLong(1))
+                expected: PluralCategory.One,
+                actual: PluralRules.Cardinal(language: "zxx", op: PluralOperands.FromLong(1))
             );
         }
         finally
@@ -289,10 +298,13 @@ public class MainLanguageCoverageTests
         TextDirectionInfo.RegisterRtlLanguage("qaa");
         TextDirectionInfo.RegisterRtlScript("Qaaa");
 
-        Assert.Equal(TextDirection.Rtl, TextDirectionInfo.ForLanguage("qaa"));
-        Assert.Equal(TextDirection.Rtl, TextDirectionInfo.ForLanguage("en", "Qaaa"));
+        Assert.Equal(expected: TextDirection.Rtl, actual: TextDirectionInfo.ForLanguage("qaa"));
+        Assert.Equal(
+            expected: TextDirection.Rtl,
+            actual: TextDirectionInfo.ForLanguage(language: "en", script: "Qaaa")
+        );
 
         // Registration also flows into Locale.TextDirection (evaluated per read).
-        Assert.Equal(TextDirection.Rtl, Locale.Parse("qaa").TextDirection);
+        Assert.Equal(expected: TextDirection.Rtl, actual: Locale.Parse("qaa").TextDirection);
     }
 }

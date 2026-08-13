@@ -25,7 +25,7 @@ public abstract class Page
     {
         return Name is null && Arguments is null
             ? RouteSettings.Empty
-            : new RouteSettings(Name, Arguments);
+            : new RouteSettings(Name: Name, Arguments: Arguments);
     }
 
     /// <summary>Create the live route that renders this page.</summary>
@@ -38,9 +38,7 @@ public abstract class Page
 /// </summary>
 public sealed class MaterialPage : Page
 {
-    public MaterialPage()
-    {
-    }
+    public MaterialPage() { }
 
     public MaterialPage(Widget child, Key? key = null, string? name = null)
     {
@@ -58,10 +56,7 @@ public sealed class MaterialPage : Page
     /// <summary>When false the page appears/disappears instantly (no transition).</summary>
     public bool Animate { get; init; } = true;
 
-    internal override Route CreateRoute()
-    {
-        return new PageBackedRoute(this) { Settings = ToSettings() };
-    }
+    internal override Route CreateRoute() => new PageBackedRoute(this) { Settings = ToSettings() };
 }
 
 /// <summary>The route that renders a <see cref="MaterialPage" />.</summary>
@@ -69,15 +64,10 @@ internal sealed class PageBackedRoute : PageRoute<object?>
 {
     private readonly MaterialPage _page;
 
-    public PageBackedRoute(MaterialPage page)
-    {
-        _page = page;
-    }
+    public PageBackedRoute(MaterialPage page) => _page = page;
 
     public override float TransitionDuration => _page.Animate ? 0.30f : 0f;
 
-    protected override Widget BuildContent(BuildContext context)
-    {
-        return _page.Builder?.Invoke(context) ?? _page.Child ?? new SizedBox();
-    }
+    protected override Widget BuildContent(BuildContext context) =>
+        _page.Builder?.Invoke(context) ?? _page.Child ?? new SizedBox();
 }

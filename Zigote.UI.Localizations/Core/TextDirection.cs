@@ -63,7 +63,10 @@ public static class TextDirectionInfo
         if (string.IsNullOrWhiteSpace(languageCode)) return;
         lock (RegisterLock)
         {
-            RtlLanguages = new HashSet<string>(RtlLanguages, StringComparer.OrdinalIgnoreCase) {
+            RtlLanguages = new HashSet<string>(
+                collection: RtlLanguages,
+                comparer: StringComparer.OrdinalIgnoreCase
+            ) {
                 languageCode.Trim(),
             };
         }
@@ -75,7 +78,10 @@ public static class TextDirectionInfo
         if (string.IsNullOrWhiteSpace(scriptCode)) return;
         lock (RegisterLock)
         {
-            RtlScripts = new HashSet<string>(RtlScripts, StringComparer.OrdinalIgnoreCase) {
+            RtlScripts = new HashSet<string>(
+                collection: RtlScripts,
+                comparer: StringComparer.OrdinalIgnoreCase
+            ) {
                 scriptCode.Trim(),
             };
         }

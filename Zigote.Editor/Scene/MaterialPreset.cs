@@ -41,87 +41,87 @@ public sealed record MaterialPreset(
 public static class MaterialPresets
 {
     public static readonly MaterialPreset CarPaint = new(
-        "Car Paint",
-        new Vec3(0.72f, 0.05f, 0.06f),
-        0.9f,
-        0.30f,
-        1.0f,
-        0.05f,
-        1.0f,
-        Vec3.Zero,
-        0,
-        RenderEffect.Standard,
-        true
+        Name: "Car Paint",
+        Color: new Vec3(x: 0.72f, y: 0.05f, z: 0.06f),
+        Metallic: 0.9f,
+        Roughness: 0.30f,
+        Clearcoat: 1.0f,
+        ClearcoatRoughness: 0.05f,
+        Specular: 1.0f,
+        Emissive: Vec3.Zero,
+        AlphaMode: 0,
+        Effect: RenderEffect.Standard,
+        KeepNodeColor: true
     );
 
     public static readonly MaterialPreset Chrome = new(
-        "Chrome",
-        new Vec3(0.90f, 0.90f, 0.92f),
-        1.0f,
-        0.04f,
-        0f,
-        0f,
-        1.0f,
-        Vec3.Zero,
-        0,
-        RenderEffect.Standard,
-        false
+        Name: "Chrome",
+        Color: new Vec3(x: 0.90f, y: 0.90f, z: 0.92f),
+        Metallic: 1.0f,
+        Roughness: 0.04f,
+        Clearcoat: 0f,
+        ClearcoatRoughness: 0f,
+        Specular: 1.0f,
+        Emissive: Vec3.Zero,
+        AlphaMode: 0,
+        Effect: RenderEffect.Standard,
+        KeepNodeColor: false
     );
 
     public static readonly MaterialPreset Glass = new(
-        "Glass",
-        new Vec3(0.85f, 0.92f, 0.95f),
-        0f,
-        0.04f,
-        1.0f,
-        0.03f,
-        1.0f,
-        Vec3.Zero,
-        2 /* Blend */,
-        RenderEffect.Standard,
-        false
+        Name: "Glass",
+        Color: new Vec3(x: 0.85f, y: 0.92f, z: 0.95f),
+        Metallic: 0f,
+        Roughness: 0.04f,
+        Clearcoat: 1.0f,
+        ClearcoatRoughness: 0.03f,
+        Specular: 1.0f,
+        Emissive: Vec3.Zero,
+        AlphaMode: 2 /* Blend */,
+        Effect: RenderEffect.Standard,
+        KeepNodeColor: false
     );
 
     public static readonly MaterialPreset Matte = new(
-        "Matte",
-        new Vec3(0.5f, 0.5f, 0.5f),
-        0f,
-        0.9f,
-        0f,
-        0f,
-        0.5f,
-        Vec3.Zero,
-        0,
-        RenderEffect.Standard,
-        true
+        Name: "Matte",
+        Color: new Vec3(x: 0.5f, y: 0.5f, z: 0.5f),
+        Metallic: 0f,
+        Roughness: 0.9f,
+        Clearcoat: 0f,
+        ClearcoatRoughness: 0f,
+        Specular: 0.5f,
+        Emissive: Vec3.Zero,
+        AlphaMode: 0,
+        Effect: RenderEffect.Standard,
+        KeepNodeColor: true
     );
 
     public static readonly MaterialPreset Plastic = new(
-        "Plastic",
-        new Vec3(0.5f, 0.5f, 0.5f),
-        0f,
-        0.45f,
-        0.5f,
-        0.1f,
-        0.7f,
-        Vec3.Zero,
-        0,
-        RenderEffect.Standard,
-        true
+        Name: "Plastic",
+        Color: new Vec3(x: 0.5f, y: 0.5f, z: 0.5f),
+        Metallic: 0f,
+        Roughness: 0.45f,
+        Clearcoat: 0.5f,
+        ClearcoatRoughness: 0.1f,
+        Specular: 0.7f,
+        Emissive: Vec3.Zero,
+        AlphaMode: 0,
+        Effect: RenderEffect.Standard,
+        KeepNodeColor: true
     );
 
     public static readonly MaterialPreset Emissive = new(
-        "Emissive",
-        new Vec3(1f, 1f, 1f),
-        0f,
-        1.0f,
-        0f,
-        0f,
-        0.5f,
-        new Vec3(2f, 2f, 2f),
-        0,
-        RenderEffect.Standard,
-        false
+        Name: "Emissive",
+        Color: new Vec3(x: 1f, y: 1f, z: 1f),
+        Metallic: 0f,
+        Roughness: 1.0f,
+        Clearcoat: 0f,
+        ClearcoatRoughness: 0f,
+        Specular: 0.5f,
+        Emissive: new Vec3(x: 2f, y: 2f, z: 2f),
+        AlphaMode: 0,
+        Effect: RenderEffect.Standard,
+        KeepNodeColor: false
     );
 
     public static readonly IReadOnlyList<MaterialPreset> All =
@@ -143,15 +143,15 @@ public readonly record struct MeshMaterialSnapshot(
     public static MeshMaterialSnapshot Of(SceneNode n)
     {
         return new MeshMaterialSnapshot(
-            n.MeshColor,
-            n.MeshMetallic,
-            n.MeshRoughness,
-            n.MeshClearcoat,
-            n.MeshClearcoatRoughness,
-            n.MeshSpecular,
-            n.MeshEmissive,
-            n.MeshAlphaMode,
-            n.MeshEffect
+            Color: n.MeshColor,
+            Metallic: n.MeshMetallic,
+            Roughness: n.MeshRoughness,
+            Clearcoat: n.MeshClearcoat,
+            ClearcoatRoughness: n.MeshClearcoatRoughness,
+            Specular: n.MeshSpecular,
+            Emissive: n.MeshEmissive,
+            AlphaMode: n.MeshAlphaMode,
+            Effect: n.MeshEffect
         );
     }
 

@@ -2,8 +2,8 @@ using Zigote.Editor.History;
 using Zigote.Editor.Scene;
 using Zigote.Runtime.Scene;
 using Zigote.UI.Widgets;
-using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
+
 // Dropdown<T> must be referenced with a concrete type — alias for clarity:
 
 namespace Zigote.Editor.Panels;
@@ -12,11 +12,11 @@ public sealed partial class InspectorPanel
 {
     private static int NearestLightPreset(float kelvin)
     {
-        var best = 0;
-        var bd = float.MaxValue;
-        for (var i = 0; i < LightPresetKelvin.Length; i++)
+        int best = 0;
+        float bd = float.MaxValue;
+        for (int i = 0; i < LightPresetKelvin.Length; i++)
         {
-            var d = MathF.Abs(LightPresetKelvin[i] - kelvin);
+            float d = MathF.Abs(LightPresetKelvin[i] - kelvin);
             if (d < bd)
             {
                 bd = d;
@@ -35,19 +35,22 @@ public sealed partial class InspectorPanel
             CrossAxisAlignment = CrossAxisAlignment.Start,
             MainAxisSize = MainAxisSize.Min,
         };
-        for (var r = 0; r < presets.Count; r += 3)
+        for (int r = 0; r < presets.Count; r += 3)
         {
             var row = new Row {
                 MainAxisAlignment = MainAxisAlignment.Start,
                 CrossAxisAlignment = CrossAxisAlignment.Center,
             };
-            for (var i = r; i < Math.Min(r + 3, presets.Count); i++)
+            for (int i = r; i < Math.Min(val1: r + 3, val2: presets.Count); i++)
             {
                 var p = presets[i];
                 row.Children.Add(
                     new SizedBox(
-                        74f,
-                        child: new AdwButton(p.Name, () => ApplyMaterialPreset(p)) {
+                        width: 74f,
+                        child: new AdwButton(
+                            label: p.Name,
+                            onPressed: () => ApplyMaterialPreset(p)
+                        ) {
                             Compact = true,
                         }
                     )
@@ -79,14 +82,14 @@ public sealed partial class InspectorPanel
         var before = targets.Select(MeshMaterialSnapshot.Of).ToList();
         _state.History.Execute(
             new CompositeCommand(
-                _state,
-                () =>
+                state: _state,
+                apply: () =>
                 {
                     foreach (var t in targets) preset.ApplyTo(t);
                 },
-                () =>
+                revert: () =>
                 {
-                    for (var i = 0; i < targets.Count; i++) before[i].RestoreTo(targets[i]);
+                    for (int i = 0; i < targets.Count; i++) before[i].RestoreTo(targets[i]);
                 }
             )
         );

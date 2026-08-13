@@ -36,8 +36,8 @@ public sealed class EditableCurve
     public EditableCurve()
     {
         Keys = [
-            new CurveKey(0f, 0f),
-            new CurveKey(1f, 1f),
+            new CurveKey(time: 0f, value: 0f),
+            new CurveKey(time: 1f, value: 1f),
         ];
     }
 
@@ -47,8 +47,8 @@ public sealed class EditableCurve
         Keys.Sort(static (a, b) => a.Time.CompareTo(b.Time));
         if (Keys.Count == 0)
         {
-            Keys.Add(new CurveKey(0f, 0f));
-            Keys.Add(new CurveKey(1f, 1f));
+            Keys.Add(new CurveKey(time: 0f, value: 0f));
+            Keys.Add(new CurveKey(time: 1f, value: 1f));
         }
     }
 
@@ -65,15 +65,18 @@ public sealed class EditableCurve
         // Use a stable tie-break on Value so reordering is deterministic.
         Keys.Sort(static (a, b) =>
             {
-                var c = a.Time.CompareTo(b.Time);
+                int c = a.Time.CompareTo(b.Time);
                 return c != 0 ? c : a.Value.CompareTo(b.Value);
             }
         );
-        for (var i = 0; i < Keys.Count; i++)
+        for (int i = 0; i < Keys.Count; i++)
+        {
             if (Keys[i].Time == tracked.Time && Keys[i].Value == tracked.Value &&
                 Keys[i].InTangent == tracked.InTangent && Keys[i].OutTangent == tracked.OutTangent)
                 return i;
-        return Math.Clamp(trackIndex, 0, Keys.Count - 1);
+        }
+
+        return Math.Clamp(value: trackIndex, min: 0, max: Keys.Count - 1);
     }
 
     /// <summary>Sample the curve at <paramref name="t" /> using cubic-Hermite between bracketing keys.</summary>
@@ -86,39 +89,41 @@ public sealed class EditableCurve
         if (t >= Keys[^1].Time) return Keys[^1].Value;
 
         // Find the segment [i, i+1] containing t.
-        var i = 0;
-        for (var k = 0; k < Keys.Count - 1; k++)
+        int i = 0;
+        for (int k = 0; k < Keys.Count - 1; k++)
+        {
             if (t >= Keys[k].Time && t <= Keys[k + 1].Time)
             {
                 i = k;
                 break;
             }
+        }
 
         var a = Keys[i];
         var b = Keys[i + 1];
-        var dt = b.Time - a.Time;
+        float dt = b.Time - a.Time;
         if (dt <= 1e-6f) return b.Value;
 
-        var u = (t - a.Time) / dt;
-        var (mOut, mIn) = ResolveSlopes(i);
+        float u = (t - a.Time) / dt;
+        (float mOut, float mIn) = ResolveSlopes(i);
         return Hermite(
-            a.Value,
-            b.Value,
-            mOut * dt,
-            mIn * dt,
-            u
+            p0: a.Value,
+            p1: b.Value,
+            m0: mOut * dt,
+            m1: mIn * dt,
+            u: u
         );
     }
 
     // Hermite basis: p0/p1 endpoints, m0/m1 scaled tangents (already × dt).
     private static float Hermite(float p0, float p1, float m0, float m1, float u)
     {
-        var u2 = u * u;
-        var u3 = u2 * u;
-        return (2f * u3 - 3f * u2 + 1f) * p0
-               + (u3 - 2f * u2 + u) * m0
-               + (-2f * u3 + 3f * u2) * p1
-               + (u3 - u2) * m1;
+        float u2 = u * u;
+        float u3 = u2 * u;
+        return (((2f * u3) - (3f * u2) + 1f) * p0)
+               + ((u3 - (2f * u2) + u) * m0)
+               + (((-2f * u3) + (3f * u2)) * p1)
+               + ((u3 - u2) * m1);
     }
 
     /// <summary>
@@ -130,8 +135,8 @@ public sealed class EditableCurve
     {
         var a = Keys[i];
         var b = Keys[i + 1];
-        var outS = a.OutTangent != 0f ? a.OutTangent : AutoSlope(i);
-        var inS = b.InTangent != 0f ? b.InTangent : AutoSlope(i + 1);
+        float outS = a.OutTangent != 0f ? a.OutTangent : AutoSlope(i);
+        float inS = b.InTangent != 0f ? b.InTangent : AutoSlope(i + 1);
         return (outS, inS);
     }
 
@@ -139,9 +144,9 @@ public sealed class EditableCurve
     public float AutoSlope(int i)
     {
         if (Keys.Count < 2) return 0f;
-        var prev = Keys[Math.Max(0, i - 1)];
-        var next = Keys[Math.Min(Keys.Count - 1, i + 1)];
-        var dt = next.Time - prev.Time;
+        var prev = Keys[Math.Max(val1: 0, val2: i - 1)];
+        var next = Keys[Math.Min(val1: Keys.Count - 1, val2: i + 1)];
+        float dt = next.Time - prev.Time;
         if (MathF.Abs(dt) <= 1e-6f) return 0f;
         return (next.Value - prev.Value) / dt;
     }
@@ -164,13 +169,6 @@ public sealed class CurveEditor : Widget
 
     private const uint ScDelete = 76;
     private const uint ScBackspace = 42;
-
-    /// <summary>
-    ///     Pick radius for keys and tangent handles. The drawn key stays 4.5pt; a fingertip needs a
-    ///     far wider catchment, and tangent handles are only pickable on the already-selected key,
-    ///     so the wider radius cannot make the wrong handle win.
-    /// </summary>
-    private float Grab => _compact ? TouchMetrics.MinTarget / 2f : HitRadius;
 
     private readonly float _maxT = 1f;
 
@@ -196,6 +194,13 @@ public sealed class CurveEditor : Widget
         OnChanged = onChanged;
     }
 
+    /// <summary>
+    ///     Pick radius for keys and tangent handles. The drawn key stays 4.5pt; a fingertip needs a
+    ///     far wider catchment, and tangent handles are only pickable on the already-selected key,
+    ///     so the wider radius cannot make the wrong handle win.
+    /// </summary>
+    private float Grab => _compact ? TouchMetrics.MinTarget / 2f : HitRadius;
+
     public Action<EditableCurve>? OnChanged { get; set; }
     public EditableCurve Curve { get; }
 
@@ -214,31 +219,31 @@ public sealed class CurveEditor : Widget
     public override int DebugStateHash()
     {
         return HashCode.Combine(
-            Curve.Keys.Count,
-            _selected,
-            _hoverKey,
-            (int)_drag,
-            Focused
+            value1: Curve.Keys.Count,
+            value2: _selected,
+            value3: _hoverKey,
+            value4: (int)_drag,
+            value5: Focused
         );
     }
 
     private Offset DataToScreen(float time, float value)
     {
         var p = Plot;
-        var tx = _maxT > _minT ? (time - _minT) / (_maxT - _minT) : 0f;
-        var ty = MaxValue > MinValue ? (value - MinValue) / (MaxValue - MinValue) : 0f;
-        var x = p.X + tx * p.Width;
-        var y = p.Y + (1f - ty) * p.Height; // Y up in data, down in screen
-        return new Offset(x, y);
+        float tx = _maxT > _minT ? (time - _minT) / (_maxT - _minT) : 0f;
+        float ty = MaxValue > MinValue ? (value - MinValue) / (MaxValue - MinValue) : 0f;
+        float x = p.X + (tx * p.Width);
+        float y = p.Y + ((1f - ty) * p.Height); // Y up in data, down in screen
+        return new Offset(x: x, y: y);
     }
 
     private (float time, float value) ScreenToData(Offset s)
     {
         var p = Plot;
-        var tx = p.Width > 0f ? (s.X - p.X) / p.Width : 0f;
-        var ty = p.Height > 0f ? (s.Y - p.Y) / p.Height : 0f;
-        var time = _minT + tx * (_maxT - _minT);
-        var value = MinValue + (1f - ty) * (MaxValue - MinValue);
+        float tx = p.Width > 0f ? (s.X - p.X) / p.Width : 0f;
+        float ty = p.Height > 0f ? (s.Y - p.Y) / p.Height : 0f;
+        float time = _minT + (tx * (_maxT - _minT));
+        float value = MinValue + ((1f - ty) * (MaxValue - MinValue));
         return (time, value);
     }
 
@@ -248,9 +253,9 @@ public sealed class CurveEditor : Widget
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
         _compact = TouchMetrics.IsCompact;
-        var w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 240f;
-        var h = float.IsFinite(c.MaxHeight) ? c.MaxHeight : 160f;
-        var sz = c.Constrain(new Size(w, h));
+        float w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 240f;
+        float h = float.IsFinite(c.MaxHeight) ? c.MaxHeight : 160f;
+        var sz = c.Constrain(new Size(width: w, height: h));
         _w = sz.Width;
         _h = sz.Height;
         return sz;
@@ -259,10 +264,10 @@ public sealed class CurveEditor : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _w,
-            _h
+            x: origin.X,
+            y: origin.Y,
+            width: _w,
+            height: _h
         );
     }
 
@@ -273,7 +278,7 @@ public sealed class CurveEditor : Widget
         if (!paint.IsVisible(Bounds)) return;
 
         // Backdrop.
-        paint.AddRect(Bounds, _theme.SurfaceAlt, Radii.Md);
+        paint.AddRect(bounds: Bounds, color: _theme.SurfaceAlt, radius: Radii.Md);
         paint.AddClipStart(Bounds);
 
         DrawGrid(paint);
@@ -283,74 +288,74 @@ public sealed class CurveEditor : Widget
 
         paint.AddClipEnd();
 
-        paint.AddBorder(Bounds, _theme.Separator, Radii.Md);
+        paint.AddBorder(bounds: Bounds, color: _theme.Separator, radius: Radii.Md);
         if (Focused && Enabled)
-            paint.AddFocusRing(Bounds, Radii.Md, _theme);
+            paint.AddFocusRing(bounds: Bounds, radius: Radii.Md, theme: _theme);
     }
 
     private void DrawGrid(PaintList paint)
     {
         var grid = _theme.Separator;
-        var axis = _theme.Separator.WithAlpha(MathF.Min(1f, _theme.Separator.A * 2.5f));
+        var axis = _theme.Separator.WithAlpha(MathF.Min(x: 1f, y: _theme.Separator.A * 2.5f));
 
         // Vertical time grid lines at 0, 0.25, 0.5, 0.75, 1.
-        for (var i = 0; i <= 4; i++)
+        for (int i = 0; i <= 4; i++)
         {
-            var t = _minT + (_maxT - _minT) * (i / 4f);
-            var s = DataToScreen(t, MinValue);
+            float t = _minT + ((_maxT - _minT) * (i / 4f));
+            var s = DataToScreen(time: t, value: MinValue);
             paint.AddRect(
-                new Rect(
-                    s.X,
-                    Bounds.Y,
-                    1f,
-                    Bounds.Height
+                bounds: new Rect(
+                    x: s.X,
+                    y: Bounds.Y,
+                    width: 1f,
+                    height: Bounds.Height
                 ),
-                grid
+                color: grid
             );
         }
 
         // Horizontal value grid lines.
-        for (var i = 0; i <= 4; i++)
+        for (int i = 0; i <= 4; i++)
         {
-            var v = MinValue + (MaxValue - MinValue) * (i / 4f);
-            var s = DataToScreen(_minT, v);
+            float v = MinValue + ((MaxValue - MinValue) * (i / 4f));
+            var s = DataToScreen(time: _minT, value: v);
             paint.AddRect(
-                new Rect(
-                    Bounds.X,
-                    s.Y,
-                    Bounds.Width,
-                    1f
+                bounds: new Rect(
+                    x: Bounds.X,
+                    y: s.Y,
+                    width: Bounds.Width,
+                    height: 1f
                 ),
-                grid
+                color: grid
             );
         }
 
         // Emphasised value = 0 and value = 1 reference lines (the easing baseline).
         if (MinValue <= 0f && MaxValue >= 0f)
         {
-            var z = DataToScreen(_minT, 0f);
+            var z = DataToScreen(time: _minT, value: 0f);
             paint.AddRect(
-                new Rect(
-                    Bounds.X,
-                    z.Y,
-                    Bounds.Width,
-                    1f
+                bounds: new Rect(
+                    x: Bounds.X,
+                    y: z.Y,
+                    width: Bounds.Width,
+                    height: 1f
                 ),
-                axis
+                color: axis
             );
         }
 
         if (MinValue <= 1f && MaxValue >= 1f)
         {
-            var o = DataToScreen(_minT, 1f);
+            var o = DataToScreen(time: _minT, value: 1f);
             paint.AddRect(
-                new Rect(
-                    Bounds.X,
-                    o.Y,
-                    Bounds.Width,
-                    1f
+                bounds: new Rect(
+                    x: Bounds.X,
+                    y: o.Y,
+                    width: Bounds.Width,
+                    height: 1f
                 ),
-                axis
+                color: axis
             );
         }
     }
@@ -365,72 +370,76 @@ public sealed class CurveEditor : Widget
 
         if (keys.Count == 1)
         {
-            var s = DataToScreen(keys[0].Time, keys[0].Value);
+            var s = DataToScreen(time: keys[0].Time, value: keys[0].Value);
             paint.AddRect(
-                new Rect(
-                    Bounds.X,
-                    s.Y - width / 2f,
-                    Bounds.Width,
-                    width
+                bounds: new Rect(
+                    x: Bounds.X,
+                    y: s.Y - (width / 2f),
+                    width: Bounds.Width,
+                    height: width
                 ),
-                color
+                color: color
             );
             return;
         }
 
         // Flat extension before the first key.
-        var first = DataToScreen(keys[0].Time, keys[0].Value);
+        var first = DataToScreen(time: keys[0].Time, value: keys[0].Value);
         if (first.X > Bounds.X)
+        {
             paint.AddRect(
-                new Rect(
-                    Bounds.X,
-                    first.Y - width / 2f,
-                    first.X - Bounds.X,
-                    width
+                bounds: new Rect(
+                    x: Bounds.X,
+                    y: first.Y - (width / 2f),
+                    width: first.X - Bounds.X,
+                    height: width
                 ),
-                color
+                color: color
             );
+        }
 
         // Flat extension after the last key.
-        var last = DataToScreen(keys[^1].Time, keys[^1].Value);
+        var last = DataToScreen(time: keys[^1].Time, value: keys[^1].Value);
         if (last.X < Bounds.Right)
+        {
             paint.AddRect(
-                new Rect(
-                    last.X,
-                    last.Y - width / 2f,
-                    Bounds.Right - last.X,
-                    width
+                bounds: new Rect(
+                    x: last.X,
+                    y: last.Y - (width / 2f),
+                    width: Bounds.Right - last.X,
+                    height: width
                 ),
-                color
+                color: color
             );
+        }
 
         // Each segment becomes a cubic Bézier. Convert Hermite slopes to Bézier control points:
         // c1 = p0 + m0/3 (in data units of value over a third of the segment time span).
-        for (var i = 0; i < keys.Count - 1; i++)
+        for (int i = 0; i < keys.Count - 1; i++)
         {
             var a = keys[i];
             var b = keys[i + 1];
-            var dt = b.Time - a.Time;
+            float dt = b.Time - a.Time;
             if (dt <= 1e-6f) continue;
 
-            var (mOut, mIn) = Curve.ResolveSlopes(i);
+            (float mOut, float mIn) = Curve.ResolveSlopes(i);
 
-            var p0 = DataToScreen(a.Time, a.Value);
-            var p3 = DataToScreen(b.Time, b.Value);
-            var c1 = DataToScreen(a.Time + dt / 3f, a.Value + mOut * dt / 3f);
-            var c2 = DataToScreen(b.Time - dt / 3f, b.Value - mIn * dt / 3f);
+            var p0 = DataToScreen(time: a.Time, value: a.Value);
+            var p3 = DataToScreen(time: b.Time, value: b.Value);
+            var c1 = DataToScreen(time: a.Time + (dt / 3f), value: a.Value + (mOut * dt / 3f));
+            var c2 = DataToScreen(time: b.Time - (dt / 3f), value: b.Value - (mIn * dt / 3f));
 
             paint.AddBezier(
-                p0.X,
-                p0.Y,
-                c1.X,
-                c1.Y,
-                c2.X,
-                c2.Y,
-                p3.X,
-                p3.Y,
-                color,
-                width
+                x0: p0.X,
+                y0: p0.Y,
+                x1: c1.X,
+                y1: c1.Y,
+                x2: c2.X,
+                y2: c2.Y,
+                x3: p3.X,
+                y3: p3.Y,
+                color: color,
+                width: width
             );
         }
     }
@@ -441,57 +450,57 @@ public sealed class CurveEditor : Widget
 
         var keys = Curve.Keys;
         var key = keys[_selected];
-        var center = DataToScreen(key.Time, key.Value);
+        var center = DataToScreen(time: key.Time, value: key.Value);
         var handleColor = _theme.Accent;
         var armColor = _theme.Label2;
 
         // Out tangent (to the right): use explicit or auto slope.
         if (_selected < keys.Count - 1)
         {
-            var slope = key.OutTangent != 0f ? key.OutTangent : Curve.AutoSlope(_selected);
-            var h = TangentScreenPoint(center, slope, 1f);
+            float slope = key.OutTangent != 0f ? key.OutTangent : Curve.AutoSlope(_selected);
+            var h = TangentScreenPoint(center: center, slope: slope, dir: 1f);
             paint.AddBezier(
-                center.X,
-                center.Y,
-                center.X,
-                center.Y,
-                h.X,
-                h.Y,
-                h.X,
-                h.Y,
-                armColor,
-                1f
+                x0: center.X,
+                y0: center.Y,
+                x1: center.X,
+                y1: center.Y,
+                x2: h.X,
+                y2: h.Y,
+                x3: h.X,
+                y3: h.Y,
+                color: armColor,
+                width: 1f
             );
             DrawDot(
-                paint,
-                h,
-                HandleRadius,
-                handleColor
+                paint: paint,
+                c: h,
+                r: HandleRadius,
+                color: handleColor
             );
         }
 
         // In tangent (to the left).
         if (_selected > 0)
         {
-            var slope = key.InTangent != 0f ? key.InTangent : Curve.AutoSlope(_selected);
-            var h = TangentScreenPoint(center, slope, -1f);
+            float slope = key.InTangent != 0f ? key.InTangent : Curve.AutoSlope(_selected);
+            var h = TangentScreenPoint(center: center, slope: slope, dir: -1f);
             paint.AddBezier(
-                center.X,
-                center.Y,
-                center.X,
-                center.Y,
-                h.X,
-                h.Y,
-                h.X,
-                h.Y,
-                armColor,
-                1f
+                x0: center.X,
+                y0: center.Y,
+                x1: center.X,
+                y1: center.Y,
+                x2: h.X,
+                y2: h.Y,
+                x3: h.X,
+                y3: h.Y,
+                color: armColor,
+                width: 1f
             );
             DrawDot(
-                paint,
-                h,
-                HandleRadius,
-                handleColor
+                paint: paint,
+                c: h,
+                r: HandleRadius,
+                color: handleColor
             );
         }
     }
@@ -501,45 +510,45 @@ public sealed class CurveEditor : Widget
     {
         // Convert the data slope to a screen-space direction, then normalise to a fixed pixel length.
         var p = Plot;
-        var sxPerT = p.Width > 0f && _maxT > _minT ? p.Width / (_maxT - _minT) : 1f;
-        var syPerV = p.Height > 0f && MaxValue > MinValue ? p.Height / (MaxValue - MinValue) : 1f;
+        float sxPerT = p.Width > 0f && _maxT > _minT ? p.Width / (_maxT - _minT) : 1f;
+        float syPerV = p.Height > 0f && MaxValue > MinValue ? p.Height / (MaxValue - MinValue) : 1f;
 
-        var dxData = dir; // one unit of time in the given direction
-        var dyData = slope * dir;
-        var dxScreen = dxData * sxPerT;
-        var dyScreen = -dyData * syPerV; // screen Y is inverted
-        var len = MathF.Sqrt(dxScreen * dxScreen + dyScreen * dyScreen);
-        if (len <= 1e-4f) return new Offset(center.X + dir * TangentLen, center.Y);
-        var k = TangentLen / len;
-        return new Offset(center.X + dxScreen * k, center.Y + dyScreen * k);
+        float dxData = dir; // one unit of time in the given direction
+        float dyData = slope * dir;
+        float dxScreen = dxData * sxPerT;
+        float dyScreen = -dyData * syPerV; // screen Y is inverted
+        float len = MathF.Sqrt((dxScreen * dxScreen) + (dyScreen * dyScreen));
+        if (len <= 1e-4f) return new Offset(x: center.X + (dir * TangentLen), y: center.Y);
+        float k = TangentLen / len;
+        return new Offset(x: center.X + (dxScreen * k), y: center.Y + (dyScreen * k));
     }
 
     private void DrawKeys(PaintList paint)
     {
         var keys = Curve.Keys;
-        for (var i = 0; i < keys.Count; i++)
+        for (int i = 0; i < keys.Count; i++)
         {
-            var s = DataToScreen(keys[i].Time, keys[i].Value);
+            var s = DataToScreen(time: keys[i].Time, value: keys[i].Value);
             var fill = i == _selected
                 ? _theme.Accent
                 : i == _hoverKey
                     ? _theme.OnSurface
                     : _theme.OnSurface.WithAlpha(0.75f);
             DrawDot(
-                paint,
-                s,
-                KeyRadius,
-                fill
+                paint: paint,
+                c: s,
+                r: KeyRadius,
+                color: fill
             );
             paint.AddBorder(
-                new Rect(
-                    s.X - KeyRadius,
-                    s.Y - KeyRadius,
-                    KeyRadius * 2f,
-                    KeyRadius * 2f
+                bounds: new Rect(
+                    x: s.X - KeyRadius,
+                    y: s.Y - KeyRadius,
+                    width: KeyRadius * 2f,
+                    height: KeyRadius * 2f
                 ),
-                _theme.SurfaceAlt,
-                KeyRadius
+                color: _theme.SurfaceAlt,
+                radius: KeyRadius
             );
         }
     }
@@ -547,14 +556,14 @@ public sealed class CurveEditor : Widget
     private static void DrawDot(PaintList paint, Offset c, float r, Color color)
     {
         paint.AddRect(
-            new Rect(
-                c.X - r,
-                c.Y - r,
-                r * 2f,
-                r * 2f
+            bounds: new Rect(
+                x: c.X - r,
+                y: c.Y - r,
+                width: r * 2f,
+                height: r * 2f
             ),
-            color,
-            r
+            color: color,
+            radius: r
         );
     }
 
@@ -563,14 +572,14 @@ public sealed class CurveEditor : Widget
     private int KeyAt(Offset p)
     {
         var keys = Curve.Keys;
-        var best = -1;
-        var bestD = Grab * Grab;
-        for (var i = 0; i < keys.Count; i++)
+        int best = -1;
+        float bestD = Grab * Grab;
+        for (int i = 0; i < keys.Count; i++)
         {
-            var s = DataToScreen(keys[i].Time, keys[i].Value);
-            var dx = s.X - p.X;
-            var dy = s.Y - p.Y;
-            var d = dx * dx + dy * dy;
+            var s = DataToScreen(time: keys[i].Time, value: keys[i].Value);
+            float dx = s.X - p.X;
+            float dy = s.Y - p.Y;
+            float d = (dx * dx) + (dy * dy);
             if (d <= bestD)
             {
                 bestD = d;
@@ -586,20 +595,20 @@ public sealed class CurveEditor : Widget
         if (_selected < 0 || _selected >= Curve.Keys.Count) return DragKind.None;
         var keys = Curve.Keys;
         var key = keys[_selected];
-        var center = DataToScreen(key.Time, key.Value);
+        var center = DataToScreen(time: key.Time, value: key.Value);
 
         if (_selected < keys.Count - 1)
         {
-            var slope = key.OutTangent != 0f ? key.OutTangent : Curve.AutoSlope(_selected);
-            var h = TangentScreenPoint(center, slope, 1f);
-            if (Within(p, h, Grab)) return DragKind.OutTangent;
+            float slope = key.OutTangent != 0f ? key.OutTangent : Curve.AutoSlope(_selected);
+            var h = TangentScreenPoint(center: center, slope: slope, dir: 1f);
+            if (Within(a: p, b: h, r: Grab)) return DragKind.OutTangent;
         }
 
         if (_selected > 0)
         {
-            var slope = key.InTangent != 0f ? key.InTangent : Curve.AutoSlope(_selected);
-            var h = TangentScreenPoint(center, slope, -1f);
-            if (Within(p, h, Grab)) return DragKind.InTangent;
+            float slope = key.InTangent != 0f ? key.InTangent : Curve.AutoSlope(_selected);
+            var h = TangentScreenPoint(center: center, slope: slope, dir: -1f);
+            if (Within(a: p, b: h, r: Grab)) return DragKind.InTangent;
         }
 
         return DragKind.None;
@@ -607,9 +616,9 @@ public sealed class CurveEditor : Widget
 
     private static bool Within(Offset a, Offset b, float r)
     {
-        var dx = a.X - b.X;
-        var dy = a.Y - b.Y;
-        return dx * dx + dy * dy <= r * r;
+        float dx = a.X - b.X;
+        float dy = a.Y - b.Y;
+        return (dx * dx) + (dy * dy) <= r * r;
     }
 
     // ── Input ─────────────────────────────────────────────────────────────────
@@ -620,9 +629,9 @@ public sealed class CurveEditor : Widget
         App.Active?.RequestFocus(this);
 
         // Double-click → add a key at the cursor.
-        var now = App.Active?.Time ?? 0f;
-        var isDouble = _lastDownTime >= 0 && now - _lastDownTime < 0.35 &&
-                       Within(point, _lastDownPos, 6f);
+        float now = App.Active?.Time ?? 0f;
+        bool isDouble = _lastDownTime >= 0 && now - _lastDownTime < 0.35 &&
+                        Within(a: point, b: _lastDownPos, r: 6f);
         _lastDownTime = now;
         _lastDownPos = point;
         if (isDouble)
@@ -641,7 +650,7 @@ public sealed class CurveEditor : Widget
             return;
         }
 
-        var hit = KeyAt(point);
+        int hit = KeyAt(point);
         if (hit >= 0)
         {
             _selected = hit;
@@ -663,7 +672,7 @@ public sealed class CurveEditor : Widget
 
         if (_drag == DragKind.None)
         {
-            var h = KeyAt(point);
+            int h = KeyAt(point);
             if (h != _hoverKey)
             {
                 _hoverKey = h;
@@ -680,7 +689,7 @@ public sealed class CurveEditor : Widget
                 break;
             case DragKind.InTangent:
             case DragKind.OutTangent:
-                DragTangent(point, _drag == DragKind.InTangent);
+                DragTangent(point: point, incoming: _drag == DragKind.InTangent);
                 break;
         }
     }
@@ -695,19 +704,13 @@ public sealed class CurveEditor : Widget
     }
 
     /// <summary>The press was taken over (pinch, app background): drop the grabbed handle.</summary>
-    public override void OnPointerCancel()
-    {
-        OnPointerUp(Offset.Zero);
-    }
+    public override void OnPointerCancel() => OnPointerUp(Offset.Zero);
 
     /// <summary>
     ///     Dragging a key or a tangent moves freely in both axes, so a grabbed handle owns the
     ///     gesture outright — a press on empty graph space grabs nothing and still scrolls the page.
     /// </summary>
-    public override bool CanTouchDrag(bool vertical)
-    {
-        return _drag != DragKind.None;
-    }
+    public override bool CanTouchDrag(bool vertical) => _drag != DragKind.None;
 
     public override void OnPointerExit()
     {
@@ -738,15 +741,15 @@ public sealed class CurveEditor : Widget
     {
         if (_selected < 0 || _selected >= Curve.Keys.Count) return;
         var keys = Curve.Keys;
-        var (time, value) = ScreenToData(point);
+        (float time, float value) = ScreenToData(point);
 
         // Clamp time strictly between the neighbours so order is preserved without re-sorting jumps.
-        var lo = _selected > 0 ? keys[_selected - 1].Time : float.NegativeInfinity;
-        var hi = _selected < keys.Count - 1 ? keys[_selected + 1].Time : float.PositiveInfinity;
+        float lo = _selected > 0 ? keys[_selected - 1].Time : float.NegativeInfinity;
+        float hi = _selected < keys.Count - 1 ? keys[_selected + 1].Time : float.PositiveInfinity;
         const float eps = 1e-4f;
-        if (float.IsFinite(lo)) time = MathF.Max(time, lo + eps);
-        if (float.IsFinite(hi)) time = MathF.Min(time, hi - eps);
-        value = Math.Clamp(value, MinValue, MaxValue);
+        if (float.IsFinite(lo)) time = MathF.Max(x: time, y: lo + eps);
+        if (float.IsFinite(hi)) time = MathF.Min(x: time, y: hi - eps);
+        value = Math.Clamp(value: value, min: MinValue, max: MaxValue);
 
         var k = keys[_selected];
         k.Time = time;
@@ -762,22 +765,22 @@ public sealed class CurveEditor : Widget
         if (_selected < 0 || _selected >= Curve.Keys.Count) return;
         var keys = Curve.Keys;
         var key = keys[_selected];
-        var center = DataToScreen(key.Time, key.Value);
+        var center = DataToScreen(time: key.Time, value: key.Value);
 
         // Convert the handle position back into a data-space slope.
         var p = Plot;
-        var sxPerT = p.Width > 0f && _maxT > _minT ? p.Width / (_maxT - _minT) : 1f;
-        var syPerV = p.Height > 0f && MaxValue > MinValue ? p.Height / (MaxValue - MinValue) : 1f;
+        float sxPerT = p.Width > 0f && _maxT > _minT ? p.Width / (_maxT - _minT) : 1f;
+        float syPerV = p.Height > 0f && MaxValue > MinValue ? p.Height / (MaxValue - MinValue) : 1f;
 
-        var dxScreen = point.X - center.X;
-        var dyScreen = point.Y - center.Y;
-        var dxData = dxScreen / sxPerT;
-        var dyData = -dyScreen / syPerV; // invert screen Y
+        float dxScreen = point.X - center.X;
+        float dyScreen = point.Y - center.Y;
+        float dxData = dxScreen / sxPerT;
+        float dyData = -dyScreen / syPerV; // invert screen Y
 
         // Avoid a vertical (infinite) slope; keep a minimum horizontal extent.
         const float minDx = 1e-3f;
-        var horiz = incoming ? MathF.Min(dxData, -minDx) : MathF.Max(dxData, minDx);
-        var slope = dyData / horiz;
+        float horiz = incoming ? MathF.Min(x: dxData, y: -minDx) : MathF.Max(x: dxData, y: minDx);
+        float slope = dyData / horiz;
         // A genuine zero slope would re-trigger auto-tangent mode; nudge to a tiny non-zero value.
         if (slope == 0f) slope = incoming ? -1e-4f : 1e-4f;
 
@@ -791,12 +794,12 @@ public sealed class CurveEditor : Widget
 
     private void AddKeyAt(Offset point)
     {
-        var (time, value) = ScreenToData(point);
-        value = Math.Clamp(value, MinValue, MaxValue);
+        (float time, float value) = ScreenToData(point);
+        value = Math.Clamp(value: value, min: MinValue, max: MaxValue);
 
-        Curve.Keys.Add(new CurveKey(time, value));
+        Curve.Keys.Add(new CurveKey(time: time, value: value));
         // Sort and select the newly-added key.
-        var idx = Curve.SortKeepingTrack(Curve.Keys.Count - 1);
+        int idx = Curve.SortKeepingTrack(Curve.Keys.Count - 1);
         _selected = idx;
         _drag = DragKind.None;
 

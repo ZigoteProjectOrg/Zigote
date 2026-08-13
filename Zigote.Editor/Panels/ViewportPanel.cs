@@ -82,6 +82,10 @@ public sealed partial class ViewportPanel : Widget
         CameraNavigationMode.TwoD,
     ];
 
+    // DrawOverlay runs every painted frame — per-frame text goes through CachedText. Enum names are
+    // pre-cached: an enum inside an interpolation falls back to ToString (allocates every call).
+    private static readonly string[] KindNames = Enum.GetNames<NodeKind>();
+
     // Edit-mode physical-camera preview: applies the active camera's DoF/exposure/film grade to the
     // viewport while authoring (play mode uses GameSession's own driver). Separate instance so each mode
     // restores the settings it snapshotted.
@@ -91,19 +95,23 @@ public sealed partial class ViewportPanel : Widget
     // A Ticker keeps the viewport rendering (Ticker.AnyActive) so particles animate; rebuilt only when the
     // emitter set / their graphs change (signature), so particle state persists during normal viewing.
     private readonly VfxScenePlayback _editVfx = new();
+    private readonly CachedText _flyHintText = new();
     private readonly Ticker _flyTicker;
+    private readonly CachedText _fpsOverlayText = new();
+    private readonly CachedText _selOverlayText = new();
 
     // ── Widget refs ───────────────────────────────────────────────────────────
 
     private readonly EditorState _state;
     private readonly ThemeData _theme;
 
-    // DrawOverlay runs every painted frame — per-frame text goes through CachedText. Enum names are
-    // pre-cached: an enum inside an interpolation falls back to ToString (allocates every call).
-    private static readonly string[] KindNames = Enum.GetNames<NodeKind>();
-    private readonly CachedText _fpsOverlayText = new();
-    private readonly CachedText _selOverlayText = new();
-    private readonly CachedText _flyHintText = new();
+    /// <summary>
+    ///     Toggle the viewport to fill the whole editor (fullscreen for testing). Wired by the editor
+    ///     shell to <see cref="Widgets.DockLayout.ToggleMaximize" />. Bound to F11 while the viewport
+    ///     has focus; also reachable from the panel header's maximize button.
+    /// </summary>
+    public Action? OnToggleMaximize;
+
     private CameraNavigationMode _cameraMode;
     private Vec3 _dragStartPos;
     private Quat _dragStartRot;
@@ -160,7 +168,7 @@ public sealed partial class ViewportPanel : Widget
 
     private float _orbitPitch = 0.3f;
 
-    private Vec3 _orbitTarget = new(0f, 0.5f, 0f);
+    private Vec3 _orbitTarget = new(x: 0f, y: 0.5f, z: 0f);
     // ── Editor camera ────────────────────────────────────────────────────────
 
     private float _orbitYaw = 0.4f;
@@ -174,18 +182,12 @@ public sealed partial class ViewportPanel : Widget
         Vec3 orbitTarget, Vec3 flyPos, uint w, uint h, ulong selected, GizmoMode gizmo)?
         _renderedSig;
 
+    private float _rotSnapAccum;
+
     private Vec2 _rotateLastVec;
     private Vec2 _rotatePivotScreen;
-    private float _rotSnapAccum;
     private int _settleFrames;
     private Size _size;
-
-    /// <summary>
-    ///     Toggle the viewport to fill the whole editor (fullscreen for testing). Wired by the editor
-    ///     shell to <see cref="Widgets.DockLayout.ToggleMaximize" />. Bound to F11 while the viewport
-    ///     has focus; also reachable from the panel header's maximize button.
-    /// </summary>
-    public Action? OnToggleMaximize;
 
     public ViewportPanel(EditorState state, ThemeData theme)
     {
@@ -194,9 +196,9 @@ public sealed partial class ViewportPanel : Widget
         // ZIGOTE_VIEW=2d opens straight into 2D authoring mode — the dev-loop/capture hook for the
         // 2D viewport, alongside ZIGOTE_SCENE / ZIGOTE_AUTOPLAY.
         if (string.Equals(
-                Environment.GetEnvironmentVariable("ZIGOTE_VIEW"),
-                "2d",
-                StringComparison.OrdinalIgnoreCase
+                a: Environment.GetEnvironmentVariable("ZIGOTE_VIEW"),
+                b: "2d",
+                comparisonType: StringComparison.OrdinalIgnoreCase
             ))
         {
             _cameraMode = CameraNavigationMode.TwoD;
@@ -260,12 +262,23 @@ public sealed partial class ViewportPanel : Widget
 
     private void OnAssetDropped(string path, Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return;
-        if (path.EndsWith(PrefabDocument.Extension, StringComparison.OrdinalIgnoreCase))
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return;
+        if (path.EndsWith(
+                value: PrefabDocument.Extension,
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            ))
         {
-            var id = _state.Assets.Register(AssetPath.ToRelative(path, _state.ProjectDir));
+            var id = _state.Assets.Register(
+                AssetPath.ToRelative(path: path, contentRoot: _state.ProjectDir)
+            );
             if (_state.InstantiatePrefab(id) is null)
-                App.Active?.ShowSnackbar($"Failed to instantiate {Path.GetFileName(path)}", 4f);
+            {
+                App.Active?.ShowSnackbar(
+                    message: $"Failed to instantiate {Path.GetFileName(path)}",
+                    duration: 4f
+                );
+            }
+
             return;
         }
 
@@ -273,14 +286,16 @@ public sealed partial class ViewportPanel : Widget
         {
             try
             {
-                var imported = GltfLoader.Load(path, out var report);
-                _state.History.Execute(new AddNodeCommand(_state, _state.Scene.Root, imported));
+                var imported = GltfLoader.Load(path: path, report: out var report);
+                _state.History.Execute(
+                    new AddNodeCommand(state: _state, parent: _state.Scene.Root, node: imported)
+                );
                 _state.RefreshAnimations(true); // preview the just-imported animation clips
 
                 Console.Error.WriteLine(report.Summary());
                 App.Active?.ShowSnackbar(
-                    report.OneLine(),
-                    report.HasErrors || report.HasWarnings ? 5f : 3f
+                    message: report.OneLine(),
+                    duration: report.HasErrors || report.HasWarnings ? 5f : 3f
                 );
             }
             catch (Exception ex)
@@ -289,18 +304,24 @@ public sealed partial class ViewportPanel : Widget
                 // (the renderer only consumes the importer's `.zmesh` caches, never the raw file).
                 Console.Error.WriteLine($"[GltfLoader] {ex.Message}");
                 App.Active?.ShowSnackbar(
-                    $"Failed to import {Path.GetFileName(path)}: {ex.Message}",
-                    5f
+                    message: $"Failed to import {Path.GetFileName(path)}: {ex.Message}",
+                    duration: 5f
                 );
             }
 
             _state.NotifySceneChanged();
         }
-        else if (path.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
-                 path.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
-                 path.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
-                 path.EndsWith(".webp", StringComparison.OrdinalIgnoreCase) ||
-                 path.EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
+        else if (path.EndsWith(value: ".png", comparisonType: StringComparison.OrdinalIgnoreCase) ||
+                 path.EndsWith(value: ".jpg", comparisonType: StringComparison.OrdinalIgnoreCase) ||
+                 path.EndsWith(
+                     value: ".jpeg",
+                     comparisonType: StringComparison.OrdinalIgnoreCase
+                 ) ||
+                 path.EndsWith(
+                     value: ".webp",
+                     comparisonType: StringComparison.OrdinalIgnoreCase
+                 ) ||
+                 path.EndsWith(value: ".gif", comparisonType: StringComparison.OrdinalIgnoreCase))
         {
             if (_state.Selected is { Kind: NodeKind.Mesh })
             {
@@ -311,10 +332,10 @@ public sealed partial class ViewportPanel : Widget
             {
                 // Dropping an image creates a real 2D Sprite node (the old '#quad' mesh fabrication
                 // predates the sprite renderer).
-                var name = Path.GetFileNameWithoutExtension(path);
-                var node = _state.AddNode(name, NodeKind.Sprite);
+                string name = Path.GetFileNameWithoutExtension(path);
+                var node = _state.AddNode(name: name, kind: NodeKind.Sprite);
                 node.TexturePath = path;
-                node.Position = new Vec3(0, 1, 0);
+                node.Position = new Vec3(x: 0, y: 1, z: 0);
                 _state.NotifySceneChanged();
             }
         }
@@ -324,17 +345,17 @@ public sealed partial class ViewportPanel : Widget
 
     public override Size Measure(Constraints c)
     {
-        _size = c.Constrain(new Size(c.MaxWidth, c.MaxHeight));
+        _size = c.Constrain(new Size(width: c.MaxWidth, height: c.MaxHeight));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
@@ -342,20 +363,20 @@ public sealed partial class ViewportPanel : Widget
 
     public override void Paint(PaintList paint)
     {
-        paint.AddRect(Bounds, _theme.ViewportBackground);
+        paint.AddRect(bounds: Bounds, color: _theme.ViewportBackground);
 
         // Guard: negative or zero Bounds (cast to uint gives uint.MaxValue → wgpu panics).
-        var renderW = (uint)MathF.Max(1f, MathF.Floor(Bounds.Width));
-        var renderH = (uint)MathF.Max(1f, MathF.Floor(Bounds.Height));
+        uint renderW = (uint)MathF.Max(x: 1f, y: MathF.Floor(Bounds.Width));
+        uint renderH = (uint)MathF.Max(x: 1f, y: MathF.Floor(Bounds.Height));
 
         // Publish the viewport size so play-mode scripts can build a correctly-proportioned frustum
         // (the camera view-projection itself is published by GameSession from the active camera).
-        RenderView.SetViewport(renderW, renderH);
+        RenderView.SetViewport(width: renderW, height: renderH);
 
-        var texHandle = _lastTexHandle;
-        var texW = _lastTexW;
-        var texH = _lastTexH;
-        if (ShouldRender3D(renderW, renderH, out var sig))
+        ulong texHandle = _lastTexHandle;
+        int texW = _lastTexW;
+        int texH = _lastTexH;
+        if (ShouldRender3D(renderW: renderW, renderH: renderH, sig: out var sig))
         {
             SyncGizmos();
 
@@ -372,13 +393,13 @@ public sealed partial class ViewportPanel : Widget
                 // viewport shows the lens it will render through (FOV is already pushed by SyncToNative). The
                 // frame is rendered from the orbit/fly camera, so pass its world position for subject autofocus.
                 var editCam = FindCameraNode(_state.Scene.Root);
-                var camDt = MathF.Min(App.Active?.DeltaTime ?? 1f / 60f, 1f / 30f);
+                float camDt = MathF.Min(x: App.Active?.DeltaTime ?? 1f / 60f, y: 1f / 30f);
                 _editCamDriver.Apply(
-                    editCam,
-                    GetCameraPosition(),
-                    MathF.Max(1f, Bounds.Height),
-                    camDt,
-                    id => FindNodeById(_state.Scene.Root, id)
+                    camera: editCam,
+                    cameraWorldPos: GetCameraPosition(),
+                    viewportHeightPx: MathF.Max(x: 1f, y: Bounds.Height),
+                    dt: camDt,
+                    findNode: id => FindNodeById(node: _state.Scene.Root, id: id)
                 );
             }
 
@@ -393,14 +414,16 @@ public sealed partial class ViewportPanel : Widget
             if (_state.StreamingEnabled)
                 // Demand mesh streaming: the residency sink loads near meshes off-thread + unloads far ones,
                 // alongside the visibility cull. Off by default (StreamDistance 0) → the plain overload runs.
+            {
                 LodSystem.Apply(
-                    _state.Scene.Root,
-                    lodCam,
-                    _state.MeshStreamer,
-                    StreamingPolicy.WithHysteresis(_state.StreamDistance)
+                    root: _state.Scene.Root,
+                    cameraPos: lodCam,
+                    residency: _state.MeshStreamer,
+                    policy: StreamingPolicy.WithHysteresis(_state.StreamDistance)
                 );
+            }
             else
-                LodSystem.Apply(_state.Scene.Root, lodCam);
+                LodSystem.Apply(root: _state.Scene.Root, cameraPos: lodCam);
 
             ZigoteEngine.Instance!.SceneSetSelectedNode(_state.Selected?.Handle ?? 0);
             PushReflectionProbe();
@@ -415,17 +438,14 @@ public sealed partial class ViewportPanel : Widget
                 if (_state.UseGpuVfx) UploadVfxParticlesGpu();
                 else if (_state.UseNativeVfx) UploadVfxParticlesNative();
             }
-            else if (_state.UseNativeVfx || _state.UseGpuVfx)
-            {
-                UploadVfxParticlesNative();
-            }
+            else if (_state.UseNativeVfx || _state.UseGpuVfx) UploadVfxParticlesNative();
 
             // 2D sprites render in BOTH modes through the native sprite pass. Edit mode uses the editor's
             // perspective view-proj (sprites are world-space XY quads, so they stay coherent with gizmos +
             // picking); play mode uses the game's 2D camera and includes the script draw queue.
-            UploadSprites2D(renderW, renderH);
+            UploadSprites2D(renderW: renderW, renderH: renderH);
 
-            texHandle = ZigoteEngine.Instance.Render3D(renderW, renderH);
+            texHandle = ZigoteEngine.Instance.Render3D(width: renderW, height: renderH);
             if (texHandle != 0)
             {
                 _lastTexHandle = texHandle;
@@ -437,32 +457,28 @@ public sealed partial class ViewportPanel : Widget
                 _renderedSettings = SafeGetSettings();
             }
             else
-            {
                 _renderedSig = null; // transient failure — retry next paint
-            }
         }
 
         if (texHandle != 0)
         {
             paint.AddImage(
-                Bounds,
-                texW,
-                texH,
-                null,
-                texHandle
+                bounds: Bounds,
+                pixelWidth: texW,
+                pixelHeight: texH,
+                pixels: null,
+                cacheKey: texHandle
             );
             Draw2DOverlay(paint); // no-op outside 2D mode
             if (_state.ShowPhysicsWireframe) DrawPhysicsWireframe(paint);
             if (!_state.UseNativeVfx && !_state.UseGpuVfx) DrawVfxParticles(paint);
             if (_gizmoMode is GizmoMode.Rotate && !_state.IsPlaying) DrawRotateRings(paint);
-            DrawOverlay(paint, true);
+            DrawOverlay(paint: paint, hasReal3D: true);
         }
         else
         {
             if (Is2D)
-            {
                 Draw2DOverlay(paint);
-            }
             else
             {
                 DrawGrid(paint);
@@ -472,7 +488,7 @@ public sealed partial class ViewportPanel : Widget
             if (_state.ShowPhysicsWireframe) DrawPhysicsWireframe(paint);
             if (!_state.UseNativeVfx && !_state.UseGpuVfx) DrawVfxParticles(paint);
             if (_gizmoMode is GizmoMode.Rotate && !_state.IsPlaying) DrawRotateRings(paint);
-            DrawOverlay(paint, false);
+            DrawOverlay(paint: paint, hasReal3D: false);
         }
     }
 
@@ -496,19 +512,19 @@ public sealed partial class ViewportPanel : Widget
         // These sources mutate the 3D image outside the signature (game ticks, animated particle sim,
         // streamed-in meshes) — keep rendering while any is active. A paused play session deliberately
         // falls through to the signature: its frame is frozen, so it idles like a static edit scene.
-        var forced = (_state.IsPlaying && !_state.IsPaused)
-                     || (app?.ContinuousUpdate ?? false)
-                     || (app?.ForceContinuousRender ?? false)
-                     || (!_state.IsPlaying && _state.AnimateEditVfx)
-                     || _state.StreamingEnabled
-                     || _lastTexHandle == 0;
+        bool forced = (_state.IsPlaying && !_state.IsPaused)
+                      || (app?.ContinuousUpdate ?? false)
+                      || (app?.ForceContinuousRender ?? false)
+                      || (!_state.IsPlaying && _state.AnimateEditVfx)
+                      || _state.StreamingEnabled
+                      || _lastTexHandle == 0;
         if (forced)
         {
             _settleFrames = ComputeSettleFrames();
             return true;
         }
 
-        if (_renderedSig != sig || !SettingsEqual(SafeGetSettings(), _renderedSettings))
+        if (_renderedSig != sig || !SettingsEqual(a: SafeGetSettings(), b: _renderedSettings))
         {
             _settleFrames = ComputeSettleFrames();
             app?.RequestExtraFrames(1);
@@ -536,21 +552,28 @@ public sealed partial class ViewportPanel : Widget
     /// </summary>
     private int ComputeSettleFrames()
     {
-        var frames = SettleFrames;
+        int frames = SettleFrames;
         var s = SafeGetSettings();
         if (s.AutoExposureEnabled != 0f)
         {
-            var speed = Math.Clamp(s.AutoExposureSpeed, 0.01f, 0.99f);
-            frames = Math.Max(frames, (int)MathF.Ceiling(3.9f / -MathF.Log(1f - speed)));
+            float speed = Math.Clamp(value: s.AutoExposureSpeed, min: 0.01f, max: 0.99f);
+            frames = Math.Max(
+                val1: frames,
+                val2: (int)MathF.Ceiling(3.9f / -MathF.Log(1f - speed))
+            );
         }
 
         if (!_state.IsPlaying && FindCameraNode(_state.Scene.Root) is { PhysEnabled: true } physCam)
+        {
             frames = Math.Max(
-                frames,
-                (int)MathF.Ceiling(3.9f * 60f / Math.Clamp(physCam.PhysFocusSpeed, 0.5f, 60f))
+                val1: frames,
+                val2: (int)MathF.Ceiling(
+                    3.9f * 60f / Math.Clamp(value: physCam.PhysFocusSpeed, min: 0.5f, max: 60f)
+                )
             );
+        }
 
-        return Math.Min(frames, MaxSettleFrames);
+        return Math.Min(val1: frames, val2: MaxSettleFrames);
     }
 
     private static ZgRenderSettings3D SafeGetSettings()
@@ -589,11 +612,11 @@ public sealed partial class ViewportPanel : Widget
 
         var (center, scale) = WorldCenterScale(probe);
         var ext = new Vec3(
-            probe.ProbeExtents.X * scale.X,
-            probe.ProbeExtents.Y * scale.Y,
-            probe.ProbeExtents.Z * scale.Z
+            x: probe.ProbeExtents.X * scale.X,
+            y: probe.ProbeExtents.Y * scale.Y,
+            z: probe.ProbeExtents.Z * scale.Z
         );
-        ZigoteEngine.Instance!.SetReflectionProbe(center, ext);
+        ZigoteEngine.Instance!.SetReflectionProbe(center: center, halfExtents: ext);
     }
 
     private static SceneNode? FindActiveProbe(SceneNode n)
@@ -616,11 +639,11 @@ public sealed partial class ViewportPanel : Widget
         while (p is not null)
         {
             pos = new Vec3(
-                p.Position.X + pos.X * p.Scale.X,
-                p.Position.Y + pos.Y * p.Scale.Y,
-                p.Position.Z + pos.Z * p.Scale.Z
+                x: p.Position.X + (pos.X * p.Scale.X),
+                y: p.Position.Y + (pos.Y * p.Scale.Y),
+                z: p.Position.Z + (pos.Z * p.Scale.Z)
             );
-            scl = new Vec3(scl.X * p.Scale.X, scl.Y * p.Scale.Y, scl.Z * p.Scale.Z);
+            scl = new Vec3(x: scl.X * p.Scale.X, y: scl.Y * p.Scale.Y, z: scl.Z * p.Scale.Z);
             p = p.Parent;
         }
 
@@ -633,15 +656,15 @@ public sealed partial class ViewportPanel : Widget
     {
         return _cameraMode == CameraNavigationMode.Fly
             ? _flyPosition
-            : _orbitTarget - GetCameraForward() * _orbitDistance;
+            : _orbitTarget - (GetCameraForward() * _orbitDistance);
     }
 
     private Vec3 GetCameraForward()
     {
         return new Vec3(
-            -MathF.Sin(_orbitYaw) * MathF.Cos(_orbitPitch),
-            -MathF.Sin(_orbitPitch),
-            -MathF.Cos(_orbitYaw) * MathF.Cos(_orbitPitch)
+            x: -MathF.Sin(_orbitYaw) * MathF.Cos(_orbitPitch),
+            y: -MathF.Sin(_orbitPitch),
+            z: -MathF.Cos(_orbitYaw) * MathF.Cos(_orbitPitch)
         );
     }
 
@@ -652,10 +675,11 @@ public sealed partial class ViewportPanel : Widget
             : _orbitTarget;
     }
 
-    private Mat4 GetEditorView()
-    {
-        return Mat4.LookAt(GetCameraPosition(), GetCameraTarget(), Vec3.Up);
-    }
+    private Mat4 GetEditorView() => Mat4.LookAt(
+        eye: GetCameraPosition(),
+        center: GetCameraTarget(),
+        worldUp: Vec3.Up
+    );
 
     private void SetCameraMode(CameraNavigationMode mode)
     {
@@ -664,7 +688,7 @@ public sealed partial class ViewportPanel : Widget
         if (mode == CameraNavigationMode.Fly)
             _flyPosition = GetCameraPosition();
         else
-            _orbitTarget = GetCameraPosition() + GetCameraForward() * _orbitDistance;
+            _orbitTarget = GetCameraPosition() + (GetCameraForward() * _orbitDistance);
 
         _cameraMode = mode;
         if (mode == CameraNavigationMode.TwoD) Enter2DMode();
@@ -679,7 +703,7 @@ public sealed partial class ViewportPanel : Widget
 
         var move = Vec3.Zero;
         var forward = GetCameraForward();
-        var right = new Vec3(MathF.Cos(_orbitYaw), 0f, -MathF.Sin(_orbitYaw));
+        var right = new Vec3(x: MathF.Cos(_orbitYaw), y: 0f, z: -MathF.Sin(_orbitYaw));
         if (_flyForward) move += forward;
         if (_flyBack) move -= forward;
         if (_flyRight) move += right;
@@ -688,8 +712,8 @@ public sealed partial class ViewportPanel : Widget
         if (_flyDown) move += Vec3.Down;
         if (move.LengthSq() < 1e-6f) return;
 
-        var boost = App.Active?.CurrentModifiers.HasFlag(Modifiers.Shift) == true ? 4f : 1f;
-        var dt = Math.Clamp(deltaTime, 0f, 0.05f);
+        float boost = App.Active?.CurrentModifiers.HasFlag(Modifiers.Shift) == true ? 4f : 1f;
+        float dt = Math.Clamp(value: deltaTime, min: 0f, max: 0.05f);
         _flyPosition += move.Normalize() * (_flySpeed * boost * dt);
         MarkNeedsPaint();
     }
@@ -700,24 +724,22 @@ public sealed partial class ViewportPanel : Widget
         _flyTicker.Stop();
     }
 
-    private bool HasFlyInput()
-    {
-        return _flyForward || _flyBack || _flyLeft || _flyRight || _flyDown || _flyUp;
-    }
+    private bool HasFlyInput() =>
+        _flyForward || _flyBack || _flyLeft || _flyRight || _flyDown || _flyUp;
 
     private void FrameSelection()
     {
         if (_state.Selected is not { } selected) return;
-        var (center, radius) = NodeWorldBounds(selected);
-        FrameBounds(center, radius);
+        (var center, float radius) = NodeWorldBounds(selected);
+        FrameBounds(center: center, radius: radius);
     }
 
     /// <summary>Fit the whole scene (all visible mesh geometry) in view.</summary>
     private void FrameAll()
     {
-        var min = new Vec3(float.MaxValue, float.MaxValue, float.MaxValue);
-        var max = new Vec3(float.MinValue, float.MinValue, float.MinValue);
-        var any = false;
+        var min = new Vec3(x: float.MaxValue, y: float.MaxValue, z: float.MaxValue);
+        var max = new Vec3(x: float.MinValue, y: float.MinValue, z: float.MinValue);
+        bool any = false;
 
         void Walk(SceneNode n)
         {
@@ -725,18 +747,18 @@ public sealed partial class ViewportPanel : Widget
                 !string.IsNullOrEmpty(n.MeshPath))
             {
                 var (c, s) = WorldCenterScale(n);
-                var hx = MathF.Abs(s.X) * 0.5f;
-                var hy = MathF.Abs(s.Y) * 0.5f;
-                var hz = MathF.Abs(s.Z) * 0.5f;
+                float hx = MathF.Abs(s.X) * 0.5f;
+                float hy = MathF.Abs(s.Y) * 0.5f;
+                float hz = MathF.Abs(s.Z) * 0.5f;
                 min = new Vec3(
-                    MathF.Min(min.X, c.X - hx),
-                    MathF.Min(min.Y, c.Y - hy),
-                    MathF.Min(min.Z, c.Z - hz)
+                    x: MathF.Min(x: min.X, y: c.X - hx),
+                    y: MathF.Min(x: min.Y, y: c.Y - hy),
+                    z: MathF.Min(x: min.Z, y: c.Z - hz)
                 );
                 max = new Vec3(
-                    MathF.Max(max.X, c.X + hx),
-                    MathF.Max(max.Y, c.Y + hy),
-                    MathF.Max(max.Z, c.Z + hz)
+                    x: MathF.Max(x: max.X, y: c.X + hx),
+                    y: MathF.Max(x: max.Y, y: c.Y + hy),
+                    z: MathF.Max(x: max.Z, y: c.Z + hz)
                 );
                 any = true;
             }
@@ -747,13 +769,13 @@ public sealed partial class ViewportPanel : Widget
         Walk(_state.Scene.Root);
         if (!any)
         {
-            FrameBounds(new Vec3(0f, 0.5f, 0f), 5f);
+            FrameBounds(center: new Vec3(x: 0f, y: 0.5f, z: 0f), radius: 5f);
             return;
         }
 
         var center = (min + max) * 0.5f;
-        var radius = ((max - min) * 0.5f).Length();
-        FrameBounds(center, radius);
+        float radius = ((max - min) * 0.5f).Length();
+        FrameBounds(center: center, radius: radius);
     }
 
     /// <summary>
@@ -767,11 +789,11 @@ public sealed partial class ViewportPanel : Widget
         if (node.Kind == NodeKind.Mesh && !string.IsNullOrEmpty(node.MeshPath))
         {
             var half = new Vec3(
-                MathF.Abs(scale.X) * 0.5f,
-                MathF.Abs(scale.Y) * 0.5f,
-                MathF.Abs(scale.Z) * 0.5f
+                x: MathF.Abs(scale.X) * 0.5f,
+                y: MathF.Abs(scale.Y) * 0.5f,
+                z: MathF.Abs(scale.Z) * 0.5f
             );
-            return (center, MathF.Max(0.25f, half.Length()));
+            return (center, MathF.Max(x: 0.25f, y: half.Length()));
         }
 
         return (center, 1f);
@@ -783,11 +805,11 @@ public sealed partial class ViewportPanel : Widget
     /// </summary>
     private void FrameBounds(Vec3 center, float radius)
     {
-        radius = MathF.Max(radius, 0.25f);
+        radius = MathF.Max(x: radius, y: 0.25f);
         const float fov = MathF.PI / 4f; // matches the projection used for picking / gizmo math
-        var dist = radius / MathF.Tan(fov * 0.5f);
+        float dist = radius / MathF.Tan(fov * 0.5f);
         _frameTargetCenter = center;
-        _frameTargetDist = Math.Clamp(dist * 1.25f, 0.5f, 200f);
+        _frameTargetDist = Math.Clamp(value: dist * 1.25f, min: 0.5f, max: 200f);
         _cameraMode = CameraNavigationMode.Orbit;
         ResetFlyInput();
         (_frameTicker ??= new Ticker(TickFraming)).Start();
@@ -795,7 +817,7 @@ public sealed partial class ViewportPanel : Widget
 
     private void TickFraming(float deltaTime)
     {
-        var k = 1f - MathF.Exp(-Math.Clamp(deltaTime, 0f, 0.05f) * 14f);
+        float k = 1f - MathF.Exp(-Math.Clamp(value: deltaTime, min: 0f, max: 0.05f) * 14f);
         _orbitTarget += (_frameTargetCenter - _orbitTarget) * k;
         _orbitDistance += (_frameTargetDist - _orbitDistance) * k;
 
@@ -811,10 +833,7 @@ public sealed partial class ViewportPanel : Widget
     }
 
     /// <summary>Cancel an in-flight framing animation when the user takes manual camera control.</summary>
-    private void StopFraming()
-    {
-        _frameTicker?.Stop();
-    }
+    private void StopFraming() => _frameTicker?.Stop();
 
     /// <summary>
     ///     Project a world-space axis direction onto screen pixels and use it to convert
@@ -825,12 +844,12 @@ public sealed partial class ViewportPanel : Widget
     {
         if (_state.Selected is null || Bounds.Width < 1f || Bounds.Height < 1f) return Vec3.Zero;
 
-        var aspect = Bounds.Width / Bounds.Height;
+        float aspect = Bounds.Width / Bounds.Height;
         var proj = Mat4.PerspectiveRhZo(
-            MathF.PI / 4f,
-            aspect,
-            0.1f,
-            1000f
+            fovyRadians: MathF.PI / 4f,
+            aspect: aspect,
+            near: 0.1f,
+            far: 1000f
         );
         var view = GetEditorView();
         var vp = proj * view;
@@ -839,8 +858,8 @@ public sealed partial class ViewportPanel : Widget
         {
             var ndc = vp.MulPoint(p);
             return new Vec2(
-                (ndc.X + 1f) * 0.5f * Bounds.Width,
-                (1f - ndc.Y) * 0.5f * Bounds.Height
+                x: (ndc.X + 1f) * 0.5f * Bounds.Width,
+                y: (1f - ndc.Y) * 0.5f * Bounds.Height
             );
         }
 
@@ -848,13 +867,13 @@ public sealed partial class ViewportPanel : Widget
         var s0 = WorldToScreen(nodePos);
         var s1 = WorldToScreen(nodePos + worldAxis);
         var screenVec = s1 - s0;
-        var screenLen = screenVec.Length();
+        float screenLen = screenVec.Length();
 
         // If axis collapses to < 5px (looking straight down the axis), skip movement.
         if (screenLen < 5f) return Vec3.Zero;
 
         var screenDir = screenVec / screenLen;
-        var dot = dx * screenDir.X + dy * screenDir.Y;
+        float dot = (dx * screenDir.X) + (dy * screenDir.Y);
         return worldAxis * (dot / screenLen);
     }
 
@@ -863,12 +882,12 @@ public sealed partial class ViewportPanel : Widget
         // In 2D, snap to the tile grid the user is actually looking at rather than the 3D snap grid.
         if (Is2D) return SnapWorld2D(p);
 
-        var g = _state.SnapGrid;
+        float g = _state.SnapGrid;
         if (g <= 0f) return p;
         return new Vec3(
-            MathF.Round(p.X / g) * g,
-            MathF.Round(p.Y / g) * g,
-            MathF.Round(p.Z / g) * g
+            x: MathF.Round(p.X / g) * g,
+            y: MathF.Round(p.Y / g) * g,
+            z: MathF.Round(p.Z / g) * g
         );
     }
 
@@ -876,26 +895,26 @@ public sealed partial class ViewportPanel : Widget
     private float SnapScale(float v)
     {
         if (SnapActive) v = MathF.Round(v / SnapScaleStep) * SnapScaleStep;
-        return MathF.Max(0.001f, v);
+        return MathF.Max(x: 0.001f, y: v);
     }
 
     private Vec2 ProjectToScreen(Vec3 worldPos)
     {
         if (Bounds.Width < 1f || Bounds.Height < 1f) return Vec2.Zero;
         // Gizmo/overlay projection must use whatever camera the frame was drawn with.
-        if (Is2D) return WorldToScreen2D(new Vec2(worldPos.X, worldPos.Y));
+        if (Is2D) return WorldToScreen2D(new Vec2(x: worldPos.X, y: worldPos.Y));
 
         var vp = Mat4.PerspectiveRhZo(
-                     MathF.PI / 4f,
-                     Bounds.Width / Bounds.Height,
-                     0.1f,
-                     1000f
+                     fovyRadians: MathF.PI / 4f,
+                     aspect: Bounds.Width / Bounds.Height,
+                     near: 0.1f,
+                     far: 1000f
                  )
                  * GetEditorView();
         var ndc = vp.MulPoint(worldPos);
         return new Vec2(
-            Bounds.X + (ndc.X + 1f) * 0.5f * Bounds.Width,
-            Bounds.Y + (1f - ndc.Y) * 0.5f * Bounds.Height
+            x: Bounds.X + ((ndc.X + 1f) * 0.5f * Bounds.Width),
+            y: Bounds.Y + ((1f - ndc.Y) * 0.5f * Bounds.Height)
         );
     }
 
@@ -913,25 +932,27 @@ public sealed partial class ViewportPanel : Widget
         if (_state.IsPlaying && RenderView.IsAvailable)
             vp = RenderView.ViewProjection;
         else
+        {
             vp = Mat4.PerspectiveRhZo(
-                     MathF.PI / 4f,
-                     Bounds.Width / Bounds.Height,
-                     0.1f,
-                     1000f
+                     fovyRadians: MathF.PI / 4f,
+                     aspect: Bounds.Width / Bounds.Height,
+                     near: 0.1f,
+                     far: 1000f
                  )
                  * GetEditorView();
+        }
 
         var nodeColor = new Color(
-            0.45f,
-            0.95f,
-            0.6f,
-            0.9f
+            r: 0.45f,
+            g: 0.95f,
+            b: 0.6f,
+            a: 0.9f
         ); // editor-authored colliders
         var scriptColor = new Color(
-            0.4f,
-            0.85f,
-            0.95f,
-            0.9f
+            r: 0.4f,
+            g: 0.85f,
+            b: 0.95f,
+            a: 0.9f
         ); // script-created Jolt bodies (e.g. a chassis)
 
         // Clip to the viewport: a collider near the screen edge can project outside Bounds, and the
@@ -940,44 +961,56 @@ public sealed partial class ViewportPanel : Widget
 
         // (1) Editor-authored node.UsePhysics colliders (walk the scene tree).
         DrawPhysicsNode(
-            paint,
-            _state.Scene.Root,
-            vp,
-            nodeColor
+            paint: paint,
+            node: _state.Scene.Root,
+            vp: vp,
+            color: nodeColor
         );
 
         // (2) Script-created bodies (made via the generic Physics API, not SceneNodes) — e.g. a vehicle
         //     chassis. Only available while playing.
         if (_state.IsPlaying && _state.ActivePlay is { } play)
+        {
             foreach (var body in play.ScriptBodies)
+            {
                 StrokeEdges(
-                    paint,
-                    vp,
-                    PhysicsWireframe.WorldEdges(
-                        body.Shape,
-                        body.HalfExtents,
-                        body.Position,
-                        body.Rotation
+                    paint: paint,
+                    vp: vp,
+                    edges: PhysicsWireframe.WorldEdges(
+                        shape: body.Shape,
+                        halfExtents: body.HalfExtents,
+                        position: body.Position,
+                        rotation: body.Rotation
                     ),
-                    scriptColor
+                    color: scriptColor
                 );
+            }
+        }
 
         // (3) Game-emitted debug lines (suspension rays, raycast wheels, etc.) via the generic DebugDraw
         //     API. These cover what has no collider at all (raycast suspension), so the car's tyres show.
         foreach (var line in DebugDraw.Queue)
-            if (ProjectClip(vp, line.A, out var la) && ProjectClip(vp, line.B, out var lb))
+        {
+            if (ProjectClip(vp: vp, world: line.A, screen: out var la) && ProjectClip(
+                    vp: vp,
+                    world: line.B,
+                    screen: out var lb
+                ))
+            {
                 paint.AddBezier(
-                    la.X,
-                    la.Y,
-                    la.X,
-                    la.Y,
-                    lb.X,
-                    lb.Y,
-                    lb.X,
-                    lb.Y,
-                    line.Color,
-                    1.2f
+                    x0: la.X,
+                    y0: la.Y,
+                    x1: la.X,
+                    y1: la.Y,
+                    x2: lb.X,
+                    y2: lb.Y,
+                    x3: lb.X,
+                    y3: lb.Y,
+                    color: line.Color,
+                    width: 1.2f
                 );
+            }
+        }
 
         paint.AddClipEnd();
     }
@@ -989,25 +1022,29 @@ public sealed partial class ViewportPanel : Widget
             // body is created from these (GameSession.RegisterBodies) and SyncFromPhysics writes the
             // simulated world transform straight back into them, so they already hold what the body
             // uses. Walking parents would double-apply ancestor transforms for parented bodies.
+        {
             StrokeEdges(
-                paint,
-                vp,
-                PhysicsWireframe.WorldEdges(
-                    node.PhysicsShape,
-                    node.PhysicsHalfExtents,
-                    node.Position,
-                    node.Rotation
+                paint: paint,
+                vp: vp,
+                edges: PhysicsWireframe.WorldEdges(
+                    shape: node.PhysicsShape,
+                    halfExtents: node.PhysicsHalfExtents,
+                    position: node.Position,
+                    rotation: node.Rotation
                 ),
-                color
+                color: color
             );
+        }
 
         foreach (var c in node.Children)
+        {
             DrawPhysicsNode(
-                paint,
-                c,
-                vp,
-                color
+                paint: paint,
+                node: c,
+                vp: vp,
+                color: color
             );
+        }
     }
 
     // ── VFX particle overlay (play mode) ────────────────────────────────────────
@@ -1031,37 +1068,37 @@ public sealed partial class ViewportPanel : Widget
         else
         {
             vp = Mat4.PerspectiveRhZo(
-                MathF.PI / 4f,
-                Bounds.Width / Bounds.Height,
-                0.1f,
-                1000f
+                fovyRadians: MathF.PI / 4f,
+                aspect: Bounds.Width / Bounds.Height,
+                near: 0.1f,
+                far: 1000f
             ) * GetEditorView();
             camPos = GetCameraPosition();
         }
 
         const float fov = MathF.PI / 4f; // both cameras use a 45° vertical FOV
-        var focal = Bounds.Height * 0.5f / MathF.Tan(fov * 0.5f);
+        float focal = Bounds.Height * 0.5f / MathF.Tan(fov * 0.5f);
 
         paint.AddClipStart(Bounds);
         foreach (var (_, sim) in VfxSimSource())
         {
             var live = sim.Pool.Live;
-            for (var i = 0; i < live.Length; i++)
+            for (int i = 0; i < live.Length; i++)
             {
                 ref readonly var p = ref live[i];
-                if (!ProjectClip(vp, p.Position, out var s)) continue;
-                var dist = (p.Position - camPos).Length();
+                if (!ProjectClip(vp: vp, world: p.Position, screen: out var s)) continue;
+                float dist = (p.Position - camPos).Length();
                 if (dist < 0.05f) continue;
-                var r = MathF.Max(1f, p.Size * 0.5f * focal / dist);
+                float r = MathF.Max(x: 1f, y: p.Size * 0.5f * focal / dist);
                 paint.AddRect(
-                    new Rect(
-                        s.X - r,
-                        s.Y - r,
-                        r * 2f,
-                        r * 2f
+                    bounds: new Rect(
+                        x: s.X - r,
+                        y: s.Y - r,
+                        width: r * 2f,
+                        height: r * 2f
                     ),
-                    p.Color,
-                    r
+                    color: p.Color,
+                    radius: r
                 );
             }
         }
@@ -1076,24 +1113,24 @@ public sealed partial class ViewportPanel : Widget
         var engine = ZigoteEngine.Instance;
         if (engine == null) return;
 
-        foreach (var (key, sim) in VfxSimSource())
+        foreach ((ulong key, var sim) in VfxSimSource())
         {
             if (key == 0) continue;
             var live = sim.Pool.Live;
-            var count = live.Length;
+            int count = live.Length;
             if (count == 0)
             {
                 engine.ParticlesClear(key);
                 continue;
             }
 
-            var need = count * 9;
+            int need = count * 9;
             if (_particleScratch.Length < need)
-                _particleScratch = new float[Math.Max(need, 256 * 9)];
-            for (var i = 0; i < count; i++)
+                _particleScratch = new float[Math.Max(val1: need, val2: 256 * 9)];
+            for (int i = 0; i < count; i++)
             {
                 ref readonly var p = ref live[i];
-                var o = i * 9;
+                int o = i * 9;
                 _particleScratch[o] = p.Position.X;
                 _particleScratch[o + 1] = p.Position.Y;
                 _particleScratch[o + 2] = p.Position.Z;
@@ -1105,12 +1142,12 @@ public sealed partial class ViewportPanel : Widget
                 _particleScratch[o + 8] = p.Color.A;
             }
 
-            var blend = sim.Asset.Blend == VfxBlendMode.Additive ? 0u : 1u;
+            uint blend = sim.Asset.Blend == VfxBlendMode.Additive ? 0u : 1u;
             engine.ParticlesUpload(
-                key,
-                _particleScratch.AsSpan(0, need),
-                (uint)count,
-                blend
+                nodeHandle: key,
+                data: _particleScratch.AsSpan(start: 0, length: need),
+                count: (uint)count,
+                blend: blend
             );
         }
     }
@@ -1121,23 +1158,27 @@ public sealed partial class ViewportPanel : Widget
     {
         if (_state.IsPlaying && _state.ActivePlay is not null)
         {
-            var vp = _state.Sprites2D.ResolvePlayCamera(_state.Scene.Root, renderW, renderH);
+            var vp = _state.Sprites2D.ResolvePlayCamera(
+                root: _state.Scene.Root,
+                viewportW: renderW,
+                viewportH: renderH
+            );
             _state.Sprites2D.Render(
-                _state.Scene.Root,
-                vp,
-                renderW,
-                renderH,
-                true
+                root: _state.Scene.Root,
+                sceneViewProjection: vp,
+                viewportW: renderW,
+                viewportH: renderH,
+                includeScriptQueue: true
             );
         }
         else
         {
             _state.Sprites2D.Render(
-                _state.Scene.Root,
-                EditorSpriteViewProjection(),
-                renderW,
-                renderH,
-                false
+                root: _state.Scene.Root,
+                sceneViewProjection: EditorSpriteViewProjection(),
+                viewportW: renderW,
+                viewportH: renderH,
+                includeScriptQueue: false
             );
         }
     }
@@ -1153,16 +1194,16 @@ public sealed partial class ViewportPanel : Widget
         // pixel-exact; the 3D pass has no ortho mode, so meshes in a 2D scene will not line up.
         if (Is2D) return Camera2DViewProjection();
 
-        var aspect = MathF.Max(1f, Bounds.Width) / MathF.Max(1f, Bounds.Height);
+        float aspect = MathF.Max(x: 1f, y: Bounds.Width) / MathF.Max(x: 1f, y: Bounds.Height);
         var cam = FindCameraNode(_state.Scene.Root);
-        var fovRad = (cam?.EffectiveFovDegrees() ?? 45f) * (MathF.PI / 180f);
-        var near = cam?.CameraNear ?? 0.1f;
-        var far = cam?.CameraFar ?? 1000f;
+        float fovRad = (cam?.EffectiveFovDegrees() ?? 45f) * (MathF.PI / 180f);
+        float near = cam?.CameraNear ?? 0.1f;
+        float far = cam?.CameraFar ?? 1000f;
         return Mat4.PerspectiveRhZo(
-            fovRad,
-            aspect,
-            near,
-            far
+            fovyRadians: fovRad,
+            aspect: aspect,
+            near: near,
+            far: far
         ) * GetEditorView();
     }
 
@@ -1173,19 +1214,19 @@ public sealed partial class ViewportPanel : Widget
     {
         var engine = ZigoteEngine.Instance;
         if (engine == null) return;
-        var dt = MathF.Min(App.Active?.DeltaTime ?? 1f / 60f, 1f / 30f);
+        float dt = MathF.Min(x: App.Active?.DeltaTime ?? 1f / 60f, y: 1f / 30f);
 
         foreach (var (node, gpu) in VfxGpuSource())
         {
             if (node.Handle == 0) continue;
             gpu.Position = node.Position;
             gpu.Orientation = node.Rotation;
-            var spawn = gpu.Step(dt);
+            int spawn = gpu.Step(dt);
             engine.ParticlesComputeEmit(
-                node.Handle,
-                gpu.BuildParams(spawn, dt),
-                gpu.Capacity,
-                gpu.Blend
+                nodeHandle: node.Handle,
+                paramsData: gpu.BuildParams(spawnCount: spawn, dt: dt),
+                capacity: gpu.Capacity,
+                blend: gpu.Blend
             );
         }
     }
@@ -1203,7 +1244,7 @@ public sealed partial class ViewportPanel : Widget
             return;
         }
 
-        var (sig, any) = ComputeVfxSignature(_state.Scene.Root);
+        (int sig, bool any) = ComputeVfxSignature(_state.Scene.Root);
         if (!any)
         {
             if (_editVfxSig != 0)
@@ -1236,15 +1277,13 @@ public sealed partial class ViewportPanel : Widget
             _editVfxTicker.Start();
         }
         else
-        {
             _editVfxTicker?.Stop();
-        }
     }
 
     private void OnEditVfxTick(float dt)
     {
         if (_state.IsPlaying) return;
-        _editVfx.Step(MathF.Min(dt, 1f / 30f));
+        _editVfx.Step(MathF.Min(x: dt, y: 1f / 30f));
     }
 
     // Step each emitter to a representative state (~0.75 s) so a static preview reads as the effect rather
@@ -1252,15 +1291,15 @@ public sealed partial class ViewportPanel : Widget
     private void WarmEditVfx()
     {
         const float dt = 1f / 30f;
-        for (var i = 0; i < 22; i++) _editVfx.Step(dt);
+        for (int i = 0; i < 22; i++) _editVfx.Step(dt);
     }
 
     // Signature of the emitter set: rebuilds the static preview when an emitter is added/removed, its graph
     // is edited, or it is moved (coarse transform so micro-jitter doesn't thrash the warm-up).
     private static (int sig, bool any) ComputeVfxSignature(SceneNode root)
     {
-        var hash = 17;
-        var any = false;
+        int hash = 17;
+        bool any = false;
         Walk(root);
         return (hash, any);
 
@@ -1270,13 +1309,13 @@ public sealed partial class ViewportPanel : Widget
             {
                 any = true;
                 hash = HashCode.Combine(
-                    hash,
-                    n.Id,
-                    n.VfxGraphJson?.GetHashCode() ?? 0,
-                    n.VfxPlayOnStart,
-                    (int)(n.Position.X * 10f),
-                    (int)(n.Position.Y * 10f),
-                    (int)(n.Position.Z * 10f)
+                    value1: hash,
+                    value2: n.Id,
+                    value3: n.VfxGraphJson?.GetHashCode() ?? 0,
+                    value4: n.VfxPlayOnStart,
+                    value5: (int)(n.Position.X * 10f),
+                    value6: (int)(n.Position.Y * 10f),
+                    value7: (int)(n.Position.Z * 10f)
                 );
             }
 
@@ -1307,19 +1346,24 @@ public sealed partial class ViewportPanel : Widget
     private void StrokeEdges(PaintList paint, Mat4 vp, List<(Vec3 A, Vec3 B)> edges, Color color)
     {
         foreach (var (a, b) in edges)
-            if (ProjectClip(vp, a, out var sa) && ProjectClip(vp, b, out var sb))
+        {
+            if (ProjectClip(vp: vp, world: a, screen: out var sa) &&
+                ProjectClip(vp: vp, world: b, screen: out var sb))
+            {
                 paint.AddBezier(
-                    sa.X,
-                    sa.Y,
-                    sa.X,
-                    sa.Y,
-                    sb.X,
-                    sb.Y,
-                    sb.X,
-                    sb.Y,
-                    color,
-                    1.2f
+                    x0: sa.X,
+                    y0: sa.Y,
+                    x1: sa.X,
+                    y1: sa.Y,
+                    x2: sb.X,
+                    y2: sb.Y,
+                    x3: sb.X,
+                    y3: sb.Y,
+                    color: color,
+                    width: 1.2f
                 );
+            }
+        }
     }
 
     /// <summary>Project a world point through a full view-projection; false if behind the camera.</summary>
@@ -1327,10 +1371,10 @@ public sealed partial class ViewportPanel : Widget
     {
         var clip = vp.MulVec4(
             new Vec4(
-                world.X,
-                world.Y,
-                world.Z,
-                1f
+                x: world.X,
+                y: world.Y,
+                z: world.Z,
+                w: 1f
             )
         );
         if (clip.W <= 1e-4f)
@@ -1339,11 +1383,11 @@ public sealed partial class ViewportPanel : Widget
             return false;
         }
 
-        var nx = clip.X / clip.W;
-        var ny = clip.Y / clip.W;
+        float nx = clip.X / clip.W;
+        float ny = clip.Y / clip.W;
         screen = new Vec2(
-            Bounds.X + (nx + 1f) * 0.5f * Bounds.Width,
-            Bounds.Y + (1f - ny) * 0.5f * Bounds.Height
+            x: Bounds.X + ((nx + 1f) * 0.5f * Bounds.Width),
+            y: Bounds.Y + ((1f - ny) * 0.5f * Bounds.Height)
         );
         return true;
     }
@@ -1352,23 +1396,23 @@ public sealed partial class ViewportPanel : Widget
 
     private void PushEditorCamera()
     {
-        var camHandle = FindCameraHandle(_state.Scene.Root);
+        ulong camHandle = FindCameraHandle(_state.Scene.Root);
         if (camHandle == 0 || ZigoteEngine.Instance == null) return;
 
         var camPos = GetCameraPosition();
-        var camRot = Quat.FromEuler(-_orbitPitch, _orbitYaw, 0f);
+        var camRot = Quat.FromEuler(pitch: -_orbitPitch, yaw: _orbitYaw, roll: 0f);
         ZigoteEngine.Instance.SceneUpdateNode(
-            camHandle,
-            camPos.X,
-            camPos.Y,
-            camPos.Z,
-            camRot.X,
-            camRot.Y,
-            camRot.Z,
-            camRot.W,
-            1f,
-            1f,
-            1f
+            nodeHandle: camHandle,
+            x: camPos.X,
+            y: camPos.Y,
+            z: camPos.Z,
+            qx: camRot.X,
+            qy: camRot.Y,
+            qz: camRot.Z,
+            qw: camRot.W,
+            sx: 1f,
+            sy: 1f,
+            sz: 1f
         );
     }
 
@@ -1377,7 +1421,7 @@ public sealed partial class ViewportPanel : Widget
         if (node.Kind == NodeKind.Camera && node.Handle != 0) return node.Handle;
         foreach (var c in node.Children)
         {
-            var h = FindCameraHandle(c);
+            ulong h = FindCameraHandle(c);
             if (h != 0) return h;
         }
 
@@ -1401,7 +1445,7 @@ public sealed partial class ViewportPanel : Widget
         if (node.Id == id) return node;
         foreach (var c in node.Children)
         {
-            var found = FindNodeById(c, id);
+            var found = FindNodeById(node: c, id: id);
             if (found != null) return found;
         }
 
@@ -1448,68 +1492,68 @@ public sealed partial class ViewportPanel : Widget
                     IsHidden = true,
                     IsInternal = true,
                 };
-                _gizmoX = new SceneNode("__GizmoX", NodeKind.Mesh) {
+                _gizmoX = new SceneNode(name: "__GizmoX", kind: NodeKind.Mesh) {
                     MeshPath = "#cube",
                     IsHidden = true,
-                    MeshColor = new Vec3(0.9f, 0.1f, 0.15f),
+                    MeshColor = new Vec3(x: 0.9f, y: 0.1f, z: 0.15f),
                     MeshEffect = RenderEffect.Unlit,
                 };
-                _gizmoY = new SceneNode("__GizmoY", NodeKind.Mesh) {
+                _gizmoY = new SceneNode(name: "__GizmoY", kind: NodeKind.Mesh) {
                     MeshPath = "#cube",
                     IsHidden = true,
-                    MeshColor = new Vec3(0.1f, 0.8f, 0.15f),
+                    MeshColor = new Vec3(x: 0.1f, y: 0.8f, z: 0.15f),
                     MeshEffect = RenderEffect.Unlit,
                 };
-                _gizmoZ = new SceneNode("__GizmoZ", NodeKind.Mesh) {
+                _gizmoZ = new SceneNode(name: "__GizmoZ", kind: NodeKind.Mesh) {
                     MeshPath = "#cube",
                     IsHidden = true,
-                    MeshColor = new Vec3(0.15f, 0.25f, 0.9f),
+                    MeshColor = new Vec3(x: 0.15f, y: 0.25f, z: 0.9f),
                     MeshEffect = RenderEffect.Unlit,
                 };
 
-                _gizmoX.Scale = new Vec3(1.2f, 0.02f, 0.02f);
-                _gizmoX.Position = new Vec3(0.6f, 0, 0);
+                _gizmoX.Scale = new Vec3(x: 1.2f, y: 0.02f, z: 0.02f);
+                _gizmoX.Position = new Vec3(x: 0.6f, y: 0, z: 0);
 
-                _gizmoY.Scale = new Vec3(0.02f, 1.2f, 0.02f);
-                _gizmoY.Position = new Vec3(0, 0.6f, 0);
+                _gizmoY.Scale = new Vec3(x: 0.02f, y: 1.2f, z: 0.02f);
+                _gizmoY.Position = new Vec3(x: 0, y: 0.6f, z: 0);
 
-                _gizmoZ.Scale = new Vec3(0.02f, 0.02f, 1.2f);
-                _gizmoZ.Position = new Vec3(0, 0, 0.6f);
+                _gizmoZ.Scale = new Vec3(x: 0.02f, y: 0.02f, z: 1.2f);
+                _gizmoZ.Position = new Vec3(x: 0, y: 0, z: 0.6f);
 
                 // Arrow tip cubes — same name as shaft so picking triggers the right drag
-                _gizmoXTip = new SceneNode("__GizmoX", NodeKind.Mesh) {
+                _gizmoXTip = new SceneNode(name: "__GizmoX", kind: NodeKind.Mesh) {
                     MeshPath = "#cube",
                     IsHidden = true,
-                    MeshColor = new Vec3(0.9f, 0.1f, 0.15f),
+                    MeshColor = new Vec3(x: 0.9f, y: 0.1f, z: 0.15f),
                     MeshEffect = RenderEffect.Unlit,
                 };
-                _gizmoYTip = new SceneNode("__GizmoY", NodeKind.Mesh) {
+                _gizmoYTip = new SceneNode(name: "__GizmoY", kind: NodeKind.Mesh) {
                     MeshPath = "#cube",
                     IsHidden = true,
-                    MeshColor = new Vec3(0.1f, 0.8f, 0.15f),
+                    MeshColor = new Vec3(x: 0.1f, y: 0.8f, z: 0.15f),
                     MeshEffect = RenderEffect.Unlit,
                 };
-                _gizmoZTip = new SceneNode("__GizmoZ", NodeKind.Mesh) {
+                _gizmoZTip = new SceneNode(name: "__GizmoZ", kind: NodeKind.Mesh) {
                     MeshPath = "#cube",
                     IsHidden = true,
-                    MeshColor = new Vec3(0.15f, 0.25f, 0.9f),
+                    MeshColor = new Vec3(x: 0.15f, y: 0.25f, z: 0.9f),
                     MeshEffect = RenderEffect.Unlit,
                 };
 
-                _gizmoXTip.Scale = new Vec3(0.14f, 0.14f, 0.14f);
-                _gizmoXTip.Position = new Vec3(1.2f, 0, 0);
+                _gizmoXTip.Scale = new Vec3(x: 0.14f, y: 0.14f, z: 0.14f);
+                _gizmoXTip.Position = new Vec3(x: 1.2f, y: 0, z: 0);
 
-                _gizmoYTip.Scale = new Vec3(0.14f, 0.14f, 0.14f);
-                _gizmoYTip.Position = new Vec3(0, 1.2f, 0);
+                _gizmoYTip.Scale = new Vec3(x: 0.14f, y: 0.14f, z: 0.14f);
+                _gizmoYTip.Position = new Vec3(x: 0, y: 1.2f, z: 0);
 
-                _gizmoZTip.Scale = new Vec3(0.14f, 0.14f, 0.14f);
-                _gizmoZTip.Position = new Vec3(0, 0, 1.2f);
+                _gizmoZTip.Scale = new Vec3(x: 0.14f, y: 0.14f, z: 0.14f);
+                _gizmoZTip.Position = new Vec3(x: 0, y: 0, z: 1.2f);
 
                 // Center sphere for scale-mode uniform drag
-                _gizmoCenter = new SceneNode("__GizmoCenter", NodeKind.Mesh) {
+                _gizmoCenter = new SceneNode(name: "__GizmoCenter", kind: NodeKind.Mesh) {
                     MeshPath = "#sphere",
                     IsHidden = true,
-                    MeshColor = new Vec3(1f, 1f, 1f),
+                    MeshColor = new Vec3(x: 1f, y: 1f, z: 1f),
                     MeshEffect = RenderEffect.Unlit,
                 };
                 _gizmoCenter.Position = Vec3.Zero;
@@ -1528,20 +1572,20 @@ public sealed partial class ViewportPanel : Widget
             _gizmoRoot.Position = _state.Selected.Position;
 
             // Keep gizmo the same apparent size regardless of camera distance.
-            var screenH = MathF.Max(1f, _size.Height);
-            var cameraDistance = MathF.Max(
-                0.05f,
-                (_state.Selected.Position - GetCameraPosition()).Length()
+            float screenH = MathF.Max(x: 1f, y: _size.Height);
+            float cameraDistance = MathF.Max(
+                x: 0.05f,
+                y: (_state.Selected.Position - GetCameraPosition()).Length()
             );
-            var gizmoScale = cameraDistance * (2f * MathF.Tan(MathF.PI / 8f)) / screenH * 80f;
+            float gizmoScale = cameraDistance * (2f * MathF.Tan(MathF.PI / 8f)) / screenH * 80f;
             _gizmoRoot.Scale = Vec3.One * gizmoScale;
 
             // Show/hide child nodes based on current gizmo mode
-            var showShafts = _gizmoMode is GizmoMode.Translate or GizmoMode.Scale;
-            var tipSz = _gizmoMode is GizmoMode.Scale ? 0.22f : 0.14f;
-            _gizmoX!.Scale = showShafts ? new Vec3(1.2f, 0.02f, 0.02f) : Vec3.Zero;
-            _gizmoY!.Scale = showShafts ? new Vec3(0.02f, 1.2f, 0.02f) : Vec3.Zero;
-            _gizmoZ!.Scale = showShafts ? new Vec3(0.02f, 0.02f, 1.2f) : Vec3.Zero;
+            bool showShafts = _gizmoMode is GizmoMode.Translate or GizmoMode.Scale;
+            float tipSz = _gizmoMode is GizmoMode.Scale ? 0.22f : 0.14f;
+            _gizmoX!.Scale = showShafts ? new Vec3(x: 1.2f, y: 0.02f, z: 0.02f) : Vec3.Zero;
+            _gizmoY!.Scale = showShafts ? new Vec3(x: 0.02f, y: 1.2f, z: 0.02f) : Vec3.Zero;
+            _gizmoZ!.Scale = showShafts ? new Vec3(x: 0.02f, y: 0.02f, z: 1.2f) : Vec3.Zero;
             _gizmoXTip!.Scale = showShafts ? Vec3.One * tipSz : Vec3.Zero;
             _gizmoYTip!.Scale = showShafts ? Vec3.One * tipSz : Vec3.Zero;
             _gizmoZTip!.Scale = showShafts ? Vec3.One * tipSz : Vec3.Zero;
@@ -1559,7 +1603,7 @@ public sealed partial class ViewportPanel : Widget
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
 
         // In play mode, let interactive/opaque HUD widgets capture input while transparent regions fall
         // through to the viewport (camera control). Hit-test the game tree directly — not the theme/media
@@ -1574,10 +1618,8 @@ public sealed partial class ViewportPanel : Widget
         return this;
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return _hudWrapper is not null ? new[] { _hudWrapper } : [];
-    }
+    public override IEnumerable<Widget> GetChildren() =>
+        _hudWrapper is not null ? new[] { _hudWrapper } : [];
 
     // ── Pointer input ─────────────────────────────────────────────────────────
 
@@ -1589,9 +1631,9 @@ public sealed partial class ViewportPanel : Widget
         // Tool-rail buttons (transform mode) take priority over scene picking; the opaque rail
         // surface (insets/gaps between buttons) also swallows clicks so they never fall through.
         if (CameraModeHit(point)) return;
-        if (!_state.IsPlaying && CameraModeBounds().Contains(point.X, point.Y)) return;
+        if (!_state.IsPlaying && CameraModeBounds().Contains(px: point.X, py: point.Y)) return;
         if (ToolRailHit(point)) return;
-        if (!_state.IsPlaying && ToolRailBounds().Contains(point.X, point.Y)) return;
+        if (!_state.IsPlaying && ToolRailBounds().Contains(px: point.X, py: point.Y)) return;
 
         // 2D tile tools claim the press before selection/gizmo picking, so painting never also
         // re-selects whatever sprite happens to sit under the cursor.
@@ -1609,7 +1651,7 @@ public sealed partial class ViewportPanel : Widget
             // Rotate rings: 2D overlay pick before 3D ray test
             if (_gizmoMode is GizmoMode.Rotate && _state.Selected is not null)
             {
-                var ring = PickRotateRing(point);
+                char ring = PickRotateRing(point);
                 if (ring != '\0')
                 {
                     _isDraggingRotX = ring == 'X';
@@ -1618,7 +1660,7 @@ public sealed partial class ViewportPanel : Widget
                     _rotSnapAccum = 0f;
                     var pivot = ProjectToScreen(_state.Selected.Position);
                     _rotatePivotScreen = pivot;
-                    _rotateLastVec = new Vec2(point.X - pivot.X, point.Y - pivot.Y);
+                    _rotateLastVec = new Vec2(x: point.X - pivot.X, y: point.Y - pivot.Y);
                     return;
                 }
             }
@@ -1700,15 +1742,15 @@ public sealed partial class ViewportPanel : Widget
     {
         if (Bounds.Width <= 0 || Bounds.Height <= 0) return null;
 
-        var ndcX = (point.X - Bounds.X) / Bounds.Width * 2f - 1f;
-        var ndcY = 1f - (point.Y - Bounds.Y) / Bounds.Height * 2f;
+        float ndcX = ((point.X - Bounds.X) / Bounds.Width * 2f) - 1f;
+        float ndcY = 1f - ((point.Y - Bounds.Y) / Bounds.Height * 2f);
 
-        var aspect = Bounds.Width / Bounds.Height;
+        float aspect = Bounds.Width / Bounds.Height;
         var proj = Mat4.PerspectiveRhZo(
-            MathF.PI / 4f,
-            aspect,
-            0.1f,
-            1000f
+            fovyRadians: MathF.PI / 4f,
+            aspect: aspect,
+            near: 0.1f,
+            far: 1000f
         );
 
         var camPos = GetCameraPosition();
@@ -1716,42 +1758,52 @@ public sealed partial class ViewportPanel : Widget
 
         var invVp = (proj * view).Inverse();
 
-        var nearPt = invVp.MulPoint(new Vec3(ndcX, ndcY, 0f));
-        var farPt = invVp.MulPoint(new Vec3(ndcX, ndcY, 1f));
+        var nearPt = invVp.MulPoint(new Vec3(x: ndcX, y: ndcY, z: 0f));
+        var farPt = invVp.MulPoint(new Vec3(x: ndcX, y: ndcY, z: 1f));
         var dir = (farPt - nearPt).Normalize();
-        var ray = new Ray(camPos, dir);
+        var ray = new Ray(origin: camPos, direction: dir);
 
         SceneNode? bestNode = null;
-        var bestDist = float.MaxValue;
+        float bestDist = float.MaxValue;
 
         void CheckNode(SceneNode node, Transform3D parentTransform)
         {
             var scale = node.Scale;
             if (node.Name.StartsWith("__Gizmo"))
+            {
                 scale = new Vec3(
-                    MathF.Max(scale.X, 0.15f),
-                    MathF.Max(scale.Y, 0.15f),
-                    MathF.Max(scale.Z, 0.15f)
+                    x: MathF.Max(x: scale.X, y: 0.15f),
+                    y: MathF.Max(x: scale.Y, y: 0.15f),
+                    z: MathF.Max(x: scale.Z, y: 0.15f)
                 );
-            var localTransform = new Transform3D(node.Position, node.Rotation, scale);
-            var worldTransform = Transform3D.Combine(parentTransform, localTransform);
+            }
+
+            var localTransform = new Transform3D(
+                position: node.Position,
+                rotation: node.Rotation,
+                scale: scale
+            );
+            var worldTransform = Transform3D.Combine(
+                parent: parentTransform,
+                child: localTransform
+            );
 
             if (node.Kind == NodeKind.Mesh && !string.IsNullOrEmpty(node.MeshPath))
             {
                 var invMat = worldTransform.ToMat4().Inverse();
                 var localOrigin = invMat.MulPoint(ray.Origin);
                 var localDir = invMat.MulDirection(ray.Direction).Normalize();
-                var localRay = new Ray(localOrigin, localDir);
+                var localRay = new Ray(origin: localOrigin, direction: localDir);
 
                 var hit = localRay.IntersectAabb(
-                    new Vec3(-0.5f, -0.5f, -0.5f),
-                    new Vec3(0.5f, 0.5f, 0.5f)
+                    aabbMin: new Vec3(x: -0.5f, y: -0.5f, z: -0.5f),
+                    aabbMax: new Vec3(x: 0.5f, y: 0.5f, z: 0.5f)
                 );
                 if (hit is { tmax: > 0 })
                 {
-                    var hitLocalPoint = localRay.At(MathF.Max(0f, hit.Value.tmin));
+                    var hitLocalPoint = localRay.At(MathF.Max(x: 0f, y: hit.Value.tmin));
                     var hitWorldPoint = worldTransform.ToMat4().MulPoint(hitLocalPoint);
-                    var dist = (hitWorldPoint - ray.Origin).LengthSq();
+                    float dist = (hitWorldPoint - ray.Origin).LengthSq();
 
                     if (dist < bestDist)
                     {
@@ -1767,29 +1819,29 @@ public sealed partial class ViewportPanel : Widget
                 var tex = _state.Sprites2D.GetTexture(node.TexturePath);
                 if (tex != null)
                 {
-                    var cols = Math.Max(1, node.SpriteCols);
-                    var rows = Math.Max(1, node.SpriteRows);
-                    var ppu = MathF.Max(0.001f, node.SpritePixelsPerUnit);
-                    var w = tex.Width / (float)cols / ppu;
-                    var h = tex.Height / (float)rows / ppu;
-                    var cx = (0.5f - node.SpritePivotX) * w;
-                    var cy = (0.5f - node.SpritePivotY) * h;
+                    int cols = Math.Max(val1: 1, val2: node.SpriteCols);
+                    int rows = Math.Max(val1: 1, val2: node.SpriteRows);
+                    float ppu = MathF.Max(x: 0.001f, y: node.SpritePixelsPerUnit);
+                    float w = tex.Width / (float)cols / ppu;
+                    float h = tex.Height / (float)rows / ppu;
+                    float cx = (0.5f - node.SpritePivotX) * w;
+                    float cy = (0.5f - node.SpritePivotY) * h;
 
                     var invMat = worldTransform.ToMat4().Inverse();
                     var localOrigin = invMat.MulPoint(ray.Origin);
                     var localDir = invMat.MulDirection(ray.Direction).Normalize();
                     if (MathF.Abs(localDir.Z) > 1e-5f)
                     {
-                        var t = -localOrigin.Z / localDir.Z;
+                        float t = -localOrigin.Z / localDir.Z;
                         if (t > 0f)
                         {
-                            var px = localOrigin.X + localDir.X * t;
-                            var py = localOrigin.Y + localDir.Y * t;
+                            float px = localOrigin.X + (localDir.X * t);
+                            float py = localOrigin.Y + (localDir.Y * t);
                             if (MathF.Abs(px - cx) <= w * 0.5f && MathF.Abs(py - cy) <= h * 0.5f)
                             {
                                 var hitWorld = worldTransform.ToMat4()
-                                    .MulPoint(new Vec3(px, py, 0f));
-                                var dist = (hitWorld - ray.Origin).LengthSq();
+                                    .MulPoint(new Vec3(x: px, y: py, z: 0f));
+                                float dist = (hitWorld - ray.Origin).LengthSq();
                                 if (dist < bestDist)
                                 {
                                     bestDist = dist;
@@ -1801,10 +1853,11 @@ public sealed partial class ViewportPanel : Widget
                 }
             }
 
-            foreach (var child in node.Children) CheckNode(child, worldTransform);
+            foreach (var child in node.Children)
+                CheckNode(node: child, parentTransform: worldTransform);
         }
 
-        CheckNode(_state.Scene.Root, Transform3D.Identity);
+        CheckNode(node: _state.Scene.Root, parentTransform: Transform3D.Identity);
         return bestNode;
     }
 
@@ -1814,8 +1867,8 @@ public sealed partial class ViewportPanel : Widget
         App.Active?.RequestFocus(this);
         _lastMousePos = point;
         if (!_state.IsPlaying &&
-            (CameraModeBounds().Contains(point.X, point.Y) ||
-             ToolRailBounds().Contains(point.X, point.Y)))
+            (CameraModeBounds().Contains(px: point.X, py: point.Y) ||
+             ToolRailBounds().Contains(px: point.X, py: point.Y)))
         {
             _isOrbitDragging = false;
             _isRightDragging = false;
@@ -1838,8 +1891,8 @@ public sealed partial class ViewportPanel : Widget
 
     public override void OnPointerMove(Offset point)
     {
-        var dx = point.X - _lastMousePos.X;
-        var dy = point.Y - _lastMousePos.Y;
+        float dx = point.X - _lastMousePos.X;
+        float dy = point.Y - _lastMousePos.Y;
         var lastPos = _lastMousePos;
         _lastMousePos = point;
 
@@ -1847,7 +1900,7 @@ public sealed partial class ViewportPanel : Widget
         {
             if (_isPanning2D)
             {
-                Pan2D(new Offset(point.X - lastPos.X, point.Y - lastPos.Y));
+                Pan2D(new Offset(x: point.X - lastPos.X, y: point.Y - lastPos.Y));
                 return;
             }
 
@@ -1862,7 +1915,11 @@ public sealed partial class ViewportPanel : Widget
             if (_isDraggingGizmoX)
             {
                 _state.Selected.Position = Snap(
-                    _state.Selected.Position + ScreenDragToWorldDelta(dx, dy, Vec3.Right)
+                    _state.Selected.Position + ScreenDragToWorldDelta(
+                        dx: dx,
+                        dy: dy,
+                        worldAxis: Vec3.Right
+                    )
                 );
                 _state.NotifySceneChanged();
                 return;
@@ -1871,7 +1928,11 @@ public sealed partial class ViewportPanel : Widget
             if (_isDraggingGizmoY)
             {
                 _state.Selected.Position = Snap(
-                    _state.Selected.Position + ScreenDragToWorldDelta(dx, dy, Vec3.Up)
+                    _state.Selected.Position + ScreenDragToWorldDelta(
+                        dx: dx,
+                        dy: dy,
+                        worldAxis: Vec3.Up
+                    )
                 );
                 _state.NotifySceneChanged();
                 return;
@@ -1880,7 +1941,11 @@ public sealed partial class ViewportPanel : Widget
             if (_isDraggingGizmoZ)
             {
                 _state.Selected.Position = Snap(
-                    _state.Selected.Position + ScreenDragToWorldDelta(dx, dy, Vec3.Back)
+                    _state.Selected.Position + ScreenDragToWorldDelta(
+                        dx: dx,
+                        dy: dy,
+                        worldAxis: Vec3.Back
+                    )
                 );
                 _state.NotifySceneChanged();
                 return;
@@ -1890,15 +1955,15 @@ public sealed partial class ViewportPanel : Widget
             if (_isDraggingRotX || _isDraggingRotY || _isDraggingRotZ)
             {
                 var curVec = new Vec2(
-                    point.X - _rotatePivotScreen.X,
-                    point.Y - _rotatePivotScreen.Y
+                    x: point.X - _rotatePivotScreen.X,
+                    y: point.Y - _rotatePivotScreen.Y
                 );
                 if (curVec.LengthSq() > 1f)
                 {
                     var prev = _rotateLastVec;
-                    var cross = prev.X * curVec.Y - prev.Y * curVec.X;
-                    var dot = prev.X * curVec.X + prev.Y * curVec.Y;
-                    var angle = MathF.Atan2(cross, dot);
+                    float cross = (prev.X * curVec.Y) - (prev.Y * curVec.X);
+                    float dot = (prev.X * curVec.X) + (prev.Y * curVec.Y);
+                    float angle = MathF.Atan2(y: cross, x: dot);
 
                     var axis = _isDraggingRotX ? Vec3.Right : _isDraggingRotY ? Vec3.Up : Vec3.Back;
                     // Flip sign when the axis faces toward the camera so clockwise always means the same thing.
@@ -1910,19 +1975,21 @@ public sealed partial class ViewportPanel : Widget
                         // Accumulate the free angle and only commit whole 15° steps, so a snapped drag
                         // clicks between discrete orientations instead of moving continuously.
                         _rotSnapAccum += angle;
-                        var applied = MathF.Truncate(_rotSnapAccum / SnapAngleRad) * SnapAngleRad;
+                        float applied = MathF.Truncate(_rotSnapAccum / SnapAngleRad) * SnapAngleRad;
                         if (applied != 0f)
                         {
                             _rotSnapAccum -= applied;
-                            _state.Selected.Rotation = Quat.FromAxisAngle(axis, applied) *
-                                                       _state.Selected.Rotation;
+                            _state.Selected.Rotation =
+                                Quat.FromAxisAngle(axis: axis, angleRadians: applied) *
+                                _state.Selected.Rotation;
                             _state.NotifySceneChanged();
                         }
                     }
                     else
                     {
                         _state.Selected.Rotation =
-                            Quat.FromAxisAngle(axis, angle) * _state.Selected.Rotation;
+                            Quat.FromAxisAngle(axis: axis, angleRadians: angle) *
+                            _state.Selected.Rotation;
                         _state.NotifySceneChanged();
                     }
 
@@ -1936,26 +2003,26 @@ public sealed partial class ViewportPanel : Widget
             if (_isDraggingScaleX || _isDraggingScaleY || _isDraggingScaleZ)
             {
                 var axis = _isDraggingScaleX ? Vec3.Right : _isDraggingScaleY ? Vec3.Up : Vec3.Back;
-                var delta = ScreenDragToWorldDelta(dx, dy, axis);
-                var amount = delta.Dot(axis) * 2f;
+                var delta = ScreenDragToWorldDelta(dx: dx, dy: dy, worldAxis: axis);
+                float amount = delta.Dot(axis) * 2f;
                 var s = _state.Selected.Scale;
                 _state.Selected.Scale = _isDraggingScaleX
-                    ? new Vec3(SnapScale(s.X + amount), s.Y, s.Z)
+                    ? new Vec3(x: SnapScale(s.X + amount), y: s.Y, z: s.Z)
                     : _isDraggingScaleY
-                        ? new Vec3(s.X, SnapScale(s.Y + amount), s.Z)
-                        : new Vec3(s.X, s.Y, SnapScale(s.Z + amount));
+                        ? new Vec3(x: s.X, y: SnapScale(s.Y + amount), z: s.Z)
+                        : new Vec3(x: s.X, y: s.Y, z: SnapScale(s.Z + amount));
                 _state.NotifySceneChanged();
                 return;
             }
 
             if (_isDraggingScaleU)
             {
-                var factor = MathF.Max(0.001f, 1f + (dx - dy) * 0.008f);
+                float factor = MathF.Max(x: 0.001f, y: 1f + ((dx - dy) * 0.008f));
                 var s = _state.Selected.Scale;
                 _state.Selected.Scale = new Vec3(
-                    SnapScale(s.X * factor),
-                    SnapScale(s.Y * factor),
-                    SnapScale(s.Z * factor)
+                    x: SnapScale(s.X * factor),
+                    y: SnapScale(s.Y * factor),
+                    z: SnapScale(s.Z * factor)
                 );
                 _state.NotifySceneChanged();
                 return;
@@ -1980,7 +2047,7 @@ public sealed partial class ViewportPanel : Widget
         {
             _orbitYaw += dx * 0.005f;
             _orbitPitch -= dy * 0.005f;
-            _orbitPitch = Math.Clamp(_orbitPitch, -1.55f, 1.55f);
+            _orbitPitch = Math.Clamp(value: _orbitPitch, min: -1.55f, max: 1.55f);
             return;
         }
 
@@ -1989,7 +2056,7 @@ public sealed partial class ViewportPanel : Widget
         {
             _orbitYaw += dx * 0.005f;
             _orbitPitch -= dy * 0.005f;
-            _orbitPitch = Math.Clamp(_orbitPitch, -1.45f, 1.45f);
+            _orbitPitch = Math.Clamp(value: _orbitPitch, min: -1.45f, max: 1.45f);
         }
     }
 
@@ -2009,10 +2076,10 @@ public sealed partial class ViewportPanel : Widget
                 _state.Selected.Position = _dragStartPos;
                 _state.History.Execute(
                     new ChangePropertyCommand<Vec3>(
-                        _state,
-                        _dragStartPos,
-                        finalPos,
-                        v => _state.Selected!.Position = v
+                        state: _state,
+                        oldValue: _dragStartPos,
+                        newValue: finalPos,
+                        setter: v => _state.Selected!.Position = v
                     )
                 );
             }
@@ -2023,10 +2090,10 @@ public sealed partial class ViewportPanel : Widget
                 _state.Selected.Rotation = _dragStartRot;
                 _state.History.Execute(
                     new ChangePropertyCommand<Quat>(
-                        _state,
-                        _dragStartRot,
-                        finalRot,
-                        v => _state.Selected!.Rotation = v
+                        state: _state,
+                        oldValue: _dragStartRot,
+                        newValue: finalRot,
+                        setter: v => _state.Selected!.Rotation = v
                     )
                 );
             }
@@ -2037,10 +2104,10 @@ public sealed partial class ViewportPanel : Widget
                 _state.Selected.Scale = _dragStartScale;
                 _state.History.Execute(
                     new ChangePropertyCommand<Vec3>(
-                        _state,
-                        _dragStartScale,
-                        finalScale,
-                        v => _state.Selected!.Scale = v
+                        state: _state,
+                        oldValue: _dragStartScale,
+                        newValue: finalScale,
+                        setter: v => _state.Selected!.Scale = v
                     )
                 );
             }
@@ -2057,18 +2124,22 @@ public sealed partial class ViewportPanel : Widget
         StopFraming(); // manual zoom cancels an in-flight frame animation
         if (Is2D)
         {
-            Zoom2DAt(_lastMousePos, dy);
+            Zoom2DAt(cursor: _lastMousePos, steps: dy);
             return;
         }
 
         if (_cameraMode == CameraNavigationMode.Fly)
         {
-            _flySpeed = Math.Clamp(_flySpeed * MathF.Pow(1.15f, dy), 0.25f, 100f);
+            _flySpeed = Math.Clamp(
+                value: _flySpeed * MathF.Pow(x: 1.15f, y: dy),
+                min: 0.25f,
+                max: 100f
+            );
             App.Active?.RequestPaint();
             return;
         }
 
-        _orbitDistance = Math.Clamp(_orbitDistance - dy * 0.5f, 0.5f, 200f);
+        _orbitDistance = Math.Clamp(value: _orbitDistance - (dy * 0.5f), min: 0.5f, max: 200f);
     }
 
     public override void OnKey(char keyChar, uint scancode, bool down, Modifiers mods)
@@ -2126,6 +2197,7 @@ public sealed partial class ViewportPanel : Widget
 
             // Gizmo mode: T / R / S (only without modifier so Ctrl+S etc. fall through)
             if (mods == Modifiers.None && _cameraMode == CameraNavigationMode.Orbit)
+            {
                 switch (char.ToLower(keyChar))
                 {
                     case 't':
@@ -2138,6 +2210,7 @@ public sealed partial class ViewportPanel : Widget
                         _gizmoMode = GizmoMode.Scale;
                         return;
                 }
+            }
         }
 
         if (!_state.IsPlaying && _cameraMode == CameraNavigationMode.Fly)
@@ -2171,7 +2244,7 @@ public sealed partial class ViewportPanel : Widget
         var play = _state.ActivePlay;
         // Publish the raw key to the session's general held-key set, so a game script can read ANY
         // key (menus, a second couch player, custom bindings) — not just the built-in drive keys.
-        if (Enum.GetName((KeyCode)scancode) is { } keyName) play.SetKey(keyName, down);
+        if (Enum.GetName((KeyCode)scancode) is { } keyName) play.SetKey(name: keyName, down: down);
 
         switch (char.ToLower(keyChar))
         {
@@ -2190,108 +2263,108 @@ public sealed partial class ViewportPanel : Widget
 
     private void DrawGrid(PaintList paint)
     {
-        var cx = Bounds.X + Bounds.Width * 0.5f;
-        var cy = Bounds.Y + Bounds.Height * 0.5f;
+        float cx = Bounds.X + (Bounds.Width * 0.5f);
+        float cy = Bounds.Y + (Bounds.Height * 0.5f);
         var color = _theme.OnSurface.WithAlpha(0.18f);
-        var horizon = cy - Bounds.Height * 0.1f;
+        float horizon = cy - (Bounds.Height * 0.1f);
 
-        for (var i = 1; i <= 8; i++)
+        for (int i = 1; i <= 8; i++)
         {
-            var t = i / 9f;
-            var y = horizon + (cy + Bounds.Height * 0.4f - horizon) * (t * t);
-            var xSpan = Bounds.Width * 0.5f * t;
-            var thick = 0.5f + t * 1.5f;
+            float t = i / 9f;
+            float y = horizon + ((cy + (Bounds.Height * 0.4f) - horizon) * (t * t));
+            float xSpan = Bounds.Width * 0.5f * t;
+            float thick = 0.5f + (t * 1.5f);
             paint.AddRect(
-                new Rect(
-                    cx - xSpan,
-                    y,
-                    xSpan * 2f,
-                    thick
+                bounds: new Rect(
+                    x: cx - xSpan,
+                    y: y,
+                    width: xSpan * 2f,
+                    height: thick
                 ),
-                color.WithAlpha(color.A * t)
+                color: color.WithAlpha(color.A * t)
             );
         }
 
-        for (var i = -5; i <= 5; i++)
+        for (int i = -5; i <= 5; i++)
         {
-            var xFar = cx + i * (Bounds.Width * 0.5f / 5f);
-            var xNear = cx + i * (Bounds.Width * 0.45f);
-            var yFar = horizon;
-            var yNear = cy + Bounds.Height * 0.4f;
-            var w = MathF.Max(0.8f, MathF.Abs(xNear - xFar));
+            float xFar = cx + (i * (Bounds.Width * 0.5f / 5f));
+            float xNear = cx + (i * (Bounds.Width * 0.45f));
+            float yFar = horizon;
+            float yNear = cy + (Bounds.Height * 0.4f);
+            float w = MathF.Max(x: 0.8f, y: MathF.Abs(xNear - xFar));
             paint.AddRect(
-                new Rect(
-                    MathF.Min(xFar, xNear),
-                    yFar,
-                    w,
-                    yNear - yFar
+                bounds: new Rect(
+                    x: MathF.Min(x: xFar, y: xNear),
+                    y: yFar,
+                    width: w,
+                    height: yNear - yFar
                 ),
-                color.WithAlpha(0.25f)
+                color: color.WithAlpha(0.25f)
             );
         }
     }
 
     private void DrawAxes(PaintList paint)
     {
-        var ox = Bounds.X + 40f;
-        var oy = Bounds.Y + Bounds.Height - 40f;
+        float ox = Bounds.X + 40f;
+        float oy = Bounds.Y + Bounds.Height - 40f;
         const float len = 20f;
 
         paint.AddRect(
-            new Rect(
-                ox,
-                oy - 1f,
-                len,
-                2f
+            bounds: new Rect(
+                x: ox,
+                y: oy - 1f,
+                width: len,
+                height: 2f
             ),
-            new Color(0.9f, 0.2f, 0.2f)
+            color: new Color(r: 0.9f, g: 0.2f, b: 0.2f)
         );
         paint.AddText(
-            "X",
-            ox + len + 2f,
-            oy + 4f,
-            new Color(0.9f, 0.2f, 0.2f),
-            11f
+            text: "X",
+            baselineX: ox + len + 2f,
+            baselineY: oy + 4f,
+            color: new Color(r: 0.9f, g: 0.2f, b: 0.2f),
+            fontSize: 11f
         );
 
         paint.AddRect(
-            new Rect(
-                ox - 1f,
-                oy - len,
-                2f,
-                len
+            bounds: new Rect(
+                x: ox - 1f,
+                y: oy - len,
+                width: 2f,
+                height: len
             ),
-            new Color(0.2f, 0.9f, 0.2f)
+            color: new Color(r: 0.2f, g: 0.9f, b: 0.2f)
         );
         paint.AddText(
-            "Y",
-            ox - 4f,
-            oy - len - 4f,
-            new Color(0.2f, 0.9f, 0.2f),
-            11f
+            text: "Y",
+            baselineX: ox - 4f,
+            baselineY: oy - len - 4f,
+            color: new Color(r: 0.2f, g: 0.9f, b: 0.2f),
+            fontSize: 11f
         );
 
-        var zLen = len * 0.7f;
+        float zLen = len * 0.7f;
         paint.AddRect(
-            new Rect(
-                ox - zLen * 0.5f,
-                oy - zLen * 0.5f,
-                zLen,
-                1.5f
+            bounds: new Rect(
+                x: ox - (zLen * 0.5f),
+                y: oy - (zLen * 0.5f),
+                width: zLen,
+                height: 1.5f
             ),
-            new Color(
-                0.2f,
-                0.4f,
-                0.9f,
-                0.8f
+            color: new Color(
+                r: 0.2f,
+                g: 0.4f,
+                b: 0.9f,
+                a: 0.8f
             )
         );
         paint.AddText(
-            "Z",
-            ox - zLen * 0.5f - 12f,
-            oy - zLen * 0.5f + 4f,
-            new Color(0.2f, 0.4f, 0.9f),
-            11f
+            text: "Z",
+            baselineX: ox - (zLen * 0.5f) - 12f,
+            baselineY: oy - (zLen * 0.5f) + 4f,
+            color: new Color(r: 0.2f, g: 0.4f, b: 0.9f),
+            fontSize: 11f
         );
     }
 
@@ -2299,84 +2372,84 @@ public sealed partial class ViewportPanel : Widget
     {
         if (_state.Selected is null || Bounds.Width < 1f || Bounds.Height < 1f) return;
         var center = ProjectToScreen(_state.Selected.Position);
-        if (!Bounds.Contains(center.X, center.Y)) return;
+        if (!Bounds.Contains(px: center.X, py: center.Y)) return;
 
         // Three concentric screen-space rings: Z (inner, blue), Y (middle, green), X (outer, red)
         DrawScreenRing(
-            paint,
-            center,
-            65f,
-            new Color(0.15f, 0.25f, 0.9f),
-            _isDraggingRotZ ? 3.5f : 2f
+            paint: paint,
+            center: center,
+            radius: 65f,
+            color: new Color(r: 0.15f, g: 0.25f, b: 0.9f),
+            width: _isDraggingRotZ ? 3.5f : 2f
         );
         DrawScreenRing(
-            paint,
-            center,
-            80f,
-            new Color(0.1f, 0.8f, 0.15f),
-            _isDraggingRotY ? 3.5f : 2f
+            paint: paint,
+            center: center,
+            radius: 80f,
+            color: new Color(r: 0.1f, g: 0.8f, b: 0.15f),
+            width: _isDraggingRotY ? 3.5f : 2f
         );
         DrawScreenRing(
-            paint,
-            center,
-            95f,
-            new Color(0.9f, 0.1f, 0.15f),
-            _isDraggingRotX ? 3.5f : 2f
+            paint: paint,
+            center: center,
+            radius: 95f,
+            color: new Color(r: 0.9f, g: 0.1f, b: 0.15f),
+            width: _isDraggingRotX ? 3.5f : 2f
         );
 
         paint.AddRect(
-            new Rect(
-                center.X - 3f,
-                center.Y - 3f,
-                6f,
-                6f
+            bounds: new Rect(
+                x: center.X - 3f,
+                y: center.Y - 3f,
+                width: 6f,
+                height: 6f
             ),
-            new Color(
-                1f,
-                1f,
-                1f,
-                0.6f
+            color: new Color(
+                r: 1f,
+                g: 1f,
+                b: 1f,
+                a: 0.6f
             ),
-            3f
+            radius: 3f
         );
 
         paint.AddText(
-            "Z",
-            center.X + 67f,
-            center.Y + 4f,
-            new Color(0.35f, 0.5f, 0.95f),
-            10f
+            text: "Z",
+            baselineX: center.X + 67f,
+            baselineY: center.Y + 4f,
+            color: new Color(r: 0.35f, g: 0.5f, b: 0.95f),
+            fontSize: 10f
         );
         paint.AddText(
-            "Y",
-            center.X + 82f,
-            center.Y + 4f,
-            new Color(0.2f, 0.85f, 0.3f),
-            10f
+            text: "Y",
+            baselineX: center.X + 82f,
+            baselineY: center.Y + 4f,
+            color: new Color(r: 0.2f, g: 0.85f, b: 0.3f),
+            fontSize: 10f
         );
         paint.AddText(
-            "X",
-            center.X + 97f,
-            center.Y + 4f,
-            new Color(0.95f, 0.25f, 0.2f),
-            10f
+            text: "X",
+            baselineX: center.X + 97f,
+            baselineY: center.Y + 4f,
+            color: new Color(r: 0.95f, g: 0.25f, b: 0.2f),
+            fontSize: 10f
         );
     }
 
     private static void DrawScreenRing(PaintList paint, Vec2 center, float radius, Color color,
         float width)
     {
-        var sz = radius * 2f;
+        float sz = radius * 2f;
         paint.AddBorder(
-            new Rect(
-                center.X - radius,
-                center.Y - radius,
-                sz,
-                sz
+            bounds: new Rect(
+                x: center.X - radius,
+                y: center.Y - radius,
+                width: sz,
+                height: sz
             ),
-            color,
-            radius,
-            width
+            color: color,
+            radius: radius,
+            width: width
         );
     }
 
@@ -2384,9 +2457,9 @@ public sealed partial class ViewportPanel : Widget
     {
         if (_state.Selected is null || Bounds.Width < 1f) return '\0';
         var center = ProjectToScreen(_state.Selected.Position);
-        var dist = MathF.Sqrt(
-            (point.X - center.X) * (point.X - center.X) +
-            (point.Y - center.Y) * (point.Y - center.Y)
+        float dist = MathF.Sqrt(
+            ((point.X - center.X) * (point.X - center.X)) +
+            ((point.Y - center.Y) * (point.Y - center.Y))
         );
         const float tol = 9f;
         if (MathF.Abs(dist - 65f) < tol) return 'Z';
@@ -2397,14 +2470,15 @@ public sealed partial class ViewportPanel : Widget
 
     private Rect ToolRailBounds()
     {
-        var h = ToolRailModes.Length * ToolRailBtn + (ToolRailModes.Length - 1) * ToolRailGap +
-                ToolRailInset * 2f;
-        var w = ToolRailBtn + ToolRailInset * 2f;
+        float h = (ToolRailModes.Length * ToolRailBtn) +
+                  ((ToolRailModes.Length - 1) * ToolRailGap) +
+                  (ToolRailInset * 2f);
+        float w = ToolRailBtn + (ToolRailInset * 2f);
         return new Rect(
-            Bounds.X + 10f,
-            Bounds.Y + (Bounds.Height - h) * 0.5f,
-            w,
-            h
+            x: Bounds.X + 10f,
+            y: Bounds.Y + ((Bounds.Height - h) * 0.5f),
+            width: w,
+            height: h
         );
     }
 
@@ -2412,32 +2486,32 @@ public sealed partial class ViewportPanel : Widget
     {
         var rb = ToolRailBounds();
         return new Rect(
-            rb.X + ToolRailInset,
-            rb.Y + ToolRailInset + i * (ToolRailBtn + ToolRailGap),
-            ToolRailBtn,
-            ToolRailBtn
+            x: rb.X + ToolRailInset,
+            y: rb.Y + ToolRailInset + (i * (ToolRailBtn + ToolRailGap)),
+            width: ToolRailBtn,
+            height: ToolRailBtn
         );
     }
 
     private void DrawToolRail(PaintList paint)
     {
         var rb = ToolRailBounds();
-        paint.AddElevation(rb, Radii.Md, Elevation.Z1);
-        paint.AddRect(rb, _theme.Panel.WithAlpha(0.95f), Radii.Md);
-        paint.AddBorder(rb, _theme.Border, Radii.Md);
+        paint.AddElevation(bounds: rb, radius: Radii.Md, style: Elevation.Z1);
+        paint.AddRect(bounds: rb, color: _theme.Panel.WithAlpha(0.95f), radius: Radii.Md);
+        paint.AddBorder(bounds: rb, color: _theme.Border, radius: Radii.Md);
 
-        for (var i = 0; i < ToolRailModes.Length; i++)
+        for (int i = 0; i < ToolRailModes.Length; i++)
         {
-            var (mode, icon) = ToolRailModes[i];
+            (var mode, string icon) = ToolRailModes[i];
             var br = ToolRailButtonRect(i);
-            var active = _gizmoMode == mode;
-            if (active) paint.AddRect(br, _theme.Accent, Radii.Sm);
+            bool active = _gizmoMode == mode;
+            if (active) paint.AddRect(bounds: br, color: _theme.Accent, radius: Radii.Sm);
             Icons.Draw(
-                paint,
-                icon,
-                br,
-                active ? _theme.OnPrimary : _theme.TextSecondary,
-                18f
+                paint: paint,
+                glyph: icon,
+                box: br,
+                color: active ? _theme.OnPrimary : _theme.TextSecondary,
+                size: 18f
             );
         }
     }
@@ -2446,13 +2520,15 @@ public sealed partial class ViewportPanel : Widget
     private bool ToolRailHit(Offset point)
     {
         if (_state.IsPlaying) return false;
-        for (var i = 0; i < ToolRailModes.Length; i++)
-            if (ToolRailButtonRect(i).Contains(point.X, point.Y))
+        for (int i = 0; i < ToolRailModes.Length; i++)
+        {
+            if (ToolRailButtonRect(i).Contains(px: point.X, py: point.Y))
             {
                 _gizmoMode = ToolRailModes[i].Mode;
                 App.Active?.RequestPaint();
                 return true;
             }
+        }
 
         return false;
     }
@@ -2460,50 +2536,50 @@ public sealed partial class ViewportPanel : Widget
     private Rect CameraModeBounds()
     {
         return new Rect(
-            Bounds.X + (Bounds.Width - CameraModeWidth) * 0.5f,
-            Bounds.Y + 8f,
-            CameraModeWidth,
-            CameraModeHeight
+            x: Bounds.X + ((Bounds.Width - CameraModeWidth) * 0.5f),
+            y: Bounds.Y + 8f,
+            width: CameraModeWidth,
+            height: CameraModeHeight
         );
     }
 
     private Rect CameraModeButtonRect(CameraNavigationMode mode)
     {
         var bounds = CameraModeBounds();
-        var index = Array.IndexOf(CameraModes, mode);
+        int index = Array.IndexOf(array: CameraModes, value: mode);
         if (index < 0) index = 0;
-        var seg = (bounds.Width - 6f) / CameraModes.Length;
+        float seg = (bounds.Width - 6f) / CameraModes.Length;
         return new Rect(
-            bounds.X + 3f + index * seg,
-            bounds.Y + 3f,
-            seg,
-            bounds.Height - 6f
+            x: bounds.X + 3f + (index * seg),
+            y: bounds.Y + 3f,
+            width: seg,
+            height: bounds.Height - 6f
         );
     }
 
     private void DrawCameraModeSwitch(PaintList paint)
     {
         var bounds = CameraModeBounds();
-        paint.AddElevation(bounds, Radii.Md, Elevation.Z1);
-        paint.AddRect(bounds, _theme.Panel.WithAlpha(0.95f), Radii.Md);
-        paint.AddBorder(bounds, _theme.Border, Radii.Md);
+        paint.AddElevation(bounds: bounds, radius: Radii.Md, style: Elevation.Z1);
+        paint.AddRect(bounds: bounds, color: _theme.Panel.WithAlpha(0.95f), radius: Radii.Md);
+        paint.AddBorder(bounds: bounds, color: _theme.Border, radius: Radii.Md);
 
-        DrawMode(CameraNavigationMode.Orbit, "Orbit");
-        DrawMode(CameraNavigationMode.Fly, "Fly");
-        DrawMode(CameraNavigationMode.TwoD, "2D");
+        DrawMode(mode: CameraNavigationMode.Orbit, label: "Orbit");
+        DrawMode(mode: CameraNavigationMode.Fly, label: "Fly");
+        DrawMode(mode: CameraNavigationMode.TwoD, label: "2D");
 
         void DrawMode(CameraNavigationMode mode, string label)
         {
             var button = CameraModeButtonRect(mode);
-            var active = _cameraMode == mode;
-            if (active) paint.AddRect(button, _theme.Accent, Radii.Sm);
-            var width = label.Length * _theme.FontSizeCaption * 0.56f;
+            bool active = _cameraMode == mode;
+            if (active) paint.AddRect(bounds: button, color: _theme.Accent, radius: Radii.Sm);
+            float width = label.Length * _theme.FontSizeCaption * 0.56f;
             paint.AddText(
-                label,
-                button.X + (button.Width - width) * 0.5f,
-                button.Y + button.Height * 0.5f + _theme.FontSizeCaption * 0.38f,
-                active ? _theme.OnPrimary : _theme.TextSecondary,
-                _theme.FontSizeCaption,
+                text: label,
+                baselineX: button.X + ((button.Width - width) * 0.5f),
+                baselineY: button.Y + (button.Height * 0.5f) + (_theme.FontSizeCaption * 0.38f),
+                color: active ? _theme.OnPrimary : _theme.TextSecondary,
+                fontSize: _theme.FontSizeCaption,
                 fontWeight: active ? FontWeight.SemiBold : FontWeight.Normal
             );
         }
@@ -2513,40 +2589,42 @@ public sealed partial class ViewportPanel : Widget
     {
         if (_state.IsPlaying) return false;
         foreach (var mode in CameraModes)
-            if (CameraModeButtonRect(mode).Contains(point.X, point.Y))
+        {
+            if (CameraModeButtonRect(mode).Contains(px: point.X, py: point.Y))
             {
                 SetCameraMode(mode);
                 return true;
             }
+        }
 
         return false;
     }
 
     private void DrawOverlay(PaintList paint, bool hasReal3D)
     {
-        var fs = _theme.FontSizeCaption;
+        float fs = _theme.FontSizeCaption;
 
         // ── FPS counter (top-right) ───────────────────────────────────────────
-        var dt = App.Active?.DeltaTime ?? 0f;
-        var fps = dt > 0f ? 1f / dt : 0f;
-        var fpsText = _fpsOverlayText.Update($"{fps:F0} fps");
-        var fpsW = fpsText.Length * fs * 0.56f;
+        float dt = App.Active?.DeltaTime ?? 0f;
+        float fps = dt > 0f ? 1f / dt : 0f;
+        string fpsText = _fpsOverlayText.Update($"{fps:F0} fps");
+        float fpsW = fpsText.Length * fs * 0.56f;
         paint.AddRect(
-            new Rect(
-                Bounds.Right - fpsW - 16f,
-                Bounds.Y + 6f,
-                fpsW + 10f,
-                fs + 6f
+            bounds: new Rect(
+                x: Bounds.Right - fpsW - 16f,
+                y: Bounds.Y + 6f,
+                width: fpsW + 10f,
+                height: fs + 6f
             ),
-            _theme.OverlayBackground,
-            4f
+            color: _theme.OverlayBackground,
+            radius: 4f
         );
         paint.AddText(
-            fpsText,
-            Bounds.Right - fpsW - 11f,
-            Bounds.Y + fs + 7f,
-            fps >= 50f ? _theme.Success : fps >= 25f ? _theme.Warning : _theme.Error,
-            fs
+            text: fpsText,
+            baselineX: Bounds.Right - fpsW - 11f,
+            baselineY: Bounds.Y + fs + 7f,
+            color: fps >= 50f ? _theme.Success : fps >= 25f ? _theme.Warning : _theme.Error,
+            fontSize: fs
         );
 
         // ── Play mode indicator border (all 4 edges) ─────────────────────────
@@ -2554,72 +2632,72 @@ public sealed partial class ViewportPanel : Widget
         {
             // Paused: dim the frozen frame first, so the indicator border + badge stay crisp on top.
             if (_state.IsPaused)
-                paint.AddRect(Bounds, _theme.Background.WithAlpha(0.35f));
+                paint.AddRect(bounds: Bounds, color: _theme.Background.WithAlpha(0.35f));
 
             const float b = 3f;
             // Amber while paused, red while running.
             var pc = (_state.IsPaused ? _theme.Warning : _theme.Error).WithAlpha(0.9f);
             paint.AddRect(
-                new Rect(
-                    Bounds.X,
-                    Bounds.Y,
-                    Bounds.Width,
-                    b
+                bounds: new Rect(
+                    x: Bounds.X,
+                    y: Bounds.Y,
+                    width: Bounds.Width,
+                    height: b
                 ),
-                pc
+                color: pc
             ); // top
             paint.AddRect(
-                new Rect(
-                    Bounds.X,
-                    Bounds.Bottom - b,
-                    Bounds.Width,
-                    b
+                bounds: new Rect(
+                    x: Bounds.X,
+                    y: Bounds.Bottom - b,
+                    width: Bounds.Width,
+                    height: b
                 ),
-                pc
+                color: pc
             ); // bottom
             paint.AddRect(
-                new Rect(
-                    Bounds.X,
-                    Bounds.Y,
-                    b,
-                    Bounds.Height
+                bounds: new Rect(
+                    x: Bounds.X,
+                    y: Bounds.Y,
+                    width: b,
+                    height: Bounds.Height
                 ),
-                pc
+                color: pc
             ); // left
             paint.AddRect(
-                new Rect(
-                    Bounds.Right - b,
-                    Bounds.Y,
-                    b,
-                    Bounds.Height
+                bounds: new Rect(
+                    x: Bounds.Right - b,
+                    y: Bounds.Y,
+                    width: b,
+                    height: Bounds.Height
                 ),
-                pc
+                color: pc
             ); // right
 
             // Paused: centered PAUSED badge over the dimmed frame.
             if (_state.IsPaused)
             {
                 const string badge = "PAUSED";
-                var bfs = fs + 6f;
-                var bw = badge.Length * bfs * 0.62f;
-                var bx = Bounds.X + (Bounds.Width - bw) / 2f;
-                var by = Bounds.Y + Bounds.Height * 0.5f - bfs;
+                float bfs = fs + 6f;
+                float bw = badge.Length * bfs * 0.62f;
+                float bx = Bounds.X + ((Bounds.Width - bw) / 2f);
+                float by = Bounds.Y + (Bounds.Height * 0.5f) - bfs;
                 paint.AddRect(
-                    new Rect(
-                        bx - 14f,
-                        by,
-                        bw + 28f,
-                        bfs + 14f
+                    bounds: new Rect(
+                        x: bx - 14f,
+                        y: by,
+                        width: bw + 28f,
+                        height: bfs + 14f
                     ),
-                    _theme.OverlayBackground,
-                    6f
+                    color: _theme.OverlayBackground,
+                    radius: 6f
                 );
                 paint.AddText(
-                    badge,
-                    bx,
-                    by + bfs + 2f,
-                    _theme.Warning,
-                    bfs,
+                    text: badge,
+                    baselineX: bx,
+                    baselineY: by + bfs + 2f,
+                    color: _theme.Warning,
+                    fontSize: bfs,
                     fontWeight: FontWeight.Bold
                 );
             }
@@ -2628,24 +2706,24 @@ public sealed partial class ViewportPanel : Widget
         // ── Selected node info (top-left) ─────────────────────────────────────
         if (_state.Selected is { } sel)
         {
-            var text = _selOverlayText.Update($"{sel.Name}  ({KindNames[(int)sel.Kind]})");
-            var tw = text.Length * fs * 0.56f;
+            string text = _selOverlayText.Update($"{sel.Name}  ({KindNames[(int)sel.Kind]})");
+            float tw = text.Length * fs * 0.56f;
             paint.AddRect(
-                new Rect(
-                    Bounds.X + 6f,
-                    Bounds.Y + 6f,
-                    tw + 10f,
-                    fs + 6f
+                bounds: new Rect(
+                    x: Bounds.X + 6f,
+                    y: Bounds.Y + 6f,
+                    width: tw + 10f,
+                    height: fs + 6f
                 ),
-                _theme.OverlayBackground,
-                4f
+                color: _theme.OverlayBackground,
+                radius: 4f
             );
             paint.AddText(
-                text,
-                Bounds.X + 11f,
-                Bounds.Y + fs + 7f,
-                _theme.Primary,
-                fs
+                text: text,
+                baselineX: Bounds.X + 11f,
+                baselineY: Bounds.Y + fs + 7f,
+                color: _theme.Primary,
+                fontSize: fs
             );
         }
 
@@ -2656,32 +2734,32 @@ public sealed partial class ViewportPanel : Widget
             DrawCameraModeSwitch(paint);
             if (_cameraMode == CameraNavigationMode.Fly)
             {
-                var cx = Bounds.X + Bounds.Width * 0.5f;
-                var cy = Bounds.Y + Bounds.Height * 0.5f;
+                float cx = Bounds.X + (Bounds.Width * 0.5f);
+                float cy = Bounds.Y + (Bounds.Height * 0.5f);
                 var reticle = _theme.OnSurface.WithAlpha(0.55f);
                 paint.AddRect(
-                    new Rect(
-                        cx - 7f,
-                        cy - 0.5f,
-                        14f,
-                        1f
+                    bounds: new Rect(
+                        x: cx - 7f,
+                        y: cy - 0.5f,
+                        width: 14f,
+                        height: 1f
                     ),
-                    reticle
+                    color: reticle
                 );
                 paint.AddRect(
-                    new Rect(
-                        cx - 0.5f,
-                        cy - 7f,
-                        1f,
-                        14f
+                    bounds: new Rect(
+                        x: cx - 0.5f,
+                        y: cy - 7f,
+                        width: 1f,
+                        height: 14f
                     ),
-                    reticle
+                    color: reticle
                 );
             }
         }
 
         // ── Control hints (bottom center) ─────────────────────────────────────
-        var controls = _state.IsPlaying
+        string controls = _state.IsPlaying
             ? _state.IsPaused
                 ? "[P] resume  [Stop] to exit  —  simulation paused"
                 : "[WASD] move/drive  [Space] handbrake  [RMB] look  [P] pause  [Stop] to exit"
@@ -2701,23 +2779,23 @@ public sealed partial class ViewportPanel : Widget
                         _ =>
                             "[RMB] orbit  [wheel] zoom  [F] frame selection  [T/R/S] gizmo  [C] fly",
                     };
-        var ctrlW = controls.Length * fs * 0.56f;
+        float ctrlW = controls.Length * fs * 0.56f;
         paint.AddRect(
-            new Rect(
-                Bounds.X + (Bounds.Width - ctrlW - 10f) / 2f,
-                Bounds.Bottom - fs - 12f,
-                ctrlW + 10f,
-                fs + 6f
+            bounds: new Rect(
+                x: Bounds.X + ((Bounds.Width - ctrlW - 10f) / 2f),
+                y: Bounds.Bottom - fs - 12f,
+                width: ctrlW + 10f,
+                height: fs + 6f
             ),
-            _theme.OverlayBackground,
-            4f
+            color: _theme.OverlayBackground,
+            radius: 4f
         );
         paint.AddText(
-            controls,
-            Bounds.X + (Bounds.Width - ctrlW) / 2f,
-            Bounds.Bottom - 8f,
-            _theme.Hint,
-            fs
+            text: controls,
+            baselineX: Bounds.X + ((Bounds.Width - ctrlW) / 2f),
+            baselineY: Bounds.Bottom - 8f,
+            color: _theme.Hint,
+            fontSize: fs
         );
 
         // ── Game HUD (widget tree + immediate-mode overlay emitted by play-mode scripts) ────
@@ -2727,19 +2805,19 @@ public sealed partial class ViewportPanel : Widget
 
         // Scene-transition fade (Scenes.Load with a fade) — covers the frame, HUD included.
         if (_state.ActivePlay is { ScreenFadeAlpha: > 0f } fadingPlay)
-            paint.AddRect(Bounds, Color.Black.WithAlpha(fadingPlay.ScreenFadeAlpha));
+            paint.AddRect(bounds: Bounds, color: Color.Black.WithAlpha(fadingPlay.ScreenFadeAlpha));
 
         // ── No camera watermark ───────────────────────────────────────────────
         if (!hasReal3D)
         {
-            var wm = "3D Viewport — no active camera in scene";
-            var wmW = wm.Length * (fs + 2f) * 0.55f;
+            string wm = "3D Viewport — no active camera in scene";
+            float wmW = wm.Length * (fs + 2f) * 0.55f;
             paint.AddText(
-                wm,
-                Bounds.X + (Bounds.Width - wmW) * 0.5f,
-                Bounds.Y + Bounds.Height * 0.5f - 8f,
-                _theme.Hint.WithAlpha(0.4f),
-                fs + 2f
+                text: wm,
+                baselineX: Bounds.X + ((Bounds.Width - wmW) * 0.5f),
+                baselineY: Bounds.Y + (Bounds.Height * 0.5f) - 8f,
+                color: _theme.Hint.WithAlpha(0.4f),
+                fontSize: fs + 2f
             );
         }
     }
@@ -2760,10 +2838,10 @@ public sealed partial class ViewportPanel : Widget
         SyncHudWidget();
         if (_hudWrapper is null) return;
 
-        var w = MathF.Max(1f, Bounds.Width);
-        var h = MathF.Max(1f, Bounds.Height);
-        _hudWrapper.Measure(Constraints.Tight(w, h));
-        _hudWrapper.Layout(new Offset(Bounds.X, Bounds.Y));
+        float w = MathF.Max(x: 1f, y: Bounds.Width);
+        float h = MathF.Max(x: 1f, y: Bounds.Height);
+        _hudWrapper.Measure(Constraints.Tight(width: w, height: h));
+        _hudWrapper.Layout(new Offset(x: Bounds.X, y: Bounds.Y));
         _hudWrapper.Paint(paint);
     }
 
@@ -2777,7 +2855,7 @@ public sealed partial class ViewportPanel : Widget
     private void SyncHudWidget()
     {
         var src = Hud.Root;
-        if (!ReferenceEquals(src, _hudSource))
+        if (!ReferenceEquals(objA: src, objB: _hudSource))
         {
             _hudWrapper?.Detach();
             _hudSource = src;
@@ -2788,9 +2866,9 @@ public sealed partial class ViewportPanel : Widget
             }
             else
             {
-                _hudMedia = new MediaQuery(ViewportMedia(), src);
-                _hudWrapper = new ThemeProvider(_theme, _hudMedia);
-                if (Owner is not null) _hudWrapper.Attach(Owner, this);
+                _hudMedia = new MediaQuery(data: ViewportMedia(), child: src);
+                _hudWrapper = new ThemeProvider(data: _theme, child: _hudMedia);
+                if (Owner is not null) _hudWrapper.Attach(owner: Owner, parent: this);
             }
         }
 
@@ -2800,8 +2878,12 @@ public sealed partial class ViewportPanel : Widget
 
     private MediaQueryData ViewportMedia()
     {
-        var scale = Owner?.Engine.Scale ?? 1f;
-        return new MediaQueryData(MathF.Max(1f, Bounds.Width), MathF.Max(1f, Bounds.Height), scale);
+        float scale = Owner?.Engine.Scale ?? 1f;
+        return new MediaQueryData(
+            width: MathF.Max(x: 1f, y: Bounds.Width),
+            height: MathF.Max(x: 1f, y: Bounds.Height),
+            devicePixelRatio: scale
+        );
     }
 
     private enum GizmoMode

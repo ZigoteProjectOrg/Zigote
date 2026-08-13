@@ -30,10 +30,7 @@ public static class ShaderCoerce
     public const float LumG = 0.7152f;
     public const float LumB = 0.0722f;
 
-    public static bool NeedsConversion(ShaderValueType from, ShaderValueType to)
-    {
-        return from != to;
-    }
+    public static bool NeedsConversion(ShaderValueType from, ShaderValueType to) => from != to;
 
     /// <summary>Convert a value carried in the universal <see cref="Vec4" /> register to the target type.</summary>
     public static Vec4 Eval(Vec4 v, ShaderValueType from, ShaderValueType to)
@@ -41,46 +38,45 @@ public static class ShaderCoerce
         if (from == to) return v;
         return to switch {
             ShaderValueType.Float => new Vec4(
-                Scalar(v, from),
-                0f,
-                0f,
-                0f
+                x: Scalar(v: v, from: from),
+                y: 0f,
+                z: 0f,
+                w: 0f
             ),
             ShaderValueType.Vec3 => from == ShaderValueType.Float
                 ? new Vec4(
-                    v.X,
-                    v.X,
-                    v.X,
-                    0f
+                    x: v.X,
+                    y: v.X,
+                    z: v.X,
+                    w: 0f
                 ) // splat
                 : new Vec4(
-                    v.X,
-                    v.Y,
-                    v.Z,
-                    0f
+                    x: v.X,
+                    y: v.Y,
+                    z: v.Z,
+                    w: 0f
                 ), // Vec4 → Vec3 drops alpha
             ShaderValueType.Vec4 => from == ShaderValueType.Float
                 ? new Vec4(
-                    v.X,
-                    v.X,
-                    v.X,
-                    1f
+                    x: v.X,
+                    y: v.X,
+                    z: v.X,
+                    w: 1f
                 ) // splat rgb, opaque
                 : new Vec4(
-                    v.X,
-                    v.Y,
-                    v.Z,
-                    1f
+                    x: v.X,
+                    y: v.Y,
+                    z: v.Z,
+                    w: 1f
                 ), // Vec3 → Vec4 appends 1
             _ => v,
         };
     }
 
     /// <summary>Scalar reduction of a register value (Float passthrough, Vec3/Vec4 → luminance of rgb).</summary>
-    public static float Scalar(Vec4 v, ShaderValueType from)
-    {
-        return from == ShaderValueType.Float ? v.X : v.X * LumR + v.Y * LumG + v.Z * LumB;
-    }
+    public static float Scalar(Vec4 v, ShaderValueType from) => from == ShaderValueType.Float
+        ? v.X
+        : (v.X * LumR) + (v.Y * LumG) + (v.Z * LumB);
 
     /// <summary>
     ///     WGSL counterpart of <see cref="Eval" />: wrap a source expression so it reads as the
@@ -90,7 +86,9 @@ public static class ShaderCoerce
     {
         if (from == to) return expr;
         return to switch {
-            ShaderValueType.Float => from == ShaderValueType.Float ? expr : Lum(expr, from),
+            ShaderValueType.Float => from == ShaderValueType.Float
+                ? expr
+                : Lum(expr: expr, from: from),
             ShaderValueType.Vec3 => from switch {
                 ShaderValueType.Float => $"vec3<f32>({expr})",
                 ShaderValueType.Vec4 => $"({expr}).xyz",
@@ -107,7 +105,7 @@ public static class ShaderCoerce
 
     private static string Lum(string expr, ShaderValueType from)
     {
-        var rgb = from == ShaderValueType.Vec4 ? $"({expr}).xyz" : $"({expr})";
+        string rgb = from == ShaderValueType.Vec4 ? $"({expr}).xyz" : $"({expr})";
         return $"dot({rgb}, vec3<f32>({LumR}, {LumG}, {LumB}))";
     }
 

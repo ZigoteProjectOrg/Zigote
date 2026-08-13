@@ -10,7 +10,7 @@ namespace Samples.Scripting;
 public sealed class Rotator : Component
 {
     [Export]
-    [EditorRange(0, 720)]
+    [EditorRange(min: 0, max: 720)]
     [EditorTooltip("Rotation speed in degrees per second")]
     public float Speed { get; set; } = 90f;
 
@@ -18,12 +18,12 @@ public sealed class Rotator : Component
 
     protected override void OnUpdate(float deltaTime)
     {
-        var sign = Clockwise ? 1f : -1f;
+        float sign = Clockwise ? 1f : -1f;
         var euler = Rotation.ToEulerRadians();
         Rotation = Quat.FromEuler(
-            euler.X,
-            euler.Y + sign * Speed * deltaTime * (MathF.PI / 180f),
-            euler.Z
+            pitch: euler.X,
+            yaw: euler.Y + (sign * Speed * deltaTime * (MathF.PI / 180f)),
+            roll: euler.Z
         );
     }
 }

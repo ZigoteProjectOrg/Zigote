@@ -26,21 +26,13 @@ public abstract class Component
 
     // ── Lifecycle — override in user scripts ──────────────────────────────────
 
-    protected virtual void OnCreate()
-    {
-    }
+    protected virtual void OnCreate() { }
 
-    protected virtual void OnDestroy()
-    {
-    }
+    protected virtual void OnDestroy() { }
 
-    protected virtual void OnEnable()
-    {
-    }
+    protected virtual void OnEnable() { }
 
-    protected virtual void OnDisable()
-    {
-    }
+    protected virtual void OnDisable() { }
 
     /// <summary>
     ///     Per-tick update. Runs on the fixed 120 Hz gameplay tick, not the render frame:
@@ -48,31 +40,17 @@ public abstract class Component
     ///     several ticks back-to-back, and a fast one may run none — render-side smoothing can
     ///     blend by <see cref="Time.InterpolationAlpha" />.
     /// </summary>
-    protected virtual void OnUpdate(float deltaTime)
-    {
-    }
+    protected virtual void OnUpdate(float deltaTime) { }
 
     // ── Internal dispatch (catches exceptions so one bad script can't crash the editor) ─
 
-    internal void CallCreate()
-    {
-        Dispatch(OnCreate);
-    }
+    internal void CallCreate() => Dispatch(OnCreate);
 
-    internal void CallDestroy()
-    {
-        Dispatch(OnDestroy);
-    }
+    internal void CallDestroy() => Dispatch(OnDestroy);
 
-    internal void CallEnable()
-    {
-        Dispatch(OnEnable);
-    }
+    internal void CallEnable() => Dispatch(OnEnable);
 
-    internal void CallDisable()
-    {
-        Dispatch(OnDisable);
-    }
+    internal void CallDisable() => Dispatch(OnDisable);
 
     // Inlined rather than routed through Dispatch: a dt-capturing lambda would allocate a closure
     // per component per tick. Same policy — log the error, disable the component.

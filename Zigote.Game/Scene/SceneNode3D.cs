@@ -31,9 +31,9 @@ public sealed class SceneNode3D(string name, Node3DKind kind = Node3DKind.Empty)
     {
         get => LocalTransform.Position;
         set => LocalTransform = new Transform3D(
-            value,
-            LocalTransform.Rotation,
-            LocalTransform.Scale
+            position: value,
+            rotation: LocalTransform.Rotation,
+            scale: LocalTransform.Scale
         );
     }
 
@@ -41,9 +41,9 @@ public sealed class SceneNode3D(string name, Node3DKind kind = Node3DKind.Empty)
     {
         get => LocalTransform.Rotation;
         set => LocalTransform = new Transform3D(
-            LocalTransform.Position,
-            value,
-            LocalTransform.Scale
+            position: LocalTransform.Position,
+            rotation: value,
+            scale: LocalTransform.Scale
         );
     }
 
@@ -51,9 +51,9 @@ public sealed class SceneNode3D(string name, Node3DKind kind = Node3DKind.Empty)
     {
         get => LocalTransform.Scale;
         set => LocalTransform = new Transform3D(
-            LocalTransform.Position,
-            LocalTransform.Rotation,
-            value
+            position: LocalTransform.Position,
+            rotation: LocalTransform.Rotation,
+            scale: value
         );
     }
 
@@ -101,16 +101,13 @@ public sealed class SceneNode3D(string name, Node3DKind kind = Node3DKind.Empty)
     {
         WorldTransform = Parent is null
             ? LocalTransform
-            : Transform3D.Combine(Parent.WorldTransform, LocalTransform);
+            : Transform3D.Combine(parent: Parent.WorldTransform, child: LocalTransform);
 
         foreach (var child in _children)
             child.UpdateWorldTransform();
     }
 
-    public Mat4 WorldMatrix()
-    {
-        return WorldTransform.ToMat4();
-    }
+    public Mat4 WorldMatrix() => WorldTransform.ToMat4();
 
     // ── Zig FFI sync ─────────────────────────────────────────────────────────
 
@@ -127,17 +124,17 @@ public sealed class SceneNode3D(string name, Node3DKind kind = Node3DKind.Empty)
         if (_pushed && pos.ApproxEquals(_pPos) && rot == _pRot &&
             scale.ApproxEquals(_pScale)) return;
         ZigoteEngine.Instance!.SceneUpdateNode(
-            Handle,
-            pos.X,
-            pos.Y,
-            pos.Z,
-            rot.X,
-            rot.Y,
-            rot.Z,
-            rot.W,
-            scale.X,
-            scale.Y,
-            scale.Z
+            nodeHandle: Handle,
+            x: pos.X,
+            y: pos.Y,
+            z: pos.Z,
+            qx: rot.X,
+            qy: rot.Y,
+            qz: rot.Z,
+            qw: rot.W,
+            sx: scale.X,
+            sy: scale.Y,
+            sz: scale.Z
         );
         _pPos = pos;
         _pRot = rot;
@@ -154,7 +151,7 @@ public sealed class SceneNode3D(string name, Node3DKind kind = Node3DKind.Empty)
     public void SyncTree()
     {
         if (Active) Sync();
-        for (var i = 0; i < _children.Count; i++)
+        for (int i = 0; i < _children.Count; i++)
             _children[i].SyncTree();
     }
 }

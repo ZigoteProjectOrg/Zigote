@@ -49,6 +49,9 @@ public static class AdwStyle
     /// </summary>
     public const float DimmerOpacity = 0.3f;
 
+    /// <summary><c>rgb(0 0 6)</c> — the near-black every Adwaita press overlay is made of.</summary>
+    internal static readonly Color Ink = Color.Rgb(r: 0, g: 0, b: 6);
+
     /// <summary>Background fill for a button-like control in a given interaction state.</summary>
     public static Color ButtonFill(
         ThemeData theme,
@@ -63,40 +66,56 @@ public static class AdwStyle
         {
             case AdwButtonStyle.Suggested:
                 // %opaque_button: the accent stays put and an overlay rides on top.
-                return Solid(theme.Accent, hovered, pressed, enabled, @checked);
+                return Solid(
+                    baseColor: theme.Accent,
+                    hovered: hovered,
+                    pressed: pressed,
+                    enabled: enabled,
+                    @checked: @checked
+                );
 
             case AdwButtonStyle.Opaque:
                 return Solid(
-                    AdwPalette.Mix(p.WindowFg, p.WindowBg, 0.15f),
-                    hovered,
-                    pressed,
-                    enabled,
-                    @checked
+                    baseColor: AdwPalette.Mix(a: p.WindowFg, b: p.WindowBg, t: 0.15f),
+                    hovered: hovered,
+                    pressed: pressed,
+                    enabled: enabled,
+                    @checked: @checked
                 );
 
             case AdwButtonStyle.Destructive:
                 // %destructive_button: currentColor is the standalone red, 15/20/35 (checked
                 // 35/40/45) — a tint of the text colour, not a solid red slab.
                 return Tint(
-                    p.Destructive,
-                    @checked
+                    currentColor: p.Destructive,
+                    percent: @checked
                         ? pressed ? 0.45f : hovered ? 0.40f : 0.35f
-                        : pressed ? 0.35f : hovered ? 0.20f : 0.15f,
-                    theme
+                        : pressed
+                            ? 0.35f
+                            : hovered
+                                ? 0.20f
+                                : 0.15f,
+                    theme: theme
                 );
 
             case AdwButtonStyle.Flat:
                 if (@checked)
+                {
                     return pressed ? p.SelectedFillActive :
                         hovered ? p.SelectedFillHover : p.SelectedFill;
+                }
+
                 if (pressed) return p.ActiveFill;
                 if (hovered) return p.HoverFill;
                 return Color.Transparent;
 
             default:
                 if (@checked)
+                {
                     return pressed ? p.ButtonFillCheckedActive :
                         hovered ? p.ButtonFillCheckedHover : p.ButtonFillChecked;
+                }
+
                 if (pressed) return p.ButtonFillActive;
                 if (hovered) return p.ButtonFillHover;
                 return p.ButtonFill;
@@ -118,9 +137,9 @@ public static class AdwStyle
         bool @checked = false)
     {
         if (!enabled) return baseColor;
-        if (pressed) return AdwPalette.Mix(Ink, baseColor, @checked ? 0.30f : 0.20f);
-        if (@checked) return AdwPalette.Mix(Ink, baseColor, hovered ? 0.05f : 0.15f);
-        if (hovered) return AdwPalette.Mix(Color.White, baseColor, 0.10f);
+        if (pressed) return AdwPalette.Mix(a: Ink, b: baseColor, t: @checked ? 0.30f : 0.20f);
+        if (@checked) return AdwPalette.Mix(a: Ink, b: baseColor, t: hovered ? 0.05f : 0.15f);
+        if (hovered) return AdwPalette.Mix(a: Color.White, b: baseColor, t: 0.10f);
         return baseColor;
     }
 
@@ -216,7 +235,7 @@ public static class AdwStyle
     public static Color SliderKnob(ThemeData theme, bool hot = false)
     {
         var p = AdwPalette.For(theme);
-        return hot ? Color.White : AdwPalette.Mix(Color.White, p.ViewBg, 0.8f);
+        return hot ? Color.White : AdwPalette.Mix(a: Color.White, b: p.ViewBg, t: 0.8f);
     }
 
     /// <summary>
@@ -224,13 +243,11 @@ public static class AdwStyle
     ///     arbitrary currentColor — the status tints (destructive buttons, error rows) where the
     ///     wash is a tint of the text colour rather than of the window foreground.
     /// </summary>
-    public static Color Tint(Color currentColor, float percent, ThemeData theme)
-    {
-        return AdwPalette.Wash(currentColor, percent, AdwPalette.For(theme).WindowBg);
-    }
-
-    /// <summary><c>rgb(0 0 6)</c> — the near-black every Adwaita press overlay is made of.</summary>
-    internal static readonly Color Ink = Color.Rgb(0, 0, 6);
+    public static Color Tint(Color currentColor, float percent, ThemeData theme) => AdwPalette.Wash(
+        tint: currentColor,
+        percent: percent,
+        over: AdwPalette.For(theme).WindowBg
+    );
 
     // ── Shared building blocks ────────────────────────────────────────────────
 
@@ -256,22 +273,22 @@ public static class AdwStyle
         );
         fill.Snap(
             ButtonFill(
-                theme,
-                style,
-                false,
-                false,
-                enabled?.Invoke() ?? true,
-                @checked?.Invoke() ?? false
+                theme: theme,
+                style: style,
+                hovered: false,
+                pressed: false,
+                enabled: enabled?.Invoke() ?? true,
+                @checked: @checked?.Invoke() ?? false
             )
         );
         pressable.OnStateChanged = () => fill.Target(
             ButtonFill(
-                theme,
-                style,
-                pressable.Hovered,
-                pressable.Pressed,
-                enabled?.Invoke() ?? true,
-                @checked?.Invoke() ?? false
+                theme: theme,
+                style: style,
+                hovered: pressable.Hovered,
+                pressed: pressable.Pressed,
+                enabled: enabled?.Invoke() ?? true,
+                @checked: @checked?.Invoke() ?? false
             )
         );
     }
@@ -287,8 +304,11 @@ public static class AdwStyle
         float paddingX = AdwMetrics.ButtonPaddingX)
     {
         return new ConstrainedBox(
-            new Constraints(minHeight: height),
-            new Align(Alignment.Center, new Padding(EdgeInsets.Symmetric(paddingX), content)) {
+            constraints: new Constraints(minHeight: height),
+            child: new Align(
+                alignment: Alignment.Center,
+                child: new Padding(padding: EdgeInsets.Symmetric(paddingX), child: content)
+            ) {
                 WidthFactor = 1f,
                 HeightFactor = 1f,
             }
@@ -302,7 +322,7 @@ public static class AdwStyle
     /// </summary>
     internal static void Set<T>(this ComposedWidget widget, ref T field, T value)
     {
-        if (EqualityComparer<T>.Default.Equals(field, value)) return;
+        if (EqualityComparer<T>.Default.Equals(x: field, y: value)) return;
         field = value;
         widget.Invalidate();
     }

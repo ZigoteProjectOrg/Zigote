@@ -9,7 +9,7 @@ namespace Zigote.Core.Engine;
 /// </summary>
 public readonly record struct TrayMenuItem(int Tag, string Label, bool Enabled = true)
 {
-    public static TrayMenuItem Separator => new(0, "", false);
+    public static TrayMenuItem Separator => new(Tag: 0, Label: "", Enabled: false);
 
     public bool IsSeparator => Tag == 0 && Label.Length == 0;
 }
@@ -49,14 +49,25 @@ public static class TrayIcon
     /// </summary>
     /// <param name="tooltip">Hover text; also the accessible name of the item.</param>
     /// <param name="onSelect">A menu item was chosen, by its tag.</param>
-    /// <param name="onActivate">The icon itself was clicked (Windows only; on macOS a click opens
-    ///     the menu, which is the platform convention).</param>
+    /// <param name="onActivate">
+    ///     The icon itself was clicked (Windows only; on macOS a click opens
+    ///     the menu, which is the platform convention).
+    /// </param>
     public static ITrayIcon? Create(string tooltip, Action<int> onSelect, Action onActivate)
     {
         try
         {
-            if (OperatingSystem.IsWindows()) return new WindowsTrayIcon(tooltip, onSelect, onActivate);
-            if (OperatingSystem.IsMacOS()) return new MacTrayIcon(tooltip, onSelect);
+            if (OperatingSystem.IsWindows())
+            {
+                return new WindowsTrayIcon(
+                    tooltip: tooltip,
+                    onSelect: onSelect,
+                    onActivate: onActivate
+                );
+            }
+
+            if (OperatingSystem.IsMacOS())
+                return new MacTrayIcon(tooltip: tooltip, onSelect: onSelect);
         }
         catch (Exception)
         {
@@ -83,10 +94,7 @@ internal sealed unsafe class MacTrayIcon : ITrayIcon
         NativeEngine.MacTrayShow(tooltip);
     }
 
-    public void SetTooltip(string tooltip)
-    {
-        NativeEngine.MacTraySetTooltip(tooltip);
-    }
+    public void SetTooltip(string tooltip) => NativeEngine.MacTraySetTooltip(tooltip);
 
     /// <summary>
     ///     The whole menu goes over as one string — <c>tag\tlabel\tenabled</c> per line, an empty
@@ -95,8 +103,12 @@ internal sealed unsafe class MacTrayIcon : ITrayIcon
     /// </summary>
     public void SetMenu(IReadOnlyList<TrayMenuItem> items)
     {
-        var spec = string.Join('\n', items.Select(i =>
-            i.IsSeparator ? "" : $"{i.Tag}\t{i.Label}\t{(i.Enabled ? 1 : 0)}"));
+        string spec = string.Join(
+            separator: '\n',
+            values: items.Select(i =>
+                i.IsSeparator ? "" : $"{i.Tag}\t{i.Label}\t{(i.Enabled ? 1 : 0)}"
+            )
+        );
         NativeEngine.MacTraySetMenu(spec);
     }
 
@@ -107,10 +119,7 @@ internal sealed unsafe class MacTrayIcon : ITrayIcon
     }
 
     [UnmanagedCallersOnly]
-    private static void Trampoline(int tag)
-    {
-        _onSelect?.Invoke(tag);
-    }
+    private static void Trampoline(int tag) => _onSelect?.Invoke(tag);
 }
 
 /// <summary>
@@ -133,18 +142,19 @@ internal sealed class WindowsTrayIcon : ITrayIcon
 
     private const uint MF_STRING = 0x0000, MF_GRAYED = 0x0001, MF_SEPARATOR = 0x0800;
     private const uint TPM_RIGHTBUTTON = 0x0002, TPM_RETURNCMD = 0x0100;
+    private readonly Action _onActivate;
 
     private readonly Action<int> _onSelect;
-    private readonly Action _onActivate;
-    private readonly WndProcDelegate _wndProc; // rooted: the OS holds a raw pointer to it
     private readonly uint _taskbarCreated;
     private readonly Thread _thread;
+    private readonly WndProcDelegate _wndProc; // rooted: the OS holds a raw pointer to it
 
     private nint _hwnd;
-    private string _tooltip;
 
     /// <summary>Read from the message-loop thread, written from the UI thread.</summary>
     private volatile IReadOnlyList<TrayMenuItem> _items = [];
+
+    private string _tooltip;
 
     public WindowsTrayIcon(string tooltip, Action<int> onSelect, Action onActivate)
     {
@@ -160,7 +170,10 @@ internal sealed class WindowsTrayIcon : ITrayIcon
         // the event out from under a Set() that is still coming — an unhandled exception on a
         // thread nobody is watching.
         var ready = new ManualResetEventSlim();
-        _thread = new Thread(() => Pump(ready)) { IsBackground = true, Name = "tray" };
+        _thread = new Thread(() => Pump(ready)) {
+            IsBackground = true,
+            Name = "tray",
+        };
         _thread.Start();
         ready.Wait(TimeSpan.FromSeconds(2));
         if (_hwnd == 0) throw new InvalidOperationException("tray window did not come up");
@@ -169,33 +182,34 @@ internal sealed class WindowsTrayIcon : ITrayIcon
     public void SetTooltip(string tooltip)
     {
         _tooltip = tooltip;
-        if (_hwnd != 0) Shell_NotifyIconW(NIM_MODIFY, Data(NIF_TIP));
+        if (_hwnd != 0) Shell_NotifyIconW(message: NIM_MODIFY, data: Data(NIF_TIP));
     }
 
-    public void SetMenu(IReadOnlyList<TrayMenuItem> items)
-    {
-        _items = items;
-    }
+    public void SetMenu(IReadOnlyList<TrayMenuItem> items) => _items = items;
 
     public void Dispose()
     {
         if (_hwnd == 0) return;
         // Posted, not called: the window belongs to the pump thread, and only that thread may
         // destroy it. The pump removes the icon on WM_DESTROY and falls out of its loop.
-        PostMessageW(_hwnd, WM_CLOSE, 0, 0);
+        PostMessageW(
+            hwnd: _hwnd,
+            msg: WM_CLOSE,
+            wParam: 0,
+            lParam: 0
+        );
         _thread.Join(TimeSpan.FromSeconds(1));
     }
 
     private void Pump(ManualResetEventSlim ready)
     {
-        var instance = GetModuleHandleW(null);
-        var className = "ZigoteTray+" + Environment.ProcessId;
-        var wc = new WNDCLASSEXW
-        {
+        IntPtr instance = GetModuleHandleW(null);
+        string className = "ZigoteTray+" + Environment.ProcessId;
+        var wc = new WNDCLASSEXW {
             cbSize = (uint)Marshal.SizeOf<WNDCLASSEXW>(),
             lpfnWndProc = Marshal.GetFunctionPointerForDelegate(_wndProc),
             hInstance = instance,
-            lpszClassName = className
+            lpszClassName = className,
         };
         if (RegisterClassExW(ref wc) == 0)
         {
@@ -205,12 +219,31 @@ internal sealed class WindowsTrayIcon : ITrayIcon
 
         // HWND_MESSAGE (-3): a window that exists only to receive messages — never shown, never in
         // the taskbar, not something alt-tab can land on.
-        _hwnd = CreateWindowExW(0, className, className, 0, 0, 0, 0, 0, -3, 0, instance, 0);
-        if (_hwnd != 0) Shell_NotifyIconW(NIM_ADD, Data(NIF_MESSAGE | NIF_ICON | NIF_TIP));
+        _hwnd = CreateWindowExW(
+            exStyle: 0,
+            className: className,
+            windowName: className,
+            style: 0,
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+            parent: -3,
+            menu: 0,
+            instance: instance,
+            param: 0
+        );
+        if (_hwnd != 0)
+            Shell_NotifyIconW(message: NIM_ADD, data: Data(NIF_MESSAGE | NIF_ICON | NIF_TIP));
         ready.Set();
         if (_hwnd == 0) return;
 
-        while (GetMessageW(out var msg, 0, 0, 0) > 0)
+        while (GetMessageW(
+                   msg: out var msg,
+                   hwnd: 0,
+                   min: 0,
+                   max: 0
+               ) > 0)
         {
             TranslateMessage(ref msg);
             DispatchMessageW(ref msg);
@@ -221,7 +254,7 @@ internal sealed class WindowsTrayIcon : ITrayIcon
     {
         if (msg == _taskbarCreated)
         {
-            Shell_NotifyIconW(NIM_ADD, Data(NIF_MESSAGE | NIF_ICON | NIF_TIP));
+            Shell_NotifyIconW(message: NIM_ADD, data: Data(NIF_MESSAGE | NIF_ICON | NIF_TIP));
             return 0;
         }
 
@@ -242,36 +275,57 @@ internal sealed class WindowsTrayIcon : ITrayIcon
                 return 0;
 
             case WM_DESTROY:
-                Shell_NotifyIconW(NIM_DELETE, Data(0));
+                Shell_NotifyIconW(message: NIM_DELETE, data: Data(0));
                 _hwnd = 0;
                 PostQuitMessage(0);
                 return 0;
         }
 
-        return DefWindowProcW(hwnd, msg, wParam, lParam);
+        return DefWindowProcW(
+            hwnd: hwnd,
+            msg: msg,
+            wParam: wParam,
+            lParam: lParam
+        );
     }
 
     private void ShowMenu(nint hwnd)
     {
-        var menu = CreatePopupMenu();
+        IntPtr menu = CreatePopupMenu();
         if (menu == 0) return;
         try
         {
             foreach (var item in _items)
+            {
                 AppendMenuW(
-                    menu,
-                    item.IsSeparator ? MF_SEPARATOR : MF_STRING | (item.Enabled ? 0 : MF_GRAYED),
-                    (nuint)item.Tag,
-                    item.IsSeparator ? null : item.Label
+                    menu: menu,
+                    flags: item.IsSeparator
+                        ? MF_SEPARATOR
+                        : MF_STRING | (item.Enabled ? 0 : MF_GRAYED),
+                    id: (nuint)item.Tag,
+                    item: item.IsSeparator ? null : item.Label
                 );
+            }
 
             GetCursorPos(out var point);
             // Documented dance: without the foreground window the menu never closes when the user
             // clicks away, and without the trailing post the *next* menu sometimes fails to open.
             SetForegroundWindow(hwnd);
-            var chosen = TrackPopupMenu(
-                menu, TPM_RIGHTBUTTON | TPM_RETURNCMD, point.X, point.Y, 0, hwnd, 0);
-            PostMessageW(hwnd, 0x0000, 0, 0);
+            int chosen = TrackPopupMenu(
+                menu: menu,
+                flags: TPM_RIGHTBUTTON | TPM_RETURNCMD,
+                x: point.X,
+                y: point.Y,
+                reserved: 0,
+                hwnd: hwnd,
+                rect: 0
+            );
+            PostMessageW(
+                hwnd: hwnd,
+                msg: 0x0000,
+                wParam: 0,
+                lParam: 0
+            );
             if (chosen > 0) _onSelect(chosen);
         }
         finally
@@ -282,8 +336,7 @@ internal sealed class WindowsTrayIcon : ITrayIcon
 
     private NOTIFYICONDATAW Data(uint flags)
     {
-        return new NOTIFYICONDATAW
-        {
+        return new NOTIFYICONDATAW {
             cbSize = (uint)Marshal.SizeOf<NOTIFYICONDATAW>(),
             hWnd = _hwnd,
             uID = 1,
@@ -295,73 +348,18 @@ internal sealed class WindowsTrayIcon : ITrayIcon
             hIcon = AppIcon(),
             // szTip is 128 chars *including* the terminator, and ByValTStr silently truncating is
             // fine — a tooltip is not data.
-            szTip = _tooltip.Length > 127 ? _tooltip[..127] : _tooltip
+            szTip = _tooltip.Length > 127 ? _tooltip[..127] : _tooltip,
         };
     }
 
     private static nint AppIcon()
     {
-        var exe = Environment.ProcessPath;
-        var icon = exe is null ? 0 : ExtractIconW(GetModuleHandleW(null), exe, 0);
+        string? exe = Environment.ProcessPath;
+        IntPtr icon = exe is null
+            ? 0
+            : ExtractIconW(instance: GetModuleHandleW(null), exeFile: exe, index: 0);
         // ExtractIcon returns 1 for "no icons in that file", which is not a handle.
-        return icon is 0 or 1 ? LoadIconW(0, 32512 /* IDI_APPLICATION */) : icon;
-    }
-
-    private delegate nint WndProcDelegate(nint hwnd, uint msg, nint wParam, nint lParam);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct POINT
-    {
-        public int X;
-        public int Y;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MSG
-    {
-        public nint hwnd;
-        public uint message;
-        public nint wParam;
-        public nint lParam;
-        public uint time;
-        public POINT pt;
-    }
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct WNDCLASSEXW
-    {
-        public uint cbSize;
-        public uint style;
-        public nint lpfnWndProc;
-        public int cbClsExtra;
-        public int cbWndExtra;
-        public nint hInstance;
-        public nint hIcon;
-        public nint hCursor;
-        public nint hbrBackground;
-        [MarshalAs(UnmanagedType.LPWStr)] public string? lpszMenuName;
-        [MarshalAs(UnmanagedType.LPWStr)] public string lpszClassName;
-        public nint hIconSm;
-    }
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct NOTIFYICONDATAW
-    {
-        public uint cbSize;
-        public nint hWnd;
-        public uint uID;
-        public uint uFlags;
-        public uint uCallbackMessage;
-        public nint hIcon;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string szTip;
-        public uint dwState;
-        public uint dwStateMask;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)] public string szInfo;
-        public uint uVersion;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)] public string szInfoTitle;
-        public uint dwInfoFlags;
-        public Guid guidItem;
-        public nint hBalloonIcon;
+        return icon is 0 or 1 ? LoadIconW(instance: 0, name: 32512 /* IDI_APPLICATION */) : icon;
     }
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
@@ -423,4 +421,70 @@ internal sealed class WindowsTrayIcon : ITrayIcon
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     private static extern nint GetModuleHandleW(string? name);
+
+    private delegate nint WndProcDelegate(nint hwnd, uint msg, nint wParam, nint lParam);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT
+    {
+        public int X;
+        public int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MSG
+    {
+        public nint hwnd;
+        public uint message;
+        public nint wParam;
+        public nint lParam;
+        public uint time;
+        public POINT pt;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct WNDCLASSEXW
+    {
+        public uint cbSize;
+        public uint style;
+        public nint lpfnWndProc;
+        public int cbClsExtra;
+        public int cbWndExtra;
+        public nint hInstance;
+        public nint hIcon;
+        public nint hCursor;
+        public nint hbrBackground;
+        [MarshalAs(UnmanagedType.LPWStr)] public string? lpszMenuName;
+        [MarshalAs(UnmanagedType.LPWStr)] public string lpszClassName;
+        public nint hIconSm;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct NOTIFYICONDATAW
+    {
+        public uint cbSize;
+        public nint hWnd;
+        public uint uID;
+        public uint uFlags;
+        public uint uCallbackMessage;
+        public nint hIcon;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        public string szTip;
+
+        public uint dwState;
+        public uint dwStateMask;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
+        public string szInfo;
+
+        public uint uVersion;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)]
+        public string szInfoTitle;
+
+        public uint dwInfoFlags;
+        public Guid guidItem;
+        public nint hBalloonIcon;
+    }
 }

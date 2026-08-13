@@ -100,12 +100,12 @@ public class ScrollView : Widget
         if (!_hasPendingReveal) return;
         _hasPendingReveal = false;
 
-        var viewH = _viewSize.Height;
+        float viewH = _viewSize.Height;
         if (viewH <= 0f) return;
 
-        var cur = _sy.Offset;
-        var top = _revealTop - _revealMargin;
-        var bottom = _revealTop + _revealHeight + _revealMargin;
+        float cur = _sy.Offset;
+        float top = _revealTop - _revealMargin;
+        float bottom = _revealTop + _revealHeight + _revealMargin;
 
         float target;
         if (top < cur) target = top; // off the top — pull the band's top edge in
@@ -119,7 +119,7 @@ public class ScrollView : Widget
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        _viewSize = c.Constrain(new Size(c.MaxWidth, c.MaxHeight));
+        _viewSize = c.Constrain(new Size(width: c.MaxWidth, height: c.MaxHeight));
 
         if (Child is not null)
         {
@@ -135,10 +135,12 @@ public class ScrollView : Widget
             // and the scrollbar computes ∞/∞ = NaN. Clamp to the viewport so there's simply nothing to
             // scroll on that axis instead of poisoning the scroll math.
             if (!float.IsFinite(_childSize.Width) || !float.IsFinite(_childSize.Height))
+            {
                 _childSize = new Size(
-                    float.IsFinite(_childSize.Width) ? _childSize.Width : _viewSize.Width,
-                    float.IsFinite(_childSize.Height) ? _childSize.Height : _viewSize.Height
+                    width: float.IsFinite(_childSize.Width) ? _childSize.Width : _viewSize.Width,
+                    height: float.IsFinite(_childSize.Height) ? _childSize.Height : _viewSize.Height
                 );
+            }
         }
 
         return _viewSize;
@@ -147,18 +149,18 @@ public class ScrollView : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _viewSize.Width,
-            _viewSize.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _viewSize.Width,
+            height: _viewSize.Height
         );
-        _sx.Max = MathF.Max(0f, _childSize.Width - _viewSize.Width);
-        _sy.Max = MathF.Max(0f, _childSize.Height - _viewSize.Height);
+        _sx.Max = MathF.Max(x: 0f, y: _childSize.Width - _viewSize.Width);
+        _sy.Max = MathF.Max(x: 0f, y: _childSize.Height - _viewSize.Height);
         _sx.Reclamp();
         _sy.Reclamp();
         ApplyPendingReveal(); // adjust _sy.Offset before laying the child out at the final offset
-        Child?.Layout(new Offset(origin.X - _sx.Offset, origin.Y - _sy.Offset));
-        OnScrolled?.Invoke(_sy.Offset, _sy.Max);
+        Child?.Layout(new Offset(x: origin.X - _sx.Offset, y: origin.Y - _sy.Offset));
+        OnScrolled?.Invoke(arg1: _sy.Offset, arg2: _sy.Max);
     }
 
     public override void Paint(PaintList paint)
@@ -170,28 +172,33 @@ public class ScrollView : Widget
         if (!ShowScrollbars) return;
 
         if (ScrollVertical)
+        {
             _vbar.PaintVertical(
-                paint,
-                Bounds,
-                _viewSize.Height,
-                _childSize.Height,
-                _sy.Offset,
-                _theme.OnSurface
+                paint: paint,
+                area: Bounds,
+                viewport: _viewSize.Height,
+                content: _childSize.Height,
+                offset: _sy.Offset,
+                tint: _theme.OnSurface
             );
+        }
+
         if (ScrollHorizontal)
+        {
             _hbar.PaintHorizontal(
-                paint,
-                Bounds,
-                _viewSize.Width,
-                _childSize.Width,
-                _sx.Offset,
-                _theme.OnSurface
+                paint: paint,
+                area: Bounds,
+                viewport: _viewSize.Width,
+                content: _childSize.Width,
+                offset: _sx.Offset,
+                tint: _theme.OnSurface
             );
+        }
     }
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         if (OverVBar(point) || OverHBar(point)) return this; // scrollbar drag claims the strip
 
         var oldScroll = CurrentScrollParent;
@@ -213,10 +220,7 @@ public class ScrollView : Widget
         // Enter has no position; a move follows immediately and resolves which strip, if either.
     }
 
-    public override void OnPointerExit()
-    {
-        SetBarHover(false, false);
-    }
+    public override void OnPointerExit() => SetBarHover(vertical: false, horizontal: false);
 
     /// <summary>Widen whichever bar the pointer is on, so a 3 px target becomes a grabbable one.</summary>
     private void SetBarHover(bool vertical, bool horizontal)
@@ -250,43 +254,43 @@ public class ScrollView : Widget
     {
         if (OverVBar(point))
         {
-            var (ts, tl) = Scrollbar.VTrack(Bounds);
-            var (start, len) = _vbar.Geometry(
-                ts,
-                tl,
-                _viewSize.Height,
-                _childSize.Height,
-                _sy.Offset
+            (float ts, float tl) = Scrollbar.VTrack(Bounds);
+            (float start, float len) = _vbar.Geometry(
+                trackStart: ts,
+                trackLen: tl,
+                viewport: _viewSize.Height,
+                content: _childSize.Height,
+                offset: _sy.Offset
             );
-            _vbar.BeginDrag(point.Y, start, len);
+            _vbar.BeginDrag(pointer: point.Y, thumbStart: start, thumbLen: len);
             _sy.JumpTo(
                 _vbar.OffsetAt(
-                    point.Y,
-                    ts,
-                    tl,
-                    _viewSize.Height,
-                    _childSize.Height
+                    pointer: point.Y,
+                    trackStart: ts,
+                    trackLen: tl,
+                    viewport: _viewSize.Height,
+                    content: _childSize.Height
                 )
             );
         }
         else if (OverHBar(point))
         {
-            var (ts, tl) = Scrollbar.HTrack(Bounds);
-            var (start, len) = _hbar.Geometry(
-                ts,
-                tl,
-                _viewSize.Width,
-                _childSize.Width,
-                _sx.Offset
+            (float ts, float tl) = Scrollbar.HTrack(Bounds);
+            (float start, float len) = _hbar.Geometry(
+                trackStart: ts,
+                trackLen: tl,
+                viewport: _viewSize.Width,
+                content: _childSize.Width,
+                offset: _sx.Offset
             );
-            _hbar.BeginDrag(point.X, start, len);
+            _hbar.BeginDrag(pointer: point.X, thumbStart: start, thumbLen: len);
             _sx.JumpTo(
                 _hbar.OffsetAt(
-                    point.X,
-                    ts,
-                    tl,
-                    _viewSize.Width,
-                    _childSize.Width
+                    pointer: point.X,
+                    trackStart: ts,
+                    trackLen: tl,
+                    viewport: _viewSize.Width,
+                    content: _childSize.Width
                 )
             );
         }
@@ -295,33 +299,33 @@ public class ScrollView : Widget
     public override void OnPointerMove(Offset point)
     {
         SetBarHover(
-            OverVBar(point) || _vbar.Dragging,
-            OverHBar(point) || _hbar.Dragging
+            vertical: OverVBar(point) || _vbar.Dragging,
+            horizontal: OverHBar(point) || _hbar.Dragging
         );
 
         if (_vbar.Dragging)
         {
-            var (ts, tl) = Scrollbar.VTrack(Bounds);
+            (float ts, float tl) = Scrollbar.VTrack(Bounds);
             _sy.JumpTo(
                 _vbar.OffsetAt(
-                    point.Y,
-                    ts,
-                    tl,
-                    _viewSize.Height,
-                    _childSize.Height
+                    pointer: point.Y,
+                    trackStart: ts,
+                    trackLen: tl,
+                    viewport: _viewSize.Height,
+                    content: _childSize.Height
                 )
             );
         }
         else if (_hbar.Dragging)
         {
-            var (ts, tl) = Scrollbar.HTrack(Bounds);
+            (float ts, float tl) = Scrollbar.HTrack(Bounds);
             _sx.JumpTo(
                 _hbar.OffsetAt(
-                    point.X,
-                    ts,
-                    tl,
-                    _viewSize.Width,
-                    _childSize.Width
+                    pointer: point.X,
+                    trackStart: ts,
+                    trackLen: tl,
+                    viewport: _viewSize.Width,
+                    content: _childSize.Width
                 )
             );
         }
@@ -337,12 +341,12 @@ public class ScrollView : Widget
 
     public override void OnScroll(float dx, float dy)
     {
-        var moved = false;
-        if (ScrollHorizontal) moved |= _sx.MoveBy(dx * ScrollSpeedMul, Smooth);
-        if (ScrollVertical) moved |= _sy.MoveBy(-dy * ScrollSpeedMul, Smooth);
+        bool moved = false;
+        if (ScrollHorizontal) moved |= _sx.MoveBy(delta: dx * ScrollSpeedMul, animate: Smooth);
+        if (ScrollVertical) moved |= _sy.MoveBy(delta: -dy * ScrollSpeedMul, animate: Smooth);
 
         // Bubble up only when we are at the edge and couldn't scroll.
-        if (!moved) base.OnScroll(dx, dy);
+        if (!moved) base.OnScroll(dx: dx, dy: dy);
     }
 
     public override bool CanTouchScroll(bool vertical)
@@ -358,18 +362,18 @@ public class ScrollView : Widget
         // Content follows the finger 1:1 (drag down = reveal content above = offset shrinks),
         // hence the negation; no ScrollSpeedMul — that multiplier converts wheel ticks, not
         // pixels. Unanimated: the offset must track the finger exactly, with no easing lag.
-        var moved = false;
-        if (ScrollHorizontal) moved |= _sx.MoveBy(-dx, false);
-        if (ScrollVertical) moved |= _sy.MoveBy(-dy, false);
-        if (!moved) base.OnTouchScroll(dx, dy);
+        bool moved = false;
+        if (ScrollHorizontal) moved |= _sx.MoveBy(delta: -dx, animate: false);
+        if (ScrollVertical) moved |= _sy.MoveBy(delta: -dy, animate: false);
+        if (!moved) base.OnTouchScroll(dx: dx, dy: dy);
     }
 
     public override void OnTouchFling(float velocityX, float velocityY)
     {
-        var started = false;
+        bool started = false;
         if (ScrollHorizontal) started |= _sx.Fling(-velocityX);
         if (ScrollVertical) started |= _sy.Fling(-velocityY);
-        if (!started) base.OnTouchFling(velocityX, velocityY);
+        if (!started) base.OnTouchFling(velocityX: velocityX, velocityY: velocityY);
     }
 
     public override void OnPointerCancel()
@@ -387,8 +391,5 @@ public class ScrollView : Widget
         _sy.Dispose();
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(Child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Child);
 }

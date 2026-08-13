@@ -1,5 +1,6 @@
 using Xunit;
 using Zigote.Core;
+using Zigote.Core.Paint;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Layout;
 
@@ -14,41 +15,11 @@ namespace Zigote.Tests;
 /// </summary>
 public class LayoutBuilderTests
 {
-    private sealed class Probe : Widget
-    {
-        public int Detaches;
-
-        public override Size Measure(Constraints constraints)
-        {
-            return new Size(10f, 10f);
-        }
-
-        public override void Layout(Offset origin)
-        {
-            Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                10f,
-                10f
-            );
-        }
-
-        public override void Paint(Core.Paint.PaintList paint)
-        {
-        }
-
-        public override void Detach()
-        {
-            Detaches++;
-            base.Detach();
-        }
-    }
-
     [Fact]
     public void RetainedChildIsNeverTornDownWhileResizing()
     {
         var probe = new Probe();
-        var builds = 0;
+        int builds = 0;
         var builder = new LayoutBuilder((_, _) =>
             {
                 builds++;
@@ -56,12 +27,15 @@ public class LayoutBuilderTests
             }
         );
 
-        builder.Measure(Constraints.Tight(1000f, 600f));
-        builder.Measure(Constraints.Tight(900f, 600f));
-        builder.Measure(Constraints.Tight(800f, 600f));
+        builder.Measure(Constraints.Tight(width: 1000f, height: 600f));
+        builder.Measure(Constraints.Tight(width: 900f, height: 600f));
+        builder.Measure(Constraints.Tight(width: 800f, height: 600f));
 
-        Assert.Equal(3, builds); // the builder still sees every width…
-        Assert.Equal(0, probe.Detaches); // …but the subtree it returns stays mounted
+        Assert.Equal(expected: 3, actual: builds); // the builder still sees every width…
+        Assert.Equal(
+            expected: 0,
+            actual: probe.Detaches
+        ); // …but the subtree it returns stays mounted
     }
 
     [Fact]
@@ -70,9 +44,34 @@ public class LayoutBuilderTests
         var wide = new Probe();
         var builder = new LayoutBuilder((_, c) => c.MaxWidth < 500f ? new Probe() : wide);
 
-        builder.Measure(Constraints.Tight(1000f, 600f));
-        builder.Measure(Constraints.Tight(400f, 600f));
+        builder.Measure(Constraints.Tight(width: 1000f, height: 600f));
+        builder.Measure(Constraints.Tight(width: 400f, height: 600f));
 
-        Assert.Equal(1, wide.Detaches);
+        Assert.Equal(expected: 1, actual: wide.Detaches);
+    }
+
+    private sealed class Probe : Widget
+    {
+        public int Detaches;
+
+        public override Size Measure(Constraints constraints) => new(width: 10f, height: 10f);
+
+        public override void Layout(Offset origin)
+        {
+            Bounds = new Rect(
+                x: origin.X,
+                y: origin.Y,
+                width: 10f,
+                height: 10f
+            );
+        }
+
+        public override void Paint(PaintList paint) { }
+
+        public override void Detach()
+        {
+            Detaches++;
+            base.Detach();
+        }
     }
 }

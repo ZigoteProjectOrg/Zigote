@@ -47,17 +47,14 @@ public sealed class AsyncImage : Widget
     private uint _texW;
     private Ticker? _ticker;
 
-    public AsyncImage(Func<CancellationToken, Task<byte[]?>> loader)
-    {
-        _loader = loader;
-    }
+    public AsyncImage(Func<CancellationToken, Task<byte[]?>> loader) => _loader = loader;
 
     /// <summary>Fill shown before/behind the image (e.g. the image's dominant colour).</summary>
     public Color Placeholder { get; init; } = new(
-        1f,
-        1f,
-        1f,
-        0.06f
+        r: 1f,
+        g: 1f,
+        b: 1f,
+        a: 0.06f
     );
 
     public float FadeDuration { get; init; } = 0.45f;
@@ -103,7 +100,7 @@ public sealed class AsyncImage : Widget
             var token = _cts.Token;
             // Task.Run so the loader's synchronous prologue (opening a file, hashing a cache key)
             // does not run on the frame thread either.
-            _task = Task.Run(() => LoadAndDecodeAsync(token), token);
+            _task = Task.Run(function: () => LoadAndDecodeAsync(token), cancellationToken: token);
         }
     }
 
@@ -144,18 +141,18 @@ public sealed class AsyncImage : Widget
     /// <summary>Fetch then decode, both off the UI thread. Returns a zero handle if cancelled.</summary>
     private async Task<(ulong, uint, uint)> LoadAndDecodeAsync(CancellationToken token)
     {
-        var bytes = await _loader(token).ConfigureAwait(false);
+        byte[]? bytes = await _loader(token).ConfigureAwait(false);
         if (bytes is not { Length: > 0 } || token.IsCancellationRequested) return default;
 
         uint w, h;
-        var handle = MaxDecodeSize > 0
+        ulong handle = MaxDecodeSize > 0
             ? ZigoteEngine.LoadTextureFromMemoryScaled(
-                bytes,
-                (uint)MaxDecodeSize,
-                out w,
-                out h
+                data: bytes,
+                maxDim: (uint)MaxDecodeSize,
+                outW: out w,
+                outH: out h
             )
-            : ZigoteEngine.LoadTextureFromMemory(bytes, out w, out h);
+            : ZigoteEngine.LoadTextureFromMemory(data: bytes, outW: out w, outH: out h);
 
         // Detached while decoding: nothing will ever paint this, so it must not outlive the tile.
         if (token.IsCancellationRequested && handle != 0)
@@ -169,19 +166,19 @@ public sealed class AsyncImage : Widget
 
     public override Size Measure(Constraints c)
     {
-        var w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 0f;
-        var h = float.IsFinite(c.MaxHeight) ? c.MaxHeight : 0f;
-        _size = c.Constrain(new Size(w, h));
+        float w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 0f;
+        float h = float.IsFinite(c.MaxHeight) ? c.MaxHeight : 0f;
+        _size = c.Constrain(new Size(width: w, height: h));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
@@ -192,17 +189,17 @@ public sealed class AsyncImage : Widget
         if (!paint.IsVisible(Bounds)) return;
 
         if (Placeholder.A > 0f && (!_decoded || _fade < 1f))
-            paint.AddRect(Bounds, Placeholder, Radius);
+            paint.AddRect(bounds: Bounds, color: Placeholder, radius: Radius);
 
         if (!_decoded || _handle == 0 || _texW == 0 || _texH == 0) return;
 
-        var cellAspect = Bounds.Height > 0f ? Bounds.Width / Bounds.Height : 1f;
-        var imgAspect = (float)_texW / _texH;
+        float cellAspect = Bounds.Height > 0f ? Bounds.Width / Bounds.Height : 1f;
+        float imgAspect = (float)_texW / _texH;
         var tint = new Color(
-            1f,
-            1f,
-            1f,
-            Math.Clamp(_fade, 0f, 1f)
+            r: 1f,
+            g: 1f,
+            b: 1f,
+            a: Math.Clamp(value: _fade, min: 0f, max: 1f)
         );
 
         if (Fit == ImageFit.Contain)
@@ -212,22 +209,22 @@ public sealed class AsyncImage : Widget
             if (imgAspect > cellAspect) h = w / imgAspect;
             else w = h * imgAspect;
             var dest = new Rect(
-                Bounds.X + (Bounds.Width - w) / 2f,
-                Bounds.Y + (Bounds.Height - h) / 2f,
-                w,
-                h
+                x: Bounds.X + ((Bounds.Width - w) / 2f),
+                y: Bounds.Y + ((Bounds.Height - h) / 2f),
+                width: w,
+                height: h
             );
             paint.AddImage(
-                dest,
-                (int)_texW,
-                (int)_texH,
-                null,
-                _handle,
-                0f,
-                0f,
-                1f,
-                1f,
-                tint
+                bounds: dest,
+                pixelWidth: (int)_texW,
+                pixelHeight: (int)_texH,
+                pixels: null,
+                cacheKey: _handle,
+                u0: 0f,
+                v0: 0f,
+                u1: 1f,
+                v1: 1f,
+                tint: tint
             );
             return;
         }
@@ -235,28 +232,28 @@ public sealed class AsyncImage : Widget
         float u0 = 0f, v0 = 0f, u1 = 1f, v1 = 1f;
         if (imgAspect > cellAspect)
         {
-            var vis = cellAspect / imgAspect; // crop left/right
+            float vis = cellAspect / imgAspect; // crop left/right
             u0 = (1f - vis) / 2f;
             u1 = 1f - u0;
         }
         else
         {
-            var vis = imgAspect / cellAspect; // crop top/bottom
+            float vis = imgAspect / cellAspect; // crop top/bottom
             v0 = (1f - vis) / 2f;
             v1 = 1f - v0;
         }
 
         paint.AddImage(
-            Bounds,
-            (int)_texW,
-            (int)_texH,
-            null,
-            _handle,
-            u0,
-            v0,
-            u1,
-            v1,
-            tint
+            bounds: Bounds,
+            pixelWidth: (int)_texW,
+            pixelHeight: (int)_texH,
+            pixels: null,
+            cacheKey: _handle,
+            u0: u0,
+            v0: v0,
+            u1: u1,
+            v1: v1,
+            tint: tint
         );
     }
 
@@ -270,7 +267,7 @@ public sealed class AsyncImage : Widget
                 return;
             }
 
-            _fade = MathF.Min(1f, _fade + dt / MathF.Max(0.01f, FadeDuration));
+            _fade = MathF.Min(x: 1f, y: _fade + (dt / MathF.Max(x: 0.01f, y: FadeDuration)));
             MarkNeedsPaint();
             return;
         }
@@ -287,7 +284,7 @@ public sealed class AsyncImage : Widget
         // decode already ran on the worker.
         if (_task.IsCompletedSuccessfully)
         {
-            var (handle, w, h) = _task.Result;
+            (ulong handle, uint w, uint h) = _task.Result;
             if (handle != 0 && w > 0 && h > 0)
             {
                 if (_handle != 0)
@@ -297,7 +294,7 @@ public sealed class AsyncImage : Widget
                 _texH = h;
                 _decoded = true;
                 _fade = 0f;
-                OnDecoded?.Invoke((int)w, (int)h);
+                OnDecoded?.Invoke(arg1: (int)w, arg2: (int)h);
                 MarkNeedsPaint();
                 return;
             }

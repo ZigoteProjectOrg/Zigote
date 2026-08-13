@@ -25,11 +25,13 @@ internal static class ChildReconciler
         // Index existing keyed children for O(1) reuse lookup.
         Dictionary<(Type, Key), Widget>? byKey = null;
         foreach (var w in current)
+        {
             if (w.Key is { } k)
             {
                 byKey ??= new Dictionary<(Type, Key), Widget>();
                 byKey[(w.GetType(), k)] = w;
             }
+        }
 
         var result = new List<Widget>(incoming.Count);
         var kept = new HashSet<Widget>();
@@ -40,29 +42,34 @@ internal static class ChildReconciler
 
             // Reuse an existing keyed instance of the same type (different reference) — preserve state.
             if (inc.Key is { } k && byKey is not null &&
-                byKey.TryGetValue((inc.GetType(), k), out var existing) && kept.Add(existing))
+                byKey.TryGetValue(key: (inc.GetType(), k), value: out var existing) &&
+                kept.Add(existing))
             {
-                if (!ReferenceEquals(existing, inc)) existing.UpdateFrom(inc);
+                if (!ReferenceEquals(objA: existing, objB: inc)) existing.UpdateFrom(inc);
                 chosen = existing;
             }
             else
-            {
                 kept.Add(inc);
-            }
 
             result.Add(chosen);
         }
 
         // Detach children that are gone.
         foreach (var w in current)
+        {
             if (!kept.Contains(w))
                 w.Detach();
+        }
 
         // Attach freshly-added children if the parent is already live in the tree.
         if (parent.Owner is not null)
+        {
             foreach (var w in result)
+            {
                 if (w.Owner is null)
-                    w.Attach(parent.Owner, parent);
+                    w.Attach(owner: parent.Owner, parent: parent);
+            }
+        }
 
         current.Clear();
         current.AddRange(result);

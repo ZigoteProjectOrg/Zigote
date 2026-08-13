@@ -4,7 +4,8 @@ using Zigote.Core.State;
 namespace Zigote.Tests;
 
 /// <summary>
-///     The convenience layer over the core: <see cref="LinkedSignal{T}" /> (writable state that resets when
+///     The convenience layer over the core: <see cref="LinkedSignal{T}" /> (writable state that resets
+///     when
 ///     its source moves — Angular's <c>linkedSignal</c>, SignalsDotnet's <c>Signal.Linked</c>),
 ///     <see cref="Trigger" /> (a valueless "it happened" source), the multi-source
 ///     <see cref="ReactiveExtensions.ObserveAny" />, and the value-returning <c>Batch</c> overload.
@@ -18,11 +19,11 @@ public class LinkedSignalTests
         var source = new Signal<int>(5);
         using var linked = Linked.From(() => source.Value * 2);
 
-        Assert.Equal(10, linked.Value);
+        Assert.Equal(expected: 10, actual: linked.Value);
 
         linked.Value = 42; // manual override sticks
-        Assert.Equal(42, linked.Value);
-        Assert.Equal(42, linked.Peek());
+        Assert.Equal(expected: 42, actual: linked.Value);
+        Assert.Equal(expected: 42, actual: linked.Peek());
     }
 
     [Fact]
@@ -33,7 +34,7 @@ public class LinkedSignalTests
 
         linked.Value = 42;
         source.Value = 10; // source moved → back to following it
-        Assert.Equal(20, linked.Value);
+        Assert.Equal(expected: 20, actual: linked.Value);
     }
 
     [Fact]
@@ -44,7 +45,7 @@ public class LinkedSignalTests
 
         linked.Value = 42;
         linked.Reset();
-        Assert.Equal(10, linked.Value);
+        Assert.Equal(expected: 10, actual: linked.Value);
     }
 
     [Fact]
@@ -54,17 +55,17 @@ public class LinkedSignalTests
         using var linked = Linked.From(() => source.Value);
         using var doubled = Computed.From(() => linked.Value * 2);
 
-        var fires = 0;
+        int fires = 0;
         using var sub = doubled.Observe(() => fires++);
-        Assert.Equal(2, doubled.Value);
+        Assert.Equal(expected: 2, actual: doubled.Value);
 
         linked.Value = 5; // manual write propagates
-        Assert.Equal(10, doubled.Value);
-        Assert.Equal(1, fires);
+        Assert.Equal(expected: 10, actual: doubled.Value);
+        Assert.Equal(expected: 1, actual: fires);
 
         source.Value = 7; // source-driven reset propagates
-        Assert.Equal(14, doubled.Value);
-        Assert.Equal(2, fires);
+        Assert.Equal(expected: 14, actual: doubled.Value);
+        Assert.Equal(expected: 2, actual: fires);
     }
 
     [Fact]
@@ -75,16 +76,16 @@ public class LinkedSignalTests
         linked.Dispose();
 
         source.Value = 99;
-        Assert.Equal(1, linked.Value); // no longer follows
+        Assert.Equal(expected: 1, actual: linked.Value); // no longer follows
         linked.Value = 3; // still a usable signal
-        Assert.Equal(3, linked.Value);
+        Assert.Equal(expected: 3, actual: linked.Value);
     }
 
     [Fact]
     public void A_trigger_recomputes_dependents_without_carrying_a_value()
     {
         var reload = new Trigger();
-        var runs = 0;
+        int runs = 0;
         using var c = Computed.From(() =>
             {
                 reload.Depend();
@@ -93,29 +94,29 @@ public class LinkedSignalTests
         );
 
         using var sub = c.Observe(() => { }); // watched, so it recomputes on fire
-        Assert.Equal(1, c.Value);
+        Assert.Equal(expected: 1, actual: c.Value);
 
         reload.Fire();
-        Assert.Equal(2, c.Value);
+        Assert.Equal(expected: 2, actual: c.Value);
         reload.Fire();
-        Assert.Equal(3, c.Value);
+        Assert.Equal(expected: 3, actual: c.Value);
     }
 
     [Fact]
     public void A_trigger_settles_an_effect_once_per_fire_and_coalesces_in_a_batch()
     {
         var reload = new Trigger();
-        var runs = 0;
+        int runs = 0;
         using var e = new Effect(() =>
             {
                 reload.Depend();
                 runs++;
             }
         );
-        Assert.Equal(1, runs);
+        Assert.Equal(expected: 1, actual: runs);
 
         reload.Fire();
-        Assert.Equal(2, runs);
+        Assert.Equal(expected: 2, actual: runs);
 
         Reactive.Batch(() =>
             {
@@ -124,7 +125,7 @@ public class LinkedSignalTests
                 reload.Fire();
             }
         );
-        Assert.Equal(3, runs); // three fires, one re-run
+        Assert.Equal(expected: 3, actual: runs); // three fires, one re-run
     }
 
     [Fact]
@@ -134,20 +135,20 @@ public class LinkedSignalTests
         var b = new Signal<int>(0);
         using var c = Computed.From(() => a.Value + b.Value);
 
-        var fires = 0;
+        int fires = 0;
         using var sub = ReactiveExtensions.ObserveAny(
-            () => fires++,
+            onChanged: () => fires++,
             a,
             b,
             c
         );
-        Assert.Equal(0, fires); // observation only, no immediate call
+        Assert.Equal(expected: 0, actual: fires); // observation only, no immediate call
 
         a.Value = 1; // a AND c changed → still one callback
-        Assert.Equal(1, fires);
+        Assert.Equal(expected: 1, actual: fires);
 
         b.Value = 2;
-        Assert.Equal(2, fires);
+        Assert.Equal(expected: 2, actual: fires);
 
         Reactive.Batch(() =>
             {
@@ -155,11 +156,11 @@ public class LinkedSignalTests
                 b.Value = 20;
             }
         );
-        Assert.Equal(3, fires);
+        Assert.Equal(expected: 3, actual: fires);
 
         sub.Dispose();
         a.Value = 100;
-        Assert.Equal(3, fires);
+        Assert.Equal(expected: 3, actual: fires);
     }
 
     [Fact]
@@ -167,7 +168,7 @@ public class LinkedSignalTests
     {
         var a = new Signal<int>(1);
         var b = new Signal<int>(2);
-        var runs = 0;
+        int runs = 0;
         using var e = new Effect(() =>
             {
                 _ = a.Value + b.Value;
@@ -175,7 +176,7 @@ public class LinkedSignalTests
             }
         );
 
-        var sum = Reactive.Batch(() =>
+        int sum = Reactive.Batch(() =>
             {
                 a.Value = 10;
                 b.Value = 20;
@@ -183,7 +184,7 @@ public class LinkedSignalTests
             }
         );
 
-        Assert.Equal(30, sum);
-        Assert.Equal(2, runs); // still one drain for the whole batch
+        Assert.Equal(expected: 30, actual: sum);
+        Assert.Equal(expected: 2, actual: runs); // still one drain for the whole batch
     }
 }

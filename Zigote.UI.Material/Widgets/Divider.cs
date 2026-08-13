@@ -24,15 +24,17 @@ public sealed class Divider : ComposedWidget
         var theme = ThemeProvider.Of(context);
         var c = Color ?? theme.Separator;
         if (Vertical)
+        {
             return new Container {
                 Width = Thickness,
                 Margin = EdgeInsets.Only(top: Indent, bottom: EndIndent),
                 Background = c,
             };
+        }
 
         return new Container {
             Height = Thickness,
-            Margin = EdgeInsets.Only(Indent, right: EndIndent),
+            Margin = EdgeInsets.Only(left: Indent, right: EndIndent),
             Background = c,
         };
     }

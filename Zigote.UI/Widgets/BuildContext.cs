@@ -36,10 +36,7 @@ public sealed class BuildContext
     /// </summary>
     public int Generation { get; private set; }
 
-    internal void BumpGeneration()
-    {
-        Generation++;
-    }
+    internal void BumpGeneration() => Generation++;
 
     internal void Reset()
     {
@@ -49,10 +46,7 @@ public sealed class BuildContext
 
     // ── Inherited widget stack (managed by InheritedWidget.Measure) ───────────
 
-    internal void Push(InheritedWidget w)
-    {
-        _inherited.Push(w);
-    }
+    internal void Push(InheritedWidget w) => _inherited.Push(w);
 
     internal void Pop(InheritedWidget expected)
     {
@@ -78,24 +72,27 @@ public sealed class BuildContext
     internal int CaptureScope(ref InheritedWidget[] buffer)
     {
         if (buffer.Length < _inherited.Count)
-            buffer = new InheritedWidget[Math.Max(8, _inherited.Count)];
+            buffer = new InheritedWidget[Math.Max(val1: 8, val2: _inherited.Count)];
 
-        var n = 0;
+        int n = 0;
         // Stack<T> enumerates top-down and its enumerator is a struct, so this allocates nothing.
         foreach (var w in _inherited) buffer[n++] = w;
         return n;
     }
 
-    /// <summary>Re-enter a scope captured by <see cref="CaptureScope" />. Pair with <see cref="ExitScope" />.</summary>
+    /// <summary>
+    ///     Re-enter a scope captured by <see cref="CaptureScope" />. Pair with
+    ///     <see cref="ExitScope" />.
+    /// </summary>
     internal void EnterScope(InheritedWidget[] buffer, int count)
     {
-        for (var i = count - 1; i >= 0; i--) _inherited.Push(buffer[i]);
+        for (int i = count - 1; i >= 0; i--) _inherited.Push(buffer[i]);
     }
 
     /// <inheritdoc cref="EnterScope" />
     internal void ExitScope(int count)
     {
-        for (var i = 0; i < count && _inherited.Count > 0; i++) _inherited.Pop();
+        for (int i = 0; i < count && _inherited.Count > 0; i++) _inherited.Pop();
     }
 
     // ── Lookup API ────────────────────────────────────────────────────────────
@@ -107,8 +104,11 @@ public sealed class BuildContext
     public T? FindAncestor<T>() where T : InheritedWidget
     {
         foreach (var w in _inherited)
+        {
             if (w is T t)
                 return t;
+        }
+
         return null;
     }
 
@@ -116,10 +116,7 @@ public sealed class BuildContext
     ///     Find the nearest ancestor <see cref="InheritedWidget" /> of type
     ///     <typeparamref name="T" /> without registering a dependency.
     /// </summary>
-    public T? Read<T>() where T : InheritedWidget
-    {
-        return FindAncestor<T>();
-    }
+    public T? Read<T>() where T : InheritedWidget => FindAncestor<T>();
 
     /// <summary>
     ///     Find the nearest ancestor <see cref="InheritedWidget" /> of type <typeparamref name="T" />
@@ -151,8 +148,5 @@ public sealed class BuildContext
     ///     Static accessor mirroring <c>T.of(context)</c>.
     ///     Example: <c>BuildContext.Of&lt;MyTheme&gt;(ctx)</c>
     /// </summary>
-    public static T Of<T>(BuildContext ctx) where T : InheritedWidget
-    {
-        return ctx.Require<T>();
-    }
+    public static T Of<T>(BuildContext ctx) where T : InheritedWidget => ctx.Require<T>();
 }

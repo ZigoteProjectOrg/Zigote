@@ -75,7 +75,7 @@ public sealed class AssetPreviewPanel : Widget, IDisposable
 
     private Widget BuildContent()
     {
-        var path = _selectedPath;
+        string? path = _selectedPath;
         if (string.IsNullOrEmpty(path)) return Empty(_theme);
 
         var meta = AssetMetadata.For(path);
@@ -86,7 +86,7 @@ public sealed class AssetPreviewPanel : Widget, IDisposable
         {
             try
             {
-                preview = provider.BuildPreview(path, _theme);
+                preview = provider.BuildPreview(path: path, theme: _theme);
             }
             catch
             {
@@ -95,7 +95,7 @@ public sealed class AssetPreviewPanel : Widget, IDisposable
 
             try
             {
-                foreach (var (k, v) in provider.ExtraMetadata(path))
+                foreach ((string k, string v) in provider.ExtraMetadata(path))
                     meta.Rows.Add((k, v));
             }
             catch
@@ -109,26 +109,26 @@ public sealed class AssetPreviewPanel : Widget, IDisposable
             MainAxisSize = MainAxisSize.Min,
         };
         footer.Children.Add(
-            new Label(meta.Name, _theme.FontSizeBody, _theme.OnSurface) {
+            new Label(text: meta.Name, fontSize: _theme.FontSizeBody, color: _theme.OnSurface) {
                 FontWeight = FontWeight.Medium,
                 Overflow = TextOverflow.Ellipsis,
             }
         );
         footer.Children.Add(new SizedBox(height: 6f));
-        footer.Children.Add(MetaRow("Type", FriendlyType(meta.Extension)));
-        footer.Children.Add(MetaRow("Size", meta.SizeHuman));
-        footer.Children.Add(MetaRow("Modified", meta.Modified));
-        foreach (var (k, v) in meta.Rows)
-            footer.Children.Add(MetaRow(k, v));
+        footer.Children.Add(MetaRow(key: "Type", value: FriendlyType(meta.Extension)));
+        footer.Children.Add(MetaRow(key: "Size", value: meta.SizeHuman));
+        footer.Children.Add(MetaRow(key: "Modified", value: meta.Modified));
+        foreach ((string k, string v) in meta.Rows)
+            footer.Children.Add(MetaRow(key: k, value: v));
 
-        var previewArea = preview ?? Empty(_theme, "No preview available");
+        var previewArea = preview ?? Empty(theme: _theme, text: "No preview available");
 
         return new Column {
             CrossAxisAlignment = CrossAxisAlignment.Stretch,
             Children = {
-                new Expanded(new Padding(EdgeInsets.All(8f), previewArea)),
+                new Expanded(new Padding(padding: EdgeInsets.All(8f), child: previewArea)),
                 new AdwSeparator(),
-                new Padding(EdgeInsets.All(8f), footer),
+                new Padding(padding: EdgeInsets.All(8f), child: footer),
             },
         };
     }
@@ -138,9 +138,20 @@ public sealed class AssetPreviewPanel : Widget, IDisposable
         return new Row {
             CrossAxisAlignment = CrossAxisAlignment.Center,
             Children = {
-                new SizedBox(86f, child: new Label(key, _theme.FontSizeCaption, _theme.TextMuted)),
+                new SizedBox(
+                    width: 86f,
+                    child: new Label(
+                        text: key,
+                        fontSize: _theme.FontSizeCaption,
+                        color: _theme.TextMuted
+                    )
+                ),
                 new Expanded(
-                    new Label(value, _theme.FontSizeCaption, _theme.OnSurface) {
+                    new Label(
+                        text: value,
+                        fontSize: _theme.FontSizeCaption,
+                        color: _theme.OnSurface
+                    ) {
                         Overflow = TextOverflow.Ellipsis,
                     }
                 ),
@@ -148,15 +159,15 @@ public sealed class AssetPreviewPanel : Widget, IDisposable
         };
     }
 
-    private static Widget Empty(ThemeData theme, string text = "Select an asset to preview")
-    {
-        return new Padding(EdgeInsets.All(16f), new Label(text, 12f, theme.TextMuted));
-    }
+    private static Widget Empty(ThemeData theme, string text = "Select an asset to preview") =>
+        new Padding(
+            padding: EdgeInsets.All(16f),
+            child: new Label(text: text, fontSize: 12f, color: theme.TextMuted)
+        );
 
-    private static string FriendlyType(string ext)
-    {
-        return string.IsNullOrEmpty(ext) ? "File" : ext.TrimStart('.').ToUpperInvariant();
-    }
+    private static string FriendlyType(string ext) => string.IsNullOrEmpty(ext)
+        ? "File"
+        : ext.TrimStart('.').ToUpperInvariant();
 
     // ── Layout (delegate everything to the composed content) ──────────────────────
 
@@ -164,16 +175,16 @@ public sealed class AssetPreviewPanel : Widget, IDisposable
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
 
-        var w = float.IsInfinity(c.MaxWidth) ? 280f : c.MaxWidth;
-        var h = float.IsInfinity(c.MaxHeight) ? 360f : c.MaxHeight;
-        _size = c.Constrain(new Size(w, MathF.Max(h, c.MinHeight)));
+        float w = float.IsInfinity(c.MaxWidth) ? 280f : c.MaxWidth;
+        float h = float.IsInfinity(c.MaxHeight) ? 360f : c.MaxHeight;
+        _size = c.Constrain(new Size(width: w, height: MathF.Max(x: h, y: c.MinHeight)));
 
         _content.Measure(
             new Constraints(
-                _size.Width,
-                _size.Width,
-                _size.Height,
-                _size.Height
+                minWidth: _size.Width,
+                maxWidth: _size.Width,
+                minHeight: _size.Height,
+                maxHeight: _size.Height
             )
         );
         return _size;
@@ -182,10 +193,10 @@ public sealed class AssetPreviewPanel : Widget, IDisposable
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         _content.Layout(origin);
     }
@@ -198,13 +209,13 @@ public sealed class AssetPreviewPanel : Widget, IDisposable
     public override void Paint(PaintList paint)
     {
         if (!paint.IsVisible(Bounds)) return;
-        paint.AddRect(Bounds, _theme.Surface);
+        paint.AddRect(bounds: Bounds, color: _theme.Surface);
         _content.Paint(paint);
     }
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return _content.HitTest(point) ?? this;
     }
 }

@@ -18,8 +18,8 @@ public static class VfxRampJson
     public static string Default { get; } = Serialize(
         new ColorRamp(
             [
-                new ColorStop(0f, Color.White),
-                new ColorStop(1f, Color.White.WithAlpha(0f)),
+                new ColorStop(position: 0f, color: Color.White),
+                new ColorStop(position: 1f, color: Color.White.WithAlpha(0f)),
             ]
         )
     );
@@ -27,10 +27,11 @@ public static class VfxRampJson
     public static string Serialize(ColorRamp ramp)
     {
         return string.Join(
-            ';',
-            ramp.Stops.Select(s =>
+            separator: ';',
+            values: ramp.Stops.Select(s =>
                 string.Create(
-                    CultureInfo.InvariantCulture,
+                    provider: CultureInfo.InvariantCulture,
+                    handler:
                     $"{s.Position:0.####},{s.Color.R:0.####},{s.Color.G:0.####},{s.Color.B:0.####},{s.Color.A:0.####}"
                 )
             )
@@ -42,24 +43,25 @@ public static class VfxRampJson
         if (string.IsNullOrWhiteSpace(text)) return Fallback();
 
         var stops = new List<ColorStop>();
-        foreach (var part in text.Split(
-                     ';',
-                     StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+        foreach (string part in text.Split(
+                     separator: ';',
+                     options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
                  ))
         {
-            var f = part.Split(',');
+            string[] f = part.Split(',');
             if (f.Length < 5) continue;
-            if (!TryF(f[0], out var pos) || !TryF(f[1], out var r) || !TryF(f[2], out var g) ||
-                !TryF(f[3], out var b) || !TryF(f[4], out var a))
+            if (!TryF(s: f[0], v: out float pos) || !TryF(s: f[1], v: out float r) ||
+                !TryF(s: f[2], v: out float g) ||
+                !TryF(s: f[3], v: out float b) || !TryF(s: f[4], v: out float a))
                 continue;
             stops.Add(
                 new ColorStop(
-                    pos,
-                    new Color(
-                        r,
-                        g,
-                        b,
-                        a
+                    position: pos,
+                    color: new Color(
+                        r: r,
+                        g: g,
+                        b: b,
+                        a: a
                     )
                 )
             );
@@ -71,17 +73,20 @@ public static class VfxRampJson
     private static ColorRamp Fallback()
     {
         return new ColorRamp(
-            [new ColorStop(0f, Color.White), new ColorStop(1f, Color.White.WithAlpha(0f))]
+            [
+                new ColorStop(position: 0f, color: Color.White),
+                new ColorStop(position: 1f, color: Color.White.WithAlpha(0f)),
+            ]
         );
     }
 
     private static bool TryF(string s, out float v)
     {
         return float.TryParse(
-            s,
-            NumberStyles.Float,
-            CultureInfo.InvariantCulture,
-            out v
+            s: s,
+            style: NumberStyles.Float,
+            provider: CultureInfo.InvariantCulture,
+            result: out v
         );
     }
 }

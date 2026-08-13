@@ -35,20 +35,12 @@ public sealed class GraphDocument
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    public GraphNode? FindNode(Guid id)
-    {
-        return Nodes.Find(n => n.Id == id);
-    }
+    public GraphNode? FindNode(Guid id) => Nodes.Find(n => n.Id == id);
 
-    public IEnumerable<GraphEdge> EdgesFrom(Guid nodeId)
-    {
-        return Edges.Where(e => e.From.NodeId == nodeId);
-    }
+    public IEnumerable<GraphEdge> EdgesFrom(Guid nodeId) =>
+        Edges.Where(e => e.From.NodeId == nodeId);
 
-    public IEnumerable<GraphEdge> EdgesTo(Guid nodeId)
-    {
-        return Edges.Where(e => e.To.NodeId == nodeId);
-    }
+    public IEnumerable<GraphEdge> EdgesTo(Guid nodeId) => Edges.Where(e => e.To.NodeId == nodeId);
 
     public IEnumerable<GraphEdge> EdgesAtPin(Guid nodeId, string pinId)
     {

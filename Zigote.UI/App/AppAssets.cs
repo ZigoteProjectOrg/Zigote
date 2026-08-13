@@ -48,11 +48,17 @@ public static class AppAssets
             _root = baseDirs
                 .OfType<string>()
                 .SelectMany(dir => new[] {
-                    System.IO.Path.Combine(dir, "Assets"),
-                    System.IO.Path.GetFullPath(
-                        System.IO.Path.Combine(dir, "..", "Resources", "Assets")
-                    ),
-                })
+                        System.IO.Path.Combine(path1: dir, path2: "Assets"),
+                        System.IO.Path.GetFullPath(
+                            System.IO.Path.Combine(
+                                path1: dir,
+                                path2: "..",
+                                path3: "Resources",
+                                path4: "Assets"
+                            )
+                        ),
+                    }
+                )
                 .FirstOrDefault(Directory.Exists);
 
             return _root;
@@ -64,25 +70,16 @@ public static class AppAssets
     ///     directory was found, so callers get a "file not found" naming the asset they asked for
     ///     rather than a null-reference somewhere further along.
     /// </summary>
-    public static string Path(string relativePath)
-    {
-        return System.IO.Path.Combine(Root ?? AppContext.BaseDirectory, relativePath);
-    }
+    public static string Path(string relativePath) => System.IO.Path.Combine(
+        path1: Root ?? AppContext.BaseDirectory,
+        path2: relativePath
+    );
 
-    public static bool Exists(string relativePath)
-    {
-        return File.Exists(Path(relativePath));
-    }
+    public static bool Exists(string relativePath) => File.Exists(Path(relativePath));
 
-    public static byte[] ReadAllBytes(string relativePath)
-    {
-        return File.ReadAllBytes(Path(relativePath));
-    }
+    public static byte[] ReadAllBytes(string relativePath) => File.ReadAllBytes(Path(relativePath));
 
-    public static Stream OpenRead(string relativePath)
-    {
-        return File.OpenRead(Path(relativePath));
-    }
+    public static Stream OpenRead(string relativePath) => File.OpenRead(Path(relativePath));
 
     /// <summary>
     ///     An <see cref="AssetManager" /> rooted at this app's <c>Assets/</c> directory, for apps that
@@ -91,8 +88,7 @@ public static class AppAssets
     ///     editor's project/content-root model — this is that reuse, not a second cache.
     ///     <para>Pair it with an <see cref="AssetRegistry" /> to turn stable ids back into paths.</para>
     /// </summary>
-    public static AssetManager CreateManager(AssetRegistry registry)
-    {
-        return new AssetManager(id => registry.Resolve(id) is { } relative ? Path(relative) : null);
-    }
+    public static AssetManager CreateManager(AssetRegistry registry) => new(id =>
+        registry.Resolve(id) is { } relative ? Path(relative) : null
+    );
 }

@@ -16,6 +16,13 @@ namespace Zigote.Core.Diagnostics;
 /// </summary>
 public static class Profiler
 {
+    // Safety cap on the in-progress buffer. A single frame never records anywhere near this many
+    // scopes, so a well-behaved host (one that brackets each frame with BeginFrame/EndFrame) never
+    // hits it. It exists only to defend against a host that leaves Enabled=true but never ends a
+    // frame — e.g. any app driven by the shared App.Frame loop without the editor's per-frame
+    // bracketing. Without it, _current grows without bound (its Event[] doubles on the LOH into the
+    // gigabytes) under continuous rendering. See the ZIGOTE_CONTINUOUS memory-growth investigation.
+    private const int MaxCurrentEvents = 1 << 15;
     [ThreadStatic] private static int _depth;
 
     private static readonly object Lock = new();
@@ -24,14 +31,6 @@ public static class Profiler
 
     private static readonly Dictionary<string, int> NameIds = new(StringComparer.Ordinal);
     private static readonly List<string> Names = [];
-
-    // Safety cap on the in-progress buffer. A single frame never records anywhere near this many
-    // scopes, so a well-behaved host (one that brackets each frame with BeginFrame/EndFrame) never
-    // hits it. It exists only to defend against a host that leaves Enabled=true but never ends a
-    // frame — e.g. any app driven by the shared App.Frame loop without the editor's per-frame
-    // bracketing. Without it, _current grows without bound (its Event[] doubles on the LOH into the
-    // gigabytes) under continuous rendering. See the ZIGOTE_CONTINUOUS memory-growth investigation.
-    private const int MaxCurrentEvents = 1 << 15;
 
     // Capture state (multi-frame export). Only allocates while a capture is in progress.
     private static int _captureFramesLeft;
@@ -45,16 +44,13 @@ public static class Profiler
     /// <summary>Events recorded for the most recently completed frame (read-only; no allocation).</summary>
     public static IReadOnlyList<Event> LastFrame => _previous;
 
-    public static string NameOf(int id)
-    {
-        return (uint)id < (uint)Names.Count ? Names[id] : "?";
-    }
+    public static string NameOf(int id) => (uint)id < (uint)Names.Count ? Names[id] : "?";
 
     private static int Intern(string name)
     {
         lock (NameIds)
         {
-            if (NameIds.TryGetValue(name, out var id)) return id;
+            if (NameIds.TryGetValue(key: name, value: out int id)) return id;
             id = Names.Count;
             Names.Add(name);
             NameIds[name] = id;
@@ -66,9 +62,9 @@ public static class Profiler
     public static ScopeHandle Scope(string name)
     {
         if (!Enabled) return default;
-        var d = _depth;
+        int d = _depth;
         _depth = d + 1;
-        return new ScopeHandle(Intern(name), d, Stopwatch.GetTimestamp());
+        return new ScopeHandle(nameId: Intern(name), depth: d, start: Stopwatch.GetTimestamp());
     }
 
     private static void Record(int nameId, int depth, long start, long end)
@@ -96,18 +92,12 @@ public static class Profiler
     public static void BeginFrame()
     {
         _depth = 0;
-        lock (Lock)
-        {
-            _current.Clear();
-        }
+        lock (Lock) _current.Clear();
     }
 
     public static void EndFrame()
     {
-        lock (Lock)
-        {
-            (_previous, _current) = (_current, _previous);
-        }
+        lock (Lock) (_previous, _current) = (_current, _previous);
 
         if (_captureFramesLeft > 0)
         {
@@ -126,14 +116,14 @@ public static class Profiler
     {
         Captured.Clear();
         _capturePath = outputPath;
-        _captureFramesLeft = Math.Max(1, frames);
+        _captureFramesLeft = Math.Max(val1: 1, val2: frames);
     }
 
     private static void FlushCapture()
     {
         try
         {
-            File.WriteAllText(_capturePath, ExportChromeTrace(Captured));
+            File.WriteAllText(path: _capturePath, contents: ExportChromeTrace(Captured));
             Console.Error.WriteLine(
                 $"[Profiler] capture written: {_capturePath} ({Captured.Count} frames)"
             );
@@ -150,27 +140,33 @@ public static class Profiler
     public static string ExportChromeTrace(IReadOnlyList<Event[]> frames)
     {
         // ticks → microseconds
-        var usPerTick = 1_000_000.0 / Stopwatch.Frequency;
-        var baseTick = long.MaxValue;
+        double usPerTick = 1_000_000.0 / Stopwatch.Frequency;
+        long baseTick = long.MaxValue;
         foreach (var f in frames)
         foreach (var e in f)
+        {
             if (e.StartTicks < baseTick)
                 baseTick = e.StartTicks;
+        }
+
         if (baseTick == long.MaxValue) baseTick = 0;
 
         var sb = new StringBuilder(64 * 1024);
         sb.Append("{\"traceEvents\":[");
-        var first = true;
+        bool first = true;
         foreach (var f in frames)
         foreach (var e in f)
         {
             if (!first) sb.Append(',');
             first = false;
-            var ts = ((e.StartTicks - baseTick) * usPerTick).ToString(
-                "F1",
-                CultureInfo.InvariantCulture
+            string ts = ((e.StartTicks - baseTick) * usPerTick).ToString(
+                format: "F1",
+                provider: CultureInfo.InvariantCulture
             );
-            var dur = (e.DurationTicks * usPerTick).ToString("F1", CultureInfo.InvariantCulture);
+            string dur = (e.DurationTicks * usPerTick).ToString(
+                format: "F1",
+                provider: CultureInfo.InvariantCulture
+            );
             sb.Append("{\"name\":\"").Append(Escape(NameOf(e.NameId)))
                 .Append("\",\"ph\":\"X\",\"pid\":1,\"tid\":").Append(e.ThreadId)
                 .Append(",\"ts\":").Append(ts)
@@ -185,7 +181,7 @@ public static class Profiler
     {
         return s.IndexOf('"') < 0 && s.IndexOf('\\') < 0
             ? s
-            : s.Replace("\\", "\\\\").Replace("\"", "\\\"");
+            : s.Replace(oldValue: "\\", newValue: "\\\\").Replace(oldValue: "\"", newValue: "\\\"");
     }
 
     public readonly struct Event
@@ -216,12 +212,14 @@ public static class Profiler
         public void Dispose()
         {
             if (_active)
+            {
                 Record(
-                    _nameId,
-                    _depth,
-                    _start,
-                    Stopwatch.GetTimestamp()
+                    nameId: _nameId,
+                    depth: _depth,
+                    start: _start,
+                    end: Stopwatch.GetTimestamp()
                 );
+            }
         }
     }
 }

@@ -1,25 +1,4 @@
-using System.Diagnostics;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using System.Text;
-using Zigote.Core;
-using Zigote.Core.Animation;
-using Zigote.Core.Diagnostics;
-using Zigote.Core.Engine;
-using Zigote.Core.Events;
-using Zigote.Core.Native;
-using Zigote.Core.Paint;
-using Zigote.Core.Rendering;
-using Zigote.Core.State;
-using Zigote.UI.Debug;
-using Zigote.UI.Licensing;
-using Zigote.UI.Semantics;
-using Zigote.UI.TextShaping;
-using Zigote.UI.Theme;
-using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
-using Zigote.UI.Widgets.Focus;
-using MediaQueryData = Zigote.UI.Widgets.MediaQueryData;
 
 namespace Zigote.UI.Host;
 
@@ -56,14 +35,12 @@ public partial class App
             _tooltipTimer += dt;
             if (_tooltipTimer > 0.7f)
             {
-                _tooltipOverlay = new TooltipBubble(text, _mousePos, Theme);
+                _tooltipOverlay = new TooltipBubble(text: text, position: _mousePos, theme: Theme);
                 PushOverlay(_tooltipOverlay);
             }
         }
         else
-        {
             _tooltipOverlay.Position = _mousePos;
-        }
     }
 
     private void HideTooltip()

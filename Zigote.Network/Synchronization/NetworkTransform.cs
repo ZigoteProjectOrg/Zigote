@@ -16,14 +16,15 @@ namespace Zigote.Network;
 /// </summary>
 public class NetworkTransform : NetObject
 {
-    private readonly SnapshotInterpolator<Vec3> _posInterp = new(static (a, b, t) => a.Lerp(b, t));
-
-    private readonly SnapshotInterpolator<Quat> _rotInterp =
-        new(static (a, b, t) => Quat.Slerp(a, b, t));
-
     public readonly NetVar<Vec3> NetPosition = NetVars.Vec3();
     public readonly NetVar<Quat> NetRotation = NetVars.Quat(Quat.Identity);
     public readonly NetVar<Vec3> NetScale = NetVars.Vec3(Vec3.One);
+
+    private readonly SnapshotInterpolator<Vec3> _posInterp =
+        new(static (a, b, t) => a.Lerp(b: b, t: t));
+
+    private readonly SnapshotInterpolator<Quat> _rotInterp =
+        new(static (a, b, t) => Quat.Slerp(a: a, bIn: b, t: t));
 
     public NetworkTransform()
     {
@@ -51,7 +52,7 @@ public class NetworkTransform : NetObject
     /// </summary>
     public Transform3D Transform
     {
-        get => new(NetPosition.Value, NetRotation.Value, NetScale.Value);
+        get => new(position: NetPosition.Value, rotation: NetRotation.Value, scale: NetScale.Value);
         set
         {
             NetPosition.Value = value.Position;
@@ -69,8 +70,8 @@ public class NetworkTransform : NetObject
 
     protected internal override void OnStateApplied(double serverTime)
     {
-        _posInterp.Push(serverTime, NetPosition.Value);
-        _rotInterp.Push(serverTime, NetRotation.Value);
+        _posInterp.Push(time: serverTime, value: NetPosition.Value);
+        _rotInterp.Push(time: serverTime, value: NetRotation.Value);
         InterpolatedScale = NetScale.Value;
     }
 
@@ -84,8 +85,10 @@ public class NetworkTransform : NetObject
             return;
         }
 
-        if (_posInterp.TrySample(renderTime, out var p)) InterpolatedPosition = p;
-        if (_rotInterp.TrySample(renderTime, out var r)) InterpolatedRotation = r;
+        if (_posInterp.TrySample(renderTime: renderTime, value: out var p))
+            InterpolatedPosition = p;
+        if (_rotInterp.TrySample(renderTime: renderTime, value: out var r))
+            InterpolatedRotation = r;
         _posInterp.Prune(renderTime);
         _rotInterp.Prune(renderTime);
     }

@@ -1,6 +1,5 @@
 using Zigote.Core.State;
 using Zigote.UI.Host;
-using Zigote.UI.Widgets.Focus;
 
 namespace Zigote.UI.Adwaita;
 
@@ -64,9 +63,12 @@ public sealed class AdwTabOverview : ComposedWidget, IDismissableOverlay
         return new Watch(() =>
             {
                 _dirty.Depend();
-                var grid = new AdwWrapBox { ChildSpacing = Spacing.Md, LineSpacing = Spacing.Md };
-                for (var i = 0; i < _view.Pages.Count; i++)
-                    grid.Children.Add(Card(theme, _view.Pages[i], i));
+                var grid = new AdwWrapBox {
+                    ChildSpacing = Spacing.Md,
+                    LineSpacing = Spacing.Md,
+                };
+                for (int i = 0; i < _view.Pages.Count; i++)
+                    grid.Children.Add(Card(theme: theme, page: _view.Pages[i], index: i));
 
                 var header = new AdwHeaderBar {
                     Title = Title,
@@ -74,7 +76,7 @@ public sealed class AdwTabOverview : ComposedWidget, IDismissableOverlay
                     ShowStartWindowControls = false,
                     ShowEndWindowControls = false,
                     End = {
-                        new AdwButton("Close Overview", Close) {
+                        new AdwButton(label: "Close Overview", onPressed: Close) {
                             IconName = Icons.Close,
                             Style = AdwButtonStyle.Flat,
                             Circular = true,
@@ -82,14 +84,22 @@ public sealed class AdwTabOverview : ComposedWidget, IDismissableOverlay
                     },
                 };
                 if (OnCreateTab is { } create)
+                {
                     header.Start.Add(
-                        new AdwButton("New Tab", () =>
+                        new AdwButton(
+                            label: "New Tab",
+                            onPressed: () =>
                             {
                                 create();
                                 _dirty.Fire();
                             }
-                        ) { IconName = Icons.Add, Style = AdwButtonStyle.Flat, Circular = true }
+                        ) {
+                            IconName = Icons.Add,
+                            Style = AdwButtonStyle.Flat,
+                            Circular = true,
+                        }
                     );
+                }
 
                 Widget body = _view.Pages.Count == 0
                     ? new AdwStatusPage {
@@ -97,14 +107,14 @@ public sealed class AdwTabOverview : ComposedWidget, IDismissableOverlay
                         Title = "No Open Tabs",
                         Compact = true,
                     }
-                    : new ScrollView(new Padding(EdgeInsets.All(Spacing.Xl), grid));
+                    : new ScrollView(new Padding(padding: EdgeInsets.All(Spacing.Xl), child: grid));
 
                 // Opaque sheet on --overview-bg-color: the overview replaces the content rather
                 // than floating over a scrim, and it gets its OWN surface (a shade off the window)
                 // so the thumbnails sitting on it read as cards.
                 return new ColoredBox(
-                    AdwPalette.For(theme).OverviewBg,
-                    new AdwToolbarView(body) { TopBars = { header } }
+                    color: AdwPalette.For(theme).OverviewBg,
+                    child: new AdwToolbarView(body) { TopBars = { header } }
                 );
             }
         );
@@ -113,26 +123,41 @@ public sealed class AdwTabOverview : ComposedWidget, IDismissableOverlay
     private Widget Card(ThemeData theme, AdwTabPage page, int index)
     {
         var p = AdwPalette.For(theme);
-        var selected = _view.SelectedIndex == index;
+        bool selected = _view.SelectedIndex == index;
 
         var titleRow = new Row(spacing: Spacing.Xs) {
             Children = {
                 new Expanded(
-                    new Label(page.Title, AdwTypography.Caption, theme.OnBackground) {
+                    new Label(
+                        text: page.Title,
+                        style: AdwTypography.Caption,
+                        color: theme.OnBackground
+                    ) {
                         MaxLines = 1,
                         Overflow = TextOverflow.Ellipsis,
                     }
                 ),
-                new AdwButton("Close Tab", () =>
+                new AdwButton(
+                    label: "Close Tab",
+                    onPressed: () =>
                     {
                         _view.Close(page);
                         _dirty.Fire();
                     }
-                ) { IconName = Icons.Close, Style = AdwButtonStyle.Flat, Circular = true },
+                ) {
+                    IconName = Icons.Close,
+                    Style = AdwButtonStyle.Flat,
+                    Circular = true,
+                },
             },
         };
         if (page.IconName is { } icon)
-            titleRow.Children.Insert(0, new IconGlyph(icon, AdwMetrics.IconSize, p.DimLabel));
+        {
+            titleRow.Children.Insert(
+                index: 0,
+                item: new IconGlyph(glyph: icon, size: AdwMetrics.IconSize, color: p.DimLabel)
+            );
+        }
 
         // `tabthumbnail { border-radius: $card_radius + 4px }` — a thumbnail is rounder than the
         // card inside it, on the thumbnail surface rather than the card one.
@@ -150,15 +175,18 @@ public sealed class AdwTabOverview : ComposedWidget, IDismissableOverlay
                         // texture here when one is available; nothing else about this changes.
                         new ColoredBox(p.ViewBg)
                     ),
-                    new Padding(EdgeInsets.Symmetric(Spacing.Sm, Spacing.Xs), titleRow),
+                    new Padding(
+                        padding: EdgeInsets.Symmetric(horizontal: Spacing.Sm, vertical: Spacing.Xs),
+                        child: titleRow
+                    ),
                 },
             },
         };
 
         return new SizedBox(
-            CardW,
-            CardH,
-            new Pressable {
+            width: CardW,
+            height: CardH,
+            child: new Pressable {
                 Child = card,
                 FocusRadius = AdwMetrics.CardRadius + 4f,
                 SemanticsLabel = page.Title,

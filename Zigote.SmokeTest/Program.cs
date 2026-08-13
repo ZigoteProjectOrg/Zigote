@@ -29,24 +29,27 @@ using Zigote.Vfx;
 
 const uint w = 640, h = 480;
 
-var frames = 30;
-if (args.Length > 0 && int.TryParse(args[0], out var fromArg))
+int frames = 30;
+if (args.Length > 0 && int.TryParse(s: args[0], result: out int fromArg))
     frames = fromArg;
-else if (int.TryParse(Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_FRAMES"), out var fromEnv))
+else if (int.TryParse(
+             s: Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_FRAMES"),
+             result: out int fromEnv
+         ))
     frames = fromEnv;
 
-var scene = args.Contains("scene") ||
-            Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_SCENE") is not null;
+bool scene = args.Contains("scene") ||
+             Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_SCENE") is not null;
 // Match the Blender EEVEE+AgX reference lighting (flat gray world + single moderate sun, exposure 1.0)
 // for a fair A/B of material/IBL/tonemap — instead of the over-bright default studio sky.
-var match = Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_MATCH") is not null;
+bool match = Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_MATCH") is not null;
 
 try
 {
     Console.WriteLine(
         $"[smoke] booting renderer; mode={(scene ? "3d-scene" : "2d")}; target {frames} frames…"
     );
-    using var app = new App("zigote-smoke", w, h);
+    using var app = new App(title: "zigote-smoke", width: w, height: h);
     app.ForceContinuousRender = true; // bounded, deterministic loop — never block on WaitEvents
     app.Root = new ColoredBox(ThemeData.Dark.Background); // opaque root (wgpu clears with alpha 0)
 
@@ -57,172 +60,181 @@ try
 
         // Camera (kind 3 → becomes the active camera, fovy 45°). Placed on +Z looking toward the
         // origin (engine camera forward is -Z), identity rotation.
-        var cam = e.SceneAddChildNode(0, "camera", 3);
+        ulong cam = e.SceneAddChildNode(parentHandle: 0, name: "camera", kind: 3);
         e.SceneUpdateNode(
-            cam,
-            0f,
-            0f,
-            3.5f,
-            0f,
-            0f,
-            0f,
-            1f,
-            1f,
-            1f,
-            1f
+            nodeHandle: cam,
+            x: 0f,
+            y: 0f,
+            z: 3.5f,
+            qx: 0f,
+            qy: 0f,
+            qz: 0f,
+            qw: 1f,
+            sx: 1f,
+            sy: 1f,
+            sz: 1f
         );
 
         // A mid-roughness red dielectric sphere (kind 1 mesh, primType 2) at the origin.
-        var ball = e.SceneAddChildNode(0, "ball", 1);
-        e.SceneSetMeshPrimitive(ball, 2);
+        ulong ball = e.SceneAddChildNode(parentHandle: 0, name: "ball", kind: 1);
+        e.SceneSetMeshPrimitive(nodeHandle: ball, primType: 2);
         e.SceneSetMeshColor(
-            ball,
-            0.80f,
-            0.18f,
-            0.16f
+            nodeHandle: ball,
+            r: 0.80f,
+            g: 0.18f,
+            b: 0.16f
         );
-        e.SceneSetMeshRoughness(ball, 0.0f, 0.40f); // metallic=0, roughness=0.4
+        e.SceneSetMeshRoughness(
+            nodeHandle: ball,
+            metallic: 0.0f,
+            roughness: 0.40f
+        ); // metallic=0, roughness=0.4
         e.SceneUpdateNode(
-            ball,
-            0f,
-            0f,
-            0f,
-            0f,
-            0f,
-            0f,
-            1f,
-            1f,
-            1f,
-            1f
+            nodeHandle: ball,
+            x: 0f,
+            y: 0f,
+            z: 0f,
+            qx: 0f,
+            qy: 0f,
+            qz: 0f,
+            qw: 1f,
+            sx: 1f,
+            sy: 1f,
+            sz: 1f
         );
 
         // Optional spot-shadow scene (ZIGOTE_SMOKE_SPOT=1): a wide ground slab + a downward spot light
         // overhead, so the sphere casts a perspective spot shadow onto the ground. Exercises the spot
         // cone falloff + per-light perspective shadow map. Replaces the directional sun for a clear read.
-        var spot = scene && Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_SPOT") is not null;
-        var point = scene && Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_POINT") is not null;
-        var glassScene =
+        bool spot = scene && Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_SPOT") is not null;
+        bool point = scene && Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_POINT") is not null;
+        bool glassScene =
             scene && Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_GLASS") is not null;
-        var pcss = scene && Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_PCSS") is not null;
-        var ssgi = scene && Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_SSGI") is not null;
-        var maskShadow = scene &&
-                         Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_MASKSHADOW") is not null;
+        bool pcss = scene && Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_PCSS") is not null;
+        bool ssgi = scene && Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_SSGI") is not null;
+        bool maskShadow = scene &&
+                          Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_MASKSHADOW") is not null;
         if (ssgi)
         {
             // SSGI colour-bleed test: a saturated RED wall next to a WHITE floor and a WHITE sphere.
             // With SSGI on, the white floor/sphere near the wall should pick up a red tint (indirect bounce).
             e.SceneUpdateNode(
-                cam,
-                0.8f,
-                1.0f,
-                3.2f,
-                -0.16f,
-                0.06f,
-                0f,
-                0.985f,
-                1f,
-                1f,
-                1f
+                nodeHandle: cam,
+                x: 0.8f,
+                y: 1.0f,
+                z: 3.2f,
+                qx: -0.16f,
+                qy: 0.06f,
+                qz: 0f,
+                qw: 0.985f,
+                sx: 1f,
+                sy: 1f,
+                sz: 1f
             );
-            var ground = e.SceneAddChildNode(0, "ground", 1);
-            e.SceneSetMeshPrimitive(ground, 0);
+            ulong ground = e.SceneAddChildNode(parentHandle: 0, name: "ground", kind: 1);
+            e.SceneSetMeshPrimitive(nodeHandle: ground, primType: 0);
             e.SceneSetMeshColor(
-                ground,
-                0.85f,
-                0.85f,
-                0.85f
+                nodeHandle: ground,
+                r: 0.85f,
+                g: 0.85f,
+                b: 0.85f
             );
-            e.SceneSetMeshRoughness(ground, 0f, 0.9f);
+            e.SceneSetMeshRoughness(nodeHandle: ground, metallic: 0f, roughness: 0.9f);
             e.SceneUpdateNode(
-                ground,
-                0f,
-                -1f,
-                0f,
-                0f,
-                0f,
-                0f,
-                1f,
-                6f,
-                0.2f,
-                6f
+                nodeHandle: ground,
+                x: 0f,
+                y: -1f,
+                z: 0f,
+                qx: 0f,
+                qy: 0f,
+                qz: 0f,
+                qw: 1f,
+                sx: 6f,
+                sy: 0.2f,
+                sz: 6f
             );
-            var wall = e.SceneAddChildNode(0, "wall", 1);
-            e.SceneSetMeshPrimitive(wall, 0);
+            ulong wall = e.SceneAddChildNode(parentHandle: 0, name: "wall", kind: 1);
+            e.SceneSetMeshPrimitive(nodeHandle: wall, primType: 0);
             e.SceneSetMeshColor(
-                wall,
-                0.95f,
-                0.04f,
-                0.04f
+                nodeHandle: wall,
+                r: 0.95f,
+                g: 0.04f,
+                b: 0.04f
             );
-            e.SceneSetMeshRoughness(wall, 0f, 0.85f);
+            e.SceneSetMeshRoughness(nodeHandle: wall, metallic: 0f, roughness: 0.85f);
             e.SceneUpdateNode(
-                wall,
-                -1.5f,
-                0.2f,
-                0f,
-                0f,
-                0f,
-                0f,
-                1f,
-                0.2f,
-                1.4f,
-                2.6f
+                nodeHandle: wall,
+                x: -1.5f,
+                y: 0.2f,
+                z: 0f,
+                qx: 0f,
+                qy: 0f,
+                qz: 0f,
+                qw: 1f,
+                sx: 0.2f,
+                sy: 1.4f,
+                sz: 2.6f
             ); // tall red wall on the floor
             // Sphere near the wall — white by default (picks up red bounce); ZIGOTE_SMOKE_SSGI_GREEN makes
             // it green (albedo tinting → green reflects little red, so the bounce is suppressed).
             if (Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_SSGI_GREEN") is not null)
+            {
                 e.SceneSetMeshColor(
-                    ball,
-                    0.15f,
-                    0.85f,
-                    0.15f
+                    nodeHandle: ball,
+                    r: 0.15f,
+                    g: 0.85f,
+                    b: 0.15f
                 );
+            }
             else
+            {
                 e.SceneSetMeshColor(
-                    ball,
-                    0.9f,
-                    0.9f,
-                    0.9f
+                    nodeHandle: ball,
+                    r: 0.9f,
+                    g: 0.9f,
+                    b: 0.9f
                 );
-            e.SceneSetMeshRoughness(ball, 0f, 0.7f);
+            }
+
+            e.SceneSetMeshRoughness(nodeHandle: ball, metallic: 0f, roughness: 0.7f);
             e.SceneUpdateNode(
-                ball,
-                -0.5f,
-                -0.3f,
-                0f,
-                0f,
-                0f,
-                0f,
-                1f,
-                0.5f,
-                0.5f,
-                0.5f
+                nodeHandle: ball,
+                x: -0.5f,
+                y: -0.3f,
+                z: 0f,
+                qx: 0f,
+                qy: 0f,
+                qz: 0f,
+                qw: 1f,
+                sx: 0.5f,
+                sy: 0.5f,
+                sz: 0.5f
             ); // sphere near the wall
-            var sun3 = e.SceneAddChildNode(0, "sun", 2);
+            ulong sun3 = e.SceneAddChildNode(parentHandle: 0, name: "sun", kind: 2);
             e.SceneSetLightProperties(
-                sun3,
-                0,
-                1f,
-                0.98f,
-                0.95f,
-                3.0f,
-                100f,
-                0.4f,
-                0.6f,
-                true
+                nodeHandle: sun3,
+                kind: 0,
+                r: 1f,
+                g: 0.98f,
+                b: 0.95f,
+                intensity: 3.0f,
+                range: 100f,
+                innerAngle: 0.4f,
+                outerAngle: 0.6f,
+                castShadows: true
             );
             e.SceneUpdateNode(
-                sun3,
-                1f,
-                4f,
-                2f,
-                -0.30f,
-                0.10f,
-                0f,
-                0.95f,
-                1f,
-                1f,
-                1f
+                nodeHandle: sun3,
+                x: 1f,
+                y: 4f,
+                z: 2f,
+                qx: -0.30f,
+                qy: 0.10f,
+                qz: 0f,
+                qw: 0.95f,
+                sx: 1f,
+                sy: 1f,
+                sz: 1f
             );
         }
         else if (maskShadow)
@@ -232,115 +244,115 @@ try
             // in the shadow); without it the plane's default white texture casts a full rectangle.
             // Before the alpha-shadow pipeline, masked casters were skipped → no shadow at all.
             e.SceneUpdateNode(
-                cam,
-                0f,
-                3.2f,
-                5.5f,
-                -0.28f,
-                0f,
-                0f,
-                0.96f,
-                1f,
-                1f,
-                1f
+                nodeHandle: cam,
+                x: 0f,
+                y: 3.2f,
+                z: 5.5f,
+                qx: -0.28f,
+                qy: 0f,
+                qz: 0f,
+                qw: 0.96f,
+                sx: 1f,
+                sy: 1f,
+                sz: 1f
             );
             e.SceneSetMeshColor(
-                ball,
-                0.8f,
-                0.2f,
-                0.2f
+                nodeHandle: ball,
+                r: 0.8f,
+                g: 0.2f,
+                b: 0.2f
             );
             e.SceneUpdateNode(
-                ball,
-                3.0f,
-                0.4f,
-                -1f,
-                0f,
-                0f,
-                0f,
-                1f,
-                0.5f,
-                0.5f,
-                0.5f
+                nodeHandle: ball,
+                x: 3.0f,
+                y: 0.4f,
+                z: -1f,
+                qx: 0f,
+                qy: 0f,
+                qz: 0f,
+                qw: 1f,
+                sx: 0.5f,
+                sy: 0.5f,
+                sz: 0.5f
             ); // off to the side
-            var ground = e.SceneAddChildNode(0, "ground", 1);
-            e.SceneSetMeshPrimitive(ground, 0);
+            ulong ground = e.SceneAddChildNode(parentHandle: 0, name: "ground", kind: 1);
+            e.SceneSetMeshPrimitive(nodeHandle: ground, primType: 0);
             e.SceneSetMeshColor(
-                ground,
-                0.62f,
-                0.62f,
-                0.64f
+                nodeHandle: ground,
+                r: 0.62f,
+                g: 0.62f,
+                b: 0.64f
             );
-            e.SceneSetMeshRoughness(ground, 0f, 0.9f);
+            e.SceneSetMeshRoughness(nodeHandle: ground, metallic: 0f, roughness: 0.9f);
             e.SceneUpdateNode(
-                ground,
-                0f,
-                -1f,
-                0f,
-                0f,
-                0f,
-                0f,
-                1f,
-                8f,
-                0.2f,
-                8f
+                nodeHandle: ground,
+                x: 0f,
+                y: -1f,
+                z: 0f,
+                qx: 0f,
+                qy: 0f,
+                qz: 0f,
+                qw: 1f,
+                sx: 8f,
+                sy: 0.2f,
+                sz: 8f
             );
             // Masked plane (quad = primType 1), rotated -90° about X to lie horizontal (normal up),
             // raised above the ground so its shadow projects onto it. alpha_mode 1 = mask.
-            var plane = e.SceneAddChildNode(0, "maskplane", 1);
-            e.SceneSetMeshPrimitive(plane, 1);
+            ulong plane = e.SceneAddChildNode(parentHandle: 0, name: "maskplane", kind: 1);
+            e.SceneSetMeshPrimitive(nodeHandle: plane, primType: 1);
             e.SceneSetMeshColor(
-                plane,
-                0.9f,
-                0.85f,
-                0.3f
+                nodeHandle: plane,
+                r: 0.9f,
+                g: 0.85f,
+                b: 0.3f
             );
-            e.SceneSetMeshAlphaMode(plane, 1); // mask
-            var maskTex = Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_MASKTEX");
+            e.SceneSetMeshAlphaMode(nodeHandle: plane, mode: 1); // mask
+            string? maskTex = Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_MASKTEX");
             if (maskTex is not null)
             {
-                e.SceneSetMeshTexturePath(plane, maskTex);
+                e.SceneSetMeshTexturePath(nodeHandle: plane, path: maskTex);
                 Console.WriteLine($"[smoke] mask texture: {maskTex}");
             }
 
             e.SceneUpdateNode(
-                plane,
-                0f,
-                1.2f,
-                0f,
-                -0.7071068f,
-                0f,
-                0f,
-                0.7071068f,
-                2.2f,
-                2.2f,
-                2.2f
+                nodeHandle: plane,
+                x: 0f,
+                y: 1.2f,
+                z: 0f,
+                qx: -0.7071068f,
+                qy: 0f,
+                qz: 0f,
+                qw: 0.7071068f,
+                sx: 2.2f,
+                sy: 2.2f,
+                sz: 2.2f
             );
-            var msun = e.SceneAddChildNode(0, "sun", 2);
+            ulong msun = e.SceneAddChildNode(parentHandle: 0, name: "sun", kind: 2);
             e.SceneSetLightProperties(
-                msun,
-                0,
-                1f,
-                0.98f,
-                0.95f,
-                3.2f,
-                100f,
-                0.4f,
-                0.6f,
-                true
+                nodeHandle: msun,
+                kind: 0,
+                r: 1f,
+                g: 0.98f,
+                b: 0.95f,
+                intensity: 3.2f,
+                range: 100f,
+                innerAngle: 0.4f,
+                outerAngle: 0.6f,
+                castShadows: true
             );
             e.SceneUpdateNode(
-                msun,
-                0.4f,
-                5f,
-                1.2f,
-                -0.34f,
-                0.08f,
-                0f,
-                0.93f,
-                1f,
-                1f,
-                1f
+                nodeHandle: msun,
+                x: 0.4f,
+                y: 5f,
+                z: 1.2f,
+                qx: -0.34f,
+                qy: 0.08f,
+                qz: 0f,
+                qw: 0.93f,
+                sx: 1f,
+                sy: 1f,
+                sz: 1f
             );
         }
         else if (pcss)
@@ -348,107 +360,107 @@ try
             // PCSS contact-hardening test: a ground slab, a sphere RESTING on it (shadow sharp at the
             // contact) and a sphere FLOATING high (shadow soft/wide). Directional sun from upper-left.
             e.SceneUpdateNode(
-                cam,
-                0f,
-                2.6f,
-                5.0f,
-                -0.2164396f,
-                0f,
-                0f,
-                0.9763146f,
-                1f,
-                1f,
-                1f
+                nodeHandle: cam,
+                x: 0f,
+                y: 2.6f,
+                z: 5.0f,
+                qx: -0.2164396f,
+                qy: 0f,
+                qz: 0f,
+                qw: 0.9763146f,
+                sx: 1f,
+                sy: 1f,
+                sz: 1f
             );
             e.SceneSetMeshColor(
-                ball,
-                0.80f,
-                0.80f,
-                0.82f
+                nodeHandle: ball,
+                r: 0.80f,
+                g: 0.80f,
+                b: 0.82f
             );
-            e.SceneSetMeshRoughness(ball, 0.0f, 0.6f);
+            e.SceneSetMeshRoughness(nodeHandle: ball, metallic: 0.0f, roughness: 0.6f);
             e.SceneUpdateNode(
-                ball,
-                -1.1f,
-                -0.3f,
-                0f,
-                0f,
-                0f,
-                0f,
-                1f,
-                0.5f,
-                0.5f,
-                0.5f
+                nodeHandle: ball,
+                x: -1.1f,
+                y: -0.3f,
+                z: 0f,
+                qx: 0f,
+                qy: 0f,
+                qz: 0f,
+                qw: 1f,
+                sx: 0.5f,
+                sy: 0.5f,
+                sz: 0.5f
             ); // resting (r=0.5 on slab top −0.8)
-            var floater = e.SceneAddChildNode(0, "floater", 1);
-            e.SceneSetMeshPrimitive(floater, 2);
+            ulong floater = e.SceneAddChildNode(parentHandle: 0, name: "floater", kind: 1);
+            e.SceneSetMeshPrimitive(nodeHandle: floater, primType: 2);
             e.SceneSetMeshColor(
-                floater,
-                0.80f,
-                0.80f,
-                0.82f
+                nodeHandle: floater,
+                r: 0.80f,
+                g: 0.80f,
+                b: 0.82f
             );
-            e.SceneSetMeshRoughness(floater, 0f, 0.6f);
+            e.SceneSetMeshRoughness(nodeHandle: floater, metallic: 0f, roughness: 0.6f);
             e.SceneUpdateNode(
-                floater,
-                1.1f,
-                1.6f,
-                0f,
-                0f,
-                0f,
-                0f,
-                1f,
-                0.5f,
-                0.5f,
-                0.5f
+                nodeHandle: floater,
+                x: 1.1f,
+                y: 1.6f,
+                z: 0f,
+                qx: 0f,
+                qy: 0f,
+                qz: 0f,
+                qw: 1f,
+                sx: 0.5f,
+                sy: 0.5f,
+                sz: 0.5f
             ); // floating high
-            var ground = e.SceneAddChildNode(0, "ground", 1);
-            e.SceneSetMeshPrimitive(ground, 0);
+            ulong ground = e.SceneAddChildNode(parentHandle: 0, name: "ground", kind: 1);
+            e.SceneSetMeshPrimitive(nodeHandle: ground, primType: 0);
             e.SceneSetMeshColor(
-                ground,
-                0.6f,
-                0.6f,
-                0.62f
+                nodeHandle: ground,
+                r: 0.6f,
+                g: 0.6f,
+                b: 0.62f
             );
-            e.SceneSetMeshRoughness(ground, 0f, 0.9f);
+            e.SceneSetMeshRoughness(nodeHandle: ground, metallic: 0f, roughness: 0.9f);
             e.SceneUpdateNode(
-                ground,
-                0f,
-                -1f,
-                0f,
-                0f,
-                0f,
-                0f,
-                1f,
-                6f,
-                0.2f,
-                6f
+                nodeHandle: ground,
+                x: 0f,
+                y: -1f,
+                z: 0f,
+                qx: 0f,
+                qy: 0f,
+                qz: 0f,
+                qw: 1f,
+                sx: 6f,
+                sy: 0.2f,
+                sz: 6f
             );
-            var sun2 = e.SceneAddChildNode(0, "sun", 2);
+            ulong sun2 = e.SceneAddChildNode(parentHandle: 0, name: "sun", kind: 2);
             e.SceneSetLightProperties(
-                sun2,
-                0,
-                1f,
-                0.98f,
-                0.95f,
-                3.5f,
-                100f,
-                0.4f,
-                0.6f,
-                true
+                nodeHandle: sun2,
+                kind: 0,
+                r: 1f,
+                g: 0.98f,
+                b: 0.95f,
+                intensity: 3.5f,
+                range: 100f,
+                innerAngle: 0.4f,
+                outerAngle: 0.6f,
+                castShadows: true
             );
             e.SceneUpdateNode(
-                sun2,
-                -2f,
-                4f,
-                1f,
-                -0.30f,
-                0.25f,
-                0f,
-                0.90f,
-                1f,
-                1f,
-                1f
+                nodeHandle: sun2,
+                x: -2f,
+                y: 4f,
+                z: 1f,
+                qx: -0.30f,
+                qy: 0.25f,
+                qz: 0f,
+                qw: 0.90f,
+                sx: 1f,
+                sy: 1f,
+                sz: 1f
             );
         }
         else if (glassScene)
@@ -456,133 +468,133 @@ try
             // Screen-space refraction: a clear glass sphere in front of three coloured cubes. Looking
             // through the sphere should show the cubes distorted/inverted — the refraction tell-tale.
             e.SceneSetMeshColor(
-                ball,
-                0.92f,
-                0.96f,
-                1.0f
+                nodeHandle: ball,
+                r: 0.92f,
+                g: 0.96f,
+                b: 1.0f
             );
             // ZIGOTE_SMOKE_GLASS_FROST → high roughness (frosted glass); else smooth/clear.
-            var frostRough =
+            float frostRough =
                 Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_GLASS_FROST") is not null
                     ? 0.5f
                     : 0.04f;
-            e.SceneSetMeshRoughness(ball, 0.0f, frostRough);
-            e.SceneSetMeshAlphaMode(ball, 3); // glass
+            e.SceneSetMeshRoughness(nodeHandle: ball, metallic: 0.0f, roughness: frostRough);
+            e.SceneSetMeshAlphaMode(nodeHandle: ball, mode: 3); // glass
             // ZIGOTE_SMOKE_GLASS_IOR=<f> → real-IOR glass (fresnel F0 + refraction bend), e.g. 2.4 = diamond.
             if (float.TryParse(
-                    Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_GLASS_IOR"),
-                    NumberStyles.Float,
-                    CultureInfo.InvariantCulture,
-                    out var glassIor
+                    s: Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_GLASS_IOR"),
+                    style: NumberStyles.Float,
+                    provider: CultureInfo.InvariantCulture,
+                    result: out float glassIor
                 ))
             {
-                e.SceneSetMeshVolume(ball, glassIor, 1f);
+                e.SceneSetMeshVolume(nodeHandle: ball, ior: glassIor, transmission: 1f);
                 Console.WriteLine($"[smoke] glass IOR -> {glassIor}");
             }
 
             e.SceneUpdateNode(
-                ball,
-                0f,
-                0f,
-                1.0f,
-                0f,
-                0f,
-                0f,
-                1f,
-                0.75f,
-                0.75f,
-                0.75f
+                nodeHandle: ball,
+                x: 0f,
+                y: 0f,
+                z: 1.0f,
+                qx: 0f,
+                qy: 0f,
+                qz: 0f,
+                qw: 1f,
+                sx: 0.75f,
+                sy: 0.75f,
+                sz: 0.75f
             );
 
             // CLOSE content inside the glass (a "ship in the bottle") — should refract/distort.
-            var inner = e.SceneAddChildNode(0, "inner", 1);
-            e.SceneSetMeshPrimitive(inner, 0);
+            ulong inner = e.SceneAddChildNode(parentHandle: 0, name: "inner", kind: 1);
+            e.SceneSetMeshPrimitive(nodeHandle: inner, primType: 0);
             e.SceneSetMeshColor(
-                inner,
-                0.95f,
-                0.10f,
-                0.85f
+                nodeHandle: inner,
+                r: 0.95f,
+                g: 0.10f,
+                b: 0.85f
             );
-            e.SceneSetMeshRoughness(inner, 0f, 0.5f);
+            e.SceneSetMeshRoughness(nodeHandle: inner, metallic: 0f, roughness: 0.5f);
             e.SceneUpdateNode(
-                inner,
-                0f,
-                0f,
-                1.15f,
-                0f,
-                0f,
-                0f,
-                1f,
-                0.28f,
-                0.28f,
-                0.28f
+                nodeHandle: inner,
+                x: 0f,
+                y: 0f,
+                z: 1.15f,
+                qx: 0f,
+                qy: 0f,
+                qz: 0f,
+                qw: 1f,
+                sx: 0.28f,
+                sy: 0.28f,
+                sz: 0.28f
             );
 
-            var c0 = e.SceneAddChildNode(0, "cubeR", 1);
-            e.SceneSetMeshPrimitive(c0, 0);
+            ulong c0 = e.SceneAddChildNode(parentHandle: 0, name: "cubeR", kind: 1);
+            e.SceneSetMeshPrimitive(nodeHandle: c0, primType: 0);
             e.SceneSetMeshColor(
-                c0,
-                0.90f,
-                0.10f,
-                0.10f
+                nodeHandle: c0,
+                r: 0.90f,
+                g: 0.10f,
+                b: 0.10f
             );
-            e.SceneSetMeshRoughness(c0, 0f, 0.5f);
+            e.SceneSetMeshRoughness(nodeHandle: c0, metallic: 0f, roughness: 0.5f);
             e.SceneUpdateNode(
-                c0,
-                -1.15f,
-                0.0f,
-                -1.6f,
-                0f,
-                0f,
-                0f,
-                1f,
-                0.6f,
-                0.6f,
-                0.6f
+                nodeHandle: c0,
+                x: -1.15f,
+                y: 0.0f,
+                z: -1.6f,
+                qx: 0f,
+                qy: 0f,
+                qz: 0f,
+                qw: 1f,
+                sx: 0.6f,
+                sy: 0.6f,
+                sz: 0.6f
             );
-            var c1 = e.SceneAddChildNode(0, "cubeG", 1);
-            e.SceneSetMeshPrimitive(c1, 0);
+            ulong c1 = e.SceneAddChildNode(parentHandle: 0, name: "cubeG", kind: 1);
+            e.SceneSetMeshPrimitive(nodeHandle: c1, primType: 0);
             e.SceneSetMeshColor(
-                c1,
-                0.10f,
-                0.85f,
-                0.20f
+                nodeHandle: c1,
+                r: 0.10f,
+                g: 0.85f,
+                b: 0.20f
             );
-            e.SceneSetMeshRoughness(c1, 0f, 0.5f);
+            e.SceneSetMeshRoughness(nodeHandle: c1, metallic: 0f, roughness: 0.5f);
             e.SceneUpdateNode(
-                c1,
-                0.0f,
-                0.95f,
-                -1.6f,
-                0f,
-                0f,
-                0f,
-                1f,
-                0.6f,
-                0.6f,
-                0.6f
+                nodeHandle: c1,
+                x: 0.0f,
+                y: 0.95f,
+                z: -1.6f,
+                qx: 0f,
+                qy: 0f,
+                qz: 0f,
+                qw: 1f,
+                sx: 0.6f,
+                sy: 0.6f,
+                sz: 0.6f
             );
-            var c2 = e.SceneAddChildNode(0, "cubeB", 1);
-            e.SceneSetMeshPrimitive(c2, 0);
+            ulong c2 = e.SceneAddChildNode(parentHandle: 0, name: "cubeB", kind: 1);
+            e.SceneSetMeshPrimitive(nodeHandle: c2, primType: 0);
             e.SceneSetMeshColor(
-                c2,
-                0.20f,
-                0.30f,
-                0.95f
+                nodeHandle: c2,
+                r: 0.20f,
+                g: 0.30f,
+                b: 0.95f
             );
-            e.SceneSetMeshRoughness(c2, 0f, 0.5f);
+            e.SceneSetMeshRoughness(nodeHandle: c2, metallic: 0f, roughness: 0.5f);
             e.SceneUpdateNode(
-                c2,
-                1.15f,
-                -0.7f,
-                -1.6f,
-                0f,
-                0f,
-                0f,
-                1f,
-                0.6f,
-                0.6f,
-                0.6f
+                nodeHandle: c2,
+                x: 1.15f,
+                y: -0.7f,
+                z: -1.6f,
+                qx: 0f,
+                qy: 0f,
+                qz: 0f,
+                qw: 1f,
+                sx: 0.6f,
+                sy: 0.6f,
+                sz: 0.6f
             );
         }
         else if (point)
@@ -591,63 +603,63 @@ try
             // side and above, so the sphere casts a cube shadow onto the ground. Exercises the depth
             // cube-array + per-direction sampling.
             e.SceneUpdateNode(
-                cam,
-                0f,
-                2.2f,
-                4.2f,
-                -0.2164396f,
-                0f,
-                0f,
-                0.9763146f,
-                1f,
-                1f,
-                1f
+                nodeHandle: cam,
+                x: 0f,
+                y: 2.2f,
+                z: 4.2f,
+                qx: -0.2164396f,
+                qy: 0f,
+                qz: 0f,
+                qw: 0.9763146f,
+                sx: 1f,
+                sy: 1f,
+                sz: 1f
             );
             e.SceneUpdateNode(
-                ball,
-                0f,
-                1.5f,
-                0f,
-                0f,
-                0f,
-                0f,
-                1f,
-                1f,
-                1f,
-                1f
+                nodeHandle: ball,
+                x: 0f,
+                y: 1.5f,
+                z: 0f,
+                qx: 0f,
+                qy: 0f,
+                qz: 0f,
+                qw: 1f,
+                sx: 1f,
+                sy: 1f,
+                sz: 1f
             );
-            var ground = e.SceneAddChildNode(0, "ground", 1);
-            e.SceneSetMeshPrimitive(ground, 0);
+            ulong ground = e.SceneAddChildNode(parentHandle: 0, name: "ground", kind: 1);
+            e.SceneSetMeshPrimitive(nodeHandle: ground, primType: 0);
             e.SceneSetMeshColor(
-                ground,
-                0.55f,
-                0.55f,
-                0.58f
+                nodeHandle: ground,
+                r: 0.55f,
+                g: 0.55f,
+                b: 0.58f
             );
-            e.SceneSetMeshRoughness(ground, 0.0f, 0.9f);
+            e.SceneSetMeshRoughness(nodeHandle: ground, metallic: 0.0f, roughness: 0.9f);
             e.SceneUpdateNode(
-                ground,
-                0f,
-                -1f,
-                0f,
-                0f,
-                0f,
-                0f,
-                1f,
-                8f,
-                0.2f,
-                8f
+                nodeHandle: ground,
+                x: 0f,
+                y: -1f,
+                z: 0f,
+                qx: 0f,
+                qy: 0f,
+                qz: 0f,
+                qw: 1f,
+                sx: 8f,
+                sy: 0.2f,
+                sz: 8f
             );
 
             // Point light (kind 1). Position from ZIGOTE_SMOKE_POINT_POS ("x,y,z"), default up++x so the
             // sphere shadow falls toward −x; overhead (0,4,0) gives a symmetric disc (cube-seam check).
-            var px = 2.0f;
-            var py = 3.2f;
-            var pz = 0.0f;
-            var pposEnv = Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_POINT_POS");
+            float px = 2.0f;
+            float py = 3.2f;
+            float pz = 0.0f;
+            string? pposEnv = Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_POINT_POS");
             if (pposEnv is not null)
             {
-                var parts = pposEnv.Split(',');
+                string[] parts = pposEnv.Split(',');
                 if (parts.Length == 3)
                 {
                     px = float.Parse(parts[0]);
@@ -656,112 +668,115 @@ try
                 }
             }
 
-            var pl = e.SceneAddChildNode(0, "point", 2);
+            ulong pl = e.SceneAddChildNode(parentHandle: 0, name: "point", kind: 2);
             e.SceneSetLightProperties(
-                pl,
-                1,
-                1f,
-                0.96f,
-                0.9f,
-                7.0f,
-                13f,
-                0.4f,
-                0.6f,
-                true
+                nodeHandle: pl,
+                kind: 1,
+                r: 1f,
+                g: 0.96f,
+                b: 0.9f,
+                intensity: 7.0f,
+                range: 13f,
+                innerAngle: 0.4f,
+                outerAngle: 0.6f,
+                castShadows: true
             );
             e.SceneUpdateNode(
-                pl,
-                px,
-                py,
-                pz,
-                0f,
-                0f,
-                0f,
-                1f,
-                1f,
-                1f,
-                1f
+                nodeHandle: pl,
+                x: px,
+                y: py,
+                z: pz,
+                qx: 0f,
+                qy: 0f,
+                qz: 0f,
+                qw: 1f,
+                sx: 1f,
+                sy: 1f,
+                sz: 1f
             );
         }
         else if (spot)
         {
             // Raise + tilt the camera down ~25° so the ground slab (and the shadow on it) is in view.
             e.SceneUpdateNode(
-                cam,
-                0f,
-                2.2f,
-                4.2f,
-                -0.2164396f,
-                0f,
-                0f,
-                0.9763146f,
-                1f,
-                1f,
-                1f
+                nodeHandle: cam,
+                x: 0f,
+                y: 2.2f,
+                z: 4.2f,
+                qx: -0.2164396f,
+                qy: 0f,
+                qz: 0f,
+                qw: 0.9763146f,
+                sx: 1f,
+                sy: 1f,
+                sz: 1f
             );
             // Lift the ball well above the ground slab so its shadow lands as a distinct disc.
             e.SceneUpdateNode(
-                ball,
-                0f,
-                1.4f,
-                0f,
-                0f,
-                0f,
-                0f,
-                1f,
-                1f,
-                1f,
-                1f
+                nodeHandle: ball,
+                x: 0f,
+                y: 1.4f,
+                z: 0f,
+                qx: 0f,
+                qy: 0f,
+                qz: 0f,
+                qw: 1f,
+                sx: 1f,
+                sy: 1f,
+                sz: 1f
             );
-            var ground = e.SceneAddChildNode(0, "ground", 1);
-            e.SceneSetMeshPrimitive(ground, 0); // cube, scaled into a thin wide slab
+            ulong ground = e.SceneAddChildNode(parentHandle: 0, name: "ground", kind: 1);
+            e.SceneSetMeshPrimitive(
+                nodeHandle: ground,
+                primType: 0
+            ); // cube, scaled into a thin wide slab
             e.SceneSetMeshColor(
-                ground,
-                0.55f,
-                0.55f,
-                0.58f
+                nodeHandle: ground,
+                r: 0.55f,
+                g: 0.55f,
+                b: 0.58f
             );
-            e.SceneSetMeshRoughness(ground, 0.0f, 0.9f);
+            e.SceneSetMeshRoughness(nodeHandle: ground, metallic: 0.0f, roughness: 0.9f);
             e.SceneUpdateNode(
-                ground,
-                0f,
-                -1f,
-                0f,
-                0f,
-                0f,
-                0f,
-                1f,
-                8f,
-                0.2f,
-                8f
+                nodeHandle: ground,
+                x: 0f,
+                y: -1f,
+                z: 0f,
+                qx: 0f,
+                qy: 0f,
+                qz: 0f,
+                qw: 1f,
+                sx: 8f,
+                sy: 0.2f,
+                sz: 8f
             );
 
             // Spot directly overhead pointing straight down (−Z forward rotated −90° about X → −Y).
-            var sp = e.SceneAddChildNode(0, "spot", 2);
+            ulong sp = e.SceneAddChildNode(parentHandle: 0, name: "spot", kind: 2);
             e.SceneSetLightProperties(
-                sp,
-                2,
-                1f,
-                0.97f,
-                0.9f,
-                18.0f,
-                40f,
-                0.40f,
-                0.62f,
-                true
+                nodeHandle: sp,
+                kind: 2,
+                r: 1f,
+                g: 0.97f,
+                b: 0.9f,
+                intensity: 18.0f,
+                range: 40f,
+                innerAngle: 0.40f,
+                outerAngle: 0.62f,
+                castShadows: true
             );
             e.SceneUpdateNode(
-                sp,
-                0f,
-                5f,
-                0f,
-                -0.7071068f,
-                0f,
-                0f,
-                0.7071068f,
-                1f,
-                1f,
-                1f
+                nodeHandle: sp,
+                x: 0f,
+                y: 5f,
+                z: 0f,
+                qx: -0.7071068f,
+                qy: 0f,
+                qz: 0f,
+                qw: 0.7071068f,
+                sx: 1f,
+                sy: 1f,
+                sz: 1f
             );
         }
         // Directional key light (kind 2 node, light-kind 0 = directional) from upper-right. Skipped in
@@ -769,31 +784,31 @@ try
         // and in spot mode so the spot light reads cleanly.
         else if (!match)
         {
-            var sun = e.SceneAddChildNode(0, "sun", 2);
+            ulong sun = e.SceneAddChildNode(parentHandle: 0, name: "sun", kind: 2);
             e.SceneSetLightProperties(
-                sun,
-                0,
-                1f,
-                0.98f,
-                0.95f,
-                3.0f,
-                100f,
-                0.4f,
-                0.6f,
-                true
+                nodeHandle: sun,
+                kind: 0,
+                r: 1f,
+                g: 0.98f,
+                b: 0.95f,
+                intensity: 3.0f,
+                range: 100f,
+                innerAngle: 0.4f,
+                outerAngle: 0.6f,
+                castShadows: true
             );
             e.SceneUpdateNode(
-                sun,
-                2f,
-                4f,
-                2f,
-                -0.30f,
-                0.10f,
-                0f,
-                0.95f,
-                1f,
-                1f,
-                1f
+                nodeHandle: sun,
+                x: 2f,
+                y: 4f,
+                z: 2f,
+                qx: -0.30f,
+                qy: 0.10f,
+                qz: 0f,
+                qw: 0.95f,
+                sx: 1f,
+                sy: 1f,
+                sz: 1f
             );
         }
 
@@ -804,10 +819,10 @@ try
         Console.WriteLine(
             $"[smoke] defaults: AmbientIntensity={s.AmbientIntensity}, Exposure={s.Exposure}, SunIntensity={s.SunIntensity}"
         );
-        var needSet = false;
+        bool needSet = false;
         if (int.TryParse(
-                Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_DEBUGVIEW"),
-                out var dv
+                s: Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_DEBUGVIEW"),
+                result: out int dv
             ) && dv > 0)
         {
             s.DebugView = dv;
@@ -815,7 +830,10 @@ try
             Console.WriteLine($"[smoke] debug view = {dv}");
         }
 
-        if (float.TryParse(Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_AMBIENT"), out var amb))
+        if (float.TryParse(
+                s: Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_AMBIENT"),
+                result: out float amb
+            ))
         {
             Console.WriteLine($"[smoke] AmbientIntensity {s.AmbientIntensity} -> {amb}");
             s.AmbientIntensity = amb;
@@ -876,10 +894,10 @@ try
         }
 
         if (float.TryParse(
-                Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_SUN"),
-                NumberStyles.Float,
-                CultureInfo.InvariantCulture,
-                out var sunI
+                s: Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_SUN"),
+                style: NumberStyles.Float,
+                provider: CultureInfo.InvariantCulture,
+                result: out float sunI
             ))
         {
             s.SunIntensity = sunI;
@@ -893,10 +911,10 @@ try
         if (Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_PHYSCAM") is not null)
         {
             e.SceneSetCameraParams(
-                cam,
-                20f,
-                0.1f,
-                4000f
+                nodeHandle: cam,
+                fovyDegrees: 20f,
+                near: 0.1f,
+                far: 4000f
             ); // tight ~20° "telephoto" lens
             s.DofEnabled = 1f;
             s.DofFocusDistance = 3.5f;
@@ -928,19 +946,19 @@ try
     // Optional native VFX particle smoke (ZIGOTE_SMOKE_VFX=1): upload a bright additive cloud each frame
     // so the GPU billboard pass actually creates its pipelines (validates the WGSL/naga) and draws —
     // visible in a ZIGOTE_SHOT dump. Cloud sits between the camera (+Z) and the ball at the origin.
-    var vfx = scene && Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_VFX") is not null;
+    bool vfx = scene && Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_VFX") is not null;
     float[]? particles = null;
     const uint pCount = 220;
     if (vfx)
     {
         particles = new float[pCount * 9];
         var rng = new Random(1234);
-        for (var i = 0; i < pCount; i++)
+        for (int i = 0; i < pCount; i++)
         {
-            var o = i * 9;
-            particles[o] = (float)(rng.NextDouble() * 2 - 1) * 1.3f; // x
-            particles[o + 1] = (float)(rng.NextDouble() * 2 - 1) * 1.3f; // y
-            particles[o + 2] = (float)rng.NextDouble() * 1.2f + 0.2f; // z (in front of the ball)
+            int o = i * 9;
+            particles[o] = (float)((rng.NextDouble() * 2) - 1) * 1.3f; // x
+            particles[o + 1] = (float)((rng.NextDouble() * 2) - 1) * 1.3f; // y
+            particles[o + 2] = ((float)rng.NextDouble() * 1.2f) + 0.2f; // z (in front of the ball)
             particles[o + 3] = 0.12f; // size
             particles[o + 4] = 0f; // rotation
             particles[o + 5] = 1.0f; // r
@@ -954,7 +972,7 @@ try
 
     // Optional GPU compute particle smoke (ZIGOTE_SMOKE_VFX_GPU=1): build a fire-like emitter asset and
     // drive the native GPU compute path each frame (spawn budget host-side, simulation + render on GPU).
-    var vfxGpu = scene && Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_VFX_GPU") is not null;
+    bool vfxGpu = scene && Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_VFX_GPU") is not null;
     VfxGpuEmitter? gpuEmitter = null;
     if (vfxGpu)
     {
@@ -964,34 +982,34 @@ try
             Shape = EmissionShape.Cone,
             ShapeRadius = 0.2f,
             ConeAngleDegrees = 28f,
-            EmitDirection = new Vec3(0f, 1f, 0f),
-            StartSpeed = new FloatRange(1.5f, 3.0f),
-            StartLifetime = new FloatRange(0.8f, 1.6f),
-            StartSize = new FloatRange(0.05f, 0.11f),
+            EmitDirection = new Vec3(x: 0f, y: 1f, z: 0f),
+            StartSpeed = new FloatRange(min: 1.5f, max: 3.0f),
+            StartLifetime = new FloatRange(min: 0.8f, max: 1.6f),
+            StartSize = new FloatRange(min: 0.05f, max: 0.11f),
             Blend = VfxBlendMode.Additive,
         };
-        asset.UpdateModules.Add(new GravityModule(new Vec3(0f, -1.5f, 0f)));
+        asset.UpdateModules.Add(new GravityModule(new Vec3(x: 0f, y: -1.5f, z: 0f)));
         asset.UpdateModules.Add(
             new ColorOverLifeModule(
                 new ColorRamp(
                     [
-                        new ColorStop(0f, new Color(1f, 0.9f, 0.4f)),
-                        new ColorStop(0.5f, new Color(1f, 0.4f, 0.1f)),
+                        new ColorStop(position: 0f, color: new Color(r: 1f, g: 0.9f, b: 0.4f)),
+                        new ColorStop(position: 0.5f, color: new Color(r: 1f, g: 0.4f, b: 0.1f)),
                         new ColorStop(
-                            1f,
-                            new Color(
-                                0.3f,
-                                0.05f,
-                                0f,
-                                0f
+                            position: 1f,
+                            color: new Color(
+                                r: 0.3f,
+                                g: 0.05f,
+                                b: 0f,
+                                a: 0f
                             )
                         ),
                     ]
                 )
             )
         );
-        asset.UpdateModules.Add(new SizeOverLifeModule(FloatCurve.Linear(1f, 0.25f)));
-        gpuEmitter = new VfxGpuEmitter(asset) { Position = new Vec3(0f, -0.6f, 0f) };
+        asset.UpdateModules.Add(new SizeOverLifeModule(FloatCurve.Linear(from: 1f, to: 0.25f)));
+        gpuEmitter = new VfxGpuEmitter(asset) { Position = new Vec3(x: 0f, y: -0.6f, z: 0f) };
         Console.WriteLine($"[smoke] VFX GPU: compute emitter, capacity {asset.Capacity}");
     }
 
@@ -1000,18 +1018,19 @@ try
     // blends on the scene stage, and an overlay-stage sprite — so the sprite WGSL/naga validation,
     // both pipelines-per-stage, the params UBO ring and the two camera UBOs all actually run.
     // Visible in a ZIGOTE_SHOT dump (scene sprites tonemapped; overlay sprite exact-color).
-    var sprites2D = scene && Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_SPRITES") is not null;
+    bool sprites2D =
+        scene && Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_SPRITES") is not null;
     uint spriteTex = 0, spriteShader = 0;
     float[]? spriteSceneVp = null, spriteOverlayVp = null;
     if (sprites2D)
     {
         // 64×64 magenta/yellow checkerboard, 8px cells.
-        var px = new byte[64 * 64 * 4];
-        for (var y = 0; y < 64; y++)
-        for (var x = 0; x < 64; x++)
+        byte[] px = new byte[64 * 64 * 4];
+        for (int y = 0; y < 64; y++)
+        for (int x = 0; x < 64; x++)
         {
-            var o = (y * 64 + x) * 4;
-            var check = (x / 8 + y / 8) % 2 == 0;
+            int o = ((y * 64) + x) * 4;
+            bool check = ((x / 8) + (y / 8)) % 2 == 0;
             px[o] = check ? (byte)255 : (byte)255; // r
             px[o + 1] = check ? (byte)0 : (byte)220; // g
             px[o + 2] = check ? (byte)255 : (byte)0; // b
@@ -1019,12 +1038,12 @@ try
         }
 
         spriteTex = app.Engine.SpritesTextureCreate(
-            px,
-            64,
-            64,
-            0 /*nearest*/,
-            1 /*srgb*/,
-            0 /*clamp*/
+            rgba: px,
+            width: 64,
+            height: 64,
+            filter: 0 /*nearest*/,
+            srgb: 1 /*srgb*/,
+            wrap: 0 /*clamp*/
         );
 
         // Custom material: swap R/B and multiply by params[0..3] — proves the shader contract
@@ -1069,8 +1088,8 @@ try
         );
 
         var cam2D = new Camera2D { OrthoHeight = 4f };
-        spriteSceneVp = cam2D.ViewProjection(w, h).ToArray();
-        spriteOverlayVp = Camera2D.PixelOverlay(w, h).ToArray();
+        spriteSceneVp = cam2D.ViewProjection(viewportW: w, viewportH: h).ToArray();
+        spriteOverlayVp = Camera2D.PixelOverlay(viewportW: w, viewportH: h).ToArray();
         Console.WriteLine($"[smoke] sprites: tex={spriteTex} customShader={spriteShader}");
         if (spriteTex == 0) return 2;
         if (spriteShader == 0) Console.WriteLine("[smoke] sprites: WARNING custom shader rejected");
@@ -1079,17 +1098,17 @@ try
     // Resize exercise (ZIGOTE_SMOKE_RESIZE=1): render the 3D scene at alternating sizes so the
     // renderer re-runs its resize path (depth/HDR/G-buffer/exposure targets + post bind groups) every
     // few frames — the editor viewport does this constantly; the fixed-size smoke otherwise never does.
-    var resizeTest = Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_RESIZE") is not null;
+    bool resizeTest = Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_RESIZE") is not null;
 
     // Per-frame settings churn (ZIGOTE_SMOKE_PHYSCAM_PERFRAME=1): mimic the editor's physical-camera driver
     // by calling GetRenderSettings3D→SetRenderSettings3D every frame (varying an env-irrelevant grade knob).
     // Times the loop so the environment-rebake regression is measurable: it must NOT rebake every frame.
-    var perFrameSet = scene &&
-                      Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_PHYSCAM_PERFRAME") is not
-                          null;
+    bool perFrameSet = scene &&
+                       Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_PHYSCAM_PERFRAME") is not
+                           null;
     var sw = Stopwatch.StartNew();
 
-    var rendered = 0;
+    int rendered = 0;
     for (; rendered < frames && !app.ShouldQuit; rendered++)
     {
         if (perFrameSet)
@@ -1097,11 +1116,11 @@ try
             var ps = app.Engine.GetRenderSettings3D();
             ps.DofEnabled = 1f;
             ps.DofFocusDistance =
-                3f + rendered % 10 * 0.1f; // owned, env-irrelevant: must not trigger a rebake
+                3f + (rendered % 10 * 0.1f); // owned, env-irrelevant: must not trigger a rebake
             // ZIGOTE_SMOKE_PHYSCAM_PERFRAME_ENV also varies an env-relevant knob (sun) each frame — this
             // SHOULD rebake every frame, demonstrating the cost the conditional-rebake fix now avoids.
             if (Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_PHYSCAM_PERFRAME_ENV") is not null)
-                ps.SunIntensity = 6f + rendered % 10 * 0.05f;
+                ps.SunIntensity = 6f + (rendered % 10 * 0.05f);
             app.Engine.SetRenderSettings3D(ps);
         }
 
@@ -1114,26 +1133,29 @@ try
                 (512, 400),
                 (800, 600),
             };
-            var (rw, rh) = sizes[rendered % sizes.Length];
-            app.Engine.Render3D(rw, rh);
+            (uint rw, uint rh) = sizes[rendered % sizes.Length];
+            app.Engine.Render3D(width: rw, height: rh);
             app.Frame();
             continue;
         }
 
         if (vfx)
+        {
             app.Engine.ParticlesUpload(
-                1,
-                particles,
-                pCount,
-                0
+                nodeHandle: 1,
+                data: particles,
+                count: pCount,
+                blend: 0
             ); // node key 1, blend 0 = additive
+        }
+
         if (sprites2D)
         {
             app.Engine.SpritesBegin(
-                spriteSceneVp,
-                spriteOverlayVp,
-                w,
-                h
+                sceneViewProj: spriteSceneVp,
+                overlayViewProj: spriteOverlayVp,
+                viewportW: w,
+                viewportH: h
             );
             // Instance: pos.xyz, rot, size.xy, uv0.xy, uv1.xy, rgba, corner_radius,
             // border_width (16 floats).
@@ -1141,146 +1163,157 @@ try
             ReadOnlySpan<float> a =
                 [0f, 0f, 0f, 0f, 2f, 2f, 0f, 0f, 1f, 1f, 1f, 1f, 1f, 1f, 0f, 0f];
             app.Engine.SpritesDraw(
-                spriteTex,
-                0,
-                0,
-                0,
-                0,
-                default,
-                a,
-                1
+                texture: spriteTex,
+                texture2: 0,
+                shader: 0,
+                blend: 0,
+                stage: 0,
+                materialParams: default,
+                instances: a,
+                count: 1
             );
             // Scene stage, additive: rotated top-left quarter of the sheet, tinted cyan.
             ReadOnlySpan<float> b =
                 [-1.6f, 1.0f, 0f, 0.6f, 1.2f, 1.2f, 0f, 0f, 0.5f, 0.5f, 0.2f, 1f, 1f, 0.9f, 0f, 0f];
             app.Engine.SpritesDraw(
-                spriteTex,
-                0,
-                0,
-                1,
-                0,
-                default,
-                b,
-                1
+                texture: spriteTex,
+                texture2: 0,
+                shader: 0,
+                blend: 1,
+                stage: 0,
+                materialParams: default,
+                instances: b,
+                count: 1
             );
             // Scene stage, CUSTOM shader (params tint green-ish); falls back to default if rejected.
             ReadOnlySpan<float> c =
                 [1.6f, 1.0f, 0f, 0f, 1.2f, 1.2f, 0f, 0f, 1f, 1f, 1f, 1f, 1f, 1f, 0f, 0f];
             ReadOnlySpan<float> prms = [0.3f, 1.0f, 0.3f, 1.0f];
             app.Engine.SpritesDraw(
-                spriteTex,
-                0,
-                spriteShader,
-                0,
-                0,
-                prms,
-                c,
-                1
+                texture: spriteTex,
+                texture2: 0,
+                shader: spriteShader,
+                blend: 0,
+                stage: 0,
+                materialParams: prms,
+                instances: c,
+                count: 1
             );
             // Overlay stage (pixel space, origin top-left): exact-color square at (40, 40)–(140, 140).
             // Rounded + stroked, exercising the new shape floats: radius 24 px, 6 px border.
             ReadOnlySpan<float> d =
                 [90f, 90f, 0f, 0f, 100f, 100f, 0f, 0f, 1f, 1f, 1f, 1f, 1f, 1f, 24f, 6f];
             app.Engine.SpritesDraw(
-                spriteTex,
-                0,
-                0,
-                0,
-                1,
-                default,
-                d,
-                1
+                texture: spriteTex,
+                texture2: 0,
+                shader: 0,
+                blend: 0,
+                stage: 1,
+                materialParams: default,
+                instances: d,
+                count: 1
             );
         }
 
         if (gpuEmitter != null)
         {
             const float dtSim = 1f / 60f;
-            var spawn = gpuEmitter.Step(dtSim);
+            int spawn = gpuEmitter.Step(dtSim);
             app.Engine.ParticlesComputeEmit(
-                2,
-                gpuEmitter.BuildParams(spawn, dtSim),
-                gpuEmitter.Capacity,
-                gpuEmitter.Blend
+                nodeHandle: 2,
+                paramsData: gpuEmitter.BuildParams(spawnCount: spawn, dt: dtSim),
+                capacity: gpuEmitter.Capacity,
+                blend: gpuEmitter.Blend
             );
         }
 
         if (scene)
-            app.Engine.Render3D(w, h); // fill the offscreen 3D target (what ZIGOTE_SHOT dumps)
+        {
+            app.Engine.Render3D(
+                width: w,
+                height: h
+            ); // fill the offscreen 3D target (what ZIGOTE_SHOT dumps)
+        }
+
         app.Frame(); // 2D frame: BeginFrame → RenderFrameV2 (capture) → EndFrame
     }
 
     sw.Stop();
     if (scene && rendered > 0)
+    {
         Console.WriteLine(
             $"[smoke] timing ({(perFrameSet ? "perframe-set" : "baseline")}): {rendered} frames in " +
             $"{sw.ElapsedMilliseconds} ms ({(double)sw.ElapsedMilliseconds / rendered:F2} ms/frame)"
         );
+    }
 
     // 2D golden-image capture (ZIGOTE_SHOT in non-scene mode): submit a deterministic paint list —
     // exercising the common CMD_RECT / CMD_BORDER commands through the ZgPaintCommand FFI struct — and
     // dump the offscreen 2D render to a BMP. This is the 2D counterpart of the 3D ZIGOTE_SHOT path and
     // the regression seam the 2D paint ABI otherwise lacks (diff with tools/bmpdiff.py).
-    var uiShot = Environment.GetEnvironmentVariable("ZIGOTE_SHOT");
+    string? uiShot = Environment.GetEnvironmentVariable("ZIGOTE_SHOT");
     if (!scene && !string.IsNullOrEmpty(uiShot))
     {
         // ZIGOTE_SMOKE_XFORM wraps the golden scene in a native transform scope
         // (CMD_TRANSFORM_PUSH/POP): "identity" must render byte-identical to no transform at all
         // (the bmpdiff gate for the transform stack); "spin" rotates+scales for a visual check.
-        var xformMode = Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_XFORM");
+        string? xformMode = Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_XFORM");
         var paint = new PaintList();
         if (xformMode == "identity")
             paint.PushTransform(Matrix2D.Identity);
         else if (xformMode == "spin")
+        {
             paint.PushTransform(
-                Matrix2D.Translation(w * 0.5f, h * 0.5f)
+                Matrix2D.Translation(dx: w * 0.5f, dy: h * 0.5f)
                 * Matrix2D.Rotation(0.35f)
-                * Matrix2D.Scale(0.8f, 0.8f)
-                * Matrix2D.Translation(-w * 0.5f, -h * 0.5f)
+                * Matrix2D.Scale(sx: 0.8f, sy: 0.8f)
+                * Matrix2D.Translation(dx: -w * 0.5f, dy: -h * 0.5f)
             );
+        }
+
         paint.AddRect(
-            new Rect(
-                0,
-                0,
-                w,
-                h
+            bounds: new Rect(
+                x: 0,
+                y: 0,
+                width: w,
+                height: h
             ),
-            ThemeData.Dark.Background
+            color: ThemeData.Dark.Background
         ); // opaque background
         paint.AddRect(
-            new Rect(
-                40,
-                40,
-                160,
-                100
+            bounds: new Rect(
+                x: 40,
+                y: 40,
+                width: 160,
+                height: 100
             ),
-            new Color(0.90f, 0.20f, 0.20f)
+            color: new Color(r: 0.90f, g: 0.20f, b: 0.20f)
         ); // red block
         paint.AddRect(
-            new Rect(
-                240,
-                120,
-                160,
-                160
+            bounds: new Rect(
+                x: 240,
+                y: 120,
+                width: 160,
+                height: 160
             ),
-            new Color(0.20f, 0.80f, 0.30f),
-            16f
+            color: new Color(r: 0.20f, g: 0.80f, b: 0.30f),
+            radius: 16f
         ); // green rounded
         paint.AddBorder(
-            new Rect(
-                430,
-                220,
-                170,
-                150
+            bounds: new Rect(
+                x: 430,
+                y: 220,
+                width: 170,
+                height: 150
             ),
-            new Color(0.30f, 0.55f, 1f),
-            12f,
-            6f
+            color: new Color(r: 0.30f, g: 0.55f, b: 1f),
+            radius: 12f,
+            width: 6f
         ); // blue border
         if (xformMode is "identity" or "spin")
             paint.PopTransform();
         app.Engine.SubmitPaintCommands(paint);
-        var okShot = app.Engine.CaptureUiBmp(uiShot, w, h);
+        bool okShot = app.Engine.CaptureUiBmp(path: uiShot, width: w, height: h);
         Console.WriteLine($"[smoke] ui-capture {(okShot ? "ok" : "FAILED")} -> {uiShot}");
         if (!okShot) return 2;
     }
@@ -1290,26 +1323,26 @@ try
     // image — with content deliberately overhanging the clip rect on every side.
     // ZIGOTE_SMOKE_CLIP_RADIUS=<r> rounds the clip corners; unset/0 = plain rect clip, so a radius-0
     // run must stay byte-identical across native changes to the clip path (tools/bmpdiff.py).
-    var clipShot = Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_CLIP");
+    string? clipShot = Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_CLIP");
     if (!scene && !string.IsNullOrEmpty(clipShot))
     {
-        var radius = 0f;
+        float radius = 0f;
         if (float.TryParse(
-                Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_CLIP_RADIUS"),
-                NumberStyles.Float,
-                CultureInfo.InvariantCulture,
-                out var r
+                s: Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_CLIP_RADIUS"),
+                style: NumberStyles.Float,
+                provider: CultureInfo.InvariantCulture,
+                result: out float r
             ))
             radius = r;
 
         // 64×64 checkerboard so the image pipeline's clipped corners are unambiguous in the dump.
         const int checker = 64;
-        var pixels = new byte[checker * checker * 4];
-        for (var py = 0; py < checker; py++)
-        for (var px = 0; px < checker; px++)
+        byte[] pixels = new byte[checker * checker * 4];
+        for (int py = 0; py < checker; py++)
+        for (int px = 0; px < checker; px++)
         {
-            var on = (px / 8 + py / 8) % 2 == 0;
-            var i = (py * checker + px) * 4;
+            bool on = ((px / 8) + (py / 8)) % 2 == 0;
+            int i = ((py * checker) + px) * 4;
             pixels[i + 0] = on ? (byte)255 : (byte)40;
             pixels[i + 1] = on ? (byte)200 : (byte)40;
             pixels[i + 2] = on ? (byte)60 : (byte)40;
@@ -1318,80 +1351,80 @@ try
 
         var paint = new PaintList();
         paint.AddRect(
-            new Rect(
-                0,
-                0,
-                w,
-                h
+            bounds: new Rect(
+                x: 0,
+                y: 0,
+                width: w,
+                height: h
             ),
-            ThemeData.Dark.Background
+            color: ThemeData.Dark.Background
         ); // opaque background
         paint.AddClipStart(
-            new Rect(
-                120,
-                90,
-                400,
-                300
+            bounds: new Rect(
+                x: 120,
+                y: 90,
+                width: 400,
+                height: 300
             ),
-            radius
+            radius: radius
         );
         paint.AddRect(
-            new Rect(
-                100,
-                70,
-                440,
-                340
+            bounds: new Rect(
+                x: 100,
+                y: 70,
+                width: 440,
+                height: 340
             ),
-            new Color(0.85f, 0.35f, 0.15f)
+            color: new Color(r: 0.85f, g: 0.35f, b: 0.15f)
         ); // overhangs all sides
         paint.AddRect(
-            new Rect(
-                120,
-                90,
-                120,
-                80
+            bounds: new Rect(
+                x: 120,
+                y: 90,
+                width: 120,
+                height: 80
             ),
-            new Color(0.20f, 0.55f, 0.95f),
-            10f
+            color: new Color(r: 0.20f, g: 0.55f, b: 0.95f),
+            radius: 10f
         ); // hugs the clip's top-left corner
         paint.AddText(
-            "Rounded clip coverage",
-            90f,
-            130f,
-            new Color(0.95f, 0.95f, 0.95f),
-            22f
+            text: "Rounded clip coverage",
+            baselineX: 90f,
+            baselineY: 130f,
+            color: new Color(r: 0.95f, g: 0.95f, b: 0.95f),
+            fontSize: 22f
         ); // enters through the left edge
         paint.AddText(
-            "corner glyphs",
-            430f,
-            380f,
-            new Color(0.95f, 0.90f, 0.30f),
-            20f
+            text: "corner glyphs",
+            baselineX: 430f,
+            baselineY: 380f,
+            color: new Color(r: 0.95f, g: 0.90f, b: 0.30f),
+            fontSize: 20f
         ); // exits through the bottom-right corner
         paint.AddImage(
-            new Rect(
-                460,
-                330,
-                checker,
-                checker
+            bounds: new Rect(
+                x: 460,
+                y: 330,
+                width: checker,
+                height: checker
             ),
-            checker,
-            checker,
-            pixels
+            pixelWidth: checker,
+            pixelHeight: checker,
+            pixels: pixels
         ); // straddles the bottom-right corner
         paint.AddClipEnd();
         paint.AddRect(
-            new Rect(
-                20,
-                400,
-                80,
-                60
+            bounds: new Rect(
+                x: 20,
+                y: 400,
+                width: 80,
+                height: 60
             ),
-            new Color(0.45f, 0.85f, 0.45f),
-            8f
+            color: new Color(r: 0.45f, g: 0.85f, b: 0.45f),
+            radius: 8f
         ); // unclipped control
         app.Engine.SubmitPaintCommands(paint);
-        var okClip = app.Engine.CaptureUiBmp(clipShot, w, h);
+        bool okClip = app.Engine.CaptureUiBmp(path: clipShot, width: w, height: h);
         Console.WriteLine(
             $"[smoke] clip-capture {(okClip ? "ok" : "FAILED")} radius={radius} -> {clipShot}"
         );
@@ -1404,14 +1437,14 @@ try
     // reads right-to-left. The bundled Inter face has no Arabic/Hebrew coverage, so point
     // ZIGOTE_SMOKE_BIDI_FONT at a font that does (e.g. "/Library/Fonts/Arial Unicode.ttf" on
     // macOS); the capture is a VISUAL verification seam, not a machine-independent byte gate.
-    var bidiShot = Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_BIDI");
+    string? bidiShot = Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_BIDI");
     if (!scene && !string.IsNullOrEmpty(bidiShot))
     {
         string? bidiFamily = null;
-        var bidiFont = Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_BIDI_FONT");
+        string? bidiFont = Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_BIDI_FONT");
         if (!string.IsNullOrEmpty(bidiFont) && File.Exists(bidiFont))
         {
-            if (app.Engine.LoadFont("bidi-test", bidiFont))
+            if (app.Engine.LoadFont(name: "bidi-test", path: bidiFont))
                 bidiFamily = "bidi-test";
             else
                 Console.WriteLine($"[smoke] bidi-capture: failed to load font {bidiFont}");
@@ -1419,15 +1452,15 @@ try
 
         var paint = new PaintList();
         paint.AddRect(
-            new Rect(
-                0,
-                0,
-                w,
-                h
+            bounds: new Rect(
+                x: 0,
+                y: 0,
+                width: w,
+                height: h
             ),
-            ThemeData.Dark.Background
+            color: ThemeData.Dark.Background
         );
-        var fg = new Color(0.95f, 0.95f, 0.95f);
+        var fg = new Color(r: 0.95f, g: 0.95f, b: 0.95f);
         ReadOnlySpan<string> lines = [
             "Latin control 2026", // pure LTR — must match the pre-bidi renderer
             "مرحبا Zigote مرحبا", // Latin word inside Arabic
@@ -1435,22 +1468,22 @@ try
             "التاريخ: 05/07/2026", // RTL label + LTR date
             "שלום Zigote!", // Hebrew + Latin + trailing punctuation
         ];
-        var y = 60f;
-        foreach (var line in lines)
+        float y = 60f;
+        foreach (string line in lines)
         {
             paint.AddText(
-                line,
-                40f,
-                y,
-                fg,
-                24f,
+                text: line,
+                baselineX: 40f,
+                baselineY: y,
+                color: fg,
+                fontSize: 24f,
                 fontFamily: bidiFamily
             );
             y += 60f;
         }
 
         app.Engine.SubmitPaintCommands(paint);
-        var okBidi = app.Engine.CaptureUiBmp(bidiShot, w, h);
+        bool okBidi = app.Engine.CaptureUiBmp(path: bidiShot, width: w, height: h);
         Console.WriteLine(
             $"[smoke] bidi-capture {(okBidi ? "ok" : "FAILED")} font={bidiFont ?? "(default)"} -> {bidiShot}"
         );
@@ -1465,43 +1498,54 @@ try
     {
         const int batch = 64;
         const uint tw = 256, th = 256;
-        var pixels = new byte[tw * th * 4];
-        Array.Fill(pixels, (byte)200);
+        byte[] pixels = new byte[tw * th * 4];
+        Array.Fill(array: pixels, value: (byte)200);
 
-        ZigoteEngine.GetImageStats(out var baseCount, out _, out _);
-        var handles = new ulong[batch];
-        for (var i = 0; i < batch; i++)
-            handles[i] = ZigoteEngine.LoadTextureFromRgba(pixels, tw, th);
+        ZigoteEngine.GetImageStats(count: out int baseCount, cpuBytes: out _, gpuBytes: out _);
+        ulong[] handles = new ulong[batch];
+        for (int i = 0; i < batch; i++)
+            handles[i] = ZigoteEngine.LoadTextureFromRgba(rgba: pixels, width: tw, height: th);
 
         // Paint them once so every handle gets a real GPU texture, then run a frame so the
         // end-of-frame drain sees the uploads.
         var texPaint = new PaintList();
-        for (var i = 0; i < batch; i++)
+        for (int i = 0; i < batch; i++)
+        {
             texPaint.AddImage(
-                new Rect(
-                    i % 8 * 32f,
-                    i / 8 * 32f,
-                    32f,
-                    32f
+                bounds: new Rect(
+                    x: i % 8 * 32f,
+                    y: i / 8 * 32f,
+                    width: 32f,
+                    height: 32f
                 ),
-                (int)tw,
-                (int)th,
-                null,
-                handles[i]
+                pixelWidth: (int)tw,
+                pixelHeight: (int)th,
+                pixels: null,
+                cacheKey: handles[i]
             );
+        }
+
         app.Engine.SubmitPaintCommands(texPaint);
         app.Frame();
         app.Frame();
 
-        ZigoteEngine.GetImageStats(out var loadedCount, out var loadedCpu, out var loadedGpu);
-        foreach (var handleToFree in handles) ZigoteEngine.ReleaseTexture(handleToFree);
+        ZigoteEngine.GetImageStats(
+            count: out int loadedCount,
+            cpuBytes: out long loadedCpu,
+            gpuBytes: out long loadedGpu
+        );
+        foreach (ulong handleToFree in handles) ZigoteEngine.ReleaseTexture(handleToFree);
         app.Frame(); // releases are deferred to end-of-frame
-        ZigoteEngine.GetImageStats(out var freedCount, out var freedCpu, out var freedGpu);
+        ZigoteEngine.GetImageStats(
+            count: out int freedCount,
+            cpuBytes: out long freedCpu,
+            gpuBytes: out long freedGpu
+        );
 
-        var texOk = loadedCount == baseCount + batch &&
-                    loadedGpu >= (long)tw * th * 4 * batch &&
-                    loadedCpu == 0 && // CPU copies dropped after upload
-                    freedCount == baseCount && freedCpu == 0 && freedGpu == 0;
+        bool texOk = loadedCount == baseCount + batch &&
+                     loadedGpu >= (long)tw * th * 4 * batch &&
+                     loadedCpu == 0 && // CPU copies dropped after upload
+                     freedCount == baseCount && freedCpu == 0 && freedGpu == 0;
         Console.WriteLine(
             $"[smoke] textures {(texOk ? "ok" : "FAILED")}: loaded={loadedCount} " +
             $"cpu={loadedCpu} gpu={loadedGpu} → after release count={freedCount} " +
@@ -1510,7 +1554,7 @@ try
         if (!texOk) return 2;
     }
 
-    var ok = rendered >= frames;
+    bool ok = rendered >= frames;
     Console.WriteLine(
         $"[smoke] rendered {rendered}/{frames} frames; ShouldQuit={app.ShouldQuit}; {(ok ? "OK" : "INCOMPLETE")}"
     );

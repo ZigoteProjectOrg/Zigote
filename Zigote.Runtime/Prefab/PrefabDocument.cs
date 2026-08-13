@@ -22,33 +22,30 @@ public sealed class PrefabDocument
 
     [JsonInclude] public SceneNode Template { get; set; } = new("Prefab");
 
-    public void Save(string path)
-    {
-        File.WriteAllText(path, JsonSerializer.Serialize(this, MathJson.SceneOptions(true)));
-    }
+    public void Save(string path) => File.WriteAllText(
+        path: path,
+        contents: JsonSerializer.Serialize(value: this, options: MathJson.SceneOptions(true))
+    );
 
     public static PrefabDocument? Load(string path)
     {
         if (!File.Exists(path)) return null;
         var doc = JsonSerializer.Deserialize<PrefabDocument>(
-            File.ReadAllText(path),
-            MathJson.SceneOptions(false)
+            json: File.ReadAllText(path),
+            options: MathJson.SceneOptions(false)
         );
         if (doc is null) return null;
-        RestoreParents(doc.Template, null);
+        RestoreParents(node: doc.Template, parent: null);
         return doc;
     }
 
     /// <summary>Build a fresh instance subtree from this template (a clean clone with no native handles).</summary>
-    public SceneNode InstantiateNode()
-    {
-        return Template.DeepClone();
-    }
+    public SceneNode InstantiateNode() => Template.DeepClone();
 
     private static void RestoreParents(SceneNode node, SceneNode? parent)
     {
         node.Parent = parent;
         foreach (var child in node.Children)
-            RestoreParents(child, node);
+            RestoreParents(node: child, parent: node);
     }
 }

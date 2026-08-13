@@ -6,7 +6,8 @@ namespace Zigote.UI.BottomSheets;
 ///     grabbable the way it is on iOS and Android. Wrap your own row in one to add another grab zone.
 ///     <para>
 ///         The strip claims every point inside it except children that capture the pointer themselves
-///         (<see cref="IPointerCapture" /> — a <c>Button</c>, a <c>Pressable</c>), so a header can carry
+///         (<see cref="IPointerCapture" /> — a <c>Button</c>, a <c>Pressable</c>), so a header can
+///         carry
 ///         a close button and still be draggable everywhere else.
 ///     </para>
 /// </summary>
@@ -53,7 +54,7 @@ public sealed class SheetDragArea : Widget
         // button is actually down. Without this the sheet would follow the cursor across the pill.
         if (!_pressed) return;
 
-        var dy = point.Y - _lastY;
+        float dy = point.Y - _lastY;
         _lastY = point.Y;
         if (!_moved)
         {
@@ -62,7 +63,7 @@ public sealed class SheetDragArea : Widget
         }
 
         _lastDelta = dy;
-        _sheet.DragBy(dy, true);
+        _sheet.DragBy(dyPixels: dy, allowCollapse: true);
     }
 
     public override void OnPointerUp(Offset point)
@@ -93,15 +94,12 @@ public sealed class SheetDragArea : Widget
 
     // ── Touch: the app promotes the drag to a scroll gesture and drives these ──
 
-    public override bool CanTouchScroll(bool vertical)
-    {
-        return vertical;
-    }
+    public override bool CanTouchScroll(bool vertical) => vertical;
 
     public override void OnTouchScroll(float dx, float dy)
     {
         _touchDriven = true;
-        _sheet.DragBy(dy, true);
+        _sheet.DragBy(dyPixels: dy, allowCollapse: true);
     }
 
     public override void OnTouchFling(float velocityX, float velocityY)
@@ -122,28 +120,22 @@ public sealed class SheetDragArea : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         _child.Layout(origin);
     }
 
-    public override void Paint(PaintList paint)
-    {
-        _child.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => _child.Paint(paint);
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         // Children that own the whole gesture (buttons) keep it; everything else is drag surface.
         return _child.HitTest(point) is IPointerCapture inner ? (Widget)inner : this;
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(_child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(_child);
 }

@@ -31,24 +31,25 @@ public class TimeScale : ChartScale
         _maxSec = double.NegativeInfinity;
     }
 
-    private static double ToSeconds(DateTime t)
-    {
-        return t.Ticks / (double)TimeSpan.TicksPerSecond;
-    }
+    private static double ToSeconds(DateTime t) => t.Ticks / (double)TimeSpan.TicksPerSecond;
 
     // Clamp to the valid tick range: near DateTime.MaxValue the double→long product rounds up to
     // MaxValue.Ticks + 1 and `new DateTime(long)` throws (data at/around 9999-12-31T23:59:59.9).
     private static DateTime FromSeconds(double s)
     {
         return new DateTime(
-            Math.Clamp((long)(s * TimeSpan.TicksPerSecond), 0L, DateTime.MaxValue.Ticks)
+            Math.Clamp(
+                value: (long)(s * TimeSpan.TicksPerSecond),
+                min: 0L,
+                max: DateTime.MaxValue.Ticks
+            )
         );
     }
 
     public override void Include(ChartValue value)
     {
         if (Finalized || value.Kind != ChartValueKind.Time) return;
-        var s = value.Numeric;
+        double s = value.Numeric;
         if (s < _minSec) _minSec = s;
         if (s > _maxSec) _maxSec = s;
     }
@@ -61,7 +62,7 @@ public class TimeScale : ChartScale
         if (Max.HasValue) _maxSec = ToSeconds(Max.Value);
         if (double.IsInfinity(_minSec))
         {
-            _minSec = ToSeconds(new DateTime(2026, 1, 1));
+            _minSec = ToSeconds(new DateTime(year: 2026, month: 1, day: 1));
             _maxSec = _minSec + 86400;
         }
 
@@ -76,42 +77,39 @@ public class TimeScale : ChartScale
         _viewMax = max > min ? max : min + 1;
     }
 
-    public override float Normalize(ChartValue value)
-    {
-        return NormalizeNumeric(value.Numeric);
-    }
+    public override float Normalize(ChartValue value) => NormalizeNumeric(value.Numeric);
 
-    public override float NormalizeNumeric(double value)
-    {
-        return (float)((value - _viewMin) / (_viewMax - _viewMin));
-    }
+    public override float NormalizeNumeric(double value) =>
+        (float)((value - _viewMin) / (_viewMax - _viewMin));
 
-    /// <summary>Seconds magnitude at a normalized position (feed to <see cref="ChartValue.Time" /> via ticks).</summary>
-    public override double NumericAt(float normalized)
-    {
-        return _viewMin + normalized * (_viewMax - _viewMin);
-    }
+    /// <summary>
+    ///     Seconds magnitude at a normalized position (feed to <see cref="ChartValue.Time" /> via
+    ///     ticks).
+    /// </summary>
+    public override double NumericAt(float normalized) =>
+        _viewMin + (normalized * (_viewMax - _viewMin));
 
     public override void BuildTicksInto(int targetCount, Func<ChartValue, string>? formatter,
         List<ChartTick> into)
     {
         into.Clear();
-        targetCount = Math.Max(2, targetCount);
-        var span = _viewMax - _viewMin;
-        var (unit, every) = ChooseUnit(span, targetCount);
+        targetCount = Math.Max(val1: 2, val2: targetCount);
+        double span = _viewMax - _viewMin;
+        (var unit, int every) = ChooseUnit(spanSeconds: span, target: targetCount);
 
-        var t = Align(FromSeconds(_viewMin), unit, every);
-        var guard = 0;
+        var t = Align(start: FromSeconds(_viewMin), unit: unit, every: every);
+        int guard = 0;
         while (ToSeconds(t) <= _viewMax + 1e-6 && guard++ < 1000)
         {
-            var pos = NormalizeNumeric(ToSeconds(t));
+            float pos = NormalizeNumeric(ToSeconds(t));
             if (pos >= -0.001f)
             {
-                var label = formatter?.Invoke(ChartValue.Time(t)) ?? Format(t, unit, span);
-                into.Add(new ChartTick(pos, label, ChartValue.Time(t)));
+                string label = formatter?.Invoke(ChartValue.Time(t)) ??
+                               Format(t: t, unit: unit, spanSeconds: span);
+                into.Add(new ChartTick(position: pos, label: label, value: ChartValue.Time(t)));
             }
 
-            var next = Advance(t, unit, every);
+            var next = Advance(t: t, unit: unit, every: every);
             if (next <= t) break; // saturated at DateTime.MaxValue — no forward progress
             t = next;
         }
@@ -119,14 +117,14 @@ public class TimeScale : ChartScale
 
     protected override string DefaultTickLabel(ChartValue value)
     {
-        var span = _viewMax - _viewMin;
-        var (unit, _) = ChooseUnit(span, 6);
-        return Format(value.DateTime, unit, span);
+        double span = _viewMax - _viewMin;
+        var (unit, _) = ChooseUnit(spanSeconds: span, target: 6);
+        return Format(t: value.DateTime, unit: unit, spanSeconds: span);
     }
 
     private static (Unit Unit, int Every) ChooseUnit(double spanSeconds, int target)
     {
-        var rough = spanSeconds / target;
+        double rough = spanSeconds / target;
         return rough switch {
             < 1 => (Unit.Second, 1),
             < 5 => (Unit.Second, 5),
@@ -148,7 +146,13 @@ public class TimeScale : ChartScale
             < 86400 * 135 => (Unit.Month, 3),
             < 86400 * 250 => (Unit.Month, 6),
             _ => (Unit.Year,
-                Math.Max(1, (int)NiceScale.TickStep(spanSeconds / (86400.0 * 365.25), target))),
+                Math.Max(
+                    val1: 1,
+                    val2: (int)NiceScale.TickStep(
+                        range: spanSeconds / (86400.0 * 365.25),
+                        targetTicks: target
+                    )
+                )),
         };
     }
 
@@ -156,34 +160,38 @@ public class TimeScale : ChartScale
     {
         return unit switch {
             Unit.Second => new DateTime(
-                start.Year,
-                start.Month,
-                start.Day,
-                start.Hour,
-                start.Minute,
-                start.Second / every * every
+                year: start.Year,
+                month: start.Month,
+                day: start.Day,
+                hour: start.Hour,
+                minute: start.Minute,
+                second: start.Second / every * every
             ),
             Unit.Minute => new DateTime(
-                start.Year,
-                start.Month,
-                start.Day,
-                start.Hour,
-                start.Minute / every * every,
-                0
+                year: start.Year,
+                month: start.Month,
+                day: start.Day,
+                hour: start.Hour,
+                minute: start.Minute / every * every,
+                second: 0
             ),
             Unit.Hour => new DateTime(
-                start.Year,
-                start.Month,
-                start.Day,
-                start.Hour / every * every,
-                0,
-                0
+                year: start.Year,
+                month: start.Month,
+                day: start.Day,
+                hour: start.Hour / every * every,
+                minute: 0,
+                second: 0
             ),
             Unit.Day => start.Date,
             // Weeks align to Monday.
             Unit.Week => start.Date.AddDays(-(((int)start.DayOfWeek + 6) % 7)),
-            Unit.Month => new DateTime(start.Year, (start.Month - 1) / every * every + 1, 1),
-            _ => new DateTime(start.Year / every * every, 1, 1),
+            Unit.Month => new DateTime(
+                year: start.Year,
+                month: ((start.Month - 1) / every * every) + 1,
+                day: 1
+            ),
+            _ => new DateTime(year: start.Year / every * every, month: 1, day: 1),
         };
     }
 
@@ -213,14 +221,14 @@ public class TimeScale : ChartScale
     {
         var inv = CultureInfo.InvariantCulture;
         return unit switch {
-            Unit.Second => t.ToString("HH:mm:ss", inv),
-            Unit.Minute or Unit.Hour => t.ToString("HH:mm", inv),
-            Unit.Day or Unit.Week => t.ToString("MMM d", inv),
+            Unit.Second => t.ToString(format: "HH:mm:ss", provider: inv),
+            Unit.Minute or Unit.Hour => t.ToString(format: "HH:mm", provider: inv),
+            Unit.Day or Unit.Week => t.ToString(format: "MMM d", provider: inv),
             // A multi-year month axis needs the year for orientation.
             Unit.Month => spanSeconds > 86400.0 * 400
-                ? t.ToString("MMM yy", inv)
-                : t.ToString("MMM", inv),
-            _ => t.ToString("yyyy", inv),
+                ? t.ToString(format: "MMM yy", provider: inv)
+                : t.ToString(format: "MMM", provider: inv),
+            _ => t.ToString(format: "yyyy", provider: inv),
         };
     }
 

@@ -30,23 +30,20 @@ BenchmarkSwitcher.FromTypes(
 /// <summary>Medium-run, in-process — same shape as the SignalsDotnet perf project this is ported from.</summary>
 public class BenchmarkConfig : ManualConfig
 {
-    public BenchmarkConfig()
-    {
+    public BenchmarkConfig() =>
         AddJob(Job.MediumRun.WithToolchain(InProcessNoEmitToolchain.Instance));
-    }
 }
 
 /// <summary>
-///     Head-to-head job: out-of-process and short. The in-process toolchain refuses benchmarks this slow
-///     (a SignalsDotnet chain recompute is orders of magnitude past a Zigote one), and both sides of every
+///     Head-to-head job: out-of-process and short. The in-process toolchain refuses benchmarks this
+///     slow
+///     (a SignalsDotnet chain recompute is orders of magnitude past a Zigote one), and both sides of
+///     every
 ///     pair run under the same job, which is what the comparison needs.
 /// </summary>
 public class ComparisonConfig : ManualConfig
 {
-    public ComparisonConfig()
-    {
-        AddJob(Job.ShortRun);
-    }
+    public ComparisonConfig() => AddJob(Job.ShortRun);
 }
 
 /// <summary>
@@ -70,9 +67,9 @@ public class ReactiveBenchmarks
     private readonly Signal<int> _batchB = new(0);
     private readonly Action _batchBody;
     private readonly Computed<int> _chain10;
-    private readonly Signal<int> _chain10Root = new(0);
     private readonly Computed<int> _chain100;
     private readonly Signal<int> _chain100Root = new(0);
+    private readonly Signal<int> _chain10Root = new(0);
     private readonly Computed<int> _computed;
     private readonly Signal<int> _contendedA = new(0);
     private readonly Signal<int> _contendedB = new(0);
@@ -102,28 +99,28 @@ public class ReactiveBenchmarks
 
         _diamond = Computed.From(() =>
             {
-                var left = _diamondRoot.Value + 1;
-                var right = _diamondRoot.Value * 2;
+                int left = _diamondRoot.Value + 1;
+                int right = _diamondRoot.Value * 2;
                 return left + right;
             }
         );
         _roots.Add(_diamond.Observe(() => { }));
 
-        _chain10 = BuildChain(_chain10Root, 10);
-        _chain100 = BuildChain(_chain100Root, 100);
+        _chain10 = BuildChain(root: _chain10Root, depth: 10);
+        _chain100 = BuildChain(root: _chain100Root, depth: 100);
 
-        for (var i = 0; i < FanOut; i++)
+        for (int i = 0; i < FanOut; i++)
         {
             var c = Computed.From(() => _fanSource.Value + 1);
             _fan[i] = c;
             _roots.Add(c.Observe(() => { }));
         }
 
-        for (var i = 0; i < WideDeps; i++) _wideSources[i] = new Signal<int>(0);
+        for (int i = 0; i < WideDeps; i++) _wideSources[i] = new Signal<int>(0);
         _wide = Computed.From(() =>
             {
-                var sum = 0;
-                for (var i = 0; i < WideDeps; i++) sum += _wideSources[i].Value;
+                int sum = 0;
+                for (int i = 0; i < WideDeps; i++) sum += _wideSources[i].Value;
                 return sum;
             }
         );
@@ -133,7 +130,10 @@ public class ReactiveBenchmarks
 
         // Deferred: a write only marks it; the body runs on the host's DrainDeferred pass.
         _roots.Add(
-            new Effect(() => _deferredSink = _deferredSource.Value, EffectAffinity.Deferred)
+            new Effect(
+                body: () => _deferredSink = _deferredSource.Value,
+                affinity: EffectAffinity.Deferred
+            )
         );
 
         // Two disjoint single-signal graphs, written from two threads — measures gate contention.
@@ -156,28 +156,22 @@ public class ReactiveBenchmarks
 
     /// <summary>Tracked read: the graph's hottest operation (gate + eval-context lookup).</summary>
     [Benchmark]
-    public int SignalRead()
-    {
-        return _signal.Value;
-    }
+    public int SignalRead() => _signal.Value;
 
     /// <summary>Untracked read — the same minus dependency registration.</summary>
     [Benchmark]
-    public int SignalPeek()
-    {
-        return _signal.Peek();
-    }
+    public int SignalPeek() => _signal.Peek();
 
     /// <summary>Unobserved computed, nothing written since: must fast-out on the global version.</summary>
     [Benchmark]
-    public int LazyComputedReadClean()
-    {
-        return _lazy.Value;
-    }
+    public int LazyComputedReadClean() => _lazy.Value;
 
     // ── writes and propagation ───────────────────────────────────────────────────
 
-    /// <summary>Port of SignalsDotnet <c>ComputedRoundTrip</c>: two writes then a read of an observed computed.</summary>
+    /// <summary>
+    ///     Port of SignalsDotnet <c>ComputedRoundTrip</c>: two writes then a read of an observed
+    ///     computed.
+    /// </summary>
     [Benchmark(Baseline = true)]
     public int ComputedRoundTrip()
     {
@@ -274,8 +268,8 @@ public class ReactiveBenchmarks
     [Benchmark(OperationsPerInvoke = ContendedWrites * 2)]
     public void WritesOneThread()
     {
-        for (var i = 0; i < ContendedWrites; i++) _contendedA.Value = i;
-        for (var i = 0; i < ContendedWrites; i++) _contendedB.Value = i;
+        for (int i = 0; i < ContendedWrites; i++) _contendedA.Value = i;
+        for (int i = 0; i < ContendedWrites; i++) _contendedB.Value = i;
     }
 
     /// <summary>Same 10k writes, two threads on disjoint graphs — what the single global gate costs.</summary>
@@ -285,11 +279,11 @@ public class ReactiveBenchmarks
         Parallel.Invoke(
             () =>
             {
-                for (var i = 0; i < ContendedWrites; i++) _contendedA.Value = i;
+                for (int i = 0; i < ContendedWrites; i++) _contendedA.Value = i;
             },
             () =>
             {
-                for (var i = 0; i < ContendedWrites; i++) _contendedB.Value = i;
+                for (int i = 0; i < ContendedWrites; i++) _contendedB.Value = i;
             }
         );
     }
@@ -297,7 +291,7 @@ public class ReactiveBenchmarks
     private Computed<int> BuildChain(Signal<int> root, int depth)
     {
         var node = Computed.From(() => root.Value + 1);
-        for (var i = 1; i < depth; i++)
+        for (int i = 1; i < depth; i++)
         {
             var prev = node;
             node = Computed.From(() => prev.Value + 1);

@@ -26,16 +26,16 @@ public class ZeroAllocPrimitivesTests
     {
         var buf = default(ScratchBuffer<float>);
         var a = buf.Get(4);
-        Assert.Equal(4, a.Length);
+        Assert.Equal(expected: 4, actual: a.Length);
         Assert.True(buf.Capacity >= 4);
 
-        var capAfterFirst = buf.Capacity;
+        int capAfterFirst = buf.Capacity;
         var b = buf.Get(3);
-        Assert.Equal(3, b.Length);
-        Assert.Equal(capAfterFirst, buf.Capacity); // no shrink, no realloc
+        Assert.Equal(expected: 3, actual: b.Length);
+        Assert.Equal(expected: capAfterFirst, actual: buf.Capacity); // no shrink, no realloc
 
         var c = buf.Get(1000);
-        Assert.Equal(1000, c.Length);
+        Assert.Equal(expected: 1000, actual: c.Length);
         Assert.True(buf.Capacity >= 1000);
     }
 
@@ -49,9 +49,9 @@ public class ZeroAllocPrimitivesTests
         a[2] = 3;
 
         var b = buf.GetPreserving(64); // forces growth
-        Assert.Equal(1, b[0]);
-        Assert.Equal(2, b[1]);
-        Assert.Equal(3, b[2]);
+        Assert.Equal(expected: 1, actual: b[0]);
+        Assert.Equal(expected: 2, actual: b[1]);
+        Assert.Equal(expected: 3, actual: b[2]);
     }
 
     [Fact]
@@ -61,7 +61,7 @@ public class ZeroAllocPrimitivesTests
         AllocGuard.AssertZeroAlloc(() =>
             {
                 var span = _scratch.Get(200);
-                for (var i = 0; i < span.Length; i++) span[i] = i;
+                for (int i = 0; i < span.Length; i++) span[i] = i;
             }
         );
     }
@@ -74,22 +74,22 @@ public class ZeroAllocPrimitivesTests
         using var list = new ValueList<int>(stackalloc int[4]);
         list.Add(10);
         list.Add(20);
-        Assert.Equal(2, list.Count);
-        Assert.Equal(10, list[0]);
-        Assert.Equal(20, list[1]);
+        Assert.Equal(expected: 2, actual: list.Count);
+        Assert.Equal(expected: 10, actual: list[0]);
+        Assert.Equal(expected: 20, actual: list[1]);
         Assert.True(list.Span.SequenceEqual([10, 20]));
 
         list.Clear();
-        Assert.Equal(0, list.Count);
+        Assert.Equal(expected: 0, actual: list.Count);
     }
 
     [Fact]
     public void ValueList_SpillsPastStackBuffer_PreservingItems()
     {
         using var list = new ValueList<int>(stackalloc int[2]);
-        for (var i = 0; i < 100; i++) list.Add(i);
-        Assert.Equal(100, list.Count);
-        for (var i = 0; i < 100; i++) Assert.Equal(i, list[i]);
+        for (int i = 0; i < 100; i++) list.Add(i);
+        Assert.Equal(expected: 100, actual: list.Count);
+        for (int i = 0; i < 100; i++) Assert.Equal(expected: i, actual: list[i]);
     }
 
     [Fact]
@@ -98,15 +98,15 @@ public class ZeroAllocPrimitivesTests
         using var list = new ValueList<string>();
         list.Add("a");
         list.Add("b");
-        Assert.Equal(2, list.Count);
-        Assert.Equal("a", list[0]);
-        Assert.Equal("b", list[1]);
+        Assert.Equal(expected: 2, actual: list.Count);
+        Assert.Equal(expected: "a", actual: list[0]);
+        Assert.Equal(expected: "b", actual: list[1]);
     }
 
     [Fact]
     public void ValueList_IndexOutOfRange_Throws()
     {
-        var thrown = false;
+        bool thrown = false;
         var list = new ValueList<int>(stackalloc int[2]);
         list.Add(1);
         try
@@ -138,17 +138,17 @@ public class ZeroAllocPrimitivesTests
     private static void StackSeededFrame()
     {
         using var list = new ValueList<int>(stackalloc int[8]);
-        for (var i = 0; i < 32; i++) list.Add(i); // spills to the (warm) pool
-        var sum = 0;
+        for (int i = 0; i < 32; i++) list.Add(i); // spills to the (warm) pool
+        int sum = 0;
         var span = list.Span;
-        for (var i = 0; i < span.Length; i++) sum += span[i];
+        for (int i = 0; i < span.Length; i++) sum += span[i];
         if (sum != 496) throw new InvalidOperationException("bad sum");
     }
 
     private static void PoolBackedFrame()
     {
         using var list = new ValueList<object>();
-        for (var i = 0; i < 20; i++) list.Add(BoxedSentinel);
+        for (int i = 0; i < 20; i++) list.Add(BoxedSentinel);
         if (list.Count != 20) throw new InvalidOperationException("bad count");
     }
 
@@ -158,7 +158,7 @@ public class ZeroAllocPrimitivesTests
     public void KeyedText_SkipsFormatting_WhileKeyUnchanged()
     {
         var kt = new KeyedText<int>();
-        var calls = 0;
+        int calls = 0;
 
         string Part()
         {
@@ -166,37 +166,43 @@ public class ZeroAllocPrimitivesTests
             return "part";
         }
 
-        var first = kt.Update(1, $"v={Part()}");
-        var second = kt.Update(1, $"v={Part()}"); // key unchanged: Part() must NOT run
-        Assert.Equal("v=part", first);
-        Assert.Same(first, second);
-        Assert.Equal(1, calls);
+        string first = kt.Update(key: 1, text: $"v={Part()}");
+        string second = kt.Update(
+            key: 1,
+            text: $"v={Part()}"
+        ); // key unchanged: Part() must NOT run
+        Assert.Equal(expected: "v=part", actual: first);
+        Assert.Same(expected: first, actual: second);
+        Assert.Equal(expected: 1, actual: calls);
 
-        var third = kt.Update(2, $"v={Part()} #{2}");
-        Assert.Equal("v=part #2", third);
-        Assert.Equal(2, calls);
+        string third = kt.Update(key: 2, text: $"v={Part()} #{2}");
+        Assert.Equal(expected: "v=part #2", actual: third);
+        Assert.Equal(expected: 2, actual: calls);
     }
 
     [Fact]
     public void KeyedText_FuncOverload_FormatsOncePerKey()
     {
         var kt = new KeyedText<StringComparison>();
-        var a = kt.Update(StringComparison.Ordinal, static k => k.ToString());
-        var b = kt.Update(StringComparison.Ordinal, static k => k.ToString());
-        Assert.Equal("Ordinal", a);
-        Assert.Same(a, b);
+        string a = kt.Update(key: StringComparison.Ordinal, format: static k => k.ToString());
+        string b = kt.Update(key: StringComparison.Ordinal, format: static k => k.ToString());
+        Assert.Equal(expected: "Ordinal", actual: a);
+        Assert.Same(expected: a, actual: b);
 
-        var c = kt.Update(StringComparison.OrdinalIgnoreCase, static k => k.ToString());
-        Assert.Equal("OrdinalIgnoreCase", c);
+        string c = kt.Update(
+            key: StringComparison.OrdinalIgnoreCase,
+            format: static k => k.ToString()
+        );
+        Assert.Equal(expected: "OrdinalIgnoreCase", actual: c);
     }
 
     [Fact]
     public void KeyedText_Invalidate_ForcesReformat()
     {
         var kt = new KeyedText<int>();
-        kt.Update(1, $"n={1}");
+        kt.Update(key: 1, text: $"n={1}");
         kt.Invalidate();
-        var calls = 0;
+        int calls = 0;
 
         string Probe()
         {
@@ -204,19 +210,19 @@ public class ZeroAllocPrimitivesTests
             return "x";
         }
 
-        kt.Update(1, $"n={Probe()}");
-        Assert.Equal(1, calls);
-        Assert.Equal("n=x", kt.Value);
+        kt.Update(key: 1, text: $"n={Probe()}");
+        Assert.Equal(expected: 1, actual: calls);
+        Assert.Equal(expected: "n=x", actual: kt.Value);
     }
 
     [Fact]
     public void KeyedText_SteadyState_AllocatesZero()
     {
-        var value = 42;
-        _keyed.Update(value, $"{value} fps · {value * 0.25f:F1} ms");
+        int value = 42;
+        _keyed.Update(key: value, text: $"{value} fps · {value * 0.25f:F1} ms");
         AllocGuard.AssertZeroAlloc(() =>
             {
-                _ = _keyed.Update(value, $"{value} fps · {value * 0.25f:F1} ms");
+                _ = _keyed.Update(key: value, text: $"{value} fps · {value * 0.25f:F1} ms");
             }
         );
     }
@@ -241,51 +247,54 @@ public class ZeroAllocPrimitivesTests
     public void Memo_RecomputesOnlyOnKeyChange()
     {
         var memo = default(Memo<int, string>);
-        var computes = 0;
+        int computes = 0;
 
-        var a = memo.Get(
-            1,
-            k =>
+        string a = memo.Get(
+            key: 1,
+            compute: k =>
             {
                 computes++;
                 return $"v{k}";
             }
         );
-        var b = memo.Get(
-            1,
-            k =>
+        string b = memo.Get(
+            key: 1,
+            compute: k =>
             {
                 computes++;
                 return $"v{k}";
             }
         );
-        Assert.Equal("v1", a);
-        Assert.Same(a, b);
-        Assert.Equal(1, computes);
+        Assert.Equal(expected: "v1", actual: a);
+        Assert.Same(expected: a, actual: b);
+        Assert.Equal(expected: 1, actual: computes);
 
-        var c = memo.Get(
-            2,
-            k =>
+        string c = memo.Get(
+            key: 2,
+            compute: k =>
             {
                 computes++;
                 return $"v{k}";
             }
         );
-        Assert.Equal("v2", c);
-        Assert.Equal(2, computes);
+        Assert.Equal(expected: "v2", actual: c);
+        Assert.Equal(expected: 2, actual: computes);
     }
 
     [Fact]
     public void Memo_StateOverload_PassesContextWithoutCapture()
     {
         var memo = default(Memo<float, string>);
-        var prefix = "w=";
-        var a = memo.Get(
-            3.5f,
-            prefix,
-            static (p, k) => p + k.ToString("F1", CultureInfo.InvariantCulture)
+        string prefix = "w=";
+        string a = memo.Get(
+            key: 3.5f,
+            state: prefix,
+            compute: static (p, k) => p + k.ToString(
+                format: "F1",
+                provider: CultureInfo.InvariantCulture
+            )
         );
-        Assert.Equal("w=3.5", a);
+        Assert.Equal(expected: "w=3.5", actual: a);
     }
 
     [Fact]

@@ -15,30 +15,15 @@ public readonly struct EntityHandle(uint id) : IEquatable<EntityHandle>
     public uint Id { get; } = id;
     public bool IsValid => Id != 0;
 
-    public bool Equals(EntityHandle other)
-    {
-        return Id == other.Id;
-    }
+    public bool Equals(EntityHandle other) => Id == other.Id;
 
-    public override bool Equals(object? obj)
-    {
-        return obj is EntityHandle h && Equals(h);
-    }
+    public override bool Equals(object? obj) => obj is EntityHandle h && Equals(h);
 
-    public override int GetHashCode()
-    {
-        return (int)Id;
-    }
+    public override int GetHashCode() => (int)Id;
 
-    public static bool operator ==(EntityHandle a, EntityHandle b)
-    {
-        return a.Id == b.Id;
-    }
+    public static bool operator ==(EntityHandle a, EntityHandle b) => a.Id == b.Id;
 
-    public static bool operator !=(EntityHandle a, EntityHandle b)
-    {
-        return a.Id != b.Id;
-    }
+    public static bool operator !=(EntityHandle a, EntityHandle b) => a.Id != b.Id;
 }
 
 /// <summary>
@@ -134,40 +119,37 @@ public static class World
     public static bool IsAvailable => Backend != null;
 
     /// <summary>The handle of the entity a component lives on (its own scene node).</summary>
-    public static EntityHandle Of(Component component)
-    {
-        return new EntityHandle(component.EntityId);
-    }
+    public static EntityHandle Of(Component component) => new(component.EntityId);
 
     // ── Spawn / destroy ───────────────────────────────────────────────────────
 
     public static EntityHandle Spawn(string prefabPath)
     {
         return Backend?.Spawn(
-            prefabPath,
-            Vec3.Zero,
-            Quat.Identity,
-            EntityHandle.None
+            prefabPath: prefabPath,
+            position: Vec3.Zero,
+            rotation: Quat.Identity,
+            parent: EntityHandle.None
         ) ?? EntityHandle.None;
     }
 
     public static EntityHandle Spawn(string prefabPath, Vec3 position)
     {
         return Backend?.Spawn(
-            prefabPath,
-            position,
-            Quat.Identity,
-            EntityHandle.None
+            prefabPath: prefabPath,
+            position: position,
+            rotation: Quat.Identity,
+            parent: EntityHandle.None
         ) ?? EntityHandle.None;
     }
 
     public static EntityHandle Spawn(string prefabPath, Vec3 position, Quat rotation)
     {
         return Backend?.Spawn(
-            prefabPath,
-            position,
-            rotation,
-            EntityHandle.None
+            prefabPath: prefabPath,
+            position: position,
+            rotation: rotation,
+            parent: EntityHandle.None
         ) ?? EntityHandle.None;
     }
 
@@ -175,134 +157,90 @@ public static class World
         EntityHandle parent)
     {
         return Backend?.Spawn(
-            prefabPath,
-            position,
-            rotation,
-            parent
+            prefabPath: prefabPath,
+            position: position,
+            rotation: rotation,
+            parent: parent
         ) ?? EntityHandle.None;
     }
 
-    public static EntityHandle SpawnEmpty(string name, Vec3 position = default)
-    {
-        return Backend?.SpawnEmpty(name, position, EntityHandle.None) ?? EntityHandle.None;
-    }
+    public static EntityHandle SpawnEmpty(string name, Vec3 position = default) =>
+        Backend?.SpawnEmpty(name: name, position: position, parent: EntityHandle.None) ??
+        EntityHandle.None;
 
-    public static EntityHandle SpawnEmpty(string name, Vec3 position, EntityHandle parent)
-    {
-        return Backend?.SpawnEmpty(name, position, parent) ?? EntityHandle.None;
-    }
+    public static EntityHandle SpawnEmpty(string name, Vec3 position, EntityHandle parent) =>
+        Backend?.SpawnEmpty(name: name, position: position, parent: parent) ?? EntityHandle.None;
 
-    public static void Destroy(EntityHandle entity)
-    {
-        Backend?.Destroy(entity);
-    }
+    public static void Destroy(EntityHandle entity) => Backend?.Destroy(entity);
 
-    public static bool IsAlive(EntityHandle entity)
-    {
-        return Backend?.IsAlive(entity) ?? false;
-    }
+    public static bool IsAlive(EntityHandle entity) => Backend?.IsAlive(entity) ?? false;
 
     // ── Transform / state ─────────────────────────────────────────────────────
 
-    public static Vec3 GetPosition(EntityHandle entity)
-    {
-        return Backend?.GetPosition(entity) ?? Vec3.Zero;
-    }
+    public static Vec3 GetPosition(EntityHandle entity) =>
+        Backend?.GetPosition(entity) ?? Vec3.Zero;
 
-    public static void SetPosition(EntityHandle entity, Vec3 position)
-    {
-        Backend?.SetPosition(entity, position);
-    }
+    public static void SetPosition(EntityHandle entity, Vec3 position) =>
+        Backend?.SetPosition(entity: entity, position: position);
 
-    public static Quat GetRotation(EntityHandle entity)
-    {
-        return Backend?.GetRotation(entity) ?? Quat.Identity;
-    }
+    public static Quat GetRotation(EntityHandle entity) =>
+        Backend?.GetRotation(entity) ?? Quat.Identity;
 
-    public static void SetRotation(EntityHandle entity, Quat rotation)
-    {
-        Backend?.SetRotation(entity, rotation);
-    }
+    public static void SetRotation(EntityHandle entity, Quat rotation) =>
+        Backend?.SetRotation(entity: entity, rotation: rotation);
 
-    public static Vec3 GetScale(EntityHandle entity)
-    {
-        return Backend?.GetScale(entity) ?? Vec3.One;
-    }
+    public static Vec3 GetScale(EntityHandle entity) => Backend?.GetScale(entity) ?? Vec3.One;
 
-    public static void SetScale(EntityHandle entity, Vec3 scale)
-    {
-        Backend?.SetScale(entity, scale);
-    }
+    public static void SetScale(EntityHandle entity, Vec3 scale) =>
+        Backend?.SetScale(entity: entity, scale: scale);
 
-    public static Vec3 GetWorldPosition(EntityHandle entity)
-    {
-        return Backend?.GetWorldPosition(entity) ?? Vec3.Zero;
-    }
+    public static Vec3 GetWorldPosition(EntityHandle entity) =>
+        Backend?.GetWorldPosition(entity) ?? Vec3.Zero;
 
-    public static bool GetVisible(EntityHandle entity)
-    {
-        return Backend?.GetVisible(entity) ?? false;
-    }
+    public static bool GetVisible(EntityHandle entity) => Backend?.GetVisible(entity) ?? false;
 
-    public static void SetVisible(EntityHandle entity, bool visible)
-    {
-        Backend?.SetVisible(entity, visible);
-    }
+    public static void SetVisible(EntityHandle entity, bool visible) =>
+        Backend?.SetVisible(entity: entity, visible: visible);
 
-    public static string? GetName(EntityHandle entity)
-    {
-        return Backend?.GetName(entity);
-    }
+    public static string? GetName(EntityHandle entity) => Backend?.GetName(entity);
 
-    public static string? GetTag(EntityHandle entity)
-    {
-        return Backend?.GetTag(entity);
-    }
+    public static string? GetTag(EntityHandle entity) => Backend?.GetTag(entity);
 
-    public static void SetTag(EntityHandle entity, string? tag)
-    {
-        Backend?.SetTag(entity, tag);
-    }
+    public static void SetTag(EntityHandle entity, string? tag) =>
+        Backend?.SetTag(entity: entity, tag: tag);
 
-    public static EntityHandle GetParent(EntityHandle entity)
-    {
-        return Backend?.GetParent(entity) ?? EntityHandle.None;
-    }
+    public static EntityHandle GetParent(EntityHandle entity) =>
+        Backend?.GetParent(entity) ?? EntityHandle.None;
 
-    public static void SetParent(EntityHandle child, EntityHandle parent)
-    {
-        Backend?.SetParent(child, parent);
-    }
+    public static void SetParent(EntityHandle child, EntityHandle parent) =>
+        Backend?.SetParent(child: child, parent: parent);
 
     // ── Find / queries ────────────────────────────────────────────────────────
 
-    public static EntityHandle Find(string name)
-    {
-        return Backend?.Find(name) ?? EntityHandle.None;
-    }
+    public static EntityHandle Find(string name) => Backend?.Find(name) ?? EntityHandle.None;
 
     public static int FindAllByTag(string tag, List<EntityHandle> results)
     {
-        if (Backend is { } b) return b.FindAllByTag(tag, results);
+        if (Backend is { } b) return b.FindAllByTag(tag: tag, results: results);
         results.Clear();
         return 0;
     }
 
-    public static int CountByTag(string tag)
-    {
-        return Backend?.CountByTag(tag) ?? 0;
-    }
+    public static int CountByTag(string tag) => Backend?.CountByTag(tag) ?? 0;
 
     public static int OverlapSphere(Vec3 center, float radius, List<EntityHandle> results,
         string? tag = null)
     {
         if (Backend is { } b)
+        {
             return b.OverlapSphere(
-                center,
-                radius,
-                results,
-                tag
+                center: center,
+                radius: radius,
+                results: results,
+                tag: tag
             );
+        }
+
         results.Clear();
         return 0;
     }
@@ -310,10 +248,10 @@ public static class World
     public static EntityHandle Nearest(Vec3 center, float maxRadius, string? tag = null)
     {
         return Backend?.Nearest(
-            center,
-            maxRadius,
-            tag,
-            EntityHandle.None
+            center: center,
+            maxRadius: maxRadius,
+            tag: tag,
+            ignore: EntityHandle.None
         ) ?? EntityHandle.None;
     }
 
@@ -321,35 +259,27 @@ public static class World
         EntityHandle ignore)
     {
         return Backend?.Nearest(
-            center,
-            maxRadius,
-            tag,
-            ignore
+            center: center,
+            maxRadius: maxRadius,
+            tag: tag,
+            ignore: ignore
         ) ?? EntityHandle.None;
     }
 
     // ── Components ────────────────────────────────────────────────────────────
 
-    public static T? GetComponent<T>(EntityHandle entity) where T : Component
-    {
-        return Backend?.GetComponent(entity, typeof(T)) as T;
-    }
+    public static T? GetComponent<T>(EntityHandle entity) where T : Component =>
+        Backend?.GetComponent(entity: entity, type: typeof(T)) as T;
 
     /// <summary>Attach a new script component to a live entity (OnCreate/OnEnable run immediately).</summary>
-    public static T? AddComponent<T>(EntityHandle entity) where T : Component
-    {
-        return Backend?.AddComponent(entity, typeof(T)) as T;
-    }
+    public static T? AddComponent<T>(EntityHandle entity) where T : Component =>
+        Backend?.AddComponent(entity: entity, type: typeof(T)) as T;
 
     /// <summary>First component of a type anywhere in the scene, in tree order (scene-singleton lookup).</summary>
-    public static T? FindComponent<T>() where T : Component
-    {
-        return Backend?.FindComponent(typeof(T)) as T;
-    }
+    public static T? FindComponent<T>() where T : Component =>
+        Backend?.FindComponent(typeof(T)) as T;
 
     /// <summary>The flecs entity mirroring a scene entity — <see cref="Entity.Null" /> outside play.</summary>
-    public static Entity EcsEntity(EntityHandle entity)
-    {
-        return Backend?.EcsEntity(entity) ?? Entity.Null;
-    }
+    public static Entity EcsEntity(EntityHandle entity) =>
+        Backend?.EcsEntity(entity) ?? Entity.Null;
 }

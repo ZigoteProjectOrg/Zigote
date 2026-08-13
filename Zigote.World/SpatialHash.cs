@@ -5,15 +5,17 @@ namespace Zigote.World;
 /// <summary>
 ///     Uniform-grid spatial index over integer entity ids. The play-mode backend rebuilds it lazily
 ///     (once per tick, on the first spatial query) from the live entities' world positions, so a tick
-///     that never queries pays nothing. Cell lists are retained across <see cref="Clear" /> — steady-state
+///     that never queries pays nothing. Cell lists are retained across <see cref="Clear" /> —
+///     steady-state
 ///     rebuild + query allocate nothing once the grid has seen the world's extent.
 /// </summary>
 public sealed class SpatialHash(float cellSize = 4f)
 {
+    private readonly float _cellSize = cellSize > 0f ? cellSize : 4f;
+
     // Cell entries carry the position alongside the id so Query stays inside the cell list —
     // no dictionary lookup per candidate. _positions only backs TryGetPosition.
     private readonly Dictionary<long, List<(int Id, Vec3 Pos)>> _cells = new();
-    private readonly float _cellSize = cellSize > 0f ? cellSize : 4f;
     private readonly Dictionary<int, Vec3> _positions = new();
 
     public int Count => _positions.Count;
@@ -27,15 +29,13 @@ public sealed class SpatialHash(float cellSize = 4f)
     public void Insert(int id, Vec3 position)
     {
         _positions[id] = position;
-        var key = KeyOf(CellOf(position.X), CellOf(position.Y), CellOf(position.Z));
-        if (!_cells.TryGetValue(key, out var list)) _cells[key] = list = [];
+        long key = KeyOf(x: CellOf(position.X), y: CellOf(position.Y), z: CellOf(position.Z));
+        if (!_cells.TryGetValue(key: key, value: out var list)) _cells[key] = list = [];
         list.Add((id, position));
     }
 
-    public bool TryGetPosition(int id, out Vec3 position)
-    {
-        return _positions.TryGetValue(id, out position);
-    }
+    public bool TryGetPosition(int id, out Vec3 position) =>
+        _positions.TryGetValue(key: id, value: out position);
 
     /// <summary>
     ///     All ids within <paramref name="radius" /> of <paramref name="center" /> (inclusive), appended
@@ -46,19 +46,19 @@ public sealed class SpatialHash(float cellSize = 4f)
         results.Clear();
         if (radius < 0f || _positions.Count == 0) return 0;
 
-        var r2 = radius * radius;
+        float r2 = radius * radius;
         int minX = CellOf(center.X - radius), maxX = CellOf(center.X + radius);
         int minY = CellOf(center.Y - radius), maxY = CellOf(center.Y + radius);
         int minZ = CellOf(center.Z - radius), maxZ = CellOf(center.Z + radius);
 
-        for (var cx = minX; cx <= maxX; cx++)
-        for (var cy = minY; cy <= maxY; cy++)
-        for (var cz = minZ; cz <= maxZ; cz++)
+        for (int cx = minX; cx <= maxX; cx++)
+        for (int cy = minY; cy <= maxY; cy++)
+        for (int cz = minZ; cz <= maxZ; cz++)
         {
-            if (!_cells.TryGetValue(KeyOf(cx, cy, cz), out var list)) continue;
-            for (var i = 0; i < list.Count; i++)
+            if (!_cells.TryGetValue(key: KeyOf(x: cx, y: cy, z: cz), value: out var list)) continue;
+            for (int i = 0; i < list.Count; i++)
             {
-                var (id, pos) = list[i];
+                (int id, var pos) = list[i];
                 var d = pos - center;
                 if (d.LengthSq() <= r2) results.Add(id);
             }
@@ -67,10 +67,7 @@ public sealed class SpatialHash(float cellSize = 4f)
         return results.Count;
     }
 
-    private int CellOf(float v)
-    {
-        return (int)MathF.Floor(v / _cellSize);
-    }
+    private int CellOf(float v) => (int)MathF.Floor(v / _cellSize);
 
     // 21 signed bits per axis (±1,048,575 cells ≈ ±4,194 km at the 4 m default) packed into one long key.
     private static long KeyOf(int x, int y, int z)

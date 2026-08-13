@@ -9,7 +9,10 @@ public enum PaintDiffResult
     /// <summary>The list is command-for-command identical to the snapshot.</summary>
     Identical,
 
-    /// <summary>The lists differ and every changed command's screen extent is covered by the returned rects.</summary>
+    /// <summary>
+    ///     The lists differ and every changed command's screen extent is covered by the returned
+    ///     rects.
+    /// </summary>
     Bounded,
 
     /// <summary>
@@ -39,27 +42,32 @@ public enum PaintDiffResult
 /// </summary>
 public sealed class PaintSnapshot
 {
-    /// <summary>Maximum changed-bounds rects reported by <see cref="Diff" />; overflow merges into the last slot.</summary>
+    /// <summary>
+    ///     Maximum changed-bounds rects reported by <see cref="Diff" />; overflow merges into the
+    ///     last slot.
+    /// </summary>
     public const int MaxChangedRects = 8;
+
+    private readonly List<(int Index, byte[] Blob)> _pixelBlobs = [];
+    private readonly List<(int Index, byte[] Blob)> _textBlobs = [];
 
     private ZgPaintCommand[] _cmds = [];
     private int _count;
-    private readonly List<(int Index, byte[] Blob)> _textBlobs = [];
-    private readonly List<(int Index, byte[] Blob)> _pixelBlobs = [];
 
     /// <summary>Record <paramref name="list" /> as the reference for the next <see cref="Diff" />.</summary>
     public void Capture(PaintList list)
     {
         var src = list.CommandSpan;
         if (_cmds.Length < src.Length)
-            _cmds = new ZgPaintCommand[Math.Max(src.Length, _cmds.Length * 2)];
+            _cmds = new ZgPaintCommand[Math.Max(val1: src.Length, val2: _cmds.Length * 2)];
         src.CopyTo(_cmds);
         _count = src.Length;
 
         _textBlobs.Clear();
-        foreach (var (index, blob) in list.TextBlobs) _textBlobs.Add((index, blob));
+        foreach ((int index, byte[] blob) in list.TextBlobs) _textBlobs.Add((index, blob));
         _pixelBlobs.Clear();
-        foreach (var (index, blob, _) in list.PixelBlobs) _pixelBlobs.Add((index, blob));
+        foreach ((int index, byte[] blob, bool _) in list.PixelBlobs)
+            _pixelBlobs.Add((index, blob));
     }
 
     /// <summary>
@@ -72,38 +80,39 @@ public sealed class PaintSnapshot
     {
         changedCount = 0;
         var cur = current.CommandSpan;
-        var prev = _cmds.AsSpan(0, _count);
+        var prev = _cmds.AsSpan(start: 0, length: _count);
 
         // Longest common prefix, comparing blob contents alongside the structs.
-        var min = Math.Min(prev.Length, cur.Length);
-        var prefix = 0;
+        int min = Math.Min(val1: prev.Length, val2: cur.Length);
+        int prefix = 0;
         while (prefix < min && CommandEquals(
-                   prev,
-                   prefix,
-                   cur,
-                   prefix,
-                   current
+                   prev: prev,
+                   prevIdx: prefix,
+                   cur: cur,
+                   curIdx: prefix,
+                   current: current
                )) prefix++;
         if (prefix == prev.Length && prefix == cur.Length) return PaintDiffResult.Identical;
 
         // Longest common suffix that does not overlap the prefix.
-        var maxSuffix = min - prefix;
-        var suffix = 0;
+        int maxSuffix = min - prefix;
+        int suffix = 0;
         while (suffix < maxSuffix &&
                CommandEquals(
-                   prev,
-                   prev.Length - 1 - suffix,
-                   cur,
-                   cur.Length - 1 - suffix,
-                   current
+                   prev: prev,
+                   prevIdx: prev.Length - 1 - suffix,
+                   cur: cur,
+                   curIdx: cur.Length - 1 - suffix,
+                   current: current
                ))
             suffix++;
 
         // Scope state entering the changed window is shared by construction (the prefix is identical).
         // A window under an active transform or render-texture scope has no reliable screen bounds.
-        var transformDepth = 0;
-        var rtDepth = 0;
-        for (var i = 0; i < prefix; i++)
+        int transformDepth = 0;
+        int rtDepth = 0;
+        for (int i = 0; i < prefix; i++)
+        {
             switch ((PaintCommandKind)prev[i].Kind)
             {
                 case PaintCommandKind.TransformPush: transformDepth++; break;
@@ -111,26 +120,27 @@ public sealed class PaintSnapshot
                 case PaintCommandKind.RenderTextureBegin: rtDepth++; break;
                 case PaintCommandKind.RenderTextureEnd: rtDepth--; break;
             }
+        }
 
         if (transformDepth > 0 || rtDepth > 0) return PaintDiffResult.Unbounded;
 
         // Every command inside either window contributes bounds; a state/structure command in the
         // window means op indices shifted across scopes — repaint everything rather than guess.
         return AccumulateWindow(
-                   prev,
-                   prefix,
-                   prev.Length - suffix,
-                   this,
-                   changed,
-                   ref changedCount
+                   cmds: prev,
+                   start: prefix,
+                   end: prev.Length - suffix,
+                   blobSource: this,
+                   changed: changed,
+                   changedCount: ref changedCount
                ) &&
                AccumulateWindow(
-                   cur,
-                   prefix,
-                   cur.Length - suffix,
-                   current,
-                   changed,
-                   ref changedCount
+                   cmds: cur,
+                   start: prefix,
+                   end: cur.Length - suffix,
+                   blobSource: current,
+                   changed: changed,
+                   changedCount: ref changedCount
                )
             ? PaintDiffResult.Bounded
             : PaintDiffResult.Unbounded;
@@ -140,16 +150,16 @@ public sealed class PaintSnapshot
         ReadOnlySpan<ZgPaintCommand> cmds, int start, int end,
         object blobSource, Span<Rect> changed, ref int changedCount)
     {
-        for (var i = start; i < end; i++)
+        for (int i = start; i < end; i++)
         {
             if (!TryCommandBounds(
-                    in cmds[i],
-                    blobSource,
-                    i,
-                    out var bounds
+                    cmd: in cmds[i],
+                    blobSource: blobSource,
+                    index: i,
+                    bounds: out var bounds
                 )) return false;
             if (bounds.Width <= 0f || bounds.Height <= 0f) continue;
-            AddRect(changed, ref changedCount, bounds);
+            AddRect(changed: changed, count: ref changedCount, r: bounds);
         }
 
         return true;
@@ -157,10 +167,10 @@ public sealed class PaintSnapshot
 
     private static void AddRect(Span<Rect> changed, ref int count, Rect r)
     {
-        for (var i = 0; i < count; i++)
+        for (int i = 0; i < count; i++)
         {
             if (!changed[i].Overlaps(r)) continue;
-            changed[i] = Rect.Union(changed[i], r);
+            changed[i] = Rect.Union(a: changed[i], b: r);
             return;
         }
 
@@ -170,7 +180,7 @@ public sealed class PaintSnapshot
             return;
         }
 
-        changed[count - 1] = Rect.Union(changed[count - 1], r);
+        changed[count - 1] = Rect.Union(a: changed[count - 1], b: r);
     }
 
     /// <summary>
@@ -189,10 +199,10 @@ public sealed class PaintSnapshot
             case PaintCommandKind.LiquidGlass:
             case PaintCommandKind.ShaderEffect:
                 bounds = new Rect(
-                        cmd.RectX,
-                        cmd.RectY,
-                        cmd.RectW,
-                        cmd.RectH
+                        x: cmd.RectX,
+                        y: cmd.RectY,
+                        width: cmd.RectW,
+                        height: cmd.RectH
                     )
                     .Inflate(cmd.BorderWidth + 2f);
                 return true;
@@ -200,10 +210,10 @@ public sealed class PaintSnapshot
             case PaintCommandKind.Shadow:
                 // BorderWidth carries the blur radius, BaselineX the (directional) spread.
                 bounds = new Rect(
-                        cmd.RectX,
-                        cmd.RectY,
-                        cmd.RectW,
-                        cmd.RectH
+                        x: cmd.RectX,
+                        y: cmd.RectY,
+                        width: cmd.RectW,
+                        height: cmd.RectH
                     )
                     .Inflate(cmd.BorderWidth + MathF.Abs(cmd.BaselineX) + 8f);
                 return true;
@@ -212,13 +222,13 @@ public sealed class PaintSnapshot
             {
                 // Text commands carry only the baseline; over-estimate from byte length. UTF-8
                 // bytes ≥ glyphs and FontSize ≥ any real advance, so the box only ever over-covers.
-                var w = cmd.TextLen * (cmd.FontSize + MathF.Abs(cmd.LetterSpacing)) + 8f;
-                var h = cmd.FontSize * 3f;
+                float w = (cmd.TextLen * (cmd.FontSize + MathF.Abs(cmd.LetterSpacing))) + 8f;
+                float h = cmd.FontSize * 3f;
                 bounds = new Rect(
-                    cmd.BaselineX - 4f,
-                    cmd.BaselineY - cmd.FontSize * 2f,
-                    w,
-                    h
+                    x: cmd.BaselineX - 4f,
+                    y: cmd.BaselineY - (cmd.FontSize * 2f),
+                    width: w,
+                    height: h
                 );
                 return true;
             }
@@ -226,54 +236,54 @@ public sealed class PaintSnapshot
             case PaintCommandKind.Bezier:
             {
                 // Control points are packed into the rect/radius/baseline slots; width in FontSize.
-                var minX = MathF.Min(
-                    MathF.Min(cmd.RectX, cmd.RectW),
-                    MathF.Min(cmd.Radius, cmd.BaselineX)
+                float minX = MathF.Min(
+                    x: MathF.Min(x: cmd.RectX, y: cmd.RectW),
+                    y: MathF.Min(x: cmd.Radius, y: cmd.BaselineX)
                 );
-                var maxX = MathF.Max(
-                    MathF.Max(cmd.RectX, cmd.RectW),
-                    MathF.Max(cmd.Radius, cmd.BaselineX)
+                float maxX = MathF.Max(
+                    x: MathF.Max(x: cmd.RectX, y: cmd.RectW),
+                    y: MathF.Max(x: cmd.Radius, y: cmd.BaselineX)
                 );
-                var minY = MathF.Min(
-                    MathF.Min(cmd.RectY, cmd.RectH),
-                    MathF.Min(cmd.BorderWidth, cmd.BaselineY)
+                float minY = MathF.Min(
+                    x: MathF.Min(x: cmd.RectY, y: cmd.RectH),
+                    y: MathF.Min(x: cmd.BorderWidth, y: cmd.BaselineY)
                 );
-                var maxY = MathF.Max(
-                    MathF.Max(cmd.RectY, cmd.RectH),
-                    MathF.Max(cmd.BorderWidth, cmd.BaselineY)
+                float maxY = MathF.Max(
+                    x: MathF.Max(x: cmd.RectY, y: cmd.RectH),
+                    y: MathF.Max(x: cmd.BorderWidth, y: cmd.BaselineY)
                 );
                 bounds = new Rect(
-                    minX,
-                    minY,
-                    maxX - minX,
-                    maxY - minY
+                    x: minX,
+                    y: minY,
+                    width: maxX - minX,
+                    height: maxY - minY
                 ).Inflate(cmd.FontSize + 2f);
                 return true;
             }
 
             case PaintCommandKind.Polygon:
             {
-                var blob = FindPixelBlob(blobSource, index);
+                byte[]? blob = FindPixelBlob(source: blobSource, index: index);
                 if (blob is null || blob.Length < 16) return false;
                 float minX = float.MaxValue,
                     minY = float.MaxValue,
                     maxX = float.MinValue,
                     maxY = float.MinValue;
-                for (var o = 0; o + 8 <= blob.Length; o += 8)
+                for (int o = 0; o + 8 <= blob.Length; o += 8)
                 {
-                    var x = BitConverter.ToSingle(blob, o);
-                    var y = BitConverter.ToSingle(blob, o + 4);
-                    minX = MathF.Min(minX, x);
-                    maxX = MathF.Max(maxX, x);
-                    minY = MathF.Min(minY, y);
-                    maxY = MathF.Max(maxY, y);
+                    float x = BitConverter.ToSingle(value: blob, startIndex: o);
+                    float y = BitConverter.ToSingle(value: blob, startIndex: o + 4);
+                    minX = MathF.Min(x: minX, y: x);
+                    maxX = MathF.Max(x: maxX, y: x);
+                    minY = MathF.Min(x: minY, y: y);
+                    maxY = MathF.Max(x: maxY, y: y);
                 }
 
                 bounds = new Rect(
-                    minX,
-                    minY,
-                    maxX - minX,
-                    maxY - minY
+                    x: minX,
+                    y: minY,
+                    width: maxX - minX,
+                    height: maxY - minY
                 ).Inflate(2f);
                 return true;
             }
@@ -299,20 +309,30 @@ public sealed class PaintSnapshot
         ref readonly var a = ref prev[prevIdx];
         ref readonly var b = ref cur[curIdx];
 
-        var ab = MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(in a, 1));
-        var bb = MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(in b, 1));
+        var ab = MemoryMarshal.AsBytes(
+            MemoryMarshal.CreateReadOnlySpan(reference: in a, length: 1)
+        );
+        var bb = MemoryMarshal.AsBytes(
+            MemoryMarshal.CreateReadOnlySpan(reference: in b, length: 1)
+        );
         // Skip bytes [8..24): TextPtr/PixelsPtr are process addresses, not content — re-encoded
         // blobs get fresh arrays for identical text, and pointers are compared by content below.
         if (!ab[..8].SequenceEqual(bb[..8]) || !ab[24..].SequenceEqual(bb[24..])) return false;
 
         if (a.TextLen > 0 &&
-            !BlobEquals(FindTextBlob(this, prevIdx), FindTextBlob(current, curIdx)))
+            !BlobEquals(
+                a: FindTextBlob(source: this, index: prevIdx),
+                b: FindTextBlob(source: current, index: curIdx)
+            ))
             return false;
 
         // Pixel payloads with a cache key are identified by it (already compared in the struct
         // bytes); keyless payloads (polygon points, raw uploads) compare by content.
         if (a.PixelsLen > 0 && a.HasCacheKey == 0 &&
-            !BlobEquals(FindPixelBlob(this, prevIdx), FindPixelBlob(current, curIdx)))
+            !BlobEquals(
+                a: FindPixelBlob(source: this, index: prevIdx),
+                b: FindPixelBlob(source: current, index: curIdx)
+            ))
             return false;
 
         return true;
@@ -320,7 +340,7 @@ public sealed class PaintSnapshot
 
     private static bool BlobEquals(byte[]? a, byte[]? b)
     {
-        if (ReferenceEquals(a, b)) return true;
+        if (ReferenceEquals(objA: a, objB: b)) return true;
         if (a is null || b is null) return false;
         return a.AsSpan().SequenceEqual(b);
     }
@@ -328,7 +348,7 @@ public sealed class PaintSnapshot
     private static byte[]? FindTextBlob(object source, int index)
     {
         return source switch {
-            PaintSnapshot s => Lookup(s._textBlobs, index),
+            PaintSnapshot s => Lookup(blobs: s._textBlobs, index: index),
             PaintList l => l.FindTextBlob(index),
             _ => null,
         };
@@ -337,7 +357,7 @@ public sealed class PaintSnapshot
     private static byte[]? FindPixelBlob(object source, int index)
     {
         return source switch {
-            PaintSnapshot s => Lookup(s._pixelBlobs, index),
+            PaintSnapshot s => Lookup(blobs: s._pixelBlobs, index: index),
             PaintList l => l.FindPixelBlob(index),
             _ => null,
         };
@@ -350,8 +370,8 @@ public sealed class PaintSnapshot
         int lo = 0, hi = blobs.Count - 1;
         while (lo <= hi)
         {
-            var mid = (lo + hi) >> 1;
-            var midIndex = blobs[mid].Index;
+            int mid = (lo + hi) >> 1;
+            int midIndex = blobs[mid].Index;
             if (midIndex == index) return blobs[mid].Blob;
             if (midIndex < index) lo = mid + 1;
             else hi = mid - 1;

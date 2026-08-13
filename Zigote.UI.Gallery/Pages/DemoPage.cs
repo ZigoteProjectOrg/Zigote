@@ -17,10 +17,7 @@ internal sealed class DemoPage : ComposedWidget
 {
     private readonly DemoInfo _demo;
 
-    public DemoPage(DemoInfo demo)
-    {
-        _demo = demo;
-    }
+    public DemoPage(DemoInfo demo) => _demo = demo;
 
     protected override Widget Build(BuildContext context)
     {
@@ -28,25 +25,25 @@ internal sealed class DemoPage : ComposedWidget
 
         // The soft keyboard hides the bottom strip of the window; pad the scroll content by it so
         // a focused field can still be scrolled clear of it. Zero everywhere without an IME.
-        var keyboard = MediaQuery.Of(context).ViewInsets.Bottom;
+        float keyboard = MediaQuery.Of(context).ViewInsets.Bottom;
 
         return new Scaffold(
-            new AppBar(
-                new Text(_demo.Title(l)),
+            appBar: new AppBar(
+                title: new Text(_demo.Title(l)),
                 // The AppBar leading slot is icon-sized (48 px) and physically on the left in
                 // either direction, so a left-pointing chevron is always correct here.
-                new BackButton { Label = "‹" },
+                leading: new BackButton { Label = "‹" },
                 centerTitle: true
             ),
-            new SingleChildScrollView {
+            body: new SingleChildScrollView {
                 Child = new Padding(
-                    EdgeInsets.FromLtrb(
-                        16,
-                        16,
-                        16,
-                        16 + keyboard
+                    padding: EdgeInsets.FromLtrb(
+                        left: 16,
+                        top: 16,
+                        right: 16,
+                        bottom: 16 + keyboard
                     ),
-                    _demo.BuildPage()
+                    child: _demo.BuildPage()
                 ),
             }
         );

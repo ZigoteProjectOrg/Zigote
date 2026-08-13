@@ -16,18 +16,21 @@ public sealed class EditorSettingsTests
 
         Assert.True(settings.ReopenLastProject.Value);
         Assert.True(settings.NativeMenuBar.Value);
-        Assert.Equal(EditorThemeMode.System, settings.ThemeMode.Value);
+        Assert.Equal(expected: EditorThemeMode.System, actual: settings.ThemeMode.Value);
         Assert.Null(settings.UiFontPath.Value);
-        Assert.Equal(13f, settings.UiFontSize.Value);
+        Assert.Equal(expected: 13f, actual: settings.UiFontSize.Value);
         Assert.Null(settings.EditorFontPath.Value);
-        Assert.Equal(13f, settings.EditorFontSize.Value);
-        Assert.Equal(0f, settings.ConsoleFontSize.Value);
+        Assert.Equal(expected: 13f, actual: settings.EditorFontSize.Value);
+        Assert.Equal(expected: 0f, actual: settings.ConsoleFontSize.Value);
         Assert.False(settings.ConsoleClearOnPlay.Value);
         Assert.True(settings.VSync.Value);
         Assert.False(settings.ReducedEditorGraphics.Value);
 
-        Assert.All(settings.Preferences, p => Assert.StartsWith("editor.", p.Key));
-        Assert.All(settings.Preferences, p => Assert.False(p.IsSet));
+        Assert.All(
+            collection: settings.Preferences,
+            action: p => Assert.StartsWith(expectedStartString: "editor.", actualString: p.Key)
+        );
+        Assert.All(collection: settings.Preferences, action: p => Assert.False(p.IsSet));
     }
 
     [Fact]
@@ -45,9 +48,15 @@ public sealed class EditorSettingsTests
 
         settings.Reset();
 
-        Assert.Equal(EditorThemeMode.System, settings.ThemeMode.Value);
-        Assert.Equal(13f, settings.UiFontSize.Value);
-        Assert.Equal([Path.GetFullPath("/tmp/demo.zigoteproj")], history.Recent.Value);
-        Assert.Equal(Path.GetFullPath("/tmp/demo.zigoteproj"), history.Last.Value);
+        Assert.Equal(expected: EditorThemeMode.System, actual: settings.ThemeMode.Value);
+        Assert.Equal(expected: 13f, actual: settings.UiFontSize.Value);
+        Assert.Equal(
+            expectedSpan: [Path.GetFullPath("/tmp/demo.zigoteproj")],
+            actualArray: history.Recent.Value
+        );
+        Assert.Equal(
+            expected: Path.GetFullPath("/tmp/demo.zigoteproj"),
+            actual: history.Last.Value
+        );
     }
 }

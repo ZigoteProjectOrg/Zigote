@@ -84,10 +84,7 @@ public abstract class Route
     internal Widget? ContentOrNull { get; private set; }
 
     /// <summary>Build (once) and return this route's content widget.</summary>
-    internal Widget EnsureContent(BuildContext context)
-    {
-        return ContentOrNull ??= BuildContent(context);
-    }
+    internal Widget EnsureContent(BuildContext context) => ContentOrNull ??= BuildContent(context);
 
     /// <summary>Compose the content widget for this route. Called once; the result is retained.</summary>
     protected abstract Widget BuildContent(BuildContext context);
@@ -98,19 +95,13 @@ public abstract class Route
     ///     Layout offset applied to the content at eased progress <paramref name="t" /> (1 =
     ///     settled).
     /// </summary>
-    public virtual Offset TransitionOffset(Size size, float t)
-    {
-        return Offset.Zero;
-    }
+    public virtual Offset TransitionOffset(Size size, float t) => Offset.Zero;
 
     /// <summary>
     ///     Paint opacity applied to the content at eased progress <paramref name="t" /> (1 =
     ///     settled).
     /// </summary>
-    public virtual float TransitionOpacity(float t)
-    {
-        return 1f;
-    }
+    public virtual float TransitionOpacity(float t) => 1f;
 
     // ── Transition driving ────────────────────────────────────────────────────
 
@@ -190,13 +181,8 @@ public abstract class Route<T> : Route
     public Task<T?> Popped => _completer.Task;
 
     /// <summary>Complete this route's result early (without animating it out).</summary>
-    public void Complete(T? result = default)
-    {
-        _completer.TrySetResult(result);
-    }
+    public void Complete(T? result = default) => _completer.TrySetResult(result);
 
-    internal override void CompleteWith(object? result)
-    {
+    internal override void CompleteWith(object? result) =>
         _completer.TrySetResult(result is T typed ? typed : default);
-    }
 }

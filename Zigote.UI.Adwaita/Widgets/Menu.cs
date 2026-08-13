@@ -63,7 +63,7 @@ public sealed class AdwMenuItem
     /// <summary>One option of a radio group.</summary>
     public static AdwMenuItem Radio(string label, bool selected, Action? onActivated = null)
     {
-        return new AdwMenuItem(label, onActivated) {
+        return new AdwMenuItem(label: label, onActivated: onActivated) {
             Role = AdwMenuItemRole.Radio,
             Checked = selected,
         };
@@ -79,15 +79,12 @@ public sealed class AdwMenuButton : ComposedWidget
 {
     private string _iconName;
 
-    public AdwMenuButton(string iconName = MaterialIcons.Menu)
-    {
-        _iconName = iconName;
-    }
+    public AdwMenuButton(string iconName = MaterialIcons.Menu) => _iconName = iconName;
 
     public string IconName
     {
         get => _iconName;
-        set => this.Set(ref _iconName, value);
+        set => this.Set(field: ref _iconName, value: value);
     }
 
     // No rebuild on either: both are read when the button opens the popover, never during Build.
@@ -114,14 +111,14 @@ public sealed class AdwMenuButton : ComposedWidget
     {
         var app = App.Active;
         if (app is null) return;
-        var any = false;
+        bool any = false;
         foreach (var s in Sections) any |= s.Count > 0;
         if (!any) return;
         new AdwMenuPopover(
-            app,
-            Sections,
-            anchor,
-            MenuWidth
+            app: app,
+            sections: Sections,
+            anchor: anchor,
+            minWidth: MenuWidth
         ).Show();
     }
 }
@@ -139,7 +136,7 @@ internal sealed class AdwMenuPopover : AdwPopoverBase
     private const float AccelGap = 24f; // min gap between label and accel
     private const float AccelFs = 12.5f;
     private const float SepMargin = 6f;
-    private const float SepH = SepMargin * 2f + 1f;
+    private const float SepH = (SepMargin * 2f) + 1f;
     private const float HeaderH = 26f; // group caption row
     private const float HeaderFs = 12f;
     private const float IndicatorSize = 16f;
@@ -148,14 +145,14 @@ internal sealed class AdwMenuPopover : AdwPopoverBase
 
     // Flattened sections: a null entry is a separator hairline.
     private readonly List<AdwMenuItem?> _entries = [];
+    private readonly bool _hasIndicators;
     private readonly float _minWidth;
 
     private float[] _entryH = [];
     private float[] _entryY = [];
-    private bool _hasIndicators;
 
     public AdwMenuPopover(App app, List<List<AdwMenuItem>> sections, Rect anchor, float minWidth)
-        : base(app, anchor)
+        : base(app: app, anchor: anchor)
     {
         _minWidth = minWidth;
         foreach (var section in sections)
@@ -168,25 +165,27 @@ internal sealed class AdwMenuPopover : AdwPopoverBase
         // GNOME indents every label in a menu that has any indicator, so radio dots and plain
         // commands share one text column instead of zig-zagging.
         foreach (var item in _entries)
+        {
             if (item?.Role is AdwMenuItemRole.Radio or AdwMenuItemRole.Check)
                 _hasIndicators = true;
+        }
     }
 
     public override Size Measure(Constraints c)
     {
         Theme = ThemeProvider.Of(BuildContext.Current);
-        Screen = new Size(c.MaxWidth, c.MaxHeight);
+        Screen = new Size(width: c.MaxWidth, height: c.MaxHeight);
         RowH = MediaQuery.Of(BuildContext.Current).SizeClass == WindowSizeClass.Compact
-            ? MathF.Max(AdwMetrics.MenuRowHeight, ControlMetrics.MinTouchTarget)
+            ? MathF.Max(x: AdwMetrics.MenuRowHeight, y: ControlMetrics.MinTouchTarget)
             : AdwMetrics.MenuRowHeight;
 
-        var fs = Theme.FontSizeBody;
-        var indent = _hasIndicators ? IndentW : 0f;
-        var widest = 0f;
+        float fs = Theme.FontSizeBody;
+        float indent = _hasIndicators ? IndentW : 0f;
+        float widest = 0f;
         if (_entryY.Length != _entries.Count) _entryY = new float[_entries.Count];
         if (_entryH.Length != _entries.Count) _entryH = new float[_entries.Count];
-        var y = Pad;
-        for (var i = 0; i < _entries.Count; i++)
+        float y = Pad;
+        for (int i = 0; i < _entries.Count; i++)
         {
             _entryY[i] = y;
             var item = _entries[i];
@@ -197,20 +196,23 @@ internal sealed class AdwMenuPopover : AdwPopoverBase
                 continue;
             }
 
-            var header = item.Role == AdwMenuItemRole.Header;
+            bool header = item.Role == AdwMenuItemRole.Header;
             _entryH[i] = header ? HeaderH : RowH;
             y += _entryH[i];
-            var w = indent + TextMeasure.Width(item.Label, header ? HeaderFs : fs);
+            float w = indent + TextMeasure.Width(
+                text: item.Label,
+                fontSize: header ? HeaderFs : fs
+            );
             if (item.Accel is { Length: > 0 } accel)
-                w += AccelGap + TextMeasure.Width(accel, AccelFs);
-            widest = MathF.Max(widest, w);
+                w += AccelGap + TextMeasure.Width(text: accel, fontSize: AccelFs);
+            widest = MathF.Max(x: widest, y: w);
         }
 
-        PopupW = MathF.Max(_minWidth, widest + TextPad * 2f);
-        PopupW = MathF.Min(PopupW, MathF.Max(120f, Screen.Width - Spacing.Lg));
+        PopupW = MathF.Max(x: _minWidth, y: widest + (TextPad * 2f));
+        PopupW = MathF.Min(x: PopupW, y: MathF.Max(x: 120f, y: Screen.Width - Spacing.Lg));
         // ponytail: no scrolling — height clamps to the screen; add AdwPopover's scroll
         // machinery if a menu ever outgrows the window.
-        PopupH = MathF.Min(y + Pad, Screen.Height - 16f);
+        PopupH = MathF.Min(x: y + Pad, y: Screen.Height - 16f);
 
         return Screen;
     }
@@ -218,38 +220,38 @@ internal sealed class AdwMenuPopover : AdwPopoverBase
     protected override void PaintRows(PaintList paint, Rect mr)
     {
         var p = AdwPalette.For(Theme);
-        var fs = Theme.FontSizeBody;
-        var indent = _hasIndicators ? IndentW : 0f;
+        float fs = Theme.FontSizeBody;
+        float indent = _hasIndicators ? IndentW : 0f;
         paint.AddClipStart(mr);
-        for (var i = 0; i < _entries.Count; i++)
+        for (int i = 0; i < _entries.Count; i++)
         {
             var item = _entries[i];
-            var rowY = mr.Y + _entryY[i];
+            float rowY = mr.Y + _entryY[i];
             if (item is null)
             {
                 paint.AddRect(
-                    new Rect(
-                        mr.X,
-                        rowY + SepMargin,
-                        mr.Width,
-                        1f
+                    bounds: new Rect(
+                        x: mr.X,
+                        y: rowY + SepMargin,
+                        width: mr.Width,
+                        height: 1f
                     ),
-                    Theme.Separator
+                    color: Theme.Separator
                 );
                 continue;
             }
 
-            var rowH = _entryH[i];
+            float rowH = _entryH[i];
 
             // A group caption: dim, smaller, no highlight — it names the rows under it.
             if (item.Role == AdwMenuItemRole.Header)
             {
                 paint.AddText(
-                    item.Label,
-                    mr.X + TextPad,
-                    rowY + (rowH - HeaderFs) / 2f + HeaderFs * 0.9f,
-                    p.DimLabel,
-                    HeaderFs
+                    text: item.Label,
+                    baselineX: mr.X + TextPad,
+                    baselineY: rowY + ((rowH - HeaderFs) / 2f) + (HeaderFs * 0.9f),
+                    color: p.DimLabel,
+                    fontSize: HeaderFs
                 );
                 continue;
             }
@@ -258,21 +260,27 @@ internal sealed class AdwMenuPopover : AdwPopoverBase
             {
                 // `modelbutton { border-radius: $menu_radius }` with the $selected_* ladder —
                 // a menu item highlights harder than a boxed-list row does, and rounds to 9px.
-                var wash = AdwStyle.MenuRowFill(Theme, i == Hovered, i == PressedRow);
+                var wash = AdwStyle.MenuRowFill(
+                    theme: Theme,
+                    hovered: i == Hovered,
+                    pressed: i == PressedRow
+                );
                 if (wash.A > 0f)
+                {
                     paint.AddRect(
-                        new Rect(
-                            mr.X + Pad,
-                            rowY,
-                            PopupW - Pad * 2f,
-                            rowH
+                        bounds: new Rect(
+                            x: mr.X + Pad,
+                            y: rowY,
+                            width: PopupW - (Pad * 2f),
+                            height: rowH
                         ),
-                        wash,
-                        AdwMetrics.MenuRadius
+                        color: wash,
+                        radius: AdwMetrics.MenuRadius
                     );
+                }
             }
 
-            var alpha = item.Enabled ? 1f : AdwStyle.DisabledOpacity;
+            float alpha = item.Enabled ? 1f : AdwStyle.DisabledOpacity;
             var fg = Theme.OnBackground.WithAlpha(Theme.OnBackground.A * alpha);
 
             // GNOME's menu indicators are absent until set: nothing at all for an unchecked row,
@@ -280,38 +288,41 @@ internal sealed class AdwMenuPopover : AdwPopoverBase
             // ring, which is what the Material check_box_outline_blank glyph drew here.
             if (item.Checked && item.Role is AdwMenuItemRole.Radio or AdwMenuItemRole.Check)
             {
-                var radio = item.Role == AdwMenuItemRole.Radio;
+                bool radio = item.Role == AdwMenuItemRole.Radio;
                 var accent = Theme.PrimaryDark;
                 Icons.Draw(
-                    paint,
-                    radio ? Icons.Dot : Icons.Check,
-                    new Rect(
-                        mr.X + TextPad,
-                        rowY + (rowH - IndicatorSize) / 2f,
-                        IndicatorSize,
-                        IndicatorSize
+                    paint: paint,
+                    glyph: radio ? Icons.Dot : Icons.Check,
+                    box: new Rect(
+                        x: mr.X + TextPad,
+                        y: rowY + ((rowH - IndicatorSize) / 2f),
+                        width: IndicatorSize,
+                        height: IndicatorSize
                     ),
-                    accent.WithAlpha(accent.A * alpha),
-                    radio ? 10f : IndicatorSize
+                    color: accent.WithAlpha(accent.A * alpha),
+                    size: radio ? 10f : IndicatorSize
                 );
             }
 
-            var baseline = rowY + (rowH - fs) / 2f + fs * 0.8f;
+            float baseline = rowY + ((rowH - fs) / 2f) + (fs * 0.8f);
             paint.AddText(
-                item.Label,
-                mr.X + TextPad + indent,
-                baseline,
-                fg,
-                fs
+                text: item.Label,
+                baselineX: mr.X + TextPad + indent,
+                baselineY: baseline,
+                color: fg,
+                fontSize: fs
             );
             if (item.Accel is { Length: > 0 } accel)
+            {
                 paint.AddText(
-                    accel,
-                    mr.Right - TextPad - TextMeasure.Width(accel, AccelFs),
-                    rowY + (rowH - AccelFs) / 2f + AccelFs * 0.8f,
-                    p.DimLabel.WithAlpha(p.DimLabel.A * alpha),
-                    AccelFs
+                    text: accel,
+                    baselineX: mr.Right - TextPad -
+                               TextMeasure.Width(text: accel, fontSize: AccelFs),
+                    baselineY: rowY + ((rowH - AccelFs) / 2f) + (AccelFs * 0.8f),
+                    color: p.DimLabel.WithAlpha(p.DimLabel.A * alpha),
+                    fontSize: AccelFs
                 );
+            }
         }
 
         paint.AddClipEnd();
@@ -319,10 +330,13 @@ internal sealed class AdwMenuPopover : AdwPopoverBase
 
     protected override int RowAt(Rect mr, float y)
     {
-        for (var i = 0; i < _entries.Count; i++)
+        for (int i = 0; i < _entries.Count; i++)
+        {
             if (_entries[i] is { Enabled: true }
                 && y >= mr.Y + _entryY[i] && y < mr.Y + _entryY[i] + _entryH[i])
                 return i;
+        }
+
         return -1;
     }
 
@@ -335,13 +349,13 @@ internal sealed class AdwMenuPopover : AdwPopoverBase
     public override void OnPointerDown(Offset point)
     {
         var mr = PopupRect();
-        if (!mr.Contains(point.X, point.Y))
+        if (!mr.Contains(px: point.X, py: point.Y))
         {
             Dismiss();
             return;
         }
 
-        var idx = RowAt(mr, point.Y);
+        int idx = RowAt(mr: mr, y: point.Y);
         if (idx < 0) return;
         PressedRow = Hovered = idx;
         MarkNeedsPaint();
@@ -366,9 +380,9 @@ internal sealed class AdwMenuPopover : AdwPopoverBase
 
     private void MoveHighlight(int dir)
     {
-        var n = _entries.Count;
-        var i = Hovered;
-        for (var step = 0; step < n; step++)
+        int n = _entries.Count;
+        int i = Hovered;
+        for (int step = 0; step < n; step++)
         {
             i = ((i < 0 ? dir > 0 ? -1 : 0 : i) + dir + n) % n;
             if (_entries[i] is not { Enabled: true }) continue;

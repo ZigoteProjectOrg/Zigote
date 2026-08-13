@@ -50,7 +50,12 @@ module Signal =
         Computed.From(Func<'c>(fun () -> f a.Value b.Value))
 
     /// Derived value combining three sources.
-    let map3 (f: 'a -> 'b -> 'c -> 'd) (a: #IReadable<'a>) (b: #IReadable<'b>) (c: #IReadable<'c>) : Computed<'d> =
+    let map3
+        (f: 'a -> 'b -> 'c -> 'd)
+        (a: #IReadable<'a>)
+        (b: #IReadable<'b>)
+        (c: #IReadable<'c>)
+        : Computed<'d> =
         Computed.From(Func<'d>(fun () -> f a.Value b.Value c.Value))
 
     /// Monadic bind — the derived source tracks whichever inner source `f` selects.

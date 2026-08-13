@@ -26,27 +26,26 @@ public sealed class AdwTabPage
 /// </summary>
 public sealed class AdwTabView : ComposedWidget
 {
-    /// <summary>Selection, signal-backed so the tab bar can react.</summary>
-    internal readonly Signal<int> Selected = new(0);
-
     /// <summary>Fired on Append/Close so the tab bar rebuilds its strip.</summary>
     internal readonly Trigger PagesChanged = new();
 
-    public AdwTabView(params AdwTabPage[] pages) : this((IEnumerable<AdwTabPage>)pages)
-    {
-    }
+    /// <summary>Selection, signal-backed so the tab bar can react.</summary>
+    internal readonly Signal<int> Selected = new(0);
 
-    public AdwTabView(IEnumerable<AdwTabPage> pages)
-    {
-        Pages = [.. pages];
-    }
+    public AdwTabView(params AdwTabPage[] pages) : this((IEnumerable<AdwTabPage>)pages) { }
+
+    public AdwTabView(IEnumerable<AdwTabPage> pages) => Pages = [.. pages];
 
     public List<AdwTabPage> Pages { get; }
 
     public int SelectedIndex
     {
         get => Selected.Value;
-        set => Selected.Value = Math.Clamp(value, 0, Math.Max(0, Pages.Count - 1));
+        set => Selected.Value = Math.Clamp(
+            value: value,
+            min: 0,
+            max: Math.Max(val1: 0, val2: Pages.Count - 1)
+        );
     }
 
     public Action<AdwTabPage>? OnClosed { get; set; }
@@ -62,13 +61,17 @@ public sealed class AdwTabView : ComposedWidget
     /// <summary>Remove a page, keeping the selection on the same page where possible.</summary>
     public void Close(AdwTabPage page)
     {
-        var index = Pages.IndexOf(page);
+        int index = Pages.IndexOf(page);
         if (index < 0) return;
         Pages.RemoveAt(index);
 
-        var selected = Selected.Peek();
+        int selected = Selected.Peek();
         if (index < selected) selected--;
-        Selected.Value = Math.Clamp(selected, 0, Math.Max(0, Pages.Count - 1));
+        Selected.Value = Math.Clamp(
+            value: selected,
+            min: 0,
+            max: Math.Max(val1: 0, val2: Pages.Count - 1)
+        );
 
         PagesChanged.Fire();
         OnClosed?.Invoke(page);
@@ -79,9 +82,9 @@ public sealed class AdwTabView : ComposedWidget
         return new Watch(() =>
             {
                 PagesChanged.Depend();
-                var index = Selected.Value;
+                int index = Selected.Value;
                 if (Pages.Count == 0) return new SizedBox();
-                index = Math.Clamp(index, 0, Pages.Count - 1);
+                index = Math.Clamp(value: index, min: 0, max: Pages.Count - 1);
                 return Pages[index].Child;
             }
         );

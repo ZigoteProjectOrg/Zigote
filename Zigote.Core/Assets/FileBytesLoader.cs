@@ -11,15 +11,9 @@ public sealed class FileBytesLoader : IAssetLoader<byte[]>
 {
     public static readonly FileBytesLoader Instance = new();
 
-    public object LoadOffThread(AssetId id, string path)
-    {
-        return File.ReadAllBytes(path);
-    }
+    public object LoadOffThread(AssetId id, string path) => File.ReadAllBytes(path);
 
-    public byte[] Apply(AssetId id, object payload)
-    {
-        return (byte[])payload;
-    }
+    public byte[] Apply(AssetId id, object payload) => (byte[])payload;
 
     public void Unload(AssetId id, byte[] value)
     {

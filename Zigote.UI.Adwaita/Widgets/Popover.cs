@@ -20,8 +20,6 @@ internal abstract class AdwPopoverBase : Widget, IDismissableOverlay
     private readonly App _app;
     private readonly AnimationController _enter;
 
-    private bool _closing;
-
     protected int Hovered = -1;
     protected float PopupH;
     protected float PopupW;
@@ -30,11 +28,15 @@ internal abstract class AdwPopoverBase : Widget, IDismissableOverlay
     protected Size Screen;
     protected ThemeData Theme = ThemeData.Dark;
 
+    private bool _closing;
+
     protected AdwPopoverBase(App app, Rect anchor)
     {
         _app = app;
         _anchor = anchor;
-        _enter = new AnimationController(0.15f, this) { Curve = Curves.EaseOut };
+        _enter = new AnimationController(durationSeconds: 0.15f, vsync: this) {
+            Curve = Curves.EaseOut,
+        };
         _enter.OnTick += MarkNeedsPaint;
         _enter.OnDismissed += FinishDismiss;
     }
@@ -58,10 +60,7 @@ internal abstract class AdwPopoverBase : Widget, IDismissableOverlay
 
     // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
     // re-attach rebinds instead of leaking one per attach cascade.
-    protected override void OnMount()
-    {
-        _enter.AttachTicker(this);
-    }
+    protected override void OnMount() => _enter.AttachTicker(this);
 
 
     public void Show()
@@ -96,33 +95,42 @@ internal abstract class AdwPopoverBase : Widget, IDismissableOverlay
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            Screen.Width,
-            Screen.Height
+            x: origin.X,
+            y: origin.Y,
+            width: Screen.Width,
+            height: Screen.Height
         );
     }
 
-    protected Rect PopupRect()
-    {
-        return OverlayPositioning.Anchored(_anchor, new Size(PopupW, PopupH), Screen);
-    }
+    protected Rect PopupRect() => OverlayPositioning.Anchored(
+        anchor: _anchor,
+        size: new Size(width: PopupW, height: PopupH),
+        screen: Screen
+    );
 
     public override void Paint(PaintList paint)
     {
-        var t = _enter.Value;
-        var fade = t < 0.999f;
-        var rise = (1f - t) * 6f;
+        float t = _enter.Value;
+        bool fade = t < 0.999f;
+        float rise = (1f - t) * 6f;
         if (fade) paint.PushAlpha(t);
-        if (rise > 0.01f) paint.PushTranslate(0f, -rise);
+        if (rise > 0.01f) paint.PushTranslate(dx: 0f, dy: -rise);
 
         var mr = PopupRect();
         // `popover > contents { border-radius: $popover_radius }` — 15px, six more than a control
         // and three more than a card, which is what tells a floating surface from an inline one.
-        paint.AddElevation(mr, AdwMetrics.PopoverRadius, AdwMetrics.PopoverShadow);
-        paint.AddRect(mr, AdwPalette.For(Theme).PopoverBg, AdwMetrics.PopoverRadius);
-        paint.AddBorder(mr, Theme.Border, AdwMetrics.PopoverRadius);
-        PaintRows(paint, mr);
+        paint.AddElevation(
+            bounds: mr,
+            radius: AdwMetrics.PopoverRadius,
+            style: AdwMetrics.PopoverShadow
+        );
+        paint.AddRect(
+            bounds: mr,
+            color: AdwPalette.For(Theme).PopoverBg,
+            radius: AdwMetrics.PopoverRadius
+        );
+        paint.AddBorder(bounds: mr, color: Theme.Border, radius: AdwMetrics.PopoverRadius);
+        PaintRows(paint: paint, mr: mr);
 
         if (rise > 0.01f) paint.PopTranslate();
         if (fade) paint.PopAlpha();
@@ -142,15 +150,13 @@ internal abstract class AdwPopoverBase : Widget, IDismissableOverlay
 
     // Capture all input over the full screen; click-outside dismiss lives in OnPointerDown.
     // While the exit animation plays, release the capture so no row can be re-picked.
-    public override Widget? HitTest(Offset point)
-    {
-        return !_closing && Bounds.Contains(point.X, point.Y) ? this : null;
-    }
+    public override Widget? HitTest(Offset point) =>
+        !_closing && Bounds.Contains(px: point.X, py: point.Y) ? this : null;
 
     public override void OnPointerMove(Offset point)
     {
         var mr = PopupRect();
-        var idx = mr.Contains(point.X, point.Y) ? RowAt(mr, point.Y) : -1;
+        int idx = mr.Contains(px: point.X, py: point.Y) ? RowAt(mr: mr, y: point.Y) : -1;
         if (idx == Hovered) return;
         Hovered = idx;
         MarkNeedsPaint();
@@ -165,13 +171,13 @@ internal abstract class AdwPopoverBase : Widget, IDismissableOverlay
 
     public override void OnPointerUp(Offset point)
     {
-        var pressed = PressedRow;
+        int pressed = PressedRow;
         PressedRow = -1;
         if (pressed < 0) return;
 
         MarkNeedsPaint();
         var mr = PopupRect();
-        if (!mr.Contains(point.X, point.Y) || RowAt(mr, point.Y) != pressed)
+        if (!mr.Contains(px: point.X, py: point.Y) || RowAt(mr: mr, y: point.Y) != pressed)
         {
             Hovered = -1;
             return;
@@ -206,13 +212,12 @@ internal sealed class AdwPopover : AdwPopoverBase
     private readonly IReadOnlyList<string> _items;
     private readonly float _minWidth;
     private readonly Action<int> _onPick;
-    private readonly int _selected;
     private readonly bool _showCheck;
 
     private bool _compact;
     private float _maxScroll;
-    private bool _scrolledToSelection;
     private float _scrollY;
+    private bool _scrolledToSelection;
 
     public AdwPopover(
         App app,
@@ -222,89 +227,98 @@ internal sealed class AdwPopover : AdwPopoverBase
         int selected = -1,
         bool showCheck = false,
         float minWidth = 0f)
-        : base(app, anchor)
+        : base(app: app, anchor: anchor)
     {
         _items = items;
         _onPick = onPick;
-        _selected = selected;
+        InitialHighlight = selected;
         _showCheck = showCheck;
         _minWidth = minWidth;
     }
 
     // GTK opens a drop-down with the current choice highlighted, so Enter re-picks it.
-    protected override int InitialHighlight => _selected;
+    protected override int InitialHighlight { get; }
 
     public override Size Measure(Constraints c)
     {
         Theme = ThemeProvider.Of(BuildContext.Current);
-        Screen = new Size(c.MaxWidth, c.MaxHeight);
+        Screen = new Size(width: c.MaxWidth, height: c.MaxHeight);
         _compact = MediaQuery.Of(BuildContext.Current).SizeClass == WindowSizeClass.Compact;
         RowH = _compact
-            ? MathF.Max(AdwMetrics.MenuRowHeight, ControlMetrics.MinTouchTarget)
+            ? MathF.Max(x: AdwMetrics.MenuRowHeight, y: ControlMetrics.MinTouchTarget)
             : AdwMetrics.MenuRowHeight;
 
-        var fs = Theme.FontSizeBody;
-        var widest = 0f;
-        for (var i = 0; i < _items.Count; i++)
-            widest = MathF.Max(widest, TextMeasure.Width(_items[i], fs));
-        var gutter = _showCheck ? CheckW : TextPad;
-        PopupW = MathF.Max(_minWidth, widest + gutter + TextPad + Pad * 2f);
-        PopupW = MathF.Min(PopupW, MathF.Max(120f, Screen.Width - Spacing.Lg));
+        float fs = Theme.FontSizeBody;
+        float widest = 0f;
+        for (int i = 0; i < _items.Count; i++)
+            widest = MathF.Max(x: widest, y: TextMeasure.Width(text: _items[i], fontSize: fs));
+        float gutter = _showCheck ? CheckW : TextPad;
+        PopupW = MathF.Max(x: _minWidth, y: widest + gutter + TextPad + (Pad * 2f));
+        PopupW = MathF.Min(x: PopupW, y: MathF.Max(x: 120f, y: Screen.Width - Spacing.Lg));
 
-        var content = _items.Count * RowH + Pad * 2f;
-        var cap = MathF.Min(MaxPopupH, Screen.Height - 16f);
-        PopupH = MathF.Min(content, cap);
-        _maxScroll = MathF.Max(0f, content - PopupH);
+        float content = (_items.Count * RowH) + (Pad * 2f);
+        float cap = MathF.Min(x: MaxPopupH, y: Screen.Height - 16f);
+        PopupH = MathF.Min(x: content, y: cap);
+        _maxScroll = MathF.Max(x: 0f, y: content - PopupH);
 
         // First measure: centre the selected row when the list overflows.
         if (_scrolledToSelection) return Screen;
         _scrolledToSelection = true;
-        if (_maxScroll > 0f && _selected >= 0)
+        if (_maxScroll > 0f && InitialHighlight >= 0)
+        {
             _scrollY = Math.Clamp(
-                _selected * RowH - PopupH * 0.5f + RowH * 0.5f,
-                0f,
-                _maxScroll
+                value: (InitialHighlight * RowH) - (PopupH * 0.5f) + (RowH * 0.5f),
+                min: 0f,
+                max: _maxScroll
             );
+        }
 
         return Screen;
     }
 
     protected override void PaintRows(PaintList paint, Rect mr)
     {
-        var fs = Theme.FontSizeBody;
-        var gutter = _showCheck ? CheckW : TextPad;
+        float fs = Theme.FontSizeBody;
+        float gutter = _showCheck ? CheckW : TextPad;
         paint.AddClipStart(mr);
-        for (var i = 0; i < _items.Count; i++)
+        for (int i = 0; i < _items.Count; i++)
         {
-            var rowY = mr.Y + Pad + i * RowH - _scrollY;
+            float rowY = mr.Y + Pad + (i * RowH) - _scrollY;
             if (rowY + RowH <= mr.Y || rowY >= mr.Bottom) continue;
 
             var row = new Rect(
-                mr.X + Pad,
-                rowY,
-                PopupW - Pad * 2f,
-                RowH
+                x: mr.X + Pad,
+                y: rowY,
+                width: PopupW - (Pad * 2f),
+                height: RowH
             );
             // `popover.menu list > row { border-radius: $menu_radius }` on the $selected ladder.
-            var wash = AdwStyle.MenuRowFill(Theme, i == Hovered, i == PressedRow);
-            if (wash.A > 0f) paint.AddRect(row, wash, AdwMetrics.MenuRadius);
+            var wash = AdwStyle.MenuRowFill(
+                theme: Theme,
+                hovered: i == Hovered,
+                pressed: i == PressedRow
+            );
+            if (wash.A > 0f) paint.AddRect(bounds: row, color: wash, radius: AdwMetrics.MenuRadius);
 
-            var baseline = row.Y + (RowH - fs) / 2f + fs * 0.8f;
-            if (_showCheck && i == _selected)
+            float baseline = row.Y + ((RowH - fs) / 2f) + (fs * 0.8f);
+            if (_showCheck && i == InitialHighlight)
+            {
                 Icons.DrawAt(
-                    paint,
-                    Icons.Check,
-                    row.X + Spacing.Xs,
-                    baseline,
-                    Theme.PrimaryDark,
-                    fs
+                    paint: paint,
+                    glyph: Icons.Check,
+                    x: row.X + Spacing.Xs,
+                    baselineY: baseline,
+                    color: Theme.PrimaryDark,
+                    size: fs
                 );
+            }
+
             paint.AddText(
-                _items[i],
-                row.X + gutter,
-                baseline,
-                Theme.OnBackground,
-                fs
+                text: _items[i],
+                baselineX: row.X + gutter,
+                baselineY: baseline,
+                color: Theme.OnBackground,
+                fontSize: fs
             );
         }
 
@@ -312,25 +326,25 @@ internal sealed class AdwPopover : AdwPopoverBase
 
         // Slim scrollbar thumb when the list overflows.
         if (_maxScroll <= 0f) return;
-        var contentH = _items.Count * RowH + Pad * 2f;
-        var thumb = MathF.Max(24f, mr.Height * (PopupH / contentH));
-        var thumbY = mr.Y + (mr.Height - thumb) * (_scrollY / _maxScroll);
+        float contentH = (_items.Count * RowH) + (Pad * 2f);
+        float thumb = MathF.Max(x: 24f, y: mr.Height * (PopupH / contentH));
+        float thumbY = mr.Y + ((mr.Height - thumb) * (_scrollY / _maxScroll));
         paint.AddRect(
-            new Rect(
-                mr.Right - 5f,
-                thumbY,
-                3f,
-                thumb
+            bounds: new Rect(
+                x: mr.Right - 5f,
+                y: thumbY,
+                width: 3f,
+                height: thumb
             ),
-            Theme.OnSurface.WithAlpha(0.25f),
-            1.5f
+            color: Theme.OnSurface.WithAlpha(0.25f),
+            radius: 1.5f
         );
     }
 
     protected override int RowAt(Rect mr, float y)
     {
         if (y < mr.Y + Pad || y >= mr.Bottom - Pad) return -1;
-        var idx = (int)((y - mr.Y - Pad + _scrollY) / RowH);
+        int idx = (int)((y - mr.Y - Pad + _scrollY) / RowH);
         return idx >= 0 && idx < _items.Count ? idx : -1;
     }
 
@@ -343,13 +357,13 @@ internal sealed class AdwPopover : AdwPopoverBase
     public override void OnPointerDown(Offset point)
     {
         var mr = PopupRect();
-        if (!mr.Contains(point.X, point.Y))
+        if (!mr.Contains(px: point.X, py: point.Y))
         {
             Dismiss();
             return;
         }
 
-        var idx = RowAt(mr, point.Y);
+        int idx = RowAt(mr: mr, y: point.Y);
         if (idx < 0) return;
 
         // On a phone the finger may be starting a scroll drag: commit on lift instead.
@@ -382,33 +396,30 @@ internal sealed class AdwPopover : AdwPopoverBase
 
     private void MoveHighlight(int dir)
     {
-        var n = _items.Count;
+        int n = _items.Count;
         if (n == 0) return;
         Hovered = ((Hovered < 0 ? dir > 0 ? -1 : 0 : Hovered) + dir + n) % n;
 
         // Follow the highlight with the viewport, the way GTK keeps the cursor row visible.
-        var top = Hovered * RowH;
-        _scrollY = MathF.Max(_scrollY, top + RowH - (PopupH - Pad * 2f));
-        _scrollY = Math.Clamp(MathF.Min(_scrollY, top), 0f, _maxScroll);
+        float top = Hovered * RowH;
+        _scrollY = MathF.Max(x: _scrollY, y: top + RowH - (PopupH - (Pad * 2f)));
+        _scrollY = Math.Clamp(value: MathF.Min(x: _scrollY, y: top), min: 0f, max: _maxScroll);
         MarkNeedsPaint();
     }
 
     public override void OnScroll(float dx, float dy)
     {
         if (_maxScroll <= 0f) return;
-        _scrollY = Math.Clamp(_scrollY - dy * RowH * 3f, 0f, _maxScroll);
+        _scrollY = Math.Clamp(value: _scrollY - (dy * RowH * 3f), min: 0f, max: _maxScroll);
         MarkNeedsPaint();
     }
 
-    public override bool CanTouchScroll(bool vertical)
-    {
-        return vertical && _maxScroll > 0f;
-    }
+    public override bool CanTouchScroll(bool vertical) => vertical && _maxScroll > 0f;
 
     public override void OnTouchScroll(float dx, float dy)
     {
         if (_maxScroll <= 0f) return;
-        _scrollY = Math.Clamp(_scrollY - dy, 0f, _maxScroll);
+        _scrollY = Math.Clamp(value: _scrollY - dy, min: 0f, max: _maxScroll);
         MarkNeedsPaint();
     }
 }

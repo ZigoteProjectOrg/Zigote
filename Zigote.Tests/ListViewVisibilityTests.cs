@@ -17,10 +17,10 @@ public class ListViewVisibilityTests
     private static ListView LaidOutList(out List<Widget> rows)
     {
         rows = [];
-        for (var i = 0; i < 100; i++) rows.Add(new FakeFocusable());
+        for (int i = 0; i < 100; i++) rows.Add(new FakeFocusable());
         var list = new ListView(itemExtent: 20) { Smooth = false };
         list.SetItems(rows);
-        list.Measure(Constraints.Tight(200f, 100f));
+        list.Measure(Constraints.Tight(width: 200f, height: 100f));
         list.Layout(Offset.Zero);
         return list;
     }
@@ -31,9 +31,9 @@ public class ListViewVisibilityTests
         var list = LaidOutList(out var rows);
 
         var focusables = FocusTraversal.Focusables(list);
-        Assert.Contains(rows[0], focusables);
-        Assert.DoesNotContain(rows[50], focusables);
-        Assert.DoesNotContain(rows[99], focusables);
+        Assert.Contains(expected: rows[0], collection: focusables);
+        Assert.DoesNotContain(expected: rows[50], collection: focusables);
+        Assert.DoesNotContain(expected: rows[99], collection: focusables);
     }
 
     [Fact]
@@ -42,8 +42,8 @@ public class ListViewVisibilityTests
         var list = LaidOutList(out var rows);
 
         // Scroll 1000 px down (25 wheel ticks × ScrollSpeed 40, instant) and lay out again.
-        list.OnScroll(0f, -25f);
-        list.Measure(Constraints.Tight(200f, 100f));
+        list.OnScroll(dx: 0f, dy: -25f);
+        list.Measure(Constraints.Tight(width: 200f, height: 100f));
         list.Layout(Offset.Zero);
 
         // Row 0 still has its non-zero bounds from the first layout — visibility must come from
@@ -51,31 +51,26 @@ public class ListViewVisibilityTests
         Assert.True(rows[0].Bounds.Height > 0f);
 
         var focusables = FocusTraversal.Focusables(list);
-        Assert.DoesNotContain(rows[0], focusables);
-        Assert.Contains(rows[50], focusables);
+        Assert.DoesNotContain(expected: rows[0], collection: focusables);
+        Assert.Contains(expected: rows[50], collection: focusables);
     }
 
     private sealed class FakeFocusable : Widget
     {
         public override bool Focusable => true;
 
-        public override Size Measure(Constraints c)
-        {
-            return new Size(50f, 20f);
-        }
+        public override Size Measure(Constraints c) => new(width: 50f, height: 20f);
 
         public override void Layout(Offset origin)
         {
             Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                50f,
-                20f
+                x: origin.X,
+                y: origin.Y,
+                width: 50f,
+                height: 20f
             );
         }
 
-        public override void Paint(PaintList paint)
-        {
-        }
+        public override void Paint(PaintList paint) { }
     }
 }

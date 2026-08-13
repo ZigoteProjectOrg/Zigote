@@ -33,8 +33,10 @@ public static class DevChart
 /// <summary>
 ///     A titled chart card: an optional caption over a fixed-height <see cref="Chart" />. It owns the
 ///     rolling x-window bookkeeping — a panel calls <see cref="Sync" /> from
-///     <see cref="IDevPanel.Refresh" /> with the current data revision and clock; when the revision moves
-///     the card shifts the window and invalidates the chart so it re-resolves scales + geometry from the
+///     <see cref="IDevPanel.Refresh" /> with the current data revision and clock; when the revision
+///     moves
+///     the card shifts the window and invalidates the chart so it re-resolves scales + geometry from
+///     the
 ///     live rings (a data-only ring push does not otherwise dirty the chart).
 /// </summary>
 public sealed class DevChartCard : ComposedWidget
@@ -42,8 +44,8 @@ public sealed class DevChartCard : ComposedWidget
     private readonly float _height;
     private readonly string? _title;
     private readonly float _window;
-    private int _revision = int.MinValue;
     private float _lastNow = float.NegativeInfinity;
+    private int _revision = int.MinValue;
 
     public DevChartCard(Chart chart, float height, float windowSeconds = 0f, string? title = null)
     {
@@ -92,18 +94,25 @@ public sealed class DevChartCard : ComposedWidget
             mainAxisSize: MainAxisSize.Min
         );
         if (_title is not null)
+        {
             col.Children.Add(
                 new Padding(
-                    EdgeInsets.Only(bottom: Spacing.Xs),
-                    new Label(_title, AdwTypography.CaptionHeading, p.DimLabel) { MaxLines = 1 }
+                    padding: EdgeInsets.Only(bottom: Spacing.Xs),
+                    child: new Label(
+                        text: _title,
+                        style: AdwTypography.CaptionHeading,
+                        color: p.DimLabel
+                    ) { MaxLines = 1 }
                 )
             );
+        }
+
         // The chart gets more vertical room when the pane it lands in is wide (fullscreen panel or a
         // torn-off window) and stays compact in a narrow dock — the class is that of the width this
         // card is actually given, not the window's.
         col.Children.Add(
             new AdaptiveBuilder(
-                (_, cls) => new SizedBox(
+                builder: (_, cls) => new SizedBox(
                     height: cls switch {
                         WindowSizeClass.Expanded => _height * 1.5f,
                         WindowSizeClass.Medium => _height * 1.2f,
@@ -111,15 +120,15 @@ public sealed class DevChartCard : ComposedWidget
                     },
                     child: Chart
                 ),
-                0f
+                transitionDuration: 0f
             )
         );
 
         // No card of its own: DevPage folds a chart and the rows that follow it into ONE boxed list,
         // so a section reads as a single object instead of two stacked boxes.
         return new Padding(
-            EdgeInsets.Symmetric(DevKit.RowInset, Spacing.Md),
-            col
+            padding: EdgeInsets.Symmetric(horizontal: DevKit.RowInset, vertical: Spacing.Md),
+            child: col
         );
     }
 }

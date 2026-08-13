@@ -15,11 +15,11 @@ public static class NiceScale
     public static double TickStep(double range, int targetTicks)
     {
         if (range <= 0 || double.IsNaN(range) || double.IsInfinity(range)) return 1;
-        targetTicks = Math.Max(1, targetTicks);
-        var rough = range / targetTicks;
-        var mag = Math.Pow(10, Math.Floor(Math.Log10(rough)));
-        var norm = rough / mag; // [1,10)
-        var nice = norm switch {
+        targetTicks = Math.Max(val1: 1, val2: targetTicks);
+        double rough = range / targetTicks;
+        double mag = Math.Pow(x: 10, y: Math.Floor(Math.Log10(rough)));
+        double norm = rough / mag; // [1,10)
+        double nice = norm switch {
             < 1.5 => 1.0,
             < 3.0 => 2.0,
             < 7.0 => 5.0,
@@ -39,14 +39,14 @@ public static class NiceScale
         if (min == max)
         {
             // Degenerate single-value domain: open a symmetric unit window around it.
-            var pad = min == 0 ? 1 : Math.Abs(min) * 0.5;
+            double pad = min == 0 ? 1 : Math.Abs(min) * 0.5;
             min -= pad;
             max += pad;
         }
 
-        var step = TickStep(max - min, targetTicks);
-        var niceMin = Math.Floor(min / step) * step;
-        var niceMax = Math.Ceiling(max / step) * step;
+        double step = TickStep(range: max - min, targetTicks: targetTicks);
+        double niceMin = Math.Floor(min / step) * step;
+        double niceMax = Math.Ceiling(max / step) * step;
         return (niceMin, niceMax, step);
     }
 
@@ -60,8 +60,8 @@ public static class NiceScale
         var result = new List<double>();
         if (step <= 0) return result;
         // Snap to the step grid to avoid 0.30000000000000004-style labels.
-        var start = Math.Ceiling(min / step - 1e-9) * step;
-        for (var v = start; v <= max + step * 1e-9; v += step)
+        double start = Math.Ceiling((min / step) - 1e-9) * step;
+        for (double v = start; v <= max + (step * 1e-9); v += step)
             result.Add(Math.Abs(v) < step * 1e-9 ? 0 : v);
         return result;
     }
@@ -69,7 +69,7 @@ public static class NiceScale
     /// <summary>Compact display label for an axis value (1.5K / 2.3M style for large magnitudes).</summary>
     public static string FormatNumber(double v)
     {
-        var abs = Math.Abs(v);
+        double abs = Math.Abs(v);
         return abs switch {
             >= 1_000_000_000 => Trim(v / 1_000_000_000) + "B",
             >= 1_000_000 => Trim(v / 1_000_000) + "M",
@@ -81,8 +81,8 @@ public static class NiceScale
         {
             // Invariant culture — axis labels must not follow the machine's decimal separator.
             return Math.Abs(x - Math.Round(x)) < 1e-9
-                ? Math.Round(x).ToString("0", CultureInfo.InvariantCulture)
-                : x.ToString("0.##", CultureInfo.InvariantCulture);
+                ? Math.Round(x).ToString(format: "0", provider: CultureInfo.InvariantCulture)
+                : x.ToString(format: "0.##", provider: CultureInfo.InvariantCulture);
         }
     }
 }

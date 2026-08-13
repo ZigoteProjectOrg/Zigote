@@ -1,7 +1,9 @@
+using System.Buffers.Binary;
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using Zigote.Core;
 using Zigote.Core.Diagnostics;
 using Zigote.Core.Events;
 using Zigote.UI.Debug;
@@ -11,38 +13,52 @@ using Zigote.UI.Widgets;
 namespace Zigote.UI.Host;
 
 /// <summary>
-///     Hands the live widget tree, the accessibility tree and the preview targets to whatever asks, over
+///     Hands the live widget tree, the accessibility tree and the preview targets to whatever asks,
+///     over
 ///     a loopback socket.
 ///     <para>
-///         This is what the IDE panels read, and — like <see cref="WidgetPreview" /> — it is deliberately
+///         This is what the IDE panels read, and — like <see cref="WidgetPreview" /> — it is
+///         deliberately
 ///         not an IDE feature. It is a socket and four one-word commands, so a Rider tool window, a
-///         terminal (<c>echo widgets | nc 127.0.0.1 $port</c>), a test or a script all get the same data
+///         terminal (<c>echo widgets | nc 127.0.0.1 $port</c>), a test or a script all get the same
+///         data
 ///         with nothing installed. Nothing here knows an editor exists.
 ///     </para>
 ///     <para>
-///         Off unless <c>ZIGOTE_INSPECT</c> is set to a port — <c>0</c> asks the OS for a free one, which
+///         Off unless <c>ZIGOTE_INSPECT</c> is set to a port — <c>0</c> asks the OS for a free one,
+///         which
 ///         is then printed as <c>zigote inspect: 127.0.0.1:PORT</c> for the launcher to read. Bound to
 ///         loopback only: this exposes an app's entire UI state, so it must never be reachable off the
 ///         machine.
 ///     </para>
 ///     <list type="bullet">
-///         <item><c>widgets</c> — the widget tree, from <see cref="WidgetDebug" />, as the inspector sees it.</item>
+///         <item>
+///             <c>widgets</c> — the widget tree, from <see cref="WidgetDebug" />, as the inspector
+///             sees it.
+///         </item>
 ///         <item><c>semantics</c> — the accessibility tree, freshly built.</item>
 ///         <item><c>targets</c> — what <see cref="WidgetPreview" /> could show.</item>
 ///         <item><c>preview &lt;Type&gt;</c> — swap the shown widget without restarting.</item>
 ///         <item><c>shot [scale]</c> — the current frame as a base64 BMP.</item>
 ///         <item><c>stream [scale] [fps]</c> — frames pushed as they change, length-prefixed binary.</item>
-///         <item><c>input …</c> — synthetic pointer/scroll/key/text events; see <see cref="ParseInput" />.</item>
+///         <item>
+///             <c>input …</c> — synthetic pointer/scroll/key/text events; see
+///             <see cref="ParseInput" />.
+///         </item>
 ///         <item><c>size WxH</c> | <c>size window</c> — lay the tree out at a device size.</item>
 ///         <item><c>theme dark|light</c> — swap the app theme.</item>
 ///         <item><c>locales</c> — the active locale and the ones the app supports.</item>
-///         <item><c>locale &lt;tag&gt;</c> — switch the app's locale (needs a <c>LocalizationsScope</c>).</item>
+///         <item>
+///             <c>locale &lt;tag&gt;</c> — switch the app's locale (needs a
+///             <c>LocalizationsScope</c>).
+///         </item>
 ///         <item><c>window hide|show</c> — the app's own window, which a preview does not want.</item>
 ///         <item><c>props ID</c> — one widget's properties, by the id the tree reports.</item>
 ///     </list>
 ///     <para>
 ///         Every command is answered on the UI thread through <see cref="App.Post" /> and the socket
-///         thread waits for the result: the widget tree may only be walked while layout is not running,
+///         thread waits for the result: the widget tree may only be walked while layout is not
+///         running,
 ///         and a snapshot taken from another thread would be a torn one.
 ///     </para>
 /// </summary>
@@ -61,10 +77,12 @@ public static class InspectServer
     ///     Start listening if <c>ZIGOTE_INSPECT</c> asks for it. <paramref name="setPreview" /> is invoked
     ///     on the UI thread to swap the shown widget; null disables the <c>preview</c> command.
     /// </summary>
-    public static void Start(App app, Action<string>? setPreview = null, Func<string, bool>? setTheme = null)
+    public static void Start(App app, Action<string>? setPreview = null,
+        Func<string, bool>? setTheme = null)
     {
-        var setting = Environment.GetEnvironmentVariable("ZIGOTE_INSPECT");
-        if (setting is not { Length: > 0 } || !int.TryParse(setting, out var port) || port is < 0 or > 65535)
+        string? setting = Environment.GetEnvironmentVariable("ZIGOTE_INSPECT");
+        if (setting is not { Length: > 0 } || !int.TryParse(s: setting, result: out int port) ||
+            port is < 0 or > 65535)
             return;
 
         // A requested port can already be taken — the launcher picked it a moment earlier and something
@@ -74,15 +92,17 @@ public static class InspectServer
         TcpListener listener;
         try
         {
-            listener = new TcpListener(IPAddress.Loopback, port);
+            listener = new TcpListener(localaddr: IPAddress.Loopback, port: port);
             listener.Start();
         }
         catch (SocketException first) when (port != 0)
         {
-            DebugLog.Error($"zigote inspect: port {port} is taken ({first.Message}); picking another");
+            DebugLog.Error(
+                $"zigote inspect: port {port} is taken ({first.Message}); picking another"
+            );
             try
             {
-                listener = new TcpListener(IPAddress.Loopback, 0);
+                listener = new TcpListener(localaddr: IPAddress.Loopback, port: 0);
                 listener.Start();
             }
             catch (SocketException e)
@@ -97,18 +117,25 @@ public static class InspectServer
             return;
         }
 
-        var actual = ((IPEndPoint)listener.LocalEndpoint).Port;
+        int actual = ((IPEndPoint)listener.LocalEndpoint).Port;
         Console.Out.WriteLine($"zigote inspect: 127.0.0.1:{actual}");
         Console.Out.Flush();
 
         // Background so the process still exits when the window closes, with the listener along with it.
-        new Thread(() => Serve(listener, app, setPreview, setTheme)) {
+        new Thread(() => Serve(
+                listener: listener,
+                app: app,
+                setPreview: setPreview,
+                setTheme: setTheme
+            )
+        ) {
             IsBackground = true,
             Name = "zigote-inspect",
         }.Start();
     }
 
-    private static void Serve(TcpListener listener, App app, Action<string>? setPreview, Func<string, bool>? setTheme)
+    private static void Serve(TcpListener listener, App app, Action<string>? setPreview,
+        Func<string, bool>? setTheme)
     {
         while (true)
         {
@@ -127,40 +154,65 @@ public static class InspectServer
             // command. Plain threads rather than the pool — a stream blocks for minutes, which is
             // exactly what pool threads are not for, and there are at most a few clients ever.
             new Thread(() =>
-            {
-                using (client)
                 {
-                    try
+                    using (client)
                     {
-                        Handle(client, app, setPreview, setTheme);
-                    }
-                    catch (IOException)
-                    {
-                        // The panel closed the socket mid-answer; nothing to do and nothing worth logging.
+                        try
+                        {
+                            Handle(
+                                client: client,
+                                app: app,
+                                setPreview: setPreview,
+                                setTheme: setTheme
+                            );
+                        }
+                        catch (IOException)
+                        {
+                            // The panel closed the socket mid-answer; nothing to do and nothing worth logging.
+                        }
                     }
                 }
-            }) { IsBackground = true, Name = "zigote-inspect-client" }.Start();
+            ) {
+                IsBackground = true,
+                Name = "zigote-inspect-client",
+            }.Start();
         }
     }
 
-    private static void Handle(TcpClient client, App app, Action<string>? setPreview, Func<string, bool>? setTheme)
+    private static void Handle(TcpClient client, App app, Action<string>? setPreview,
+        Func<string, bool>? setTheme)
     {
         using var stream = client.GetStream();
         stream.ReadTimeout = (int)Timeout.TotalMilliseconds;
-        using var reader = new StreamReader(stream, Encoding.UTF8, false, 1024, true);
-        using var writer = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true };
+        using var reader = new StreamReader(
+            stream: stream,
+            encoding: Encoding.UTF8,
+            detectEncodingFromByteOrderMarks: false,
+            bufferSize: 1024,
+            leaveOpen: true
+        );
+        using var writer =
+            new StreamWriter(
+                stream: stream,
+                encoding: new UTF8Encoding(false)
+            ) { AutoFlush = true };
 
-        var line = reader.ReadLine();
+        string? line = reader.ReadLine();
         if (line is null) return;
 
-        var space = line.IndexOf(' ');
-        var command = (space < 0 ? line : line[..space]).Trim();
-        var argument = space < 0 ? "" : line[(space + 1)..].Trim();
+        int space = line.IndexOf(' ');
+        string command = (space < 0 ? line : line[..space]).Trim();
+        string argument = space < 0 ? "" : line[(space + 1)..].Trim();
 
         // `stream` takes the connection over and never returns until the client hangs up.
         if (command == "stream")
         {
-            StreamFrames(stream, writer, app, argument);
+            StreamFrames(
+                stream: stream,
+                writer: writer,
+                app: app,
+                argument: argument
+            );
             return;
         }
 
@@ -170,14 +222,34 @@ public static class InspectServer
         // opened. `input` rides the same quiet queue because its post must not force a repaint: the
         // injected events go through the real dispatch pipeline next frame, which repaints exactly as
         // much as the same OS input would — a move flood over nothing repaints nothing.
-        var answer = command is "shot" or "input"
-            ? OnUiThread(app, () => Answer(app, command, argument, setPreview, setTheme), afterFrame: true)
-            : OnUiThread(app, () => Answer(app, command, argument, setPreview, setTheme));
+        string answer = command is "shot" or "input"
+            ? OnUiThread(
+                app: app,
+                work: () => Answer(
+                    app: app,
+                    command: command,
+                    argument: argument,
+                    setPreview: setPreview,
+                    setTheme: setTheme
+                ),
+                afterFrame: true
+            )
+            : OnUiThread(
+                app: app,
+                work: () => Answer(
+                    app: app,
+                    command: command,
+                    argument: argument,
+                    setPreview: setPreview,
+                    setTheme: setTheme
+                )
+            );
         writer.Write(answer);
         writer.Write('\n');
     }
 
-    private static string Answer(App app, string command, string argument, Action<string>? setPreview,
+    private static string Answer(App app, string command, string argument,
+        Action<string>? setPreview,
         Func<string, bool>? setTheme)
     {
         switch (command)
@@ -191,11 +263,11 @@ public static class InspectServer
             case "targets":
             {
                 var json = new StringBuilder("{\"targets\":[");
-                var first = true;
-                foreach (var name in WidgetPreview.Candidates())
+                bool first = true;
+                foreach (string name in WidgetPreview.Candidates())
                 {
                     if (!first) json.Append(',');
-                    Quote(json, name);
+                    Quote(json: json, text: name);
                     first = false;
                 }
 
@@ -207,10 +279,10 @@ public static class InspectServer
                 return "{\"ok\":true}";
 
             case "shot":
-                return Shot(app, argument);
+                return Shot(app: app, argument: argument);
 
             case "size":
-                return Size(app, argument);
+                return Size(app: app, argument: argument);
 
             case "theme" when setTheme is not null:
                 return setTheme(argument) ? Ok(app) : Error($"unknown theme '{argument}'");
@@ -220,13 +292,25 @@ public static class InspectServer
 
             case "locale" when argument.Length > 0:
                 if (app.SetLocale is null)
-                    return Error("this app has no LocalizationsScope, so there is no locale to switch");
-                return app.SetLocale(argument) ? Ok(app) : Error($"'{argument}' is not a locale tag");
+                {
+                    return Error(
+                        "this app has no LocalizationsScope, so there is no locale to switch"
+                    );
+                }
+
+                return app.SetLocale(argument)
+                    ? Ok(app)
+                    : Error($"'{argument}' is not a locale tag");
 
             case "input":
             {
                 if (ParseInput(argument) is not { } evt)
-                    return Error($"input wants down|up|move|scroll|keydown|keyup|text …, got '{argument}'");
+                {
+                    return Error(
+                        $"input wants down|up|move|scroll|keydown|keyup|text …, got '{argument}'"
+                    );
+                }
+
                 app.InjectEvent(evt);
                 return "{\"ok\":true}";
             }
@@ -240,7 +324,7 @@ public static class InspectServer
                 return "{\"ok\":true}";
 
             case "props":
-                return Props(app, argument);
+                return Props(app: app, argument: argument);
 
             default:
                 return Error($"unknown command '{command}'");
@@ -258,19 +342,27 @@ public static class InspectServer
     private static string Size(App app, string argument)
     {
         if (argument is "window" or "")
-        {
             app.PreviewSize = null;
-        }
         else
         {
-            var parts = argument.Split('x', 'X');
+            string[] parts = argument.Split('x', 'X');
             if (parts.Length != 2 ||
-                !float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var w) ||
-                !float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var h) ||
+                !float.TryParse(
+                    s: parts[0],
+                    style: NumberStyles.Float,
+                    provider: CultureInfo.InvariantCulture,
+                    result: out float w
+                ) ||
+                !float.TryParse(
+                    s: parts[1],
+                    style: NumberStyles.Float,
+                    provider: CultureInfo.InvariantCulture,
+                    result: out float h
+                ) ||
                 w is < 1 or > 8192 || h is < 1 or > 8192)
                 return Error($"size wants WIDTHxHEIGHT in 1..8192, got '{argument}'");
 
-            app.PreviewSize = new Core.Size(w, h);
+            app.PreviewSize = new Size(width: w, height: h);
         }
 
         // The tree has to be re-measured before the next capture, or the frame is the old size.
@@ -281,27 +373,28 @@ public static class InspectServer
     /// <summary>Everything the inspector knows about one widget, found by the id the tree reports.</summary>
     private static string Props(App app, string argument)
     {
-        if (!int.TryParse(argument, out var id)) return Error("props wants a widget id");
+        if (!int.TryParse(s: argument, result: out int id)) return Error("props wants a widget id");
 
-        var widget = Find(app.Root, id, 0);
-        if (widget is null) return Error($"no widget with id {id} — the tree may have been rebuilt");
+        var widget = Find(widget: app.Root, id: id, depth: 0);
+        if (widget is null)
+            return Error($"no widget with id {id} — the tree may have been rebuilt");
 
         var json = new StringBuilder("{\"id\":").Append(id);
         json.Append(",\"type\":");
-        Quote(json, widget.GetType().Name);
+        Quote(json: json, text: widget.GetType().Name);
         json.Append(",\"props\":{");
-        var first = true;
-        foreach (var (name, value) in WidgetDebug.Properties(widget))
+        bool first = true;
+        foreach ((string name, string value) in WidgetDebug.Properties(widget))
         {
             if (!first) json.Append(',');
-            Quote(json, name);
+            Quote(json: json, text: name);
             json.Append(':');
-            Quote(json, value);
+            Quote(json: json, text: value);
             first = false;
         }
 
         json.Append("}");
-        Bounds(json, widget.Bounds);
+        Bounds(json: json, bounds: widget.Bounds);
         return json.Append('}').ToString();
     }
 
@@ -310,8 +403,11 @@ public static class InspectServer
         if (widget is null || depth > MaxDepth) return null;
         if (widget.GetHashCode() == id) return widget;
         foreach (var child in WidgetDebug.Children(widget))
-            if (Find(child, id, depth + 1) is { } hit)
+        {
+            if (Find(widget: child, id: id, depth: depth + 1) is { } hit)
                 return hit;
+        }
+
         return null;
     }
 
@@ -341,18 +437,25 @@ public static class InspectServer
     private static string Shot(App app, string argument)
     {
         // `shot [scale]` — 2 renders at twice the density for a HiDPI panel.
-        var scale = float.TryParse(argument, CultureInfo.InvariantCulture, out var s) ? Math.Clamp(s, 0.1f, 4f) : 1f;
+        float scale =
+            float.TryParse(s: argument, provider: CultureInfo.InvariantCulture, result: out float s)
+                ? Math.Clamp(value: s, min: 0.1f, max: 4f)
+                : 1f;
 
-        var path = Path.Combine(Path.GetTempPath(), $"zigote-shot-{Environment.ProcessId}.bmp");
+        string path = Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: $"zigote-shot-{Environment.ProcessId}.bmp"
+        );
         try
         {
-            if (!app.CaptureUi(path, scale, out var density))
+            if (!app.CaptureUi(path: path, scale: scale, density: out float density))
                 return Error("the engine could not capture a frame — nothing has been painted yet");
 
             // The layout size, not the window's: with a device preview set they differ, and the panel
             // scales the picture by what it is told. The picture itself is w×h × `scale` pixels, so a
             // viewer needs the density that was actually used — not the one that was asked for.
-            var json = new StringBuilder("{\"format\":\"bmp\",\"w\":").Append((uint)app.LayoutWidth);
+            var json =
+                new StringBuilder("{\"format\":\"bmp\",\"w\":").Append((uint)app.LayoutWidth);
             json.Append(",\"h\":").Append((uint)app.LayoutHeight);
             json.Append(",\"scale\":").Append(Round(density));
             json.Append(",\"data\":\"").Append(Convert.ToBase64String(File.ReadAllBytes(path)));
@@ -369,9 +472,7 @@ public static class InspectServer
             {
                 File.Delete(path);
             }
-            catch (IOException)
-            {
-            }
+            catch (IOException) { }
         }
     }
 
@@ -384,47 +485,71 @@ public static class InspectServer
     ///         <item><c>move X Y</c> — pointer move.</item>
     ///         <item><c>scroll X Y DX DY</c> — wheel ticks at a position.</item>
     ///         <item><c>keydown NAME [shift+ctrl+alt+cmd]</c> / <c>keyup NAME [mods]</c> — a physical key.</item>
-    ///         <item><c>text …</c> — commit text to the focused widget (everything after the space, verbatim).</item>
+    ///         <item>
+    ///             <c>text …</c> — commit text to the focused widget (everything after the space,
+    ///             verbatim).
+    ///         </item>
     ///     </list>
     /// </summary>
     internal static InputEvent? ParseInput(string argument)
     {
-        var space = argument.IndexOf(' ');
-        var kind = space < 0 ? argument : argument[..space];
-        var rest = space < 0 ? "" : argument[(space + 1)..];
+        int space = argument.IndexOf(' ');
+        string kind = space < 0 ? argument : argument[..space];
+        string rest = space < 0 ? "" : argument[(space + 1)..];
 
         // Text is verbatim — splitting it on spaces would eat the user's own spaces.
         if (kind == "text") return rest.Length > 0 ? new TextInputEvent(rest) : null;
 
-        var parts = rest.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        string[] parts = rest.Split(separator: ' ', options: StringSplitOptions.RemoveEmptyEntries);
         switch (kind)
         {
-            case "down" or "up" when parts.Length is 2 or 3 && Xy(parts, out var x, out var y):
+            case "down" or "up" when parts.Length is 2 or 3 && Xy(
+                parts: parts,
+                x: out float x,
+                y: out float y
+            ):
             {
-                var button = parts.Length < 3 ? MouseButton.Left : parts[2] switch {
-                    "right" => MouseButton.Right,
-                    "middle" => MouseButton.Middle,
-                    _ => MouseButton.Left,
-                };
+                var button = parts.Length < 3
+                    ? MouseButton.Left
+                    : parts[2] switch {
+                        "right" => MouseButton.Right,
+                        "middle" => MouseButton.Middle,
+                        _ => MouseButton.Left,
+                    };
                 return kind == "down"
-                    ? new MouseDownEvent(x, y, button)
-                    : new MouseUpEvent(x, y, button);
+                    ? new MouseDownEvent(x: x, y: y, button: button)
+                    : new MouseUpEvent(x: x, y: y, button: button);
             }
 
-            case "move" when parts.Length == 2 && Xy(parts, out var x, out var y):
-                return new MouseMoveEvent(x, y);
+            case "move" when parts.Length == 2 && Xy(parts: parts, x: out float x, y: out float y):
+                return new MouseMoveEvent(x: x, y: y);
 
-            case "scroll" when parts.Length == 4 && Xy(parts, out var x, out var y) &&
-                               Num(parts[2], out var dx) && Num(parts[3], out var dy):
-                return new ScrollEvent(x, y, dx, dy);
+            case "scroll" when parts.Length == 4 &&
+                               Xy(parts: parts, x: out float x, y: out float y) &&
+                               Num(s: parts[2], v: out float dx) && Num(
+                                   s: parts[3],
+                                   v: out float dy
+                               ):
+                return new ScrollEvent(
+                    x: x,
+                    y: y,
+                    scrollX: dx,
+                    scrollY: dy
+                );
 
             case "keydown" or "keyup" when parts.Length is 1 or 2 &&
-                                           Enum.TryParse<KeyCode>(parts[0], true, out var key) &&
+                                           Enum.TryParse<KeyCode>(
+                                               value: parts[0],
+                                               ignoreCase: true,
+                                               result: out var key
+                                           ) &&
                                            key != KeyCode.Unknown:
             {
                 var mods = Modifiers.None;
                 if (parts.Length == 2)
-                    foreach (var m in parts[1].Split('+'))
+                {
+                    foreach (string m in parts[1].Split('+'))
+                    {
                         mods |= m switch {
                             "shift" => Modifiers.Shift,
                             "ctrl" => Modifiers.Ctrl,
@@ -432,7 +557,15 @@ public static class InspectServer
                             "cmd" => Modifiers.Cmd,
                             _ => Modifiers.None,
                         };
-                return new KeyEvent(kind == "keydown", '\0', (uint)key, mods);
+                    }
+                }
+
+                return new KeyEvent(
+                    down: kind == "keydown",
+                    keyChar: '\0',
+                    scancode: (uint)key,
+                    modifiers: mods
+                );
             }
 
             default:
@@ -442,12 +575,17 @@ public static class InspectServer
         static bool Xy(string[] parts, out float x, out float y)
         {
             y = 0;
-            return Num(parts[0], out x) && Num(parts[1], out y);
+            return Num(s: parts[0], v: out x) && Num(s: parts[1], v: out y);
         }
 
         static bool Num(string s, out float v)
         {
-            return float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out v) &&
+            return float.TryParse(
+                       s: s,
+                       style: NumberStyles.Float,
+                       provider: CultureInfo.InvariantCulture,
+                       result: out v
+                   ) &&
                    float.IsFinite(v);
         }
     }
@@ -463,25 +601,41 @@ public static class InspectServer
     ///         4K preview at 60 fps ever matters, add an in-memory capture to the engine first.
     ///     </para>
     /// </summary>
-    private static void StreamFrames(NetworkStream stream, StreamWriter writer, App app, string argument)
+    private static void StreamFrames(NetworkStream stream, StreamWriter writer, App app,
+        string argument)
     {
-        var parts = argument.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var scale = parts.Length > 0 &&
-                    float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var s)
-            ? Math.Clamp(s, 0.1f, 4f)
+        string[] parts = argument.Split(
+            separator: ' ',
+            options: StringSplitOptions.RemoveEmptyEntries
+        );
+        float scale = parts.Length > 0 &&
+                      float.TryParse(
+                          s: parts[0],
+                          style: NumberStyles.Float,
+                          provider: CultureInfo.InvariantCulture,
+                          result: out float s
+                      )
+            ? Math.Clamp(value: s, min: 0.1f, max: 4f)
             : 1f;
-        var fps = parts.Length > 1 && int.TryParse(parts[1], out var f) ? Math.Clamp(f, 1, 60) : 30;
+        int fps = parts.Length > 1 && int.TryParse(s: parts[1], result: out int f)
+            ? Math.Clamp(value: f, min: 1, max: 60)
+            : 30;
 
         // The handshake: a client of an older server gets {"error":…} here and knows to fall back.
         // It carries the density because a raw frame has no envelope to put it in, and a viewer that
         // guesses 1× draws a 2× picture at twice the size.
-        writer.Write($"{{\"format\":\"bmp\",\"stream\":true,\"scale\":{Round(app.CaptureDensity(scale))}}}\n");
+        writer.Write(
+            $"{{\"format\":\"bmp\",\"stream\":true,\"scale\":{Round(app.CaptureDensity(scale))}}}\n"
+        );
 
         stream.WriteTimeout = (int)Timeout.TotalMilliseconds; // a wedged client fails, not hangs
-        var path = Path.Combine(Path.GetTempPath(), $"zigote-stream-{Environment.ProcessId}-{Environment.CurrentManagedThreadId}.bmp");
+        string path = Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: $"zigote-stream-{Environment.ProcessId}-{Environment.CurrentManagedThreadId}.bmp"
+        );
         byte[]? last = null;
-        var lengthPrefix = new byte[4];
-        var seen = -1;
+        byte[] lengthPrefix = new byte[4];
+        int seen = -1;
         try
         {
             while (true)
@@ -489,11 +643,19 @@ public static class InspectServer
                 // Version-gated: when no paint walk ran since the last capture, skip the capture
                 // entirely (no offscreen render, no BMP round-trip, no byte compare). The byte
                 // compare below stays as the backstop for walks that repainted identical pixels.
-                var (frame, version) = CaptureFrame(app, path, scale, seen);
+                (byte[]? frame, int version) = CaptureFrame(
+                    app: app,
+                    path: path,
+                    scale: scale,
+                    sinceVersion: seen
+                );
                 seen = version;
                 if (frame is not null && (last is null || !frame.AsSpan().SequenceEqual(last)))
                 {
-                    System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(lengthPrefix, frame.Length);
+                    BinaryPrimitives.WriteInt32BigEndian(
+                        destination: lengthPrefix,
+                        value: frame.Length
+                    );
                     stream.Write(lengthPrefix);
                     stream.Write(frame);
                     last = frame;
@@ -508,9 +670,7 @@ public static class InspectServer
             {
                 File.Delete(path);
             }
-            catch (IOException)
-            {
-            }
+            catch (IOException) { }
         }
     }
 
@@ -520,23 +680,30 @@ public static class InspectServer
     ///     click's result, not the frame before it). A null frame means nothing new to show —
     ///     unpainted since <paramref name="sinceVersion" />, nothing painted yet, or a failed capture.
     /// </summary>
-    private static (byte[]? Frame, int Version) CaptureFrame(App app, string path, float scale, int sinceVersion)
+    private static (byte[]? Frame, int Version) CaptureFrame(App app, string path, float scale,
+        int sinceVersion)
     {
-        var done = new TaskCompletionSource<(byte[]?, int)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var done =
+            new TaskCompletionSource<(byte[]?, int)>(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
         app.PostAfterFrame(() =>
-        {
-            try
             {
-                var version = app.PaintVersion;
-                done.TrySetResult(version != sinceVersion && app.CaptureUi(path, scale)
-                    ? (File.ReadAllBytes(path), version)
-                    : (null, version));
+                try
+                {
+                    int version = app.PaintVersion;
+                    done.TrySetResult(
+                        version != sinceVersion && app.CaptureUi(path: path, scale: scale)
+                            ? (File.ReadAllBytes(path), version)
+                            : (null, version)
+                    );
+                }
+                catch (Exception)
+                {
+                    done.TrySetResult((null, sinceVersion));
+                }
             }
-            catch (Exception)
-            {
-                done.TrySetResult((null, sinceVersion));
-            }
-        });
+        );
         return done.Task.Wait(Timeout) ? done.Task.Result : (null, sinceVersion);
     }
 
@@ -549,20 +716,22 @@ public static class InspectServer
         // A TaskCompletionSource rather than an event to wait on: on timeout this method returns while
         // the posted action is still queued, and there is nothing left for that action to signal into
         // that could have been disposed underneath it.
-        var done = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var done =
+            new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         Action<Action> post = afterFrame ? app.PostAfterFrame : app.Post;
         post(() =>
-        {
-            try
             {
-                done.TrySetResult(work());
+                try
+                {
+                    done.TrySetResult(work());
+                }
+                catch (Exception e)
+                {
+                    done.TrySetResult(Error(e.Message));
+                }
             }
-            catch (Exception e)
-            {
-                done.TrySetResult(Error(e.Message));
-            }
-        });
+        );
 
         return done.Task.Wait(Timeout)
             ? done.Task.Result
@@ -578,8 +747,13 @@ public static class InspectServer
     internal static string WidgetTreeJson(Widget? root)
     {
         var json = new StringBuilder("{\"tree\":");
-        var budget = MaxNodes;
-        WriteWidget(json, root, 0, ref budget);
+        int budget = MaxNodes;
+        WriteWidget(
+            json: json,
+            widget: root,
+            depth: 0,
+            budget: ref budget
+        );
         return json.Append('}').ToString();
     }
 
@@ -590,13 +764,13 @@ public static class InspectServer
     internal static string LocalesJson((string Current, IReadOnlyList<string> Supported)? info)
     {
         var json = new StringBuilder("{\"current\":");
-        Quote(json, info?.Current);
+        Quote(json: json, text: info?.Current);
         json.Append(",\"locales\":[");
         var supported = info?.Supported ?? [];
-        for (var i = 0; i < supported.Count; i++)
+        for (int i = 0; i < supported.Count; i++)
         {
             if (i > 0) json.Append(',');
-            Quote(json, supported[i]);
+            Quote(json: json, text: supported[i]);
         }
 
         return json.Append("]}").ToString();
@@ -606,8 +780,13 @@ public static class InspectServer
     internal static string SemanticsTreeJson(SemanticsNode? root)
     {
         var json = new StringBuilder("{\"tree\":");
-        var budget = MaxNodes;
-        WriteSemantics(json, root, 0, ref budget);
+        int budget = MaxNodes;
+        WriteSemantics(
+            json: json,
+            node: root,
+            depth: 0,
+            budget: ref budget
+        );
         return json.Append('}').ToString();
     }
 
@@ -621,25 +800,31 @@ public static class InspectServer
 
         json.Append("{\"id\":").Append(widget.GetHashCode());
         json.Append(",\"type\":");
-        Quote(json, widget.GetType().Name);
+        Quote(json: json, text: widget.GetType().Name);
         json.Append(",\"desc\":");
-        Quote(json, WidgetDebug.Describe(widget));
-        Bounds(json, widget.Bounds);
+        Quote(json: json, text: WidgetDebug.Describe(widget));
+        Bounds(json: json, bounds: widget.Bounds);
 
         json.Append(",\"children\":[");
-        var first = true;
+        bool first = true;
         foreach (var child in WidgetDebug.Children(widget))
         {
             if (budget <= 0) break;
             if (!first) json.Append(',');
-            WriteWidget(json, child, depth + 1, ref budget);
+            WriteWidget(
+                json: json,
+                widget: child,
+                depth: depth + 1,
+                budget: ref budget
+            );
             first = false;
         }
 
         json.Append("]}");
     }
 
-    private static void WriteSemantics(StringBuilder json, SemanticsNode? node, int depth, ref int budget)
+    private static void WriteSemantics(StringBuilder json, SemanticsNode? node, int depth,
+        ref int budget)
     {
         if (node is null || depth > MaxDepth || budget-- <= 0)
         {
@@ -649,31 +834,36 @@ public static class InspectServer
 
         json.Append("{\"id\":").Append(node.Id);
         json.Append(",\"role\":");
-        Quote(json, node.Role.ToString());
+        Quote(json: json, text: node.Role.ToString());
         json.Append(",\"label\":");
-        Quote(json, node.Label);
+        Quote(json: json, text: node.Label);
         json.Append(",\"value\":");
-        Quote(json, node.Value);
+        Quote(json: json, text: node.Value);
         json.Append(",\"hint\":");
-        Quote(json, node.Hint);
+        Quote(json: json, text: node.Hint);
         json.Append(",\"flags\":");
-        Quote(json, node.Flags.ToString());
+        Quote(json: json, text: node.Flags.ToString());
         json.Append(",\"actions\":");
-        Quote(json, node.Actions.ToString());
-        Bounds(json, node.Bounds);
+        Quote(json: json, text: node.Actions.ToString());
+        Bounds(json: json, bounds: node.Bounds);
 
         json.Append(",\"children\":[");
-        for (var i = 0; i < node.Children.Count; i++)
+        for (int i = 0; i < node.Children.Count; i++)
         {
             if (budget <= 0) break;
             if (i > 0) json.Append(',');
-            WriteSemantics(json, node.Children[i], depth + 1, ref budget);
+            WriteSemantics(
+                json: json,
+                node: node.Children[i],
+                depth: depth + 1,
+                budget: ref budget
+            );
         }
 
         json.Append("]}");
     }
 
-    private static void Bounds(StringBuilder json, Core.Rect bounds)
+    private static void Bounds(StringBuilder json, Rect bounds)
     {
         json.Append(",\"x\":").Append(Round(bounds.X));
         json.Append(",\"y\":").Append(Round(bounds.Y));
@@ -685,14 +875,14 @@ public static class InspectServer
     private static string Round(float v)
     {
         return float.IsFinite(v)
-            ? Math.Round(v, 2).ToString(CultureInfo.InvariantCulture)
+            ? Math.Round(value: v, digits: 2).ToString(CultureInfo.InvariantCulture)
             : "0";
     }
 
     private static string Error(string message)
     {
         var json = new StringBuilder("{\"error\":");
-        Quote(json, message);
+        Quote(json: json, text: message);
         return json.Append('}').ToString();
     }
 
@@ -705,7 +895,8 @@ public static class InspectServer
         }
 
         json.Append('"');
-        foreach (var c in text)
+        foreach (char c in text)
+        {
             switch (c)
             {
                 case '"': json.Append("\\\""); break;
@@ -715,10 +906,17 @@ public static class InspectServer
                 case '\t': json.Append("\\t"); break;
                 default:
                     // Control characters are illegal raw in JSON; widget descriptions can carry them.
-                    if (c < ' ') json.Append("\\u").Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
+                    if (c < ' ')
+                    {
+                        json.Append("\\u").Append(
+                            ((int)c).ToString(format: "x4", provider: CultureInfo.InvariantCulture)
+                        );
+                    }
                     else json.Append(c);
+
                     break;
             }
+        }
 
         json.Append('"');
     }

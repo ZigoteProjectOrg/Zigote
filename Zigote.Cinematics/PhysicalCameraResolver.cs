@@ -17,7 +17,7 @@ public static class PhysicalCameraResolver
     /// <summary>Vertical field of view (radians) for a focal length on a sensor of the given gate height.</summary>
     public static float VerticalFov(float focalLengthMm, float sensorHeightMm)
     {
-        var f = MathF.Max(focalLengthMm, 1e-3f);
+        float f = MathF.Max(x: focalLengthMm, y: 1e-3f);
         return 2f * MathF.Atan(sensorHeightMm / (2f * f));
     }
 
@@ -27,8 +27,8 @@ public static class PhysicalCameraResolver
     /// </summary>
     public static float EffectiveFocalMm(float focalLengthMm, float focusM)
     {
-        var f = MathF.Max(focalLengthMm, 1e-3f);
-        var dMm = MathF.Max(focusM * 1000f, f + 1f); // keep denominator positive
+        float f = MathF.Max(x: focalLengthMm, y: 1e-3f);
+        float dMm = MathF.Max(x: focusM * 1000f, y: f + 1f); // keep denominator positive
         return f * (dMm / (dMm - f));
     }
 
@@ -40,11 +40,11 @@ public static class PhysicalCameraResolver
     public static float CircleOfConfusionMm(float focalLengthMm, float fStop, float subjectM,
         float focusM)
     {
-        var f = MathF.Max(focalLengthMm, 1e-3f);
-        var n = MathF.Max(fStop, 1e-3f);
-        var s = MathF.Max(subjectM * 1000f, 1e-3f); // mm
-        var d = MathF.Max(focusM * 1000f, f + 1e-3f); // mm, keep (d - f) > 0
-        var aperture = f / n; // entrance-pupil diameter, mm
+        float f = MathF.Max(x: focalLengthMm, y: 1e-3f);
+        float n = MathF.Max(x: fStop, y: 1e-3f);
+        float s = MathF.Max(x: subjectM * 1000f, y: 1e-3f); // mm
+        float d = MathF.Max(x: focusM * 1000f, y: f + 1e-3f); // mm, keep (d - f) > 0
+        float aperture = f / n; // entrance-pupil diameter, mm
         return aperture * (f / (d - f)) * MathF.Abs(s - d) / s;
     }
 
@@ -53,29 +53,29 @@ public static class PhysicalCameraResolver
         float sensorHeightMm,
         float viewportHeightPx)
     {
-        var f = MathF.Max(focalLengthMm, 1e-3f);
-        var n = MathF.Max(fStop, 1e-3f);
-        var d = MathF.Max(focusM * 1000f, f + 1e-3f);
-        var aperture = f / n;
-        var bgCocMm = aperture * (f / (d - f)); // |s-d|/s → 1 as s → ∞
-        var px = bgCocMm / MathF.Max(sensorHeightMm, 1e-3f) * viewportHeightPx;
-        return Math.Clamp(px, 0f, MaxCocPixelCap);
+        float f = MathF.Max(x: focalLengthMm, y: 1e-3f);
+        float n = MathF.Max(x: fStop, y: 1e-3f);
+        float d = MathF.Max(x: focusM * 1000f, y: f + 1e-3f);
+        float aperture = f / n;
+        float bgCocMm = aperture * (f / (d - f)); // |s-d|/s → 1 as s → ∞
+        float px = bgCocMm / MathF.Max(x: sensorHeightMm, y: 1e-3f) * viewportHeightPx;
+        return Math.Clamp(value: px, min: 0f, max: MaxCocPixelCap);
     }
 
     /// <summary>Exposure value at ISO 100 from the exposure triangle: EV100 = log2(N²/t) − log2(ISO/100).</summary>
     public static float Ev100(float fStop, float shutterSeconds, float iso)
     {
-        var n = MathF.Max(fStop, 1e-3f);
-        var t = MathF.Max(shutterSeconds, 1e-6f);
-        var s = MathF.Max(iso, 1f);
+        float n = MathF.Max(x: fStop, y: 1e-3f);
+        float t = MathF.Max(x: shutterSeconds, y: 1e-6f);
+        float s = MathF.Max(x: iso, y: 1f);
         return MathF.Log2(n * n / t) - MathF.Log2(s / 100f);
     }
 
     /// <summary>Map an EV to the renderer's linear exposure multiplier — brighter EV → less digital gain.</summary>
     public static float ExposureMultiplier(float ev100)
     {
-        var e = ReferenceExposure * MathF.Pow(2f, ReferenceEv100 - ev100);
-        return Math.Clamp(e, 0.1f, 4f);
+        float e = ReferenceExposure * MathF.Pow(x: 2f, y: ReferenceEv100 - ev100);
+        return Math.Clamp(value: e, min: 0.1f, max: 4f);
     }
 
     /// <summary>
@@ -87,17 +87,25 @@ public static class PhysicalCameraResolver
         float viewportHeightPx,
         float dtSeconds)
     {
-        var sensorH = MathF.Max(cam.Sensor.HeightMm, 1e-3f);
-        var focus = ResolveFocusDistance(cam, subjectDistanceM, dtSeconds);
+        float sensorH = MathF.Max(x: cam.Sensor.HeightMm, y: 1e-3f);
+        float focus = ResolveFocusDistance(
+            cam: cam,
+            subjectDistanceM: subjectDistanceM,
+            dtSeconds: dtSeconds
+        );
         cam.CurrentFocusDistanceM = focus;
 
-        var fovY = VerticalFov(cam.Lens.FocalLengthMm, sensorH);
+        float fovY = VerticalFov(focalLengthMm: cam.Lens.FocalLengthMm, sensorHeightMm: sensorH);
 
-        var ev = Ev100(cam.Lens.FStop, cam.Body.ShutterSpeed, cam.Body.Iso);
-        var exposure = ExposureMultiplier(ev);
+        float ev = Ev100(
+            fStop: cam.Lens.FStop,
+            shutterSeconds: cam.Body.ShutterSpeed,
+            iso: cam.Body.Iso
+        );
+        float exposure = ExposureMultiplier(ev);
 
         var film = cam.Film;
-        var motionShutter = MotionBlurShutter(cam.Body);
+        float motionShutter = MotionBlurShutter(cam.Body);
 
         return new CameraGrade {
             FovYRadians = fovY,
@@ -107,11 +115,11 @@ public static class PhysicalCameraResolver
             DofFocusDistance = focus,
             DofFStop = cam.Lens.FStop,
             DofMaxCoc = BackgroundCocPixels(
-                cam.Lens.FocalLengthMm,
-                cam.Lens.FStop,
-                focus,
-                sensorH,
-                viewportHeightPx
+                focalLengthMm: cam.Lens.FocalLengthMm,
+                fStop: cam.Lens.FStop,
+                focusM: focus,
+                sensorHeightMm: sensorH,
+                viewportHeightPx: viewportHeightPx
             ),
             Ev100 = ev,
             Exposure = exposure,
@@ -126,7 +134,8 @@ public static class PhysicalCameraResolver
             DistortionK2 = cam.Lens.DistortionK2,
             MotionBlurShutter = motionShutter,
             FocusBreathing =
-                EffectiveFocalMm(cam.Lens.FocalLengthMm, focus) - cam.Lens.FocalLengthMm,
+                EffectiveFocalMm(focalLengthMm: cam.Lens.FocalLengthMm, focusM: focus) -
+                cam.Lens.FocalLengthMm,
             ApertureBlades = cam.Lens.ApertureBlades,
             Anamorphic = cam.Lens.Anamorphic <= 0f ? 1f : cam.Lens.Anamorphic,
             LutId = film.LutId,
@@ -145,16 +154,16 @@ public static class PhysicalCameraResolver
         float dtSeconds)
     {
         if (cam.Focus.Kind == FocusModeKind.Manual)
-            return MathF.Max(cam.Focus.ManualDistanceM, 0.01f);
+            return MathF.Max(x: cam.Focus.ManualDistanceM, y: 0.01f);
 
-        var target = MathF.Max(subjectDistanceM, 0.01f);
-        var current = cam.CurrentFocusDistanceM <= 0f ? target : cam.CurrentFocusDistanceM;
-        var speed = cam.Focus.SpeedPerSec;
+        float target = MathF.Max(x: subjectDistanceM, y: 0.01f);
+        float current = cam.CurrentFocusDistanceM <= 0f ? target : cam.CurrentFocusDistanceM;
+        float speed = cam.Focus.SpeedPerSec;
         if (speed <= 0f || dtSeconds <= 0f)
             return target;
 
-        var alpha = 1f - MathF.Exp(-speed * dtSeconds);
-        return current + (target - current) * alpha;
+        float alpha = 1f - MathF.Exp(-speed * dtSeconds);
+        return current + ((target - current) * alpha);
     }
 
     // Shutter fraction 0..1 driving camera motion blur. Uses the cine shutter angle when set, else derives
@@ -162,8 +171,8 @@ public static class PhysicalCameraResolver
     private static float MotionBlurShutter(CameraBody body)
     {
         if (body.ShutterAngleDeg > 0f)
-            return Math.Clamp(body.ShutterAngleDeg / 360f, 0f, 1f);
-        var reference = 1f / 50f;
-        return Math.Clamp(body.ShutterSpeed / reference * 0.5f, 0f, 1f);
+            return Math.Clamp(value: body.ShutterAngleDeg / 360f, min: 0f, max: 1f);
+        float reference = 1f / 50f;
+        return Math.Clamp(value: body.ShutterSpeed / reference * 0.5f, min: 0f, max: 1f);
     }
 }

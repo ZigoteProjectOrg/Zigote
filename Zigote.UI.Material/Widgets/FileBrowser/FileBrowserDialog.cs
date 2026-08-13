@@ -17,8 +17,10 @@ public sealed class FileBrowserOptions
     public bool ShowHidden { get; init; }
     public bool CanCreateDirectories { get; init; } = true;
 
-    /// <summary>Clamp navigation to this subtree and hide the places sidebar — for pickers that
-    ///     must stay inside a project.</summary>
+    /// <summary>
+    ///     Clamp navigation to this subtree and hide the places sidebar — for pickers that
+    ///     must stay inside a project.
+    /// </summary>
     public string? LockRoot { get; init; }
 
     public static FileBrowserOptions From(FileDialogRequest request)
@@ -55,6 +57,22 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
     internal App? HostWindow;
     internal TaskCompletionSource<string[]> Tcs = new();
 
+    private int _activeFilter;
+
+    /// <summary>Phone width: the dialog drops to a single column (no places sidebar, no preview).</summary>
+    private bool _compact;
+
+    private string[] _filterLabels = [];
+    private FileDialogFilter[] _filters = [];
+    private FileBrowserHeader _header = null!;
+    private FileBrowserList _list = null!;
+    private FileBrowserModel _model = null!;
+    private TextField _nameField = null!;
+    private List<FileBrowserPlaces.Place> _places = [];
+    private ScrollView _scroll = null!;
+    private SearchField _search = null!;
+    private ScrollView _sidebarScroll = null!;
+
     /// <summary>
     ///     The browser is also embeddable as a plain widget (no modal host): construct with
     ///     <see cref="Options" /> and await <see cref="Result" /> — cancel/confirm complete it;
@@ -85,11 +103,16 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
 
         // A phone has no secondary-window concept, and 780pt of dialog would be clipped to half of
         // itself anyway — go straight to the in-window presentation, sized full-screen below.
-        var compact = WindowSize.ClassFor(app.HostLogicalWidth) == WindowSizeClass.Compact;
+        bool compact = WindowSize.ClassFor(app.HostLogicalWidth) == WindowSizeClass.Compact;
         if (!compact)
+        {
             try
             {
-                var win = app.CreateWindow(DefaultTitle(options), WindowWidth, WindowHeight);
+                var win = app.CreateWindow(
+                    title: DefaultTitle(options),
+                    width: WindowWidth,
+                    height: WindowHeight
+                );
                 win.Theme = app.Theme;
                 // Titlebar ✕ destroys the window App after this fires; a confirm/cancel completed
                 // the task first and makes it a no-op.
@@ -99,7 +122,7 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
                 // from its parent App at CreateWindow, and the App wraps this root in the titlebar
                 // strip automatically.
                 win.Root = picker;
-                CenterOverParent(app, win);
+                CenterOverParent(parent: app, win: win);
                 return picker.Tcs.Task;
             }
             catch (Exception ex)
@@ -109,8 +132,9 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
                     "showing the in-window dialog instead."
                 );
             }
+        }
 
-        var host = new BrowserHost(picker, app) {
+        var host = new BrowserHost(content: picker, app: app) {
             Dismissible = true,
             WidthFraction = compact ? 1f : 0.62f,
             HeightFraction = compact ? 1f : 0.7f,
@@ -150,37 +174,21 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
     {
         try
         {
-            var (px, py) = parent.NativeWindow is { } parentWindow
+            (int px, int py) = parent.NativeWindow is { } parentWindow
                 ? parentWindow.GetPosition()
                 : parent.Engine.MainWindowPosition();
-            var x = px + (int)((parent.HostLogicalWidth - WindowWidth) / 2f);
-            var y = py + (int)((parent.HostLogicalHeight - WindowHeight) / 2f);
-            win.NativeWindow?.SetPosition(Math.Max(0, x), Math.Max(0, y));
+            int x = px + (int)((parent.HostLogicalWidth - WindowWidth) / 2f);
+            int y = py + (int)((parent.HostLogicalHeight - WindowHeight) / 2f);
+            win.NativeWindow?.SetPosition(
+                x: Math.Max(val1: 0, val2: x),
+                y: Math.Max(val1: 0, val2: y)
+            );
         }
         catch
         {
             // Positioning is cosmetic — the OS default placement is an acceptable fallback.
         }
     }
-
-    /// <summary>INoAutoFocus: the dialog focuses the list (or the save-name field) itself instead
-    ///     of letting the overlay auto-focus the first toolbar button.</summary>
-    private sealed class BrowserHost(Widget content, App app) : Dialog(content, app), INoAutoFocus;
-
-    private int _activeFilter;
-    private FileDialogFilter[] _filters = [];
-    private string[] _filterLabels = [];
-    private FileBrowserHeader _header = null!;
-    private FileBrowserList _list = null!;
-    private FileBrowserModel _model = null!;
-    private TextField _nameField = null!;
-    private List<FileBrowserPlaces.Place> _places = [];
-    private ScrollView _scroll = null!;
-    private SearchField _search = null!;
-    private ScrollView _sidebarScroll = null!;
-
-    /// <summary>Phone width: the dialog drops to a single column (no places sidebar, no preview).</summary>
-    private bool _compact;
 
     // Everything below is built at mount, not construction: Options arrives through the object
     // initialiser, after the constructor has run.
@@ -209,7 +217,7 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
                 MarkNeedsBuild();
             },
         };
-        _search = new SearchField("Search", OnSearchChanged);
+        _search = new SearchField(hint: "Search", onChanged: OnSearchChanged);
         _sidebarScroll = new ScrollView();
         _nameField = new TextField(
             onChanged: _ => MarkNeedsBuild(),
@@ -222,19 +230,17 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
         _model.NavigateTo(ResolveStartDirectory());
 
         // Owner is the hosting window's App when the browser runs as a separate OS window.
-        (Owner ?? App.Active)?.RequestFocus(
-            o.Kind == FileDialogKind.SaveFile ? _nameField : _list
-        );
+        (Owner ?? App.Active)?.RequestFocus(o.Kind == FileDialogKind.SaveFile ? _nameField : _list);
     }
 
     private string ResolveStartDirectory()
     {
-        foreach (var candidate in (string?[])[Options.StartDirectory, Options.LockRoot])
+        foreach (string? candidate in (string?[])[Options.StartDirectory, Options.LockRoot])
         {
             if (string.IsNullOrEmpty(candidate)) continue;
             if (Directory.Exists(candidate)) return candidate;
             // A file path (e.g. a previous selection) starts in its directory.
-            var parent = Path.GetDirectoryName(candidate);
+            string? parent = Path.GetDirectoryName(candidate);
             if (parent is not null && Directory.Exists(parent)) return parent;
         }
 
@@ -249,7 +255,7 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
         // Open dialogs offer an explicit escape hatch to everything (save keeps its format list).
         if (list.Count > 0 && Options.Kind == FileDialogKind.OpenFile &&
             !list.Any(f => f.Extensions.Contains("*")))
-            list.Add(new FileDialogFilter("All Files", "*"));
+            list.Add(new FileDialogFilter(name: "All Files", "*"));
 
         _filters = list.ToArray();
         _filterLabels = _filters.Select(LabelOf).ToArray();
@@ -259,17 +265,17 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
 
         static string LabelOf(FileDialogFilter f)
         {
-            var exts = NormalizedExts(f);
+            string[]? exts = NormalizedExts(f);
             return exts is null
                 ? f.Name
-                : $"{f.Name} ({string.Join(", ", exts.Select(e => "." + e))})";
+                : $"{f.Name} ({string.Join(separator: ", ", values: exts.Select(e => "." + e))})";
         }
     }
 
     /// <summary>Extensions without dots, or null when the filter admits everything.</summary>
     private static string[]? NormalizedExts(FileDialogFilter filter)
     {
-        var exts = filter.Extensions
+        string[] exts = filter.Extensions
             .Select(e => e.TrimStart('*', '.'))
             .Select(e => e.Length == 0 ? "*" : e)
             .ToArray();
@@ -296,67 +302,78 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
         // chrome) or the app-injected WindowTitleBar strip (unified/CSD). The in-content title
         // row only earns its place in the overlay/embedded presentations.
         if (HostWindow is null)
+        {
             body.Children.Insert(
-                0,
-                new Padding(
-                    new EdgeInsets(
-                        16f,
-                        12f,
-                        16f,
-                        8f
+                index: 0,
+                item: new Padding(
+                    padding: new EdgeInsets(
+                        left: 16f,
+                        top: 12f,
+                        right: 16f,
+                        bottom: 8f
                     ),
-                    new Label(TitleText(), theme.FontSizeTitle, theme.OnSurface)
+                    child: new Label(
+                        text: TitleText(),
+                        fontSize: theme.FontSizeTitle,
+                        color: theme.OnSurface
+                    )
                 )
             );
+        }
         else
-            body.Children.Insert(0, new SizedBox(height: 6f));
+            body.Children.Insert(index: 0, item: new SizedBox(height: 6f));
+
         return body;
     }
 
-    private string TitleText()
-    {
-        return FileBrowserDialog.DefaultTitle(Options);
-    }
+    private string TitleText() => DefaultTitle(Options);
 
     private Widget BuildToolbar(ThemeData theme)
     {
         var crumbs = new Row { CrossAxisAlignment = CrossAxisAlignment.Center };
         var segments = BreadcrumbSegments();
-        var start = 0;
+        int start = 0;
         if (segments.Count > 5)
         {
-            crumbs.Children.Add(CrumbButton(segments[0], theme));
-            crumbs.Children.Add(new Label("…", theme.FontSizeCaption, theme.TextMuted));
+            crumbs.Children.Add(CrumbButton(segment: segments[0], theme: theme));
+            crumbs.Children.Add(
+                new Label(text: "…", fontSize: theme.FontSizeCaption, color: theme.TextMuted)
+            );
             start = segments.Count - 3;
         }
 
-        for (var i = start; i < segments.Count; i++)
+        for (int i = start; i < segments.Count; i++)
         {
             if (crumbs.Children.Count > 0)
-                crumbs.Children.Add(new IconGlyph(Icons.ChevronRight, 12f, theme.TextMuted));
-            crumbs.Children.Add(CrumbButton(segments[i], theme));
+            {
+                crumbs.Children.Add(
+                    new IconGlyph(glyph: Icons.ChevronRight, size: 12f, color: theme.TextMuted)
+                );
+            }
+
+            crumbs.Children.Add(CrumbButton(segment: segments[i], theme: theme));
         }
 
         // MacUnified windows have no titlebar strip — this toolbar IS the titlebar band, so it
         // leads with the traffic-light inset and its gaps drag the window.
-        var lightsInset = MathF.Max(0f, (HostWindow?.TitleBarLeftInset ?? 0f) - 10f);
+        float lightsInset = MathF.Max(x: 0f, y: (HostWindow?.TitleBarLeftInset ?? 0f) - 10f);
         var nav = new Row {
             CrossAxisAlignment = CrossAxisAlignment.Center,
             Children = {
                 new SizedBox(lightsInset),
                 new IconButton(
-                    new IconGlyph(Icons.ArrowBack, 18f),
-                    _model.CanGoBack ? () => Navigate(_model.GoBack) : null,
+                    icon: new IconGlyph(glyph: Icons.ArrowBack, size: 18f),
+                    onPressed: _model.CanGoBack ? () => Navigate(_model.GoBack) : null,
                     tooltip: "Back"
                 ),
                 new IconButton(
-                    new IconGlyph(Icons.ArrowForward, 18f),
-                    _model.CanGoForward ? () => Navigate(_model.GoForward) : null,
+                    icon: new IconGlyph(glyph: Icons.ArrowForward, size: 18f),
+                    onPressed: _model.CanGoForward ? () => Navigate(_model.GoForward) : null,
                     tooltip: "Forward"
                 ),
                 new IconButton(
-                    new IconGlyph(Icons.ArrowUpward, 18f),
-                    _model.CanGoUp ? GoUp : null,
+                    icon: new IconGlyph(glyph: Icons.ArrowUpward, size: 18f),
+                    onPressed: _model.CanGoUp ? GoUp : null,
                     tooltip: "Up one level"
                 ),
                 new SizedBox(6f),
@@ -380,26 +397,26 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
         // give the field its own full-width row instead.
         if (!_compact)
         {
-            nav.Children.Add(new SizedBox(190f, child: _search));
+            nav.Children.Add(new SizedBox(width: 190f, child: _search));
             return new Padding(
-                new EdgeInsets(
-                    10f,
-                    0f,
-                    10f,
-                    6f
+                padding: new EdgeInsets(
+                    left: 10f,
+                    top: 0f,
+                    right: 10f,
+                    bottom: 6f
                 ),
-                nav
+                child: nav
             );
         }
 
         return new Padding(
-            new EdgeInsets(
-                10f,
-                0f,
-                10f,
-                6f
+            padding: new EdgeInsets(
+                left: 10f,
+                top: 0f,
+                right: 10f,
+                bottom: 6f
             ),
-            new Column {
+            child: new Column {
                 CrossAxisAlignment = CrossAxisAlignment.Stretch,
                 Children = {
                     nav,
@@ -412,12 +429,15 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
 
     private Widget CrumbButton((string Label, string Path) segment, ThemeData theme)
     {
-        var isCurrent = string.Equals(
-            segment.Path,
-            _model.CurrentDirectory,
-            StringComparison.OrdinalIgnoreCase
+        bool isCurrent = string.Equals(
+            a: segment.Path,
+            b: _model.CurrentDirectory,
+            comparisonType: StringComparison.OrdinalIgnoreCase
         );
-        return new Button(segment.Label, isCurrent ? null : () => NavigateTo(segment.Path)) {
+        return new Button(
+            label: segment.Label,
+            onPressed: isCurrent ? null : () => NavigateTo(segment.Path)
+        ) {
             Style = ButtonStyle.Flat,
             FontSize = theme.FontSizeCaption,
             TextColor = isCurrent ? theme.OnSurface : theme.TextSecondary,
@@ -443,7 +463,7 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
         if (_places.Count > 0)
         {
             _sidebarScroll.Child = BuildSidebar();
-            row.Children.Add(new SizedBox(156f, child: _sidebarScroll));
+            row.Children.Add(new SizedBox(width: 156f, child: _sidebarScroll));
             row.Children.Add(new Divider { Vertical = true });
         }
 
@@ -452,14 +472,16 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
         if (BuildPreview() is { } preview)
         {
             row.Children.Add(new Divider { Vertical = true });
-            row.Children.Add(new SizedBox(220f, child: preview));
+            row.Children.Add(new SizedBox(width: 220f, child: preview));
         }
 
         return row.Children.Count == 1 ? listColumn : row;
     }
 
-    /// <summary>Preview pane for a single selected previewable file (images incl. .hdr — a
-    ///     place the in-app browser beats the OS dialogs for engine content).</summary>
+    /// <summary>
+    ///     Preview pane for a single selected previewable file (images incl. .hdr — a
+    ///     place the in-app browser beats the OS dialogs for engine content).
+    /// </summary>
     private Widget? BuildPreview()
     {
         if (Options.Kind == FileDialogKind.PickFolder) return null;
@@ -477,16 +499,16 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
         };
         foreach (var place in _places)
         {
-            var isCurrent = string.Equals(
-                Path.TrimEndingDirectorySeparator(place.Path),
-                Path.TrimEndingDirectorySeparator(_model.CurrentDirectory),
-                StringComparison.OrdinalIgnoreCase
+            bool isCurrent = string.Equals(
+                a: Path.TrimEndingDirectorySeparator(place.Path),
+                b: Path.TrimEndingDirectorySeparator(_model.CurrentDirectory),
+                comparisonType: StringComparison.OrdinalIgnoreCase
             );
-            var target = place.Path;
+            string target = place.Path;
             col.Children.Add(
                 new ListTile(
-                    new IconGlyph(place.Icon, 16f),
-                    new Label(place.Label) { Style = Label.LabelStyle.Caption },
+                    leading: new IconGlyph(glyph: place.Icon, size: 16f),
+                    title: new Label(place.Label) { Style = Label.LabelStyle.Caption },
                     onPressed: () => NavigateTo(target),
                     selected: isCurrent
                 )
@@ -505,42 +527,50 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
             MainAxisSize = MainAxisSize.Min,
         };
         if (Options.Kind == FileDialogKind.SaveFile)
+        {
             col.Children.Add(
                 new Padding(
-                    new EdgeInsets(
-                        16f,
-                        10f,
-                        16f,
-                        0f
+                    padding: new EdgeInsets(
+                        left: 16f,
+                        top: 10f,
+                        right: 16f,
+                        bottom: 0f
                     ),
-                    new Row {
+                    child: new Row {
                         CrossAxisAlignment = CrossAxisAlignment.Center,
                         Children = {
-                            new Label("Name:", theme.FontSizeCaption, theme.TextSecondary),
+                            new Label(
+                                text: "Name:",
+                                fontSize: theme.FontSizeCaption,
+                                color: theme.TextSecondary
+                            ),
                             new SizedBox(8f),
                             new Expanded(_nameField),
                         },
                     }
                 )
             );
+        }
 
         // Options (hidden toggle, New Folder, item count) and the commit pair (filter, Cancel,
         // Accept) add up to ~600pt of un-wrapping Row. On a phone they become two stacked rows,
         // with the filter dropdown full-width above the buttons.
         var options = new Row { CrossAxisAlignment = CrossAxisAlignment.Center };
         options.Children.Add(
-            new Checkbox(_model.ShowHidden, ToggleHidden) {
+            new Checkbox(value: _model.ShowHidden, onChanged: ToggleHidden) {
                 Size = _compact ? ControlMetrics.CheckboxSize : 14f,
             }
         );
         options.Children.Add(new SizedBox(6f));
-        options.Children.Add(new Label("Hidden", theme.FontSizeCaption, theme.TextSecondary));
+        options.Children.Add(
+            new Label(text: "Hidden", fontSize: theme.FontSizeCaption, color: theme.TextSecondary)
+        );
 
         if (Options.CanCreateDirectories && Options.Kind != FileDialogKind.OpenFile)
         {
             options.Children.Add(new SizedBox(14f));
             options.Children.Add(
-                new Button("New Folder", PromptNewFolder) {
+                new Button(label: "New Folder", onPressed: PromptNewFolder) {
                     Style = ButtonStyle.Outlined,
                     FontSize = theme.FontSizeCaption,
                 }
@@ -548,7 +578,9 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
         }
 
         options.Children.Add(new SizedBox(14f));
-        options.Children.Add(new Label(StatusText(), theme.FontSizeCaption, theme.TextMuted));
+        options.Children.Add(
+            new Label(text: StatusText(), fontSize: theme.FontSizeCaption, color: theme.TextMuted)
+        );
 
         var commit = new Row {
             // Only read in the stacked (phone) arm — the desktop arm copies these children into a
@@ -557,19 +589,25 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
             CrossAxisAlignment = CrossAxisAlignment.Center,
         };
         Widget? filter = _filterLabels.Length > 0
-            ? new Dropdown<string>(_filterLabels, _activeFilter, OnFilterChanged) { Height = 26f }
+            ? new Dropdown<string>(
+                items: _filterLabels,
+                selectedIndex: _activeFilter,
+                onChanged: OnFilterChanged
+            ) { Height = 26f }
             : null;
 
         if (filter is not null && !_compact)
         {
-            commit.Children.Add(new SizedBox(220f, child: filter));
+            commit.Children.Add(new SizedBox(width: 220f, child: filter));
             commit.Children.Add(new SizedBox(10f));
         }
 
-        commit.Children.Add(new Button("Cancel", Cancel) { Style = ButtonStyle.Outlined });
+        commit.Children.Add(
+            new Button(label: "Cancel", onPressed: Cancel) { Style = ButtonStyle.Outlined }
+        );
         commit.Children.Add(new SizedBox(8f));
         commit.Children.Add(
-            new Button(AcceptLabel(), CanAccept() ? Confirm : null) {
+            new Button(label: AcceptLabel(), onPressed: CanAccept() ? Confirm : null) {
                 BackgroundColor = theme.Primary,
             }
         );
@@ -582,13 +620,13 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
             actions.Children.AddRange(commit.Children);
             col.Children.Add(
                 new Padding(
-                    new EdgeInsets(
-                        16f,
-                        10f,
-                        16f,
-                        12f
+                    padding: new EdgeInsets(
+                        left: 16f,
+                        top: 10f,
+                        right: 16f,
+                        bottom: 12f
                     ),
-                    actions
+                    child: actions
                 )
             );
             return col;
@@ -610,13 +648,13 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
 
         col.Children.Add(
             new Padding(
-                new EdgeInsets(
-                    16f,
-                    10f,
-                    16f,
-                    12f
+                padding: new EdgeInsets(
+                    left: 16f,
+                    top: 10f,
+                    right: 16f,
+                    bottom: 12f
                 ),
-                stacked
+                child: stacked
             )
         );
         return col;
@@ -624,9 +662,9 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
 
     private string StatusText()
     {
-        var count = _model.Visible.Count;
-        var items = count == 1 ? "1 item" : $"{count} items";
-        var selected = _model.SelectedPaths.Count;
+        int count = _model.Visible.Count;
+        string items = count == 1 ? "1 item" : $"{count} items";
+        int selected = _model.SelectedPaths.Count;
         return selected > 1 ? $"{items} · {selected} selected" : items;
     }
 
@@ -651,19 +689,23 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
     private List<(string Label, string Path)> BreadcrumbSegments()
     {
         var segments = new List<(string, string)>();
-        var stopAt = Options.LockRoot is null
+        string? stopAt = Options.LockRoot is null
             ? null
             : Path.TrimEndingDirectorySeparator(Path.GetFullPath(Options.LockRoot));
-        var dir = _model.CurrentDirectory;
+        string dir = _model.CurrentDirectory;
         while (!string.IsNullOrEmpty(dir))
         {
-            var trimmed = Path.TrimEndingDirectorySeparator(dir);
-            var name = Path.GetFileName(trimmed);
+            string trimmed = Path.TrimEndingDirectorySeparator(dir);
+            string name = Path.GetFileName(trimmed);
             if (string.IsNullOrEmpty(name)) name = trimmed.Length > 0 ? trimmed : dir;
-            segments.Insert(0, (name, dir));
+            segments.Insert(index: 0, item: (name, dir));
             if (stopAt is not null &&
-                string.Equals(trimmed, stopAt, StringComparison.OrdinalIgnoreCase)) break;
-            var parent = Path.GetDirectoryName(trimmed);
+                string.Equals(
+                    a: trimmed,
+                    b: stopAt,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                )) break;
+            string? parent = Path.GetDirectoryName(trimmed);
             if (parent is null || parent == dir) break;
             dir = parent;
         }
@@ -680,10 +722,7 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
         MarkNeedsBuild();
     }
 
-    private void NavigateTo(string path)
-    {
-        Navigate(() => _model.NavigateTo(path));
-    }
+    private void NavigateTo(string path) => Navigate(() => _model.NavigateTo(path));
 
     private void GoUp()
     {
@@ -718,7 +757,7 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
     private void OnFilterChanged(int index, string _)
     {
         _activeFilter = index;
-        var exts = NormalizedExts(_filters[index]);
+        string[]? exts = NormalizedExts(_filters[index]);
         _model.ExtensionFilter = exts;
         _model.ApplyView();
         RetargetSaveExtension(exts);
@@ -729,10 +768,15 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
     private void RetargetSaveExtension(string[]? exts)
     {
         if (Options.Kind != FileDialogKind.SaveFile || exts is not { Length: > 0 }) return;
-        var name = _nameField.Text.Trim();
+        string name = _nameField.Text.Trim();
         if (name.Length == 0) return;
-        var current = Path.GetExtension(name).TrimStart('.');
-        if (exts.Any(e => string.Equals(e, current, StringComparison.OrdinalIgnoreCase))) return;
+        string current = Path.GetExtension(name).TrimStart('.');
+        if (exts.Any(e => string.Equals(
+                    a: e,
+                    b: current,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                )
+            )) return;
         _nameField.Text = Path.GetFileNameWithoutExtension(name) + "." + exts[0];
     }
 
@@ -767,19 +811,22 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
                     return;
                 }
 
-                var files = selected.Where(e => !e.IsDirectory).Select(e => e.FullPath).ToArray();
+                string[] files = selected.Where(e => !e.IsDirectory).Select(e => e.FullPath)
+                    .ToArray();
                 if (files.Length > 0) Complete(files);
                 break;
             }
             case FileDialogKind.PickFolder:
             {
-                var dir = _model.CurrentDirectory;
+                string dir = _model.CurrentDirectory;
                 foreach (var e in _model.SelectedEntries())
+                {
                     if (e.IsDirectory)
                     {
                         dir = e.FullPath;
                         break;
                     }
+                }
 
                 Complete([dir]);
                 break;
@@ -792,10 +839,12 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
 
     private void ConfirmSave()
     {
-        var name = _nameField.Text.Trim();
+        string name = _nameField.Text.Trim();
         if (name.Length == 0) return;
 
-        var full = Path.IsPathRooted(name) ? name : Path.Combine(_model.CurrentDirectory, name);
+        string full = Path.IsPathRooted(name)
+            ? name
+            : Path.Combine(path1: _model.CurrentDirectory, path2: name);
         if (Directory.Exists(full))
         {
             NavigateTo(full); // they typed a folder — enter it instead of overwriting it
@@ -805,18 +854,23 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
         // Enforce the active format's extension, the way native save panels do.
         if (_filters.Length > 0 && NormalizedExts(_filters[_activeFilter]) is { Length: > 0 } exts)
         {
-            var ext = Path.GetExtension(full).TrimStart('.');
-            if (!exts.Any(e => string.Equals(e, ext, StringComparison.OrdinalIgnoreCase)))
+            string ext = Path.GetExtension(full).TrimStart('.');
+            if (!exts.Any(e => string.Equals(
+                        a: e,
+                        b: ext,
+                        comparisonType: StringComparison.OrdinalIgnoreCase
+                    )
+                ))
                 full += "." + exts[0];
         }
 
         if (File.Exists(full))
         {
             Dialog.Confirm(
-                "Replace existing file?",
-                $"\"{Path.GetFileName(full)}\" already exists in this location. " +
-                "Replacing it overwrites its contents.",
-                () => Complete([full]),
+                title: "Replace existing file?",
+                message: $"\"{Path.GetFileName(full)}\" already exists in this location. " +
+                         "Replacing it overwrites its contents.",
+                onConfirm: () => Complete([full]),
                 confirmLabel: "Replace"
             );
             return;
@@ -833,30 +887,34 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
         if (entry is { } e)
         {
             items.Add(
-                new ContextMenuItem(e.IsDirectory ? "Open" : AcceptLabel(), () => OnActivate(e))
+                new ContextMenuItem(
+                    Label: e.IsDirectory ? "Open" : AcceptLabel(),
+                    OnSelect: () => OnActivate(e)
+                )
             );
-            items.Add(new ContextMenuItem("", null, true));
-            items.Add(new ContextMenuItem("Rename…", () => PromptRename(e)));
-            items.Add(new ContextMenuItem(TrashLabel(), TrashSelection));
-            items.Add(new ContextMenuItem("", null, true));
+            items.Add(new ContextMenuItem(Label: "", OnSelect: null, Separator: true));
+            items.Add(new ContextMenuItem(Label: "Rename…", OnSelect: () => PromptRename(e)));
+            items.Add(new ContextMenuItem(Label: TrashLabel(), OnSelect: TrashSelection));
+            items.Add(new ContextMenuItem(Label: "", OnSelect: null, Separator: true));
             items.Add(
                 new ContextMenuItem(
-                    "Copy Path",
-                    () => ZigoteEngine.Instance?.SetClipboard(e.FullPath)
+                    Label: "Copy Path",
+                    OnSelect: () => ZigoteEngine.Instance?.SetClipboard(e.FullPath)
                 )
             );
             items.Add(
                 new ContextMenuItem(
-                    RevealLabel(),
-                    () => FileOperations.RevealInFileManager(e.FullPath)
+                    Label: RevealLabel(),
+                    OnSelect: () => FileOperations.RevealInFileManager(e.FullPath)
                 )
             );
         }
 
         if (Options.CanCreateDirectories)
         {
-            if (items.Count > 0) items.Add(new ContextMenuItem("", null, true));
-            items.Add(new ContextMenuItem("New Folder", PromptNewFolder));
+            if (items.Count > 0)
+                items.Add(new ContextMenuItem(Label: "", OnSelect: null, Separator: true));
+            items.Add(new ContextMenuItem(Label: "New Folder", OnSelect: PromptNewFolder));
         }
 
         if (items.Count > 0) new ContextMenu(items.ToArray()).ShowAt(point);
@@ -864,7 +922,7 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
 
     private string TrashLabel()
     {
-        var count = _model.SelectedPaths.Count;
+        int count = _model.SelectedPaths.Count;
         return count > 1 ? $"Move {count} Items to Trash" : "Move to Trash";
     }
 
@@ -880,10 +938,13 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
     {
         var targets = _model.SelectedEntries();
         if (targets.Count == 0) return;
-        var failed = 0;
+        int failed = 0;
         foreach (var target in targets)
+        {
             if (!FileOperations.MoveToTrash(target.FullPath))
                 failed++;
+        }
+
         if (failed > 0)
             App.Active?.ShowSnackbar($"Could not move {failed} item(s) to the Trash.");
         _model.Refresh();
@@ -902,10 +963,10 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
         field.OnSubmitted = _ => Apply();
 
         var body = new SizedBox(
-            340f,
+            width: 340f,
             child: new Padding(
-                EdgeInsets.All(18f),
-                new Column {
+                padding: EdgeInsets.All(18f),
+                child: new Column {
                     CrossAxisAlignment = CrossAxisAlignment.Stretch,
                     MainAxisSize = MainAxisSize.Min,
                     Children = {
@@ -916,35 +977,39 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
                         new Row {
                             MainAxisAlignment = MainAxisAlignment.End,
                             Children = {
-                                new Button("Cancel", () => prompt?.Dismiss()) {
+                                new Button(label: "Cancel", onPressed: () => prompt?.Dismiss()) {
                                     Style = ButtonStyle.Outlined,
                                 },
                                 new SizedBox(8f),
-                                new Button("Rename", Apply),
+                                new Button(label: "Rename", onPressed: Apply),
                             },
                         },
                     },
                 }
             )
         );
-        prompt = new Dialog(body, app) { Dismissible = true };
+        prompt = new Dialog(content: body, app: app) { Dismissible = true };
         prompt.Show();
         return;
 
         void Apply()
         {
-            var name = field.Text.Trim();
+            string name = field.Text.Trim();
             if (name.Length == 0 || name == entry.Name)
             {
                 prompt?.Dismiss();
                 return;
             }
 
-            var target = Path.Combine(Path.GetDirectoryName(entry.FullPath)!, name);
+            string target = Path.Combine(
+                path1: Path.GetDirectoryName(entry.FullPath)!,
+                path2: name
+            );
             try
             {
-                if (entry.IsDirectory) Directory.Move(entry.FullPath, target);
-                else File.Move(entry.FullPath, target);
+                if (entry.IsDirectory)
+                    Directory.Move(sourceDirName: entry.FullPath, destDirName: target);
+                else File.Move(sourceFileName: entry.FullPath, destFileName: target);
             }
             catch (Exception ex)
             {
@@ -962,16 +1027,18 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
 
     private void SelectPath(string path)
     {
-        for (var i = 0; i < _model.Visible.Count; i++)
+        for (int i = 0; i < _model.Visible.Count; i++)
+        {
             if (string.Equals(
-                    _model.Visible[i].FullPath,
-                    path,
-                    StringComparison.OrdinalIgnoreCase
+                    a: _model.Visible[i].FullPath,
+                    b: path,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
                 ))
             {
                 _model.SelectIndex(i);
                 return;
             }
+        }
     }
 
     private void PromptNewFolder()
@@ -985,10 +1052,10 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
         field.OnSubmitted = _ => Create();
 
         var body = new SizedBox(
-            340f,
+            width: 340f,
             child: new Padding(
-                EdgeInsets.All(18f),
-                new Column {
+                padding: EdgeInsets.All(18f),
+                child: new Column {
                     CrossAxisAlignment = CrossAxisAlignment.Stretch,
                     MainAxisSize = MainAxisSize.Min,
                     Children = {
@@ -999,26 +1066,26 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
                         new Row {
                             MainAxisAlignment = MainAxisAlignment.End,
                             Children = {
-                                new Button("Cancel", () => prompt?.Dismiss()) {
+                                new Button(label: "Cancel", onPressed: () => prompt?.Dismiss()) {
                                     Style = ButtonStyle.Outlined,
                                 },
                                 new SizedBox(8f),
-                                new Button("Create", Create),
+                                new Button(label: "Create", onPressed: Create),
                             },
                         },
                     },
                 }
             )
         );
-        prompt = new Dialog(body, app) { Dismissible = true };
+        prompt = new Dialog(content: body, app: app) { Dismissible = true };
         prompt.Show();
         return;
 
         void Create()
         {
-            var name = field.Text.Trim();
+            string name = field.Text.Trim();
             if (name.Length == 0) return;
-            var path = Path.Combine(_model.CurrentDirectory, name);
+            string path = Path.Combine(path1: _model.CurrentDirectory, path2: name);
             try
             {
                 Directory.CreateDirectory(path);
@@ -1037,15 +1104,16 @@ public sealed class FileBrowserDialog : ComposedWidget, IDismissableOverlay
         }
     }
 
-    private void Cancel()
-    {
-        Complete([]);
-    }
+    private void Cancel() => Complete([]);
 
-    private void Complete(string[] paths)
-    {
-        CompleteAndClose(paths);
-    }
+    private void Complete(string[] paths) => CompleteAndClose(paths);
+
+    /// <summary>
+    ///     INoAutoFocus: the dialog focuses the list (or the save-name field) itself instead
+    ///     of letting the overlay auto-focus the first toolbar button.
+    /// </summary>
+    private sealed class BrowserHost(Widget content, App app)
+        : Dialog(content: content, app: app), INoAutoFocus;
 }
 
 /// <summary>
@@ -1069,7 +1137,7 @@ internal static class FileBrowserFallbackInstaller
                       throw new FileDialogException(
                           "No active app to host the in-app file dialog."
                       );
-            return FileBrowserDialog.ShowAsync(app, FileBrowserOptions.From(request));
+            return FileBrowserDialog.ShowAsync(app: app, options: FileBrowserOptions.From(request));
         };
     }
 }

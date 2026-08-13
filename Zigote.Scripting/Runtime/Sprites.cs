@@ -58,10 +58,7 @@ public static class Sprites
     public static Camera2D? Camera { get; private set; }
 
     /// <summary>Host: clear the queue at the top of each fixed tick, before scripts run.</summary>
-    public static void BeginTick()
-    {
-        Draws.Clear();
-    }
+    public static void BeginTick() => Draws.Clear();
 
     /// <summary>Host: drop everything and detach on play stop so nothing lingers.</summary>
     public static void Clear()
@@ -75,10 +72,10 @@ public static class Sprites
         bool srgb = true, SpriteWrap wrap = SpriteWrap.Clamp)
     {
         return Backend?.LoadTexture(
-            path,
-            filter,
-            srgb,
-            wrap
+            path: path,
+            filter: filter,
+            srgb: srgb,
+            wrap: wrap
         );
     }
 
@@ -88,10 +85,7 @@ public static class Sprites
     ///     <see cref="Material2D.ShaderHandle" />,
     ///     or 0 when rejected / outside play.
     /// </summary>
-    public static uint CreateShader(string wgsl)
-    {
-        return Backend?.CreateShader(wgsl) ?? 0;
-    }
+    public static uint CreateShader(string wgsl) => Backend?.CreateShader(wgsl) ?? 0;
 
     /// <summary>
     ///     Create a dynamic texture atlas over the live device: pack sprites at runtime
@@ -103,11 +97,11 @@ public static class Sprites
     {
         return Backend is { } b
             ? new DynamicTextureAtlas(
-                b.Device,
-                initialSize,
-                maxSize,
-                padding,
-                filter
+                device: b.Device,
+                initialSize: initialSize,
+                maxSize: maxSize,
+                padding: padding,
+                filter: filter
             )
             : null;
     }
@@ -124,10 +118,7 @@ public static class Sprites
     }
 
     /// <summary>Drop the script camera override (back to the scene's ortho camera / default view).</summary>
-    public static void ClearCamera()
-    {
-        Camera = null;
-    }
+    public static void ClearCamera() => Camera = null;
 
     /// <summary>Queue one sprite for this tick (no-op outside play).</summary>
     public static void Draw(in SpriteDraw draw)
@@ -141,19 +132,19 @@ public static class Sprites
         short layer = 0, short order = 0)
     {
         Draw(
-            texture,
-            position,
-            size,
-            texture.FullFrame,
-            new Vec4(
-                1,
-                1,
-                1,
-                1
+            texture: texture,
+            position: position,
+            size: size,
+            frame: texture.FullFrame,
+            color: new Vec4(
+                x: 1,
+                y: 1,
+                z: 1,
+                w: 1
             ),
-            0f,
-            layer,
-            order
+            rotation: 0f,
+            layer: layer,
+            order: order
         );
     }
 

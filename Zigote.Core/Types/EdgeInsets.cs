@@ -16,30 +16,30 @@ public readonly struct EdgeInsets(float left, float top, float right, float bott
     public static EdgeInsets All(float value)
     {
         return new EdgeInsets(
-            value,
-            value,
-            value,
-            value
+            left: value,
+            top: value,
+            right: value,
+            bottom: value
         );
     }
 
     public static EdgeInsets Symmetric(float horizontal = 0, float vertical = 0)
     {
         return new EdgeInsets(
-            horizontal,
-            vertical,
-            horizontal,
-            vertical
+            left: horizontal,
+            top: vertical,
+            right: horizontal,
+            bottom: vertical
         );
     }
 
     public static EdgeInsets Only(float left = 0, float top = 0, float right = 0, float bottom = 0)
     {
         return new EdgeInsets(
-            left,
-            top,
-            right,
-            bottom
+            left: left,
+            top: top,
+            right: right,
+            bottom: bottom
         );
     }
 
@@ -47,18 +47,18 @@ public readonly struct EdgeInsets(float left, float top, float right, float bott
     public static EdgeInsets FromLtrb(float left, float top, float right, float bottom)
     {
         return new EdgeInsets(
-            left,
-            top,
-            right,
-            bottom
+            left: left,
+            top: top,
+            right: right,
+            bottom: bottom
         );
     }
 
     public static readonly EdgeInsets Zero = new(
-        0,
-        0,
-        0,
-        0
+        left: 0,
+        top: 0,
+        right: 0,
+        bottom: 0
     );
 
     public bool Equals(EdgeInsets other)
@@ -77,33 +77,21 @@ public readonly struct EdgeInsets(float left, float top, float right, float bott
                Math.Abs(Bottom - other.Bottom) < tolerance;
     }
 
-    public override bool Equals(object? obj)
-    {
-        return obj is EdgeInsets e && Equals(e);
-    }
+    public override bool Equals(object? obj) => obj is EdgeInsets e && Equals(e);
 
     public override int GetHashCode()
     {
         return HashCode.Combine(
-            Left,
-            Top,
-            Right,
-            Bottom
+            value1: Left,
+            value2: Top,
+            value3: Right,
+            value4: Bottom
         );
     }
 
-    public static bool operator ==(EdgeInsets a, EdgeInsets b)
-    {
-        return a.Equals(b);
-    }
+    public static bool operator ==(EdgeInsets a, EdgeInsets b) => a.Equals(b);
 
-    public static bool operator !=(EdgeInsets a, EdgeInsets b)
-    {
-        return !a.Equals(b);
-    }
+    public static bool operator !=(EdgeInsets a, EdgeInsets b) => !a.Equals(b);
 
-    public override string ToString()
-    {
-        return $"EdgeInsets(L={Left} T={Top} R={Right} B={Bottom})";
-    }
+    public override string ToString() => $"EdgeInsets(L={Left} T={Top} R={Right} B={Bottom})";
 }

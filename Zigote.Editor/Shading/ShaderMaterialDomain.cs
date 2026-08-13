@@ -37,15 +37,10 @@ public sealed class ShaderMaterialDomain : IGraphDomain
     public string DisplayName => "Shader";
     public IReadOnlyList<string> SupportedSchemas => [MaterialSchema];
 
-    public IReadOnlyList<GraphTypeDefinition> GetTypeDefinitions()
-    {
-        return ShaderNodeLibrary.TypeDefinitions;
-    }
+    public IReadOnlyList<GraphTypeDefinition> GetTypeDefinitions() =>
+        ShaderNodeLibrary.TypeDefinitions;
 
-    public IReadOnlyList<NodeDefinition> GetNodeDefinitions()
-    {
-        return ShaderNodeLibrary.Definitions;
-    }
+    public IReadOnlyList<NodeDefinition> GetNodeDefinitions() => ShaderNodeLibrary.Definitions;
 
     public bool CanCreateEdge(GraphDocument graph, GraphPinEndpoint from, GraphPinEndpoint to,
         out string? reason)
@@ -64,8 +59,9 @@ public sealed class ShaderMaterialDomain : IGraphDomain
     public GraphValidationResult Validate(GraphDocument graph)
     {
         var diags = new List<GraphDiagnostic>();
-        var outputs = graph.Nodes.Count(n => n.DefinitionId == OutputId);
+        int outputs = graph.Nodes.Count(n => n.DefinitionId == OutputId);
         if (outputs == 0)
+        {
             diags.Add(
                 new GraphDiagnostic {
                     Severity = GraphDiagnosticSeverity.Error,
@@ -74,7 +70,9 @@ public sealed class ShaderMaterialDomain : IGraphDomain
                     DomainId = DomainIdConst,
                 }
             );
+        }
         else if (outputs > 1)
+        {
             diags.Add(
                 new GraphDiagnostic {
                     Severity = GraphDiagnosticSeverity.Warning,
@@ -83,6 +81,8 @@ public sealed class ShaderMaterialDomain : IGraphDomain
                     DomainId = DomainIdConst,
                 }
             );
+        }
+
         return new GraphValidationResult {
             IsValid = !diags.Any(d => d.Severity == GraphDiagnosticSeverity.Error),
             Diagnostics = diags,
@@ -147,10 +147,10 @@ public sealed class ShaderMaterialDomain : IGraphDomain
         var doc = CreateDefaultMaterialGraph($"{node.Name} material");
         var p = doc.Nodes.First(n => n.DefinitionId == PrincipledId);
         p.Properties["in.base_color"] = GraphValue.FromFloat4(
-            node.MeshColor.X,
-            node.MeshColor.Y,
-            node.MeshColor.Z,
-            1f
+            x: node.MeshColor.X,
+            y: node.MeshColor.Y,
+            z: node.MeshColor.Z,
+            w: 1f
         );
         p.Properties["in.metallic"] = GraphValue.FromFloat(node.MeshMetallic);
         p.Properties["in.roughness"] = GraphValue.FromFloat(node.MeshRoughness);
@@ -159,10 +159,10 @@ public sealed class ShaderMaterialDomain : IGraphDomain
         p.Properties["in.clearcoat_roughness"] = GraphValue.FromFloat(node.MeshClearcoatRoughness);
         p.Properties["in.emission"] =
             GraphValue.FromFloat4(
-                node.MeshEmissive.X,
-                node.MeshEmissive.Y,
-                node.MeshEmissive.Z,
-                1f
+                x: node.MeshEmissive.X,
+                y: node.MeshEmissive.Y,
+                z: node.MeshEmissive.Z,
+                w: 1f
             );
         p.Properties["in.emission_strength"] = GraphValue.FromFloat(1f);
         return doc;
@@ -177,23 +177,23 @@ public sealed class ShaderMaterialDomain : IGraphDomain
             SchemaId = MaterialSchema,
         };
         var principled = AddNode(
-            doc,
-            PrincipledId,
-            -300f,
-            -150f,
-            210f
+            doc: doc,
+            defId: PrincipledId,
+            x: -300f,
+            y: -150f,
+            width: 210f
         );
         var output = AddNode(
-            doc,
-            OutputId,
-            100f,
-            -70f,
-            180f
+            doc: doc,
+            defId: OutputId,
+            x: 100f,
+            y: -70f,
+            width: 180f
         );
         doc.Edges.Add(
             new GraphEdge {
-                From = new GraphPinEndpoint(principled.Id, "out.bsdf"),
-                To = new GraphPinEndpoint(output.Id, "in.surface"),
+                From = new GraphPinEndpoint(NodeId: principled.Id, PinId: "out.bsdf"),
+                To = new GraphPinEndpoint(NodeId: output.Id, PinId: "in.surface"),
             }
         );
         return doc;
@@ -211,23 +211,23 @@ public sealed class ShaderMaterialDomain : IGraphDomain
             SchemaId = MaterialSchema,
         };
         var p = AddNode(
-            doc,
-            PrincipledId,
-            -300f,
-            -150f,
-            210f
+            doc: doc,
+            defId: PrincipledId,
+            x: -300f,
+            y: -150f,
+            width: 210f
         );
         var output = AddNode(
-            doc,
-            OutputId,
-            100f,
-            -70f,
-            180f
+            doc: doc,
+            defId: OutputId,
+            x: 100f,
+            y: -70f,
+            width: 180f
         );
         doc.Edges.Add(
             new GraphEdge {
-                From = new GraphPinEndpoint(p.Id, "out.bsdf"),
-                To = new GraphPinEndpoint(output.Id, "in.surface"),
+                From = new GraphPinEndpoint(NodeId: p.Id, PinId: "out.bsdf"),
+                To = new GraphPinEndpoint(NodeId: output.Id, PinId: "in.surface"),
             }
         );
 
@@ -240,10 +240,10 @@ public sealed class ShaderMaterialDomain : IGraphDomain
                 break;
             case "glass":
                 p.Properties["in.base_color"] = GraphValue.FromFloat4(
-                    0.85f,
-                    0.92f,
-                    0.95f,
-                    1f
+                    x: 0.85f,
+                    y: 0.92f,
+                    z: 0.95f,
+                    w: 1f
                 );
                 p.Properties["in.roughness"] = GraphValue.FromFloat(0.03f);
                 p.Properties["in.clearcoat"] = GraphValue.FromFloat(1f);
@@ -251,10 +251,10 @@ public sealed class ShaderMaterialDomain : IGraphDomain
                 break;
             case "car_paint":
                 p.Properties["in.base_color"] = GraphValue.FromFloat4(
-                    0.72f,
-                    0.05f,
-                    0.06f,
-                    1f
+                    x: 0.72f,
+                    y: 0.05f,
+                    z: 0.06f,
+                    w: 1f
                 );
                 p.Properties["in.metallic"] = GraphValue.FromFloat(0.9f);
                 p.Properties["in.roughness"] = GraphValue.FromFloat(0.30f);
@@ -284,13 +284,13 @@ public sealed class ShaderMaterialDomain : IGraphDomain
     /// <summary>Push a compiled material onto a scene node (graph → material → renderer).</summary>
     public static void ApplyTo(CompiledMaterial mat, SceneNode node)
     {
-        node.MeshColor = new Vec3(mat.BaseColor[0], mat.BaseColor[1], mat.BaseColor[2]);
+        node.MeshColor = new Vec3(x: mat.BaseColor[0], y: mat.BaseColor[1], z: mat.BaseColor[2]);
         node.MeshMetallic = mat.Metallic;
         node.MeshRoughness = mat.Roughness;
         node.MeshClearcoat = mat.Clearcoat;
         node.MeshClearcoatRoughness = mat.ClearcoatRoughness;
         node.MeshSpecular = mat.Specular;
-        node.MeshEmissive = new Vec3(mat.Emissive[0], mat.Emissive[1], mat.Emissive[2]);
+        node.MeshEmissive = new Vec3(x: mat.Emissive[0], y: mat.Emissive[1], z: mat.Emissive[2]);
         if (mat.BaseColorTexturePath is { Length: > 0 })
             node.TexturePath = mat.BaseColorTexturePath;
         // Round-trip the normal map (previously dropped, so a graph-set normal was lost on apply).

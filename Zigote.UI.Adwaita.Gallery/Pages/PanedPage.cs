@@ -7,8 +7,8 @@ namespace AdwaitaGallery.Pages;
 public sealed class PanedPage : ComposedWidget
 {
     private readonly Signal<float> _horizontal = new(0.4f);
-    private readonly Signal<bool> _vertical = new(false);
     private readonly Signal<float> _minPane = new(120f);
+    private readonly Signal<bool> _vertical = new(false);
 
     protected override Widget Build(BuildContext context)
     {
@@ -18,36 +18,40 @@ public sealed class PanedPage : ComposedWidget
         {
             return new DecoratedBox {
                 Fill = fill,
-                Child = new Center(new Label(label, AdwTypography.Body, theme.OnBackground)),
+                Child = new Center(
+                    new Label(text: label, style: AdwTypography.Body, color: theme.OnBackground)
+                ),
             };
         }
 
         return new GalleryPage(
-            "Paned",
+            title: "Paned",
+            description:
             "Two panes, one draggable handle — the resizable split every editor is built on.",
-            MaterialIcons.Splitscreen
+            iconName: MaterialIcons.Splitscreen
         ) {
             ClampWidth = 720f,
             Children = {
                 Demo.Group(
-                    "Options",
+                    title: "Options",
+                    description:
                     "The handle is a hairline in a wider grab gutter, so it is easy to catch " +
                     "without being heavy to look at.",
                     new AdwSwitchRow(
-                        "Vertical",
-                        "Split top/bottom instead of left/right",
-                        false,
-                        v => _vertical.Value = v
+                        title: "Vertical",
+                        subtitle: "Split top/bottom instead of left/right",
+                        value: false,
+                        onChanged: v => _vertical.Value = v
                     ),
                     new AdwActionRow("Minimum pane") {
                         Suffixes = {
                             new SizedBox(
-                                200f,
+                                width: 200f,
                                 child: new AdwSlider(
-                                    120f,
-                                    40f,
-                                    260f,
-                                    v => _minPane.Value = MathF.Round(v)
+                                    value: 120f,
+                                    min: 40f,
+                                    max: 260f,
+                                    onChanged: v => _minPane.Value = MathF.Round(v)
                                 )
                             ),
                         },
@@ -64,16 +68,16 @@ public sealed class PanedPage : ComposedWidget
                 new Watch(() => new SizedBox(
                         height: 260f,
                         child: Demo.Stage(
-                            new AdwPaned(
-                                Pane("First", AdwPalette.For(theme).SidebarBg),
-                                Pane("Second", AdwPalette.For(theme).ViewBg),
-                                _vertical.Value
+                            child: new AdwPaned(
+                                first: Pane(label: "First", fill: AdwPalette.For(theme).SidebarBg),
+                                second: Pane(label: "Second", fill: AdwPalette.For(theme).ViewBg),
+                                vertical: _vertical.Value
                             ) {
                                 Position = _horizontal.Peek(),
                                 MinPaneSize = _minPane.Value,
                                 OnPositionChanged = p => _horizontal.Value = p,
                             },
-                            Spacing.Md
+                            padding: Spacing.Md
                         )
                     )
                 ),

@@ -9,11 +9,11 @@ public class SceneLoadVerify
     public void PorscheDemoSceneLoads()
     {
         // Walk up from the test bin dir to the repo root, then to the demo scene.
-        var dir = AppContext.BaseDirectory;
+        string dir = AppContext.BaseDirectory;
         string? scene = null;
         for (var d = new DirectoryInfo(dir); d != null; d = d.Parent)
         {
-            var candidate = Path.Combine(
+            string candidate = Path.Combine(
                 d.FullName,
                 "examples",
                 "PorscheDemo",
@@ -35,12 +35,15 @@ public class SceneLoadVerify
 
         // The car + chase-camera are wired purely through scripts (game code) — no engine vehicle types.
         var porsche = all.Single(n => n.Name == "Porsche 911 Turbo");
-        Assert.Equal("ExampleProject.Scripts.CarController", porsche.ScriptClass);
+        Assert.Equal(expected: "ExampleProject.Scripts.CarController", actual: porsche.ScriptClass);
 
         var camera = all.Single(n => n.Name == "Camera");
-        Assert.Equal("ExampleProject.Scripts.ChaseCameraComponent", camera.ScriptClass);
+        Assert.Equal(
+            expected: "ExampleProject.Scripts.ChaseCameraComponent",
+            actual: camera.ScriptClass
+        );
 
         // A ground plane to drive on exists.
-        Assert.Contains(all, n => n.Name == "Ground");
+        Assert.Contains(collection: all, filter: n => n.Name == "Ground");
     }
 }

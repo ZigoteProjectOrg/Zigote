@@ -32,10 +32,10 @@ public sealed class NodeBind<T>
     {
         _state.History.Execute(
             new ChangePropertyCommand<T>(
-                _state,
-                _get(),
-                newValue,
-                _set
+                state: _state,
+                oldValue: _get(),
+                newValue: newValue,
+                setter: _set
             )
         );
     }
@@ -44,16 +44,10 @@ public sealed class NodeBind<T>
     ///     Start a coalescing interaction so subsequent <see cref="Set" /> calls merge into one undo
     ///     entry.
     /// </summary>
-    public void BeginEdit()
-    {
-        _state.History.BeginInteraction();
-    }
+    public void BeginEdit() => _state.History.BeginInteraction();
 
     /// <summary>End the coalescing interaction.</summary>
-    public void EndEdit()
-    {
-        _state.History.EndInteraction();
-    }
+    public void EndEdit() => _state.History.EndInteraction();
 
     /// <summary>
     ///     Set the property and run <paramref name="afterSet" /> on both Execute and Undo — for
@@ -63,10 +57,10 @@ public sealed class NodeBind<T>
     {
         _state.History.Execute(
             new ChangePropertyCommand<T>(
-                _state,
-                _get(),
-                newValue,
-                v =>
+                state: _state,
+                oldValue: _get(),
+                newValue: newValue,
+                setter: v =>
                 {
                     _set(v);
                     afterSet();
@@ -81,8 +75,6 @@ public static class NodeBind
 {
     /// <summary>Create a binding from typed getter/setter lambdas on <paramref name="node" />.</summary>
     public static NodeBind<T> To<TNode, T>(EditorState state, TNode node,
-        Func<TNode, T> getter, Action<TNode, T> setter)
-    {
-        return new NodeBind<T>(state, () => getter(node), v => setter(node, v));
-    }
+        Func<TNode, T> getter, Action<TNode, T> setter) =>
+        new(state: state, get: () => getter(node), set: v => setter(arg1: node, arg2: v));
 }

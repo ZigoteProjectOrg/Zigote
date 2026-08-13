@@ -7,7 +7,11 @@ public readonly struct Transform3D(Vec3 position, Quat rotation, Vec3 scale)
     public Quat Rotation { get; } = rotation;
     public Vec3 Scale { get; } = scale;
 
-    public static readonly Transform3D Identity = new(Vec3.Zero, Quat.Identity, Vec3.One);
+    public static readonly Transform3D Identity = new(
+        position: Vec3.Zero,
+        rotation: Quat.Identity,
+        scale: Vec3.One
+    );
 
     public Mat4 ToMat4()
     {
@@ -17,14 +21,14 @@ public readonly struct Transform3D(Vec3 position, Quat rotation, Vec3 scale)
         // products on this per-node-per-frame path.
         var r = Rotation.ToMat4();
         return new Mat4(
-            r.Col0 * Scale.X,
-            r.Col1 * Scale.Y,
-            r.Col2 * Scale.Z,
-            new Vec4(
-                Position.X,
-                Position.Y,
-                Position.Z,
-                1f
+            c0: r.Col0 * Scale.X,
+            c1: r.Col1 * Scale.Y,
+            c2: r.Col2 * Scale.Z,
+            c3: new Vec4(
+                x: Position.X,
+                y: Position.Y,
+                z: Position.Z,
+                w: 1f
             )
         );
     }
@@ -32,9 +36,9 @@ public readonly struct Transform3D(Vec3 position, Quat rotation, Vec3 scale)
     public static Transform3D Lerp(Transform3D a, Transform3D b, float t)
     {
         return new Transform3D(
-            a.Position.Lerp(b.Position, t),
-            Quat.Slerp(a.Rotation, b.Rotation, t),
-            a.Scale.Lerp(b.Scale, t)
+            position: a.Position.Lerp(b: b.Position, t: t),
+            rotation: Quat.Slerp(a: a.Rotation, bIn: b.Rotation, t: t),
+            scale: a.Scale.Lerp(b: b.Scale, t: t)
         );
     }
 
@@ -42,41 +46,29 @@ public readonly struct Transform3D(Vec3 position, Quat rotation, Vec3 scale)
     public static Transform3D Combine(Transform3D parent, Transform3D child)
     {
         return new Transform3D(
-            parent.Position + parent.Rotation.RotateVec(child.Position * parent.Scale),
-            parent.Rotation * child.Rotation,
-            parent.Scale * child.Scale
+            position: parent.Position + parent.Rotation.RotateVec(child.Position * parent.Scale),
+            rotation: parent.Rotation * child.Rotation,
+            scale: parent.Scale * child.Scale
         );
     }
 
     // ── Equality ─────────────────────────────────────────────────────────────
 
-    public bool Equals(Transform3D other)
-    {
-        return Position == other.Position && Rotation == other.Rotation && Scale == other.Scale;
-    }
+    public bool Equals(Transform3D other) => Position == other.Position &&
+                                             Rotation == other.Rotation && Scale == other.Scale;
 
-    public override bool Equals(object? obj)
-    {
-        return obj is Transform3D t && Equals(t);
-    }
+    public override bool Equals(object? obj) => obj is Transform3D t && Equals(t);
 
-    public override int GetHashCode()
-    {
-        return HashCode.Combine(Position, Rotation, Scale);
-    }
+    public override int GetHashCode() => HashCode.Combine(
+        value1: Position,
+        value2: Rotation,
+        value3: Scale
+    );
 
-    public override string ToString()
-    {
-        return $"Transform3D(pos={Position}, rot={Rotation}, scale={Scale})";
-    }
+    public override string ToString() =>
+        $"Transform3D(pos={Position}, rot={Rotation}, scale={Scale})";
 
-    public static bool operator ==(Transform3D a, Transform3D b)
-    {
-        return a.Equals(b);
-    }
+    public static bool operator ==(Transform3D a, Transform3D b) => a.Equals(b);
 
-    public static bool operator !=(Transform3D a, Transform3D b)
-    {
-        return !a.Equals(b);
-    }
+    public static bool operator !=(Transform3D a, Transform3D b) => !a.Equals(b);
 }

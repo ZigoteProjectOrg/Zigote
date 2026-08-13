@@ -22,16 +22,16 @@ public static class LocalizationJson
     /// </summary>
     public static LocalizationCatalog LoadCatalog(string json, Locale locale)
     {
-        using var doc = JsonDocument.Parse(json, Options);
+        using var doc = JsonDocument.Parse(json: json, options: Options);
         if (doc.RootElement.ValueKind != JsonValueKind.Object)
             throw new FormatException("Localization JSON must be a JSON object.");
-        return ReadCatalog(locale, doc.RootElement);
+        return ReadCatalog(locale: locale, obj: doc.RootElement);
     }
 
     /// <summary>Parse a nested <c>{ "&lt;locale&gt;": { "key": "template" } }</c> document into a bundle.</summary>
     public static LocalizationBundle LoadBundle(string json)
     {
-        using var doc = JsonDocument.Parse(json, Options);
+        using var doc = JsonDocument.Parse(json: json, options: Options);
         if (doc.RootElement.ValueKind != JsonValueKind.Object)
             throw new FormatException("Localization JSON must be a JSON object.");
 
@@ -39,8 +39,8 @@ public static class LocalizationJson
         foreach (var localeProp in doc.RootElement.EnumerateObject())
         {
             if (localeProp.Value.ValueKind != JsonValueKind.Object) continue;
-            if (!Locale.TryParse(localeProp.Name, out var locale)) continue;
-            bundle.Add(ReadCatalog(locale, localeProp.Value));
+            if (!Locale.TryParse(tag: localeProp.Name, locale: out var locale)) continue;
+            bundle.Add(ReadCatalog(locale: locale, obj: localeProp.Value));
         }
 
         return bundle;
@@ -54,7 +54,7 @@ public static class LocalizationJson
             if (prop.Name.Length > 0 && prop.Name[0] == '@')
                 continue; // ARB metadata (@@locale, @key)
             if (prop.Value.ValueKind == JsonValueKind.String)
-                catalog.Add(prop.Name, prop.Value.GetString()!);
+                catalog.Add(key: prop.Name, template: prop.Value.GetString()!);
         }
 
         return catalog;

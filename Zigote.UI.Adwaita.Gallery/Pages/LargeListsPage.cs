@@ -21,14 +21,19 @@ public sealed class LargeListsPage : ComposedWidget
         var theme = ThemeProvider.Of(context);
         var p = AdwPalette.For(theme);
 
-        var list = ListView.Builder(Rows, Row, AdwMetrics.RowMinHeight);
+        var list = ListView.Builder(
+            itemCount: Rows,
+            itemBuilder: Row,
+            itemExtent: AdwMetrics.RowMinHeight
+        );
         list.OnScrolled = (_, y) =>
             _first.Value = (int)MathF.Floor(y / AdwMetrics.RowMinHeight) + 1;
 
         return new GalleryPage(
-            "Large Lists",
+            title: "Large Lists",
+            description:
             "Two thousand rows, of which only the visible ones are ever measured or painted.",
-            MaterialIcons.FormatListNumbered
+            iconName: MaterialIcons.FormatListNumbered
         ) {
             ClampWidth = 680f,
             Children = {
@@ -43,7 +48,7 @@ public sealed class LargeListsPage : ComposedWidget
                         Radius = AdwMetrics.CardRadius,
                         BorderColor = p.CardShade,
                         BorderWidth = 1f,
-                        Child = new ClipRRect(AdwMetrics.CardRadius, list),
+                        Child = new ClipRRect(radius: AdwMetrics.CardRadius, child: list),
                     }
                 ),
                 Demo.Caption(
@@ -55,8 +60,11 @@ public sealed class LargeListsPage : ComposedWidget
 
     private Widget Row(int index)
     {
-        var kind = Kinds[index % Kinds.Length];
-        return new AdwActionRow($"{kind} {index + 1:0000}", $"Modified {index % 28 + 1} days ago") {
+        string kind = Kinds[index % Kinds.Length];
+        return new AdwActionRow(
+            title: $"{kind} {index + 1:0000}",
+            subtitle: $"Modified {(index % 28) + 1} days ago"
+        ) {
             IconName = MaterialIcons.Description,
             ShowChevron = true,
             OnActivated = () => _picked.Value = $"{kind} {index + 1:0000}",

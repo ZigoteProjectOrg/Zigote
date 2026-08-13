@@ -45,8 +45,8 @@ public sealed class AssetMetadata
         }
 
         long size = -1;
-        var sizeHuman = "—";
-        var modified = "—";
+        string sizeHuman = "—";
+        string modified = "—";
         try
         {
             var info = new FileInfo(path);
@@ -79,7 +79,7 @@ public sealed class AssetMetadata
         if (bytes < 1024) return $"{bytes} B";
         string[] units = ["KB", "MB", "GB", "TB"];
         double v = bytes;
-        var u = -1;
+        int u = -1;
         do
         {
             v /= 1024.0;

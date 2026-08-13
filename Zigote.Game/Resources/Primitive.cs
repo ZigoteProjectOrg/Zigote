@@ -4,9 +4,7 @@ namespace Zigote.Game.Resources;
 
 public sealed class Primitive
 {
-    public Primitive()
-    {
-    }
+    public Primitive() { }
 
     public Primitive(Vertex[] vertices, uint[] indices, int? materialIndex = null)
     {
@@ -22,21 +20,21 @@ public sealed class Primitive
     /// <summary>Recalculates vertex normals from triangle faces (overwrites existing normals).</summary>
     public void RecalculateNormals()
     {
-        for (var i = 0; i < Vertices.Length; i++)
+        for (int i = 0; i < Vertices.Length; i++)
             Vertices[i].NX = Vertices[i].NY = Vertices[i].NZ = 0f;
 
-        for (var i = 0; i + 2 < Indices.Length; i += 3)
+        for (int i = 0; i + 2 < Indices.Length; i += 3)
         {
-            var ia = (int)Indices[i];
-            var ib = (int)Indices[i + 1];
-            var ic = (int)Indices[i + 2];
+            int ia = (int)Indices[i];
+            int ib = (int)Indices[i + 1];
+            int ic = (int)Indices[i + 2];
 
-            var a = new Vec3(Vertices[ia].PX, Vertices[ia].PY, Vertices[ia].PZ);
-            var b = new Vec3(Vertices[ib].PX, Vertices[ib].PY, Vertices[ib].PZ);
-            var c = new Vec3(Vertices[ic].PX, Vertices[ic].PY, Vertices[ic].PZ);
+            var a = new Vec3(x: Vertices[ia].PX, y: Vertices[ia].PY, z: Vertices[ia].PZ);
+            var b = new Vec3(x: Vertices[ib].PX, y: Vertices[ib].PY, z: Vertices[ib].PZ);
+            var c = new Vec3(x: Vertices[ic].PX, y: Vertices[ic].PY, z: Vertices[ic].PZ);
             var n = (b - a).Cross(c - a).Normalize();
 
-            foreach (var idx in (int[])[ia, ib, ic])
+            foreach (int idx in (int[])[ia, ib, ic])
             {
                 Vertices[idx].NX += n.X;
                 Vertices[idx].NY += n.Y;
@@ -44,9 +42,9 @@ public sealed class Primitive
             }
         }
 
-        for (var i = 0; i < Vertices.Length; i++)
+        for (int i = 0; i < Vertices.Length; i++)
         {
-            var nn = new Vec3(Vertices[i].NX, Vertices[i].NY, Vertices[i].NZ).Normalize();
+            var nn = new Vec3(x: Vertices[i].NX, y: Vertices[i].NY, z: Vertices[i].NZ).Normalize();
             Vertices[i].NX = nn.X;
             Vertices[i].NY = nn.Y;
             Vertices[i].NZ = nn.Z;

@@ -12,16 +12,23 @@ namespace Zigote.UI.Widgets;
 ///         The three places code goes, and the reason there are exactly three:
 ///         <list type="bullet">
 ///             <item>
-///                 <b>Constructor / field initialisers</b> — compose the retained child tree and keep it
+///                 <b>Constructor / field initialisers</b> — compose the retained child tree and keep
+///                 it
 ///                 in fields. Runs once per instance.
 ///             </item>
 ///             <item>
-///                 <b><see cref="Widget.OnMount" /></b> — start what must stop when the widget leaves the
+///                 <b>
+///                     <see cref="Widget.OnMount" />
+///                 </b>
+///                 — start what must stop when the widget leaves the
 ///                 tree (subscriptions, tickers, async), registered via <see cref="Widget.Own{T}" /> /
 ///                 <see cref="Widget.OwnEffect(Action)" />. Runs once per mount period.
 ///             </item>
 ///             <item>
-///                 <b><see cref="Build" /></b> — read inherited data (theme, media query, localisations)
+///                 <b>
+///                     <see cref="Build" />
+///                 </b>
+///                 — read inherited data (theme, media query, localisations)
 ///                 off the <see cref="BuildContext" /> and push it into those retained children, then
 ///                 return the root. Runs once, then again on <see cref="Invalidate" />/
 ///                 <see cref="Widget.MarkNeedsBuild" />.
@@ -31,8 +38,10 @@ namespace Zigote.UI.Widgets;
 ///     <para>
 ///         Prefer neither of the last two for ordinary state changes: an
 ///         <see cref="Widget.OwnEffect(Action)" /> that writes a signal straight into a retained child
-///         costs no allocation and no rebuild at all, and a <see cref="Watch" /> handles the case where
-///         the tree's <em>shape</em> depends on a signal. Reach for <see cref="Widget.MarkNeedsBuild" />
+///         costs no allocation and no rebuild at all, and a <see cref="Watch" /> handles the case
+///         where
+///         the tree's <em>shape</em> depends on a signal. Reach for
+///         <see cref="Widget.MarkNeedsBuild" />
 ///         when neither fits.
 ///     </para>
 /// </summary>
@@ -51,10 +60,7 @@ public abstract class ComposedWidget : Widget
     protected abstract Widget Build(BuildContext context);
 
     /// <summary>Schedule a rebuild of this widget on the next Measure pass.</summary>
-    public void Invalidate()
-    {
-        MarkNeedsBuild();
-    }
+    public void Invalidate() => MarkNeedsBuild();
 
     private void EnsureBuilt()
     {
@@ -87,7 +93,7 @@ public abstract class ComposedWidget : Widget
 
         _childCache = _child is not null ? [_child] : null;
 
-        SwapChild(previous, _child);
+        SwapChild(previous: previous, next: _child);
 
         NeedsBuild = false;
 
@@ -106,7 +112,7 @@ public abstract class ComposedWidget : Widget
     {
         MeasureCount++;
         EnsureBuilt();
-        var gen = BuildContext.Current.Generation;
+        int gen = BuildContext.Current.Generation;
         if (!NeedsLayout && c == LastConstraints && _measuredGen == gen) return MeasuredSize;
 
         LastConstraints = c;
@@ -120,10 +126,10 @@ public abstract class ComposedWidget : Widget
     {
         LayoutCount++;
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            MeasuredSize.Width,
-            MeasuredSize.Height
+            x: origin.X,
+            y: origin.Y,
+            width: MeasuredSize.Width,
+            height: MeasuredSize.Height
         );
         _child?.Layout(origin);
     }
@@ -136,17 +142,11 @@ public abstract class ComposedWidget : Widget
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return _child?.HitTest(point) ?? this;
     }
 
-    public override int DebugStateHash()
-    {
-        return _child?.DebugStateHash() ?? 0;
-    }
+    public override int DebugStateHash() => _child?.DebugStateHash() ?? 0;
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return (IEnumerable<Widget>?)_childCache ?? [];
-    }
+    public override IEnumerable<Widget> GetChildren() => (IEnumerable<Widget>?)_childCache ?? [];
 }

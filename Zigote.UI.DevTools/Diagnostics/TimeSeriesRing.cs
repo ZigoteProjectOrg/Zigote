@@ -13,7 +13,7 @@ public readonly record struct TimeSample(float Time, float Value);
 /// </summary>
 public sealed class TimeSeriesRing(int capacity) : IReadOnlyList<TimeSample>
 {
-    private readonly TimeSample[] _samples = new TimeSample[Math.Max(2, capacity)];
+    private readonly TimeSample[] _samples = new TimeSample[Math.Max(val1: 2, val2: capacity)];
     private int _head; // next write slot
 
     public int Capacity => _samples.Length;
@@ -27,25 +27,22 @@ public sealed class TimeSeriesRing(int capacity) : IReadOnlyList<TimeSample>
         get
         {
             if ((uint)index >= (uint)Count) throw new ArgumentOutOfRangeException(nameof(index));
-            var start = (_head - Count + _samples.Length) % _samples.Length;
+            int start = (_head - Count + _samples.Length) % _samples.Length;
             return _samples[(start + index) % _samples.Length];
         }
     }
 
     public IEnumerator<TimeSample> GetEnumerator()
     {
-        for (var i = 0; i < Count; i++) yield return this[i];
+        for (int i = 0; i < Count; i++) yield return this[i];
     }
 
-    IEnumerator IEnumerable.GetEnumerator()
-    {
-        return GetEnumerator();
-    }
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
     public void Push(float time, float value)
     {
         if (float.IsNaN(value) || float.IsInfinity(value)) value = 0f;
-        _samples[_head] = new TimeSample(time, value);
+        _samples[_head] = new TimeSample(Time: time, Value: value);
         _head = (_head + 1) % _samples.Length;
         if (Count < _samples.Length) Count++;
     }
@@ -59,8 +56,8 @@ public sealed class TimeSeriesRing(int capacity) : IReadOnlyList<TimeSample>
     /// <summary>Maximum value currently held (0 when empty).</summary>
     public float Max()
     {
-        var max = 0f;
-        for (var i = 0; i < Count; i++) max = MathF.Max(max, this[i].Value);
+        float max = 0f;
+        for (int i = 0; i < Count; i++) max = MathF.Max(x: max, y: this[i].Value);
         return max;
     }
 }

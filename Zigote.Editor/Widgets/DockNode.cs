@@ -21,15 +21,9 @@ public abstract class DockNode
 /// </summary>
 public sealed class DockLeaf : DockNode
 {
-    public DockLeaf(string panelId)
-    {
-        PanelIds = [panelId];
-    }
+    public DockLeaf(string panelId) => PanelIds = [panelId];
 
-    public DockLeaf(IEnumerable<string> panelIds)
-    {
-        PanelIds = panelIds.ToList();
-    }
+    public DockLeaf(IEnumerable<string> panelIds) => PanelIds = panelIds.ToList();
 
     public string LeafId { get; init; } = Guid.NewGuid().ToString("N")[..8];
     public List<string> PanelIds { get; }
@@ -42,12 +36,13 @@ public sealed class DockLeaf : DockNode
     public bool Collapsed { get; set; }
 
     public string ActivePanelId =>
-        PanelIds[Math.Clamp(ActiveIndex, 0, Math.Max(0, PanelIds.Count - 1))];
+        PanelIds[Math.Clamp(
+            value: ActiveIndex,
+            min: 0,
+            max: Math.Max(val1: 0, val2: PanelIds.Count - 1)
+        )];
 
-    public override IEnumerable<string> LeafIds()
-    {
-        return PanelIds;
-    }
+    public override IEnumerable<string> LeafIds() => PanelIds;
 }
 
 public sealed class DockSplit : DockNode
@@ -67,7 +62,7 @@ public sealed class DockSplit : DockNode
 
     public override IEnumerable<string> LeafIds()
     {
-        foreach (var id in First.LeafIds()) yield return id;
-        foreach (var id in Second.LeafIds()) yield return id;
+        foreach (string id in First.LeafIds()) yield return id;
+        foreach (string id in Second.LeafIds()) yield return id;
     }
 }

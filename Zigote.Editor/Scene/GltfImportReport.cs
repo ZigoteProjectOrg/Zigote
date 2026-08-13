@@ -41,7 +41,7 @@ public sealed class GltfImportReport
     /// <summary>Compact single line, suitable for a snackbar.</summary>
     public string OneLine()
     {
-        var tail = (HasErrors, HasWarnings) switch {
+        string tail = (HasErrors, HasWarnings) switch {
             (true, _) => $" — {Errors.Count} error(s), {Warnings.Count} warning(s)",
             (false, true) => $" — {Warnings.Count} warning(s)",
             _ => "",
@@ -65,14 +65,14 @@ public sealed class GltfImportReport
         {
             sb.AppendLine();
             sb.AppendLine("Errors:");
-            foreach (var e in Errors) sb.AppendLine($"- {e}");
+            foreach (string e in Errors) sb.AppendLine($"- {e}");
         }
 
         if (HasWarnings)
         {
             sb.AppendLine();
             sb.AppendLine("Warnings:");
-            foreach (var w in Warnings) sb.AppendLine($"- {w}");
+            foreach (string w in Warnings) sb.AppendLine($"- {w}");
         }
 
         return sb.ToString();

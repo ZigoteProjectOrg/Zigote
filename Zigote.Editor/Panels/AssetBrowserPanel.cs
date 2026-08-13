@@ -29,18 +29,11 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
     private static readonly TimeSpan ScanDebounce = TimeSpan.FromMilliseconds(120);
 
     private readonly HashSet<string> _expanded = new(StringComparer.Ordinal);
+    private readonly Latest _scan;
     private readonly AdwSearchEntry _searchField;
     private readonly EditorState _state;
     private readonly FileSystemWatcher? _watcher;
     private readonly Background _work;
-    private readonly Latest _scan;
-
-    /// <summary>
-    ///     The visible tree, produced whole on a worker and swapped in on the UI thread. Immutable
-    ///     rather than a mutating list: it crosses a thread boundary, and the walk that produced it is
-    ///     still allowed to be superseded on its way back.
-    /// </summary>
-    private ImmutableArray<Entry> _rows = [];
 
     private volatile bool _dirty = true;
     private Offset _dragStart;
@@ -50,6 +43,14 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
     private long _lastClickMs;
     private string? _lastClickPath;
     private int _pressIndex = -1;
+
+    /// <summary>
+    ///     The visible tree, produced whole on a worker and swapped in on the UI thread. Immutable
+    ///     rather than a mutating list: it crosses a thread boundary, and the walk that produced it is
+    ///     still allowed to be superseded on its way back.
+    /// </summary>
+    private ImmutableArray<Entry> _rows = [];
+
     private string? _selectedPath;
     private Size _size;
     private ThemeData _theme;
@@ -73,8 +74,9 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
             },
         };
 
-        var root = RootPath;
+        string? root = RootPath;
         if (root != null && Directory.Exists(root))
+        {
             try
             {
                 _watcher = new FileSystemWatcher(root) {
@@ -94,7 +96,7 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
                     _dirty = true;
                     // Heal the registry + open-scene references on the main thread (renames from
                     // Finder/IDE included — the editor is no longer the only safe way to move assets).
-                    _state.QueueAssetRenamed(e.OldFullPath, e.FullPath);
+                    _state.QueueAssetRenamed(oldFullPath: e.OldFullPath, newFullPath: e.FullPath);
                     _state.NotifyAssetsChanged();
                 };
             }
@@ -102,6 +104,7 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
             {
                 Console.WriteLine($"[Project] FileSystemWatcher failed: {ex.Message}");
             }
+        }
     }
 
     private string? RootPath => _state.ProjectDir ??
@@ -114,10 +117,7 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
         _watcher?.Dispose();
     }
 
-    private static bool Skip(string name)
-    {
-        return name.StartsWith('.') || name is "obj" or "bin";
-    }
+    private static bool Skip(string name) => name.StartsWith('.') || name is "obj" or "bin";
 
     /// <summary>
     ///     Walk the project on a worker and swap the finished tree in.
@@ -131,24 +131,24 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
     /// </summary>
     private void RequestRebuild()
     {
-        var root = RootPath;
-        var filter = _filter;
+        string? root = RootPath;
+        string filter = _filter;
         // Snapshotted: the worker must not read a set the UI thread expands under it.
-        var expanded = new HashSet<string>(_expanded, StringComparer.Ordinal);
+        var expanded = new HashSet<string>(collection: _expanded, comparer: StringComparer.Ordinal);
 
         _scan.Run(
-            token => Scan(
-                root,
-                filter,
-                expanded,
-                token
+            work: token => Scan(
+                root: root,
+                filter: filter,
+                expanded: expanded,
+                token: token
             ),
-            rows =>
+            onUi: rows =>
             {
                 _rows = rows;
                 App.Active?.RequestLayout(); // the tree changed size; nothing else marks it
             },
-            ScanDebounce
+            delay: ScanDebounce
         );
     }
 
@@ -167,22 +167,30 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
             // Flat filtered view of matching files.
             try
             {
-                foreach (var f in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+                foreach (string f in Directory.EnumerateFiles(
+                                 path: root,
+                                 searchPattern: "*",
+                                 searchOption: SearchOption.AllDirectories
+                             )
                              .Where(p => Path.GetFileName(p).Contains(
-                                     filter,
-                                     StringComparison.OrdinalIgnoreCase
+                                     value: filter,
+                                     comparisonType: StringComparison.OrdinalIgnoreCase
                                  )
                              )
-                             .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+                             .OrderBy(
+                                 keySelector: p => p,
+                                 comparer: StringComparer.OrdinalIgnoreCase
+                             )
                              .Take(500))
                 {
                     token.ThrowIfCancellationRequested();
                     rows.Add(
                         new Entry(
-                            f,
-                            Path.GetRelativePath(root, f).Replace('\\', '/'),
-                            false,
-                            0
+                            FullPath: f,
+                            Name: Path.GetRelativePath(relativeTo: root, path: f)
+                                .Replace(oldChar: '\\', newChar: '/'),
+                            IsDir: false,
+                            Depth: 0
                         )
                     );
                 }
@@ -196,11 +204,11 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
         }
 
         WalkDir(
-            rows,
-            root,
-            0,
-            expanded,
-            token
+            rows: rows,
+            dir: root,
+            depth: 0,
+            expanded: expanded,
+            token: token
         );
         return rows.ToImmutable();
     }
@@ -214,44 +222,50 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
         try
         {
             dirs = Directory.GetDirectories(dir).Where(d => !Skip(Path.GetFileName(d)))
-                .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase).ToList();
+                .OrderBy(keySelector: Path.GetFileName, comparer: StringComparer.OrdinalIgnoreCase)
+                .ToList();
             files = Directory.GetFiles(dir).Where(f => !Skip(Path.GetFileName(f)))
-                .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase).ToList();
+                .OrderBy(keySelector: Path.GetFileName, comparer: StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
         catch
         {
             return;
         }
 
-        foreach (var d in dirs)
+        foreach (string d in dirs)
         {
             rows.Add(
                 new Entry(
-                    d,
-                    Path.GetFileName(d),
-                    true,
-                    depth
+                    FullPath: d,
+                    Name: Path.GetFileName(d),
+                    IsDir: true,
+                    Depth: depth
                 )
             );
             if (expanded.Contains(d))
+            {
                 WalkDir(
-                    rows,
-                    d,
-                    depth + 1,
-                    expanded,
-                    token
+                    rows: rows,
+                    dir: d,
+                    depth: depth + 1,
+                    expanded: expanded,
+                    token: token
                 );
+            }
         }
 
-        foreach (var f in files)
+        foreach (string f in files)
+        {
             rows.Add(
                 new Entry(
-                    f,
-                    Path.GetFileName(f),
-                    false,
-                    depth
+                    FullPath: f,
+                    Name: Path.GetFileName(f),
+                    IsDir: false,
+                    Depth: depth
                 )
             );
+        }
     }
 
     // ── Layout ──────────────────────────────────────────────────────────────────
@@ -268,26 +282,23 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
         _searchField.Measure(
             new Constraints(maxWidth: c.MaxWidth - 12f, maxHeight: AdwMetrics.CompactControlHeight)
         );
-        var h = HeaderH + _rows.Length * RowH + 6f;
-        _size = c.Constrain(new Size(c.MaxWidth, MathF.Max(h, c.MinHeight)));
+        float h = HeaderH + (_rows.Length * RowH) + 6f;
+        _size = c.Constrain(new Size(width: c.MaxWidth, height: MathF.Max(x: h, y: c.MinHeight)));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
-        _searchField.Layout(new Offset(origin.X + 6f, origin.Y + 4f));
+        _searchField.Layout(new Offset(x: origin.X + 6f, y: origin.Y + 4f));
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return [_searchField];
-    }
+    public override IEnumerable<Widget> GetChildren() => [_searchField];
 
     // ── Paint ───────────────────────────────────────────────────────────────────
 
@@ -295,87 +306,88 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
     {
         _searchField.Paint(paint);
 
-        var fs = _theme.FontSizeCaption;
-        for (var i = 0; i < _rows.Length; i++)
+        float fs = _theme.FontSizeCaption;
+        for (int i = 0; i < _rows.Length; i++)
         {
             var row = _rows[i];
-            var y = Bounds.Y + HeaderH + i * RowH;
+            float y = Bounds.Y + HeaderH + (i * RowH);
             var rowRect = new Rect(
-                Bounds.X,
-                y,
-                Bounds.Width,
-                RowH
+                x: Bounds.X,
+                y: y,
+                width: Bounds.Width,
+                height: RowH
             );
 
-            var selected = _selectedPath == row.FullPath;
+            bool selected = _selectedPath == row.FullPath;
             var pill = new Rect(
-                rowRect.X + 3f,
-                rowRect.Y + 1f,
-                rowRect.Width - 6f,
-                rowRect.Height - 2f
+                x: rowRect.X + 3f,
+                y: rowRect.Y + 1f,
+                width: rowRect.Width - 6f,
+                height: rowRect.Height - 2f
             );
-            if (selected) paint.AddRect(pill, _theme.SelectionTint, 5f);
-            else if (AdwStyle.RowFill(_theme, _hoverIndex == i, false) is { A: > 0f } wash)
-                paint.AddRect(pill, wash, 5f);
+            if (selected) paint.AddRect(bounds: pill, color: _theme.SelectionTint, radius: 5f);
+            else if (AdwStyle.RowFill(theme: _theme, hovered: _hoverIndex == i, pressed: false) is
+                     { A: > 0f } wash)
+                paint.AddRect(bounds: pill, color: wash, radius: 5f);
 
-            var x = Bounds.X + 6f + row.Depth * Indent;
-            var ty = y + (RowH - fs) / 2f + fs * 0.8f;
+            float x = Bounds.X + 6f + (row.Depth * Indent);
+            float ty = y + ((RowH - fs) / 2f) + (fs * 0.8f);
 
             if (row.IsDir)
             {
-                var open = _expanded.Contains(row.FullPath);
+                bool open = _expanded.Contains(row.FullPath);
                 Icons.Draw(
-                    paint,
-                    open ? Icons.ChevronDown : Icons.ChevronRight,
-                    new Rect(
-                        x,
-                        y,
-                        13f,
-                        RowH
+                    paint: paint,
+                    glyph: open ? Icons.ChevronDown : Icons.ChevronRight,
+                    box: new Rect(
+                        x: x,
+                        y: y,
+                        width: 13f,
+                        height: RowH
                     ),
-                    _theme.TextMuted,
-                    13f
+                    color: _theme.TextMuted,
+                    size: 13f
                 );
                 Icons.Draw(
-                    paint,
-                    open ? Icons.FolderOpen : Icons.Folder,
-                    new Rect(
-                        x + 14f,
-                        y,
-                        16f,
-                        RowH
+                    paint: paint,
+                    glyph: open ? Icons.FolderOpen : Icons.Folder,
+                    box: new Rect(
+                        x: x + 14f,
+                        y: y,
+                        width: 16f,
+                        height: RowH
                     ),
-                    _theme.Warning.WithAlpha(0.85f),
-                    14f
+                    color: _theme.Warning.WithAlpha(0.85f),
+                    size: 14f
                 );
                 paint.AddText(
-                    row.Name,
-                    x + 33f,
-                    ty,
-                    _theme.OnSurface,
-                    fs
+                    text: row.Name,
+                    baselineX: x + 33f,
+                    baselineY: ty,
+                    color: _theme.OnSurface,
+                    fontSize: fs
                 );
             }
             else
             {
                 Icons.Draw(
-                    paint,
-                    FileGlyph(row.Name),
-                    new Rect(
-                        x + 14f,
-                        y,
-                        16f,
-                        RowH
+                    paint: paint,
+                    glyph: FileGlyph(row.Name),
+                    box: new Rect(
+                        x: x + 14f,
+                        y: y,
+                        width: 16f,
+                        height: RowH
                     ),
-                    IconColor(row.Name),
-                    14f
+                    color: IconColor(row.Name),
+                    size: 14f
                 );
                 paint.AddText(
-                    row.Name,
-                    x + 33f,
-                    ty,
-                    _theme.OnSurface,
-                    fs
+                    text: row.Name,
+                    baselineX: x + 33f,
+                    baselineY: ty,
+                    color: _theme.OnSurface,
+                    fontSize: fs
                 );
             }
         }
@@ -385,7 +397,7 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         var h = _searchField.HitTest(point);
         if (h is not null) return h;
         return this; // own the row area for clicks/drag
@@ -394,18 +406,13 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
     private int RowAt(Offset point)
     {
         if (point.Y < Bounds.Y + HeaderH) return -1;
-        var i = (int)((point.Y - (Bounds.Y + HeaderH)) / RowH);
+        int i = (int)((point.Y - (Bounds.Y + HeaderH)) / RowH);
         return i >= 0 && i < _rows.Length ? i : -1;
     }
 
-    public override void OnPointerEnter()
-    {
-    }
+    public override void OnPointerEnter() { }
 
-    public override void OnPointerExit()
-    {
-        _hoverIndex = -1;
-    }
+    public override void OnPointerExit() => _hoverIndex = -1;
 
     public override void OnPointerMove(Offset point)
     {
@@ -437,12 +444,12 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
         else if (_isDragging)
         {
             // Dropped somewhere (e.g. the viewport) — same pipeline as the old asset grid.
-            _state.NotifyAssetDropped(row.FullPath, point);
+            _state.NotifyAssetDropped(path: row.FullPath, screenPos: point);
         }
         else
         {
-            var now = Environment.TickCount64;
-            var isDouble = row.FullPath == _lastClickPath && now - _lastClickMs < 400;
+            long now = Environment.TickCount64;
+            bool isDouble = row.FullPath == _lastClickPath && now - _lastClickMs < 400;
             _selectedPath = row.FullPath;
             _state.NotifyAssetSelected(row.FullPath);
             if (isDouble && IsOpenable(row.FullPath))
@@ -460,7 +467,7 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
     private static bool IsOpenable(string path)
     {
         return Ext(
-            path,
+            name: path,
             ".cs",
             ".wgsl",
             ".zig",
@@ -482,28 +489,28 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
     {
         return name switch {
             _ when Ext(
-                name,
+                name: name,
                 ".glb",
                 ".gltf",
                 ".fbx",
                 ".obj"
             ) => "[3D]",
             _ when Ext(
-                name,
+                name: name,
                 ".png",
                 ".jpg",
                 ".jpeg",
                 ".webp",
                 ".gif"
             ) => "[TX]",
-            _ when Ext(name, ".cs", ".lua") => "[CS]",
+            _ when Ext(name: name, ".cs", ".lua") => "[CS]",
             _ when Ext(
-                name,
+                name: name,
                 ".wav",
                 ".ogg",
                 ".mp3"
             ) => "[AU]",
-            _ when Ext(name, ".scene") => "[SC]",
+            _ when Ext(name: name, ".scene") => "[SC]",
             _ => "[··]",
         };
     }
@@ -512,29 +519,29 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
     {
         return name switch {
             _ when Ext(
-                name,
+                name: name,
                 ".glb",
                 ".gltf",
                 ".fbx",
                 ".obj"
-            ) => new Color(0.4f, 0.75f, 1f),
+            ) => new Color(r: 0.4f, g: 0.75f, b: 1f),
             _ when Ext(
-                name,
+                name: name,
                 ".png",
                 ".jpg",
                 ".jpeg",
                 ".webp",
                 ".gif"
-            ) => new Color(0.4f, 0.9f, 0.5f),
-            _ when Ext(name, ".cs", ".lua") => new Color(0.75f, 0.45f, 1f),
+            ) => new Color(r: 0.4f, g: 0.9f, b: 0.5f),
+            _ when Ext(name: name, ".cs", ".lua") => new Color(r: 0.75f, g: 0.45f, b: 1f),
             _ when Ext(
-                name,
+                name: name,
                 ".wav",
                 ".ogg",
                 ".mp3"
-            ) => new Color(1f, 0.88f, 0.3f),
-            _ when Ext(name, ".scene") => new Color(1f, 0.6f, 0.3f),
-            _ => new Color(0.6f, 0.6f, 0.6f),
+            ) => new Color(r: 1f, g: 0.88f, b: 0.3f),
+            _ when Ext(name: name, ".scene") => new Color(r: 1f, g: 0.6f, b: 0.3f),
+            _ => new Color(r: 0.6f, g: 0.6f, b: 0.6f),
         };
     }
 
@@ -542,36 +549,35 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
     {
         return name switch {
             _ when Ext(
-                name,
+                name: name,
                 ".glb",
                 ".gltf",
                 ".fbx",
                 ".obj"
             ) => Icons.Cube,
             _ when Ext(
-                name,
+                name: name,
                 ".png",
                 ".jpg",
                 ".jpeg",
                 ".webp",
                 ".gif"
             ) => Icons.Image,
-            _ when Ext(name, ".cs", ".lua") => Icons.Code,
+            _ when Ext(name: name, ".cs", ".lua") => Icons.Code,
             _ when Ext(
-                name,
+                name: name,
                 ".wav",
                 ".ogg",
                 ".mp3"
             ) => Icons.Audio,
-            _ when Ext(name, ".scene") => Icons.Layers,
+            _ when Ext(name: name, ".scene") => Icons.Layers,
             _ => Icons.File,
         };
     }
 
-    private static bool Ext(string name, params string[] exts)
-    {
-        return exts.Any(e => name.EndsWith(e, StringComparison.OrdinalIgnoreCase));
-    }
+    private static bool Ext(string name, params string[] exts) => exts.Any(e =>
+        name.EndsWith(value: e, comparisonType: StringComparison.OrdinalIgnoreCase)
+    );
 
     // ── Tree model ──────────────────────────────────────────────────────────────
 

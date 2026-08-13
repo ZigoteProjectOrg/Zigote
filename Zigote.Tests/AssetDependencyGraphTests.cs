@@ -16,7 +16,7 @@ public class AssetDependencyGraphTests
     private static SceneGraph DemoScene()
     {
         var scene = new SceneGraph { EnvironmentPath = "assets/hdri/sky.hdr" };
-        var car = new SceneNode("Car", NodeKind.Mesh) {
+        var car = new SceneNode(name: "Car", kind: NodeKind.Mesh) {
             MeshPath = "assets/models/car/.mesh_cache/body.zmesh",
             TexturePath = "assets/models/car/textures/body.png",
             MetallicRoughnessTexturePath = "assets/models/car/textures/body_mr.png",
@@ -25,19 +25,19 @@ public class AssetDependencyGraphTests
         };
         scene.Root.Children.Add(car);
 
-        var cube = new SceneNode("Cube", NodeKind.Mesh) {
+        var cube = new SceneNode(name: "Cube", kind: NodeKind.Mesh) {
             MeshPath = "#cube",
             Parent = scene.Root,
         };
         scene.Root.Children.Add(cube);
 
-        var speaker = new SceneNode("Speaker", NodeKind.AudioSource) {
+        var speaker = new SceneNode(name: "Speaker", kind: NodeKind.AudioSource) {
             AudioClipPath = "assets/audio/engine.ogg",
             Parent = scene.Root,
         };
         scene.Root.Children.Add(speaker);
 
-        var sparks = new SceneNode("Sparks", NodeKind.VfxEmitter) {
+        var sparks = new SceneNode(name: "Sparks", kind: NodeKind.VfxEmitter) {
             VfxBakedJson =
                 VfxAssetJson.Serialize(
                     new VfxEmitterAsset { TexturePath = "assets/vfx/spark.png" }
@@ -63,14 +63,14 @@ public class AssetDependencyGraphTests
             "assets/audio/engine.ogg",
             "assets/vfx/spark.png",
         ];
-        Assert.Equal(expected.OrderBy(p => p), graph.Files.OrderBy(p => p));
+        Assert.Equal(expected: expected.OrderBy(p => p), actual: graph.Files.OrderBy(p => p));
     }
 
     [Fact]
     public void Build_SkipsPrimitivesAndEmpties()
     {
         var graph = AssetDependencyGraph.Build(DemoScene());
-        Assert.DoesNotContain("#cube", graph.Files);
+        Assert.DoesNotContain(expected: "#cube", collection: graph.Files);
     }
 
     [Fact]
@@ -79,12 +79,12 @@ public class AssetDependencyGraphTests
         var graph = AssetDependencyGraph.Build(DemoScene());
 
         var dep = Assert.Single(graph.DependentsOf("assets/audio/engine.ogg"));
-        Assert.Equal("Speaker", dep.Node?.Name);
-        Assert.Equal("audio", dep.Role);
+        Assert.Equal(expected: "Speaker", actual: dep.Node?.Name);
+        Assert.Equal(expected: "audio", actual: dep.Role);
 
         var env = Assert.Single(graph.DependentsOf("assets/hdri/sky.hdr"));
         Assert.Null(env.Node);
-        Assert.Equal("environment", env.Role);
+        Assert.Equal(expected: "environment", actual: env.Role);
 
         Assert.Empty(graph.DependentsOf("assets/unused.png"));
     }
@@ -94,13 +94,13 @@ public class AssetDependencyGraphTests
     {
         var scene = new SceneGraph();
         scene.Root.Children.Add(
-            new SceneNode("A", NodeKind.Mesh) {
+            new SceneNode(name: "A", kind: NodeKind.Mesh) {
                 MeshPath = "assets/Models/a.zmesh",
                 Parent = scene.Root,
             }
         );
         scene.Root.Children.Add(
-            new SceneNode("B", NodeKind.Mesh) {
+            new SceneNode(name: "B", kind: NodeKind.Mesh) {
                 MeshPath = "assets/models/a.zmesh",
                 Parent = scene.Root,
             }
@@ -108,6 +108,6 @@ public class AssetDependencyGraphTests
 
         // Distinct spellings stay distinct — staging must ship the path exactly as the runtime opens it.
         var graph = AssetDependencyGraph.Build(scene);
-        Assert.Equal(2, graph.Files.Count);
+        Assert.Equal(expected: 2, actual: graph.Files.Count);
     }
 }

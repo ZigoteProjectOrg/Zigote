@@ -69,7 +69,7 @@ public sealed class VfxEmitterAsset
 
     // ── Emission shape ───────────────────────────────────────────────────────
     public EmissionShape Shape = EmissionShape.Cone;
-    public Vec3 ShapeBoxHalfExtents = new(0.5f, 0.5f, 0.5f);
+    public Vec3 ShapeBoxHalfExtents = new(x: 0.5f, y: 0.5f, z: 0.5f);
     public float ShapeRadius = 0.25f;
     public bool SoftParticles = true;
 
@@ -79,7 +79,7 @@ public sealed class VfxEmitterAsset
     /// <summary>Continuous emission rate in particles/second.</summary>
     public float SpawnRate = 24f;
 
-    public FloatRange StartAngularVelocity = new(0f, 0f);
+    public FloatRange StartAngularVelocity = new(min: 0f, max: 0f);
 
     /// <summary>Birth colour; a random lerp toward <see cref="StartColorVariation" /> (equal = constant).</summary>
     public Color StartColor = Color.White;
@@ -87,10 +87,10 @@ public sealed class VfxEmitterAsset
     public Color StartColorVariation = Color.White;
 
     // ── Initial particle values ──────────────────────────────────────────────
-    public FloatRange StartLifetime = new(1.5f, 2.5f);
-    public FloatRange StartRotation = new(0f, 0f);
-    public FloatRange StartSize = new(0.15f, 0.3f);
-    public FloatRange StartSpeed = new(2f, 4f);
+    public FloatRange StartLifetime = new(min: 1.5f, max: 2.5f);
+    public FloatRange StartRotation = new(min: 0f, max: 0f);
+    public FloatRange StartSize = new(min: 0.15f, max: 0.3f);
+    public FloatRange StartSpeed = new(min: 2f, max: 4f);
     public string? TexturePath;
 
     public List<VfxBurst> Bursts { get; } = [];

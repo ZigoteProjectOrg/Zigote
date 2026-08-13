@@ -13,29 +13,31 @@ namespace Zigote.Editor.Settings;
 /// </summary>
 public sealed class EditorSettings : PreferencesProvider
 {
-    public EditorSettings(PreferenceStore store) : base(store, "editor")
+    public EditorSettings(PreferenceStore store) : base(store: store, prefix: "editor")
     {
-        ReopenLastProject = Register("reopenLastProject", true);
-        NativeMenuBar = Register("nativeMenuBar", true);
-        ThemeMode = Register("themeMode", EditorThemeMode.System);
-        UiFontPath = Register<string?>("uiFontPath", null);
-        UiFontSize = Register("uiFontSize", 13f);
-        EditorFontPath = Register<string?>("editorFontPath", null);
-        EditorFontSize = Register("editorFontSize", 13f);
-        ConsoleFontSize = Register("consoleFontSize", 0f);
-        ConsoleClearOnPlay = Register("consoleClearOnPlay", false);
-        VSync = Register("vsync", true);
-        ReducedEditorGraphics = Register("reducedEditorGraphics", false);
-        NativeFileDialogs = Register("nativeFileDialogs", true);
-        WindowChromeMode = Register("windowChromeMode", "auto");
-        GpuIndex = Register("gpuIndex", -1);
+        ReopenLastProject = Register(key: "reopenLastProject", defaultValue: true);
+        NativeMenuBar = Register(key: "nativeMenuBar", defaultValue: true);
+        ThemeMode = Register(key: "themeMode", defaultValue: EditorThemeMode.System);
+        UiFontPath = Register<string?>(key: "uiFontPath", defaultValue: null);
+        UiFontSize = Register(key: "uiFontSize", defaultValue: 13f);
+        EditorFontPath = Register<string?>(key: "editorFontPath", defaultValue: null);
+        EditorFontSize = Register(key: "editorFontSize", defaultValue: 13f);
+        ConsoleFontSize = Register(key: "consoleFontSize", defaultValue: 0f);
+        ConsoleClearOnPlay = Register(key: "consoleClearOnPlay", defaultValue: false);
+        VSync = Register(key: "vsync", defaultValue: true);
+        ReducedEditorGraphics = Register(key: "reducedEditorGraphics", defaultValue: false);
+        NativeFileDialogs = Register(key: "nativeFileDialogs", defaultValue: true);
+        WindowChromeMode = Register(key: "windowChromeMode", defaultValue: "auto");
+        GpuIndex = Register(key: "gpuIndex", defaultValue: -1);
     }
 
     /// <summary>Reopen the last project on launch (off = always start at the welcome screen).</summary>
     public Preference<bool> ReopenLastProject { get; }
 
-    /// <summary>Use the OS-native menu bar where one exists (macOS NSMenu); off renders the
-    ///     cross-platform in-window menu bar instead.</summary>
+    /// <summary>
+    ///     Use the OS-native menu bar where one exists (macOS NSMenu); off renders the
+    ///     cross-platform in-window menu bar instead.
+    /// </summary>
     public Preference<bool> NativeMenuBar { get; }
 
     /// <summary>Appearance: follow the OS, or force dark/light.</summary>
@@ -65,13 +67,17 @@ public sealed class EditorSettings : PreferencesProvider
     /// <summary>Edit-mode reduced viewport graphics (no TAA/bloom/SSR/DoF while authoring).</summary>
     public Preference<bool> ReducedEditorGraphics { get; }
 
-    /// <summary>Use the OS-native file/folder dialogs for open/save flows; off uses the in-app
-    ///     picker everywhere (the automatic fallback path).</summary>
+    /// <summary>
+    ///     Use the OS-native file/folder dialogs for open/save flows; off uses the in-app
+    ///     picker everywhere (the automatic fallback path).
+    /// </summary>
     public Preference<bool> NativeFileDialogs { get; }
 
-    /// <summary>App-wide window chrome (main window + every secondary): "auto" (macOS unified /
+    /// <summary>
+    ///     App-wide window chrome (main window + every secondary): "auto" (macOS unified /
     ///     GNOME Adwaita / else system), "system", "mac", or "adwaita" — the override exists for
-    ///     cross-look testing.</summary>
+    ///     cross-look testing.
+    /// </summary>
     public Preference<string> WindowChromeMode { get; }
 
     /// <summary>
@@ -86,12 +92,12 @@ public sealed class EditorSettings : PreferencesProvider
     {
         get
         {
-            var dir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "Zigote"
+            string dir = Path.Combine(
+                path1: Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                path2: "Zigote"
             );
             Directory.CreateDirectory(dir);
-            return Path.Combine(dir, "preferences.db");
+            return Path.Combine(path1: dir, path2: "preferences.db");
         }
     }
 }

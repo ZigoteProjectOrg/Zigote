@@ -15,29 +15,29 @@ public class FileDialogTests
     [Fact]
     public void FilterSpec_JoinsNameAndExtensions()
     {
-        var spec = FileDialog.BuildFilterSpec(
+        string? spec = FileDialog.BuildFilterSpec(
             [
-                new FileDialogFilter("Zigote Project", "zigoteproj"),
-                new FileDialogFilter("Images", "png", "jpg"),
+                new FileDialogFilter(name: "Zigote Project", "zigoteproj"),
+                new FileDialogFilter(name: "Images", "png", "jpg"),
             ]
         );
-        Assert.Equal("Zigote Project|zigoteproj\nImages|png;jpg", spec);
+        Assert.Equal(expected: "Zigote Project|zigoteproj\nImages|png;jpg", actual: spec);
     }
 
     [Fact]
     public void FilterSpec_NormalizesDotAndStarPrefixes()
     {
-        var spec = FileDialog.BuildFilterSpec(
+        string? spec = FileDialog.BuildFilterSpec(
             [
                 new FileDialogFilter(
-                    "Images",
+                    name: "Images",
                     ".png",
                     "*.jpg",
                     "webp"
                 ),
             ]
         );
-        Assert.Equal("Images|png;jpg;webp", spec);
+        Assert.Equal(expected: "Images|png;jpg;webp", actual: spec);
     }
 
     [Fact]
@@ -45,27 +45,28 @@ public class FileDialogTests
     {
         // A "*" (or "*.*") extension makes the whole filter an all-files pattern — SDL only
         // accepts "*" as a standalone pattern, never mixed with extensions.
-        var spec = FileDialog.BuildFilterSpec(
+        string? spec = FileDialog.BuildFilterSpec(
             [
-                new FileDialogFilter("All Files", "png", "*"),
+                new FileDialogFilter(name: "All Files", "png", "*"),
             ]
         );
-        Assert.Equal("All Files|*", spec);
+        Assert.Equal(expected: "All Files|*", actual: spec);
 
-        var starDotStar = FileDialog.BuildFilterSpec([new FileDialogFilter("All", "*.*")]);
-        Assert.Equal("All|*", starDotStar);
+        string? starDotStar =
+            FileDialog.BuildFilterSpec([new FileDialogFilter(name: "All", "*.*")]);
+        Assert.Equal(expected: "All|*", actual: starDotStar);
     }
 
     [Fact]
     public void FilterSpec_SanitizesReservedCharactersInNames()
     {
         // '|' and '\n' are the spec's own separators; they must never leak in from a name.
-        var spec = FileDialog.BuildFilterSpec(
+        string? spec = FileDialog.BuildFilterSpec(
             [
-                new FileDialogFilter("Weird|Name\nHere", "png"),
+                new FileDialogFilter(name: "Weird|Name\nHere", "png"),
             ]
         );
-        Assert.Equal("Weird Name Here|png", spec);
+        Assert.Equal(expected: "Weird Name Here|png", actual: spec);
     }
 
     [Fact]
@@ -74,9 +75,12 @@ public class FileDialogTests
         // Exercises the real zigote_file_dialog_* symbols (name + calling convention) without
         // showing UI: supported is compile-time, and status/consume are safe while idle.
         Assert.True(NativeEngine.FileDialogSupported()); // all desktop OSes have a backend
-        Assert.Equal(0, NativeEngine.FileDialogStatus()); // idle before any request
+        Assert.Equal(
+            expected: 0,
+            actual: NativeEngine.FileDialogStatus()
+        ); // idle before any request
         NativeEngine.FileDialogConsume(); // no-op when idle — must not throw or corrupt state
-        Assert.Equal(0, NativeEngine.FileDialogStatus());
+        Assert.Equal(expected: 0, actual: NativeEngine.FileDialogStatus());
     }
 
     [Fact]
@@ -94,7 +98,7 @@ public class FileDialogTests
         // No engine runs under test, so IsSupported is false and every call must route to the
         // managed backend with the request intact — the same path the in-app browser serves.
         var prevBackend = FileDialog.ManagedBackend;
-        var prevEnabled = FileDialog.Enabled;
+        bool prevEnabled = FileDialog.Enabled;
         try
         {
             FileDialog.Enabled = false;
@@ -105,18 +109,18 @@ public class FileDialogTests
                 return Task.FromResult<string[]>(["/tmp/picked.scene"]);
             };
 
-            var result = await FileDialog.SaveFileAsync(
-                "Save Scene As",
-                "/tmp",
-                "level.scene",
-                [new FileDialogFilter("Zigote Scene", "scene")]
+            string? result = await FileDialog.SaveFileAsync(
+                title: "Save Scene As",
+                startDirectory: "/tmp",
+                suggestedName: "level.scene",
+                filters: [new FileDialogFilter(name: "Zigote Scene", "scene")]
             );
 
-            Assert.Equal("/tmp/picked.scene", result);
+            Assert.Equal(expected: "/tmp/picked.scene", actual: result);
             Assert.NotNull(seen);
-            Assert.Equal(FileDialogKind.SaveFile, seen!.Kind);
-            Assert.Equal("level.scene", seen.FileName);
-            Assert.Equal("/tmp", seen.Directory);
+            Assert.Equal(expected: FileDialogKind.SaveFile, actual: seen!.Kind);
+            Assert.Equal(expected: "level.scene", actual: seen.FileName);
+            Assert.Equal(expected: "/tmp", actual: seen.Directory);
             Assert.Single(seen.Filters!);
         }
         finally
@@ -130,7 +134,7 @@ public class FileDialogTests
     public async Task NoBackendAtAll_FaultsWithFileDialogException()
     {
         var prevBackend = FileDialog.ManagedBackend;
-        var prevEnabled = FileDialog.Enabled;
+        bool prevEnabled = FileDialog.Enabled;
         try
         {
             FileDialog.Enabled = false;

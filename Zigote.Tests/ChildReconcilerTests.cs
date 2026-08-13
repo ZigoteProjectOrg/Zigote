@@ -11,10 +11,7 @@ namespace Zigote.Tests;
 /// </summary>
 public class ChildReconcilerTests
 {
-    private static SizedBox Keyed(int key)
-    {
-        return new SizedBox { Key = new ValueKey<int>(key) };
-    }
+    private static SizedBox Keyed(int key) => new() { Key = new ValueKey<int>(key) };
 
     [Fact]
     public void Reorder_PreservesKeyedInstances()
@@ -26,8 +23,8 @@ public class ChildReconcilerTests
         // New instances, same keys, reversed order — reconciler must reuse the originals.
         row.SetChildren([Keyed(2), Keyed(1)]);
 
-        Assert.Same(b, row.Children[0]);
-        Assert.Same(a, row.Children[1]);
+        Assert.Same(expected: b, actual: row.Children[0]);
+        Assert.Same(expected: a, actual: row.Children[1]);
     }
 
     [Fact]
@@ -40,8 +37,8 @@ public class ChildReconcilerTests
         row.SetChildren([Keyed(1)]); // key 2 is gone
 
         Assert.Single(row.Children);
-        Assert.Same(a, row.Children[0]);
-        Assert.DoesNotContain(b, row.Children);
+        Assert.Same(expected: a, actual: row.Children[0]);
+        Assert.DoesNotContain(expected: b, collection: row.Children);
     }
 
     [Fact]
@@ -53,20 +50,20 @@ public class ChildReconcilerTests
         var inserted = Keyed(2);
         row.SetChildren([a, inserted]);
 
-        Assert.Equal(2, row.Children.Count);
-        Assert.Same(a, row.Children[0]);
-        Assert.Same(inserted, row.Children[1]);
+        Assert.Equal(expected: 2, actual: row.Children.Count);
+        Assert.Same(expected: a, actual: row.Children[0]);
+        Assert.Same(expected: inserted, actual: row.Children[1]);
     }
 
     [Fact]
     public void SameReference_IsAlwaysReused_WithoutKeys()
     {
-        var a = new SizedBox(1, 1);
-        var b = new SizedBox(2, 2);
+        var a = new SizedBox(width: 1, height: 1);
+        var b = new SizedBox(width: 2, height: 2);
         var row = new Row([a, b]);
 
         row.SetChildren([a, b]); // identical references, no keys
-        Assert.Same(a, row.Children[0]);
-        Assert.Same(b, row.Children[1]);
+        Assert.Same(expected: a, actual: row.Children[0]);
+        Assert.Same(expected: b, actual: row.Children[1]);
     }
 }

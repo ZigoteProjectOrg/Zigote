@@ -11,7 +11,8 @@ namespace Zigote.UI.Widgets.Menu;
 ///     is display-only text unless something binds it — this is that something.
 ///     <para>
 ///         Shortcut strings are accepted in both forms: the mac glyph form ("⌘⇧Z") and the written
-///         form ("Ctrl+Shift+Z", "Mod+S", "F5"). ⌘ resolves to <see cref="KeyChord.PlatformCommand" />,
+///         form ("Ctrl+Shift+Z", "Mod+S", "F5"). ⌘ resolves to <see cref="KeyChord.PlatformCommand" />
+///         ,
 ///         so one <see cref="AppMenu" /> model drives both platforms and
 ///         <see cref="Display" /> renders the label the local platform expects.
 ///     </para>
@@ -22,14 +23,19 @@ public static class MenuAccelerators
     {
         chord = default;
         if (string.IsNullOrWhiteSpace(shortcut)) return false;
-        if (shortcut.Contains('+', StringComparison.Ordinal))
-            return KeyChord.TryParse(shortcut, out chord);
+        if (shortcut.Contains(value: '+', comparisonType: StringComparison.Ordinal))
+            return KeyChord.TryParse(text: shortcut, chord: out chord);
 
         // Glyph form. The globe/fn modifier is a surrogate pair with no cross-platform meaning —
         // strip it before the per-char scan or its low surrogate reads as the key.
         var mods = Modifiers.None;
-        var key = "";
-        foreach (var ch in shortcut.Replace("🌐", "", StringComparison.Ordinal))
+        string key = "";
+        foreach (char ch in shortcut.Replace(
+                     oldValue: "🌐",
+                     newValue: "",
+                     comparisonType: StringComparison.Ordinal
+                 ))
+        {
             switch (ch)
             {
                 case '⌘': mods |= KeyChord.PlatformCommand; break;
@@ -38,9 +44,10 @@ public static class MenuAccelerators
                 case '⌃': mods |= Modifiers.Ctrl; break;
                 default: key += ch; break;
             }
+        }
 
-        if (!KeyNames.TryParse(key, out var code)) return false;
-        chord = new KeyChord(code, mods);
+        if (!KeyNames.TryParse(token: key, key: out var code)) return false;
+        chord = new KeyChord(Key: code, Modifiers: mods);
         return true;
     }
 
@@ -50,10 +57,10 @@ public static class MenuAccelerators
     /// </summary>
     public static string? Display(string? shortcut)
     {
-        if (!TryParse(shortcut, out var chord)) return shortcut;
+        if (!TryParse(shortcut: shortcut, chord: out var chord)) return shortcut;
         if (!OperatingSystem.IsMacOS()) return chord.ToString();
 
-        var s = "";
+        string s = "";
         if (chord.Modifiers.HasFlag(Modifiers.Ctrl)) s += '⌃';
         if (chord.Modifiers.HasFlag(Modifiers.Alt)) s += '⌥';
         if (chord.Modifiers.HasFlag(Modifiers.Shift)) s += '⇧';
@@ -77,7 +84,7 @@ public static class MenuAccelerators
     public static List<(KeyChord Chord, Action Run)> Collect(IReadOnlyList<AppMenu> menus)
     {
         List<(KeyChord, Action)> found = [];
-        foreach (var menu in menus) Add(found, menu.Items);
+        foreach (var menu in menus) Add(into: found, items: menu.Items);
         return found;
     }
 
@@ -87,13 +94,13 @@ public static class MenuAccelerators
         {
             if (item.Children is { Count: > 0 } children)
             {
-                Add(into, children);
+                Add(into: into, items: children);
                 continue;
             }
 
             // A disabled item's shortcut is inert, exactly as its key equivalent is under NSMenu.
             if (item is { Separator: false, OnSelect: { } action } && item.IsEnabled &&
-                TryParse(item.Shortcut, out var chord))
+                TryParse(shortcut: item.Shortcut, chord: out var chord))
                 into.Add((chord, action));
         }
     }

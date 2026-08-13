@@ -8,7 +8,8 @@ using Zigote.Ecs.Scene;
 namespace Zigote.EcsBench;
 
 /// <summary>
-///     Standalone correctness checks for the SceneNode↔entity bridge + first-class prefabs. Lives in the
+///     Standalone correctness checks for the SceneNode↔entity bridge + first-class prefabs. Lives in
+///     the
 ///     benchmark (references only Zigote.ECS) so it runs independent of the editor build. Mirrors the
 ///     xUnit tests in Zigote.Tests for when that assembly's editor dependency compiles again.
 ///     Run: dotnet run -c Release --project Zigote.Ecs.Benchmark -- verify
@@ -17,11 +18,11 @@ internal static class Verify
 {
     public static int Run()
     {
-        var failures = 0;
+        int failures = 0;
         Console.WriteLine("=== Bridge + Prefab verification ===");
 
-        Section("EcsSceneBridge", ref failures, BridgeChecks);
-        Section("EcsPrefab", ref failures, PrefabChecks);
+        Section(name: "EcsSceneBridge", failures: ref failures, body: BridgeChecks);
+        Section(name: "EcsPrefab", failures: ref failures, body: PrefabChecks);
 
         Console.WriteLine(failures == 0 ? "\nALL PASS" : $"\n{failures} FAILURE(S)");
         return failures == 0 ? 0 : 1;
@@ -33,7 +34,7 @@ internal static class Verify
         var root = new FakeNode {
             Id = 1,
             Name = "root",
-            Position = new Vec3(1, 0, 0),
+            Position = new Vec3(x: 1, y: 0, z: 0),
             Kids = {
                 new FakeNode {
                     Id = 2,
@@ -49,47 +50,61 @@ internal static class Verify
         };
         bridge.BuildFrom(root);
 
-        a.True(bridge.NodeEntities.Count == 3, "entity per node");
-        a.True(bridge.TryNodeId(bridge.EntityOf(1), out var nid) && nid == 1, "reverse lookup");
+        a.True(cond: bridge.NodeEntities.Count == 3, label: "entity per node");
         a.True(
-            bridge.TryGetTransform(1, out var t0) && t0.Position.Equals(new Vec3(1, 0, 0)),
-            "transform seeded"
+            cond: bridge.TryNodeId(e: bridge.EntityOf(1), nodeId: out int nid) && nid == 1,
+            label: "reverse lookup"
         );
         a.True(
-            bridge.World.GetParent(bridge.EntityOf(2)) == bridge.EntityOf(1),
-            "ChildOf mirrored"
+            cond: bridge.TryGetTransform(nodeId: 1, transform: out var t0) &&
+                  t0.Position.Equals(new Vec3(x: 1, y: 0, z: 0)),
+            label: "transform seeded"
         );
         a.True(
-            bridge.World.GetParent(bridge.EntityOf(3)) == bridge.EntityOf(2),
-            "grandchild ChildOf"
+            cond: bridge.World.GetParent(bridge.EntityOf(2)) == bridge.EntityOf(1),
+            label: "ChildOf mirrored"
+        );
+        a.True(
+            cond: bridge.World.GetParent(bridge.EntityOf(3)) == bridge.EntityOf(2),
+            label: "grandchild ChildOf"
         );
 
         // canonical entity transform → node mirror (the play hand-off)
         bridge.SetTransform(
-            1,
-            new Transform {
-                Position = new Vec3(9, 8, 7),
+            nodeId: 1,
+            transform: new Transform {
+                Position = new Vec3(x: 9, y: 8, z: 7),
                 Rotation = Quat.Identity,
                 Scale = Vec3.One,
             }
         );
-        a.True(root.Position.Equals(new Vec3(1, 0, 0)), "node not yet mirrored");
+        a.True(
+            cond: root.Position.Equals(new Vec3(x: 1, y: 0, z: 0)),
+            label: "node not yet mirrored"
+        );
         bridge.PullTransforms(root);
-        a.True(root.Position.Equals(new Vec3(9, 8, 7)), "PullTransforms mirrors entity→node");
+        a.True(
+            cond: root.Position.Equals(new Vec3(x: 9, y: 8, z: 7)),
+            label: "PullTransforms mirrors entity→node"
+        );
 
         // author edit → entity bake
-        root.Position = new Vec3(5, 5, 5);
+        root.Position = new Vec3(x: 5, y: 5, z: 5);
         bridge.PushTransforms(root);
         a.True(
-            bridge.TryGetTransform(1, out var t1) && t1.Position.Equals(new Vec3(5, 5, 5)),
-            "PushTransforms node→entity"
+            cond: bridge.TryGetTransform(nodeId: 1, transform: out var t1) &&
+                  t1.Position.Equals(new Vec3(x: 5, y: 5, z: 5)),
+            label: "PushTransforms node→entity"
         );
 
         // remove subtree
         var childE = bridge.EntityOf(2);
         bridge.RemoveNode(root.Kids[0]);
-        a.True(bridge.EntityOf(2).IsNull && bridge.EntityOf(3).IsNull, "subtree entities removed");
-        a.True(!bridge.World.IsAlive(childE), "removed entity destroyed");
+        a.True(
+            cond: bridge.EntityOf(2).IsNull && bridge.EntityOf(3).IsNull,
+            label: "subtree entities removed"
+        );
+        a.True(cond: !bridge.World.IsAlive(childE), label: "removed entity destroyed");
     }
 
     private static void PrefabChecks(Asserter a)
@@ -98,17 +113,14 @@ internal static class Verify
         var reg = new EcsComponentRegistry();
         reg.Register<Health>();
         reg.Register<Speed>();
-        var lib = new EcsPrefabLibrary(w, reg);
+        var lib = new EcsPrefabLibrary(world: w, registry: reg);
 
-        int HealthOf(Entity e)
-        {
-            return w.TryGet<Health>(e, out var h) ? h.Current : -1;
-        } // read-only: never auto-overrides
+        int HealthOf(Entity e) =>
+            w.TryGet<Health>(e: e, value: out var h)
+                ? h.Current
+                : -1; // read-only: never auto-overrides
 
-        float SpeedOf(Entity e)
-        {
-            return w.TryGet<Speed>(e, out var s) ? s.Value : -1f;
-        }
+        float SpeedOf(Entity e) => w.TryGet<Speed>(e: e, value: out var s) ? s.Value : -1f;
 
         var enemy = lib.Define("Enemy").With(
             new Health {
@@ -118,21 +130,21 @@ internal static class Verify
         ).With(new Speed { Value = 3f });
         var inst = lib.Instantiate("Enemy");
         a.True(
-            w.Has<Health>(inst) && !lib.IsOverridden(inst, typeof(Health)),
-            "instance inherits (not owned)"
+            cond: w.Has<Health>(inst) && !lib.IsOverridden(instance: inst, type: typeof(Health)),
+            label: "instance inherits (not owned)"
         );
-        a.True(HealthOf(inst) == 100 && SpeedOf(inst) == 3f, "inherited values");
+        a.True(cond: HealthOf(inst) == 100 && SpeedOf(inst) == 3f, label: "inherited values");
 
         w.Set(
-            inst,
-            new Health {
+            e: inst,
+            c: new Health {
                 Current = 25,
                 Max = 100,
             }
         );
         a.True(
-            lib.IsOverridden(inst, typeof(Health)) && HealthOf(inst) == 25,
-            "override owns value"
+            cond: lib.IsOverridden(instance: inst, type: typeof(Health)) && HealthOf(inst) == 25,
+            label: "override owns value"
         );
         enemy.With(
             new Health {
@@ -140,30 +152,40 @@ internal static class Verify
                 Max = 999,
             }
         );
-        a.True(HealthOf(inst) == 25, "override isolated from prefab edit");
+        a.True(cond: HealthOf(inst) == 25, label: "override isolated from prefab edit");
 
         var a2 = lib.Instantiate("Enemy");
-        a.True(HealthOf(a2) == 999, "new instance inherits latest prefab value");
+        a.True(cond: HealthOf(a2) == 999, label: "new instance inherits latest prefab value");
 
         a.True(
-            lib.Revert(inst, typeof(Health)) && !lib.IsOverridden(inst, typeof(Health)),
-            "revert drops override"
+            cond: lib.Revert(instance: inst, type: typeof(Health)) &&
+                  !lib.IsOverridden(instance: inst, type: typeof(Health)),
+            label: "revert drops override"
         );
-        a.True(HealthOf(inst) == 999, "reverted instance inherits again");
+        a.True(cond: HealthOf(inst) == 999, label: "reverted instance inherits again");
 
         // serialize overrides-only round-trip
         var iso = lib.Instantiate("Enemy");
-        w.Set(iso, new Speed { Value = 9f });
-        var json = (JsonObject)JsonNode.Parse(lib.SerializeInstance(iso, "Enemy").ToJsonString())!;
-        a.True(((JsonArray)json["overrides"]!).Count == 1, "only overrides serialized");
+        w.Set(e: iso, c: new Speed { Value = 9f });
+        var json = (JsonObject)JsonNode.Parse(
+            lib.SerializeInstance(instance: iso, prefabName: "Enemy").ToJsonString()
+        )!;
+        a.True(
+            cond: ((JsonArray)json["overrides"]!).Count == 1,
+            label: "only overrides serialized"
+        );
         var restored = lib.DeserializeInstance(json);
         a.True(
-            SpeedOf(restored) == 9f && lib.IsOverridden(restored, typeof(Speed)),
-            "override restored"
+            cond: SpeedOf(restored) == 9f &&
+                  lib.IsOverridden(instance: restored, type: typeof(Speed)),
+            label: "override restored"
         );
         a.True(
-            HealthOf(restored) == 999 && !lib.IsOverridden(restored, typeof(Health)),
-            "inheritance kept"
+            cond: HealthOf(restored) == 999 && !lib.IsOverridden(
+                instance: restored,
+                type: typeof(Health)
+            ),
+            label: "inheritance kept"
         );
     }
 

@@ -4,15 +4,9 @@ namespace Zigote.Graphs.Commands;
 
 public sealed class AddEdgeCommand(GraphEdge edge) : IGraphCommand
 {
-    public void Execute(GraphDocument graph)
-    {
-        graph.Edges.Add(edge);
-    }
+    public void Execute(GraphDocument graph) => graph.Edges.Add(edge);
 
-    public void Undo(GraphDocument graph)
-    {
-        graph.Edges.RemoveAll(e => e.Id == edge.Id);
-    }
+    public void Undo(GraphDocument graph) => graph.Edges.RemoveAll(e => e.Id == edge.Id);
 }
 
 public sealed class DeleteEdgeCommand(Guid edgeId) : IGraphCommand

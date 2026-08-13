@@ -17,8 +17,10 @@ namespace Zigote.UI.DevTools.Panels;
 ///     how much of that reaches the screen, and — with attribution on — which bodies are responsible.
 ///     <para>
 ///         The number to read is the <b>idle</b> one. A graph at rest should run nothing: a rate that
-///         stays above zero while nothing on screen changes means a signal is being written with a value
-///         that only looks new (a value type without <see cref="IEquatable{T}" />, a computed returning a
+///         stays above zero while nothing on screen changes means a signal is being written with a
+///         value
+///         that only looks new (a value type without <see cref="IEquatable{T}" />, a computed
+///         returning a
 ///         fresh collection every run), or an effect is writing a signal it reads.
 ///     </para>
 /// </summary>
@@ -27,55 +29,55 @@ public sealed class ReactivePanel : IDevPanel
     private const int TopBodies = 8;
     private const float TableInterval = 0.5f;
 
-    private static readonly Color Blue = Color.Rgb(10, 132, 255);
-    private static readonly Color Purple = Color.Rgb(191, 90, 242);
+    private static readonly Color Blue = Color.Rgb(r: 10, g: 132, b: 255);
+    private static readonly Color Purple = Color.Rgb(r: 191, g: 90, b: 242);
 
     private readonly Label[] _bodies = new Label[TopBodies];
     private readonly CachedText[] _bodyText = new CachedText[TopBodies];
     private readonly DevChartCard _card;
     private readonly DevKeyValue _deferred = new("Deferred backlog");
     private readonly DevNote _hint = new("Turn attribution on, then reproduce the churn.");
-    private readonly DevKeyValue _rate = new("Runs / s", valueColor: Blue);
-    private readonly DevKeyValue _rebuilds = new("Watch rebuilds", valueColor: Purple);
+    private readonly DevKeyValue _rate = new(key: "Runs / s", valueColor: Blue);
+    private readonly DevKeyValue _rebuilds = new(key: "Watch rebuilds", valueColor: Purple);
     private readonly DevKeyValue _runs = new("Reaction runs");
-    private readonly DevToggle _track;
-    private readonly DevKeyValue _writes = new("Signal writes");
 
     private readonly CachedText _tDeferred = new();
     private readonly CachedText _tRate = new();
     private readonly CachedText _tRebuilds = new();
     private readonly CachedText _tRuns = new();
     private readonly CachedText _tWrites = new();
+    private readonly DevToggle _track;
+    private readonly DevKeyValue _writes = new("Signal writes");
+    private long _lastRuns;
+    private float _rateTimer;
 
     private float _tableTimer;
-    private float _rateTimer;
-    private long _lastRuns;
 
     public ReactivePanel()
     {
         var chart = DevChart.Sparkline();
         AddLine(
-            chart,
-            DevChartData.ReactionRuns,
-            "runs/s",
-            Blue
+            chart: chart,
+            ring: DevChartData.ReactionRuns,
+            name: "runs/s",
+            color: Blue
         );
         AddLine(
-            chart,
-            DevChartData.WatchRebuilds,
-            "rebuilds/s",
-            Purple
+            chart: chart,
+            ring: DevChartData.WatchRebuilds,
+            name: "rebuilds/s",
+            color: Purple
         );
         _card = new DevChartCard(
-            chart,
-            84f,
-            60f,
-            "Graph churn — 60 s"
+            chart: chart,
+            height: 84f,
+            windowSeconds: 60f,
+            title: "Graph churn — 60 s"
         );
 
-        for (var i = 0; i < TopBodies; i++)
+        for (int i = 0; i < TopBodies; i++)
         {
-            _bodies[i] = new Label("", DevKit.CaptionSize) {
+            _bodies[i] = new Label(text: "", fontSize: DevKit.CaptionSize) {
                 MaxLines = 1,
                 Overflow = TextOverflow.Ellipsis,
                 FontFamily = "code",
@@ -84,9 +86,9 @@ public sealed class ReactivePanel : IDevPanel
         }
 
         _track = new DevToggle(
-            "Attribute runs to call sites",
-            Reactive.TrackReactions,
-            SetTracking
+            label: "Attribute runs to call sites",
+            value: Reactive.TrackReactions,
+            onChanged: SetTracking
         );
     }
 
@@ -120,7 +122,11 @@ public sealed class ReactivePanel : IDevPanel
 
     public void Refresh(float dt)
     {
-        _card.Sync(DevChartData.Revision, DevChartData.Time, App.Active?.Theme ?? ThemeData.Dark);
+        _card.Sync(
+            revision: DevChartData.Revision,
+            now: DevChartData.Time,
+            theme: App.Active?.Theme ?? ThemeData.Dark
+        );
 
         _writes.Value = _tWrites.Update($"{Reactive.Writes}");
         _runs.Value = _tRuns.Update($"{Reactive.Runs}");
@@ -132,7 +138,7 @@ public sealed class ReactivePanel : IDevPanel
         _rateTimer += dt;
         if (_rateTimer >= TableInterval)
         {
-            var runs = Reactive.Runs;
+            long runs = Reactive.Runs;
             _rate.Value = _tRate.Update($"{(runs - _lastRuns) / _rateTimer:F0}");
             _lastRuns = runs;
             _rateTimer = 0f;
@@ -159,10 +165,12 @@ public sealed class ReactivePanel : IDevPanel
             ? "Nothing has run since attribution was switched on."
             : "Runs since attribution was switched on, by declaring method.";
 
-        for (var i = 0; i < _bodies.Length; i++)
+        for (int i = 0; i < _bodies.Length; i++)
+        {
             _bodies[i].Text = i < hottest.Length
                 ? _bodyText[i].Update($"{hottest[i].Runs}×  {hottest[i].Label}")
                 : "";
+        }
     }
 
     // Toggling on clears first, so the table answers "what churned while I did that" rather than
@@ -176,7 +184,7 @@ public sealed class ReactivePanel : IDevPanel
 
     private static void AddLine(Chart chart, TimeSeriesRing ring, string name, Color color)
     {
-        var m = LineMark.Of(ring, s => s.Time, s => s.Value);
+        var m = LineMark.Of(data: ring, x: s => s.Time, y: s => s.Value);
         m.Name = name;
         m.Color = color;
         m.Interpolation = ChartInterpolation.Step;

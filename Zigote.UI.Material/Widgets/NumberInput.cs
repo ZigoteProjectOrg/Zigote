@@ -18,21 +18,20 @@ public sealed class NumberInput : Widget
     private readonly TextField _field;
     private readonly ScrubGrip _grip;
     private readonly Row _row;
+    private int _decimals = 2;
     private bool _editingText;
+    private float _max = float.PositiveInfinity;
+    private float _min = float.NegativeInfinity;
     private Size _size;
     private ThemeData _theme = ThemeData.Dark;
 
     private float _value;
-    private float _min = float.NegativeInfinity;
-    private float _max = float.PositiveInfinity;
-    private float _step = 1f;
-    private int _decimals = 2;
 
     public NumberInput(float value, float step = 1f,
         float min = float.NegativeInfinity, float max = float.PositiveInfinity)
     {
         Value = value;
-        _step = step;
+        Step = step;
         _min = min;
         _max = max;
 
@@ -44,17 +43,17 @@ public sealed class NumberInput : Widget
             {
                 _editingText = true;
                 if (float.TryParse(
-                        s,
-                        NumberStyles.Float,
-                        CultureInfo.InvariantCulture,
-                        out var v
+                        s: s,
+                        style: NumberStyles.Float,
+                        provider: CultureInfo.InvariantCulture,
+                        result: out float v
                     ))
                     Commit(v);
             },
         };
 
-        _btnUp = SmallButton("+", () => Commit(Value + Step));
-        _btnDown = SmallButton("-", () => Commit(Value - Step));
+        _btnUp = SmallButton(label: "+", onClick: () => Commit(Value + Step));
+        _btnDown = SmallButton(label: "-", onClick: () => Commit(Value - Step));
 
         _grip = new ScrubGrip(this);
 
@@ -96,7 +95,7 @@ public sealed class NumberInput : Widget
             if (value == _min) return;
             _min = value;
             // If the new lower bound clamps the current value, pull it up and reflect it.
-            var clamped = Math.Clamp(Value, _min, _max);
+            float clamped = Math.Clamp(value: Value, min: _min, max: _max);
             if (clamped != Value) Value = clamped;
             MarkNeedsPaint();
         }
@@ -110,17 +109,13 @@ public sealed class NumberInput : Widget
             if (value == _max) return;
             _max = value;
             // If the new upper bound clamps the current value, pull it down and reflect it.
-            var clamped = Math.Clamp(Value, _min, _max);
+            float clamped = Math.Clamp(value: Value, min: _min, max: _max);
             if (clamped != Value) Value = clamped;
             MarkNeedsPaint();
         }
     }
 
-    public float Step
-    {
-        get => _step;
-        set => _step = value;
-    }
+    public float Step { get; set; } = 1f;
 
     public int Decimals
     {
@@ -149,10 +144,10 @@ public sealed class NumberInput : Widget
     /// <summary>Fired when a drag-scrub ends (pointer-up after a drag). Use to close the undo interaction.</summary>
     public Action? OnScrubEnd { get; set; }
 
-    public override int DebugStateHash()
-    {
-        return HashCode.Combine(Value, _grip.DebugStateHash());
-    }
+    public override int DebugStateHash() => HashCode.Combine(
+        value1: Value,
+        value2: _grip.DebugStateHash()
+    );
 
     public override void UpdateFrom(Widget newWidget)
     {
@@ -176,7 +171,7 @@ public sealed class NumberInput : Widget
 
     private void Commit(float v)
     {
-        var clamped = Math.Clamp(v, Min, Max);
+        float clamped = Math.Clamp(value: v, min: Min, max: Max);
         if (MathF.Abs(clamped - Value) < 1e-9f && _editingText) return;
         Value = clamped;
         if (!_editingText) _field.Text = Format(clamped);
@@ -187,8 +182,11 @@ public sealed class NumberInput : Widget
     /// <summary>Applies a raw value from the scrub grip: clamp, round to Decimals, fire OnChanged live.</summary>
     private void Scrub(float v)
     {
-        var clamped = Math.Clamp(v, Min, Max);
-        var rounded = MathF.Round(clamped, Math.Clamp(Decimals, 0, 15));
+        float clamped = Math.Clamp(value: v, min: Min, max: Max);
+        float rounded = MathF.Round(
+            x: clamped,
+            digits: Math.Clamp(value: Decimals, min: 0, max: 15)
+        );
         if (MathF.Abs(rounded - Value) < 1e-9f) return;
         _editingText = false;
         Value = rounded;
@@ -196,10 +194,7 @@ public sealed class NumberInput : Widget
         OnChanged?.Invoke(rounded);
     }
 
-    public void SyncText()
-    {
-        _field.Text = Format(Value);
-    }
+    public void SyncText() => _field.Text = Format(Value);
 
     public override Size Measure(Constraints c)
     {
@@ -207,8 +202,8 @@ public sealed class NumberInput : Widget
         // On a phone the ± buttons are the only usable way to change the value (the scrub grip
         // measures itself away), so they get finger-sized padding instead of the dense 4×2.
         var pad = TouchMetrics.IsCompact
-            ? EdgeInsets.Symmetric(Spacing.Md, Spacing.Md)
-            : EdgeInsets.Symmetric(Spacing.Xs, Spacing.Xxs);
+            ? EdgeInsets.Symmetric(horizontal: Spacing.Md, vertical: Spacing.Md)
+            : EdgeInsets.Symmetric(horizontal: Spacing.Xs, vertical: Spacing.Xxs);
         _btnUp.Padding = pad;
         _btnDown.Padding = pad;
         _size = _row.Measure(c);
@@ -218,44 +213,38 @@ public sealed class NumberInput : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         _row.Layout(origin);
     }
 
-    public override void Paint(PaintList paint)
-    {
-        _row.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => _row.Paint(paint);
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return _row.HitTest(point);
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return [_row];
-    }
+    public override IEnumerable<Widget> GetChildren() => [_row];
 
     private string Format(float v)
     {
         return v.ToString(
-            $"F{Decimals}",
-            CultureInfo.InvariantCulture
+            format: $"F{Decimals}",
+            provider: CultureInfo.InvariantCulture
         );
     }
 
     private static Button SmallButton(string label, Action onClick)
     {
-        return new Button(label, onClick) {
+        return new Button(label: label, onPressed: onClick) {
             Style = ButtonStyle.Outlined,
             Radius = Radii.Md,
-            Padding = EdgeInsets.Symmetric(Spacing.Xs, Spacing.Xxs),
+            Padding = EdgeInsets.Symmetric(horizontal: Spacing.Xs, vertical: Spacing.Xxs),
             FontSize = ThemeData.Dark.FontSizeBody,
         };
     }
@@ -278,31 +267,33 @@ public sealed class NumberInput : Widget
 
         public override bool Focusable => false;
 
-        public override int DebugStateHash()
-        {
-            return HashCode.Combine(_dragging, _hovered);
-        }
+        public override int DebugStateHash() =>
+            HashCode.Combine(value1: _dragging, value2: _hovered);
 
         public override Size Measure(Constraints c)
         {
             _theme = ThemeProvider.Of(BuildContext.Current);
-            var h = float.IsFinite(c.MaxHeight)
-                ? Math.Clamp(ControlMetrics.RegularHeight, c.MinHeight, c.MaxHeight)
+            float h = float.IsFinite(c.MaxHeight)
+                ? Math.Clamp(
+                    value: ControlMetrics.RegularHeight,
+                    min: c.MinHeight,
+                    max: c.MaxHeight
+                )
                 : ControlMetrics.RegularHeight;
             _measureH = h;
             // A 14pt drag strip whose only cue is a hover cursor is dead weight on a phone; collapse
             // it so the field and the ± buttons get the whole row.
             _measureW = TouchMetrics.IsCompact ? 0f : GripWidth;
-            return c.Constrain(new Size(_measureW, h));
+            return c.Constrain(new Size(width: _measureW, height: h));
         }
 
         public override void Layout(Offset origin)
         {
             Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                _measureW,
-                _measureH
+                x: origin.X,
+                y: origin.Y,
+                width: _measureW,
+                height: _measureH
             );
         }
 
@@ -310,22 +301,22 @@ public sealed class NumberInput : Widget
         {
             // Subtle dotted "grip" affordance — three vertical dots, brighter while dragging.
             var color = _dragging || _hovered ? _theme.Label2 : _theme.Label3;
-            var cx = Bounds.X + Bounds.Width / 2f;
-            var cy = Bounds.Y + Bounds.Height / 2f;
+            float cx = Bounds.X + (Bounds.Width / 2f);
+            float cy = Bounds.Y + (Bounds.Height / 2f);
             const float dot = 1.5f;
             const float gap = 4f;
-            for (var i = -1; i <= 1; i++)
+            for (int i = -1; i <= 1; i++)
             {
-                var y = cy + i * gap;
+                float y = cy + (i * gap);
                 paint.AddRect(
-                    new Rect(
-                        cx - dot / 2f,
-                        y - dot / 2f,
-                        dot,
-                        dot
+                    bounds: new Rect(
+                        x: cx - (dot / 2f),
+                        y: y - (dot / 2f),
+                        width: dot,
+                        height: dot
                     ),
-                    color,
-                    dot / 2f
+                    color: color,
+                    radius: dot / 2f
                 );
             }
         }
@@ -356,13 +347,13 @@ public sealed class NumberInput : Widget
         public override void OnPointerMove(Offset point)
         {
             if (!_dragging) return;
-            var delta = point.X - _lastX;
+            float delta = point.X - _lastX;
             _lastX = point.X;
             if (delta == 0f) return;
 
-            var fine = App.Active?.CurrentModifiers.HasFlag(Modifiers.Shift) ?? false;
-            var sensitivity = owner.ScrubSensitivity * (fine ? 0.1f : 1f);
-            owner.Scrub(owner.Value + delta * owner.Step * sensitivity);
+            bool fine = App.Active?.CurrentModifiers.HasFlag(Modifiers.Shift) ?? false;
+            float sensitivity = owner.ScrubSensitivity * (fine ? 0.1f : 1f);
+            owner.Scrub(owner.Value + (delta * owner.Step * sensitivity));
         }
 
         public override void OnPointerUp(Offset point)
@@ -383,9 +374,6 @@ public sealed class NumberInput : Widget
         }
 
         /// <summary>A scrub in progress owns the gesture, the way a slider's does.</summary>
-        public override bool CanTouchDrag(bool vertical)
-        {
-            return _dragging;
-        }
+        public override bool CanTouchDrag(bool vertical) => _dragging;
     }
 }

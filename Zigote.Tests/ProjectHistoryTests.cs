@@ -17,15 +17,11 @@ public sealed class ProjectHistoryTests : IDisposable
         {
             _dir.Delete(true);
         }
-        catch (IOException)
-        {
-        }
+        catch (IOException) { }
     }
 
-    private static string Proj(string name)
-    {
-        return Path.GetFullPath($"/tmp/zigote-projects/{name}.zigoteproj");
-    }
+    private static string Proj(string name) =>
+        Path.GetFullPath($"/tmp/zigote-projects/{name}.zigoteproj");
 
     [Fact]
     public void RecordOpened_MostRecentFirst_DedupesAndTracksLast()
@@ -37,8 +33,8 @@ public sealed class ProjectHistoryTests : IDisposable
         history.RecordOpened(Proj("b"));
         history.RecordOpened(Proj("a")); // reopening moves it to the front, no duplicate
 
-        Assert.Equal([Proj("a"), Proj("b")], history.Recent.Value);
-        Assert.Equal(Proj("a"), history.Last.Value);
+        Assert.Equal(expectedSpan: [Proj("a"), Proj("b")], actualArray: history.Recent.Value);
+        Assert.Equal(expected: Proj("a"), actual: history.Last.Value);
     }
 
     [Fact]
@@ -47,11 +43,11 @@ public sealed class ProjectHistoryTests : IDisposable
         using var store = new PreferenceStore(new InMemoryKeyValueStore());
         var history = new ProjectHistory(store);
 
-        for (var i = 0; i < 20; i++) history.RecordOpened(Proj($"p{i}"));
+        for (int i = 0; i < 20; i++) history.RecordOpened(Proj($"p{i}"));
 
-        Assert.Equal(12, history.Recent.Value.Length);
-        Assert.Equal(Proj("p19"), history.Recent.Value[0]);
-        Assert.Equal(Proj("p8"), history.Recent.Value[^1]);
+        Assert.Equal(expected: 12, actual: history.Recent.Value.Length);
+        Assert.Equal(expected: Proj("p19"), actual: history.Recent.Value[0]);
+        Assert.Equal(expected: Proj("p8"), actual: history.Recent.Value[^1]);
     }
 
     [Fact]
@@ -64,7 +60,7 @@ public sealed class ProjectHistoryTests : IDisposable
 
         history.Forget(Proj("b"));
 
-        Assert.Equal([Proj("a")], history.Recent.Value);
+        Assert.Equal(expectedSpan: [Proj("a")], actualArray: history.Recent.Value);
         Assert.Null(history.Last.Value); // "b" was also the last project
 
         history.Forget(Proj("a"));
@@ -81,7 +77,7 @@ public sealed class ProjectHistoryTests : IDisposable
         history.ClearRecent();
 
         Assert.Empty(history.Recent.Value);
-        Assert.Equal(Proj("a"), history.Last.Value);
+        Assert.Equal(expected: Proj("a"), actual: history.Last.Value);
     }
 
     [Fact]
@@ -91,17 +87,17 @@ public sealed class ProjectHistoryTests : IDisposable
         var history = new ProjectHistory(store);
         history.RecordOpened(Proj("a"));
 
-        var notifications = 0;
+        int notifications = 0;
         using var subscription = history.Recent.Observe(() => notifications++);
         history.RecordOpened(Proj("a")); // structural comparer: same list → no persist, no notify
 
-        Assert.Equal(0, notifications);
+        Assert.Equal(expected: 0, actual: notifications);
     }
 
     [Fact]
     public void History_RoundTrips_AcrossStoreReopen()
     {
-        var path = Path.Combine(_dir.FullName, "prefs.json");
+        string path = Path.Combine(path1: _dir.FullName, path2: "prefs.json");
 
         using (var store = new PreferenceStore(new JsonFileKeyValueStore(path)))
         {
@@ -113,7 +109,7 @@ public sealed class ProjectHistoryTests : IDisposable
         using var reopened = new PreferenceStore(new JsonFileKeyValueStore(path));
         var restored = new ProjectHistory(reopened);
 
-        Assert.Equal([Proj("b"), Proj("a")], restored.Recent.Value);
-        Assert.Equal(Proj("b"), restored.Last.Value);
+        Assert.Equal(expectedSpan: [Proj("b"), Proj("a")], actualArray: restored.Recent.Value);
+        Assert.Equal(expected: Proj("b"), actual: restored.Last.Value);
     }
 }

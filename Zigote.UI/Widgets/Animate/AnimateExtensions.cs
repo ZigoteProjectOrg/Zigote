@@ -11,18 +11,13 @@ namespace Zigote.UI.Widgets;
 public static class AnimateExtensions
 {
     /// <summary>Wrap this widget in an <see cref="Animate" /> for fluent effect chaining.</summary>
-    public static Animate Animate(this Widget child)
-    {
-        return new Animate(child);
-    }
+    public static Animate Animate(this Widget child) => new(child);
 
     /// <summary>
     ///     Wrap this widget in an <see cref="Animate" /> configured for a state-driven transition —
     ///     the returned <see cref="Animate" /> plays forward/reverse as <paramref name="target" />
     ///     flips between 1 and 0.
     /// </summary>
-    public static Animate Animate(this Widget child, float target)
-    {
-        return new Animate(child) { Target = target };
-    }
+    public static Animate Animate(this Widget child, float target) =>
+        new(child) { Target = target };
 }

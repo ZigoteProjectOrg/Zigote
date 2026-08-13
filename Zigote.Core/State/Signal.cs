@@ -1,7 +1,8 @@
 namespace Zigote.Core.State;
 
 /// <summary>
-///     Untyped "something changed" seam. Lets change-observation (<see cref="ReactiveExtensions.Observe" />)
+///     Untyped "something changed" seam. Lets change-observation (
+///     <see cref="ReactiveExtensions.Observe" />)
 ///     and combinators work over a <see cref="Signal{T}" /> or a <see cref="Computed{T}" /> without
 ///     knowing the value type.
 /// </summary>
@@ -15,7 +16,8 @@ public interface ISignal
 ///     inside a <see cref="Computed{T}" />/<see cref="Effect" /> subscribes that reaction; writing it
 ///     pushes staleness to observers and drains effects once.
 ///     <para>
-///         Fires <see cref="Changed" /> on mutation; <see cref="Subscribe" /> returns a disposable that
+///         Fires <see cref="Changed" /> on mutation; <see cref="Subscribe" /> returns a disposable
+///         that
 ///         auto-unsubscribes. Thread-safe: reads/writes run under the shared <see cref="Reactive" />
 ///         graph lock, so a signal may be set from any thread (a timer/async completion). An optional
 ///         <see cref="IEqualityComparer{T}" /> controls when a write counts as a change.
@@ -24,7 +26,6 @@ public interface ISignal
 public sealed class Signal<T> : Source, IReadableSignal<T>
 {
     private readonly IEqualityComparer<T> _equals;
-    private T _value;
 
     /// <summary>
     ///     Seqlock counter: even means <see cref="_value" /> is stable, odd means a write is in flight.
@@ -33,6 +34,8 @@ public sealed class Signal<T> : Source, IReadableSignal<T>
     ///     snapshot WITHOUT the gate. One <c>long</c> per signal, no allocation.
     /// </summary>
     private long _seq;
+
+    private T _value;
 
     public Signal(T initialValue, IEqualityComparer<T>? comparer = null)
     {
@@ -61,7 +64,7 @@ public sealed class Signal<T> : Source, IReadableSignal<T>
         {
             using (Reactive.Hold())
             {
-                if (_equals.Equals(_value, value)) return;
+                if (_equals.Equals(x: _value, y: value)) return;
                 Write(value);
             }
         }
@@ -89,10 +92,7 @@ public sealed class Signal<T> : Source, IReadableSignal<T>
     {
         if (!Reactive.InReaction) return Snapshot();
 
-        using (Reactive.Hold())
-        {
-            return _value;
-        }
+        using (Reactive.Hold()) return _value;
     }
 
     /// <summary>
@@ -101,7 +101,8 @@ public sealed class Signal<T> : Source, IReadableSignal<T>
     ///     which is the guarantee the gate used to provide on this path.
     ///     <para>
     ///         Only valid when this thread is NOT inside a reaction: it registers no dependency. The two
-    ///         volatile reads of <see cref="_seq" /> are also the acquire fences that stop the JIT hoisting
+    ///         volatile reads of <see cref="_seq" /> are also the acquire fences that stop the JIT
+    ///         hoisting
     ///         <see cref="_value" /> out of a caller's spin loop.
     ///     </para>
     /// </summary>
@@ -109,7 +110,7 @@ public sealed class Signal<T> : Source, IReadableSignal<T>
     {
         while (true)
         {
-            var before = Volatile.Read(ref _seq);
+            long before = Volatile.Read(ref _seq);
             if ((before & 1) == 0)
             {
                 var snapshot = _value;
@@ -123,10 +124,7 @@ public sealed class Signal<T> : Source, IReadableSignal<T>
     /// <summary>Set the value and notify unconditionally (skips the equality check).</summary>
     public void Set(T value)
     {
-        using (Reactive.Hold())
-        {
-            Write(value);
-        }
+        using (Reactive.Hold()) Write(value);
     }
 
     /// <summary>Read-modify-write: store <c>update(current)</c> (equality-gated like the setter).</summary>
@@ -135,7 +133,7 @@ public sealed class Signal<T> : Source, IReadableSignal<T>
         using (Reactive.Hold())
         {
             var next = update(_value);
-            if (_equals.Equals(_value, next)) return;
+            if (_equals.Equals(x: _value, y: next)) return;
             Write(next);
         }
     }
@@ -143,9 +141,11 @@ public sealed class Signal<T> : Source, IReadableSignal<T>
     /// <summary>
     ///     Subscribe and immediately invoke <paramref name="listener" /> with the current value.
     ///     <para>
-    ///         The value is snapshotted under the graph lock but the initial invoke runs <b>after</b> it is
+    ///         The value is snapshotted under the graph lock but the initial invoke runs <b>after</b> it
+    ///         is
     ///         released — one less piece of user code under the global lock, so a listener that blocks or
-    ///         takes another lock cannot stall (or deadlock) the graph. The trade: with a concurrent writer
+    ///         takes another lock cannot stall (or deadlock) the graph. The trade: with a concurrent
+    ///         writer
     ///         the listener can see the newer value from <see cref="Changed" /> before this initial one.
     ///         Single-threaded UI use is unaffected.
     ///     </para>
@@ -163,7 +163,8 @@ public sealed class Signal<T> : Source, IReadableSignal<T>
         {
             // Nested inside a reaction's run, this thread still holds the gate — suspend tracking there,
             // so the listener's reads don't become dependencies of whatever is running.
-            if (Monitor.IsEntered(Reactive.Gate)) Reactive.UntrackedInvoke(listener, snapshot);
+            if (Monitor.IsEntered(Reactive.Gate))
+                Reactive.UntrackedInvoke(handler: listener, value: snapshot);
             else listener(snapshot);
         }
         catch
@@ -175,17 +176,11 @@ public sealed class Signal<T> : Source, IReadableSignal<T>
         return new Unsubscriber(() => Changed -= listener);
     }
 
-    public static implicit operator T(Signal<T> s)
-    {
-        return s.Value;
-    }
+    public static implicit operator T(Signal<T> s) => s.Value;
 
     public override string ToString()
     {
-        using (Reactive.Hold())
-        {
-            return _value?.ToString() ?? "";
-        }
+        using (Reactive.Hold()) return _value?.ToString() ?? "";
     }
 
     // Commit a new value and cascade — always called under the lock.
@@ -198,7 +193,10 @@ public sealed class Signal<T> : Source, IReadableSignal<T>
         // let a reader observe a torn value under an even counter. x64 would be fine either way.
         Interlocked.Increment(ref _seq); // now odd: write in flight
         _value = value;
-        Volatile.Write(ref _seq, _seq + 1); // now even: publish, with _value ordered before it
+        Volatile.Write(
+            location: ref _seq,
+            value: _seq + 1
+        ); // now even: publish, with _value ordered before it
 
         // Cascade BEFORE firing Changed/Invalidated: a user handler is allowed to re-enter and
         // subscribe/dispose an observer of this same signal, which would otherwise mutate the observer
@@ -207,16 +205,13 @@ public sealed class Signal<T> : Source, IReadableSignal<T>
 
         // A write can land mid-run (a self-writing reaction) — suspend tracking so handler reads
         // don't become phantom dependencies of whatever reaction is executing.
-        Reactive.UntrackedInvoke(Changed, value);
+        Reactive.UntrackedInvoke(handler: Changed, value: value);
         Reactive.UntrackedInvoke(Invalidated);
     }
 
     private sealed class Unsubscriber(Action dispose) : IDisposable
     {
-        public void Dispose()
-        {
-            dispose();
-        }
+        public void Dispose() => dispose();
     }
 }
 
@@ -224,7 +219,8 @@ public sealed class Signal<T> : Source, IReadableSignal<T>
 ///     A valueless source: "this happened". Reactions that <see cref="Depend" /> on it re-run on every
 ///     <see cref="Fire" />, with no value to compare — the escape hatch for recomputing on an event
 ///     (a reload, a tick, a device change) rather than on a state change. Cf. SignalsDotnet's signal
-///     events. Everything a <see cref="Signal{T}" /> gives you applies: tracking, batching, glitch-free
+///     events. Everything a <see cref="Signal{T}" /> gives you applies: tracking, batching,
+///     glitch-free
 ///     settling, and it may be fired from any thread.
 ///     <code>
 ///     var reload = new Trigger();
@@ -240,10 +236,7 @@ public sealed class Trigger : Source, ISignal
     /// <summary>The running computed/effect re-runs on the next <see cref="Fire" />.</summary>
     public void Depend()
     {
-        using (Reactive.Hold())
-        {
-            Track();
-        }
+        using (Reactive.Hold()) Track();
     }
 
     /// <summary>Raise the event: every reaction that depends on this trigger becomes stale.</summary>

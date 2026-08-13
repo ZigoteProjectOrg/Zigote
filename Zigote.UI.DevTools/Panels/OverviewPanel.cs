@@ -7,10 +7,10 @@ using Zigote.UI.Charts.Scales;
 using Zigote.UI.Debug;
 using Zigote.UI.DevTools.Diagnostics;
 using Zigote.UI.DevTools.Widgets;
+using Zigote.UI.Host;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Layout;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.DevTools.Panels;
 
@@ -22,45 +22,45 @@ namespace Zigote.UI.DevTools.Panels;
 /// </summary>
 public sealed class OverviewPanel : IDevPanel
 {
-    private static readonly Color Blue = Color.Rgb(10, 132, 255);
-    private static readonly Color Green = Color.Rgb(48, 209, 88);
-    private static readonly Color Orange = Color.Rgb(255, 159, 10);
+    private static readonly Color Blue = Color.Rgb(r: 10, g: 132, b: 255);
+    private static readonly Color Green = Color.Rgb(r: 48, g: 209, b: 88);
+    private static readonly Color Orange = Color.Rgb(r: 255, g: 159, b: 10);
 
     private readonly DevKeyValue _backend = new("Backend");
+    private readonly DevKeyValue _cpu = new(key: "Load", valueColor: Blue);
     private readonly DevChartCard _cpuCard;
-    private readonly DevKeyValue _cpu = new("Load", valueColor: Blue);
     private readonly DevKeyValue _draws = new("Draw calls");
     private readonly DevKeyValue _errors = new("Errors");
-    private readonly DevChartCard _fpsCard;
     private readonly DevKeyValue _fps = new("FPS");
+    private readonly DevChartCard _fpsCard;
     private readonly DevKeyValue _frame = new("Frame time");
-    private readonly DevKeyValue _heap = new("GC heap", valueColor: Green);
+    private readonly DevKeyValue _heap = new(key: "GC heap", valueColor: Green);
+    private readonly DevNote _idle = new("3D idle — counters show the last rendered frame");
     private readonly DevKeyValue _info = new("Info");
     private readonly DevChartCard _memCard;
     private readonly DevKeyValue _range = new("Range");
     private readonly DevKeyValue _surface = new("Surface");
-    private readonly DevKeyValue _tris = new("Triangles");
-    private readonly DevKeyValue _uptime = new("Uptime");
-    private readonly DevKeyValue _visible = new("Visible objects");
-    private readonly DevKeyValue _warnings = new("Warnings");
-    private readonly DevKeyValue _ws = new("Working set", valueColor: Blue);
-    private readonly DevNote _idle = new("3D idle — counters show the last rendered frame");
+    private readonly CachedText _tCpu = new();
+    private readonly CachedText _tDraws = new();
+    private readonly CachedText _tErrors = new();
 
     // Per-readout caches: Refresh runs every frame while the panel is open, so all formatting goes
     // through CachedText (zero-alloc while the rendered text is unchanged).
     private readonly CachedText _tFps = new();
     private readonly CachedText _tFrame = new();
-    private readonly CachedText _tRange = new();
-    private readonly CachedText _tCpu = new();
-    private readonly CachedText _tWs = new();
     private readonly CachedText _tHeap = new();
-    private readonly CachedText _tSurface = new();
-    private readonly CachedText _tDraws = new();
-    private readonly CachedText _tVisible = new();
-    private readonly CachedText _tErrors = new();
-    private readonly CachedText _tWarnings = new();
     private readonly CachedText _tInfo = new();
+    private readonly CachedText _tRange = new();
+    private readonly CachedText _tSurface = new();
     private readonly CachedText _tUptime = new();
+    private readonly CachedText _tVisible = new();
+    private readonly CachedText _tWarnings = new();
+    private readonly CachedText _tWs = new();
+    private readonly DevKeyValue _tris = new("Triangles");
+    private readonly DevKeyValue _uptime = new("Uptime");
+    private readonly DevKeyValue _visible = new("Visible objects");
+    private readonly DevKeyValue _warnings = new("Warnings");
+    private readonly DevKeyValue _ws = new(key: "Working set", valueColor: Blue);
     private RenderBackend? _backendKey;
     private string _backendText = "—";
     private long _trisKey = -1;
@@ -69,7 +69,7 @@ public sealed class OverviewPanel : IDevPanel
     public OverviewPanel()
     {
         var fps = DevChart.Sparkline();
-        var fpsArea = AreaMark.Of(DevChartData.Fps, s => s.Time, s => s.Value);
+        var fpsArea = AreaMark.Of(data: DevChartData.Fps, x: s => s.Time, y: s => s.Value);
         fpsArea.Name = "fps";
         fpsArea.Color = Green;
         fpsArea.Opacity = 0.2f;
@@ -90,7 +90,7 @@ public sealed class OverviewPanel : IDevPanel
                 Dash = 4f,
             }
         );
-        _fpsCard = new DevChartCard(fps, 78f, 60f);
+        _fpsCard = new DevChartCard(chart: fps, height: 78f, windowSeconds: 60f);
 
         var cpu = DevChart.Sparkline();
         cpu.YScale = new LinearScale {
@@ -98,24 +98,24 @@ public sealed class OverviewPanel : IDevPanel
             Max = 100,
             Nice = false,
         };
-        var cpuArea = AreaMark.Of(DevChartData.CpuPct, s => s.Time, s => s.Value);
+        var cpuArea = AreaMark.Of(data: DevChartData.CpuPct, x: s => s.Time, y: s => s.Value);
         cpuArea.Name = "cpu %";
         cpuArea.Color = Blue;
         cpuArea.Opacity = 0.18f;
         cpuArea.Interpolation = ChartInterpolation.Monotone;
         cpu.Marks.Add(cpuArea);
-        _cpuCard = new DevChartCard(cpu, 54f, 120f);
+        _cpuCard = new DevChartCard(chart: cpu, height: 54f, windowSeconds: 120f);
 
         var mem = DevChart.Sparkline();
-        var ws = LineMark.Of(DevChartData.WorkingSetMb, s => s.Time, s => s.Value);
+        var ws = LineMark.Of(data: DevChartData.WorkingSetMb, x: s => s.Time, y: s => s.Value);
         ws.Name = "working set";
         ws.Color = Blue;
-        var heap = LineMark.Of(DevChartData.GcHeapMb, s => s.Time, s => s.Value);
+        var heap = LineMark.Of(data: DevChartData.GcHeapMb, x: s => s.Time, y: s => s.Value);
         heap.Name = "GC heap";
         heap.Color = Green;
         mem.Marks.Add(ws);
         mem.Marks.Add(heap);
-        _memCard = new DevChartCard(mem, 62f, 120f);
+        _memCard = new DevChartCard(chart: mem, height: 62f, windowSeconds: 120f);
     }
 
     public string Title => "Overview";
@@ -158,14 +158,14 @@ public sealed class OverviewPanel : IDevPanel
 
     public void Refresh(float dt)
     {
-        var rev = DevChartData.Revision;
-        var now = DevChartData.Time;
+        int rev = DevChartData.Revision;
+        float now = DevChartData.Time;
         var theme = App.Active?.Theme ?? ThemeData.Dark;
-        _fpsCard.Sync(rev, now, theme);
-        _cpuCard.Sync(rev, now, theme);
-        _memCard.Sync(rev, now, theme);
+        _fpsCard.Sync(revision: rev, now: now, theme: theme);
+        _cpuCard.Sync(revision: rev, now: now, theme: theme);
+        _memCard.Sync(revision: rev, now: now, theme: theme);
 
-        var fps = DebugStats.Fps;
+        float fps = DebugStats.Fps;
         _fps.Value = _tFps.Update($"{fps:F0}");
         _fps.ValueColor = fps >= 55f ? Color.Green : fps >= 30f ? Color.Amber : Color.Red;
         _frame.Value = _tFrame.Update($"{DebugStats.FrameMs:F2} ms");
@@ -217,14 +217,14 @@ public sealed class OverviewPanel : IDevPanel
             _idle.Text = "";
         }
 
-        var (_, _, info, warn, err, fatal) = DebugLog.Counts();
+        (_, _, int info, int warn, int err, int fatal) = DebugLog.Counts();
         _errors.Value = _tErrors.Update($"{err + fatal}");
         _errors.ValueColor = err + fatal > 0 ? theme.Error : theme.Hint;
         _warnings.Value = _tWarnings.Update($"{warn}");
         _warnings.ValueColor = warn > 0 ? Color.Amber : theme.Hint;
         _info.Value = _tInfo.Update($"{info}");
         _info.ValueColor = theme.Hint;
-        var up = TimeSpan.FromSeconds(Math.Max(0f, App.Active?.Time ?? 0f));
+        var up = TimeSpan.FromSeconds(Math.Max(val1: 0f, val2: App.Active?.Time ?? 0f));
         _uptime.Value = up.TotalHours >= 1
             ? _tUptime.Update($"{(int)up.TotalHours}h {up.Minutes}m {up.Seconds}s")
             : up.TotalMinutes >= 1

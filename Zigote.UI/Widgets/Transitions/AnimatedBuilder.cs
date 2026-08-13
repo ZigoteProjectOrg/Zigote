@@ -60,38 +60,35 @@ public sealed class AnimatedBuilder(
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         _built?.Layout(origin);
     }
 
-    public override void Paint(PaintList paint)
-    {
-        _built?.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => _built?.Paint(paint);
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return _built?.HitTest(point) ?? this;
     }
 
-    public override int DebugStateHash()
-    {
-        return HashCode.Combine(Animation.Value.GetHashCode(), _built?.DebugStateHash() ?? 0);
-    }
+    public override int DebugStateHash() => HashCode.Combine(
+        value1: Animation.Value.GetHashCode(),
+        value2: _built?.DebugStateHash() ?? 0
+    );
 
     // ── Rebuild logic ─────────────────────────────────────────────────────────
 
     private void RebuildIfDirty()
     {
-        var v = Animation.Value;
+        float v = Animation.Value;
         if (float.IsNaN(_lastValue) || Math.Abs(v - _lastValue) > 0.001f)
         {
-            _built = Builder(BuildContext.Current, Child);
+            _built = Builder(arg1: BuildContext.Current, arg2: Child);
             _lastValue = v;
         }
     }

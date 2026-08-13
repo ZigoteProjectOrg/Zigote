@@ -18,9 +18,9 @@ public abstract class GameApp(string title, uint width = 1280, uint height = 720
     // A game renders a 3D scene every frame, so it wants the fastest GPU on a multi-GPU machine —
     // unlike a plain UI App, which defaults to the power-efficient one.
     : App(
-        title,
-        width,
-        height,
+        title: title,
+        width: width,
+        height: height,
         gpuPreference: GpuPowerPreference.Performance
     )
 {
@@ -62,23 +62,17 @@ public abstract class GameApp(string title, uint width = 1280, uint height = 720
     public float InterpolationAlpha { get; private set; }
 
     /// <summary>Called once before the game loop begins.</summary>
-    protected virtual void OnStart()
-    {
-    }
+    protected virtual void OnStart() { }
 
     /// <summary>Called once per render frame with the raw delta time — view work, not simulation.</summary>
-    protected virtual void OnUpdate(float dt)
-    {
-    }
+    protected virtual void OnUpdate(float dt) { }
 
     /// <summary>
     ///     Called once per fixed tick with the constant <see cref="FixedDt" />, right before the
     ///     physics step of the same slice — frame-rate-independent gameplay (forces, movement)
     ///     belongs here.
     /// </summary>
-    protected virtual void OnFixedStep(float fixedDt)
-    {
-    }
+    protected virtual void OnFixedStep(float fixedDt) { }
 
     /// <summary>Run until the window is closed.</summary>
     public void Run()
@@ -92,7 +86,7 @@ public abstract class GameApp(string title, uint width = 1280, uint height = 720
             Frame(); // UiApp.Frame() updates DeltaTime internally — and paces the frame on the way out
             OnUpdate(DeltaTime);
 
-            _accumulator = MathF.Min(_accumulator + DeltaTime, MaxCatchUp);
+            _accumulator = MathF.Min(x: _accumulator + DeltaTime, y: MaxCatchUp);
             while (_accumulator >= FixedDt)
             {
                 OnFixedStep(FixedDt);

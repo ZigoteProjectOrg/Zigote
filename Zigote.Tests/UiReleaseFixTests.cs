@@ -18,24 +18,28 @@ namespace Zigote.Tests;
 /// </summary>
 public class UiReleaseFixTests
 {
-    private static Offset CenterOf(Widget w)
-    {
-        return new Offset(w.Bounds.X + w.Bounds.Width / 2f, w.Bounds.Y + w.Bounds.Height / 2f);
-    }
+    private static Offset CenterOf(Widget w) => new(
+        x: w.Bounds.X + (w.Bounds.Width / 2f),
+        y: w.Bounds.Y + (w.Bounds.Height / 2f)
+    );
 
     // ── Keyed reconcile keeps config in sync (UpdateFrom) ──────────────────────
 
     [Fact]
     public void Radio_KeyedReconcile_UpdatesGroupValue()
     {
-        var a = new Radio<string>("x", "x") { Key = new ValueKey<int>(1) }; // selected (x == x)
+        var a = new Radio<string>(value: "x", groupValue: "x") {
+            Key = new ValueKey<int>(1),
+        }; // selected (x == x)
         var row = new Row([a]);
         Assert.True(a.IsSelected);
 
         // New instance, same key, group now "y" — reconciler reuses `a` and must carry the new config in.
-        row.SetChildren([new Radio<string>("x", "y") { Key = new ValueKey<int>(1) }]);
+        row.SetChildren(
+            [new Radio<string>(value: "x", groupValue: "y") { Key = new ValueKey<int>(1) }]
+        );
 
-        Assert.Same(a, row.Children[0]);
+        Assert.Same(expected: a, actual: row.Children[0]);
         Assert.False(a.IsSelected); // was stale-true before the UpdateFrom fix
     }
 
@@ -47,7 +51,7 @@ public class UiReleaseFixTests
 
         row.SetChildren([new Switch(true) { Key = new ValueKey<int>(1) }]);
 
-        Assert.Same(a, row.Children[0]);
+        Assert.Same(expected: a, actual: row.Children[0]);
         Assert.True(a.Value); // UpdateFrom previously dropped Value
     }
 
@@ -55,13 +59,13 @@ public class UiReleaseFixTests
     public void TabBar_MutatingTabs_RebuildsCells_AndDoesNotThrow()
     {
         var tabs = new TabBar([new Tab("Alpha"), new Tab("Beta"), new Tab("Gamma")]);
-        tabs.Measure(Constraints.Loose(400, 40));
+        tabs.Measure(Constraints.Loose(width: 400, height: 40));
 
         tabs.Tabs = ["Solo"]; // shorter list — stale cells would index past Tabs.Count
 
         var ex = Record.Exception(() =>
             {
-                tabs.Measure(Constraints.Loose(400, 40));
+                tabs.Measure(Constraints.Loose(width: 400, height: 40));
                 tabs.Layout(Offset.Zero);
             }
         );
@@ -75,12 +79,12 @@ public class UiReleaseFixTests
             Key = new ValueKey<int>(1),
         };
         var row = new Row([a]);
-        row.Measure(Constraints.Loose(400, 40));
+        row.Measure(Constraints.Loose(width: 400, height: 40));
 
         row.SetChildren([new TabBar([new Tab("X")]) { Key = new ValueKey<int>(1) }]);
 
-        Assert.Same(a, row.Children[0]);
-        var ex = Record.Exception(() => row.Measure(Constraints.Loose(400, 40)));
+        Assert.Same(expected: a, actual: row.Children[0]);
+        var ex = Record.Exception(() => row.Measure(Constraints.Loose(width: 400, height: 40)));
         Assert.Null(ex);
     }
 
@@ -92,8 +96,11 @@ public class UiReleaseFixTests
 
         sw.Child = new Probe { Key = new ValueKey<int>(1) }; // same key + type, new instance
 
-        Assert.Same(a, sw.Child); // retained (no cross-fade)
-        Assert.Equal(1, a.Updates); // config forwarded via UpdateFrom (previously dropped)
+        Assert.Same(expected: a, actual: sw.Child); // retained (no cross-fade)
+        Assert.Equal(
+            expected: 1,
+            actual: a.Updates
+        ); // config forwarded via UpdateFrom (previously dropped)
     }
 
     // ── Center loosens child constraints ──────────────────────────────────────
@@ -101,19 +108,19 @@ public class UiReleaseFixTests
     [Fact]
     public void Center_CentersChild_UnderTightConstraints()
     {
-        var child = new SizedBox(40, 20);
+        var child = new SizedBox(width: 40, height: 20);
         var center = new Center(child);
 
-        center.Measure(Constraints.Tight(200, 200));
+        center.Measure(Constraints.Tight(width: 200, height: 200));
         center.Layout(Offset.Zero);
 
         Assert.Equal(
-            80f,
-            child.Bounds.X,
-            2
+            expected: 80f,
+            actual: child.Bounds.X,
+            precision: 2
         ); // (200-40)/2 — was 0 (child forced to fill) before the fix
-        Assert.Equal(90f, child.Bounds.Y, 2); // (200-20)/2
-        Assert.Equal(40f, child.Bounds.Width, 2);
+        Assert.Equal(expected: 90f, actual: child.Bounds.Y, precision: 2); // (200-20)/2
+        Assert.Equal(expected: 40f, actual: child.Bounds.Width, precision: 2);
     }
 
     // ── GlassGlow forwards input to its child ─────────────────────────────────
@@ -121,9 +128,9 @@ public class UiReleaseFixTests
     [Fact]
     public void GlassGlow_ForwardsHitAndClick_ToChild()
     {
-        var clicks = 0;
-        var glow = new GlassGlow(new Button("Go", () => clicks++));
-        glow.Measure(Constraints.Loose(200, 100));
+        int clicks = 0;
+        var glow = new GlassGlow(new Button(label: "Go", onPressed: () => clicks++));
+        glow.Measure(Constraints.Loose(width: 200, height: 100));
         glow.Layout(Offset.Zero);
 
         var hit = glow.HitTest(CenterOf(glow));
@@ -131,7 +138,7 @@ public class UiReleaseFixTests
 
         hit!.OnPointerDown(CenterOf(glow));
         hit.OnPointerUp(CenterOf(glow));
-        Assert.Equal(1, clicks);
+        Assert.Equal(expected: 1, actual: clicks);
     }
 
     // ── InheritedWidget weak-dependent notify still rebuilds live dependents ───
@@ -144,7 +151,9 @@ public class UiReleaseFixTests
         var reader = new Reader();
         var marker = new Marker { Child = reader };
 
-        marker.Measure(Constraints.Tight(10, 10)); // Reader.Build runs → registers via DependOn
+        marker.Measure(
+            Constraints.Tight(width: 10, height: 10)
+        ); // Reader.Build runs → registers via DependOn
         Assert.False(reader.NeedsBuild);
 
         marker.Fire();
@@ -153,15 +162,9 @@ public class UiReleaseFixTests
 
     private sealed class Marker : InheritedWidget
     {
-        public override bool UpdateShouldNotify(InheritedWidget oldWidget)
-        {
-            return true;
-        }
+        public override bool UpdateShouldNotify(InheritedWidget oldWidget) => true;
 
-        public void Fire()
-        {
-            NotifyDependents();
-        }
+        public void Fire() => NotifyDependents();
     }
 
     private sealed class Reader : ComposedWidget
@@ -169,7 +172,7 @@ public class UiReleaseFixTests
         protected override Widget Build(BuildContext ctx)
         {
             ctx.DependOn<Marker>();
-            return new SizedBox(1, 1);
+            return new SizedBox(width: 1, height: 1);
         }
     }
 
@@ -178,28 +181,20 @@ public class UiReleaseFixTests
     {
         public int Updates;
 
-        public override Size Measure(Constraints c)
-        {
-            return c.Constrain(Size.Zero);
-        }
+        public override Size Measure(Constraints c) => c.Constrain(Size.Zero);
 
         public override void Layout(Offset origin)
         {
             Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                0f,
-                0f
+                x: origin.X,
+                y: origin.Y,
+                width: 0f,
+                height: 0f
             );
         }
 
-        public override void Paint(PaintList paint)
-        {
-        }
+        public override void Paint(PaintList paint) { }
 
-        public override void UpdateFrom(Widget newWidget)
-        {
-            Updates++;
-        }
+        public override void UpdateFrom(Widget newWidget) => Updates++;
     }
 }

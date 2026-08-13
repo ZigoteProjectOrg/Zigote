@@ -44,10 +44,8 @@ public sealed class StackScratch
         ByX.Clear();
     }
 
-    internal Dictionary<string, double> RentColumn()
-    {
-        return Pool.Count > 0 ? Pool.Pop() : new Dictionary<string, double>();
-    }
+    internal Dictionary<string, double> RentColumn() =>
+        Pool.Count > 0 ? Pool.Pop() : new Dictionary<string, double>();
 }
 
 /// <summary>
@@ -71,11 +69,13 @@ public static class StackCompute
         result.Clear();
         if (mode == ChartStacking.None)
         {
-            for (var i = 0; i < points.Count; i++)
+            for (int i = 0; i < points.Count; i++)
             {
-                var (series, key, value) = points[i];
+                (string series, var key, double value) = points[i];
                 result[(series, key)] =
-                    value >= 0 ? new StackedSpan(0, value) : new StackedSpan(value, 0);
+                    value >= 0
+                        ? new StackedSpan(Bottom: 0, Top: value)
+                        : new StackedSpan(Bottom: value, Top: 0);
             }
 
             return;
@@ -84,19 +84,17 @@ public static class StackCompute
         // Group values by x, preserving one slot per (series, x); a duplicate datum overwrites.
         Dictionary<ChartValue, Dictionary<string, double>> byX;
         if (scratch is null)
-        {
             byX = new Dictionary<ChartValue, Dictionary<string, double>>();
-        }
         else
         {
             scratch.Recycle();
             byX = scratch.ByX;
         }
 
-        for (var i = 0; i < points.Count; i++)
+        for (int i = 0; i < points.Count; i++)
         {
-            var (series, key, value) = points[i];
-            if (!byX.TryGetValue(key, out var column))
+            (string series, var key, double value) = points[i];
+            if (!byX.TryGetValue(key: key, value: out var column))
                 byX[key] = column = scratch?.RentColumn() ?? new Dictionary<string, double>();
             column[series] = value;
         }
@@ -104,28 +102,28 @@ public static class StackCompute
         foreach (var (key, column) in byX)
         {
             double posSum = 0, negSum = 0, total = 0;
-            foreach (var v in column.Values) total += Math.Abs(v);
-            var scale = mode == ChartStacking.Normalized && total > 0 ? 1.0 / total : 1.0;
-            var offset = mode == ChartStacking.Center ? -total * scale / 2.0 : 0.0;
+            foreach (double v in column.Values) total += Math.Abs(v);
+            double scale = mode == ChartStacking.Normalized && total > 0 ? 1.0 / total : 1.0;
+            double offset = mode == ChartStacking.Center ? -total * scale / 2.0 : 0.0;
 
-            for (var s = 0; s < seriesOrder.Count; s++)
+            for (int s = 0; s < seriesOrder.Count; s++)
             {
-                var series = seriesOrder[s];
-                if (!column.TryGetValue(series, out var v)) continue;
-                var scaled = v * scale;
+                string series = seriesOrder[s];
+                if (!column.TryGetValue(key: series, value: out double v)) continue;
+                double scaled = v * scale;
                 if (scaled >= 0)
                 {
                     result[(series, key)] = new StackedSpan(
-                        offset + posSum,
-                        offset + posSum + scaled
+                        Bottom: offset + posSum,
+                        Top: offset + posSum + scaled
                     );
                     posSum += scaled;
                 }
                 else
                 {
                     result[(series, key)] = new StackedSpan(
-                        offset + negSum + scaled,
-                        offset + negSum
+                        Bottom: offset + negSum + scaled,
+                        Top: offset + negSum
                     );
                     negSum += scaled;
                 }

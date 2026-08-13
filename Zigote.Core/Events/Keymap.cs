@@ -21,18 +21,12 @@ public readonly record struct KeyChord(KeyCode Key, Modifiers Modifiers = Modifi
         var m = PlatformCommand;
         if (shift) m |= Modifiers.Shift;
         if (alt) m |= Modifiers.Alt;
-        return new KeyChord(key, m);
+        return new KeyChord(Key: key, Modifiers: m);
     }
 
-    public bool Matches(KeyCode key, Modifiers modifiers)
-    {
-        return Key == key && Modifiers == modifiers;
-    }
+    public bool Matches(KeyCode key, Modifiers modifiers) => Key == key && Modifiers == modifiers;
 
-    public bool Matches(KeyEvent e)
-    {
-        return e.Down && Matches(e.Key, e.Modifiers);
-    }
+    public bool Matches(KeyEvent e) => e.Down && Matches(key: e.Key, modifiers: e.Modifiers);
 
     public override string ToString()
     {
@@ -42,7 +36,7 @@ public readonly record struct KeyChord(KeyCode Key, Modifiers Modifiers = Modifi
         if (Modifiers.HasFlag(Modifiers.Alt)) parts.Add("Alt");
         if (Modifiers.HasFlag(Modifiers.Shift)) parts.Add("Shift");
         parts.Add(KeyNames.Display(Key));
-        return string.Join("+", parts);
+        return string.Join(separator: "+", values: parts);
     }
 
     /// <summary>
@@ -54,14 +48,15 @@ public readonly record struct KeyChord(KeyCode Key, Modifiers Modifiers = Modifi
         chord = default;
         if (string.IsNullOrWhiteSpace(text)) return false;
 
-        var tokens = text.Split(
-            '+',
-            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+        string[] tokens = text.Split(
+            separator: '+',
+            options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
         );
         if (tokens.Length == 0) return false;
 
         var mods = Modifiers.None;
-        for (var i = 0; i < tokens.Length - 1; i++)
+        for (int i = 0; i < tokens.Length - 1; i++)
+        {
             switch (tokens[i].ToLowerInvariant())
             {
                 case "cmd" or "command" or "meta" or "super" or "win": mods |= Modifiers.Cmd; break;
@@ -71,9 +66,10 @@ public readonly record struct KeyChord(KeyCode Key, Modifiers Modifiers = Modifi
                 case "mod" or "cmdorctrl": mods |= PlatformCommand; break;
                 default: return false;
             }
+        }
 
-        if (!KeyNames.TryParse(tokens[^1], out var key)) return false;
-        chord = new KeyChord(key, mods);
+        if (!KeyNames.TryParse(token: tokens[^1], key: out var key)) return false;
+        chord = new KeyChord(Key: key, Modifiers: mods);
         return true;
     }
 }
@@ -93,7 +89,7 @@ public sealed class Keymap
     /// <summary>Add a chord to an action (idempotent — duplicate chords are ignored).</summary>
     public void Bind(string action, KeyChord chord)
     {
-        if (!_bindings.TryGetValue(action, out var list))
+        if (!_bindings.TryGetValue(key: action, value: out var list))
             _bindings[action] = list = [];
         if (!list.Contains(chord)) list.Add(chord);
     }
@@ -101,64 +97,60 @@ public sealed class Keymap
     /// <summary>Add a chord parsed from a string; returns false (and binds nothing) if it doesn't parse.</summary>
     public bool Bind(string action, string chord)
     {
-        if (!KeyChord.TryParse(chord, out var c)) return false;
-        Bind(action, c);
+        if (!KeyChord.TryParse(text: chord, chord: out var c)) return false;
+        Bind(action: action, chord: c);
         return true;
     }
 
     /// <summary>Replace all of an action's chords with a single one.</summary>
-    public void Rebind(string action, KeyChord chord)
-    {
-        _bindings[action] = [chord];
-    }
+    public void Rebind(string action, KeyChord chord) => _bindings[action] = [chord];
 
     /// <summary>Remove every chord bound to an action.</summary>
-    public void Unbind(string action)
-    {
-        _bindings.Remove(action);
-    }
+    public void Unbind(string action) => _bindings.Remove(action);
 
     /// <summary>Remove one chord from an action (dropping the action if it becomes empty).</summary>
     public void Unbind(string action, KeyChord chord)
     {
-        if (!_bindings.TryGetValue(action, out var list)) return;
+        if (!_bindings.TryGetValue(key: action, value: out var list)) return;
         list.Remove(chord);
         if (list.Count == 0) _bindings.Remove(action);
     }
 
-    public IReadOnlyList<KeyChord> ChordsFor(string action)
-    {
-        return _bindings.TryGetValue(action, out var list) ? list : [];
-    }
+    public IReadOnlyList<KeyChord> ChordsFor(string action) =>
+        _bindings.TryGetValue(key: action, value: out var list) ? list : [];
 
     public bool IsBound(string action, KeyCode key, Modifiers modifiers)
     {
-        if (!_bindings.TryGetValue(action, out var list)) return false;
+        if (!_bindings.TryGetValue(key: action, value: out var list)) return false;
         foreach (var c in list)
-            if (c.Matches(key, modifiers))
+        {
+            if (c.Matches(key: key, modifiers: modifiers))
                 return true;
+        }
+
         return false;
     }
 
     /// <summary>The first action whose any chord matches; null if none. Down-events only.</summary>
     public string? Resolve(KeyCode key, Modifiers modifiers)
     {
-        foreach (var (action, list) in _bindings)
+        foreach ((string action, var list) in _bindings)
         foreach (var c in list)
-            if (c.Matches(key, modifiers))
+        {
+            if (c.Matches(key: key, modifiers: modifiers))
                 return action;
+        }
+
         return null;
     }
 
-    public string? Resolve(KeyEvent e)
-    {
-        return e.Down ? Resolve(e.Key, e.Modifiers) : null;
-    }
+    public string? Resolve(KeyEvent e) =>
+        e.Down ? Resolve(key: e.Key, modifiers: e.Modifiers) : null;
 
     /// <summary>Flatten to (action, chord-string) pairs for persistence.</summary>
     public IEnumerable<(string Action, string Chord)> Export()
     {
-        foreach (var (action, list) in _bindings)
+        foreach ((string action, var list) in _bindings)
         foreach (var c in list)
             yield return (action, c.ToString());
     }
@@ -170,7 +162,7 @@ public sealed class Keymap
     public void Load(IEnumerable<(string Action, string Chord)> entries)
     {
         _bindings.Clear();
-        foreach (var (action, chord) in entries)
-            Bind(action, chord);
+        foreach ((string action, string chord) in entries)
+            Bind(action: action, chord: chord);
     }
 }

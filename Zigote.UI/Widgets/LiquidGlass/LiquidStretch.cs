@@ -17,10 +17,7 @@ public class LiquidStretch : Widget
     private float _targetScaleX = 1f;
     private float _targetScaleY = 1f;
 
-    public LiquidStretch(Widget? child = null)
-    {
-        Child = child;
-    }
+    public LiquidStretch(Widget? child = null) => Child = child;
 
     public Widget? Child { get; set; }
 
@@ -33,20 +30,28 @@ public class LiquidStretch : Widget
     public override void Layout(Offset origin)
     {
         // Animate scale values towards targets
-        var dt = Owner?.DeltaTime ?? 0.016f;
+        float dt = Owner?.DeltaTime ?? 0.016f;
 
         // Clamp dt to avoid huge jumps on frame drops
-        dt = Math.Min(dt, 0.1f);
+        dt = Math.Min(val1: dt, val2: 0.1f);
 
         // Smooth spring-like lerping
-        _activeScaleX = MathHelper.Lerp(_activeScaleX, _targetScaleX, dt * 15f);
-        _activeScaleY = MathHelper.Lerp(_activeScaleY, _targetScaleY, dt * 15f);
+        _activeScaleX = MathHelper.Lerp(
+            value1: _activeScaleX,
+            value2: _targetScaleX,
+            amount: dt * 15f
+        );
+        _activeScaleY = MathHelper.Lerp(
+            value1: _activeScaleY,
+            value2: _targetScaleY,
+            amount: dt * 15f
+        );
 
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
 
         if (Child != null)
@@ -55,12 +60,12 @@ public class LiquidStretch : Widget
             // affine scale, so we shift the child rather than rewriting its Bounds — overwriting a
             // child's Bounds after its own Layout() corrupts hit-testing and clipping. A true scaled
             // deformation awaits a native transform in the renderer.
-            var scaledW = _size.Width * _activeScaleX;
-            var scaledH = _size.Height * _activeScaleY;
-            var dx = (_size.Width - scaledW) / 2f;
-            var dy = (_size.Height - scaledH) / 2f;
+            float scaledW = _size.Width * _activeScaleX;
+            float scaledH = _size.Height * _activeScaleY;
+            float dx = (_size.Width - scaledW) / 2f;
+            float dy = (_size.Height - scaledH) / 2f;
 
-            Child.Layout(new Offset(origin.X + dx, origin.Y + dy));
+            Child.Layout(new Offset(x: origin.X + dx, y: origin.Y + dy));
         }
 
         // Keep layout ticking while animating
@@ -69,10 +74,7 @@ public class LiquidStretch : Widget
             MarkNeedsLayout();
     }
 
-    public override void Paint(PaintList paint)
-    {
-        Child?.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => Child?.Paint(paint);
 
     public override void OnPointerDown(Offset point)
     {
@@ -120,20 +122,15 @@ public class LiquidStretch : Widget
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return this;
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(Child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Child);
 }
 
 internal static class MathHelper
 {
-    public static float Lerp(float value1, float value2, float amount)
-    {
-        return value1 + (value2 - value1) * amount;
-    }
+    public static float Lerp(float value1, float value2, float amount) =>
+        value1 + ((value2 - value1) * amount);
 }

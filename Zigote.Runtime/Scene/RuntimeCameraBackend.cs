@@ -15,20 +15,15 @@ internal sealed class RuntimeCameraBackend(SceneNode root) : ICameraBackend
 {
     private SceneNode? ActiveCamera => FindCamera(root);
 
-    public void SetPhysicalEnabled(bool enabled)
-    {
-        WithCamera(c => c.PhysEnabled = enabled, false);
-    }
+    public void SetPhysicalEnabled(bool enabled) => WithCamera(
+        apply: c => c.PhysEnabled = enabled,
+        enable: false
+    );
 
-    public void SetFocalLength(float millimetres)
-    {
+    public void SetFocalLength(float millimetres) =>
         WithCamera(c => c.PhysFocalLengthMm = millimetres);
-    }
 
-    public void SetSensor(SensorPreset preset)
-    {
-        WithCamera(c => c.PhysSensorPreset = (int)preset);
-    }
+    public void SetSensor(SensorPreset preset) => WithCamera(c => c.PhysSensorPreset = (int)preset);
 
     public void SetSensorSize(float widthMm, float heightMm)
     {
@@ -41,40 +36,31 @@ internal sealed class RuntimeCameraBackend(SceneNode root) : ICameraBackend
         );
     }
 
-    public void SetAperture(float fStop)
-    {
-        WithCamera(c => c.PhysFStop = fStop);
-    }
+    public void SetAperture(float fStop) => WithCamera(c => c.PhysFStop = fStop);
 
-    public void SetIso(float iso)
-    {
-        WithCamera(c => c.PhysIso = iso);
-    }
+    public void SetIso(float iso) => WithCamera(c => c.PhysIso = iso);
 
-    public void SetShutter(float seconds)
-    {
-        WithCamera(c => c.PhysShutterSpeed = seconds);
-    }
+    public void SetShutter(float seconds) => WithCamera(c => c.PhysShutterSpeed = seconds);
 
-    public void SetFocusMode(FocusModeKind mode)
-    {
-        WithCamera(c => c.PhysFocusMode = (int)mode, false);
-    }
+    public void SetFocusMode(FocusModeKind mode) => WithCamera(
+        apply: c => c.PhysFocusMode = (int)mode,
+        enable: false
+    );
 
-    public void SetManualFocus(float metres)
-    {
-        WithCamera(c => c.PhysManualFocusM = metres, false);
-    }
+    public void SetManualFocus(float metres) => WithCamera(
+        apply: c => c.PhysManualFocusM = metres,
+        enable: false
+    );
 
     public void SetFilmStock(FilmStockKind stock, float strength)
     {
         WithCamera(
-            c =>
+            apply: c =>
             {
                 c.PhysFilmStock = (int)stock;
                 c.PhysFilmStrength = strength;
             },
-            false
+            enable: false
         );
     }
 

@@ -61,10 +61,8 @@ public sealed class ReplicationManager(bool isServer)
     ///     Client: map a prefab id to a factory that builds the matching <see cref="NetObject" />
     ///     subclass.
     /// </summary>
-    public void RegisterPrefab(ushort prefabId, Func<NetObject> factory)
-    {
+    public void RegisterPrefab(ushort prefabId, Func<NetObject> factory) =>
         _prefabs[prefabId] = factory;
-    }
 
     // ── Server ────────────────────────────────────────────────────────────────
     public T Spawn<T>(T obj, ushort prefabId, int owner = -1) where T : NetObject
@@ -93,34 +91,39 @@ public sealed class ReplicationManager(bool isServer)
         if (isServer) _known[conn.Id] = [];
     }
 
-    public void OnConnectionRemoved(NetConnection conn)
-    {
-        _known.Remove(conn.Id);
-    }
+    public void OnConnectionRemoved(NetConnection conn) => _known.Remove(conn.Id);
 
     public void ServerTick(IReadOnlyList<NetConnection> connections, double serverTime)
     {
-        for (var i = 0; i < connections.Count; i++) BuildForConnection(connections[i], serverTime);
+        for (int i = 0; i < connections.Count; i++)
+            BuildForConnection(conn: connections[i], serverTime: serverTime);
         foreach (var obj in _objects.Values) obj.TickVars();
     }
 
     private void BuildForConnection(NetConnection conn, double serverTime)
     {
-        if (!_known.TryGetValue(conn.Id, out var known)) return;
+        if (!_known.TryGetValue(key: conn.Id, value: out var known)) return;
 
         _relevant.Clear();
         foreach (var obj in _objects.Values)
-            if (_interest.IsRelevant(obj, conn))
+        {
+            if (_interest.IsRelevant(obj: obj, connection: conn))
                 _relevant.Add(obj.Id);
+        }
 
         _spawns.Clear();
         _despawns.Clear();
         foreach (var id in _relevant)
+        {
             if (!known.Contains(id))
                 _spawns.Add(id);
+        }
+
         foreach (var id in known)
+        {
             if (!_relevant.Contains(id))
                 _despawns.Add(id);
+        }
 
         if (_spawns.Count > 0 || _despawns.Count > 0)
         {
@@ -137,7 +140,7 @@ public sealed class ReplicationManager(bool isServer)
                 w.WriteBool(obj.OwnerConnectionId == conn.Id);
                 _block.Clear();
                 obj.SerializeFull(_block);
-                WriteBlock(w, _block.AsSpan());
+                WriteBlock(writer: w, block: _block.AsSpan());
                 known.Add(id);
             }
 
@@ -153,9 +156,11 @@ public sealed class ReplicationManager(bool isServer)
 
         _stateList.Clear();
         foreach (var id in known)
+        {
             if (_relevant.Contains(id) && !_spawns.Contains(id) &&
-                _objects.TryGetValue(id, out var obj) && obj.AnyDirty())
+                _objects.TryGetValue(key: id, value: out var obj) && obj.AnyDirty())
                 _stateList.Add(id);
+        }
 
         if (_stateList.Count > 0)
         {
@@ -168,7 +173,7 @@ public sealed class ReplicationManager(bool isServer)
                 w.WriteNetId(id);
                 _block.Clear();
                 obj.SerializeDelta(_block);
-                WriteBlock(w, _block.AsSpan());
+                WriteBlock(writer: w, block: _block.AsSpan());
             }
 
             conn.EndSend(DeliveryMethod.UnreliableSequenced);
@@ -178,20 +183,20 @@ public sealed class ReplicationManager(bool isServer)
     // ── Client ────────────────────────────────────────────────────────────────
     internal void HandleEvents(NetConnection conn, NetReader reader)
     {
-        var count = reader.ReadVarUInt();
-        for (var i = 0; i < count && !reader.Overflow; i++)
+        uint count = reader.ReadVarUInt();
+        for (int i = 0; i < count && !reader.Overflow; i++)
         {
             var op = (ReplicationOp)reader.ReadByte();
             if (op == ReplicationOp.Spawn)
             {
                 var id = reader.ReadNetId();
-                var prefabId = reader.ReadUInt16();
-                var owner = reader.ReadVarInt();
-                var isOwner = reader.ReadBool();
+                ushort prefabId = reader.ReadUInt16();
+                int owner = reader.ReadVarInt();
+                bool isOwner = reader.ReadBool();
                 var block = ReadBlock(reader);
 
                 if (_objects.ContainsKey(id)) continue;
-                if (!_prefabs.TryGetValue(prefabId, out var factory)) continue;
+                if (!_prefabs.TryGetValue(key: prefabId, value: out var factory)) continue;
 
                 var obj = factory();
                 obj.Id = id;
@@ -208,7 +213,7 @@ public sealed class ReplicationManager(bool isServer)
             else
             {
                 var id = reader.ReadNetId();
-                if (_objects.Remove(id, out var obj))
+                if (_objects.Remove(key: id, value: out var obj))
                 {
                     obj.OnNetworkDespawn();
                     ObjectDespawned?.Invoke(obj);
@@ -219,13 +224,13 @@ public sealed class ReplicationManager(bool isServer)
 
     internal void HandleState(NetConnection conn, NetReader reader)
     {
-        var serverTime = reader.ReadDouble();
-        var count = reader.ReadVarUInt();
-        for (var i = 0; i < count && !reader.Overflow; i++)
+        double serverTime = reader.ReadDouble();
+        uint count = reader.ReadVarUInt();
+        for (int i = 0; i < count && !reader.Overflow; i++)
         {
             var id = reader.ReadNetId();
             var block = ReadBlock(reader);
-            if (!_objects.TryGetValue(id, out var obj)) continue;
+            if (!_objects.TryGetValue(key: id, value: out var obj)) continue;
 
             _subReader.SetSource(block);
             obj.ApplyDelta(_subReader);
@@ -253,15 +258,16 @@ public sealed class ReplicationManager(bool isServer)
     private static void WriteBlock(NetWriter writer, ReadOnlySpan<byte> block)
     {
         writer.WriteVarUInt((uint)block.Length);
-        for (var i = 0; i < block.Length; i++) writer.WriteByte(block[i]);
+        for (int i = 0; i < block.Length; i++) writer.WriteByte(block[i]);
     }
 
     private ReadOnlySpan<byte> ReadBlock(NetReader reader)
     {
-        var len = (int)reader.ReadVarUInt();
+        int len = (int)reader.ReadVarUInt();
         if (len <= 0) return ReadOnlySpan<byte>.Empty;
-        if (_scratch.Length < len) _scratch = new byte[Math.Max(len, _scratch.Length * 2)];
-        for (var i = 0; i < len; i++) _scratch[i] = reader.ReadByte();
-        return _scratch.AsSpan(0, len);
+        if (_scratch.Length < len)
+            _scratch = new byte[Math.Max(val1: len, val2: _scratch.Length * 2)];
+        for (int i = 0; i < len; i++) _scratch[i] = reader.ReadByte();
+        return _scratch.AsSpan(start: 0, length: len);
     }
 }

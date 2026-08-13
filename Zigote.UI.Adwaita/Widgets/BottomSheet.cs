@@ -31,25 +31,16 @@ public sealed class AdwBottomSheet : ComposedWidget
     // settles to whichever it is nearer, and a flick takes the next one in the direction thrown.
     private static readonly float[] OpenClosed = [0f, 1f];
 
-    private readonly BottomSheetController _sheetPosition = new(
-        0f,
-        0f,
-        1f,
-        OpenClosed,
-        false // never dismissed out from under its host — "closed" is a position here, not a teardown
-    );
-
     private readonly Padding _sheetHost = new(EdgeInsets.Zero);
 
-    private Widget? _bottomBar;
-    private Widget? _content;
-    private FlexibleBottomSheet? _flex;
-    private bool _flexHasHandle;
-    private bool _focusPending;
-    private bool _modal = true;
-    private bool _open;
-    private bool _showDragHandle = true;
-    private Widget? _sheet;
+    private readonly BottomSheetController _sheetPosition = new(
+        minExtent: 0f,
+        initExtent: 0f,
+        maxExtent: 1f,
+        anchors: OpenClosed,
+        isCollapsible:
+        false // never dismissed out from under its host — "closed" is a position here, not a teardown
+    );
 
     // The content layer is retained across builds. Opening or closing the sheet swaps the returned
     // tree between this layer alone and a Stack containing it, and rebuilding the wrapper each time
@@ -58,6 +49,16 @@ public sealed class AdwBottomSheet : ComposedWidget
     private Column? _below;
     private Widget? _belowBar;
     private Widget? _belowContent;
+
+    private Widget? _bottomBar;
+    private Widget? _content;
+    private FlexibleBottomSheet? _flex;
+    private bool _flexHasHandle;
+    private bool _focusPending;
+    private bool _modal = true;
+    private bool _open;
+    private Widget? _sheet;
+    private bool _showDragHandle = true;
 
     public AdwBottomSheet(Widget? content = null, Widget? sheet = null)
     {
@@ -73,21 +74,21 @@ public sealed class AdwBottomSheet : ComposedWidget
     public Widget? Content
     {
         get => _content;
-        set => this.Set(ref _content, value);
+        set => this.Set(field: ref _content, value: value);
     }
 
     /// <summary>The sheet itself — shown while <see cref="Open" /> is true.</summary>
     public Widget? Sheet
     {
         get => _sheet;
-        set => this.Set(ref _sheet, value);
+        set => this.Set(field: ref _sheet, value: value);
     }
 
     /// <summary>Optional bar under the content; tapping it opens the sheet.</summary>
     public Widget? BottomBar
     {
         get => _bottomBar;
-        set => this.Set(ref _bottomBar, value);
+        set => this.Set(field: ref _bottomBar, value: value);
     }
 
     /// <summary>Whether the sheet is up. Assigning animates (snaps while unattached).</summary>
@@ -98,7 +99,7 @@ public sealed class AdwBottomSheet : ComposedWidget
         {
             if (_open == value) return;
             _open = value;
-            var target = value ? 1f : 0f;
+            float target = value ? 1f : 0f;
             // Unattached (construction-time config): snap, don't animate.
             if (Owner is null) _sheetPosition.JumpTo(target);
             else _sheetPosition.AnimateTo(target);
@@ -114,14 +115,14 @@ public sealed class AdwBottomSheet : ComposedWidget
     public bool Modal
     {
         get => _modal;
-        set => this.Set(ref _modal, value);
+        set => this.Set(field: ref _modal, value: value);
     }
 
     /// <summary>Pill at the top of the sheet, tap-to-close. Read at build time.</summary>
     public bool ShowDragHandle
     {
         get => _showDragHandle;
-        set => this.Set(ref _showDragHandle, value);
+        set => this.Set(field: ref _showDragHandle, value: value);
     }
 
     private void SetOpen(bool open)
@@ -145,7 +146,8 @@ public sealed class AdwBottomSheet : ComposedWidget
         _below ??= new Column(crossAxisAlignment: CrossAxisAlignment.Stretch);
 
         var content = Content ?? SizedBox.Shrink();
-        if (ReferenceEquals(_belowContent, content) && ReferenceEquals(_belowBar, BottomBar))
+        if (ReferenceEquals(objA: _belowContent, objB: content) &&
+            ReferenceEquals(objA: _belowBar, objB: BottomBar))
             return _below;
 
         _belowContent = content;
@@ -155,9 +157,13 @@ public sealed class AdwBottomSheet : ComposedWidget
         _below.Children.Add(new Expanded(content));
         // Dragging the bar up pulls the sheet out of the bottom edge; a tap opens it outright.
         if (BottomBar is not null)
+        {
             _below.Children.Add(
-                new SheetDragArea(BottomBar, _sheetPosition) { OnTap = () => SetOpen(true) }
+                new SheetDragArea(child: BottomBar, sheet: _sheetPosition) {
+                    OnTap = () => SetOpen(true),
+                }
             );
+        }
 
         _below.MarkNeedsLayout();
         return _below;
@@ -165,7 +171,7 @@ public sealed class AdwBottomSheet : ComposedWidget
 
     public override void Attach(App owner, Widget? parent)
     {
-        base.Attach(owner, parent);
+        base.Attach(owner: owner, parent: parent);
         // Android's back button / iOS edge swipe closes the sheet before it reaches the page under
         // it — libadwaita's sheets are transient the same way a dialog is. Removing first keeps the
         // registration single (a re-parented widget can be attached without an intervening detach)
@@ -199,7 +205,7 @@ public sealed class AdwBottomSheet : ComposedWidget
         var p = AdwPalette.For(theme);
 
         var below = BuildBelow();
-        var sheet = BuildSheet(theme, p);
+        var sheet = BuildSheet(theme: theme, p: p);
 
         // A modal sheet is modal for the keyboard too: without a trap Tab walks straight out of the
         // card and into the content behind the scrim, which libadwaita's sheets never allow. The
@@ -242,21 +248,23 @@ public sealed class AdwBottomSheet : ComposedWidget
             CornerRadius = AdwMetrics.DialogRadius,
             Shadow = Elevation.Z3,
             ShowDragHandle = ShowDragHandle,
-            DragHandleColor = AdwPalette.Fill(theme, 0.25f),
+            DragHandleColor = AdwPalette.Fill(theme: theme, percent: 0.25f),
         };
 
         if (_flex is null || _flexHasHandle != ShowDragHandle)
         {
             _flexHasHandle = ShowDragHandle;
-            _flex = new FlexibleBottomSheet(_sheetHost, _sheetPosition, style) {
+            _flex = new FlexibleBottomSheet(
+                content: _sheetHost,
+                controller: _sheetPosition,
+                style: style
+            ) {
                 TopInset = TopGap,
                 OnHandleTap = () => SetOpen(false),
             };
         }
         else
-        {
             _flex.Style = style;
-        }
 
         _flex.IsModal = Modal;
         _flex.IsDismissible = Modal;

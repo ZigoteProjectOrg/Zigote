@@ -1,5 +1,3 @@
-using Zigote.Core.State;
-
 namespace Zigote.UI.Adwaita;
 
 /// <summary>
@@ -32,14 +30,14 @@ public sealed class AdwViewSwitcherSidebar : ComposedWidget
     public Widget? Prefix
     {
         get => _prefix;
-        set => this.Set(ref _prefix, value);
+        set => this.Set(field: ref _prefix, value: value);
     }
 
     /// <summary>Widget below the list.</summary>
     public Widget? Suffix
     {
         get => _suffix;
-        set => this.Set(ref _suffix, value);
+        set => this.Set(field: ref _suffix, value: value);
     }
 
     /// <summary>Case-insensitive title filter, forwarded to the underlying sidebar.</summary>
@@ -66,11 +64,14 @@ public sealed class AdwViewSwitcherSidebar : ComposedWidget
         _sidebar.Sections.Clear();
         var section = new AdwSidebarSection(null);
         foreach (var page in _stack.Pages)
+        {
             section.Items.Add(
-                new AdwSidebarItem(page.Title, page.IconName ?? "") {
-                    Suffix = page.Badge > 0 ? Indicator(theme, page.Badge) : null,
+                new AdwSidebarItem(title: page.Title, iconName: page.IconName ?? "") {
+                    Suffix = page.Badge > 0 ? Indicator(theme: theme, count: page.Badge) : null,
                 }
             );
+        }
+
         _sidebar.Sections.Add(section);
         _sidebar.Invalidate();
     }
@@ -86,10 +87,14 @@ public sealed class AdwViewSwitcherSidebar : ComposedWidget
     {
         return new DecoratedBox {
             Radius = AdwMetrics.Pill,
-            Fill = AdwPalette.Fill(theme, 0.4f),
+            Fill = AdwPalette.Fill(theme: theme, percent: 0.4f),
             Child = new Padding(
-                EdgeInsets.Symmetric(AdwMetrics.RowSpacing, 1f),
-                new Label(count.ToString(), AdwTypography.CaptionHeading, theme.OnBackground)
+                padding: EdgeInsets.Symmetric(horizontal: AdwMetrics.RowSpacing, vertical: 1f),
+                child: new Label(
+                    text: count.ToString(),
+                    style: AdwTypography.CaptionHeading,
+                    color: theme.OnBackground
+                )
             ),
         };
     }
@@ -105,8 +110,8 @@ public sealed class AdwViewSwitcherSidebar : ComposedWidget
         // how a reactive graph acquires a cycle.
         OwnEffect(() =>
             {
-                var visible = _stack.Visible.Value;
-                var index = _stack.Pages.FindIndex(p => p.Name == visible);
+                string visible = _stack.Visible.Value;
+                int index = _stack.Pages.FindIndex(p => p.Name == visible);
                 if (index >= 0) _sidebar.Selected = index;
             }
         );
@@ -141,13 +146,13 @@ public sealed class AdwClampScrollable : ComposedWidget
     public Widget Child
     {
         get => _child;
-        set => this.Set(ref _child, value);
+        set => this.Set(field: ref _child, value: value);
     }
 
     public float MaximumSize
     {
         get => _maximumSize;
-        set => this.Set(ref _maximumSize, value);
+        set => this.Set(field: ref _maximumSize, value: value);
     }
 
     protected override Widget Build(BuildContext context)
@@ -157,13 +162,13 @@ public sealed class AdwClampScrollable : ComposedWidget
         return new Align {
             Alignment = Alignment.TopCenter,
             Child = new ConstrainedBox(
-                new Constraints(
-                    0f,
-                    MaximumSize,
-                    0f,
-                    float.PositiveInfinity
+                constraints: new Constraints(
+                    minWidth: 0f,
+                    maxWidth: MaximumSize,
+                    minHeight: 0f,
+                    maxHeight: float.PositiveInfinity
                 ),
-                Child
+                child: Child
             ),
         };
     }

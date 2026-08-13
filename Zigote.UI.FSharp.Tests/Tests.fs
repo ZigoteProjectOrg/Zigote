@@ -224,7 +224,11 @@ let ``effectWith re-run does not allocate in the wrapper`` () =
         s.Value <- i
 
     let allocated = GC.GetAllocatedBytesForCurrentThread() - before
-    Assert.True((allocated = 0L), sprintf "effectWith re-run allocated %d B over 500 iterations" allocated)
+
+    Assert.True(
+        (allocated = 0L),
+        sprintf "effectWith re-run allocated %d B over 500 iterations" allocated
+    )
 
 // ── watch: signals reaching the retained widget tree ─────────────────────────
 
@@ -243,8 +247,7 @@ let ``watch renders and updates its subtree when a signal changes`` () =
 let ``watch rebuilds a list from a signal`` () =
     let items = signal [ "a"; "b" ]
 
-    let root =
-        watch (fun () -> Column(children = [ for x in items.Value -> w (Text x) ]))
+    let root = watch (fun () -> Column(children = [ for x in items.Value -> w (Text x) ]))
 
     measure root
     Assert.Equal(2, (findOne<Column> root).Children.Count)

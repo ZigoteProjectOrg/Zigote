@@ -5,7 +5,8 @@ namespace Zigote.UI.DevTools;
 /// <summary>
 ///     Declares which kind of application the devtools overlay is running inside, so it can show only
 ///     the relevant debug layers. A 2D app has no renderer pipeline to inspect, so its
-///     <see cref="DevCategory.Render3D" /> tab is hidden and the General tab surfaces the CPU / memory /
+///     <see cref="DevCategory.Render3D" /> tab is hidden and the General tab surfaces the CPU / memory
+///     /
 ///     GPU metrics prominently; a 3D app shows the 2D and 3D layers side by side.
 /// </summary>
 public enum DevToolsProfile
@@ -37,8 +38,6 @@ public static class DevToolsProfileExtensions
     }
 
     /// <summary>True when the <see cref="DevCategory.Render3D" /> tab should be visible for this profile.</summary>
-    public static bool ShowsRender3D(this DevToolsProfile profile)
-    {
-        return profile.Resolve() == DevToolsProfile.ThreeD;
-    }
+    public static bool ShowsRender3D(this DevToolsProfile profile) =>
+        profile.Resolve() == DevToolsProfile.ThreeD;
 }

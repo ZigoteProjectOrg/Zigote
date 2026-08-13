@@ -1,18 +1,19 @@
 using System.Diagnostics;
 using Zigote.Core;
 using Zigote.UI.DevTools.Widgets;
+using Zigote.UI.Host;
 using Zigote.UI.Semantics;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.DevTools.Panels;
 
 /// <summary>
 ///     Accessibility-tree inspector: the live <see cref="SemanticsNode" /> tree the app would hand a
-///     screen reader — role, accessible name/value, and state flags, indented by depth. Lets you verify
+///     screen reader — role, accessible name/value, and state flags, indented by depth. Lets you
+///     verify
 ///     announcements without a native AT bridge. Rebuilt at ~5 Hz.
 /// </summary>
 public sealed class SemanticsPanel(App app) : IDevPanel
@@ -48,7 +49,7 @@ public sealed class SemanticsPanel(App app) : IDevPanel
 
     public void Refresh(float dt)
     {
-        var now = Stopwatch.GetTimestamp();
+        long now = Stopwatch.GetTimestamp();
         if ((now - _last) * 1000.0 / Stopwatch.Frequency < RefreshMs) return;
         _last = now;
 
@@ -64,15 +65,19 @@ public sealed class SemanticsPanel(App app) : IDevPanel
         }
 
         var rows = new List<Widget>();
-        var n = 0;
+        int n = 0;
         if (root is not null)
+        {
             foreach (var child in root.Children)
+            {
                 n += Flatten(
-                    child,
-                    0,
-                    rows,
-                    t
+                    node: child,
+                    depth: 0,
+                    rows: rows,
+                    t: t
                 );
+            }
+        }
 
         _count.Value = n.ToString();
         _count.ValueColor = t.Hint;
@@ -82,16 +87,16 @@ public sealed class SemanticsPanel(App app) : IDevPanel
 
     private static int Flatten(SemanticsNode node, int depth, List<Widget> rows, ThemeData t)
     {
-        var focused = node.Flags.HasFlag(SemanticsFlags.Focused);
-        var disabled = node.Flags.HasFlag(SemanticsFlags.Disabled);
-        var text = Describe(node);
+        bool focused = node.Flags.HasFlag(SemanticsFlags.Focused);
+        bool disabled = node.Flags.HasFlag(SemanticsFlags.Disabled);
+        string text = Describe(node);
         rows.Add(
             new Padding(
-                EdgeInsets.Only(depth * 12f),
-                new Label(
-                    text,
-                    DevKit.CaptionSize,
-                    focused ? t.Primary : disabled ? t.Hint.WithAlpha(0.6f) : t.OnSurface
+                padding: EdgeInsets.Only(depth * 12f),
+                child: new Label(
+                    text: text,
+                    fontSize: DevKit.CaptionSize,
+                    color: focused ? t.Primary : disabled ? t.Hint.WithAlpha(0.6f) : t.OnSurface
                 ) {
                     MaxLines = 1,
                     Overflow = TextOverflow.Ellipsis,
@@ -99,22 +104,25 @@ public sealed class SemanticsPanel(App app) : IDevPanel
             )
         );
 
-        var count = 1;
+        int count = 1;
         foreach (var child in node.Children)
+        {
             count += Flatten(
-                child,
-                depth + 1,
-                rows,
-                t
+                node: child,
+                depth: depth + 1,
+                rows: rows,
+                t: t
             );
+        }
+
         return count;
     }
 
     private static string Describe(SemanticsNode node)
     {
-        var label = node.Label ?? node.Value ?? "";
-        var s = node.Role + (label.Length > 0 ? $": {label}" : "");
-        var flags = FlagSummary(node.Flags);
+        string label = node.Label ?? node.Value ?? "";
+        string s = node.Role + (label.Length > 0 ? $": {label}" : "");
+        string flags = FlagSummary(node.Flags);
         return flags.Length > 0 ? $"{s}  [{flags}]" : s;
     }
 
@@ -125,6 +133,6 @@ public sealed class SemanticsPanel(App app) : IDevPanel
         if (f.HasFlag(SemanticsFlags.Selected)) parts.Add("selected");
         if (f.HasFlag(SemanticsFlags.Disabled)) parts.Add("disabled");
         if (f.HasFlag(SemanticsFlags.Focused)) parts.Add("focused");
-        return string.Join(", ", parts);
+        return string.Join(separator: ", ", values: parts);
     }
 }

@@ -32,28 +32,28 @@ public sealed class IconGlyph : Widget
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        _box = c.Constrain(new Size(SizePx, SizePx));
+        _box = c.Constrain(new Size(width: SizePx, height: SizePx));
         return _box;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _box.Width,
-            _box.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _box.Width,
+            height: _box.Height
         );
     }
 
     public override void Paint(PaintList paint)
     {
         Icons.Draw(
-            paint,
-            _glyph,
-            Bounds,
-            Color ?? _theme.OnSurface,
-            SizePx
+            paint: paint,
+            glyph: _glyph,
+            box: Bounds,
+            color: Color ?? _theme.OnSurface,
+            size: SizePx
         );
     }
 }

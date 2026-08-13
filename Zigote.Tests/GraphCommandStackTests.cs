@@ -10,10 +10,7 @@ namespace Zigote.Tests;
 /// </summary>
 public class GraphCommandStackTests
 {
-    private static GraphCommandStack NewStack()
-    {
-        return new GraphCommandStack(new GraphDocument());
-    }
+    private static GraphCommandStack NewStack() => new(new GraphDocument());
 
     [Fact]
     public void FreshStack_IsClean()
@@ -82,12 +79,8 @@ public class GraphCommandStackTests
 
     private sealed class NoopCommand : IGraphCommand
     {
-        public void Execute(GraphDocument graph)
-        {
-        }
+        public void Execute(GraphDocument graph) { }
 
-        public void Undo(GraphDocument graph)
-        {
-        }
+        public void Undo(GraphDocument graph) { }
     }
 }

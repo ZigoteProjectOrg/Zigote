@@ -8,13 +8,10 @@ namespace Zigote.UI.Adwaita;
 public sealed class AdwToolbarView : ComposedWidget
 {
     private Widget? _content;
-    private bool _raisedTopBar;
     private bool _raisedBottomBar;
+    private bool _raisedTopBar;
 
-    public AdwToolbarView(Widget? content = null)
-    {
-        _content = content;
-    }
+    public AdwToolbarView(Widget? content = null) => _content = content;
 
     /// <summary>Bars above the content (header bars, tab bars…). Populate before mounting.</summary>
     public List<Widget> TopBars { get; init; } = [];
@@ -25,19 +22,19 @@ public sealed class AdwToolbarView : ComposedWidget
     public Widget? Content
     {
         get => _content;
-        set => this.Set(ref _content, value);
+        set => this.Set(field: ref _content, value: value);
     }
 
     public bool RaisedTopBar
     {
         get => _raisedTopBar;
-        set => this.Set(ref _raisedTopBar, value);
+        set => this.Set(field: ref _raisedTopBar, value: value);
     }
 
     public bool RaisedBottomBar
     {
         get => _raisedBottomBar;
-        set => this.Set(ref _raisedBottomBar, value);
+        set => this.Set(field: ref _raisedBottomBar, value: value);
     }
 
     protected override Widget Build(BuildContext context)
@@ -47,13 +44,15 @@ public sealed class AdwToolbarView : ComposedWidget
 
         var col = new Column(crossAxisAlignment: CrossAxisAlignment.Stretch);
 
-        foreach (var bar in TopBars) col.Children.Add(Wrap(bar, RaisedTopBar, theme));
+        foreach (var bar in TopBars)
+            col.Children.Add(Wrap(bar: bar, raised: RaisedTopBar, theme: theme));
         if (RaisedTopBar && TopBars.Count > 0) col.Children.Add(Hairline(p));
 
         col.Children.Add(new Expanded(Content ?? new SizedBox()));
 
         if (RaisedBottomBar && BottomBars.Count > 0) col.Children.Add(Hairline(p));
-        foreach (var bar in BottomBars) col.Children.Add(Wrap(bar, RaisedBottomBar, theme));
+        foreach (var bar in BottomBars)
+            col.Children.Add(Wrap(bar: bar, raised: RaisedBottomBar, theme: theme));
 
         return col;
     }

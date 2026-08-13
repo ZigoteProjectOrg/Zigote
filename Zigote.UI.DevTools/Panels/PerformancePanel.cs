@@ -4,11 +4,11 @@ using Zigote.Core.Diagnostics;
 using Zigote.UI.Charts.Marks;
 using Zigote.UI.DevTools.Diagnostics;
 using Zigote.UI.DevTools.Widgets;
+using Zigote.UI.Host;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.DevTools.Panels;
 
@@ -22,29 +22,30 @@ public sealed class PerformancePanel : IDevPanel
 {
     private const double ScopeRefreshMs = 100.0;
 
-    private static readonly Color Blue = Color.Rgb(10, 132, 255);
-    private static readonly Color Green = Color.Rgb(48, 209, 88);
-    private static readonly Color Orange = Color.Rgb(255, 159, 10);
+    private static readonly Color Blue = Color.Rgb(r: 10, g: 132, b: 255);
+    private static readonly Color Green = Color.Rgb(r: 48, g: 209, b: 88);
+    private static readonly Color Orange = Color.Rgb(r: 255, g: 159, b: 10);
+
+    private readonly List<DebugProfiler.ScopeAggregate> _agg = [];
 
     private readonly DevChartCard _frameCard;
-    private readonly DevKeyValue _stats = new("Avg / min / max");
 
     private readonly Column _scopeList = new(
         crossAxisAlignment: CrossAxisAlignment.Stretch,
         mainAxisSize: MainAxisSize.Min
     );
 
-    private readonly List<DebugProfiler.ScopeAggregate> _agg = [];
-    private long _lastScope;
+    private readonly DevKeyValue _stats = new("Avg / min / max");
 
     // Per-readout caches: Refresh runs every frame while the panel is open, so all formatting goes
     // through CachedText (zero-alloc while the rendered text is unchanged).
     private readonly CachedText _tStats = new();
+    private long _lastScope;
 
     public PerformancePanel()
     {
         var frame = DevChart.Sparkline();
-        var area = AreaMark.Of(DevChartData.FrameMs, s => s.Time, s => s.Value);
+        var area = AreaMark.Of(data: DevChartData.FrameMs, x: s => s.Time, y: s => s.Value);
         area.Name = "frame ms";
         area.Color = Blue;
         area.Opacity = 0.25f;
@@ -66,10 +67,10 @@ public sealed class PerformancePanel : IDevPanel
             }
         );
         _frameCard = new DevChartCard(
-            frame,
-            80f,
-            60f,
-            "Frame time (ms) — 60 s"
+            chart: frame,
+            height: 80f,
+            windowSeconds: 60f,
+            title: "Frame time (ms) — 60 s"
         );
     }
 
@@ -87,8 +88,11 @@ public sealed class PerformancePanel : IDevPanel
                 _stats,
                 new SizedBox(height: Spacing.Xs),
                 new Button(
-                    "Capture 120 frames → profile_capture.json",
-                    () => Profiler.Capture(120, "profile_capture.json")
+                    label: "Capture 120 frames → profile_capture.json",
+                    onPressed: () => Profiler.Capture(
+                        frames: 120,
+                        outputPath: "profile_capture.json"
+                    )
                 ) { Style = ButtonStyle.Outlined },
                 new DevSectionHeader("Hottest scopes (self · total)"),
                 _scopeList,
@@ -99,25 +103,25 @@ public sealed class PerformancePanel : IDevPanel
     public void Refresh(float dt)
     {
         var t = App.Active?.Theme ?? ThemeData.Dark;
-        _frameCard.Sync(DevChartData.Revision, DevChartData.Time, t);
+        _frameCard.Sync(revision: DevChartData.Revision, now: DevChartData.Time, theme: t);
 
-        var (min, max, avg) = DebugProfiler.Stats();
+        (float min, float max, float avg) = DebugProfiler.Stats();
         _stats.Value = _tStats.Update($"{avg:F2} / {min:F2} / {max:F2} ms");
         _stats.ValueColor = max > 1000.0 / 30.0 ? Orange : t.OnSurface;
 
-        var nowTs = Stopwatch.GetTimestamp();
+        long nowTs = Stopwatch.GetTimestamp();
         if ((nowTs - _lastScope) * 1000.0 / Stopwatch.Frequency < ScopeRefreshMs) return;
         _lastScope = nowTs;
 
         _agg.Clear();
         _agg.AddRange(DebugProfiler.Aggregate(Profiler.LastFrame));
         var rows = new List<Widget>();
-        var shown = Math.Min(_agg.Count, 16);
-        for (var i = 0; i < shown; i++)
+        int shown = Math.Min(val1: _agg.Count, val2: 16);
+        for (int i = 0; i < shown; i++)
         {
             var a = _agg[i];
-            var name = a.Calls > 1 ? $"{a.Name} ×{a.Calls}" : a.Name;
-            rows.Add(new DevKeyValue(name, $"{a.SelfMs:F2} · {a.TotalMs:F2}"));
+            string name = a.Calls > 1 ? $"{a.Name} ×{a.Calls}" : a.Name;
+            rows.Add(new DevKeyValue(key: name, value: $"{a.SelfMs:F2} · {a.TotalMs:F2}"));
         }
 
         if (rows.Count == 0)

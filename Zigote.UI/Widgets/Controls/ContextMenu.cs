@@ -53,6 +53,10 @@ public sealed class ContextMenu : Widget
 
     private readonly AppInstance _app;
     private readonly AnimationController _enter;
+
+    // Resolved at ShowAt(): with secondary OS windows, the window presenting the menu is the one
+    // whose dispatch is running (App.Active), which may differ from the window active at construction.
+    private AppInstance? _host;
     private int _hoveredIdx = -1;
     private float _menuW = ControlMetrics.MenuRowHeight * 8f; // sane fallback before first Measure
     private int _openSubmenuIdx = -1;
@@ -68,27 +72,15 @@ public sealed class ContextMenu : Widget
         _app = app ?? AppInstance.Active ??
             throw new InvalidOperationException("No active App found.");
         Items = [.. items];
-        _enter = new AnimationController(Motion.Fast, this) { Curve = Curves.EaseOut };
+        _enter = new AnimationController(durationSeconds: Motion.Fast, vsync: this) {
+            Curve = Curves.EaseOut,
+        };
         _enter.OnTick += MarkNeedsLayout;
-    }
-
-    // The ticker CreateTicker hands out is owned by the mount period, so a re-attach just rebinds.
-    protected override void OnMount()
-    {
-        _enter.AttachTicker(this);
-    }
-
-    private void PlayEnter()
-    {
-        _enter.Dismiss();
-        _enter.Forward();
     }
 
     /// <summary>Convenience constructor using <see cref="AppInstance.Active" />.</summary>
     public ContextMenu(params ContextMenuItem[] items)
-        : this(null, items)
-    {
-    }
+        : this(app: null, items: items) { }
 
     public List<ContextMenuItem> Items { get; } = [];
 
@@ -99,9 +91,14 @@ public sealed class ContextMenu : Widget
     /// </summary>
     public Rect? PointerExitScope { get; set; }
 
-    // Resolved at ShowAt(): with secondary OS windows, the window presenting the menu is the one
-    // whose dispatch is running (App.Active), which may differ from the window active at construction.
-    private AppInstance? _host;
+    // The ticker CreateTicker hands out is owned by the mount period, so a re-attach just rebinds.
+    protected override void OnMount() => _enter.AttachTicker(this);
+
+    private void PlayEnter()
+    {
+        _enter.Dismiss();
+        _enter.Forward();
+    }
 
     public void ShowAt(Offset position)
     {
@@ -149,35 +146,32 @@ public sealed class ContextMenu : Widget
     ///     submenu instance (HitTest returns it), and only the root was ever PushOverlay'd — so a
     ///     submenu's own Dismiss() pops nothing. Dismissing the root cascades to every submenu.
     /// </summary>
-    public void DismissAll()
-    {
-        Root().Dismiss();
-    }
+    public void DismissAll() => Root().Dismiss();
 
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        _screen = new Size(c.MaxWidth, c.MaxHeight);
+        _screen = new Size(width: c.MaxWidth, height: c.MaxHeight);
         _safe = MediaQuery.Of(BuildContext.Current).Padding;
         // Clamping can only shift a surface, never shrink it — so cap the width here or a long
         // label runs off a phone screen and takes its whole row out of reach.
-        _menuW = MathF.Min(MeasureMenuWidth(), MathF.Max(80f, UsableWidth() - Spacing.Lg));
+        _menuW = MathF.Min(
+            x: MeasureMenuWidth(),
+            y: MathF.Max(x: 80f, y: UsableWidth() - Spacing.Lg)
+        );
         return _screen;
     }
 
     /// <summary>Screen width actually available to a menu (safe area excluded).</summary>
-    private float UsableWidth()
-    {
-        return _screen.Width - _safe.Horizontal;
-    }
+    private float UsableWidth() => _screen.Width - _safe.Horizontal;
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _screen.Width,
-            _screen.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _screen.Width,
+            height: _screen.Height
         );
     }
 
@@ -201,8 +195,11 @@ public sealed class ContextMenu : Widget
     private float GutterWidth()
     {
         foreach (var item in Items)
+        {
             if (!item.Separator && (item.Icon is not null || item.Checked is not null))
                 return _theme.FontSizeBody + Spacing.Sm;
+        }
+
         return 0f;
     }
 
@@ -210,170 +207,172 @@ public sealed class ContextMenu : Widget
     ///     The shortcut as the local platform writes it — the model is authored once (⌘S) and read as
     ///     "Ctrl+S" off macOS, where the same chord is also what <c>MenuAccelerators</c> binds.
     /// </summary>
-    private static string? ShortcutLabel(ContextMenuItem item)
-    {
-        return MenuAccelerators.Display(item.Shortcut);
-    }
+    private static string? ShortcutLabel(ContextMenuItem item) =>
+        MenuAccelerators.Display(item.Shortcut);
 
     /// <summary>Width = gutter + widest (label + gap + shortcut/arrow) across all items, plus insets.</summary>
     private float MeasureMenuWidth()
     {
-        var fs = _theme.FontSizeBody;
-        var widest = 0f;
+        float fs = _theme.FontSizeBody;
+        float widest = 0f;
 
         foreach (var item in Items)
         {
             if (item.Separator) continue;
 
-            var w = TextMeasure.Width(item.Label, fs);
+            float w = TextMeasure.Width(text: item.Label, fontSize: fs);
 
-            var hasChildren = item.Children is { Count: > 0 };
+            bool hasChildren = item.Children is { Count: > 0 };
             if (hasChildren)
                 // Submenu arrow ("▶") rendered at the trailing edge.
-                w += Spacing.Lg + TextMeasure.Width("▶", fs * 0.8f);
+                w += Spacing.Lg + TextMeasure.Width(text: "▶", fontSize: fs * 0.8f);
             else if (ShortcutLabel(item) is { Length: > 0 } sc)
-                w += Spacing.Lg + TextMeasure.Width(sc, fs);
+                w += Spacing.Lg + TextMeasure.Width(text: sc, fontSize: fs);
 
             if (w > widest) widest = w;
         }
 
-        return widest + GutterWidth() + Spacing.Md * 2f;
+        return widest + GutterWidth() + (Spacing.Md * 2f);
     }
 
     private float TotalHeight()
     {
-        var h = 0f;
+        float h = 0f;
         foreach (var item in Items) h += RowHeight(item);
         return h;
     }
 
     private Rect MenuRect()
     {
-        var size = new Size(_menuW, TotalHeight());
+        var size = new Size(width: _menuW, height: TotalHeight());
         var raw = new Rect(
-            _pos.X,
-            _pos.Y,
-            size.Width,
-            size.Height
+            x: _pos.X,
+            y: _pos.Y,
+            width: size.Width,
+            height: size.Height
         );
-        return OverlayPositioning.Clamp(raw, _screen, safe: _safe);
+        return OverlayPositioning.Clamp(rect: raw, screen: _screen, safe: _safe);
     }
 
     public override void Paint(PaintList paint)
     {
-        var t = _enter.Value;
-        var fade = t < 0.999f;
-        var rise = (1f - t) * 6f;
+        float t = _enter.Value;
+        bool fade = t < 0.999f;
+        float rise = (1f - t) * 6f;
         if (fade) paint.PushAlpha(t);
-        if (rise > 0.01f) paint.PushTranslate(0f, -rise);
+        if (rise > 0.01f) paint.PushTranslate(dx: 0f, dy: -rise);
 
         var mr = MenuRect();
 
         // Flat popover: soft Z2 lift, opaque surface, hairline border.
-        paint.AddElevation(mr, Radii.Lg, Elevation.Z2);
-        paint.AddRect(mr, _theme.Surface, Radii.Lg);
-        paint.AddBorder(mr, _theme.Separator, Radii.Lg);
+        paint.AddElevation(bounds: mr, radius: Radii.Lg, style: Elevation.Z2);
+        paint.AddRect(bounds: mr, color: _theme.Surface, radius: Radii.Lg);
+        paint.AddBorder(bounds: mr, color: _theme.Separator, radius: Radii.Lg);
 
         // Rows are painted from measured text that can exceed the clamped menu width on a narrow
         // screen; clip so an over-long label ends at the surface instead of over the page.
         paint.AddClipStart(mr);
 
-        var fs = _theme.FontSizeBody;
-        var y = mr.Y;
+        float fs = _theme.FontSizeBody;
+        float y = mr.Y;
 
-        for (var i = 0; i < Items.Count; i++)
+        for (int i = 0; i < Items.Count; i++)
         {
             var item = Items[i];
-            var rowH = RowHeight(item);
+            float rowH = RowHeight(item);
             var row = new Rect(
-                mr.X,
-                y,
-                _menuW,
-                rowH
+                x: mr.X,
+                y: y,
+                width: _menuW,
+                height: rowH
             );
             y += rowH;
 
             if (item.Separator)
             {
                 paint.AddRect(
-                    new Rect(
-                        row.X + Spacing.Md,
-                        row.Y + rowH / 2f - 0.5f,
-                        _menuW - Spacing.Md * 2f,
-                        1f
+                    bounds: new Rect(
+                        x: row.X + Spacing.Md,
+                        y: row.Y + (rowH / 2f) - 0.5f,
+                        width: _menuW - (Spacing.Md * 2f),
+                        height: 1f
                     ),
-                    _theme.Separator
+                    color: _theme.Separator
                 );
                 continue;
             }
 
-            var enabled = item.IsEnabled;
+            bool enabled = item.IsEnabled;
             // Disabled rows never take the selection highlight (macOS behavior).
-            var hovered = enabled && (_hoveredIdx == i || _openSubmenuIdx == i);
+            bool hovered = enabled && (_hoveredIdx == i || _openSubmenuIdx == i);
             if (hovered)
-                paint.AddRect(row, _theme.Selection, Radii.Xs);
+                paint.AddRect(bounds: row, color: _theme.Selection, radius: Radii.Xs);
 
-            var hasChildren = item.Children is { Count: > 0 };
+            bool hasChildren = item.Children is { Count: > 0 };
 
             Color fg;
             if (hovered) fg = _theme.OnPrimary;
             else if (!enabled) fg = _theme.Hint;
             else fg = _theme.OnSurface;
 
-            var baseline = row.Y + (rowH - fs) / 2f + fs * 0.8f;
+            float baseline = row.Y + ((rowH - fs) / 2f) + (fs * 0.8f);
 
             // Leading gutter: checkmark takes precedence over a decorative icon.
-            var gutter = GutterWidth();
+            float gutter = GutterWidth();
             if (gutter > 0f)
             {
-                var glyph = item.Checked == true ? Icons.Check : item.Icon;
+                string? glyph = item.Checked == true ? Icons.Check : item.Icon;
                 if (glyph is not null)
+                {
                     Icons.Draw(
-                        paint,
-                        glyph,
-                        new Rect(
-                            row.X + Spacing.Md,
-                            row.Y + (rowH - fs) / 2f,
-                            fs,
-                            fs
+                        paint: paint,
+                        glyph: glyph,
+                        box: new Rect(
+                            x: row.X + Spacing.Md,
+                            y: row.Y + ((rowH - fs) / 2f),
+                            width: fs,
+                            height: fs
                         ),
-                        fg,
-                        fs
+                        color: fg,
+                        size: fs
                     );
+                }
             }
 
             if (!string.IsNullOrEmpty(item.Label))
+            {
                 paint.AddText(
-                    item.Label,
-                    row.X + Spacing.Md + gutter,
-                    baseline,
-                    fg,
-                    fs
+                    text: item.Label,
+                    baselineX: row.X + Spacing.Md + gutter,
+                    baselineY: baseline,
+                    color: fg,
+                    fontSize: fs
                 );
+            }
 
             if (hasChildren)
             {
                 const string arrow = "▶";
-                var arrowFs = fs * 0.8f;
-                var arrowW = TextMeasure.Width(arrow, arrowFs);
+                float arrowFs = fs * 0.8f;
+                float arrowW = TextMeasure.Width(text: arrow, fontSize: arrowFs);
                 paint.AddText(
-                    arrow,
-                    row.Right - Spacing.Md - arrowW,
-                    row.Y + (rowH - arrowFs) / 2f + arrowFs * 0.8f,
-                    hovered ? _theme.OnPrimary : _theme.Hint,
-                    arrowFs
+                    text: arrow,
+                    baselineX: row.Right - Spacing.Md - arrowW,
+                    baselineY: row.Y + ((rowH - arrowFs) / 2f) + (arrowFs * 0.8f),
+                    color: hovered ? _theme.OnPrimary : _theme.Hint,
+                    fontSize: arrowFs
                 );
             }
             else if (ShortcutLabel(item) is { Length: > 0 } sc)
             {
                 // Right-aligned shortcut, dimmed unless the row is the active selection.
-                var scW = TextMeasure.Width(sc, fs);
+                float scW = TextMeasure.Width(text: sc, fontSize: fs);
                 paint.AddText(
-                    sc,
-                    row.Right - Spacing.Md - scW,
-                    baseline,
-                    hovered ? _theme.OnPrimary : _theme.Hint,
-                    fs
+                    text: sc,
+                    baselineX: row.Right - Spacing.Md - scW,
+                    baselineY: baseline,
+                    color: hovered ? _theme.OnPrimary : _theme.Hint,
+                    fontSize: fs
                 );
             }
         }
@@ -389,7 +388,7 @@ public sealed class ContextMenu : Widget
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         // Forward to submenu first so it gets priority
         if (_submenu is not null)
         {
@@ -404,10 +403,10 @@ public sealed class ContextMenu : Widget
     /// <summary>Index of the item whose row contains <paramref name="localY" />, or -1.</summary>
     private int RowIndexAt(Rect mr, float localY)
     {
-        var y = mr.Y;
-        for (var i = 0; i < Items.Count; i++)
+        float y = mr.Y;
+        for (int i = 0; i < Items.Count; i++)
         {
-            var rowH = RowHeight(Items[i]);
+            float rowH = RowHeight(Items[i]);
             if (localY >= y && localY < y + rowH) return i;
             y += rowH;
         }
@@ -418,17 +417,17 @@ public sealed class ContextMenu : Widget
     /// <summary>The pointer is inside this menu or any open submenu (with edge slop).</summary>
     private bool ChainContains(Offset point)
     {
-        if (Inflate(MenuRect(), ExitSlop).Contains(point.X, point.Y)) return true;
+        if (Inflate(r: MenuRect(), by: ExitSlop).Contains(px: point.X, py: point.Y)) return true;
         return _submenu?.ChainContains(point) ?? false;
     }
 
     private static Rect Inflate(Rect r, float by)
     {
         return new Rect(
-            r.X - by,
-            r.Y - by,
-            r.Width + by * 2f,
-            r.Height + by * 2f
+            x: r.X - by,
+            y: r.Y - by,
+            width: r.Width + (by * 2f),
+            height: r.Height + (by * 2f)
         );
     }
 
@@ -438,7 +437,7 @@ public sealed class ContextMenu : Widget
         // Only the root carries the scope and only it was pushed as an overlay.
         if (_parentMenu is null && PointerExitScope is { } scope &&
             !ChainContains(point) &&
-            !Inflate(scope, ExitSlop).Contains(point.X, point.Y))
+            !Inflate(r: scope, by: ExitSlop).Contains(px: point.X, py: point.Y))
         {
             DismissAll();
             return;
@@ -448,7 +447,7 @@ public sealed class ContextMenu : Widget
         if (_submenu is not null)
         {
             var mr2 = _submenu.MenuRect();
-            if (mr2.Contains(point.X, point.Y))
+            if (mr2.Contains(px: point.X, py: point.Y))
             {
                 _submenu.OnPointerMove(point);
                 return;
@@ -456,7 +455,7 @@ public sealed class ContextMenu : Widget
         }
 
         var mr = MenuRect();
-        if (!mr.Contains(point.X, point.Y))
+        if (!mr.Contains(px: point.X, py: point.Y))
         {
             if (_hoveredIdx != -1)
             {
@@ -467,7 +466,7 @@ public sealed class ContextMenu : Widget
             return;
         }
 
-        var idx = RowIndexAt(mr, point.Y);
+        int idx = RowIndexAt(mr: mr, localY: point.Y);
         if (idx != _hoveredIdx)
         {
             _hoveredIdx = idx;
@@ -478,12 +477,10 @@ public sealed class ContextMenu : Widget
 
         var item = Items[idx];
         if (item.Separator || !item.IsEnabled) return;
-        var hasChildren = item.Children is { Count: > 0 };
+        bool hasChildren = item.Children is { Count: > 0 };
 
         if (hasChildren && _openSubmenuIdx != idx)
-        {
-            OpenSubmenu(idx, mr);
-        }
+            OpenSubmenu(idx: idx, mr: mr);
         else if (!hasChildren && _openSubmenuIdx >= 0)
         {
             CloseSubmenu();
@@ -500,39 +497,39 @@ public sealed class ContextMenu : Widget
         CloseSubmenu();
         _openSubmenuIdx = idx;
 
-        var rowTop = mr.Y;
-        for (var i = 0; i < idx; i++) rowTop += RowHeight(Items[i]);
+        float rowTop = mr.Y;
+        for (int i = 0; i < idx; i++) rowTop += RowHeight(Items[i]);
         var row = new Rect(
-            mr.X,
-            rowTop,
-            _menuW,
-            RowHeight(Items[idx])
+            x: mr.X,
+            y: rowTop,
+            width: _menuW,
+            height: RowHeight(Items[idx])
         );
 
-        _submenu = new ContextMenu(_app, [.. Items[idx].Children!]);
+        _submenu = new ContextMenu(app: _app, items: [.. Items[idx].Children!]);
         // Submenu shares the screen overlay but we position it manually
         _submenu._parentMenu = this; // owner link so item-select can dismiss the whole chain
         _submenu._screen = _screen;
         _submenu._safe = _safe;
         _submenu._theme = _theme;
         _submenu._menuW = MathF.Min(
-            _submenu.MeasureMenuWidth(),
-            MathF.Max(80f, UsableWidth() - Spacing.Lg)
+            x: _submenu.MeasureMenuWidth(),
+            y: MathF.Max(x: 80f, y: UsableWidth() - Spacing.Lg)
         );
         // Anchored rather than "right edge of the parent": on a narrow screen the parent already
         // spans most of the width, and a fixed right placement would clamp back on top of it.
         var placed = OverlayPositioning.Anchored(
-            row,
-            new Size(_submenu._menuW, _submenu.TotalHeight()),
-            _screen,
-            OverlaySide.Right,
-            0f,
+            anchor: row,
+            size: new Size(width: _submenu._menuW, height: _submenu.TotalHeight()),
+            screen: _screen,
+            side: OverlaySide.Right,
+            gap: 0f,
             safe: _safe
         );
-        _submenu._pos = new Offset(placed.X, placed.Y);
+        _submenu._pos = new Offset(x: placed.X, y: placed.Y);
         // Mount before animating: only the root menu is pushed as an overlay, so a submenu that is
         // never attached stays unmounted — and an unmounted widget's ticker is muted.
-        if (Owner is not null) _submenu.Attach(Owner, this);
+        if (Owner is not null) _submenu.Attach(owner: Owner, parent: this);
         _submenu.PlayEnter();
         MarkNeedsPaint();
     }
@@ -543,7 +540,7 @@ public sealed class ContextMenu : Widget
         if (_submenu is not null)
         {
             var subMr = _submenu.MenuRect();
-            if (subMr.Contains(point.X, point.Y))
+            if (subMr.Contains(px: point.X, py: point.Y))
             {
                 _submenu.OnPointerDown(point);
                 return;
@@ -551,13 +548,13 @@ public sealed class ContextMenu : Widget
         }
 
         var mr = MenuRect();
-        if (!mr.Contains(point.X, point.Y))
+        if (!mr.Contains(px: point.X, py: point.Y))
         {
             DismissAll();
             return;
         }
 
-        var idx = RowIndexAt(mr, point.Y);
+        int idx = RowIndexAt(mr: mr, localY: point.Y);
         if (idx >= 0 && idx < Items.Count)
         {
             var item = Items[idx];
@@ -567,7 +564,7 @@ public sealed class ContextMenu : Widget
             // this is a no-op there.
             if (item.Children is { Count: > 0 })
             {
-                if (_openSubmenuIdx != idx) OpenSubmenu(idx, mr);
+                if (_openSubmenuIdx != idx) OpenSubmenu(idx: idx, mr: mr);
                 return;
             }
 

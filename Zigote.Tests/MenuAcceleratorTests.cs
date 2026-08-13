@@ -16,62 +16,83 @@ public class MenuAcceleratorTests
     [Fact]
     public void MacGlyphsAndWrittenFormParseToTheSameChord()
     {
-        Assert.True(MenuAccelerators.TryParse("⌘⇧Z", out var glyph));
-        Assert.True(MenuAccelerators.TryParse("Mod+Shift+Z", out var written));
-        Assert.Equal(written, glyph);
-        Assert.Equal(new KeyChord(KeyCode.Z, KeyChord.PlatformCommand | Modifiers.Shift), glyph);
+        Assert.True(MenuAccelerators.TryParse(shortcut: "⌘⇧Z", chord: out var glyph));
+        Assert.True(MenuAccelerators.TryParse(shortcut: "Mod+Shift+Z", chord: out var written));
+        Assert.Equal(expected: written, actual: glyph);
+        Assert.Equal(
+            expected: new KeyChord(
+                Key: KeyCode.Z,
+                Modifiers: KeyChord.PlatformCommand | Modifiers.Shift
+            ),
+            actual: glyph
+        );
     }
 
     [Fact]
     public void NonLetterKeysSurvive()
     {
-        Assert.True(MenuAccelerators.TryParse("F5", out var f5));
-        Assert.Equal(new KeyChord(KeyCode.F5), f5);
+        Assert.True(MenuAccelerators.TryParse(shortcut: "F5", chord: out var f5));
+        Assert.Equal(expected: new KeyChord(KeyCode.F5), actual: f5);
         // The globe modifier has no cross-platform meaning — stripped, not mistaken for the key.
-        Assert.True(MenuAccelerators.TryParse("🌐E", out var globe));
-        Assert.Equal(new KeyChord(KeyCode.E), globe);
-        Assert.False(MenuAccelerators.TryParse("⌘", out _)); // modifier alone binds nothing
-        Assert.False(MenuAccelerators.TryParse(null, out _));
+        Assert.True(MenuAccelerators.TryParse(shortcut: "🌐E", chord: out var globe));
+        Assert.Equal(expected: new KeyChord(KeyCode.E), actual: globe);
+        Assert.False(
+            MenuAccelerators.TryParse(shortcut: "⌘", chord: out _)
+        ); // modifier alone binds nothing
+        Assert.False(MenuAccelerators.TryParse(shortcut: null, chord: out _));
     }
 
     /// <summary>A label the local platform can read: glyphs on macOS, "Ctrl+S" everywhere else.</summary>
     [Fact]
     public void DisplayIsPlatformSpelled()
     {
-        var shown = MenuAccelerators.Display("⌘S");
-        Assert.Equal(OperatingSystem.IsMacOS() ? "⌘S" : "Ctrl+S", shown);
+        string? shown = MenuAccelerators.Display("⌘S");
+        Assert.Equal(expected: OperatingSystem.IsMacOS() ? "⌘S" : "Ctrl+S", actual: shown);
         // Not a chord at all: passed through, so a hand-written label still renders.
-        Assert.Equal("hold ⌥", MenuAccelerators.Display("hold ⌥"));
+        Assert.Equal(expected: "hold ⌥", actual: MenuAccelerators.Display("hold ⌥"));
     }
 
     [Fact]
     public void CollectWalksSubmenusAndSkipsWhatCannotFire()
     {
-        var fired = 0;
+        int fired = 0;
         var menus = new[] {
             new AppMenu(
-                "File",
-                [
-                    new ContextMenuItem("Save", () => fired++, Shortcut: "⌘S"),
-                    new ContextMenuItem("", null, true), // separator
-                    new ContextMenuItem("No action", null, Shortcut: "⌘K"),
-                    new ContextMenuItem("Disabled", () => fired += 100, Shortcut: "⌘D",
-                        Enabled: false),
+                Title: "File",
+                Items: [
+                    new ContextMenuItem(Label: "Save", OnSelect: () => fired++, Shortcut: "⌘S"),
+                    new ContextMenuItem(Label: "", OnSelect: null, Separator: true), // separator
+                    new ContextMenuItem(Label: "No action", OnSelect: null, Shortcut: "⌘K"),
                     new ContextMenuItem(
-                        "Recent",
-                        null,
-                        Children: [new ContextMenuItem("a.zigote", () => fired += 10, Shortcut: "⌘1")]
+                        Label: "Disabled",
+                        OnSelect: () => fired += 100,
+                        Shortcut: "⌘D",
+                        Enabled: false
+                    ),
+                    new ContextMenuItem(
+                        Label: "Recent",
+                        OnSelect: null,
+                        Children: [
+                            new ContextMenuItem(
+                                Label: "a.zigote",
+                                OnSelect: () => fired += 10,
+                                Shortcut: "⌘1"
+                            ),
+                        ]
                     ),
                 ]
             ),
         };
 
         var accel = MenuAccelerators.Collect(menus);
-        Assert.Equal(2, accel.Count);
+        Assert.Equal(expected: 2, actual: accel.Count);
 
         foreach (var (chord, run) in accel)
-            if (chord.Matches(KeyCode.S, KeyChord.PlatformCommand))
+        {
+            if (chord.Matches(key: KeyCode.S, modifiers: KeyChord.PlatformCommand))
                 run();
-        Assert.Equal(1, fired);
+        }
+
+        Assert.Equal(expected: 1, actual: fired);
     }
 }

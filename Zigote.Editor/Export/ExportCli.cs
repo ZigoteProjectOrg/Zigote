@@ -22,15 +22,25 @@ public static class ExportCli
         var modes = new List<ExportMode>();
         string? outDir = null;
 
-        for (var i = 2; i < args.Length; i++)
+        for (int i = 2; i < args.Length; i++)
+        {
             switch (args[i])
             {
                 case "--rids" when i + 1 < args.Length:
-                    rids.AddRange(args[++i].Split(',', StringSplitOptions.RemoveEmptyEntries));
+                    rids.AddRange(
+                        args[++i].Split(
+                            separator: ',',
+                            options: StringSplitOptions.RemoveEmptyEntries
+                        )
+                    );
                     break;
                 case "--mode" when i + 1 < args.Length:
                     // "jit", "aot", "both", or a comma list — one pass can produce every flavor.
-                    foreach (var m in args[++i].Split(',', StringSplitOptions.RemoveEmptyEntries))
+                    foreach (string m in args[++i].Split(
+                                 separator: ',',
+                                 options: StringSplitOptions.RemoveEmptyEntries
+                             ))
+                    {
                         switch (m.ToLowerInvariant())
                         {
                             case "aot": modes.Add(ExportMode.NativeAot); break;
@@ -40,6 +50,7 @@ public static class ExportCli
                                 modes.Add(ExportMode.NativeAot);
                                 break;
                         }
+                    }
 
                     break;
                 case "--out" when i + 1 < args.Length:
@@ -49,6 +60,7 @@ public static class ExportCli
                     projectPath ??= args[i];
                     break;
             }
+        }
 
         if (projectPath is null)
         {
@@ -66,7 +78,7 @@ public static class ExportCli
         }
 
         var project = ZigoteProject.Load(projectPath);
-        var projDir = Path.GetDirectoryName(projectPath)!;
+        string projDir = Path.GetDirectoryName(projectPath)!;
         Directory.SetCurrentDirectory(projDir);
 
         // Same registry population as the editor: built-in sample components + the game's assembly.
@@ -76,7 +88,7 @@ public static class ExportCli
         ScriptDomain? domain = null;
         if (project.ScriptProject is { Length: > 0 } sp)
         {
-            var csproj = Path.GetFullPath(Path.Combine(projDir, sp));
+            string csproj = Path.GetFullPath(Path.Combine(path1: projDir, path2: sp));
             Console.WriteLine($"[export] building scripts: {csproj}");
             var result = await ScriptCompiler.BuildAsync(csproj);
             if (!result.Success || result.OutputAssemblyPath is null)
@@ -95,25 +107,30 @@ public static class ExportCli
 
         if (rids.Count == 0) rids.Add(RuntimeInformation.RuntimeIdentifier);
         if (modes.Count == 0) modes.Add(ExportMode.SelfContained);
-        outDir ??= Path.Combine(projDir, "export");
+        outDir ??= Path.Combine(path1: projDir, path2: "export");
 
         var input = new ExportInput(
-            projectPath,
-            project,
-            registry,
-            scriptAsm
+            ProjectPath: projectPath,
+            Project: project,
+            Scripts: registry,
+            ScriptAssemblyName: scriptAsm
         );
-        var options = new ExportOptions(Path.GetFullPath(outDir), rids, modes.Distinct().ToList());
-        var ok = await GameExporter.ExportAsync(input, options, new ConsoleProgress());
+        var options = new ExportOptions(
+            OutputDir: Path.GetFullPath(outDir),
+            Rids: rids,
+            Modes: modes.Distinct().ToList()
+        );
+        bool ok = await GameExporter.ExportAsync(
+            input: input,
+            options: options,
+            log: new ConsoleProgress()
+        );
         GC.KeepAlive(domain);
         return ok ? 0 : 1;
     }
 
     private sealed class ConsoleProgress : IProgress<string>
     {
-        public void Report(string value)
-        {
-            Console.WriteLine(value);
-        }
+        public void Report(string value) => Console.WriteLine(value);
     }
 }

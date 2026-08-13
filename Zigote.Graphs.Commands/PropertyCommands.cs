@@ -27,15 +27,9 @@ public sealed class ChangeNodePropertyCommand(
 
 public sealed class AddParameterCommand(GraphParameter parameter) : IGraphCommand
 {
-    public void Execute(GraphDocument graph)
-    {
-        graph.Parameters.Add(parameter);
-    }
+    public void Execute(GraphDocument graph) => graph.Parameters.Add(parameter);
 
-    public void Undo(GraphDocument graph)
-    {
-        graph.Parameters.RemoveAll(p => p.Id == parameter.Id);
-    }
+    public void Undo(GraphDocument graph) => graph.Parameters.RemoveAll(p => p.Id == parameter.Id);
 }
 
 public sealed class DeleteParameterCommand(Guid parameterId) : IGraphCommand

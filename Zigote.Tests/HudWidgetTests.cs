@@ -28,9 +28,9 @@ public class HudWidgetTests
     /// </summary>
     private static PaintList HostPaint(Widget hudRoot, float vw, float vh, Offset origin)
     {
-        var media = new MediaQuery(new MediaQueryData(vw, vh), hudRoot);
-        var wrapper = new ThemeProvider(ThemeData.Dark, media);
-        wrapper.Measure(Constraints.Tight(vw, vh));
+        var media = new MediaQuery(data: new MediaQueryData(width: vw, height: vh), child: hudRoot);
+        var wrapper = new ThemeProvider(data: ThemeData.Dark, child: media);
+        wrapper.Measure(Constraints.Tight(width: vw, height: vh));
         wrapper.Layout(origin);
         var p = new PaintList();
         wrapper.Paint(p);
@@ -45,14 +45,14 @@ public class HudWidgetTests
 
         var box = new ColoredBox(
             new Color(
-                0f,
-                0f,
-                0f,
-                0.5f
+                r: 0f,
+                g: 0f,
+                b: 0f,
+                a: 0.5f
             )
         );
         Hud.Root = box;
-        Assert.Same(box, Hud.Root);
+        Assert.Same(expected: box, actual: Hud.Root);
 
         Hud.Reset(); // play-stop drops the HUD
         Assert.Null(Hud.Root);
@@ -63,26 +63,29 @@ public class HudWidgetTests
     {
         var box = new ColoredBox(
             new Color(
-                0.1f,
-                0.1f,
-                0.1f,
-                0.8f
+                r: 0.1f,
+                g: 0.1f,
+                b: 0.1f,
+                a: 0.8f
             )
         );
-        var root = new Align(Alignment.BottomRight, new SizedBox(200f, 80f, box));
+        var root = new Align(
+            alignment: Alignment.BottomRight,
+            child: new SizedBox(width: 200f, height: 80f, child: box)
+        );
 
         var p = HostPaint(
-            root,
-            800f,
-            600f,
-            new Offset(10f, 20f)
+            hudRoot: root,
+            vw: 800f,
+            vh: 600f,
+            origin: new Offset(x: 10f, y: 20f)
         );
 
         // The bottom-right box sits at the far corner of the viewport, offset by the viewport origin.
-        Assert.Equal(10f + 800f - 200f, box.Bounds.X, 1);
-        Assert.Equal(20f + 600f - 80f, box.Bounds.Y, 1);
-        Assert.Equal(200f, box.Bounds.Width, 1);
-        Assert.Equal(80f, box.Bounds.Height, 1);
+        Assert.Equal(expected: 10f + 800f - 200f, actual: box.Bounds.X, precision: 1);
+        Assert.Equal(expected: 20f + 600f - 80f, actual: box.Bounds.Y, precision: 1);
+        Assert.Equal(expected: 200f, actual: box.Bounds.Width, precision: 1);
+        Assert.Equal(expected: 80f, actual: box.Bounds.Height, precision: 1);
         Assert.True(p.Count >= 1); // the ColoredBox emitted its fill rect
     }
 
@@ -91,50 +94,56 @@ public class HudWidgetTests
     {
         var box = new ColoredBox(
             new Color(
-                0.1f,
-                0.1f,
-                0.1f,
-                0.8f
+                r: 0.1f,
+                g: 0.1f,
+                b: 0.1f,
+                a: 0.8f
             )
         );
-        var root = new Align(Alignment.BottomRight, new SizedBox(200f, 80f, box));
+        var root = new Align(
+            alignment: Alignment.BottomRight,
+            child: new SizedBox(width: 200f, height: 80f, child: box)
+        );
         HostPaint(
-            root,
-            800f,
-            600f,
-            Offset.Zero
+            hudRoot: root,
+            vw: 800f,
+            vh: 600f,
+            origin: Offset.Zero
         );
 
         // Empty top-left region: the Align has no child there → null → the click falls through to the viewport.
-        Assert.Null(root.HitTest(new Offset(20f, 20f)));
+        Assert.Null(root.HitTest(new Offset(x: 20f, y: 20f)));
 
         // Inside the opaque panel (bottom-right): the ColoredBox absorbs the hit.
-        Assert.Same(box, root.HitTest(new Offset(800f - 100f, 600f - 40f)));
+        Assert.Same(expected: box, actual: root.HitTest(new Offset(x: 800f - 100f, y: 600f - 40f)));
     }
 
     [Fact]
     public void HostedTree_InteractiveWidget_ReceivesTap()
     {
-        var fired = 0;
+        int fired = 0;
         var pressable = new Pressable {
-            Child = new SizedBox(120f, 40f),
+            Child = new SizedBox(width: 120f, height: 40f),
             OnPressed = () => fired++,
         };
-        var root = new Align(Alignment.TopLeft, new SizedBox(120f, 40f, pressable));
+        var root = new Align(
+            alignment: Alignment.TopLeft,
+            child: new SizedBox(width: 120f, height: 40f, child: pressable)
+        );
         HostPaint(
-            root,
-            800f,
-            600f,
-            Offset.Zero
+            hudRoot: root,
+            vw: 800f,
+            vh: 600f,
+            origin: Offset.Zero
         );
 
-        var hit = root.HitTest(new Offset(60f, 20f));
-        Assert.Same(pressable, hit);
+        var hit = root.HitTest(new Offset(x: 60f, y: 20f));
+        Assert.Same(expected: pressable, actual: hit);
 
         // The host routes the captured pointer straight to the hit widget, like App.DispatchEvent.
-        hit!.OnPointerDown(new Offset(60f, 20f));
-        hit.OnPointerUp(new Offset(60f, 20f));
-        Assert.Equal(1, fired);
+        hit!.OnPointerDown(new Offset(x: 60f, y: 20f));
+        hit.OnPointerUp(new Offset(x: 60f, y: 20f));
+        Assert.Equal(expected: 1, actual: fired);
     }
 
     [Fact]
@@ -150,19 +159,19 @@ public class HudWidgetTests
         );
 
         HostPaint(
-            probe,
-            640f,
-            480f,
-            Offset.Zero
+            hudRoot: probe,
+            vw: 640f,
+            vh: 480f,
+            origin: Offset.Zero
         );
 
         Assert.NotNull(seenTheme); // a theme is in scope (host-provided)
         Assert.Equal(
-            640f,
-            seenMedia.Width,
-            1
+            expected: 640f,
+            actual: seenMedia.Width,
+            precision: 1
         ); // MediaQuery reports the viewport size, not the default
-        Assert.Equal(480f, seenMedia.Height, 1);
+        Assert.Equal(expected: 480f, actual: seenMedia.Height, precision: 1);
     }
 
     /// <summary>
@@ -174,7 +183,7 @@ public class HudWidgetTests
         protected override Widget Build(BuildContext context)
         {
             onBuild(context);
-            return new SizedBox(0f, 0f);
+            return new SizedBox(width: 0f, height: 0f);
         }
     }
 }

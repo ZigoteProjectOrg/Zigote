@@ -19,10 +19,7 @@ public class AddNodeCommand(EditorState state, SceneNode parent, SceneNode node)
         state.NotifySceneChanged();
     }
 
-    public bool TryMergeWith(ICommand other)
-    {
-        return false;
-    }
+    public bool TryMergeWith(ICommand other) => false;
 }
 
 public class DeleteNodeCommand : ICommand
@@ -55,16 +52,13 @@ public class DeleteNodeCommand : ICommand
     public void Undo()
     {
         _node.Parent = null; // Reset to allow AddChild
-        _parent.Children.Insert(_index, _node);
+        _parent.Children.Insert(index: _index, item: _node);
         _node.Parent = _parent;
         if (_wasSelected) _state.Select(_node);
         _state.NotifySceneChanged();
     }
 
-    public bool TryMergeWith(ICommand other)
-    {
-        return false;
-    }
+    public bool TryMergeWith(ICommand other) => false;
 }
 
 public class ReparentNodeCommand : ICommand
@@ -95,15 +89,12 @@ public class ReparentNodeCommand : ICommand
     {
         _newParent.RemoveChild(_node);
         _node.Parent = null;
-        _oldParent.Children.Insert(_oldIndex, _node);
+        _oldParent.Children.Insert(index: _oldIndex, item: _node);
         _node.Parent = _oldParent;
         _state.NotifySceneChanged();
     }
 
-    public bool TryMergeWith(ICommand other)
-    {
-        return false;
-    }
+    public bool TryMergeWith(ICommand other) => false;
 }
 
 public class ChangePropertyCommand<T>(EditorState state, T oldValue, T newValue, Action<T> setter)
@@ -138,8 +129,10 @@ public class ChangePropertyCommand<T>(EditorState state, T oldValue, T newValue,
 }
 
 /// <summary>
-///     Applies a batch of mutations as a single undo step, firing one <see cref="EditorState.NotifySceneChanged" />
-///     for the whole batch (one native sync + one relayout). Used for multi-field / multi-node edits like
+///     Applies a batch of mutations as a single undo step, firing one
+///     <see cref="EditorState.NotifySceneChanged" />
+///     for the whole batch (one native sync + one relayout). Used for multi-field / multi-node edits
+///     like
 ///     applying a material preset to a model and all its sub-meshes.
 /// </summary>
 public sealed class CompositeCommand(EditorState state, Action apply, Action revert) : ICommand
@@ -156,8 +149,5 @@ public sealed class CompositeCommand(EditorState state, Action apply, Action rev
         state.NotifySceneChanged();
     }
 
-    public bool TryMergeWith(ICommand other)
-    {
-        return false;
-    }
+    public bool TryMergeWith(ICommand other) => false;
 }

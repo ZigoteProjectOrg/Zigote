@@ -31,7 +31,7 @@ public sealed class ScenePrefabLibrary
         _registry.Register<Transform>();
         _registry.Register<NodeMaterial>();
         _registry.Register<NodeLight>();
-        _lib = new EcsPrefabLibrary(world, _registry);
+        _lib = new EcsPrefabLibrary(world: world, registry: _registry);
     }
 
     public EcsWorld World { get; }
@@ -56,16 +56,10 @@ public sealed class ScenePrefabLibrary
         return prefab;
     }
 
-    public EcsPrefab? Get(string name)
-    {
-        return _lib.Get(name);
-    }
+    public EcsPrefab? Get(string name) => _lib.Get(name);
 
     /// <summary>Spawn an instance entity that inherits the named prefab's components.</summary>
-    public Entity Instantiate(string name)
-    {
-        return _lib.Instantiate(name);
-    }
+    public Entity Instantiate(string name) => _lib.Instantiate(name);
 
     /// <summary>
     ///     Copy the instance's currently-resolved component values (inherited from the prefab unless
@@ -74,40 +68,38 @@ public sealed class ScenePrefabLibrary
     /// </summary>
     public void ApplyToNode(Entity instance, SceneNode node)
     {
-        if (World.TryGet<Transform>(instance, out var t))
-            SceneNodeComponents.WriteTransform(node, t);
-        if (node.Kind == NodeKind.Mesh && World.TryGet<NodeMaterial>(instance, out var m))
-            SceneNodeComponents.WriteMaterial(node, m);
-        if (node.Kind == NodeKind.Light && World.TryGet<NodeLight>(instance, out var l))
-            SceneNodeComponents.WriteLight(node, l);
+        if (World.TryGet<Transform>(e: instance, value: out var t))
+            SceneNodeComponents.WriteTransform(n: node, t: t);
+        if (node.Kind == NodeKind.Mesh && World.TryGet<NodeMaterial>(e: instance, value: out var m))
+            SceneNodeComponents.WriteMaterial(n: node, m: m);
+        if (node.Kind == NodeKind.Light && World.TryGet<NodeLight>(e: instance, value: out var l))
+            SceneNodeComponents.WriteLight(n: node, l: l);
     }
 
     // ── Override / revert (delegates to flecs Owns/Remove semantics) ─────────────
 
     /// <summary>Override the instance's transform with the node's current value (instance now owns it).</summary>
-    public void OverrideTransform(Entity instance, SceneNode node)
-    {
-        World.Set(instance, SceneNodeComponents.ReadTransform(node));
-    }
+    public void OverrideTransform(Entity instance, SceneNode node) => World.Set(
+        e: instance,
+        c: SceneNodeComponents.ReadTransform(node)
+    );
 
-    public void OverrideMaterial(Entity instance, SceneNode node)
-    {
-        World.Set(instance, SceneNodeComponents.ReadMaterial(node));
-    }
+    public void OverrideMaterial(Entity instance, SceneNode node) => World.Set(
+        e: instance,
+        c: SceneNodeComponents.ReadMaterial(node)
+    );
 
-    public void OverrideLight(Entity instance, SceneNode node)
-    {
-        World.Set(instance, SceneNodeComponents.ReadLight(node));
-    }
+    public void OverrideLight(Entity instance, SceneNode node) => World.Set(
+        e: instance,
+        c: SceneNodeComponents.ReadLight(node)
+    );
 
     /// <summary>
     ///     Whether the instance overrides <paramref name="type" /> (owns it) vs inherits from the
     ///     prefab.
     /// </summary>
-    public bool IsOverridden(Entity instance, Type type)
-    {
-        return _lib.IsOverridden(instance, type);
-    }
+    public bool IsOverridden(Entity instance, Type type) =>
+        _lib.IsOverridden(instance: instance, type: type);
 
     /// <summary>
     ///     Drop the override of <paramref name="type" /> so the instance inherits from the prefab again,
@@ -116,21 +108,16 @@ public sealed class ScenePrefabLibrary
     /// </summary>
     public bool Revert(Entity instance, SceneNode node, Type type)
     {
-        if (!_lib.Revert(instance, type)) return false;
-        ApplyToNode(instance, node);
+        if (!_lib.Revert(instance: instance, type: type)) return false;
+        ApplyToNode(instance: instance, node: node);
         return true;
     }
 
     // ── Serialization (compact: prefab name + owned overrides only) ──────────────
 
-    public JsonObject SerializeInstance(Entity instance, string prefabName)
-    {
-        return _lib.SerializeInstance(instance, prefabName);
-    }
+    public JsonObject SerializeInstance(Entity instance, string prefabName) =>
+        _lib.SerializeInstance(instance: instance, prefabName: prefabName);
 
     /// <summary>Instantiate a prefab and re-apply the stored overrides (Entity.Null if prefab unknown).</summary>
-    public Entity DeserializeInstance(JsonObject data)
-    {
-        return _lib.DeserializeInstance(data);
-    }
+    public Entity DeserializeInstance(JsonObject data) => _lib.DeserializeInstance(data);
 }

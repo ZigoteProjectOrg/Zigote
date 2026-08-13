@@ -11,13 +11,14 @@ public sealed class SpinnerPage : ComposedWidget
         var theme = ThemeProvider.Of(context);
 
         return new GalleryPage(
-            "Spinner",
+            title: "Spinner",
+            description:
             "For a wait with no total to divide by. The arc grows and shrinks as it turns.",
-            ""
+            iconName: ""
         ) {
             Children = {
                 Demo.Stage(
-                    new Column(
+                    child: new Column(
                         spacing: Spacing.Lg,
                         mainAxisSize: MainAxisSize.Min,
                         crossAxisAlignment: CrossAxisAlignment.Center
@@ -27,12 +28,12 @@ public sealed class SpinnerPage : ComposedWidget
                             Demo.Caption("64 px — the status-page size"),
                         },
                     },
-                    Spacing.Xxl
+                    padding: Spacing.Xxl
                 ),
                 Demo.Titled(
-                    "Sizes",
-                    "It reads the same from a row suffix to a hero.",
-                    Demo.Stage(
+                    title: "Sizes",
+                    description: "It reads the same from a row suffix to a hero.",
+                    child: Demo.Stage(
                         new Row(
                             spacing: Spacing.Xxl,
                             mainAxisSize: MainAxisSize.Min,
@@ -41,33 +42,37 @@ public sealed class SpinnerPage : ComposedWidget
                             Children = {
                                 new AdwSpinner(16f),
                                 new AdwSpinner(24f),
-                                new AdwSpinner(32f),
+                                new AdwSpinner(),
                                 new AdwSpinner(48f),
                             },
                         }
                     )
                 ),
                 Demo.Group(
-                    "In Place",
-                    "Where a spinner actually turns up in an app.",
-                    new AdwActionRow("Checking for updates", "In a row suffix") {
+                    title: "In Place",
+                    description: "Where a spinner actually turns up in an app.",
+                    new AdwActionRow(title: "Checking for updates", subtitle: "In a row suffix") {
                         Suffixes = { new AdwSpinner(16f) },
                     },
-                    new AdwActionRow("Signing in", "Next to a label") {
+                    new AdwActionRow(title: "Signing in", subtitle: "Next to a label") {
                         Suffixes = {
                             new Row(spacing: Spacing.Sm, mainAxisSize: MainAxisSize.Min) {
                                 Children = {
                                     new AdwSpinner(16f),
-                                    new Label("Working…", AdwTypography.Body, theme.TextSecondary),
+                                    new Label(
+                                        text: "Working…",
+                                        style: AdwTypography.Body,
+                                        color: theme.TextSecondary
+                                    ),
                                 },
                             },
                         },
                     }
                 ),
                 Demo.Titled(
-                    "As a Status Page",
-                    "The pattern for a view that has nothing to show yet.",
-                    Demo.Stage(
+                    title: "As a Status Page",
+                    description: "The pattern for a view that has nothing to show yet.",
+                    child: Demo.Stage(
                         new Column(
                             spacing: Spacing.Md,
                             mainAxisSize: MainAxisSize.Min,
@@ -76,14 +81,14 @@ public sealed class SpinnerPage : ComposedWidget
                             Children = {
                                 new AdwSpinner(48f),
                                 new Label(
-                                    "Loading Library",
-                                    AdwTypography.Title3,
-                                    theme.OnBackground
+                                    text: "Loading Library",
+                                    style: AdwTypography.Title3,
+                                    color: theme.OnBackground
                                 ) { Align = TextAlign.Center },
                                 new Label(
-                                    "This takes a moment the first time",
-                                    AdwTypography.Body,
-                                    theme.TextSecondary
+                                    text: "This takes a moment the first time",
+                                    style: AdwTypography.Body,
+                                    color: theme.TextSecondary
                                 ) { Align = TextAlign.Center },
                             },
                         }

@@ -41,8 +41,8 @@ public sealed class AssetRegistry
         // root would strip a unix path's leading '/' (callers like the streaming tests register
         // absolute scratch paths deliberately).
         if (!Path.IsPathRooted(relativePath))
-            relativePath = AssetPath.ToRelative(relativePath, null);
-        if (_pathToId.TryGetValue(relativePath, out var existing)) return existing;
+            relativePath = AssetPath.ToRelative(path: relativePath, contentRoot: null);
+        if (_pathToId.TryGetValue(key: relativePath, value: out var existing)) return existing;
         var id = AssetId.New();
         _idToPath[id] = relativePath;
         _pathToId[relativePath] = id;
@@ -55,7 +55,7 @@ public sealed class AssetRegistry
     /// </summary>
     public string? Resolve(AssetId id)
     {
-        _idToPath.TryGetValue(id, out var path);
+        _idToPath.TryGetValue(key: id, value: out string? path);
         return path;
     }
 
@@ -63,10 +63,8 @@ public sealed class AssetRegistry
     ///     Look up the <see cref="AssetId" /> for a known path, or <see langword="null" /> if
     ///     unregistered.
     /// </summary>
-    public AssetId? Find(string relativePath)
-    {
-        return _pathToId.TryGetValue(relativePath, out var id) ? id : null;
-    }
+    public AssetId? Find(string relativePath) =>
+        _pathToId.TryGetValue(key: relativePath, value: out var id) ? id : null;
 
     /// <summary>
     ///     Update the registry when a file is renamed or moved.
@@ -75,7 +73,7 @@ public sealed class AssetRegistry
     /// </summary>
     public void RenamePath(string oldPath, string newPath)
     {
-        if (!_pathToId.TryGetValue(oldPath, out var id)) return;
+        if (!_pathToId.TryGetValue(key: oldPath, value: out var id)) return;
         _pathToId.Remove(oldPath);
         _pathToId[newPath] = id;
         _idToPath[id] = newPath;
@@ -84,7 +82,7 @@ public sealed class AssetRegistry
     /// <summary>Remove a GUID+path pair (e.g. file was deleted from the project).</summary>
     public void Remove(string relativePath)
     {
-        if (!_pathToId.TryGetValue(relativePath, out var id)) return;
+        if (!_pathToId.TryGetValue(key: relativePath, value: out var id)) return;
         _pathToId.Remove(relativePath);
         _idToPath.Remove(id);
     }
@@ -95,8 +93,14 @@ public sealed class AssetRegistry
     public void Save(string registryPath)
     {
         // { "guid": "relative/path.ext", ... }
-        var dict = _idToPath.ToDictionary(kvp => kvp.Key.ToString(), kvp => kvp.Value);
-        File.WriteAllText(registryPath, JsonSerializer.Serialize(dict, JsonOpts));
+        var dict = _idToPath.ToDictionary(
+            keySelector: kvp => kvp.Key.ToString(),
+            elementSelector: kvp => kvp.Value
+        );
+        File.WriteAllText(
+            path: registryPath,
+            contents: JsonSerializer.Serialize(value: dict, options: JsonOpts)
+        );
     }
 
     /// <summary>
@@ -111,17 +115,19 @@ public sealed class AssetRegistry
         try
         {
             var dict = JsonSerializer.Deserialize<Dictionary<string, string>>(
-                File.ReadAllText(registryPath),
-                JsonOpts
+                json: File.ReadAllText(registryPath),
+                options: JsonOpts
             );
             if (dict is null) return reg;
-            foreach (var (key, path) in dict)
-                if (Guid.TryParse(key, out var g))
+            foreach ((string key, string path) in dict)
+            {
+                if (Guid.TryParse(input: key, result: out var g))
                 {
                     var id = new AssetId(g);
                     reg._idToPath[id] = path;
                     reg._pathToId[path] = id;
                 }
+            }
         }
         catch
         {

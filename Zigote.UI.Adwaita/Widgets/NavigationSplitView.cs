@@ -14,13 +14,6 @@ namespace Zigote.UI.Adwaita;
 /// </summary>
 public sealed class AdwNavigationSplitView : ComposedWidget
 {
-    private Widget? _sidebar;
-    private Widget? _content;
-    private bool _collapsed;
-    private bool _showContent;
-    private float _sidebarWidth = AdwMetrics.SidebarWidth;
-    private float _autoCollapseBelow;
-
     /// <summary>
     ///     The observable form of the collapsed state — including the <see cref="AutoCollapseBelow" />
     ///     breakpoint, which only the layout pass can decide. Hosts that need to follow the fold (a
@@ -29,35 +22,42 @@ public sealed class AdwNavigationSplitView : ComposedWidget
     /// </summary>
     public readonly Signal<bool> IsCollapsed = new(false);
 
+    private float _autoCollapseBelow;
+    private bool _collapsed;
+    private Widget? _content;
+    private bool _showContent;
+    private Widget? _sidebar;
+    private float _sidebarWidth = AdwMetrics.SidebarWidth;
+
     public Widget? Sidebar
     {
         get => _sidebar;
-        set => this.Set(ref _sidebar, value);
+        set => this.Set(field: ref _sidebar, value: value);
     }
 
     public Widget? Content
     {
         get => _content;
-        set => this.Set(ref _content, value);
+        set => this.Set(field: ref _content, value: value);
     }
 
     public float SidebarWidth
     {
         get => _sidebarWidth;
-        set => this.Set(ref _sidebarWidth, value);
+        set => this.Set(field: ref _sidebarWidth, value: value);
     }
 
     public bool Collapsed
     {
         get => _collapsed;
-        set => this.Set(ref _collapsed, value);
+        set => this.Set(field: ref _collapsed, value: value);
     }
 
     /// <summary>Collapsed only: show the content pane instead of the sidebar.</summary>
     public bool ShowContent
     {
         get => _showContent;
-        set => this.Set(ref _showContent, value);
+        set => this.Set(field: ref _showContent, value: value);
     }
 
     /// <summary>
@@ -67,7 +67,7 @@ public sealed class AdwNavigationSplitView : ComposedWidget
     public float AutoCollapseBelow
     {
         get => _autoCollapseBelow;
-        set => this.Set(ref _autoCollapseBelow, value);
+        set => this.Set(field: ref _autoCollapseBelow, value: value);
     }
 
     protected override Widget Build(BuildContext context)
@@ -84,23 +84,27 @@ public sealed class AdwNavigationSplitView : ComposedWidget
 
         return new LayoutBuilder((_, c) =>
             {
-                var collapsed = Collapsed ||
-                                (AutoCollapseBelow > 0f && c.MaxWidth < AutoCollapseBelow);
+                bool collapsed = Collapsed ||
+                                 (AutoCollapseBelow > 0f && c.MaxWidth < AutoCollapseBelow);
                 // Peek, not Value: this runs during Measure, potentially inside a Watch's evaluation,
                 // and reading the signal there would subscribe that Watch to a value it is writing.
                 if (IsCollapsed.Peek() != collapsed) IsCollapsed.Value = collapsed;
 
                 if (collapsed && ShowContent)
+                {
                     return collapsedContent ??= new Container {
                         Background = theme.Window,
                         Child = Content,
                     };
+                }
 
                 if (collapsed)
+                {
                     return collapsedSidebar ??= new Container {
                         Background = p.SidebarBg,
                         Child = Sidebar,
                     };
+                }
 
                 return sideBySide ??= new Row(crossAxisAlignment: CrossAxisAlignment.Stretch) {
                     Children = {

@@ -5,7 +5,8 @@ using Microsoft.CodeAnalysis.Text;
 namespace Zigote.Generators;
 
 /// <summary>
-///     Compile-safe localizations (a <c>gen_l10n</c>-style resource generator). Ingests the project's ARB
+///     Compile-safe localizations (a <c>gen_l10n</c>-style resource generator). Ingests the project's
+///     ARB
 ///     catalog files (<c>AdditionalFiles</c> ending in <c>.arb</c>) and emits one strongly-typed
 ///     resource class: a property per parameterless message and a method per parameterized one, with
 ///     parameter types inferred from the ICU placeholders (<c>plural</c>/<c>number → double</c>,
@@ -26,51 +27,61 @@ namespace Zigote.Generators;
 public sealed class LocalizationsGenerator : IIncrementalGenerator
 {
     private static readonly DiagnosticDescriptor MalformedArb = new(
-        "ZGL001",
-        "Malformed ARB file",
-        "Localization file '{0}' could not be parsed: {1}",
-        "Zigote.Localizations",
-        DiagnosticSeverity.Error,
-        true
+        id: "ZGL001",
+        title: "Malformed ARB file",
+        messageFormat: "Localization file '{0}' could not be parsed: {1}",
+        category: "Zigote.Localizations",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true
     );
 
     private static readonly DiagnosticDescriptor MissingKey = new(
-        "ZGL002",
-        "Missing translation",
-        "Locale '{0}' is missing key '{1}' — the template ({2}) text is used",
-        "Zigote.Localizations",
-        DiagnosticSeverity.Warning,
-        true
+        id: "ZGL002",
+        title: "Missing translation",
+        messageFormat: "Locale '{0}' is missing key '{1}' — the template ({2}) text is used",
+        category: "Zigote.Localizations",
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true
     );
 
     private static readonly DiagnosticDescriptor UnknownPlaceholder = new(
-        "ZGL003",
-        "Unknown placeholder",
+        id: "ZGL003",
+        title: "Unknown placeholder",
+        messageFormat:
         "Locale '{0}', key '{1}' references placeholder '{2}' that the template does not declare — it will render unsubstituted",
-        "Zigote.Localizations",
-        DiagnosticSeverity.Warning,
-        true
+        category: "Zigote.Localizations",
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true
     );
 
     private static readonly DiagnosticDescriptor OrphanKey = new(
-        "ZGL004",
-        "Orphan translation",
+        id: "ZGL004",
+        title: "Orphan translation",
+        messageFormat:
         "Locale '{0}' defines key '{1}' that the template does not — no typed accessor is generated for it",
-        "Zigote.Localizations",
-        DiagnosticSeverity.Warning,
-        true
+        category: "Zigote.Localizations",
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true
     );
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var arbFiles = context.AdditionalTextsProvider
-            .Where(static file => file.Path.EndsWith(".arb", StringComparison.OrdinalIgnoreCase))
+            .Where(static file => file.Path.EndsWith(
+                    value: ".arb",
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                )
+            )
             .Select(static (file, ct) =>
-                (file.Path.Replace('\\', '/'), file.GetText(ct)?.ToString() ?? string.Empty)
+                (file.Path.Replace(oldChar: '\\', newChar: '/'),
+                    file.GetText(ct)?.ToString() ?? string.Empty)
             )
             .Collect();
 
-        context.RegisterSourceOutput(arbFiles, static (spc, files) => Emit(spc, files));
+        context.RegisterSourceOutput(
+            source: arbFiles,
+            action: static (spc, files) => Emit(spc: spc, files: files)
+        );
     }
 
     private static void Emit(SourceProductionContext spc,
@@ -79,19 +90,22 @@ public sealed class LocalizationsGenerator : IIncrementalGenerator
         if (files.Count == 0) return;
 
         var catalogs = new List<ArbCatalog>();
-        foreach (var (path, text) in files.OrderBy(static f => f.Path, StringComparer.Ordinal))
+        foreach ((string path, string text) in files.OrderBy(
+                     keySelector: static f => f.Path,
+                     comparer: StringComparer.Ordinal
+                 ))
         {
             if (string.IsNullOrWhiteSpace(text)) continue;
             try
             {
-                catalogs.Add(ArbCatalog.Parse(path, text));
+                catalogs.Add(ArbCatalog.Parse(path: path, json: text));
             }
             catch (Exception ex)
             {
                 spc.ReportDiagnostic(
                     Diagnostic.Create(
-                        MalformedArb,
-                        Location.None,
+                        descriptor: MalformedArb,
+                        location: Location.None,
                         path,
                         ex.Message
                     )
@@ -102,35 +116,42 @@ public sealed class LocalizationsGenerator : IIncrementalGenerator
         if (catalogs.Count == 0) return;
 
         var template = catalogs.FirstOrDefault(static c => c.Locale == "en") ?? catalogs[0];
-        var className = template.ClassName ?? "AppLocalizations";
-        var ns = template.Namespace ?? "Zigote.Localizations.Generated";
+        string className = template.ClassName ?? "AppLocalizations";
+        string ns = template.Namespace ?? "Zigote.Localizations.Generated";
 
         // Member model from the template: key → (member name, ordered typed args).
         var members = new List<MessageMember>();
         var usedNames = new HashSet<string>(StringComparer.Ordinal);
         foreach (var pair in template.Messages)
         {
-            var member = new MessageMember(pair.Key, MemberName(pair.Key, usedNames));
-            IcuArgs.Scan(pair.Value, member.Args);
+            var member = new MessageMember(
+                key: pair.Key,
+                name: MemberName(key: pair.Key, used: usedNames)
+            );
+            IcuArgs.Scan(template: pair.Value, into: member.Args);
             members.Add(member);
         }
 
         // Validate the other catalogs against the template.
         foreach (var catalog in catalogs)
         {
-            if (ReferenceEquals(catalog, template)) continue;
+            if (ReferenceEquals(objA: catalog, objB: template)) continue;
 
             foreach (var member in members)
+            {
                 if (!catalog.Messages.ContainsKey(member.Key))
+                {
                     spc.ReportDiagnostic(
                         Diagnostic.Create(
-                            MissingKey,
-                            Location.None,
+                            descriptor: MissingKey,
+                            location: Location.None,
                             catalog.Locale,
                             member.Key,
                             template.Locale
                         )
                     );
+                }
+            }
 
             foreach (var pair in catalog.Messages)
             {
@@ -139,8 +160,8 @@ public sealed class LocalizationsGenerator : IIncrementalGenerator
                 {
                     spc.ReportDiagnostic(
                         Diagnostic.Create(
-                            OrphanKey,
-                            Location.None,
+                            descriptor: OrphanKey,
+                            location: Location.None,
                             catalog.Locale,
                             pair.Key
                         )
@@ -149,32 +170,36 @@ public sealed class LocalizationsGenerator : IIncrementalGenerator
                 }
 
                 var localeArgs = new List<IcuArg>();
-                IcuArgs.Scan(pair.Value, localeArgs);
+                IcuArgs.Scan(template: pair.Value, into: localeArgs);
                 foreach (var arg in localeArgs)
+                {
                     if (!member.Args.Exists(a => a.Name == arg.Name))
+                    {
                         spc.ReportDiagnostic(
                             Diagnostic.Create(
-                                UnknownPlaceholder,
-                                Location.None,
+                                descriptor: UnknownPlaceholder,
+                                location: Location.None,
                                 catalog.Locale,
                                 pair.Key,
                                 arg.Name
                             )
                         );
+                    }
+                }
             }
         }
 
         spc.AddSource(
-            $"{className}.g.cs",
-            SourceText.From(
-                GenerateSource(
-                    ns,
-                    className,
-                    template,
-                    catalogs,
-                    members
+            hintName: $"{className}.g.cs",
+            sourceText: SourceText.From(
+                text: GenerateSource(
+                    ns: ns,
+                    className: className,
+                    template: template,
+                    catalogs: catalogs,
+                    members: members
                 ),
-                Encoding.UTF8
+                encoding: Encoding.UTF8
             )
         );
     }
@@ -236,8 +261,11 @@ public sealed class LocalizationsGenerator : IIncrementalGenerator
         );
         sb.Append("        Locale.Parse(\"").Append(template.Locale).AppendLine("\"),");
         foreach (var c in catalogs)
-            if (!ReferenceEquals(c, template))
+        {
+            if (!ReferenceEquals(objA: c, objB: template))
                 sb.Append("        Locale.Parse(\"").Append(c.Locale).AppendLine("\"),");
+        }
+
         sb.AppendLine("    };");
         sb.AppendLine();
         sb.Append(
@@ -272,9 +300,9 @@ public sealed class LocalizationsGenerator : IIncrementalGenerator
         // ── message accessors ──
         foreach (var member in members)
         {
-            var templateText = template.Messages[member.Key];
+            string templateText = template.Messages[member.Key];
             sb.AppendLine("    /// <summary>");
-            sb.Append("    ///     ").AppendLine(XmlEscape(Truncate(templateText, 120)));
+            sb.Append("    ///     ").AppendLine(XmlEscape(Truncate(s: templateText, max: 120)));
             sb.AppendLine("    /// </summary>");
             if (member.Args.Count == 0)
             {
@@ -286,7 +314,7 @@ public sealed class LocalizationsGenerator : IIncrementalGenerator
             else
             {
                 sb.Append("    public string ").Append(member.Name).Append('(');
-                for (var i = 0; i < member.Args.Count; i++)
+                for (int i = 0; i < member.Args.Count; i++)
                 {
                     if (i > 0) sb.Append(", ");
                     sb.Append(member.Args[i].CsType).Append(' ').Append(member.Args[i].ParamName);
@@ -296,8 +324,11 @@ public sealed class LocalizationsGenerator : IIncrementalGenerator
                 sb.AppendLine("    {");
                 sb.Append("        return _catalog.Translate(").Append(Quote(member.Key));
                 foreach (var arg in member.Args)
+                {
                     sb.Append(", (").Append(Quote(arg.Name)).Append(", ").Append(arg.ParamName)
                         .Append(')');
+                }
+
                 sb.Append(") ?? ").Append(Quote(member.Key)).AppendLine(";");
                 sb.AppendLine("    }");
             }
@@ -311,8 +342,11 @@ public sealed class LocalizationsGenerator : IIncrementalGenerator
         sb.AppendLine("        switch (locale.ToBcp47())");
         sb.AppendLine("        {");
         foreach (var c in catalogs)
+        {
             sb.Append("            case \"").Append(c.Locale).Append("\": return Catalog")
                 .Append(LocaleId(c.Locale)).AppendLine("();");
+        }
+
         sb.AppendLine("        }");
         sb.AppendLine();
         sb.AppendLine("        switch (locale.Language)");
@@ -320,7 +354,7 @@ public sealed class LocalizationsGenerator : IIncrementalGenerator
         var seenLanguages = new HashSet<string>(StringComparer.Ordinal);
         foreach (var c in catalogs)
         {
-            var lang = c.Locale.Split('-', '_')[0];
+            string lang = c.Locale.Split('-', '_')[0];
             if (!seenLanguages.Add(lang)) continue;
             sb.Append("            case \"").Append(lang).Append("\": return Catalog")
                 .Append(LocaleId(c.Locale)).AppendLine("();");
@@ -334,7 +368,7 @@ public sealed class LocalizationsGenerator : IIncrementalGenerator
 
         foreach (var c in catalogs)
         {
-            var id = LocaleId(c.Locale);
+            string id = LocaleId(c.Locale);
             sb.Append("    private static LocalizationCatalog? _catalog").Append(id)
                 .AppendLine(";");
             sb.Append("    private static LocalizationCatalog Catalog").Append(id).AppendLine("()");
@@ -345,7 +379,7 @@ public sealed class LocalizationsGenerator : IIncrementalGenerator
             foreach (var member in members)
             {
                 // Fall back to the template text so every accessor is total in every locale.
-                var text = c.Messages.TryGetValue(member.Key, out var localized)
+                string text = c.Messages.TryGetValue(key: member.Key, value: out string? localized)
                     ? localized
                     : template.Messages[member.Key];
                 sb.Append("            { ").Append(Quote(member.Key)).Append(", ")
@@ -367,8 +401,8 @@ public sealed class LocalizationsGenerator : IIncrementalGenerator
     private static string MemberName(string key, HashSet<string> used)
     {
         var sb = new StringBuilder(key.Length);
-        var upper = true;
-        foreach (var ch in key)
+        bool upper = true;
+        foreach (char ch in key)
         {
             if (ch is '.' or '-' or '_' or ' ')
             {
@@ -381,11 +415,11 @@ public sealed class LocalizationsGenerator : IIncrementalGenerator
         }
 
         if (sb.Length == 0) sb.Append("Message");
-        if (char.IsDigit(sb[0])) sb.Insert(0, '_');
+        if (char.IsDigit(sb[0])) sb.Insert(index: 0, value: '_');
 
-        var name = sb.ToString();
-        var candidate = name;
-        var n = 2;
+        string name = sb.ToString();
+        string candidate = name;
+        int n = 2;
         while (!used.Add(candidate)) candidate = name + n++;
         return candidate;
     }
@@ -393,8 +427,8 @@ public sealed class LocalizationsGenerator : IIncrementalGenerator
     private static string LocaleId(string tag)
     {
         var sb = new StringBuilder(tag.Length);
-        var upper = true;
-        foreach (var ch in tag)
+        bool upper = true;
+        foreach (char ch in tag)
         {
             if (ch is '-' or '_')
             {
@@ -413,7 +447,8 @@ public sealed class LocalizationsGenerator : IIncrementalGenerator
     {
         var sb = new StringBuilder(s.Length + 8);
         sb.Append('"');
-        foreach (var ch in s)
+        foreach (char ch in s)
+        {
             switch (ch)
             {
                 case '"': sb.Append("\\\""); break;
@@ -426,20 +461,19 @@ public sealed class LocalizationsGenerator : IIncrementalGenerator
                     else sb.Append(ch);
                     break;
             }
+        }
 
         sb.Append('"');
         return sb.ToString();
     }
 
-    private static string XmlEscape(string s)
-    {
-        return s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
-    }
+    private static string XmlEscape(string s) => s.Replace(oldValue: "&", newValue: "&amp;")
+        .Replace(oldValue: "<", newValue: "&lt;").Replace(oldValue: ">", newValue: "&gt;");
 
     private static string Truncate(string s, int max)
     {
-        s = s.Replace('\n', ' ').Replace('\r', ' ');
-        return s.Length <= max ? s : s.Substring(0, max) + "…";
+        s = s.Replace(oldChar: '\n', newChar: ' ').Replace(oldChar: '\r', newChar: ' ');
+        return s.Length <= max ? s : s.Substring(startIndex: 0, length: max) + "…";
     }
 
     // ── model ─────────────────────────────────────────────────────────────────

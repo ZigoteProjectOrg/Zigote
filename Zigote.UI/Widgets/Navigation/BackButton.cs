@@ -16,8 +16,10 @@ public sealed class BackButton : ComposedWidget
     {
         var nav = Navigator.MaybeOf(context);
         if (nav is null || !nav.CanPop)
-            return new SizedBox(0f, 0f);
+            return new SizedBox(width: 0f, height: 0f);
 
-        return new Button(Label, () => nav.MaybePop()) { Style = ButtonStyle.Flat };
+        return new Button(label: Label, onPressed: () => nav.MaybePop()) {
+            Style = ButtonStyle.Flat,
+        };
     }
 }

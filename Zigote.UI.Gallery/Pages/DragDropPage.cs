@@ -26,8 +26,8 @@ internal sealed class DragDropPage : ComposedWidget
             crossAxisAlignment: CrossAxisAlignment.Stretch,
             children: [
                 Section(
-                    "In-app drag & drop",
-                    new Column(
+                    title: "In-app drag & drop",
+                    child: new Column(
                         crossAxisAlignment: CrossAxisAlignment.Start,
                         children: [
                             new Text("Drag a chip into the drop zone:"),
@@ -35,11 +35,11 @@ internal sealed class DragDropPage : ComposedWidget
                             new Row(
                                 mainAxisSize: MainAxisSize.Min,
                                 children: [
-                                    Chip("Red", Color.Red),
+                                    Chip(label: "Red", color: Color.Red),
                                     new SizedBox(10),
-                                    Chip("Green", Color.Green),
+                                    Chip(label: "Green", color: Color.Green),
                                     new SizedBox(10),
-                                    Chip("Blue", Color.Blue),
+                                    Chip(label: "Blue", color: Color.Blue),
                                 ]
                             ),
                             new SizedBox(height: 14),
@@ -50,8 +50,8 @@ internal sealed class DragDropPage : ComposedWidget
                     )
                 ),
                 Section(
-                    "External file drop (OS → app)",
-                    new AdaptiveBuilder((_, size) => size == WindowSizeClass.Compact
+                    title: "External file drop (OS → app)",
+                    child: new AdaptiveBuilder((_, size) => size == WindowSizeClass.Compact
                         ? DesktopOnly("Desktop only — phones have no OS file drag.")
                         : new Column(
                             crossAxisAlignment: CrossAxisAlignment.Start,
@@ -60,21 +60,21 @@ internal sealed class DragDropPage : ComposedWidget
                     )
                 ),
                 Section(
-                    "Clipboard (two-way)",
-                    new Column(
+                    title: "Clipboard (two-way)",
+                    child: new Column(
                         crossAxisAlignment: CrossAxisAlignment.Start,
                         children: [
                             new Row(
                                 mainAxisSize: MainAxisSize.Min,
                                 children: [
                                     new FilledButton(
-                                        new Text("Copy sample text"),
-                                        () => ZigoteEngine.Instance?.SetClipboard(
+                                        child: new Text("Copy sample text"),
+                                        onPressed: () => ZigoteEngine.Instance?.SetClipboard(
                                             "Hello from Zigote!"
                                         )
                                     ),
                                     new SizedBox(10),
-                                    new OutlinedButton(new Text("Paste"), Paste),
+                                    new OutlinedButton(child: new Text("Paste"), onPressed: Paste),
                                 ]
                             ),
                             new SizedBox(height: 10),
@@ -83,8 +83,8 @@ internal sealed class DragDropPage : ComposedWidget
                     )
                 ),
                 Section(
-                    "Drag OUT to the OS (macOS best-effort)",
-                    new AdaptiveBuilder((_, size) => size == WindowSizeClass.Compact
+                    title: "Drag OUT to the OS (macOS best-effort)",
+                    child: new AdaptiveBuilder((_, size) => size == WindowSizeClass.Compact
                         ? DesktopOnly("Desktop only — no app-to-app drag on a phone.")
                         : new Column(
                             crossAxisAlignment: CrossAxisAlignment.Start,
@@ -92,8 +92,8 @@ internal sealed class DragDropPage : ComposedWidget
                                 new Text("Drag this onto Finder or a text field in another app:"),
                                 new SizedBox(height: 10),
                                 new Draggable<string>(
-                                    "Zigote drag-out",
-                                    Pill("⤴  Drag me out", Color.Purple),
+                                    data: "Zigote drag-out",
+                                    child: Pill(label: "⤴  Drag me out", color: Color.Purple),
                                     dragText: "Dragged out of Zigote"
                                 ) { AllowDragOut = true },
                             ]
@@ -106,21 +106,23 @@ internal sealed class DragDropPage : ComposedWidget
 
     // Both OS integrations above are desktop-only surfaces: there is no OS file drag and no
     // app-to-app drag on a phone, so those sections say so rather than baiting a dead gesture.
-    private static Widget DesktopOnly(string note)
-    {
-        return new Label(note, 13, Colors.Grey[500]);
-    }
+    private static Widget DesktopOnly(string note) => new Label(
+        text: note,
+        fontSize: 13,
+        color: Colors.Grey[500]
+    );
 
     private void Paste()
     {
-        var text = ZigoteEngine.Instance?.GetClipboard() ?? string.Empty;
+        string text = ZigoteEngine.Instance?.GetClipboard() ?? string.Empty;
         _pasted.Text = text.Length > 0 ? text : "(clipboard empty)";
     }
 
-    private Widget Chip(string label, Color color)
-    {
-        return new Draggable<string>(label, Pill(label, color), dragText: label);
-    }
+    private Widget Chip(string label, Color color) => new Draggable<string>(
+        data: label,
+        child: Pill(label: label, color: color),
+        dragText: label
+    );
 
     private static Widget Pill(string label, Color color)
     {
@@ -129,8 +131,8 @@ internal sealed class DragDropPage : ComposedWidget
             Radius = Radii.Capsule,
             BorderWidth = 0f,
             Child = new Padding(
-                EdgeInsets.Symmetric(Spacing.Md, Spacing.Sm),
-                new Label(label, 13, Color.White)
+                padding: EdgeInsets.Symmetric(horizontal: Spacing.Md, vertical: Spacing.Sm),
+                child: new Label(text: label, fontSize: 13, color: Color.White)
             ),
         };
     }
@@ -141,24 +143,24 @@ internal sealed class DragDropPage : ComposedWidget
                 Fill = hover
                     ? Color.Blue.WithAlpha(0.18f)
                     : new Color(
-                        0.5f,
-                        0.5f,
-                        0.5f,
-                        0.10f
+                        r: 0.5f,
+                        g: 0.5f,
+                        b: 0.5f,
+                        a: 0.10f
                     ),
                 BorderColor = hover
                     ? Color.Blue
                     : new Color(
-                        0.5f,
-                        0.5f,
-                        0.5f,
-                        0.45f
+                        r: 0.5f,
+                        g: 0.5f,
+                        b: 0.5f,
+                        a: 0.45f
                     ),
                 BorderWidth = 1.5f,
                 Radius = Radii.Md,
                 Child = new Padding(
-                    EdgeInsets.All(Spacing.Xl),
-                    new Center(new Text(hover ? "Release to drop" : "Drop a chip here"))
+                    padding: EdgeInsets.All(Spacing.Xl),
+                    child: new Center(new Text(hover ? "Release to drop" : "Drop a chip here"))
                 ),
             }
         ) {
@@ -172,24 +174,24 @@ internal sealed class DragDropPage : ComposedWidget
                 Fill = hover
                     ? Color.Green.WithAlpha(0.18f)
                     : new Color(
-                        0.5f,
-                        0.5f,
-                        0.5f,
-                        0.10f
+                        r: 0.5f,
+                        g: 0.5f,
+                        b: 0.5f,
+                        a: 0.10f
                     ),
                 BorderColor = hover
                     ? Color.Green
                     : new Color(
-                        0.5f,
-                        0.5f,
-                        0.5f,
-                        0.45f
+                        r: 0.5f,
+                        g: 0.5f,
+                        b: 0.5f,
+                        a: 0.45f
                     ),
                 BorderWidth = 1.5f,
                 Radius = Radii.Md,
                 Child = new Padding(
-                    EdgeInsets.All(Spacing.Xl),
-                    new Center(
+                    padding: EdgeInsets.All(Spacing.Xl),
+                    child: new Center(
                         new Text(hover ? "Release to drop files" : "Drag files here from the OS")
                     )
                 ),

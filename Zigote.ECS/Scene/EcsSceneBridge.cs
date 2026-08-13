@@ -50,29 +50,26 @@ public sealed class EcsSceneBridge : IDisposable
     // ── Build / lifecycle ────────────────────────────────────────────────────────
 
     /// <summary>Create (or refresh) an entity per node in the subtree, mirroring transforms + hierarchy.</summary>
-    public void BuildFrom(IEcsSceneNode root)
-    {
-        BuildNode(root, Entity.Null);
-    }
+    public void BuildFrom(IEcsSceneNode root) => BuildNode(node: root, parent: Entity.Null);
 
     private void BuildNode(IEcsSceneNode node, Entity parent)
     {
         var e = EnsureEntity(node);
-        if (!parent.IsNull) World.SetParent(e, parent);
-        foreach (var child in node.Children) BuildNode(child, e);
+        if (!parent.IsNull) World.SetParent(child: e, parent: parent);
+        foreach (var child in node.Children) BuildNode(node: child, parent: e);
     }
 
     /// <summary>Entity for a node, creating + seeding its Transform on first sight (idempotent).</summary>
     public Entity EnsureEntity(IEcsSceneNode node)
     {
-        if (_nodeToEntity.TryGetValue(node.Id, out var existing)) return existing;
+        if (_nodeToEntity.TryGetValue(key: node.Id, value: out var existing)) return existing;
 
         // UNNAMED on purpose. The editor allows duplicate node names, but flecs entity names are unique
         // per scope (and treat '.' as a path) — CreateEntity(name) would lookup-or-create, collapsing two
         // same-named nodes onto ONE entity and then making it a child of itself via SetParent → flecs
         // aborts (SIGABRT). The bridge keys on node.Id in its own map and never needs the flecs name.
         var e = World.CreateEntity();
-        World.Set(e, ToTransform(node));
+        World.Set(e: e, c: ToTransform(node));
         _nodeToEntity[node.Id] = e;
         _entityToNode[e.Raw] = node.Id;
         return e;
@@ -82,7 +79,7 @@ public sealed class EcsSceneBridge : IDisposable
     public void RemoveNode(IEcsSceneNode node)
     {
         foreach (var child in node.Children) RemoveNode(child);
-        if (_nodeToEntity.Remove(node.Id, out var e))
+        if (_nodeToEntity.Remove(key: node.Id, value: out var e))
         {
             _entityToNode.Remove(e.Raw);
             _lastPushed.Remove(node.Id);
@@ -92,28 +89,24 @@ public sealed class EcsSceneBridge : IDisposable
 
     // ── Lookups ──────────────────────────────────────────────────────────────────
 
-    public Entity EntityOf(int nodeId)
-    {
-        return _nodeToEntity.GetValueOrDefault(nodeId);
-    }
+    public Entity EntityOf(int nodeId) => _nodeToEntity.GetValueOrDefault(nodeId);
 
-    public bool TryNodeId(Entity e, out int nodeId)
-    {
-        return _entityToNode.TryGetValue(e.Raw, out nodeId);
-    }
+    public bool TryNodeId(Entity e, out int nodeId) =>
+        _entityToNode.TryGetValue(key: e.Raw, value: out nodeId);
 
     // ── Transform hand-off ───────────────────────────────────────────────────────
 
     public bool TryGetTransform(int nodeId, out Transform transform)
     {
-        if (_nodeToEntity.TryGetValue(nodeId, out var e)) return World.TryGet(e, out transform);
+        if (_nodeToEntity.TryGetValue(key: nodeId, value: out var e))
+            return World.TryGet(e: e, value: out transform);
         transform = Transform.Identity;
         return false;
     }
 
     public void SetTransform(int nodeId, in Transform transform)
     {
-        if (_nodeToEntity.TryGetValue(nodeId, out var e)) World.Set(e, transform);
+        if (_nodeToEntity.TryGetValue(key: nodeId, value: out var e)) World.Set(e: e, c: transform);
     }
 
     /// <summary>
@@ -122,27 +115,28 @@ public sealed class EcsSceneBridge : IDisposable
     /// </summary>
     public void PushTransforms(IEcsSceneNode root)
     {
-        if (_nodeToEntity.TryGetValue(root.Id, out var e))
+        if (_nodeToEntity.TryGetValue(key: root.Id, value: out var e))
         {
             var t = ToTransform(root);
-            if (!_lastPushed.TryGetValue(root.Id, out var last)
+            if (!_lastPushed.TryGetValue(key: root.Id, value: out var last)
                 || last.Position != t.Position
                 || last.Rotation != t.Rotation
                 || last.Scale != t.Scale)
             {
-                World.Set(e, t);
+                World.Set(e: e, c: t);
                 _lastPushed[root.Id] = t;
             }
         }
 
         var children = root.Children;
-        for (var i = 0; i < children.Count; i++) PushTransforms(children[i]);
+        for (int i = 0; i < children.Count; i++) PushTransforms(children[i]);
     }
 
     /// <summary>Entities → scene: mirror canonical entity Transforms back onto the nodes for rendering.</summary>
     public void PullTransforms(IEcsSceneNode root)
     {
-        if (_nodeToEntity.TryGetValue(root.Id, out var e) && World.TryGet<Transform>(e, out var t))
+        if (_nodeToEntity.TryGetValue(key: root.Id, value: out var e) &&
+            World.TryGet<Transform>(e: e, value: out var t))
         {
             root.Position = t.Position;
             root.Rotation = t.Rotation;
@@ -151,7 +145,7 @@ public sealed class EcsSceneBridge : IDisposable
         }
 
         var children = root.Children;
-        for (var i = 0; i < children.Count; i++) PullTransforms(children[i]);
+        for (int i = 0; i < children.Count; i++) PullTransforms(children[i]);
     }
 
     private static Transform ToTransform(IEcsSceneNode n)

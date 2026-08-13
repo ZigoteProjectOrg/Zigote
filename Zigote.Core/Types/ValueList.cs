@@ -25,18 +25,13 @@ public ref struct ValueList<T>
     private T[]? _rented;
 
     /// <summary>Pool-backed: rents on first <see cref="Add" />.</summary>
-    public ValueList()
-    {
-    }
+    public ValueList() { }
 
     /// <summary>
     ///     Seeded with a caller-owned buffer (typically <c>stackalloc</c>); spills to the pool on
     ///     overflow.
     /// </summary>
-    public ValueList(Span<T> initialBuffer)
-    {
-        _span = initialBuffer;
-    }
+    public ValueList(Span<T> initialBuffer) => _span = initialBuffer;
 
     public int Count { get; private set; }
 
@@ -54,16 +49,14 @@ public ref struct ValueList<T>
 
     public void Add(T item)
     {
-        var count = Count;
+        int count = Count;
         if ((uint)count < (uint)_span.Length)
         {
             _span[count] = item;
             Count = count + 1;
         }
         else
-        {
             GrowAndAdd(item);
-        }
     }
 
     /// <summary>Resets the count; the buffer (stack or rented) is kept for reuse within the method.</summary>
@@ -80,23 +73,29 @@ public ref struct ValueList<T>
         _rented = null;
         _span = default;
         Count = 0;
-        ArrayPool<T>.Shared.Return(rented, RuntimeHelpers.IsReferenceOrContainsReferences<T>());
+        ArrayPool<T>.Shared.Return(
+            array: rented,
+            clearArray: RuntimeHelpers.IsReferenceOrContainsReferences<T>()
+        );
     }
 
     private void GrowAndAdd(T item)
     {
-        var next = ArrayPool<T>.Shared.Rent(Math.Max(MinimumRent, _span.Length * 2));
+        var next = ArrayPool<T>.Shared.Rent(Math.Max(val1: MinimumRent, val2: _span.Length * 2));
         _span[..Count].CopyTo(next);
         var old = _rented;
         _rented = next;
         _span = next;
         if (old is not null)
-            ArrayPool<T>.Shared.Return(old, RuntimeHelpers.IsReferenceOrContainsReferences<T>());
+        {
+            ArrayPool<T>.Shared.Return(
+                array: old,
+                clearArray: RuntimeHelpers.IsReferenceOrContainsReferences<T>()
+            );
+        }
+
         _span[Count++] = item;
     }
 
-    private static void ThrowIndexOutOfRange()
-    {
-        throw new ArgumentOutOfRangeException("index");
-    }
+    private static void ThrowIndexOutOfRange() => throw new ArgumentOutOfRangeException("index");
 }

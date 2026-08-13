@@ -10,19 +10,19 @@ public class TextDirectionTests
     [InlineData("he", TextDirection.Rtl)]
     [InlineData("fa", TextDirection.Rtl)]
     [InlineData("ur", TextDirection.Rtl)]
-    public void Language_direction(string tag, TextDirection expected)
-    {
-        Assert.Equal(expected, Locale.Parse(tag).TextDirection);
-    }
+    public void Language_direction(string tag, TextDirection expected) => Assert.Equal(
+        expected: expected,
+        actual: Locale.Parse(tag).TextDirection
+    );
 
     [Fact]
     public void Script_overrides_language_direction()
     {
         // Azerbaijani is LTR in Latin but RTL in the Arabic script.
-        Assert.Equal(TextDirection.Rtl, Locale.Parse("az-Arab").TextDirection);
-        Assert.Equal(TextDirection.Ltr, Locale.Parse("az-Latn").TextDirection);
+        Assert.Equal(expected: TextDirection.Rtl, actual: Locale.Parse("az-Arab").TextDirection);
+        Assert.Equal(expected: TextDirection.Ltr, actual: Locale.Parse("az-Latn").TextDirection);
         // Hebrew written in Latin transliteration is LTR.
-        Assert.Equal(TextDirection.Ltr, Locale.Parse("he-Latn").TextDirection);
+        Assert.Equal(expected: TextDirection.Ltr, actual: Locale.Parse("he-Latn").TextDirection);
     }
 }
 
@@ -37,8 +37,12 @@ public class LocaleResolutionTests
     public void Exact_match_wins()
     {
         Assert.Equal(
-            Locale.Parse("es-MX"),
-            LocaleResolution.Resolve(Locale.Parse("es-MX"), Supported, Locale.Parse("en"))
+            expected: Locale.Parse("es-MX"),
+            actual: LocaleResolution.Resolve(
+                preferred: Locale.Parse("es-MX"),
+                supported: Supported,
+                fallback: Locale.Parse("en")
+            )
         );
     }
 
@@ -47,8 +51,12 @@ public class LocaleResolutionTests
     {
         // fr-CA not supported -> the bare fr entry.
         Assert.Equal(
-            Locale.Parse("fr"),
-            LocaleResolution.Resolve(Locale.Parse("fr-CA"), Supported, Locale.Parse("en"))
+            expected: Locale.Parse("fr"),
+            actual: LocaleResolution.Resolve(
+                preferred: Locale.Parse("fr-CA"),
+                supported: Supported,
+                fallback: Locale.Parse("en")
+            )
         );
     }
 
@@ -57,8 +65,12 @@ public class LocaleResolutionTests
     {
         // es-AR not present, but es and es-MX are; language-only es wins over region variant.
         Assert.Equal(
-            Locale.Parse("es"),
-            LocaleResolution.Resolve(Locale.Parse("es-AR"), Supported, Locale.Parse("en"))
+            expected: Locale.Parse("es"),
+            actual: LocaleResolution.Resolve(
+                preferred: Locale.Parse("es-AR"),
+                supported: Supported,
+                fallback: Locale.Parse("en")
+            )
         );
     }
 
@@ -66,8 +78,12 @@ public class LocaleResolutionTests
     public void Matches_script_when_present()
     {
         Assert.Equal(
-            Locale.Parse("zh-Hant"),
-            LocaleResolution.Resolve(Locale.Parse("zh-Hant-HK"), Supported, Locale.Parse("en"))
+            expected: Locale.Parse("zh-Hant"),
+            actual: LocaleResolution.Resolve(
+                preferred: Locale.Parse("zh-Hant-HK"),
+                supported: Supported,
+                fallback: Locale.Parse("en")
+            )
         );
     }
 
@@ -81,8 +97,12 @@ public class LocaleResolutionTests
             Locale.Parse("en"),
         };
         Assert.Equal(
-            Locale.Parse("es-MX"),
-            LocaleResolution.Resolve(preferred, Supported, Locale.Parse("en"))
+            expected: Locale.Parse("es-MX"),
+            actual: LocaleResolution.Resolve(
+                preferred: preferred,
+                supported: Supported,
+                fallback: Locale.Parse("en")
+            )
         );
     }
 
@@ -90,8 +110,12 @@ public class LocaleResolutionTests
     public void No_match_returns_fallback_when_supported()
     {
         Assert.Equal(
-            Locale.Parse("en"),
-            LocaleResolution.Resolve(Locale.Parse("ja"), Supported, Locale.Parse("en"))
+            expected: Locale.Parse("en"),
+            actual: LocaleResolution.Resolve(
+                preferred: Locale.Parse("ja"),
+                supported: Supported,
+                fallback: Locale.Parse("en")
+            )
         );
     }
 
@@ -99,8 +123,12 @@ public class LocaleResolutionTests
     public void No_match_and_fallback_absent_returns_first_supported()
     {
         Assert.Equal(
-            Supported[0],
-            LocaleResolution.Resolve(Locale.Parse("ja"), Supported, Locale.Parse("ko"))
+            expected: Supported[0],
+            actual: LocaleResolution.Resolve(
+                preferred: Locale.Parse("ja"),
+                supported: Supported,
+                fallback: Locale.Parse("ko")
+            )
         );
     }
 
@@ -108,12 +136,20 @@ public class LocaleResolutionTests
     public void Empty_supported_returns_fallback_or_preference()
     {
         Assert.Equal(
-            Locale.Parse("de"),
-            LocaleResolution.Resolve(Locale.Parse("de"), [], Locale.Parse("de"))
+            expected: Locale.Parse("de"),
+            actual: LocaleResolution.Resolve(
+                preferred: Locale.Parse("de"),
+                supported: [],
+                fallback: Locale.Parse("de")
+            )
         );
         Assert.Equal(
-            Locale.Parse("de"),
-            LocaleResolution.Resolve(Locale.Parse("de"), [], default)
+            expected: Locale.Parse("de"),
+            actual: LocaleResolution.Resolve(
+                preferred: Locale.Parse("de"),
+                supported: [],
+                fallback: default
+            )
         );
     }
 }

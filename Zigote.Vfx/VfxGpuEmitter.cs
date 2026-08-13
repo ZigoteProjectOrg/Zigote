@@ -15,14 +15,14 @@ namespace Zigote.Vfx;
 public sealed class VfxGpuEmitter
 {
     private readonly float[] _params = new float[VfxGpuParams.FloatCount];
+    public bool Emitting = true;
+    public Quat Orientation = Quat.Identity;
+    public Vec3 Position;
     private bool[] _burstFired;
     private uint _frame;
     private float _loopTime;
     private float _spawnAccumulator;
     private float _time;
-    public bool Emitting = true;
-    public Quat Orientation = Quat.Identity;
-    public Vec3 Position;
 
     public VfxGpuEmitter(VfxEmitterAsset asset)
     {
@@ -32,7 +32,7 @@ public sealed class VfxGpuEmitter
 
     public VfxEmitterAsset Asset { get; }
 
-    public uint Capacity => (uint)Math.Max(1, Asset.Capacity);
+    public uint Capacity => (uint)Math.Max(val1: 1, val2: Asset.Capacity);
     public uint Blend => Asset.Blend == VfxBlendMode.Additive ? 0u : 1u;
 
     public void Reset()
@@ -55,14 +55,14 @@ public sealed class VfxGpuEmitter
         _frame++;
         if (!Emitting || dt <= 0f) return 0;
 
-        var prev = _loopTime;
-        var next = _loopTime + dt;
+        float prev = _loopTime;
+        float next = _loopTime + dt;
 
         _spawnAccumulator += Asset.SpawnRate * dt;
-        var count = (int)_spawnAccumulator;
+        int count = (int)_spawnAccumulator;
         _spawnAccumulator -= count;
 
-        for (var i = 0; i < Asset.Bursts.Count; i++)
+        for (int i = 0; i < Asset.Bursts.Count; i++)
         {
             if (_burstFired[i]) continue;
             var b = Asset.Bursts[i];
@@ -80,9 +80,7 @@ public sealed class VfxGpuEmitter
                 Array.Clear(_burstFired);
             }
             else
-            {
                 Emitting = false;
-            }
         }
 
         return count;
@@ -94,16 +92,16 @@ public sealed class VfxGpuEmitter
     /// </summary>
     public ReadOnlySpan<float> BuildParams(int spawnCount, float dt)
     {
-        var frameSeed = unchecked(_frame * 2654435761u + Asset.Seed);
+        uint frameSeed = unchecked((_frame * 2654435761u) + Asset.Seed);
         VfxGpuParams.Build(
-            Asset,
-            spawnCount,
-            frameSeed,
-            dt,
-            _time,
-            Position,
-            Orientation,
-            _params
+            asset: Asset,
+            spawnCount: spawnCount,
+            frameSeed: frameSeed,
+            dt: dt,
+            time: _time,
+            position: Position,
+            orientation: Orientation,
+            dst: _params
         );
         return _params;
     }

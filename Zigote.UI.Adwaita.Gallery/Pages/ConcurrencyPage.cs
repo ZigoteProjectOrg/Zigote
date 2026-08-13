@@ -39,49 +39,50 @@ public sealed class ConcurrencyPage : ComposedWidget
     private const int BurstSize = 500;
     private const int SliceUnits = 20_000;
     private const float SamplePeriod = 0.25f;
+    private readonly Signal<string> _burst = new("no burst yet");
 
     /// <summary>One per worker thread, written with no synchronisation beyond the signal's own.</summary>
     private readonly Signal<long>[] _counters =
-        [.. Enumerable.Range(0, MaxWorkers).Select(_ => new Signal<long>(0))];
+        [.. Enumerable.Range(start: 0, count: MaxWorkers).Select(_ => new Signal<long>(0))];
+
+    private readonly Signal<string> _frame = new("—");
+    private readonly Signal<float> _progress = new(0f);
+
+    // Published once per SamplePeriod by the pump — the only signals any widget subscribes to.
+    private readonly Signal<string> _rate = new("stopped");
+    private readonly Signal<bool> _running = new(false);
+    private readonly Signal<string> _slice = new("not started");
+    private readonly Signal<string> _split = new("—");
+
+    private readonly Signal<int> _workers = new(Math.Min(val1: 4, val2: MaxWorkers));
 
     /// <summary>The fan-in. Invalidated by every write from every thread; recomputed once per sample.</summary>
     private readonly Computed<long> _writes;
 
-    private readonly Signal<int> _workers = new(Math.Min(4, MaxWorkers));
-    private readonly Signal<bool> _running = new(false);
-
-    // Published once per SamplePeriod by the pump — the only signals any widget subscribes to.
-    private readonly Signal<string> _rate = new("stopped");
-    private readonly Signal<string> _split = new("—");
-    private readonly Signal<string> _frame = new("—");
-    private readonly Signal<string> _burst = new("no burst yet");
-    private readonly Signal<float> _progress = new(0f);
-    private readonly Signal<string> _slice = new("not started");
-
     private Background? _background;
-    private Ticker? _pump;
-
-    private Thread[]? _threads;
-    private CancellationTokenSource? _stop;
-
-    private long _lastWrites;
-    private float _sampled;
+    private long _burstClock;
 
     private int _burstLeft;
-    private long _burstClock;
-    private float _burstWorstMs;
     private string _burstMode = "";
+    private float _burstWorstMs;
 
-    private int _sliceDone;
+    private long _lastWrites;
+    private Ticker? _pump;
+    private float _sampled;
 
     /// <summary>Kept so the compiler cannot delete the work the slice and the burst exist to do.</summary>
     private long _sink;
+
+    private int _sliceDone;
+    private CancellationTokenSource? _stop;
+
+    private Thread[]? _threads;
 
     public ConcurrencyPage()
     {
         _writes = Computed.From(() =>
             {
-                var total = 0L;
+                long total = 0L;
                 foreach (var counter in _counters) total += counter.Value;
                 return total;
             }
@@ -89,14 +90,18 @@ public sealed class ConcurrencyPage : ComposedWidget
     }
 
     /// <summary>Threads to offer: more than there are cores measures the scheduler, not the graph.</summary>
-    private static int WorkerLimit => Math.Clamp(Environment.ProcessorCount, 1, MaxWorkers);
+    private static int WorkerLimit => Math.Clamp(
+        value: Environment.ProcessorCount,
+        min: 1,
+        max: MaxWorkers
+    );
 
     protected override void OnMount()
     {
         base.OnMount();
         _background = new Background(
-            action => App.Active?.Post(action),
-            () => App.Active?.RequestLayout()
+            toUi: action => App.Active?.Post(action),
+            requestFrame: () => App.Active?.RequestLayout()
         );
         // Owned: disposed with the mount period, which stops the pump when the page is navigated away.
         _pump = CreateTicker(Pump);
@@ -124,13 +129,13 @@ public sealed class ConcurrencyPage : ComposedWidget
 
         // The number the two delivery modes differ in. Sampled here rather than in OnResult, because
         // the frame a Next burst ruins is the frame no result is being delivered on.
-        if (_burstLeft > 0) _burstWorstMs = MathF.Max(_burstWorstMs, dt * 1000f);
+        if (_burstLeft > 0) _burstWorstMs = MathF.Max(x: _burstWorstMs, y: dt * 1000f);
 
         _sampled += dt;
         if (_sampled < SamplePeriod) return;
 
-        var total = _writes.Value;
-        var delta = total - _lastWrites;
+        long total = _writes.Value;
+        long delta = total - _lastWrites;
         _lastWrites = total;
 
         _rate.Value = _running.Value
@@ -149,13 +154,13 @@ public sealed class ConcurrencyPage : ComposedWidget
     private string Split()
     {
         var parts = new List<string>();
-        for (var i = 0; i < _counters.Length; i++)
+        for (int i = 0; i < _counters.Length; i++)
         {
-            var value = _counters[i].Peek();
+            long value = _counters[i].Peek();
             if (value > 0) parts.Add($"{value / 1e6:0.0}M");
         }
 
-        return parts.Count == 0 ? "—" : string.Join("  ", parts);
+        return parts.Count == 0 ? "—" : string.Join(separator: "  ", values: parts);
     }
 
     private void Wake()
@@ -178,11 +183,11 @@ public sealed class ConcurrencyPage : ComposedWidget
         foreach (var counter in _counters) counter.Value = 0;
         _lastWrites = 0;
 
-        var count = Math.Min(_workers.Value, WorkerLimit);
+        int count = Math.Min(val1: _workers.Value, val2: WorkerLimit);
         _stop = new CancellationTokenSource();
         var token = _stop.Token;
         _threads = new Thread[count];
-        for (var i = 0; i < count; i++)
+        for (int i = 0; i < count; i++)
         {
             var slot = _counters[i];
             _threads[i] = new Thread(() =>
@@ -196,7 +201,10 @@ public sealed class ConcurrencyPage : ComposedWidget
                         if ((written & 0xFF) == 0) Thread.Sleep(0);
                     }
                 }
-            ) { IsBackground = true, Name = $"zigote-signal-spin-{i}" };
+            ) {
+                IsBackground = true,
+                Name = $"zigote-signal-spin-{i}",
+            };
             _threads[i].Start();
         }
 
@@ -209,8 +217,10 @@ public sealed class ConcurrencyPage : ComposedWidget
         _stop?.Cancel();
         // Bounded: the loop checks the token every write, so this is microseconds, not a hang.
         if (_threads is { } threads)
+        {
             foreach (var thread in threads)
                 thread.Join();
+        }
 
         _stop?.Dispose();
         _stop = null;
@@ -233,10 +243,10 @@ public sealed class ConcurrencyPage : ComposedWidget
         _burstClock = Stopwatch.GetTimestamp();
         _burst.Value = $"{_burstMode}: 0/{BurstSize}";
 
-        for (var i = 0; i < BurstSize; i++)
+        for (int i = 0; i < BurstSize; i++)
         {
-            var seed = i;
-            _background!.Run(() => Mix(seed), OnResult, deliver);
+            int seed = i;
+            _background!.Run(work: () => Mix(seed), onUi: OnResult, deliver: deliver);
         }
 
         Wake();
@@ -248,7 +258,7 @@ public sealed class ConcurrencyPage : ComposedWidget
         _sink += value;
         if (--_burstLeft > 0) return;
 
-        var ms = (Stopwatch.GetTimestamp() - _burstClock) * 1000.0 / Stopwatch.Frequency;
+        double ms = (Stopwatch.GetTimestamp() - _burstClock) * 1000.0 / Stopwatch.Frequency;
         _burst.Value =
             $"{_burstMode}: {BurstSize} results in {ms:0} ms · worst frame {_burstWorstMs:0.0} ms";
     }
@@ -260,20 +270,20 @@ public sealed class ConcurrencyPage : ComposedWidget
         _sliceDone = 0;
         _progress.Value = 0f;
         _slice.Value = "building…";
-        var clock = Stopwatch.GetTimestamp();
+        long clock = Stopwatch.GetTimestamp();
 
         _background!.Slice(
-            "rows",
-            SliceUnits,
-            i =>
+            key: "rows",
+            count: SliceUnits,
+            step: i =>
             {
                 _sink += Mix(i);
                 _sliceDone = i + 1;
             },
-            () =>
+            onDone: () =>
             {
                 _progress.Value = 1f;
-                var ms = (Stopwatch.GetTimestamp() - clock) * 1000.0 / Stopwatch.Frequency;
+                double ms = (Stopwatch.GetTimestamp() - clock) * 1000.0 / Stopwatch.Frequency;
                 _slice.Value = $"{SliceUnits:N0} units in {ms:0} ms of wall clock, 4 ms a frame";
             }
         );
@@ -284,8 +294,8 @@ public sealed class ConcurrencyPage : ComposedWidget
     /// <summary>A few microseconds of arithmetic — a stand-in for a parse, a decode, a row build.</summary>
     private static long Mix(int seed)
     {
-        var h = (ulong)seed * 0x9E3779B97F4A7C15UL;
-        for (var i = 0; i < 2000; i++)
+        ulong h = (ulong)seed * 0x9E3779B97F4A7C15UL;
+        for (int i = 0; i < 2000; i++)
         {
             h ^= h >> 33;
             h *= 0xFF51AFD7ED558CCDUL;
@@ -299,23 +309,25 @@ public sealed class ConcurrencyPage : ComposedWidget
     protected override Widget Build(BuildContext context)
     {
         return new GalleryPage(
-            "Concurrency",
+            title: "Concurrency",
+            description:
             "Threads writing signals, results landing under a frame budget, and work sliced across frames.",
-            MaterialIcons.Speed
+            iconName: MaterialIcons.Speed
         ) {
             ClampWidth = 680f,
             Children = {
                 Demo.Group(
-                    "Workers",
+                    title: "Workers",
+                    description:
                     $"Dedicated threads, each writing its own signal in a tight loop. This machine has {Environment.ProcessorCount} cores.",
-                    new AdwActionRow("Threads", $"1 to {WorkerLimit}") {
+                    new AdwActionRow(title: "Threads", subtitle: $"1 to {WorkerLimit}") {
                         Suffixes = {
                             new AdwSpinButton(
-                                _workers.Peek(),
-                                1,
-                                WorkerLimit,
-                                1,
-                                v =>
+                                value: _workers.Peek(),
+                                min: 1,
+                                max: WorkerLimit,
+                                step: 1,
+                                onChanged: v =>
                                 {
                                     _workers.Value = (int)v;
                                     if (_running.Peek()) StartWorkers(); // restart at the new width
@@ -324,10 +336,10 @@ public sealed class ConcurrencyPage : ComposedWidget
                         },
                     },
                     new Watch(() => new AdwSwitchRow(
-                            "Running",
-                            "Off cancels every thread and joins them",
-                            _running.Value,
-                            on =>
+                            title: "Running",
+                            subtitle: "Off cancels every thread and joins them",
+                            value: _running.Value,
+                            onChanged: on =>
                             {
                                 if (on) StartWorkers();
                                 else
@@ -340,21 +352,29 @@ public sealed class ConcurrencyPage : ComposedWidget
                     )
                 ),
                 Demo.Titled(
-                    "Concurrent Signals",
+                    title: "Concurrent Signals",
+                    description:
                     "No lock in the worker. The sum is a Computed over every counter, read once a frame.",
-                    Demo.Specimen(
+                    child: Demo.Specimen(
                         new Watch(() => Demo.Value(_rate.Value)),
                         new Watch(() => Demo.Caption(_split.Value)),
                         new Watch(() => Demo.Caption($"frame  {_frame.Value}"))
                     )
                 ),
                 Demo.Titled(
-                    "Delivery",
+                    title: "Delivery",
+                    description:
                     $"{BurstSize} background results finishing at once. Next takes the frame it lands on; WhenIdle takes what is left of several.",
-                    Demo.Specimen(
+                    child: Demo.Specimen(
                         Demo.Bar(
-                            new AdwButton("Burst · Next", () => Burst(Deliver.Next)),
-                            new AdwButton("Burst · WhenIdle", () => Burst(Deliver.WhenIdle)) {
+                            new AdwButton(
+                                label: "Burst · Next",
+                                onPressed: () => Burst(Deliver.Next)
+                            ),
+                            new AdwButton(
+                                label: "Burst · WhenIdle",
+                                onPressed: () => Burst(Deliver.WhenIdle)
+                            ) {
                                 Style = AdwButtonStyle.Suggested,
                             }
                         ),
@@ -362,22 +382,38 @@ public sealed class ConcurrencyPage : ComposedWidget
                     )
                 ),
                 Demo.Titled(
-                    "Slicing",
+                    title: "Slicing",
+                    description:
                     $"{SliceUnits:N0} units of UI-thread work, 4 ms of each frame. The window keeps drawing while it runs.",
-                    Demo.Specimen(
-                        new AdwButton("Build rows", BuildRows),
+                    child: Demo.Specimen(
+                        new AdwButton(label: "Build rows", onPressed: BuildRows),
                         new Watch(() => new AdwProgressBar(_progress.Value)),
                         new Watch(() => Demo.Caption(_slice.Value))
                     )
                 ),
                 Demo.Group(
-                    "The Pieces",
-                    null,
-                    new AdwActionRow("Signal<T>", "Written from any thread; readers take a coherent snapshot"),
-                    new AdwActionRow("Computed<T>", "Fan-in over every worker's counter, recomputed on demand"),
-                    new AdwActionRow("Background", "Scoped workers whose failures are reported, not swallowed"),
-                    new AdwActionRow("Deliver.WhenIdle", "Results land only while the frame still has room"),
-                    new AdwActionRow("Slice", "One long job spread over frames, keyed so it can be replaced")
+                    title: "The Pieces",
+                    description: null,
+                    new AdwActionRow(
+                        title: "Signal<T>",
+                        subtitle: "Written from any thread; readers take a coherent snapshot"
+                    ),
+                    new AdwActionRow(
+                        title: "Computed<T>",
+                        subtitle: "Fan-in over every worker's counter, recomputed on demand"
+                    ),
+                    new AdwActionRow(
+                        title: "Background",
+                        subtitle: "Scoped workers whose failures are reported, not swallowed"
+                    ),
+                    new AdwActionRow(
+                        title: "Deliver.WhenIdle",
+                        subtitle: "Results land only while the frame still has room"
+                    ),
+                    new AdwActionRow(
+                        title: "Slice",
+                        subtitle: "One long job spread over frames, keyed so it can be replaced"
+                    )
                 ),
             },
         };
@@ -394,17 +430,17 @@ public sealed class ConcurrencyPage : ComposedWidget
         const int writes = 20_000;
 
         var counters = new Signal<long>[threads];
-        for (var i = 0; i < threads; i++) counters[i] = new Signal<long>(0);
+        for (int i = 0; i < threads; i++) counters[i] = new Signal<long>(0);
         var total = Computed.From(() =>
             {
-                var sum = 0L;
+                long sum = 0L;
                 foreach (var counter in counters) sum += counter.Value;
                 return sum;
             }
         );
 
         var workers = new Thread[threads];
-        for (var i = 0; i < threads; i++)
+        for (int i = 0; i < threads; i++)
         {
             var slot = counters[i];
             workers[i] = new Thread(() =>
@@ -417,12 +453,14 @@ public sealed class ConcurrencyPage : ComposedWidget
         foreach (var worker in workers) worker.Start();
         foreach (var worker in workers) worker.Join();
 
-        var expected = (long)threads * writes;
+        long expected = (long)threads * writes;
         if (total.Value != expected)
             return $"fan-in read {total.Value}, expected {expected}";
         foreach (var counter in counters)
+        {
             if (counter.Peek() != writes)
                 return $"a counter read {counter.Peek()}, expected {writes}";
+        }
 
         total.Dispose();
         return null;

@@ -24,11 +24,13 @@ type AppConfig =
 module AppConfig =
     /// Defaults: 960×640, no host hook. Override fields with `{ AppConfig.create t th with OnReady = … }`.
     let create (title: string) (theme: ThemeData) : AppConfig =
-        { Title = title
-          Theme = theme
-          Width = 960
-          Height = 640
-          OnReady = ignore }
+        {
+            Title = title
+            Theme = theme
+            Width = 960
+            Height = 640
+            OnReady = ignore
+        }
 
 /// A <see cref="ZigoteApp" /> subclass that surfaces the live <c>App</c> at init so an F# runner can
 /// invoke <see cref="AppConfig.OnReady" /> with the same timing a C# host gets in its own

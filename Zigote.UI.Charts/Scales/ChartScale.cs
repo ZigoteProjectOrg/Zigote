@@ -41,18 +41,13 @@ public abstract class ChartScale
     ///     Restrict the [0,1] range to the given sub-window of the finalized domain. Values outside
     ///     normalize past [0,1] and clip at the plot edge. No-op on scales without windowing.
     /// </summary>
-    public virtual void SetVisibleWindow(double min, double max)
-    {
-    }
+    public virtual void SetVisibleWindow(double min, double max) { }
 
     /// <summary>
     ///     Clear accumulated domain state (keeping user configuration) so the scale can be rebuilt.
     ///     The chart resets its scales every layout, so a user-supplied scale instance stays reusable.
     /// </summary>
-    public virtual void Reset()
-    {
-        Finalized = false;
-    }
+    public virtual void Reset() => Finalized = false;
 
     public abstract void Include(ChartValue value);
 
@@ -60,9 +55,7 @@ public abstract class ChartScale
     ///     Expand the domain so it also covers <paramref name="value" /> (stack tops, rule
     ///     positions).
     /// </summary>
-    public virtual void IncludeNumeric(double value)
-    {
-    }
+    public virtual void IncludeNumeric(double value) { }
 
     public abstract void FinalizeDomain();
 
@@ -73,26 +66,20 @@ public abstract class ChartScale
     public abstract float Normalize(ChartValue value);
 
     /// <summary>Normalized position for a raw numeric magnitude (stacked totals share the value axis).</summary>
-    public virtual float NormalizeNumeric(double value)
-    {
-        return 0f;
-    }
+    public virtual float NormalizeNumeric(double value) => 0f;
 
     /// <summary>
     ///     Domain magnitude at a normalized [0,1] position — the inverse of
     ///     <see cref="NormalizeNumeric" />, honouring the visible window. Units match
     ///     <see cref="FullExtent" /> (numeric value, seconds for time, band index for categories).
     /// </summary>
-    public virtual double NumericAt(float normalized)
-    {
-        return 0;
-    }
+    public virtual double NumericAt(float normalized) => 0;
 
     public IReadOnlyList<ChartTick> BuildTicks(int targetCount,
         Func<ChartValue, string>? formatter)
     {
         var ticks = new List<ChartTick>();
-        BuildTicksInto(targetCount, formatter, ticks);
+        BuildTicksInto(targetCount: targetCount, formatter: formatter, into: ticks);
         return ticks;
     }
 
@@ -111,18 +98,21 @@ public abstract class ChartScale
         Func<ChartValue, string>? formatter, List<ChartTick> into)
     {
         into.Clear();
-        for (var i = 0; i < values.Count; i++)
+        for (int i = 0; i < values.Count; i++)
         {
             var v = values[i];
-            var pos = Normalize(v);
+            float pos = Normalize(v);
             if (pos is < -0.02f or > 1.02f) continue;
-            into.Add(new ChartTick(pos, formatter?.Invoke(v) ?? DefaultTickLabel(v), v));
+            into.Add(
+                new ChartTick(
+                    position: pos,
+                    label: formatter?.Invoke(v) ?? DefaultTickLabel(v),
+                    value: v
+                )
+            );
         }
     }
 
     /// <summary>Label for a pinned tick value when the axis has no formatter.</summary>
-    protected virtual string DefaultTickLabel(ChartValue value)
-    {
-        return value.ToString();
-    }
+    protected virtual string DefaultTickLabel(ChartValue value) => value.ToString();
 }

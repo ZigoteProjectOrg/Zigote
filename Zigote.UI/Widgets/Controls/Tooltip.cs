@@ -17,10 +17,7 @@ public sealed class Tooltip(string message, Widget? child = null) : ComposedWidg
 
     public override string? TooltipText => Message;
 
-    protected override Widget Build(BuildContext context)
-    {
-        return Child ?? new SizedBox();
-    }
+    protected override Widget Build(BuildContext context) => Child ?? new SizedBox();
 }
 
 /// <summary>
@@ -47,8 +44,8 @@ public sealed class TooltipBubble : Widget
             Fill = theme.Surface,
             Radius = Radii.Sm,
             Child = new Padding(
-                EdgeInsets.All(Spacing.Sm),
-                new Label(text) {
+                padding: EdgeInsets.All(Spacing.Sm),
+                child: new Label(text) {
                     FontSize = theme.FontSizeCaption,
                     Color = theme.OnSurface,
                 }
@@ -60,16 +57,16 @@ public sealed class TooltipBubble : Widget
 
     public override Size Measure(Constraints c)
     {
-        _screen = new Size(c.MaxWidth, c.MaxHeight);
+        _screen = new Size(width: c.MaxWidth, height: c.MaxHeight);
         _safe = MediaQuery.Of(BuildContext.Current).Padding;
         // Cap the bubble at the usable width so a long message wraps instead of measuring wider
         // than the screen (which drove the placement below to a negative x).
         _bubbleSize = _bubble.Measure(
             new Constraints(
-                0f,
-                MathF.Max(0f, c.MaxWidth - _safe.Horizontal - Spacing.Md * 2f),
-                0f,
-                c.MaxHeight
+                minWidth: 0f,
+                maxWidth: MathF.Max(x: 0f, y: c.MaxWidth - _safe.Horizontal - (Spacing.Md * 2f)),
+                minHeight: 0f,
+                maxHeight: c.MaxHeight
             )
         );
         return _screen;
@@ -78,44 +75,35 @@ public sealed class TooltipBubble : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _screen.Width,
-            _screen.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _screen.Width,
+            height: _screen.Height
         );
 
         // Position above and to the right of the cursor.
-        var bx = Position.X + Spacing.Md;
-        var by = Position.Y - _bubbleSize.Height - Spacing.Sm;
+        float bx = Position.X + Spacing.Md;
+        float by = Position.Y - _bubbleSize.Height - Spacing.Sm;
         if (by < Spacing.Xs) by = Position.Y + Spacing.Xl;
 
         var placed = OverlayPositioning.Clamp(
-            new Rect(
-                bx,
-                by,
-                _bubbleSize.Width,
-                _bubbleSize.Height
+            rect: new Rect(
+                x: bx,
+                y: by,
+                width: _bubbleSize.Width,
+                height: _bubbleSize.Height
             ),
-            _screen,
-            Spacing.Xs,
-            _safe
+            screen: _screen,
+            margin: Spacing.Xs,
+            safe: _safe
         );
-        _bubble.Layout(new Offset(placed.X, placed.Y));
+        _bubble.Layout(new Offset(x: placed.X, y: placed.Y));
     }
 
-    public override void Paint(PaintList paint)
-    {
-        _bubble.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => _bubble.Paint(paint);
 
     // Transparent to hit-testing — let events through to widgets beneath
-    public override Widget? HitTest(Offset point)
-    {
-        return null;
-    }
+    public override Widget? HitTest(Offset point) => null;
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(_bubble);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(_bubble);
 }

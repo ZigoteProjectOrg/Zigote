@@ -34,22 +34,22 @@ internal sealed class HomePage : ComposedWidget
         var l = GalleryL10n.Of(context);
 
         var cards = new List<Widget>();
-        foreach (var demo in DemoRegistry.All) cards.Add(DemoCard(l, demo));
+        foreach (var demo in DemoRegistry.All) cards.Add(DemoCard(l: l, demo: demo));
 
         return new Scaffold(
-            new AppBar(
-                new Text(l.AppTitle),
+            appBar: new AppBar(
+                title: new Text(l.AppTitle),
                 centerTitle: true,
                 actions: [
                     new IconButton(
-                        new Icon(MaterialIcons.Info),
-                        AboutAction(l)
+                        icon: new Icon(MaterialIcons.Info),
+                        onPressed: AboutAction(l)
                     ),
                 ]
             ),
             floatingActionButton: new FloatingActionButton(
-                FabAction(l),
-                new Icon(MaterialIcons.Add)
+                onPressed: FabAction(l),
+                child: new Icon(MaterialIcons.Add)
             ),
             // One page, three form factors: the size class (from the width the body actually
             // gets — reacts to live resizes and rotation) picks the header arrangement and the
@@ -57,22 +57,22 @@ internal sealed class HomePage : ComposedWidget
             // desktop composition.
             body: new AdaptiveBuilder((ctx, size) => new SingleChildScrollView {
                     Child = new Padding(
-                        EdgeInsets.All(size == WindowSizeClass.Compact ? 16 : 24),
-                        new Column(
+                        padding: EdgeInsets.All(size == WindowSizeClass.Compact ? 16 : 24),
+                        child: new Column(
                             crossAxisAlignment: CrossAxisAlignment.Stretch,
                             children: [
-                                Header(ctx, l, size),
+                                Header(context: ctx, l: l, size: size),
                                 new SizedBox(height: 20),
                                 GridView.Count(
-                                    size switch {
+                                    crossAxisCount: size switch {
                                         WindowSizeClass.Compact => 1,
                                         WindowSizeClass.Medium => 2,
                                         _ => 3,
                                     },
-                                    cards,
-                                    16,
-                                    16,
-                                    size == WindowSizeClass.Compact ? 2.6 : 2.1
+                                    children: cards,
+                                    mainAxisSpacing: 16,
+                                    crossAxisSpacing: 16,
+                                    childAspectRatio: size == WindowSizeClass.Compact ? 2.6 : 2.1
                                 ),
                             ]
                         )
@@ -86,14 +86,14 @@ internal sealed class HomePage : ComposedWidget
     // the strings in the action.
     private static Action AboutAction(GalleryL10n l)
     {
-        var title = l.HomeAboutTitle;
-        var body = l.HomeAboutBody;
-        return () => Dialog.Alert(title, body).Show();
+        string title = l.HomeAboutTitle;
+        string body = l.HomeAboutBody;
+        return () => Dialog.Alert(title: title, message: body).Show();
     }
 
     private static Action FabAction(GalleryL10n l)
     {
-        var message = l.HomeFab;
+        string message = l.HomeFab;
         return () => GalleryUi.Toast(message);
     }
 
@@ -103,13 +103,13 @@ internal sealed class HomePage : ComposedWidget
             crossAxisAlignment: CrossAxisAlignment.Start,
             children: [
                 new Text(
-                    l.HomeHeadline,
-                    new TextStyle(24, fontWeight: FontWeight.Bold)
+                    data: l.HomeHeadline,
+                    style: new TextStyle(fontSize: 24, fontWeight: FontWeight.Bold)
                 ),
                 new SizedBox(height: 4),
                 new Text(
-                    l.HomeTagline,
-                    new TextStyle(13, color: Colors.Grey[500])
+                    data: l.HomeTagline,
+                    style: new TextStyle(fontSize: 13, color: Colors.Grey[500])
                 ),
             ]
         );
@@ -117,15 +117,16 @@ internal sealed class HomePage : ComposedWidget
         // Watch rebuilds just this control when the theme signal changes. Labels are captured
         // from the locale-resolved `l` (this whole page rebuilds on a locale switch anyway).
         var appearance = new Watch(() => new SegmentedControl(
-                [l.HomeThemeLight, l.HomeThemeDark],
-                _theme.Mode.Value == ThemeMode.Dark ? 1 : 0,
-                i => _theme.Set(i == 1 ? ThemeMode.Dark : ThemeMode.Light)
+                segments: [l.HomeThemeLight, l.HomeThemeDark],
+                selected: _theme.Mode.Value == ThemeMode.Dark ? 1 : 0,
+                onChanged: i => _theme.Set(i == 1 ? ThemeMode.Dark : ThemeMode.Light)
             )
         );
 
         // Phone widths can't fit headline + both controls on one line — stack them, with each
         // control on its own labelled row. Wider classes keep the single-row composition.
         if (size == WindowSizeClass.Compact)
+        {
             return new Column(
                 crossAxisAlignment: CrossAxisAlignment.Start,
                 children: [
@@ -134,33 +135,40 @@ internal sealed class HomePage : ComposedWidget
                     new Row(
                         crossAxisAlignment: CrossAxisAlignment.Center,
                         children: [
-                            new Text(l.HomeLanguage, new TextStyle(color: Colors.Grey[500])),
+                            new Text(
+                                data: l.HomeLanguage,
+                                style: new TextStyle(color: Colors.Grey[500])
+                            ),
                             new SizedBox(12),
-                            LanguageSwitcher(context, l),
+                            LanguageSwitcher(context: context, l: l),
                         ]
                     ),
                     new SizedBox(height: 12),
                     new Row(
                         crossAxisAlignment: CrossAxisAlignment.Center,
                         children: [
-                            new Text(l.HomeAppearance, new TextStyle(color: Colors.Grey[500])),
+                            new Text(
+                                data: l.HomeAppearance,
+                                style: new TextStyle(color: Colors.Grey[500])
+                            ),
                             new SizedBox(12),
                             appearance,
                         ]
                     ),
                 ]
             );
+        }
 
         return new Row(
             crossAxisAlignment: CrossAxisAlignment.Center,
             children: [
                 new Expanded(headline),
                 new SizedBox(24),
-                new Text(l.HomeLanguage, new TextStyle(color: Colors.Grey[500])),
+                new Text(data: l.HomeLanguage, style: new TextStyle(color: Colors.Grey[500])),
                 new SizedBox(12),
-                LanguageSwitcher(context, l),
+                LanguageSwitcher(context: context, l: l),
                 new SizedBox(24),
-                new Text(l.HomeAppearance, new TextStyle(color: Colors.Grey[500])),
+                new Text(data: l.HomeAppearance, style: new TextStyle(color: Colors.Grey[500])),
                 new SizedBox(12),
                 appearance,
             ]
@@ -175,21 +183,23 @@ internal sealed class HomePage : ComposedWidget
         // Each option shows its own native name (the localeName message of that locale's catalog).
         var items = new List<DropdownMenuItem<string>>();
         foreach (var locale in GalleryL10n.SupportedLocales)
+        {
             items.Add(
                 new DropdownMenuItem<string>(
-                    locale.ToBcp47(),
-                    GalleryL10n.Load(locale).LocaleName
+                    value: locale.ToBcp47(),
+                    child: GalleryL10n.Load(locale).LocaleName
                 )
             );
+        }
 
         // The dropdown fills whatever width it is given — box it to a control-sized slot. The
         // pan-Unicode family renders every native name even while the UI face is Latin-only Inter.
         return new SizedBox(
-            150,
+            width: 150,
             child: new DropdownButton<string>(
-                items,
-                l.Locale.ToBcp47(),
-                tag =>
+                items: items,
+                value: l.Locale.ToBcp47(),
+                onChanged: tag =>
                 {
                     if (tag is not null) controller?.SetLocale(Locale.Parse(tag));
                 }
@@ -203,23 +213,23 @@ internal sealed class HomePage : ComposedWidget
             new InkWell(
                 onTap: () => _navigation.OpenDemo(demo.Id),
                 child: new Padding(
-                    EdgeInsets.All(16),
-                    new Column(
+                    padding: EdgeInsets.All(16),
+                    child: new Column(
                         crossAxisAlignment: CrossAxisAlignment.Start,
                         children: [
                             new CircleAvatar(
-                                new Icon(demo.Icon) { Color = Colors.White },
-                                demo.Accent
+                                child: new Icon(demo.Icon) { Color = Colors.White },
+                                backgroundColor: demo.Accent
                             ),
                             new SizedBox(height: 12),
                             new Text(
-                                demo.Title(l),
-                                new TextStyle(15, fontWeight: FontWeight.SemiBold)
+                                data: demo.Title(l),
+                                style: new TextStyle(fontSize: 15, fontWeight: FontWeight.SemiBold)
                             ),
                             new SizedBox(height: 4),
                             new Text(
-                                demo.Description(l),
-                                new TextStyle(12, color: Colors.Grey[500])
+                                data: demo.Description(l),
+                                style: new TextStyle(fontSize: 12, color: Colors.Grey[500])
                             ),
                         ]
                     )

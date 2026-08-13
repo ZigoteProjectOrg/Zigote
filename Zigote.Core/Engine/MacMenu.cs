@@ -29,28 +29,17 @@ public static unsafe class MacMenu
     }
 
     [UnmanagedCallersOnly]
-    private static void Trampoline(int tag)
-    {
-        _onSelect?.Invoke(tag);
-    }
+    private static void Trampoline(int tag) => _onSelect?.Invoke(tag);
 
     /// <summary>Start a new menu bar with the standard application menu (About/Hide/Quit).</summary>
-    public static void Reset(string appName)
-    {
-        NativeEngine.MacMenuReset(appName);
-    }
+    public static void Reset(string appName) => NativeEngine.MacMenuReset(appName);
 
     /// <summary>Append a top-level menu; returns an opaque handle for adding items.</summary>
-    public static nint AddMenu(string title)
-    {
-        return NativeEngine.MacMenuAddMenu(title);
-    }
+    public static nint AddMenu(string title) => NativeEngine.MacMenuAddMenu(title);
 
     /// <summary>Append a submenu under <paramref name="parent" />; returns the child handle.</summary>
-    public static nint AddSubmenu(nint parent, string title)
-    {
-        return NativeEngine.MacMenuAddSubmenu(parent, title);
-    }
+    public static nint AddSubmenu(nint parent, string title) =>
+        NativeEngine.MacMenuAddSubmenu(parent: parent, title: title);
 
     /// <param name="sfSymbol">Optional SF Symbol name shown as the item image (macOS 11+).</param>
     /// <param name="checked">Leading checkmark state.</param>
@@ -58,38 +47,29 @@ public static unsafe class MacMenu
         bool enabled, string? sfSymbol = null, bool @checked = false)
     {
         NativeEngine.MacMenuAddItem(
-            parent,
-            title,
-            tag,
-            key,
-            modMask,
-            enabled ? 1 : 0,
-            sfSymbol ?? "",
-            @checked ? 1 : 0
+            parent: parent,
+            title: title,
+            tag: tag,
+            key: key,
+            modMask: modMask,
+            enabled: enabled ? 1 : 0,
+            sfSymbol: sfSymbol ?? "",
+            checkedState: @checked ? 1 : 0
         );
     }
 
     /// <summary>Mark a menu as a standard AppKit role: 1 = windows menu, 2 = help menu.</summary>
-    public static void SetMenuRole(nint menu, int role)
-    {
-        NativeEngine.MacMenuSetMenuRole(menu, role);
-    }
+    public static void SetMenuRole(nint menu, int role) =>
+        NativeEngine.MacMenuSetMenuRole(menu: menu, role: role);
 
-    public static void AddSeparator(nint parent)
-    {
-        NativeEngine.MacMenuAddSeparator(parent);
-    }
+    public static void AddSeparator(nint parent) => NativeEngine.MacMenuAddSeparator(parent);
 
     /// <summary>Install the assembled menu as the application's main menu.</summary>
-    public static void Commit()
-    {
-        NativeEngine.MacMenuCommit();
-    }
+    public static void Commit() => NativeEngine.MacMenuCommit();
 
-    /// <summary>Show the standard Cocoa about panel (the About fallback when the app has no
-    ///     custom about screen).</summary>
-    public static void ShowStandardAbout()
-    {
-        NativeEngine.MacMenuShowStandardAbout();
-    }
+    /// <summary>
+    ///     Show the standard Cocoa about panel (the About fallback when the app has no
+    ///     custom about screen).
+    /// </summary>
+    public static void ShowStandardAbout() => NativeEngine.MacMenuShowStandardAbout();
 }

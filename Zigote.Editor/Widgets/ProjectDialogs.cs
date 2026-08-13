@@ -1,10 +1,7 @@
-using Zigote.Core;
 using Zigote.Core.Engine;
 using Zigote.Runtime.Scene;
 using Zigote.UI.Host;
-using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
-using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
 
 namespace Zigote.Editor.Widgets;
@@ -21,13 +18,13 @@ public static class ProjectDialogs
     public static void ShowOpen(App app, Action<string> onOpen)
     {
         Run(
-            app,
-            async () =>
+            app: app,
+            flow: async () =>
             {
-                var path = await FileDialog.OpenFileAsync(
-                    "Open Project",
-                    Directory.GetCurrentDirectory(),
-                    [new FileDialogFilter("Zigote Project", "zigoteproj")]
+                string? path = await FileDialog.OpenFileAsync(
+                    title: "Open Project",
+                    startDirectory: Directory.GetCurrentDirectory(),
+                    filters: [new FileDialogFilter(name: "Zigote Project", "zigoteproj")]
                 );
                 if (path is not null) onOpen(path);
             }
@@ -37,12 +34,15 @@ public static class ProjectDialogs
     /// <summary>Prompt for a target folder, scaffold a new project there, and open it.</summary>
     public static void ShowNew(App app, Action<string> onOpen)
     {
-        var defaultDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            "ZigoteProjects",
-            "MyProject"
+        string defaultDir = Path.Combine(
+            path1: Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            path2: "ZigoteProjects",
+            path3: "MyProject"
         );
-        var pathField = new AdwEntry { Placeholder = "Project folder", Text = defaultDir };
+        var pathField = new AdwEntry {
+            Placeholder = "Project folder",
+            Text = defaultDir,
+        };
 
         // The project folder itself doesn't exist yet, so the native picker chooses the PARENT
         // directory and the field keeps the (editable) new folder name.
@@ -50,11 +50,11 @@ public static class ProjectDialogs
         {
             try
             {
-                var current = pathField.Text.Trim();
+                string current = pathField.Text.Trim();
                 string? startDir = null;
                 try
                 {
-                    var parent = Path.GetDirectoryName(current.TrimEnd('/', '\\'));
+                    string? parent = Path.GetDirectoryName(current.TrimEnd('/', '\\'));
                     if (Directory.Exists(parent)) startDir = parent;
                 }
                 catch
@@ -62,11 +62,14 @@ public static class ProjectDialogs
                     // Malformed text in the field — let the OS pick its default start location.
                 }
 
-                var picked = await FileDialog.PickFolderAsync("Choose Project Location", startDir);
+                string? picked = await FileDialog.PickFolderAsync(
+                    title: "Choose Project Location",
+                    startDirectory: startDir
+                );
                 if (picked is null) return;
-                var name = Path.GetFileName(current.TrimEnd('/', '\\'));
+                string name = Path.GetFileName(current.TrimEnd('/', '\\'));
                 if (string.IsNullOrWhiteSpace(name)) name = "MyProject";
-                pathField.Text = Path.Combine(picked, name);
+                pathField.Text = Path.Combine(path1: picked, path2: name);
                 app.RequestPaint();
             }
             catch (Exception ex)
@@ -81,31 +84,35 @@ public static class ProjectDialogs
                 Children = {
                     new Expanded(pathField),
                     new SizedBox(8f),
-                    new AdwButton("Browse…", BrowseLocation),
+                    new AdwButton(label: "Browse…", onPressed: BrowseLocation),
                 },
             }
             : pathField;
 
         var dialog = new AdwAlertDialog(
-            "New Project",
-            "A .zigoteproj, assets/ folder and starter scene are created here."
+            heading: "New Project",
+            body: "A .zigoteproj, assets/ folder and starter scene are created here."
         ) {
             ExtraChild = pathRow,
             DefaultResponse = "create",
             CloseResponse = "cancel",
         };
-        dialog.AddResponse("cancel", "Cancel");
-        dialog.AddResponse("create", "Create", AdwResponseAppearance.Suggested);
+        dialog.AddResponse(id: "cancel", label: "Cancel");
+        dialog.AddResponse(
+            id: "create",
+            label: "Create",
+            appearance: AdwResponseAppearance.Suggested
+        );
         dialog.OnResponse = id =>
         {
             if (id != "create") return;
-            var dirPath = pathField.Text.Trim();
+            string dirPath = pathField.Text.Trim();
             if (string.IsNullOrWhiteSpace(dirPath)) return;
             try
             {
-                var name = Path.GetFileName(dirPath.TrimEnd('/', '\\'));
+                string name = Path.GetFileName(dirPath.TrimEnd('/', '\\'));
                 if (string.IsNullOrWhiteSpace(name)) name = "MyProject";
-                onOpen(ZigoteProject.Scaffold(dirPath, name));
+                onOpen(ZigoteProject.Scaffold(projectDir: dirPath, name: name));
             }
             catch (Exception ex)
             {
@@ -120,17 +127,17 @@ public static class ProjectDialogs
     public static void ShowSaveSceneAs(App app, string currentPath, Action<string> onSave)
     {
         Run(
-            app,
-            async () =>
+            app: app,
+            flow: async () =>
             {
-                var full = Path.GetFullPath(
+                string full = Path.GetFullPath(
                     string.IsNullOrWhiteSpace(currentPath) ? "assets/main.scene" : currentPath
                 );
-                var picked = await FileDialog.SaveFileAsync(
-                    "Save Scene As",
-                    Path.GetDirectoryName(full),
-                    Path.GetFileName(full),
-                    [new FileDialogFilter("Zigote Scene", "scene")]
+                string? picked = await FileDialog.SaveFileAsync(
+                    title: "Save Scene As",
+                    startDirectory: Path.GetDirectoryName(full),
+                    suggestedName: Path.GetFileName(full),
+                    filters: [new FileDialogFilter(name: "Zigote Scene", "scene")]
                 );
                 if (picked is not null) onSave(RelativizeToProject(picked));
             }
@@ -161,9 +168,10 @@ public static class ProjectDialogs
     private static string RelativizeToProject(string path)
     {
         if (!Path.IsPathRooted(path)) return path;
-        var rel = Path.GetRelativePath(Directory.GetCurrentDirectory(), path);
-        return rel.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(rel)
+        string rel = Path.GetRelativePath(relativeTo: Directory.GetCurrentDirectory(), path: path);
+        return rel.StartsWith(value: "..", comparisonType: StringComparison.Ordinal) ||
+               Path.IsPathRooted(rel)
             ? path
-            : rel.Replace('\\', '/');
+            : rel.Replace(oldChar: '\\', newChar: '/');
     }
 }

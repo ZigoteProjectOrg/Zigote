@@ -43,19 +43,21 @@ public sealed class Image : Widget, IDisposable
     // fetches feeding it included — would stall behind it. One slot per core keeps the decoders
     // saturated and the pool free, and the wait is an await, so a queued load costs no thread.
     private static readonly SemaphoreSlim DecodeGate =
-        new(Environment.ProcessorCount, Environment.ProcessorCount);
+        new(initialCount: Environment.ProcessorCount, maxCount: Environment.ProcessorCount);
+
+    private bool _disposed;
 
     private CancellationTokenSource? _loadCts;
-    private bool _disposed;
     private Size _size;
     private uint _texHeight;
-    private ulong _textureHandle;
     private uint _texWidth;
+    private ulong _textureHandle;
 
-    /// <summary>An empty image — nothing is painted until a texture arrives (see <see cref="LoadAsync" />).</summary>
-    public Image()
-    {
-    }
+    /// <summary>
+    ///     An empty image — nothing is painted until a texture arrives (see <see cref="LoadAsync" />
+    ///     ).
+    /// </summary>
+    public Image() { }
 
     /// <summary>
     ///     Load and decode <paramref name="path" /> synchronously. Blocks the calling thread for the
@@ -67,9 +69,9 @@ public sealed class Image : Widget, IDisposable
         if (maxDim == 0)
         {
             _textureHandle = ZigoteEngine.LoadTexture(
-                Path.GetFullPath(path),
-                out _texWidth,
-                out _texHeight
+                path: Path.GetFullPath(path),
+                outW: out _texWidth,
+                outH: out _texHeight
             );
             return;
         }
@@ -77,10 +79,10 @@ public sealed class Image : Widget, IDisposable
         // No scaled file entry point on the engine: read here and go through the memory path,
         // which does the downsample during decode.
         _textureHandle = ZigoteEngine.LoadTextureFromMemoryScaled(
-            File.ReadAllBytes(Path.GetFullPath(path)),
-            maxDim,
-            out _texWidth,
-            out _texHeight
+            data: File.ReadAllBytes(Path.GetFullPath(path)),
+            maxDim: maxDim,
+            outW: out _texWidth,
+            outH: out _texHeight
         );
     }
 
@@ -147,10 +149,7 @@ public sealed class Image : Widget, IDisposable
         config.Label = AltText;
     }
 
-    public static Image FromFile(string path, uint maxDim = 0)
-    {
-        return new Image(path, maxDim);
-    }
+    public static Image FromFile(string path, uint maxDim = 0) => new(path: path, maxDim: maxDim);
 
     /// <summary>
     ///     An image from the app's deployed <c>Assets/</c> tree —
@@ -168,23 +167,23 @@ public sealed class Image : Widget, IDisposable
     ///         missing-file error.
     ///     </para>
     /// </summary>
-    public static Image FromAsset(string relativePath, uint maxDim = 0)
-    {
-        return new Image(AppAssets.Path(relativePath), maxDim);
-    }
+    public static Image FromAsset(string relativePath, uint maxDim = 0) => new(
+        path: AppAssets.Path(relativePath),
+        maxDim: maxDim
+    );
 
     public static Image FromBytes(ReadOnlySpan<byte> data, uint maxDim = 0)
     {
         uint w, h;
-        var handle = maxDim == 0
-            ? ZigoteEngine.LoadTextureFromMemory(data, out w, out h)
+        ulong handle = maxDim == 0
+            ? ZigoteEngine.LoadTextureFromMemory(data: data, outW: out w, outH: out h)
             : ZigoteEngine.LoadTextureFromMemoryScaled(
-                data,
-                maxDim,
-                out w,
-                out h
+                data: data,
+                maxDim: maxDim,
+                outW: out w,
+                outH: out h
             );
-        return new Image(handle, w, h);
+        return new Image(handle: handle, width: w, height: h);
     }
 
     /// <summary>
@@ -197,13 +196,14 @@ public sealed class Image : Widget, IDisposable
     ///         <see cref="FromAsset" /> instead — different mechanism, different lookup.
     ///     </para>
     /// </summary>
-    public static Image FromResource(string resourceName, Type? assemblyType = null, uint maxDim = 0)
+    public static Image FromResource(string resourceName, Type? assemblyType = null,
+        uint maxDim = 0)
     {
         var asm = assemblyType?.Assembly ?? Assembly.GetCallingAssembly();
         using var stream = asm.GetManifestResourceStream(resourceName);
         if (stream == null)
         {
-            var allNames = string.Join(", ", asm.GetManifestResourceNames());
+            string allNames = string.Join(separator: ", ", value: asm.GetManifestResourceNames());
             throw new FileNotFoundException(
                 $"Resource '{resourceName}' not found. Available: {allNames}"
             );
@@ -211,7 +211,7 @@ public sealed class Image : Widget, IDisposable
 
         using var ms = new MemoryStream();
         stream.CopyTo(ms);
-        return FromBytes(ms.ToArray(), maxDim);
+        return FromBytes(data: ms.ToArray(), maxDim: maxDim);
     }
 
     /// <summary>
@@ -241,13 +241,13 @@ public sealed class Image : Widget, IDisposable
         var token = cts.Token;
 
         return Task.Run(
-            async () =>
+            function: async () =>
             {
                 ulong handle;
                 uint w, h;
                 try
                 {
-                    var bytes = await fetch(token).ConfigureAwait(false);
+                    byte[] bytes = await fetch(token).ConfigureAwait(false);
                     token.ThrowIfCancellationRequested();
 
                     await DecodeGate.WaitAsync(token).ConfigureAwait(false);
@@ -257,12 +257,16 @@ public sealed class Image : Widget, IDisposable
                         // the common case in a fast-flung grid, and its decode is pure waste.
                         token.ThrowIfCancellationRequested();
                         handle = maxDim == 0
-                            ? ZigoteEngine.LoadTextureFromMemory(bytes, out w, out h)
+                            ? ZigoteEngine.LoadTextureFromMemory(
+                                data: bytes,
+                                outW: out w,
+                                outH: out h
+                            )
                             : ZigoteEngine.LoadTextureFromMemoryScaled(
-                                bytes,
-                                maxDim,
-                                out w,
-                                out h
+                                data: bytes,
+                                maxDim: maxDim,
+                                outW: out w,
+                                outH: out h
                             );
                     }
                     finally
@@ -276,7 +280,7 @@ public sealed class Image : Widget, IDisposable
                 }
                 catch (Exception error)
                 {
-                    Fail(error, token);
+                    Fail(error: error, token: token);
                     return;
                 }
 
@@ -284,7 +288,12 @@ public sealed class Image : Widget, IDisposable
                 {
                     // The fetch succeeded but the engine could not decode the bytes — an HTML error
                     // page served with an image URL, a truncated file, a format not built in.
-                    Fail(new InvalidDataException("The fetched bytes are not a decodable image."), token);
+                    Fail(
+                        error: new InvalidDataException(
+                            "The fetched bytes are not a decodable image."
+                        ),
+                        token: token
+                    );
                     return;
                 }
 
@@ -313,12 +322,12 @@ public sealed class Image : Widget, IDisposable
                             return;
                         }
 
-                        SetTexture(handle, w, h);
+                        SetTexture(textureHandle: handle, width: w, height: h);
                         OnLoaded?.Invoke();
                     }
                 );
             },
-            token
+            cancellationToken: token
         );
     }
 
@@ -385,7 +394,7 @@ public sealed class Image : Widget, IDisposable
             return _size;
         }
 
-        var aspect = (float)_texWidth / _texHeight;
+        float aspect = (float)_texWidth / _texHeight;
         float w = _texWidth;
         float h = _texHeight;
 
@@ -401,29 +410,31 @@ public sealed class Image : Widget, IDisposable
             w = h * aspect;
         }
 
-        _size = c.Constrain(new Size(w, h));
+        _size = c.Constrain(new Size(width: w, height: h));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
     public override void Paint(PaintList paint)
     {
         if (_textureHandle != 0)
+        {
             paint.AddImage(
-                Bounds,
-                (int)_texWidth,
-                (int)_texHeight,
-                null,
-                _textureHandle
+                bounds: Bounds,
+                pixelWidth: (int)_texWidth,
+                pixelHeight: (int)_texHeight,
+                pixels: null,
+                cacheKey: _textureHandle
             );
+        }
     }
 }

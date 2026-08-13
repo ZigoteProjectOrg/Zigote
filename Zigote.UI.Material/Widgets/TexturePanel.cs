@@ -15,17 +15,19 @@ public class TexturePanel(ulong textureId) : Widget
     public override Size Measure(Constraints c)
     {
         // Viewports typically expand to fill available space
-        _size = c.Constrain(new Size(float.PositiveInfinity, float.PositiveInfinity));
+        _size = c.Constrain(
+            new Size(width: float.PositiveInfinity, height: float.PositiveInfinity)
+        );
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
@@ -34,11 +36,11 @@ public class TexturePanel(ulong textureId) : Widget
         // Render the 3D scene texture as a full-size image widget.
         // We assume the native side will provide the texture contents via the TextureId.
         paint.AddImage(
-            Bounds,
-            (int)_size.Width,
-            (int)_size.Height,
-            null,
-            TextureId
+            bounds: Bounds,
+            pixelWidth: (int)_size.Width,
+            pixelHeight: (int)_size.Height,
+            pixels: null,
+            cacheKey: TextureId
         );
     }
 }

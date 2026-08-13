@@ -1,11 +1,11 @@
 using Zigote.Core;
 using Zigote.Core.Diagnostics;
 using Zigote.UI.DevTools.Widgets;
+using Zigote.UI.Host;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.DevTools.Panels;
 
@@ -41,14 +41,14 @@ public sealed class LogsPanel : IDevPanel
             Children = {
                 new Row(crossAxisAlignment: CrossAxisAlignment.Center) {
                     Children = {
-                        Chip("Err", DebugLogLevel.Error),
-                        Chip("Warn", DebugLogLevel.Warning),
-                        Chip("Info", DebugLogLevel.Info),
-                        Chip("Dbg", DebugLogLevel.Debug),
+                        Chip(label: "Err", level: DebugLogLevel.Error),
+                        Chip(label: "Warn", level: DebugLogLevel.Warning),
+                        Chip(label: "Info", level: DebugLogLevel.Info),
+                        Chip(label: "Dbg", level: DebugLogLevel.Debug),
                         new Spacer(),
                         new Button(
-                            "Clear",
-                            () =>
+                            label: "Clear",
+                            onPressed: () =>
                             {
                                 DebugLog.Clear();
                                 _dirty = true;
@@ -74,22 +74,28 @@ public sealed class LogsPanel : IDevPanel
         DebugLog.CopyInto(_all);
         var t = App.Active?.Theme ?? ThemeData.Dark;
         var rows = new List<Widget>();
-        var from = 0;
+        int from = 0;
         // Count visible from the end so the newest MaxRows survive the cap.
-        var visible = 0;
-        for (var i = _all.Count - 1; i >= 0 && visible < MaxRows; i--)
+        int visible = 0;
+        for (int i = _all.Count - 1; i >= 0 && visible < MaxRows; i--)
+        {
             if (!_hidden.Contains(_all[i].Level))
             {
                 visible++;
                 from = i;
             }
+        }
 
-        for (var i = from; i < _all.Count; i++)
+        for (int i = from; i < _all.Count; i++)
         {
             var e = _all[i];
             if (_hidden.Contains(e.Level)) continue;
             rows.Add(
-                new Label(e.Message, DevKit.CaptionSize, LevelColor(e.Level, t)) {
+                new Label(
+                    text: e.Message,
+                    fontSize: DevKit.CaptionSize,
+                    color: LevelColor(level: e.Level, t: t)
+                ) {
                     MaxLines = 1,
                     Overflow = TextOverflow.Ellipsis,
                     FontFamily = "code",
@@ -104,22 +110,25 @@ public sealed class LogsPanel : IDevPanel
     private Padding Chip(string label, DebugLogLevel level)
     {
         var box = new DecoratedBox { Radius = 4f };
-        var text = new Label(label, DevKit.CaptionSize) { MaxLines = 1 };
+        var text = new Label(text: label, fontSize: DevKit.CaptionSize) { MaxLines = 1 };
 
         void Recolor()
         {
             var t = App.Active?.Theme ?? ThemeData.Dark;
-            var on = !_hidden.Contains(level);
-            box.Fill = on ? LevelColor(level, t).WithAlpha(0.22f) : Color.Transparent;
-            box.BorderColor = on ? LevelColor(level, t).WithAlpha(0.5f) : t.Separator;
+            bool on = !_hidden.Contains(level);
+            box.Fill = on ? LevelColor(level: level, t: t).WithAlpha(0.22f) : Color.Transparent;
+            box.BorderColor = on ? LevelColor(level: level, t: t).WithAlpha(0.5f) : t.Separator;
             text.Color = on ? t.OnSurface : t.Hint;
         }
 
-        box.Child = new Padding(EdgeInsets.Symmetric(Spacing.Sm, 2f), text);
+        box.Child = new Padding(
+            padding: EdgeInsets.Symmetric(horizontal: Spacing.Sm, vertical: 2f),
+            child: text
+        );
         Recolor();
         return new Padding(
-            EdgeInsets.Only(right: Spacing.Xs),
-            new Pressable {
+            padding: EdgeInsets.Only(right: Spacing.Xs),
+            child: new Pressable {
                 Child = box,
                 FocusRadius = 4f,
                 OnPressed = () =>

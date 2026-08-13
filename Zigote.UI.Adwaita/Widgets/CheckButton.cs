@@ -15,15 +15,15 @@ public class AdwCheckButton : ComposedWidget
 
     // RadioDotGlyph's dot is GlyphSize × 0.56 — 14.3 yields the spec's 8px dot inside the 18px ring.
     private readonly RadioDotGlyph _dot = new() { GlyphSize = 14.3f };
-    private readonly Label _text = new("", AdwTypography.Body);
     private readonly Opacity _fade;
     private readonly FillTransition _fill;
     private readonly Pressable _root;
     private readonly Row _row;
-    private ThemeData _theme = ThemeData.Dark;
+    private readonly Label _text = new(text: "", style: AdwTypography.Body);
 
     private bool _enabled = true;
     private string _label;
+    private ThemeData _theme = ThemeData.Dark;
     private bool _value;
 
     public AdwCheckButton(string label = "", bool value = false, Action<bool>? onChanged = null)
@@ -53,13 +53,13 @@ public class AdwCheckButton : ComposedWidget
     public string Label
     {
         get => _label;
-        set => SetBuild(ref _label, value);
+        set => SetBuild(field: ref _label, value: value);
     }
 
     public bool Value
     {
         get => _value;
-        set => SetBuild(ref _value, value);
+        set => SetBuild(field: ref _value, value: value);
     }
 
     public Action<bool>? OnChanged { get; set; }
@@ -67,7 +67,7 @@ public class AdwCheckButton : ComposedWidget
     public bool Enabled
     {
         get => _enabled;
-        set => SetBuild(ref _enabled, value);
+        set => SetBuild(field: ref _enabled, value: value);
     }
 
     internal virtual bool IsRadio => false;
@@ -83,10 +83,11 @@ public class AdwCheckButton : ComposedWidget
         }
     }
 
-    public override int DebugStateHash()
-    {
-        return HashCode.Combine(Value, Enabled, base.DebugStateHash());
-    }
+    public override int DebugStateHash() => HashCode.Combine(
+        value1: Value,
+        value2: Enabled,
+        value3: base.DebugStateHash()
+    );
 
     protected override Widget Build(BuildContext context)
     {
@@ -95,8 +96,8 @@ public class AdwCheckButton : ComposedWidget
         // check { border-radius: $check_radius } / radio { border-radius: 100% }.
         _box.Radius = IsRadio ? AdwMetrics.CheckSize / 2f : AdwMetrics.CheckRadius;
         _box.Child = SizedBox.Square(
-            AdwMetrics.CheckSize,
-            new Center(IsRadio ? _dot : _check)
+            size: AdwMetrics.CheckSize,
+            child: new Center(IsRadio ? _dot : _check)
         );
 
         _text.Text = Label;
@@ -132,24 +133,33 @@ public class AdwCheckButton : ComposedWidget
     private void ApplyColors()
     {
         var p = AdwPalette.For(_theme);
-        var hovered = _root.Hovered && Enabled;
-        var pressed = _root.Pressed && Enabled;
+        bool hovered = _root.Hovered && Enabled;
+        bool pressed = _root.Pressed && Enabled;
 
         // Fill fades ~100ms; the ring flips instantly (a fading border reads as smear at 20px,
         // and Adwaita's checks switch fast anyway).
         if (Value)
         {
-            _fill.Target(AdwStyle.Solid(_theme.Accent, hovered, pressed), _theme);
+            _fill.Target(
+                target: AdwStyle.Solid(
+                    baseColor: _theme.Accent,
+                    hovered: hovered,
+                    pressed: pressed
+                ),
+                theme: _theme
+            );
             _box.BorderColor = Color.Transparent;
         }
         else
         {
             // Unchecked is EMPTY with a 2px inset trough ring — `box-shadow: inset 0 0 0 2px
             // $trough_color` — except while pressed, where the ring gives way to a filled trough.
-            _fill.Target(pressed ? p.TroughFillActive : Color.Transparent, _theme);
+            _fill.Target(target: pressed ? p.TroughFillActive : Color.Transparent, theme: _theme);
             _box.BorderColor = pressed
                 ? Color.Transparent
-                : hovered ? p.TroughFillHover : p.TroughFill;
+                : hovered
+                    ? p.TroughFillHover
+                    : p.TroughFill;
             _box.BorderWidth = AdwMetrics.CheckBorder;
         }
 
@@ -170,9 +180,7 @@ public class AdwCheckButton : ComposedWidget
 public class AdwRadioButton : AdwCheckButton
 {
     public AdwRadioButton(string label = "", bool value = false, Action<bool>? onChanged = null)
-        : base(label, value, onChanged)
-    {
-    }
+        : base(label: label, value: value, onChanged: onChanged) { }
 
     internal override bool IsRadio => true;
 }

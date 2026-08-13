@@ -33,7 +33,11 @@ public sealed class WidgetHud : Component
 
     protected override void OnCreate()
     {
-        _valueLabel = new Label("0.00", 13f, new Color(0.96f, 0.97f, 0.99f));
+        _valueLabel = new Label(
+            text: "0.00",
+            fontSize: 13f,
+            color: new Color(r: 0.96f, g: 0.97f, b: 0.99f)
+        );
         _bar = new ProgressBar();
 
         var card = new Card(
@@ -41,7 +45,11 @@ public sealed class WidgetHud : Component
                 MainAxisSize = MainAxisSize.Min,
                 CrossAxisAlignment = CrossAxisAlignment.Start,
                 Children = {
-                    new Label(Title, 15f, new Color(0.62f, 0.67f, 0.74f)) {
+                    new Label(
+                        text: Title,
+                        fontSize: 15f,
+                        color: new Color(r: 0.62f, g: 0.67f, b: 0.74f)
+                    ) {
                         FontWeight = FontWeight.SemiBold,
                     },
                     _valueLabel,
@@ -49,10 +57,10 @@ public sealed class WidgetHud : Component
             }
         ) {
             Color = new Color(
-                0.05f,
-                0.06f,
-                0.08f,
-                0.78f
+                r: 0.05f,
+                g: 0.06f,
+                b: 0.08f,
+                a: 0.78f
             ),
             Padding = EdgeInsets.All(12f),
             Radius = 10f,
@@ -62,10 +70,16 @@ public sealed class WidgetHud : Component
         // top-left, a progress bar pinned along the bottom. Empty regions pass clicks through to the viewport.
         _root = new Stack {
             Children = {
-                new Align(Alignment.TopLeft, new Padding(EdgeInsets.All(16f), card)),
                 new Align(
-                    Alignment.BottomCenter,
-                    new Padding(EdgeInsets.All(20f), new SizedBox(360f, 8f, _bar))
+                    alignment: Alignment.TopLeft,
+                    child: new Padding(padding: EdgeInsets.All(16f), child: card)
+                ),
+                new Align(
+                    alignment: Alignment.BottomCenter,
+                    child: new Padding(
+                        padding: EdgeInsets.All(20f),
+                        child: new SizedBox(width: 360f, height: 8f, child: _bar)
+                    )
                 ),
             },
         };
@@ -78,7 +92,7 @@ public sealed class WidgetHud : Component
         _elapsed += deltaTime;
 
         // Mutate the retained widgets in place — no rebuild, state preserved (this is the framework's model).
-        var t = (MathF.Sin(_elapsed) + 1f) * 0.5f;
+        float t = (MathF.Sin(_elapsed) + 1f) * 0.5f;
         if (_bar is not null) _bar.Value = t;
         if (_valueLabel is not null) _valueLabel.Text = t.ToString("F2");
     }
@@ -87,7 +101,7 @@ public sealed class WidgetHud : Component
     {
         // Hand the HUD back. PlaySession also clears Hud on stop, so this only matters when the component is
         // destroyed mid-play; guard so we never clobber a HUD another component installed afterwards.
-        if (ReferenceEquals(Hud.Root, _root)) Hud.Root = null;
+        if (ReferenceEquals(objA: Hud.Root, objB: _root)) Hud.Root = null;
         _root = null;
         _bar = null;
         _valueLabel = null;

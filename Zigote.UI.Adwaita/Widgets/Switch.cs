@@ -1,6 +1,5 @@
 using Zigote.Core.Animation;
 using Zigote.Core.Events;
-using Zigote.UI.Host;
 using Zigote.UI.Semantics;
 
 namespace Zigote.UI.Adwaita;
@@ -24,7 +23,9 @@ public sealed class AdwSwitch : Widget
     {
         _value = value;
         OnChanged = onChanged;
-        _anim = new AnimationController(Motion.Fast, this) { Curve = Curves.EaseOut };
+        _anim = new AnimationController(durationSeconds: Motion.Fast, vsync: this) {
+            Curve = Curves.EaseOut,
+        };
         _anim.OnTick += MarkNeedsPaint;
         // Jump to the initial position without animating.
         if (value) _anim.Complete();
@@ -51,7 +52,7 @@ public sealed class AdwSwitch : Widget
     public bool Enabled
     {
         get => _enabled;
-        set => SetPaint(ref _enabled, value);
+        set => SetPaint(field: ref _enabled, value: value);
     }
 
     /// <summary>Optional accessible name (the setting this switch toggles).</summary>
@@ -62,10 +63,7 @@ public sealed class AdwSwitch : Widget
 
     // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
     // re-attach rebinds instead of leaking one per attach cascade.
-    protected override void OnMount()
-    {
-        _anim.AttachTicker(this);
-    }
+    protected override void OnMount() => _anim.AttachTicker(this);
 
 
     public override void DescribeSemantics(SemanticsConfiguration config)
@@ -74,10 +72,10 @@ public sealed class AdwSwitch : Widget
         config.Label = SemanticsLabel;
         config.Actions = SemanticsAction.Tap | SemanticsAction.Focus;
         config.AddFlag(SemanticsFlags.Checkable)
-            .AddFlag(SemanticsFlags.Checked, Value)
-            .AddFlag(SemanticsFlags.Focusable, Enabled)
-            .AddFlag(SemanticsFlags.Focused, Focused)
-            .AddFlag(SemanticsFlags.Disabled, !Enabled);
+            .AddFlag(flag: SemanticsFlags.Checked, on: Value)
+            .AddFlag(flag: SemanticsFlags.Focusable, on: Enabled)
+            .AddFlag(flag: SemanticsFlags.Focused, on: Focused)
+            .AddFlag(flag: SemanticsFlags.Disabled, on: !Enabled);
     }
 
     public override void UpdateFrom(Widget newWidget)
@@ -93,29 +91,31 @@ public sealed class AdwSwitch : Widget
     public override int DebugStateHash()
     {
         return HashCode.Combine(
-            Value,
-            _anim.Progress.GetHashCode(),
-            _hovered,
-            _pressed,
-            Focused,
-            Enabled
+            value1: Value,
+            value2: _anim.Progress.GetHashCode(),
+            value3: _hovered,
+            value4: _pressed,
+            value5: Focused,
+            value6: Enabled
         );
     }
 
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        _size = c.Constrain(new Size(AdwMetrics.SwitchWidth, AdwMetrics.SwitchHeight));
+        _size = c.Constrain(
+            new Size(width: AdwMetrics.SwitchWidth, height: AdwMetrics.SwitchHeight)
+        );
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
@@ -123,42 +123,49 @@ public sealed class AdwSwitch : Widget
     {
         if (!Enabled) paint.PushAlpha(AdwStyle.DisabledOpacity);
 
-        var r = Bounds.Height / 2f;
+        float r = Bounds.Height / 2f;
 
         // Off, a switch is a TROUGH (currentColor 15/20/25%), the same ladder as a scale or a
         // check — a switch is not a button and does not carry the button fill.
         var track = _value
             ? AdwStyle.Solid(
-                _theme.Accent,
-                _hovered,
-                _pressed,
-                Enabled
+                baseColor: _theme.Accent,
+                hovered: _hovered,
+                pressed: _pressed,
+                enabled: Enabled
             )
-            : AdwStyle.TroughFill(_theme, _hovered && Enabled, _pressed && Enabled);
-        paint.AddRect(Bounds, track, Radii.Capsule);
+            : AdwStyle.TroughFill(
+                theme: _theme,
+                hovered: _hovered && Enabled,
+                pressed: _pressed && Enabled
+            );
+        paint.AddRect(bounds: Bounds, color: track, radius: Radii.Capsule);
 
         // `> slider { min-width: 20px }` inside 3px of trough padding, on the knob colour every
         // Adwaita slider shares (white 80% over the view background, going pure white when hot).
-        var knobD = AdwMetrics.SliderKnob;
-        var knobR = knobD / 2f;
-        var travel = Bounds.Width - Bounds.Height;
-        var cx = Bounds.X + r + travel * _anim.Value;
-        var cy = Bounds.Y + r;
+        float knobD = AdwMetrics.SliderKnob;
+        float knobR = knobD / 2f;
+        float travel = Bounds.Width - Bounds.Height;
+        float cx = Bounds.X + r + (travel * _anim.Value);
+        float cy = Bounds.Y + r;
         var knob = new Rect(
-            cx - knobR,
-            cy - knobR,
-            knobD,
-            knobD
+            x: cx - knobR,
+            y: cy - knobR,
+            width: knobD,
+            height: knobD
         );
-        paint.AddElevation(knob, Radii.Capsule, Elevation.Z1);
+        paint.AddElevation(bounds: knob, radius: Radii.Capsule, style: Elevation.Z1);
         paint.AddRect(
-            knob,
-            AdwStyle.SliderKnob(_theme, (_hovered || _pressed || _value) && Enabled),
-            Radii.Capsule
+            bounds: knob,
+            color: AdwStyle.SliderKnob(
+                theme: _theme,
+                hot: (_hovered || _pressed || _value) && Enabled
+            ),
+            radius: Radii.Capsule
         );
 
         if (Focused && Enabled)
-            paint.AddFocusRing(Bounds, Radii.Capsule, _theme);
+            paint.AddFocusRing(bounds: Bounds, radius: Radii.Capsule, theme: _theme);
 
         if (!Enabled) paint.PopAlpha();
     }
@@ -198,7 +205,7 @@ public sealed class AdwSwitch : Widget
 
     public override void OnPointerUp(Offset point)
     {
-        if (_pressed && Enabled && Bounds.Contains(point.X, point.Y))
+        if (_pressed && Enabled && Bounds.Contains(px: point.X, py: point.Y))
             Toggle();
         if (_pressed)
         {

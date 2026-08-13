@@ -35,28 +35,21 @@ public sealed class AdwLayoutSlot(string id) : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         Content?.Layout(origin);
     }
 
-    public override void Paint(PaintList paint)
-    {
-        Content?.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => Content?.Paint(paint);
 
-    public override Widget? HitTest(Offset point)
-    {
-        return Bounds.Contains(point.X, point.Y) ? Content?.HitTest(point) : null;
-    }
+    public override Widget? HitTest(Offset point) => Bounds.Contains(px: point.X, py: point.Y)
+        ? Content?.HitTest(point)
+        : null;
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(Content);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Content);
 }
 
 /// <summary>
@@ -93,7 +86,7 @@ public sealed class AdwMultiLayoutView : ComposedWidget
     public string? LayoutName
     {
         get => _layoutName;
-        set => this.Set(ref _layoutName, value);
+        set => this.Set(field: ref _layoutName, value: value);
     }
 
     /// <summary>The resolved layout — the named one, else the first declared.</summary>

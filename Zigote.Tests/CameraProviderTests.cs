@@ -21,26 +21,26 @@ public class CameraProviderTests
             Camera.SetPhysicalEnabled(true);
             Camera.SetFocalLength(85f);
             Camera.SetSensor(SensorPreset.Super35);
-            Camera.SetSensorSize(36f, 24f);
+            Camera.SetSensorSize(widthMm: 36f, heightMm: 24f);
             Camera.SetAperture(1.4f);
             Camera.SetIso(400f);
             Camera.SetShutter(0.01f);
             Camera.SetFocusMode(FocusModeKind.Subject);
             Camera.SetManualFocus(3.5f);
-            Camera.SetFilmStock(FilmStockKind.Kodak2383, 0.5f);
+            Camera.SetFilmStock(stock: FilmStockKind.Kodak2383, strength: 0.5f);
 
             Assert.True(fake.Enabled);
-            Assert.Equal(85f, fake.Focal);
-            Assert.Equal(SensorPreset.Super35, fake.Sensor);
-            Assert.Equal(24f, fake.SensorH);
-            Assert.Equal(1.4f, fake.FStop);
-            Assert.Equal(400f, fake.Iso);
-            Assert.Equal(0.01f, fake.Shutter);
-            Assert.Equal(FocusModeKind.Subject, fake.Mode);
-            Assert.Equal(3.5f, fake.ManualFocus);
-            Assert.Equal(FilmStockKind.Kodak2383, fake.Stock);
-            Assert.Equal(0.5f, fake.FilmStrength);
-            Assert.Equal(10, fake.Calls);
+            Assert.Equal(expected: 85f, actual: fake.Focal);
+            Assert.Equal(expected: SensorPreset.Super35, actual: fake.Sensor);
+            Assert.Equal(expected: 24f, actual: fake.SensorH);
+            Assert.Equal(expected: 1.4f, actual: fake.FStop);
+            Assert.Equal(expected: 400f, actual: fake.Iso);
+            Assert.Equal(expected: 0.01f, actual: fake.Shutter);
+            Assert.Equal(expected: FocusModeKind.Subject, actual: fake.Mode);
+            Assert.Equal(expected: 3.5f, actual: fake.ManualFocus);
+            Assert.Equal(expected: FilmStockKind.Kodak2383, actual: fake.Stock);
+            Assert.Equal(expected: 0.5f, actual: fake.FilmStrength);
+            Assert.Equal(expected: 10, actual: fake.Calls);
         }
         finally
         {
@@ -56,7 +56,7 @@ public class CameraProviderTests
         // None of these should throw with no backend set.
         Camera.SetPhysicalEnabled(true);
         Camera.SetFocalLength(50f);
-        Camera.SetFilmStock(FilmStockKind.Bw, 1f);
+        Camera.SetFilmStock(stock: FilmStockKind.Bw, strength: 1f);
     }
 
     private sealed class FakeCameraBackend : ICameraBackend

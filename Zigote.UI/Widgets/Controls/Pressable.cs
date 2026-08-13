@@ -1,9 +1,9 @@
 using Zigote.Core;
 using Zigote.Core.Events;
 using Zigote.Core.Paint;
+using Zigote.UI.Host;
 using Zigote.UI.Semantics;
 using Zigote.UI.Theme;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.Widgets.Controls;
 
@@ -66,13 +66,13 @@ public sealed class Pressable : Widget, IPointerCapture
         config.Label = SemanticsLabel;
         config.IsLeaf = true; // the decorative child (box + label/glyph) is not its own node
         config.Actions = SemanticsAction.Tap | SemanticsAction.Focus;
-        config.AddFlag(SemanticsFlags.Focusable, Enabled);
-        config.AddFlag(SemanticsFlags.Focused, Focused);
-        config.AddFlag(SemanticsFlags.Disabled, !Enabled);
+        config.AddFlag(flag: SemanticsFlags.Focusable, on: Enabled);
+        config.AddFlag(flag: SemanticsFlags.Focused, on: Focused);
+        config.AddFlag(flag: SemanticsFlags.Disabled, on: !Enabled);
         if (Checked is { } c)
-            config.AddFlag(SemanticsFlags.Checkable).AddFlag(SemanticsFlags.Checked, c);
+            config.AddFlag(SemanticsFlags.Checkable).AddFlag(flag: SemanticsFlags.Checked, on: c);
         if (SelectedState is { } s)
-            config.AddFlag(SemanticsFlags.Selectable).AddFlag(SemanticsFlags.Selected, s);
+            config.AddFlag(SemanticsFlags.Selectable).AddFlag(flag: SemanticsFlags.Selected, on: s);
     }
 
     public override Size Measure(Constraints c)
@@ -85,10 +85,10 @@ public sealed class Pressable : Widget, IPointerCapture
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         Child?.Layout(origin);
     }
@@ -97,7 +97,7 @@ public sealed class Pressable : Widget, IPointerCapture
     {
         Child?.Paint(paint);
         if (Focused && Enabled)
-            paint.AddFocusRing(Bounds, FocusRadius, _theme);
+            paint.AddFocusRing(bounds: Bounds, radius: FocusRadius, theme: _theme);
     }
 
     // Capture all pointer events so the child's visuals are driven entirely by this wrapper — except
@@ -105,7 +105,7 @@ public sealed class Pressable : Widget, IPointerCapture
     // is itself activatable routinely carries both; without this the row swallows their gestures.
     public override Widget? HitTest(Offset point)
     {
-        if (!TouchTarget().Contains(point.X, point.Y)) return null;
+        if (!TouchTarget().Contains(px: point.X, py: point.Y)) return null;
         return Child?.HitTest(point) is IPointerCapture inner ? (Widget)inner : this;
     }
 
@@ -121,19 +121,19 @@ public sealed class Pressable : Widget, IPointerCapture
         if (!App.PointerIsTouch) return Bounds;
 
         const float glyphSized = ControlMetrics.RowHeight;
-        var gx = Bounds.Width < glyphSized
+        float gx = Bounds.Width < glyphSized
             ? (ControlMetrics.MinTouchTarget - Bounds.Width) / 2f
             : 0f;
-        var gy = Bounds.Height < glyphSized
+        float gy = Bounds.Height < glyphSized
             ? (ControlMetrics.MinTouchTarget - Bounds.Height) / 2f
             : 0f;
         if (gx <= 0f && gy <= 0f) return Bounds;
 
         return new Rect(
-            Bounds.X - gx,
-            Bounds.Y - gy,
-            Bounds.Width + gx * 2f,
-            Bounds.Height + gy * 2f
+            x: Bounds.X - gx,
+            y: Bounds.Y - gy,
+            width: Bounds.Width + (gx * 2f),
+            height: Bounds.Height + (gy * 2f)
         );
     }
 
@@ -164,7 +164,7 @@ public sealed class Pressable : Widget, IPointerCapture
     {
         // Same rect the press was accepted through, so a tap that landed in the touch margin
         // still commits rather than silently doing nothing.
-        if (Pressed && Enabled && TouchTarget().Contains(point.X, point.Y))
+        if (Pressed && Enabled && TouchTarget().Contains(px: point.X, py: point.Y))
         {
             UiFeedback.Click?.Invoke();
             OnPressed?.Invoke();
@@ -200,10 +200,7 @@ public sealed class Pressable : Widget, IPointerCapture
         }
     }
 
-    protected override void OnFocusChanged(bool focused)
-    {
-        MarkNeedsPaint();
-    }
+    protected override void OnFocusChanged(bool focused) => MarkNeedsPaint();
 
     private void NotifyState()
     {
@@ -211,19 +208,16 @@ public sealed class Pressable : Widget, IPointerCapture
         MarkNeedsPaint();
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(Child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Child);
 
     public override int DebugStateHash()
     {
         return HashCode.Combine(
-            Hovered,
-            Pressed,
-            Focused,
-            Enabled,
-            Child?.DebugStateHash() ?? 0
+            value1: Hovered,
+            value2: Pressed,
+            value3: Focused,
+            value4: Enabled,
+            value5: Child?.DebugStateHash() ?? 0
         );
     }
 }

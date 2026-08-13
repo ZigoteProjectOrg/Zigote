@@ -9,10 +9,7 @@ public sealed class AdwViewSwitcher : ComposedWidget
 {
     private readonly AdwViewStack _stack;
 
-    public AdwViewSwitcher(AdwViewStack stack)
-    {
-        _stack = stack;
-    }
+    public AdwViewSwitcher(AdwViewStack stack) => _stack = stack;
 
     protected override Widget Build(BuildContext context)
     {
@@ -20,21 +17,24 @@ public sealed class AdwViewSwitcher : ComposedWidget
         var p = AdwPalette.For(theme);
         return new Watch(() =>
             {
-                var visible = _stack.Visible.Value;
+                string visible = _stack.Visible.Value;
                 // `viewswitcher { border-spacing: 3px }`.
                 var row = new Row(
                     spacing: AdwMetrics.ToggleGroupPadding,
                     mainAxisSize: MainAxisSize.Min
                 );
                 foreach (var page in _stack.Pages)
+                {
                     row.Children.Add(
                         Toggle(
-                            theme,
-                            p,
-                            page,
-                            page.Name == visible
+                            theme: theme,
+                            p: p,
+                            page: page,
+                            active: page.Name == visible
                         )
                     );
+                }
+
                 return row;
             }
         );
@@ -45,18 +45,20 @@ public sealed class AdwViewSwitcher : ComposedWidget
         var fg = active ? theme.OnBackground : p.DimLabel;
         var content = new Row(spacing: 6f, mainAxisSize: MainAxisSize.Min);
         if (page.IconName is { } icon)
-            content.Children.Add(new IconGlyph(icon, AdwMetrics.IconSize, fg));
-        content.Children.Add(new Label(page.Title, 14f, fg) { FontWeight = FontWeight.Bold });
+            content.Children.Add(new IconGlyph(glyph: icon, size: AdwMetrics.IconSize, color: fg));
+        content.Children.Add(
+            new Label(text: page.Title, fontSize: 14f, color: fg) { FontWeight = FontWeight.Bold }
+        );
         if (page.Badge > 0)
-            content.Children.Add(Badge(theme, page.Badge));
+            content.Children.Add(Badge(theme: theme, count: page.Badge));
 
         // A header-bar view switcher is made of FLAT toggles: checked is $selected_color (10%),
         // not the 30% a raised button latches to — the switcher has to sit quietly in the chrome.
         var box = new DecoratedBox {
             Radius = AdwMetrics.ControlRadius,
             Fill = AdwStyle.ButtonFill(
-                theme,
-                AdwButtonStyle.Flat,
+                theme: theme,
+                style: AdwButtonStyle.Flat,
                 @checked: active
             ),
             // Zero-width strut fixes the height at 34 and cross-centers the content without
@@ -65,7 +67,13 @@ public sealed class AdwViewSwitcher : ComposedWidget
                 Children = {
                     new SizedBox(height: AdwMetrics.ButtonHeight),
                     // `> stack > box.wide { padding: 2px 12px }`.
-                    new Padding(EdgeInsets.Symmetric(AdwMetrics.RowPaddingX, 2f), content),
+                    new Padding(
+                        padding: EdgeInsets.Symmetric(
+                            horizontal: AdwMetrics.RowPaddingX,
+                            vertical: 2f
+                        ),
+                        child: content
+                    ),
                 },
             },
         };
@@ -77,9 +85,9 @@ public sealed class AdwViewSwitcher : ComposedWidget
             OnPressed = () => _stack.VisibleName = page.Name,
         };
         pressable.WireFill(
-            box,
-            theme,
-            AdwButtonStyle.Flat,
+            box: box,
+            theme: theme,
+            style: AdwButtonStyle.Flat,
             @checked: () => active
         );
         return pressable;
@@ -91,8 +99,8 @@ public sealed class AdwViewSwitcher : ComposedWidget
             Radius = AdwMetrics.Pill,
             Fill = theme.Accent,
             Child = new Padding(
-                EdgeInsets.Symmetric(6f, 1f),
-                new Label(count.ToString(), 10f, theme.OnPrimary) {
+                padding: EdgeInsets.Symmetric(horizontal: 6f, vertical: 1f),
+                child: new Label(text: count.ToString(), fontSize: 10f, color: theme.OnPrimary) {
                     FontWeight = FontWeight.Bold,
                 }
             ),
@@ -108,10 +116,7 @@ public sealed class AdwViewSwitcherBar : ComposedWidget
 {
     private readonly AdwViewStack _stack;
 
-    public AdwViewSwitcherBar(AdwViewStack stack)
-    {
-        _stack = stack;
-    }
+    public AdwViewSwitcherBar(AdwViewStack stack) => _stack = stack;
 
     protected override Widget Build(BuildContext context)
     {
@@ -145,16 +150,13 @@ public sealed class AdwInlineViewSwitcher : ComposedWidget
     private readonly AdwViewStack _stack;
     private bool _round;
 
-    public AdwInlineViewSwitcher(AdwViewStack stack)
-    {
-        _stack = stack;
-    }
+    public AdwInlineViewSwitcher(AdwViewStack stack) => _stack = stack;
 
     /// <summary>Capsule (pill) shape instead of the 9px rounded rectangle.</summary>
     public bool Round
     {
         get => _round;
-        set => this.Set(ref _round, value);
+        set => this.Set(field: ref _round, value: value);
     }
 
     protected override Widget Build(BuildContext context)
@@ -163,12 +165,18 @@ public sealed class AdwInlineViewSwitcher : ComposedWidget
         // hand-rolled copy of one, with its own (snapping) hover handling.
         return new Watch(() =>
             {
-                var visible = _stack.Visible.Value;
-                var active = _stack.Pages.FindIndex(p => p.Name == visible);
+                string visible = _stack.Visible.Value;
+                int active = _stack.Pages.FindIndex(p => p.Name == visible);
                 return new AdwToggleGroup(
-                    [.. _stack.Pages.Select(p => new AdwToggle(p.Title, p.IconName))],
-                    Math.Max(active, 0),
-                    i => _stack.VisibleName = _stack.Pages[i].Name
+                    toggles: [
+                        .. _stack.Pages.Select(p => new AdwToggle(
+                                Label: p.Title,
+                                IconName: p.IconName
+                            )
+                        ),
+                    ],
+                    active: Math.Max(val1: active, val2: 0),
+                    onActive: i => _stack.VisibleName = _stack.Pages[i].Name
                 ) { Round = _round };
             }
         );

@@ -11,14 +11,14 @@ namespace Zigote.Editor.Settings;
 /// </summary>
 public sealed class ViewportPreferences : PreferencesProvider
 {
-    public ViewportPreferences(PreferenceStore store) : base(store, "viewport")
+    public ViewportPreferences(PreferenceStore store) : base(store: store, prefix: "viewport")
     {
-        PhysicsWireframe = Register("physicsWireframe", false);
-        StreamDistance = Register("streamDistance", 0f);
-        NativeVfx = Register("nativeVfx", false);
-        GpuVfx = Register("gpuVfx", false);
-        AnimateEditVfx = Register("animateEditVfx", false);
-        SnapGrid = Register("snapGrid", 0f);
+        PhysicsWireframe = Register(key: "physicsWireframe", defaultValue: false);
+        StreamDistance = Register(key: "streamDistance", defaultValue: 0f);
+        NativeVfx = Register(key: "nativeVfx", defaultValue: false);
+        GpuVfx = Register(key: "gpuVfx", defaultValue: false);
+        AnimateEditVfx = Register(key: "animateEditVfx", defaultValue: false);
+        SnapGrid = Register(key: "snapGrid", defaultValue: 0f);
     }
 
     /// <summary>Draw physics collision shapes as a wireframe overlay (edit + play mode).</summary>

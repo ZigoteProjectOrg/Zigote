@@ -15,7 +15,7 @@ public class ReactiveReconcileTests
     public void A_source_read_twice_collapses_to_one_dependency()
     {
         var a = new Signal<int>(1);
-        var runs = 0;
+        int runs = 0;
         using var c = Computed.From(() =>
             {
                 runs++;
@@ -25,8 +25,11 @@ public class ReactiveReconcileTests
         using var live = c.Observe(() => { });
 
         a.Value = 2;
-        Assert.Equal(2, runs); // exactly one recompute per write — one edge, not two
-        Assert.Equal(4, c.Value);
+        Assert.Equal(
+            expected: 2,
+            actual: runs
+        ); // exactly one recompute per write — one edge, not two
+        Assert.Equal(expected: 4, actual: c.Value);
     }
 
     [Fact]
@@ -36,7 +39,7 @@ public class ReactiveReconcileTests
         // would truncate a stale trailing `a` and unsubscribe it while still depending on it.
         var a = new Signal<int>(1);
         var twice = new Signal<bool>(true);
-        var runs = 0;
+        int runs = 0;
         using var c = Computed.From(() =>
             {
                 runs++;
@@ -46,11 +49,11 @@ public class ReactiveReconcileTests
         using var live = c.Observe(() => { });
 
         twice.Value = false;
-        Assert.Equal(2, runs);
+        Assert.Equal(expected: 2, actual: runs);
 
         a.Value = 7; // a must still be wired after the branch change
-        Assert.Equal(3, runs);
-        Assert.Equal(7, c.Value);
+        Assert.Equal(expected: 3, actual: runs);
+        Assert.Equal(expected: 7, actual: c.Value);
     }
 
     [Fact]
@@ -60,18 +63,18 @@ public class ReactiveReconcileTests
         var a = new Signal<int>(1);
         var b = new Signal<int>(10);
         using var c = Computed.From(() => flip.Value ? b.Value + a.Value : a.Value + b.Value);
-        var fires = 0;
+        int fires = 0;
         using var live = c.Observe(() => fires++);
 
         flip.Value = true; // same sources, swapped positions — the value is unchanged
-        Assert.Equal(0, fires);
+        Assert.Equal(expected: 0, actual: fires);
 
         a.Value = 2;
-        Assert.Equal(1, fires);
-        Assert.Equal(12, c.Value);
+        Assert.Equal(expected: 1, actual: fires);
+        Assert.Equal(expected: 12, actual: c.Value);
         b.Value = 20;
-        Assert.Equal(2, fires);
-        Assert.Equal(22, c.Value);
+        Assert.Equal(expected: 2, actual: fires);
+        Assert.Equal(expected: 22, actual: c.Value);
     }
 
     [Fact]
@@ -82,11 +85,11 @@ public class ReactiveReconcileTests
         var sub = c.Observe(() => { });
         sub.Dispose(); // last observer gone → detached from s
 
-        var fires = 0;
+        int fires = 0;
         using var sub2 = c.Observe(() => fires++); // re-observe with nothing changed in between
 
         s.Value = 5; // must reach c through the rewired edge
-        Assert.Equal(1, fires);
-        Assert.Equal(10, c.Value);
+        Assert.Equal(expected: 1, actual: fires);
+        Assert.Equal(expected: 10, actual: c.Value);
     }
 }

@@ -6,7 +6,8 @@ using Zigote.UI.TextShaping;
 namespace Zigote.UI.Adwaita;
 
 /// <summary>
-///     AdwSpinButton — the GNOME horizontal spin button: one linked <see cref="AdwColors.ButtonFill" />
+///     AdwSpinButton — the GNOME horizontal spin button: one linked
+///     <see cref="AdwColors.ButtonFill" />
 ///     box (radius 9) with a flat minus button, the centred value, and a flat plus button,
 ///     separated by hairlines. Clamps to [Min, Max]; the unavailable side's glyph drops to half
 ///     opacity. Arrow keys step the value. While focused the value area is typeable, GNOME-style:
@@ -16,9 +17,9 @@ namespace Zigote.UI.Adwaita;
 /// </summary>
 public sealed class AdwSpinButton : Widget, ITextInputClient
 {
-    private bool _compact;
     private const float SegmentW = AdwMetrics.ButtonHeight; // square end buttons
     private const float MinValueW = 48f;
+    private bool _compact;
 
     private string? _edit; // pending typed text; null = not editing
     private bool _enabled = true;
@@ -35,7 +36,7 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
     {
         _min = min;
         _max = max;
-        _value = Math.Clamp(value, min, Math.Max(min, max));
+        _value = Math.Clamp(value: value, min: min, max: Math.Max(val1: min, val2: max));
         Step = step;
         OnChanged = onChanged;
     }
@@ -51,7 +52,7 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
             CancelEdit();
             // Range-safe: an inverted [Min, Max] is transient while a caller moves both ends, and
             // Math.Clamp throws on min > max — so no ordering constraint is imposed on setters.
-            var v = Math.Clamp(value, _min, Math.Max(_min, _max));
+            double v = Math.Clamp(value: value, min: _min, max: Math.Max(val1: _min, val2: _max));
             if (v == _value) return;
             _value = v;
             MarkNeedsLayout(); // the value text can change the centre width
@@ -87,7 +88,7 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
     public bool Enabled
     {
         get => _enabled;
-        set => SetPaint(ref _enabled, value);
+        set => SetPaint(field: ref _enabled, value: value);
     }
 
     /// <summary>Optional accessible name (the setting this spin button edits).</summary>
@@ -97,7 +98,7 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
     public bool Compact
     {
         get => _compact;
-        set => SetLayout(ref _compact, value);
+        set => SetLayout(field: ref _compact, value: value);
     }
 
     public override bool Focusable => Enabled;
@@ -105,26 +106,26 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
     /// <summary>Arrow keys step the value, so they are never repurposed for focus traversal.</summary>
     public override bool HandlesDirectionalKeys => true;
 
-    /// <summary>Static caret (no blink) so the frame loop can idle while focused.</summary>
-    bool ITextInputClient.WantsCaretBlink => false;
-
     private string ValueText => _value.ToString("0.###");
 
     private string DisplayText => _edit ?? ValueText;
 
     private Rect MinusRect => new(
-        Bounds.X,
-        Bounds.Y,
-        SegmentW,
-        Bounds.Height
+        x: Bounds.X,
+        y: Bounds.Y,
+        width: SegmentW,
+        height: Bounds.Height
     );
 
     private Rect PlusRect => new(
-        Bounds.Right - SegmentW,
-        Bounds.Y,
-        SegmentW,
-        Bounds.Height
+        x: Bounds.Right - SegmentW,
+        y: Bounds.Y,
+        width: SegmentW,
+        height: Bounds.Height
     );
+
+    /// <summary>Static caret (no blink) so the frame loop can idle while focused.</summary>
+    bool ITextInputClient.WantsCaretBlink => false;
 
     public override void DescribeSemantics(SemanticsConfiguration config)
     {
@@ -133,9 +134,9 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
         config.Value = DisplayText;
         config.Actions =
             SemanticsAction.Increase | SemanticsAction.Decrease | SemanticsAction.Focus;
-        config.AddFlag(SemanticsFlags.Focusable, Enabled)
-            .AddFlag(SemanticsFlags.Focused, Focused)
-            .AddFlag(SemanticsFlags.Disabled, !Enabled);
+        config.AddFlag(flag: SemanticsFlags.Focusable, on: Enabled)
+            .AddFlag(flag: SemanticsFlags.Focused, on: Focused)
+            .AddFlag(flag: SemanticsFlags.Disabled, on: !Enabled);
     }
 
     public override void UpdateFrom(Widget newWidget)
@@ -154,24 +155,24 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
     public override int DebugStateHash()
     {
         return HashCode.Combine(
-            Value,
-            _edit,
-            _hoverZone,
-            _pressZone,
-            Enabled,
-            Focused
+            value1: Value,
+            value2: _edit,
+            value3: _hoverZone,
+            value4: _pressZone,
+            value5: Enabled,
+            value6: Focused
         );
     }
 
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        var textW = TextMeasure.Width(DisplayText, _theme.FontSizeBody);
-        var valueW = MathF.Max(MinValueW, textW + Spacing.Md);
+        float textW = TextMeasure.Width(text: DisplayText, fontSize: _theme.FontSizeBody);
+        float valueW = MathF.Max(x: MinValueW, y: textW + Spacing.Md);
         _size = c.Constrain(
             new Size(
-                SegmentW * 2f + 2f + valueW,
-                Compact ? AdwMetrics.CompactControlHeight : AdwMetrics.ButtonHeight
+                width: (SegmentW * 2f) + 2f + valueW,
+                height: Compact ? AdwMetrics.CompactControlHeight : AdwMetrics.ButtonHeight
             )
         );
         return _size;
@@ -180,10 +181,10 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
@@ -193,17 +194,17 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
 
         // `spinbutton @extend %entry` — the box is an entry, so it carries the entry/button fill.
         var p = AdwPalette.For(_theme);
-        paint.AddRect(Bounds, p.ButtonFill, AdwMetrics.ControlRadius);
+        paint.AddRect(bounds: Bounds, color: p.ButtonFill, radius: AdwMetrics.ControlRadius);
 
         // The +/− are FLAT buttons over that fill (7% hover, 16% press), clipped to the box; the
         // wash's square corners are invisible under the faint fill at a 9px radius.
-        var zone = _pressZone != 0 ? _pressZone : _hoverZone;
+        int zone = _pressZone != 0 ? _pressZone : _hoverZone;
         if (Enabled && zone != 0 && SideAvailable(zone))
         {
             paint.AddClipStart(Bounds);
             paint.AddRect(
-                zone < 0 ? MinusRect : PlusRect,
-                _pressZone != 0 ? p.ActiveFill : p.HoverFill
+                bounds: zone < 0 ? MinusRect : PlusRect,
+                color: _pressZone != 0 ? p.ActiveFill : p.HoverFill
             );
             paint.AddClipEnd();
         }
@@ -211,82 +212,81 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
         // `> button { border-color: color-mix(in srgb, currentColor 10%, transparent) }` — the
         // buttons are divided from the value by their own 1px border, not by the theme hairline.
         paint.AddRect(
-            new Rect(
-                MinusRect.Right,
-                Bounds.Y,
-                1f,
-                Bounds.Height
+            bounds: new Rect(
+                x: MinusRect.Right,
+                y: Bounds.Y,
+                width: 1f,
+                height: Bounds.Height
             ),
-            p.ButtonFill
+            color: p.ButtonFill
         );
         paint.AddRect(
-            new Rect(
-                PlusRect.X - 1f,
-                Bounds.Y,
-                1f,
-                Bounds.Height
+            bounds: new Rect(
+                x: PlusRect.X - 1f,
+                y: Bounds.Y,
+                width: 1f,
+                height: Bounds.Height
             ),
-            p.ButtonFill
+            color: p.ButtonFill
         );
 
         // Glyphs — the unavailable side at half opacity.
         var fg = _theme.OnBackground;
         Icons.Draw(
-            paint,
-            MaterialIcons.Remove,
-            MinusRect,
-            SideAvailable(-1) ? fg : fg.WithAlpha(fg.A * 0.5f),
-            AdwMetrics.IconSize
+            paint: paint,
+            glyph: MaterialIcons.Remove,
+            box: MinusRect,
+            color: SideAvailable(-1) ? fg : fg.WithAlpha(fg.A * 0.5f),
+            size: AdwMetrics.IconSize
         );
         Icons.Draw(
-            paint,
-            Icons.Add,
-            PlusRect,
-            SideAvailable(1) ? fg : fg.WithAlpha(fg.A * 0.5f),
-            AdwMetrics.IconSize
+            paint: paint,
+            glyph: Icons.Add,
+            box: PlusRect,
+            color: SideAvailable(1) ? fg : fg.WithAlpha(fg.A * 0.5f),
+            size: AdwMetrics.IconSize
         );
 
         // Centred value text (the pending edit buffer while typing).
-        var fs = _theme.FontSizeBody;
-        var textW = TextMeasure.Width(DisplayText, fs);
-        var cx = Bounds.X + Bounds.Width / 2f;
-        var baseline = Bounds.Y + (Bounds.Height - fs) / 2f + fs * 0.8f;
+        float fs = _theme.FontSizeBody;
+        float textW = TextMeasure.Width(text: DisplayText, fontSize: fs);
+        float cx = Bounds.X + (Bounds.Width / 2f);
+        float baseline = Bounds.Y + ((Bounds.Height - fs) / 2f) + (fs * 0.8f);
         paint.AddText(
-            DisplayText,
-            cx - textW / 2f,
-            baseline,
-            fg,
-            fs
+            text: DisplayText,
+            baselineX: cx - (textW / 2f),
+            baselineY: baseline,
+            color: fg,
+            fontSize: fs
         );
 
         // ponytail: static caret bar as the editing cue — no blink, WantsCaretBlink is false so
         // the frame loop idles; upgrade to a Ticker-driven blink if it ever reads as dead.
         if (_edit is not null)
+        {
             paint.AddRect(
-                new Rect(
-                    cx + textW / 2f + 1f,
-                    Bounds.Y + (Bounds.Height - fs) / 2f,
-                    1.5f,
-                    fs
+                bounds: new Rect(
+                    x: cx + (textW / 2f) + 1f,
+                    y: Bounds.Y + ((Bounds.Height - fs) / 2f),
+                    width: 1.5f,
+                    height: fs
                 ),
-                fg
+                color: fg
             );
+        }
 
         if (Focused && Enabled)
-            paint.AddFocusRing(Bounds, AdwMetrics.ControlRadius, _theme);
+            paint.AddFocusRing(bounds: Bounds, radius: AdwMetrics.ControlRadius, theme: _theme);
 
         if (!Enabled) paint.PopAlpha();
     }
 
-    private bool SideAvailable(int zone)
-    {
-        return zone < 0 ? Value > Min : Value < Max;
-    }
+    private bool SideAvailable(int zone) => zone < 0 ? Value > Min : Value < Max;
 
     private void StepBy(int dir)
     {
         CancelEdit(); // stepping always acts on the committed value
-        var next = Math.Clamp(Value + dir * Step, Min, Max);
+        double next = Math.Clamp(value: Value + (dir * Step), min: Min, max: Max);
         if (next == Value) return;
         Value = next;
         OnChanged?.Invoke(next);
@@ -303,16 +303,16 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
     private void CommitEdit()
     {
         if (_edit is null) return;
-        var text = _edit;
+        string text = _edit;
         _edit = null;
         if (double.TryParse(
-                text,
-                NumberStyles.Float,
-                CultureInfo.InvariantCulture,
-                out var v
+                s: text,
+                style: NumberStyles.Float,
+                provider: CultureInfo.InvariantCulture,
+                result: out double v
             ))
         {
-            v = Math.Clamp(v, Min, Max);
+            v = Math.Clamp(value: v, min: Min, max: Max);
             if (v != _value)
             {
                 _value = v;
@@ -325,14 +325,14 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
 
     private int ZoneAt(Offset point)
     {
-        if (MinusRect.Contains(point.X, point.Y)) return -1;
-        if (PlusRect.Contains(point.X, point.Y)) return 1;
+        if (MinusRect.Contains(px: point.X, py: point.Y)) return -1;
+        if (PlusRect.Contains(px: point.X, py: point.Y)) return 1;
         return 0;
     }
 
     public override void OnPointerMove(Offset point)
     {
-        var zone = ZoneAt(point);
+        int zone = ZoneAt(point);
         if (zone == _hoverZone) return;
         _hoverZone = zone;
         MarkNeedsPaint();
@@ -349,7 +349,7 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
     public override void OnPointerDown(Offset point)
     {
         if (!Enabled) return;
-        var zone = ZoneAt(point);
+        int zone = ZoneAt(point);
         if (zone == 0) return;
         _pressZone = zone;
         StepBy(zone);
@@ -363,10 +363,7 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
         MarkNeedsPaint();
     }
 
-    public override void OnPointerCancel()
-    {
-        OnPointerUp(default);
-    }
+    public override void OnPointerCancel() => OnPointerUp(default);
 
     // ponytail: raw key handling only for editing keys; printable characters arrive via
     // OnTextInput (ITextInputClient engages the host IME), same route as Material TextField.
@@ -404,13 +401,15 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
     public override void OnTextInput(string text)
     {
         if (!Enabled) return;
-        var changed = false;
-        foreach (var ch in text)
+        bool changed = false;
+        foreach (char ch in text)
+        {
             if (char.IsAsciiDigit(ch) || ch is '-' or '.')
             {
                 _edit = (_edit ?? "") + ch; // first char starts a fresh buffer
                 changed = true;
             }
+        }
 
         if (changed) MarkNeedsLayout();
     }

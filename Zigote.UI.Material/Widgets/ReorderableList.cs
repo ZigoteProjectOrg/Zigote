@@ -41,21 +41,21 @@ public sealed class ReorderableList : Widget
     // target so the handle can actually be grabbed.
     private float Grip => _compact ? TouchMetrics.MinTarget : PointerGripWidth;
 
-    private float RowH => _compact ? MathF.Max(RowHeight, TouchMetrics.MinTarget) : RowHeight;
+    private float RowH => _compact ? MathF.Max(x: RowHeight, y: TouchMetrics.MinTarget) : RowHeight;
 
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
         _compact = TouchMetrics.IsCompact;
-        var w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 240f;
-        var h = _items.Count * RowH;
-        _size = c.Constrain(new Size(w, h));
+        float w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 240f;
+        float h = _items.Count * RowH;
+        _size = c.Constrain(new Size(width: w, height: h));
 
         var rowC = new Constraints(
-            0f,
-            MathF.Max(0f, _size.Width - Grip),
-            0f,
-            RowH
+            minWidth: 0f,
+            maxWidth: MathF.Max(x: 0f, y: _size.Width - Grip),
+            minHeight: 0f,
+            maxHeight: RowH
         );
         foreach (var item in _items)
             item.Measure(rowC);
@@ -65,15 +65,15 @@ public sealed class ReorderableList : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
-        for (var i = 0; i < _items.Count; i++)
+        for (int i = 0; i < _items.Count; i++)
         {
-            var y = origin.Y + i * RowH;
-            _items[i].Layout(new Offset(origin.X + Grip, y));
+            float y = origin.Y + (i * RowH);
+            _items[i].Layout(new Offset(x: origin.X + Grip, y: y));
         }
     }
 
@@ -81,71 +81,85 @@ public sealed class ReorderableList : Widget
     {
         paint.AddClipStart(Bounds);
 
-        for (var i = 0; i < _items.Count; i++)
+        for (int i = 0; i < _items.Count; i++)
         {
             if (i == _dragFrom) continue; // drawn separately as the ghost
 
-            var rowY = Bounds.Y + i * RowH;
+            float rowY = Bounds.Y + (i * RowH);
             var rowRect = new Rect(
-                Bounds.X,
-                rowY,
-                _size.Width,
-                RowH
+                x: Bounds.X,
+                y: rowY,
+                width: _size.Width,
+                height: RowH
             );
             if (!paint.IsVisible(rowRect)) continue;
 
             if (i == _hoverIndex && _dragFrom < 0)
+            {
                 paint.AddRect(
-                    new Rect(
-                        Bounds.X + 2f,
-                        rowY + 1f,
-                        _size.Width - 4f,
-                        RowH - 2f
+                    bounds: new Rect(
+                        x: Bounds.X + 2f,
+                        y: rowY + 1f,
+                        width: _size.Width - 4f,
+                        height: RowH - 2f
                     ),
-                    _theme.OnSurface.WithAlpha(0.05f),
-                    Radii.Sm
+                    color: _theme.OnSurface.WithAlpha(0.05f),
+                    radius: Radii.Sm
                 );
+            }
 
-            PaintGrip(paint, rowY, false);
+            PaintGrip(paint: paint, rowY: rowY, active: false);
             _items[i].Paint(paint);
         }
 
         // Insertion indicator.
         if (_dragFrom >= 0 && _dragInsert >= 0)
         {
-            var lineY = Bounds.Y + _dragInsert * RowH;
-            lineY = Math.Clamp(lineY, Bounds.Y, Bounds.Bottom - 2f);
+            float lineY = Bounds.Y + (_dragInsert * RowH);
+            lineY = Math.Clamp(value: lineY, min: Bounds.Y, max: Bounds.Bottom - 2f);
             paint.AddRect(
-                new Rect(
-                    Bounds.X + 2f,
-                    lineY - 1f,
-                    _size.Width - 4f,
-                    2f
+                bounds: new Rect(
+                    x: Bounds.X + 2f,
+                    y: lineY - 1f,
+                    width: _size.Width - 4f,
+                    height: 2f
                 ),
-                _theme.Primary,
-                1f
+                color: _theme.Primary,
+                radius: 1f
             );
         }
 
         // Ghost of the dragged row, following the cursor.
         if (_dragFrom >= 0 && _dragFrom < _items.Count)
         {
-            var ghostY = Math.Clamp(_dragY - _grabDy, Bounds.Y, Bounds.Bottom - RowH);
-            var ghostRect = new Rect(
-                Bounds.X,
-                ghostY,
-                _size.Width,
-                RowH
+            float ghostY = Math.Clamp(
+                value: _dragY - _grabDy,
+                min: Bounds.Y,
+                max: Bounds.Bottom - RowH
             );
-            paint.AddElevation(ghostRect, Radii.Sm, Elevation.Z2);
-            paint.AddRect(ghostRect, _theme.SurfaceAlt.WithAlpha(0.96f), Radii.Sm);
-            paint.AddBorder(ghostRect, _theme.Primary.WithAlpha(0.6f), Radii.Sm);
+            var ghostRect = new Rect(
+                x: Bounds.X,
+                y: ghostY,
+                width: _size.Width,
+                height: RowH
+            );
+            paint.AddElevation(bounds: ghostRect, radius: Radii.Sm, style: Elevation.Z2);
+            paint.AddRect(
+                bounds: ghostRect,
+                color: _theme.SurfaceAlt.WithAlpha(0.96f),
+                radius: Radii.Sm
+            );
+            paint.AddBorder(
+                bounds: ghostRect,
+                color: _theme.Primary.WithAlpha(0.6f),
+                radius: Radii.Sm
+            );
 
             // Translate the dragged child + grip to the ghost position.
             var item = _items[_dragFrom];
-            var dy = ghostY - (Bounds.Y + _dragFrom * RowH);
-            paint.PushTranslate(0f, dy);
-            PaintGrip(paint, Bounds.Y + _dragFrom * RowH, true);
+            float dy = ghostY - (Bounds.Y + (_dragFrom * RowH));
+            paint.PushTranslate(dx: 0f, dy: dy);
+            PaintGrip(paint: paint, rowY: Bounds.Y + (_dragFrom * RowH), active: true);
             item.Paint(paint);
             paint.PopTranslate();
         }
@@ -157,42 +171,42 @@ public sealed class ReorderableList : Widget
     {
         // Six-dot grip (⠿) drawn as small squares — robust regardless of font glyph coverage.
         var color = active ? _theme.OnSurface.WithAlpha(0.8f) : _theme.TextMuted.WithAlpha(0.55f);
-        var cx = Bounds.X + Grip / 2f;
-        var cy = rowY + RowH / 2f;
+        float cx = Bounds.X + (Grip / 2f);
+        float cy = rowY + (RowH / 2f);
         const float gap = 4f;
         const float dot = 2f;
-        for (var col = 0; col < 2; col++)
-        for (var r = 0; r < 3; r++)
+        for (int col = 0; col < 2; col++)
+        for (int r = 0; r < 3; r++)
         {
-            var dx = cx + (col == 0 ? -gap / 2f : gap / 2f) - dot / 2f;
-            var dyy = cy + (r - 1) * gap - dot / 2f;
+            float dx = cx + (col == 0 ? -gap / 2f : gap / 2f) - (dot / 2f);
+            float dyy = cy + ((r - 1) * gap) - (dot / 2f);
             paint.AddRect(
-                new Rect(
-                    dx,
-                    dyy,
-                    dot,
-                    dot
+                bounds: new Rect(
+                    x: dx,
+                    y: dyy,
+                    width: dot,
+                    height: dot
                 ),
-                color,
-                1f
+                color: color,
+                radius: 1f
             );
         }
     }
 
     private int RowIndexAt(float y)
     {
-        var idx = (int)((y - Bounds.Y) / RowH);
+        int idx = (int)((y - Bounds.Y) / RowH);
         return idx >= 0 && idx < _items.Count ? idx : -1;
     }
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
 
         // The grip column always belongs to this list (drag handle). Elsewhere, let children hit-test.
         if (point.X >= Bounds.X + Grip)
         {
-            var idx = RowIndexAt(point.Y);
+            int idx = RowIndexAt(point.Y);
             if (idx >= 0)
             {
                 var hit = _items[idx].HitTest(point);
@@ -216,14 +230,14 @@ public sealed class ReorderableList : Widget
         {
             _dragY = point.Y;
             // Insertion slot = nearest gap, computed from the row center under the cursor.
-            var raw = (point.Y - Bounds.Y) / RowH;
-            var insert = (int)MathF.Round(raw);
-            _dragInsert = Math.Clamp(insert, 0, _items.Count);
+            float raw = (point.Y - Bounds.Y) / RowH;
+            int insert = (int)MathF.Round(raw);
+            _dragInsert = Math.Clamp(value: insert, min: 0, max: _items.Count);
             MarkNeedsPaint();
             return;
         }
 
-        var idx = RowIndexAt(point.Y);
+        int idx = RowIndexAt(point.Y);
         if (idx != _hoverIndex)
         {
             _hoverIndex = idx;
@@ -240,7 +254,7 @@ public sealed class ReorderableList : Widget
 
     public override void OnPointerDown(Offset point)
     {
-        var idx = RowIndexAt(point.Y);
+        int idx = RowIndexAt(point.Y);
         if (idx < 0) return;
 
         // Only the grip column starts a drag; clicks elsewhere are forwarded to children via HitTest.
@@ -249,7 +263,7 @@ public sealed class ReorderableList : Widget
             _dragFrom = idx;
             _dragInsert = idx;
             _dragY = point.Y;
-            _grabDy = point.Y - (Bounds.Y + idx * RowH);
+            _grabDy = point.Y - (Bounds.Y + (idx * RowH));
             MarkNeedsPaint();
         }
     }
@@ -268,42 +282,37 @@ public sealed class ReorderableList : Widget
     {
         if (_dragFrom < 0) return;
 
-        var from = _dragFrom;
-        var insert = _dragInsert;
+        int from = _dragFrom;
+        int insert = _dragInsert;
         _dragFrom = -1;
         _dragInsert = -1;
 
         // Convert an insertion slot into a destination index after removal of the source.
-        var to = insert > from ? insert - 1 : insert;
-        to = Math.Clamp(to, 0, _items.Count - 1);
+        int to = insert > from ? insert - 1 : insert;
+        to = Math.Clamp(value: to, min: 0, max: _items.Count - 1);
 
         if (to != from && from >= 0 && from < _items.Count)
         {
             var moved = _items[from];
             _items.RemoveAt(from);
-            _items.Insert(to, moved);
+            _items.Insert(index: to, item: moved);
             MarkNeedsLayout();
-            OnReorder?.Invoke(from, to);
+            OnReorder?.Invoke(arg1: from, arg2: to);
         }
         else
-        {
             MarkNeedsPaint();
-        }
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return _items;
-    }
+    public override IEnumerable<Widget> GetChildren() => _items;
 
     public override int DebugStateHash()
     {
         return HashCode.Combine(
-            _items.Count,
-            _dragFrom,
-            _dragInsert,
-            _hoverIndex,
-            (int)_dragY
+            value1: _items.Count,
+            value2: _dragFrom,
+            value3: _dragInsert,
+            value4: _hoverIndex,
+            value5: (int)_dragY
         );
     }
 }

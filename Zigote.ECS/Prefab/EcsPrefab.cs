@@ -30,15 +30,12 @@ public sealed class EcsPrefab
     public EcsPrefab With<T>(in T value) where T : unmanaged
     {
         _world.MakeInheritable<T>(); // share via (IsA, prefab) instead of flecs's default copy-on-instantiate
-        _world.Set(Root, value);
+        _world.Set(e: Root, c: value);
         return this;
     }
 
     /// <summary>Spawn an instance that inherits the prefab's components via <c>(IsA, prefab)</c>.</summary>
-    public Entity Instantiate()
-    {
-        return _world.Instantiate(Root);
-    }
+    public Entity Instantiate() => _world.Instantiate(Root);
 }
 
 /// <summary>
@@ -64,35 +61,25 @@ public sealed class EcsPrefabLibrary
     /// <summary>Define (or fetch) a named prefab.</summary>
     public EcsPrefab Define(string name)
     {
-        if (_byName.TryGetValue(name, out var existing)) return existing;
-        var prefab = new EcsPrefab(_world, _world.NewPrefab(name), name);
+        if (_byName.TryGetValue(key: name, value: out var existing)) return existing;
+        var prefab = new EcsPrefab(world: _world, root: _world.NewPrefab(name), name: name);
         return _byName[name] = prefab;
     }
 
-    public EcsPrefab? Get(string name)
-    {
-        return _byName.GetValueOrDefault(name);
-    }
+    public EcsPrefab? Get(string name) => _byName.GetValueOrDefault(name);
 
-    public Entity Instantiate(string name)
-    {
-        return _byName.TryGetValue(name, out var p) ? p.Instantiate() : Entity.Null;
-    }
+    public Entity Instantiate(string name) => _byName.TryGetValue(key: name, value: out var p)
+        ? p.Instantiate()
+        : Entity.Null;
 
     /// <summary>
     ///     Whether the instance overrides <paramref name="type" /> (owns its own copy) vs inherits
     ///     it.
     /// </summary>
-    public bool IsOverridden(Entity instance, Type type)
-    {
-        return _world.Owns(instance, type);
-    }
+    public bool IsOverridden(Entity instance, Type type) => _world.Owns(e: instance, t: type);
 
     /// <summary>Drop an override so the field inherits from the prefab again.</summary>
-    public bool Revert(Entity instance, Type type)
-    {
-        return _world.Remove(instance, type);
-    }
+    public bool Revert(Entity instance, Type type) => _world.Remove(e: instance, t: type);
 
     // ── Serialization (instance = prefab name + overrides only) ──────────────────
 
@@ -100,8 +87,11 @@ public sealed class EcsPrefabLibrary
     {
         var overrides = new JsonArray();
         foreach (var ct in _registry.Types)
-            if (_world.Owns(instance, ct.Type) && _world.GetBoxed(instance, ct.Type) is { } boxed)
-                overrides.Add(EcsEntitySerializer.ComponentNode(ct, boxed));
+        {
+            if (_world.Owns(e: instance, t: ct.Type) && _world.GetBoxed(e: instance, t: ct.Type) is
+                    { } boxed)
+                overrides.Add(EcsEntitySerializer.ComponentNode(ct: ct, boxed: boxed));
+        }
 
         return new JsonObject {
             ["prefab"] = prefabName,
@@ -116,22 +106,24 @@ public sealed class EcsPrefabLibrary
     public Entity DeserializeInstance(JsonObject data)
     {
         if ((string?)data["prefab"] is not { } prefabName ||
-            !_byName.TryGetValue(prefabName, out var prefab))
+            !_byName.TryGetValue(key: prefabName, value: out var prefab))
             return Entity.Null;
 
         var instance = prefab.Instantiate();
         if (data["overrides"] is JsonArray overrides)
+        {
             foreach (var node in overrides)
             {
                 if (node is not JsonObject co || (string?)co["type"] is not { } typeName) continue;
                 if (_registry.ByName(typeName) is not { } ct) continue;
 
                 // Seed from the inherited value so an override of a subset of fields keeps the rest.
-                var boxed = _world.GetBoxed(instance, ct.Type) ??
-                            Activator.CreateInstance(ct.Type)!;
-                EcsEntitySerializer.ApplyFields(ct, co, boxed);
-                _world.SetBoxed(instance, ct.Type, boxed); // owns it now → an override
+                object boxed = _world.GetBoxed(e: instance, t: ct.Type) ??
+                               Activator.CreateInstance(ct.Type)!;
+                EcsEntitySerializer.ApplyFields(ct: ct, component: co, boxed: boxed);
+                _world.SetBoxed(e: instance, t: ct.Type, value: boxed); // owns it now → an override
             }
+        }
 
         return instance;
     }

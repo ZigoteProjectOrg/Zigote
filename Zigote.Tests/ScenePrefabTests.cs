@@ -22,77 +22,88 @@ public sealed class PrefabServiceTests
     [Fact]
     public void CreateThenInstantiate_RoundTrips_Structure()
     {
-        var dir = Path.Combine(Path.GetTempPath(), "zig-prefab-" + Guid.NewGuid().ToString("N"));
+        string dir = Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: "zig-prefab-" + Guid.NewGuid().ToString("N")
+        );
         Directory.CreateDirectory(dir);
         try
         {
             var reg = new AssetRegistry();
-            var svc = new PrefabService(() => reg, () => dir);
+            var svc = new PrefabService(assets: () => reg, projectDir: () => dir);
 
-            var source = new SceneNode("Turret", NodeKind.Mesh) {
+            var source = new SceneNode(name: "Turret", kind: NodeKind.Mesh) {
                 MeshPath = "#cube",
                 MeshMetallic = 0.7f,
             };
-            source.AddChild(new SceneNode("Barrel", NodeKind.Mesh) { MeshPath = "#cylinder" });
+            source.AddChild(
+                new SceneNode(name: "Barrel", kind: NodeKind.Mesh) { MeshPath = "#cylinder" }
+            );
 
             var id = svc.CreatePrefab(source);
             Assert.False(id.IsEmpty);
             Assert.True(
                 File.Exists(
                     Path.Combine(
-                        dir,
-                        "assets",
-                        "prefabs",
-                        "Turret.prefab"
+                        path1: dir,
+                        path2: "assets",
+                        path3: "prefabs",
+                        path4: "Turret.prefab"
                     )
                 )
             );
 
             var inst = svc.InstantiateNode(id);
             Assert.NotNull(inst);
-            Assert.Equal(id, inst!.PrefabSource);
+            Assert.Equal(expected: id, actual: inst!.PrefabSource);
             Assert.True(inst.IsPrefabInstance);
-            Assert.Equal("#cube", inst.MeshPath);
-            Assert.Equal(0.7f, inst.MeshMetallic);
+            Assert.Equal(expected: "#cube", actual: inst.MeshPath);
+            Assert.Equal(expected: 0.7f, actual: inst.MeshMetallic);
             Assert.Single(inst.Children);
-            Assert.Equal("#cylinder", inst.Children[0].MeshPath);
-            Assert.Same(inst, inst.Children[0].Parent); // parent linkage restored on load
+            Assert.Equal(expected: "#cylinder", actual: inst.Children[0].MeshPath);
+            Assert.Same(
+                expected: inst,
+                actual: inst.Children[0].Parent
+            ); // parent linkage restored on load
         }
         finally
         {
-            Directory.Delete(dir, true);
+            Directory.Delete(path: dir, recursive: true);
         }
     }
 
     [Fact]
     public void PrefabPreview_ReportsNameAndNodeCount()
     {
-        var dir = Path.Combine(Path.GetTempPath(), "zig-prefab-" + Guid.NewGuid().ToString("N"));
+        string dir = Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: "zig-prefab-" + Guid.NewGuid().ToString("N")
+        );
         Directory.CreateDirectory(dir);
         try
         {
             var reg = new AssetRegistry();
-            var svc = new PrefabService(() => reg, () => dir);
-            var source = new SceneNode("Turret", NodeKind.Mesh) { MeshPath = "#cube" };
-            source.AddChild(new SceneNode("Barrel", NodeKind.Mesh));
+            var svc = new PrefabService(assets: () => reg, projectDir: () => dir);
+            var source = new SceneNode(name: "Turret", kind: NodeKind.Mesh) { MeshPath = "#cube" };
+            source.AddChild(new SceneNode(name: "Barrel", kind: NodeKind.Mesh));
             svc.CreatePrefab(source);
 
-            var file = Path.Combine(
-                dir,
-                "assets",
-                "prefabs",
-                "Turret.prefab"
+            string file = Path.Combine(
+                path1: dir,
+                path2: "assets",
+                path3: "prefabs",
+                path4: "Turret.prefab"
             );
             var meta = new PrefabPreviewProvider().ExtraMetadata(file).ToList();
-            Assert.Contains(("Prefab", "Turret"), meta);
+            Assert.Contains(expected: ("Prefab", "Turret"), collection: meta);
             Assert.Contains(
-                meta,
-                kv => kv.Key == "Nodes" && kv.Value == "2"
+                collection: meta,
+                filter: kv => kv.Key == "Nodes" && kv.Value == "2"
             ); // handles Preserve $values
         }
         finally
         {
-            Directory.Delete(dir, true);
+            Directory.Delete(path: dir, recursive: true);
         }
     }
 
@@ -100,14 +111,16 @@ public sealed class PrefabServiceTests
     public void PrefabSourceId_RoundTripsOnSceneNode()
     {
         var id = AssetId.New();
-        var n = new SceneNode("x", NodeKind.Mesh) { PrefabSource = id };
-        Assert.Equal(id.ToString(), n.PrefabSourceId);
+        var n = new SceneNode(name: "x", kind: NodeKind.Mesh) { PrefabSource = id };
+        Assert.Equal(expected: id.ToString(), actual: n.PrefabSourceId);
 
-        var n2 = new SceneNode("y", NodeKind.Mesh) { PrefabSourceId = n.PrefabSourceId };
-        Assert.Equal(id, n2.PrefabSource);
+        var n2 = new SceneNode(name: "y", kind: NodeKind.Mesh) {
+            PrefabSourceId = n.PrefabSourceId,
+        };
+        Assert.Equal(expected: id, actual: n2.PrefabSource);
         Assert.True(n2.IsPrefabInstance);
 
-        var plain = new SceneNode("z", NodeKind.Mesh);
+        var plain = new SceneNode(name: "z", kind: NodeKind.Mesh);
         Assert.Null(plain.PrefabSourceId);
         Assert.False(plain.IsPrefabInstance);
     }
@@ -116,8 +129,11 @@ public sealed class PrefabServiceTests
     public void DeepClone_Preserves_PrefabSource()
     {
         var id = AssetId.New();
-        var n = new SceneNode("inst", NodeKind.Mesh) { PrefabSource = id };
-        Assert.Equal(id, n.DeepClone().PrefabSource); // the verified DeepClone landmine
+        var n = new SceneNode(name: "inst", kind: NodeKind.Mesh) { PrefabSource = id };
+        Assert.Equal(
+            expected: id,
+            actual: n.DeepClone().PrefabSource
+        ); // the verified DeepClone landmine
     }
 }
 
@@ -131,11 +147,11 @@ public sealed class PrefabOverridesTests
 {
     private static SceneNode Template()
     {
-        return new SceneNode("Crate", NodeKind.Mesh) {
+        return new SceneNode(name: "Crate", kind: NodeKind.Mesh) {
             MeshPath = "#cube",
             MeshMetallic = 0.5f,
-            MeshColor = new Vec3(1f, 0f, 0f),
-            Position = new Vec3(1f, 0f, 0f),
+            MeshColor = new Vec3(x: 1f, y: 0f, z: 0f),
+            Position = new Vec3(x: 1f, y: 0f, z: 0f),
         };
     }
 
@@ -144,9 +160,21 @@ public sealed class PrefabOverridesTests
     {
         var tmpl = Template();
         var inst = tmpl.DeepClone();
-        Assert.False(PrefabOverrides.AnyOverridden(inst, tmpl));
-        Assert.False(PrefabOverrides.IsOverridden(PrefabComponent.Material, inst, tmpl));
-        Assert.False(PrefabOverrides.IsOverridden(PrefabComponent.Transform, inst, tmpl));
+        Assert.False(PrefabOverrides.AnyOverridden(instance: inst, template: tmpl));
+        Assert.False(
+            PrefabOverrides.IsOverridden(
+                component: PrefabComponent.Material,
+                instance: inst,
+                template: tmpl
+            )
+        );
+        Assert.False(
+            PrefabOverrides.IsOverridden(
+                component: PrefabComponent.Transform,
+                instance: inst,
+                template: tmpl
+            )
+        );
     }
 
     [Fact]
@@ -156,12 +184,30 @@ public sealed class PrefabOverridesTests
         var inst = tmpl.DeepClone();
         inst.MeshMetallic = 0.9f;
 
-        Assert.True(PrefabOverrides.IsOverridden(PrefabComponent.Material, inst, tmpl));
-        Assert.False(PrefabOverrides.IsOverridden(PrefabComponent.Transform, inst, tmpl));
+        Assert.True(
+            PrefabOverrides.IsOverridden(
+                component: PrefabComponent.Material,
+                instance: inst,
+                template: tmpl
+            )
+        );
+        Assert.False(
+            PrefabOverrides.IsOverridden(
+                component: PrefabComponent.Transform,
+                instance: inst,
+                template: tmpl
+            )
+        );
 
-        inst.Position = new Vec3(5f, 0f, 0f);
-        Assert.True(PrefabOverrides.IsOverridden(PrefabComponent.Transform, inst, tmpl));
-        Assert.True(PrefabOverrides.AnyOverridden(inst, tmpl));
+        inst.Position = new Vec3(x: 5f, y: 0f, z: 0f);
+        Assert.True(
+            PrefabOverrides.IsOverridden(
+                component: PrefabComponent.Transform,
+                instance: inst,
+                template: tmpl
+            )
+        );
+        Assert.True(PrefabOverrides.AnyOverridden(instance: inst, template: tmpl));
     }
 
     [Fact]
@@ -171,29 +217,37 @@ public sealed class PrefabOverridesTests
         var inst = tmpl.DeepClone();
         inst.MeshMetallic = 0.9f;
 
-        var before = PrefabOverrides.Capture(PrefabComponent.Material, inst);
-        PrefabOverrides.Revert(PrefabComponent.Material, inst, tmpl);
-        Assert.Equal(0.5f, inst.MeshMetallic); // reverted to template
-        Assert.False(PrefabOverrides.IsOverridden(PrefabComponent.Material, inst, tmpl));
+        object before = PrefabOverrides.Capture(component: PrefabComponent.Material, node: inst);
+        PrefabOverrides.Revert(component: PrefabComponent.Material, instance: inst, template: tmpl);
+        Assert.Equal(expected: 0.5f, actual: inst.MeshMetallic); // reverted to template
+        Assert.False(
+            PrefabOverrides.IsOverridden(
+                component: PrefabComponent.Material,
+                instance: inst,
+                template: tmpl
+            )
+        );
 
-        PrefabOverrides.Restore(PrefabComponent.Material, inst, before);
-        Assert.Equal(0.9f, inst.MeshMetallic); // undo restores the override
+        PrefabOverrides.Restore(component: PrefabComponent.Material, node: inst, snapshot: before);
+        Assert.Equal(expected: 0.9f, actual: inst.MeshMetallic); // undo restores the override
     }
 
     [Fact]
     public void ApplicableTo_MatchesNodeKind()
     {
         Assert.Equal(
-            [PrefabComponent.Transform, PrefabComponent.Material],
-            PrefabOverrides.ApplicableTo(new SceneNode("m", NodeKind.Mesh)).ToArray()
+            expected: [PrefabComponent.Transform, PrefabComponent.Material],
+            actual: PrefabOverrides.ApplicableTo(new SceneNode(name: "m", kind: NodeKind.Mesh))
+                .ToArray()
         );
         Assert.Equal(
-            [PrefabComponent.Transform, PrefabComponent.Light],
-            PrefabOverrides.ApplicableTo(new SceneNode("l", NodeKind.Light)).ToArray()
+            expected: [PrefabComponent.Transform, PrefabComponent.Light],
+            actual: PrefabOverrides.ApplicableTo(new SceneNode(name: "l", kind: NodeKind.Light))
+                .ToArray()
         );
         Assert.Equal(
-            [PrefabComponent.Transform],
-            PrefabOverrides.ApplicableTo(new SceneNode("e")).ToArray()
+            expected: [PrefabComponent.Transform],
+            actual: PrefabOverrides.ApplicableTo(new SceneNode("e")).ToArray()
         );
     }
 }
@@ -210,22 +264,16 @@ public sealed class ScenePrefabTests : IDisposable
     private readonly ScenePrefabLibrary _lib;
     private readonly EcsWorld _w = new();
 
-    public ScenePrefabTests()
-    {
-        _lib = new ScenePrefabLibrary(_w);
-    }
+    public ScenePrefabTests() => _lib = new ScenePrefabLibrary(_w);
 
-    public void Dispose()
-    {
-        _w.Dispose();
-    }
+    public void Dispose() => _w.Dispose();
 
     private static SceneNode MeshTemplate()
     {
-        return new SceneNode("Crate", NodeKind.Mesh) {
+        return new SceneNode(name: "Crate", kind: NodeKind.Mesh) {
             MeshPath = "#cube",
-            Position = new Vec3(1f, 2f, 3f),
-            MeshColor = new Vec3(0.8f, 0.4f, 0.2f),
+            Position = new Vec3(x: 1f, y: 2f, z: 3f),
+            MeshColor = new Vec3(x: 0.8f, y: 0.4f, z: 0.2f),
             MeshMetallic = 0.5f,
             MeshRoughness = 0.3f,
         };
@@ -237,15 +285,15 @@ public sealed class ScenePrefabTests : IDisposable
     public void Mapper_RoundTrips_Material_And_Transform()
     {
         var src = MeshTemplate();
-        var dst = new SceneNode("Copy", NodeKind.Mesh);
+        var dst = new SceneNode(name: "Copy", kind: NodeKind.Mesh);
 
-        SceneNodeComponents.WriteTransform(dst, SceneNodeComponents.ReadTransform(src));
-        SceneNodeComponents.WriteMaterial(dst, SceneNodeComponents.ReadMaterial(src));
+        SceneNodeComponents.WriteTransform(n: dst, t: SceneNodeComponents.ReadTransform(src));
+        SceneNodeComponents.WriteMaterial(n: dst, m: SceneNodeComponents.ReadMaterial(src));
 
-        Assert.Equal(src.Position, dst.Position);
-        Assert.Equal(src.MeshColor, dst.MeshColor);
-        Assert.Equal(src.MeshMetallic, dst.MeshMetallic);
-        Assert.Equal(src.MeshRoughness, dst.MeshRoughness);
+        Assert.Equal(expected: src.Position, actual: dst.Position);
+        Assert.Equal(expected: src.MeshColor, actual: dst.MeshColor);
+        Assert.Equal(expected: src.MeshMetallic, actual: dst.MeshMetallic);
+        Assert.Equal(expected: src.MeshRoughness, actual: dst.MeshRoughness);
     }
 
     // ── EcsPrefab-backed behaviour ──────────────────────────────────────────────
@@ -253,111 +301,122 @@ public sealed class ScenePrefabTests : IDisposable
     [Fact]
     public void Instance_Inherits_Template_Values()
     {
-        _lib.DefinePrefab("Crate", MeshTemplate());
+        _lib.DefinePrefab(name: "Crate", template: MeshTemplate());
         var inst = _lib.Instantiate("Crate");
 
-        var node = new SceneNode("Instance", NodeKind.Mesh);
-        _lib.ApplyToNode(inst, node);
+        var node = new SceneNode(name: "Instance", kind: NodeKind.Mesh);
+        _lib.ApplyToNode(instance: inst, node: node);
 
-        Assert.Equal(new Vec3(1f, 2f, 3f), node.Position);
-        Assert.Equal(0.5f, node.MeshMetallic);
-        Assert.False(_lib.IsOverridden(inst, typeof(NodeMaterial))); // inherited, not owned
+        Assert.Equal(expected: new Vec3(x: 1f, y: 2f, z: 3f), actual: node.Position);
+        Assert.Equal(expected: 0.5f, actual: node.MeshMetallic);
+        Assert.False(
+            _lib.IsOverridden(instance: inst, type: typeof(NodeMaterial))
+        ); // inherited, not owned
     }
 
     [Fact]
     public void Override_Owns_And_Is_Isolated_From_Prefab_Edits()
     {
         var template = MeshTemplate();
-        _lib.DefinePrefab("Crate", template);
+        _lib.DefinePrefab(name: "Crate", template: template);
         var inst = _lib.Instantiate("Crate");
 
-        var node = new SceneNode("Instance", NodeKind.Mesh);
-        _lib.ApplyToNode(inst, node);
+        var node = new SceneNode(name: "Instance", kind: NodeKind.Mesh);
+        _lib.ApplyToNode(instance: inst, node: node);
         node.MeshMetallic = 0.9f; // user edits the instance
-        _lib.OverrideMaterial(inst, node);
-        Assert.True(_lib.IsOverridden(inst, typeof(NodeMaterial)));
+        _lib.OverrideMaterial(instance: inst, node: node);
+        Assert.True(_lib.IsOverridden(instance: inst, type: typeof(NodeMaterial)));
 
         template.MeshMetallic = 0.1f; // edit the prefab template
-        _lib.DefinePrefab("Crate", template);
+        _lib.DefinePrefab(name: "Crate", template: template);
 
-        var refreshed = new SceneNode("R", NodeKind.Mesh);
-        _lib.ApplyToNode(inst, refreshed);
-        Assert.Equal(0.9f, refreshed.MeshMetallic); // override shields the instance
+        var refreshed = new SceneNode(name: "R", kind: NodeKind.Mesh);
+        _lib.ApplyToNode(instance: inst, node: refreshed);
+        Assert.Equal(
+            expected: 0.9f,
+            actual: refreshed.MeshMetallic
+        ); // override shields the instance
     }
 
     [Fact]
     public void Revert_ReInherits_From_Prefab()
     {
-        _lib.DefinePrefab("Crate", MeshTemplate());
+        _lib.DefinePrefab(name: "Crate", template: MeshTemplate());
         var inst = _lib.Instantiate("Crate");
 
-        var node = new SceneNode("Instance", NodeKind.Mesh);
-        _lib.ApplyToNode(inst, node);
+        var node = new SceneNode(name: "Instance", kind: NodeKind.Mesh);
+        _lib.ApplyToNode(instance: inst, node: node);
         node.MeshMetallic = 0.9f;
-        _lib.OverrideMaterial(inst, node);
-        Assert.True(_lib.IsOverridden(inst, typeof(NodeMaterial)));
+        _lib.OverrideMaterial(instance: inst, node: node);
+        Assert.True(_lib.IsOverridden(instance: inst, type: typeof(NodeMaterial)));
 
-        Assert.True(_lib.Revert(inst, node, typeof(NodeMaterial)));
-        Assert.False(_lib.IsOverridden(inst, typeof(NodeMaterial)));
-        Assert.Equal(0.5f, node.MeshMetallic); // node refreshed to inherited value
+        Assert.True(_lib.Revert(instance: inst, node: node, type: typeof(NodeMaterial)));
+        Assert.False(_lib.IsOverridden(instance: inst, type: typeof(NodeMaterial)));
+        Assert.Equal(
+            expected: 0.5f,
+            actual: node.MeshMetallic
+        ); // node refreshed to inherited value
     }
 
     [Fact]
     public void Editing_Prefab_Propagates_To_NonOverriding_Instance()
     {
         var template = MeshTemplate();
-        _lib.DefinePrefab("Crate", template);
+        _lib.DefinePrefab(name: "Crate", template: template);
         var inst = _lib.Instantiate("Crate");
 
         template.MeshMetallic = 0.15f;
-        _lib.DefinePrefab("Crate", template); // re-define == edit prefab
+        _lib.DefinePrefab(name: "Crate", template: template); // re-define == edit prefab
 
-        var node = new SceneNode("Instance", NodeKind.Mesh);
-        _lib.ApplyToNode(inst, node);
-        Assert.Equal(0.15f, node.MeshMetallic); // non-overriding instance sees the new value
+        var node = new SceneNode(name: "Instance", kind: NodeKind.Mesh);
+        _lib.ApplyToNode(instance: inst, node: node);
+        Assert.Equal(
+            expected: 0.15f,
+            actual: node.MeshMetallic
+        ); // non-overriding instance sees the new value
     }
 
     [Fact]
     public void SerializeInstance_StoresOverridesOnly_AndRoundTrips()
     {
-        _lib.DefinePrefab("Crate", MeshTemplate());
+        _lib.DefinePrefab(name: "Crate", template: MeshTemplate());
         var inst = _lib.Instantiate("Crate");
 
-        var node = new SceneNode("Instance", NodeKind.Mesh);
-        _lib.ApplyToNode(inst, node);
+        var node = new SceneNode(name: "Instance", kind: NodeKind.Mesh);
+        _lib.ApplyToNode(instance: inst, node: node);
         node.MeshMetallic = 0.77f;
-        _lib.OverrideMaterial(inst, node);
+        _lib.OverrideMaterial(instance: inst, node: node);
 
-        var json = _lib.SerializeInstance(inst, "Crate");
-        Assert.Equal("Crate", (string?)json["prefab"]);
+        var json = _lib.SerializeInstance(instance: inst, prefabName: "Crate");
+        Assert.Equal(expected: "Crate", actual: (string?)json["prefab"]);
 
         var restored = _lib.DeserializeInstance(json);
-        Assert.NotEqual(Entity.Null, restored);
-        Assert.True(_lib.IsOverridden(restored, typeof(NodeMaterial)));
+        Assert.NotEqual(expected: Entity.Null, actual: restored);
+        Assert.True(_lib.IsOverridden(instance: restored, type: typeof(NodeMaterial)));
 
-        var restoredNode = new SceneNode("Restored", NodeKind.Mesh);
-        _lib.ApplyToNode(restored, restoredNode);
-        Assert.Equal(0.77f, restoredNode.MeshMetallic);
+        var restoredNode = new SceneNode(name: "Restored", kind: NodeKind.Mesh);
+        _lib.ApplyToNode(instance: restored, node: restoredNode);
+        Assert.Equal(expected: 0.77f, actual: restoredNode.MeshMetallic);
     }
 
     [Fact]
     public void Light_Prefab_Inherits_And_Overrides()
     {
-        var template = new SceneNode("Lamp", NodeKind.Light) {
+        var template = new SceneNode(name: "Lamp", kind: NodeKind.Light) {
             LightKind = LightType.Point,
             LightIntensity = 2f,
             LightRange = 10f,
         };
-        _lib.DefinePrefab("Lamp", template);
+        _lib.DefinePrefab(name: "Lamp", template: template);
         var inst = _lib.Instantiate("Lamp");
 
-        var node = new SceneNode("Inst", NodeKind.Light);
-        _lib.ApplyToNode(inst, node);
-        Assert.Equal(2f, node.LightIntensity);
-        Assert.Equal(LightType.Point, node.LightKind);
+        var node = new SceneNode(name: "Inst", kind: NodeKind.Light);
+        _lib.ApplyToNode(instance: inst, node: node);
+        Assert.Equal(expected: 2f, actual: node.LightIntensity);
+        Assert.Equal(expected: LightType.Point, actual: node.LightKind);
 
         node.LightIntensity = 5f;
-        _lib.OverrideLight(inst, node);
-        Assert.True(_lib.IsOverridden(inst, typeof(NodeLight)));
+        _lib.OverrideLight(instance: inst, node: node);
+        Assert.True(_lib.IsOverridden(instance: inst, type: typeof(NodeLight)));
     }
 }

@@ -14,11 +14,12 @@ public static class FontFaces
     // registered face at or below the requested weight, then to the default family.
     private static readonly string?[] Buckets = new string?[10];
 
-    /// <summary>Register the family name loaded for <paramref name="weight" /> (default-face variants only).</summary>
-    public static void RegisterWeight(FontWeight weight, string family)
-    {
+    /// <summary>
+    ///     Register the family name loaded for <paramref name="weight" /> (default-face variants
+    ///     only).
+    /// </summary>
+    public static void RegisterWeight(FontWeight weight, string family) =>
         Buckets[(int)weight / 100] = family;
-    }
 
     /// <summary>
     ///     The family to shape <paramref name="requested" /> with at <paramref name="weight" />.
@@ -28,9 +29,12 @@ public static class FontFaces
     public static string? Resolve(FontWeight weight, string? requested)
     {
         if (!string.IsNullOrEmpty(requested)) return requested;
-        for (var i = (int)weight / 100; i >= 1; i--)
+        for (int i = (int)weight / 100; i >= 1; i--)
+        {
             if (Buckets[i] is { } family)
                 return family;
+        }
+
         return null;
     }
 }

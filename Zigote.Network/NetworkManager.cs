@@ -56,15 +56,16 @@ public sealed class NetworkManager : ITransportListener, IDisposable
     /// <summary>Server only: veto a connecting client by returning false. Default accepts everyone.</summary>
     public Func<NetConnection, bool>? ApproveConnection { get; set; }
 
-    public void Dispose()
-    {
-        Stop();
-    }
+    public void Dispose() => Stop();
 
     // ── ITransportListener ─────────────────────────────────────────────────────
     void ITransportListener.OnConnected(int connectionId)
     {
-        var conn = new NetConnection(connectionId, _transport, IsServer);
+        var conn = new NetConnection(
+            id: connectionId,
+            transport: _transport,
+            isServerSide: IsServer
+        );
         WireHandlers(conn);
 
         if (IsServer && ApproveConnection is not null && !ApproveConnection(conn))
@@ -83,27 +84,25 @@ public sealed class NetworkManager : ITransportListener, IDisposable
 
     void ITransportListener.OnDisconnected(int connectionId, DisconnectReason reason)
     {
-        if (!_connections.Remove(connectionId, out var conn)) return;
+        if (!_connections.Remove(key: connectionId, value: out var conn)) return;
 
         Replication.OnConnectionRemoved(conn);
         if (ServerConnection?.Id == connectionId) ServerConnection = null;
         RebuildConnectionList();
         conn.State = ConnectionState.Disconnected;
-        PeerDisconnected?.Invoke(conn, reason);
+        PeerDisconnected?.Invoke(arg1: conn, arg2: reason);
     }
 
     void ITransportListener.OnReceive(int connectionId, ReadOnlySpan<byte> payload,
         DeliveryMethod delivery,
         int channel)
     {
-        if (_connections.TryGetValue(connectionId, out var conn))
-            conn.HandleReceive(payload, delivery, channel);
+        if (_connections.TryGetValue(key: connectionId, value: out var conn))
+            conn.HandleReceive(payload: payload, delivery: delivery, transportChannel: channel);
     }
 
-    void ITransportListener.OnError(int connectionId, string error)
-    {
-        TransportError?.Invoke(connectionId, error);
-    }
+    void ITransportListener.OnError(int connectionId, string error) =>
+        TransportError?.Invoke(arg1: connectionId, arg2: error);
 
     /// <summary>A peer was established (server: a client joined; client: the server accepted us).</summary>
     public event Action<NetConnection>? PeerConnected;
@@ -134,7 +133,7 @@ public sealed class NetworkManager : ITransportListener, IDisposable
         IsServer = false;
         Replication = new ReplicationManager(false);
         _transport.Listener = this;
-        _transport.StartClient(host, port);
+        _transport.StartClient(host: host, port: port);
     }
 
     public void Stop()
@@ -156,48 +155,48 @@ public sealed class NetworkManager : ITransportListener, IDisposable
         if (IsClient && ServerConnection is { } server && Clock.ShouldPing())
             Clock.SendPing(server);
 
-        var steps = _fixedTick.Advance(dt);
-        for (var i = 0; i < steps; i++)
+        int steps = _fixedTick.Advance(dt);
+        for (int i = 0; i < steps; i++)
         {
             FixedTick?.Invoke(_fixedTick.Interval);
-            if (IsServer) Replication.ServerTick(_connectionList, Clock.LocalTime);
+            if (IsServer)
+                Replication.ServerTick(connections: _connectionList, serverTime: Clock.LocalTime);
         }
 
         if (IsClient) Replication.InterpolateClient(Clock.RenderTime);
     }
 
     // ── Messaging ──────────────────────────────────────────────────────────────
-    public void OnMessage<T>(Action<NetConnection, T> handler) where T : INetMessage, new()
-    {
+    public void OnMessage<T>(Action<NetConnection, T> handler) where T : INetMessage, new() =>
         _router.Handle(handler);
-    }
 
     public void Send<T>(NetConnection connection, T message,
         DeliveryMethod delivery = DeliveryMethod.ReliableOrdered)
-        where T : INetMessage, new()
-    {
-        _router.Send(connection, message, delivery);
-    }
+        where T : INetMessage, new() =>
+        _router.Send(conn: connection, message: message, delivery: delivery);
 
     public void SendToServer<T>(T message, DeliveryMethod delivery = DeliveryMethod.ReliableOrdered)
         where T : INetMessage, new()
     {
-        if (ServerConnection is { } server) _router.Send(server, message, delivery);
+        if (ServerConnection is { } server)
+            _router.Send(conn: server, message: message, delivery: delivery);
     }
 
     public void SendToAll<T>(T message, DeliveryMethod delivery = DeliveryMethod.ReliableOrdered)
         where T : INetMessage, new()
     {
-        for (var i = 0; i < _connectionList.Count; i++)
-            _router.Send(_connectionList[i], message, delivery);
+        for (int i = 0; i < _connectionList.Count; i++)
+            _router.Send(conn: _connectionList[i], message: message, delivery: delivery);
     }
 
     public void SendToAllExcept<T>(NetConnection except, T message,
         DeliveryMethod delivery = DeliveryMethod.ReliableOrdered) where T : INetMessage, new()
     {
-        for (var i = 0; i < _connectionList.Count; i++)
+        for (int i = 0; i < _connectionList.Count; i++)
+        {
             if (_connectionList[i].Id != except.Id)
-                _router.Send(_connectionList[i], message, delivery);
+                _router.Send(conn: _connectionList[i], message: message, delivery: delivery);
+        }
     }
 
     // ── RPC convenience ────────────────────────────────────────────────────────
@@ -205,7 +204,8 @@ public sealed class NetworkManager : ITransportListener, IDisposable
         where TReq : INetMessage, new()
         where TResp : INetMessage, new()
     {
-        if (ServerConnection is { } server) return Rpc.Call<TReq, TResp>(server, request, timeout);
+        if (ServerConnection is { } server)
+            return Rpc.Call<TReq, TResp>(conn: server, request: request, timeout: timeout);
         return Task.FromException<TResp>(
             new InvalidOperationException("Not connected to a server.")
         );
@@ -213,12 +213,12 @@ public sealed class NetworkManager : ITransportListener, IDisposable
 
     private void WireHandlers(NetConnection conn)
     {
-        conn.On(NetChannel.Message, _router.Dispatch);
-        conn.On(NetChannel.RpcRequest, Rpc.HandleRequest);
-        conn.On(NetChannel.RpcResponse, Rpc.HandleResponse);
-        conn.On(NetChannel.ReplicationEvents, Replication.HandleEvents);
-        conn.On(NetChannel.ReplicationState, Replication.HandleState);
-        conn.On(NetChannel.TimeSync, Clock.HandlePacket);
+        conn.On(channel: NetChannel.Message, handler: _router.Dispatch);
+        conn.On(channel: NetChannel.RpcRequest, handler: Rpc.HandleRequest);
+        conn.On(channel: NetChannel.RpcResponse, handler: Rpc.HandleResponse);
+        conn.On(channel: NetChannel.ReplicationEvents, handler: Replication.HandleEvents);
+        conn.On(channel: NetChannel.ReplicationState, handler: Replication.HandleState);
+        conn.On(channel: NetChannel.TimeSync, handler: Clock.HandlePacket);
     }
 
     private void RebuildConnectionList()

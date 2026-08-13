@@ -40,13 +40,15 @@ public class Stack : MultiChildWidget
         // measure cache, thrashing it for the whole subtree every frame).
         if (c.MinWidth == c.MaxWidth && c.MinHeight == c.MaxHeight)
         {
-            _size = new Size(c.MaxWidth, c.MaxHeight);
-            var tightFill = Constraints.Tight(_size.Width, _size.Height);
+            _size = new Size(width: c.MaxWidth, height: c.MaxHeight);
+            var tightFill = Constraints.Tight(width: _size.Width, height: _size.Height);
             foreach (var child in Children)
+            {
                 if (child is Positioned p)
-                    MeasurePositioned(p, _size);
+                    MeasurePositioned(p: p, stack: _size);
                 else
                     child.Measure(tightFill); // non-positioned children fill the stack
+            }
 
             return _size;
         }
@@ -54,33 +56,33 @@ public class Stack : MultiChildWidget
         // The stack sizes to its largest non-positioned child (or the parent constraints).
         float w = 0f, h = 0f;
         var probe = new Constraints(
-            0,
-            c.MaxWidth,
-            0,
-            c.MaxHeight
+            minWidth: 0,
+            maxWidth: c.MaxWidth,
+            minHeight: 0,
+            maxHeight: c.MaxHeight
         );
         if (_probeSizes.Length < Children.Count) _probeSizes = new Size[Children.Count];
-        for (var i = 0; i < Children.Count; i++)
+        for (int i = 0; i < Children.Count; i++)
         {
             var child = Children[i];
             if (child is Positioned) continue;
             var sz = child.Measure(probe);
             _probeSizes[i] = sz;
-            w = MathF.Max(w, sz.Width);
-            h = MathF.Max(h, sz.Height);
+            w = MathF.Max(x: w, y: sz.Width);
+            h = MathF.Max(x: h, y: sz.Height);
         }
 
-        _size = c.Constrain(new Size(w, h));
+        _size = c.Constrain(new Size(width: w, height: h));
 
         // Resolve each child's constraints against the final stack size. A child whose probe size
         // already matches the stack keeps its probe measurement (re-measuring would evict it from
         // the child's measure cache without changing the result).
-        var fill = Constraints.Tight(_size.Width, _size.Height);
-        for (var i = 0; i < Children.Count; i++)
+        var fill = Constraints.Tight(width: _size.Width, height: _size.Height);
+        for (int i = 0; i < Children.Count; i++)
         {
             var child = Children[i];
             if (child is Positioned p)
-                MeasurePositioned(p, _size);
+                MeasurePositioned(p: p, stack: _size);
             else if (_probeSizes[i] != _size)
                 child.Measure(fill); // non-positioned children fill the stack
         }
@@ -91,41 +93,41 @@ public class Stack : MultiChildWidget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         foreach (var child in Children)
+        {
             if (child is Positioned p)
             {
-                var (x, pw) = ResolveAxis(
-                    p.Left,
-                    p.Right,
-                    p.Width,
-                    p.MeasuredSize.Width,
-                    _size.Width
+                (float x, float pw) = ResolveAxis(
+                    start: p.Left,
+                    end: p.Right,
+                    size: p.Width,
+                    measured: p.MeasuredSize.Width,
+                    total: _size.Width
                 );
-                var (y, ph) = ResolveAxis(
-                    p.Top,
-                    p.Bottom,
-                    p.Height,
-                    p.MeasuredSize.Height,
-                    _size.Height
+                (float y, float ph) = ResolveAxis(
+                    start: p.Top,
+                    end: p.Bottom,
+                    size: p.Height,
+                    measured: p.MeasuredSize.Height,
+                    total: _size.Height
                 );
                 p.LayoutAt(
                     new Rect(
-                        origin.X + x,
-                        origin.Y + y,
-                        pw,
-                        ph
+                        x: origin.X + x,
+                        y: origin.Y + y,
+                        width: pw,
+                        height: ph
                     )
                 );
             }
             else
-            {
                 child.Layout(origin);
-            }
+        }
     }
 
     public override void Paint(PaintList paint)
@@ -135,8 +137,8 @@ public class Stack : MultiChildWidget
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
-        for (var i = Children.Count - 1; i >= 0; i--)
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
+        for (int i = Children.Count - 1; i >= 0; i--)
         {
             var hit = Children[i].HitTest(point);
             if (hit != null) return hit;
@@ -147,29 +149,29 @@ public class Stack : MultiChildWidget
 
     private static void MeasurePositioned(Positioned p, Size stack)
     {
-        var knownW = p.Width.HasValue || (p.Left.HasValue && p.Right.HasValue);
-        var knownH = p.Height.HasValue || (p.Top.HasValue && p.Bottom.HasValue);
-        var (_, w) = ResolveAxis(
-            p.Left,
-            p.Right,
-            p.Width,
-            0f,
-            stack.Width
+        bool knownW = p.Width.HasValue || (p.Left.HasValue && p.Right.HasValue);
+        bool knownH = p.Height.HasValue || (p.Top.HasValue && p.Bottom.HasValue);
+        (_, float w) = ResolveAxis(
+            start: p.Left,
+            end: p.Right,
+            size: p.Width,
+            measured: 0f,
+            total: stack.Width
         );
-        var (_, h) = ResolveAxis(
-            p.Top,
-            p.Bottom,
-            p.Height,
-            0f,
-            stack.Height
+        (_, float h) = ResolveAxis(
+            start: p.Top,
+            end: p.Bottom,
+            size: p.Height,
+            measured: 0f,
+            total: stack.Height
         );
 
         p.Measure(
             new Constraints(
-                knownW ? w : 0,
-                knownW ? w : stack.Width,
-                knownH ? h : 0,
-                knownH ? h : stack.Height
+                minWidth: knownW ? w : 0,
+                maxWidth: knownW ? w : stack.Width,
+                minHeight: knownH ? h : 0,
+                maxHeight: knownH ? h : stack.Height
             )
         );
     }
@@ -181,7 +183,7 @@ public class Stack : MultiChildWidget
         float len;
         if (size.HasValue) len = size.Value;
         else if (start.HasValue && end.HasValue)
-            len = MathF.Max(0f, total - start.Value - end.Value);
+            len = MathF.Max(x: 0f, y: total - start.Value - end.Value);
         else len = measured;
 
         float pos;

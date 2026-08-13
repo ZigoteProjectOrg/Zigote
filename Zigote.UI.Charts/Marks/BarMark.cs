@@ -10,11 +10,8 @@ namespace Zigote.UI.Charts.Marks;
 public static class BarMark
 {
     public static BarMark<T> Of<T>(IReadOnlyList<T> data, Func<T, ChartValue> x,
-        Func<T, ChartValue> y,
-        Func<T, string>? series = null)
-    {
-        return new BarMark<T>(data, x, y) { SeriesBy = series };
-    }
+        Func<T, ChartValue> y, Func<T, string>? series = null) =>
+        new(data: data, x: x, y: y) { SeriesBy = series };
 }
 
 /// <summary>
@@ -24,10 +21,14 @@ public static class BarMark
 ///     <see cref="ChartStacking.None" /> for side-by-side grouping.
 /// </summary>
 public class BarMark<T>(IReadOnlyList<T> data, Func<T, ChartValue> x, Func<T, ChartValue> y)
-    : SeriesMark<T>(data, x, y)
+    : SeriesMark<T>(data: data, x: x, y: y)
 {
     private readonly Dictionary<ChartValue, double> _roundedBottom = new();
     private readonly Dictionary<ChartValue, double> _roundedTop = new();
+    private readonly StackScratch _stackScratch = new();
+
+    // Reused stacking-input scratch (StackCompute does not retain it) + the pooled column maps.
+    private readonly List<(string Series, ChartValue X, double Value)> _triples = [];
 
     private bool _horizontal;
 
@@ -35,10 +36,6 @@ public class BarMark<T>(IReadOnlyList<T> data, Func<T, ChartValue> x, Func<T, Ch
     // maps double-buffer across morph epochs so a re-resolve reuses them instead of reallocating.
     private Dictionary<(string Series, ChartValue X), StackedSpan>? _prevSpans;
     private Dictionary<(string Series, ChartValue X), StackedSpan> _spans = new();
-
-    // Reused stacking-input scratch (StackCompute does not retain it) + the pooled column maps.
-    private readonly List<(string Series, ChartValue X, double Value)> _triples = [];
-    private readonly StackScratch _stackScratch = new();
 
     public ChartStacking Stacking { get; set; } = ChartStacking.Standard;
 
@@ -56,11 +53,14 @@ public class BarMark<T>(IReadOnlyList<T> data, Func<T, ChartValue> x, Func<T, Ch
 
     public override void IncludeDomain(ChartDomain domain)
     {
-        var snapshot = EpochChanged(domain);
+        bool snapshot = EpochChanged(domain);
         if (snapshot && _spans.Count > 0)
             // Morph source for animated updates — swap buffers so the displaced prev map is reused.
+        {
             (_prevSpans, _spans) = (_spans,
                 _prevSpans ?? new Dictionary<(string, ChartValue), StackedSpan>());
+        }
+
         ResolveData(snapshot);
         if (Resolved.Count == 0) return;
 
@@ -69,7 +69,9 @@ public class BarMark<T>(IReadOnlyList<T> data, Func<T, ChartValue> x, Func<T, Ch
                       first.X.Kind != ChartValueKind.Category;
 
         var catScale = _horizontal ? domain.Y(first.Y) : domain.X(first.X);
-        var valScale = _horizontal ? domain.X(first.X) : domain.Y(first.Y, UseSecondaryYAxis);
+        var valScale = _horizontal
+            ? domain.X(first.X)
+            : domain.Y(sample: first.Y, secondary: UseSecondaryYAxis);
         ChartDomain.RequestZeroBaseline(valScale);
 
         foreach (var p in Resolved)
@@ -81,16 +83,16 @@ public class BarMark<T>(IReadOnlyList<T> data, Func<T, ChartValue> x, Func<T, Ch
         _triples.Clear();
         foreach (var p in Resolved)
         {
-            var value = (_horizontal ? p.X : p.Y).Numeric;
+            double value = (_horizontal ? p.X : p.Y).Numeric;
             _triples.Add((p.Series, _horizontal ? p.Y : p.X, value));
         }
 
         StackCompute.Compute(
-            _triples,
-            SeriesOrder,
-            mode,
-            _spans,
-            _stackScratch
+            points: _triples,
+            seriesOrder: SeriesOrder,
+            mode: mode,
+            result: _spans,
+            scratch: _stackScratch
         );
 
         _roundedTop.Clear();
@@ -100,32 +102,32 @@ public class BarMark<T>(IReadOnlyList<T> data, Func<T, ChartValue> x, Func<T, Ch
             valScale.IncludeNumeric(span.Bottom);
             valScale.IncludeNumeric(span.Top);
             // Only the outermost segment of a stacked column rounds its corner.
-            if (!_roundedTop.TryGetValue(key, out var top) || span.Top > top)
+            if (!_roundedTop.TryGetValue(key: key, value: out double top) || span.Top > top)
                 _roundedTop[key] = span.Top;
-            if (!_roundedBottom.TryGetValue(key, out var bot) || span.Bottom < bot)
+            if (!_roundedBottom.TryGetValue(key: key, value: out double bot) || span.Bottom < bot)
                 _roundedBottom[key] = span.Bottom;
         }
     }
 
     public override void CollectInteractive(ChartRenderContext ctx)
     {
-        for (var i = 0; i < Resolved.Count; i++)
+        for (int i = 0; i < Resolved.Count; i++)
         {
             var p = Resolved[i];
-            var (rect, _) = BarRect(ctx, p);
+            var (rect, _) = BarRect(ctx: ctx, p: p);
             if (rect.IsEmpty && rect.Width <= 0 && rect.Height <= 0) continue;
             var value = _horizontal ? p.X : p.Y;
-            var screenX = _horizontal ? rect.Right : rect.X + rect.Width / 2f;
-            var screenY = _horizontal ? rect.Y + rect.Height / 2f : rect.Y;
+            float screenX = _horizontal ? rect.Right : rect.X + (rect.Width / 2f);
+            float screenY = _horizontal ? rect.Y + (rect.Height / 2f) : rect.Y;
             ctx.HoverPoints.Add(
                 new ChartDataPoint(
-                    screenX,
-                    screenY,
-                    p.X,
-                    p.Y,
-                    p.Series,
-                    FormatValue(value),
-                    ctx.ColorFor(p.Series, Color, MarkIndex)
+                    screenX: screenX,
+                    screenY: screenY,
+                    x: p.X,
+                    y: p.Y,
+                    series: p.Series,
+                    valueLabel: FormatValue(value),
+                    color: ctx.ColorFor(series: p.Series, markOverride: Color, markIndex: MarkIndex)
                 )
             );
         }
@@ -136,17 +138,17 @@ public class BarMark<T>(IReadOnlyList<T> data, Func<T, ChartValue> x, Func<T, Ch
         var paint = ctx.Paint;
         if (paint is null) return;
 
-        for (var i = 0; i < Resolved.Count; i++)
+        for (int i = 0; i < Resolved.Count; i++)
         {
             var p = Resolved[i];
-            var (rect, roundedEnd) = BarRect(ctx, p);
+            var (rect, roundedEnd) = BarRect(ctx: ctx, p: p);
             if (rect.Width <= 0.01f || rect.Height <= 0.01f) continue;
 
-            var color = ctx.ColorFor(p.Series, Color, MarkIndex);
-            var r = MathF.Min(CornerRadius, MathF.Min(rect.Width, rect.Height) / 2f);
+            var color = ctx.ColorFor(series: p.Series, markOverride: Color, markIndex: MarkIndex);
+            float r = MathF.Min(x: CornerRadius, y: MathF.Min(x: rect.Width, y: rect.Height) / 2f);
             if (r <= 0f || roundedEnd == RoundedEnd.None)
             {
-                paint.AddRect(rect, color);
+                paint.AddRect(bounds: rect, color: color);
                 continue;
             }
 
@@ -154,32 +156,32 @@ public class BarMark<T>(IReadOnlyList<T> data, Func<T, ChartValue> x, Func<T, Ch
             // by the radius so the baseline corners stay square.
             var extended = roundedEnd switch {
                 RoundedEnd.Top => new Rect(
-                    rect.X,
-                    rect.Y,
-                    rect.Width,
-                    rect.Height + r
+                    x: rect.X,
+                    y: rect.Y,
+                    width: rect.Width,
+                    height: rect.Height + r
                 ),
                 RoundedEnd.Bottom => new Rect(
-                    rect.X,
-                    rect.Y - r,
-                    rect.Width,
-                    rect.Height + r
+                    x: rect.X,
+                    y: rect.Y - r,
+                    width: rect.Width,
+                    height: rect.Height + r
                 ),
                 RoundedEnd.Right => new Rect(
-                    rect.X - r,
-                    rect.Y,
-                    rect.Width + r,
-                    rect.Height
+                    x: rect.X - r,
+                    y: rect.Y,
+                    width: rect.Width + r,
+                    height: rect.Height
                 ),
                 _ => new Rect(
-                    rect.X,
-                    rect.Y,
-                    rect.Width + r,
-                    rect.Height
+                    x: rect.X,
+                    y: rect.Y,
+                    width: rect.Width + r,
+                    height: rect.Height
                 ), // Left
             };
             paint.AddClipStart(rect);
-            paint.AddRect(extended, color, r);
+            paint.AddRect(bounds: extended, color: color, radius: r);
             paint.AddClipEnd();
         }
     }
@@ -188,62 +190,68 @@ public class BarMark<T>(IReadOnlyList<T> data, Func<T, ChartValue> x, Func<T, Ch
     {
         var catValue = _horizontal ? p.Y : p.X;
         var catScale = _horizontal ? ctx.YScale : ctx.XScale;
-        var plotLen = _horizontal ? ctx.PlotRect.Height : ctx.PlotRect.Width;
+        float plotLen = _horizontal ? ctx.PlotRect.Height : ctx.PlotRect.Width;
 
-        var groupWidth = catScale.IsBand
+        float groupWidth = catScale.IsBand
             ? catScale.NormalizedBandWidth * plotLen * WidthFraction
             : FixedWidth;
 
         var mode = SeriesOrder.Count > 1 || SeriesOrder[0].Length > 0
             ? Stacking
             : ChartStacking.None;
-        var grouped = mode == ChartStacking.None && SeriesOrder.Count > 1;
-        var barWidth = grouped
-            ? MathF.Max(1f, (groupWidth - GroupGap * (SeriesOrder.Count - 1)) / SeriesOrder.Count)
+        bool grouped = mode == ChartStacking.None && SeriesOrder.Count > 1;
+        float barWidth = grouped
+            ? MathF.Max(
+                x: 1f,
+                y: (groupWidth - (GroupGap * (SeriesOrder.Count - 1))) / SeriesOrder.Count
+            )
             : groupWidth;
 
-        var center = _horizontal ? ctx.MapY(catValue) : ctx.MapX(catValue);
-        var catStart = center - groupWidth / 2f;
+        float center = _horizontal ? ctx.MapY(catValue) : ctx.MapX(catValue);
+        float catStart = center - (groupWidth / 2f);
         if (grouped)
-            catStart += Math.Max(0, IndexOfSeries(p.Series)) * (barWidth + GroupGap);
+            catStart += Math.Max(val1: 0, val2: IndexOfSeries(p.Series)) * (barWidth + GroupGap);
 
-        if (!_spans.TryGetValue((p.Series, catValue), out var span))
+        if (!_spans.TryGetValue(key: (p.Series, catValue), value: out var span))
             return (Rect.Zero, RoundedEnd.None);
 
         // Data-update morph: interpolate from the previous epoch's span (new bars grow from zero).
-        var spanBottom = span.Bottom;
-        var spanTop = span.Top;
+        double spanBottom = span.Bottom;
+        double spanTop = span.Top;
         if (ctx.DataProgress < 1f)
         {
             var old = _prevSpans is not null &&
-                      _prevSpans.TryGetValue((p.Series, catValue), out var o)
+                      _prevSpans.TryGetValue(key: (p.Series, catValue), value: out var o)
                 ? o
-                : new StackedSpan(0, 0);
-            spanBottom = old.Bottom + (spanBottom - old.Bottom) * ctx.DataProgress;
-            spanTop = old.Top + (spanTop - old.Top) * ctx.DataProgress;
+                : new StackedSpan(Bottom: 0, Top: 0);
+            spanBottom = old.Bottom + ((spanBottom - old.Bottom) * ctx.DataProgress);
+            spanTop = old.Top + ((spanTop - old.Top) * ctx.DataProgress);
         }
 
         // Entrance animation grows the bar out of the baseline.
-        var bottom = spanBottom;
-        var top = bottom + (spanTop - spanBottom) * ctx.Progress;
+        double bottom = spanBottom;
+        double top = bottom + ((spanTop - spanBottom) * ctx.Progress);
 
-        var isOuterPositive = span.Top > span.Bottom &&
-                              _roundedTop.TryGetValue(catValue, out var maxTop) &&
-                              span.Top >= maxTop;
-        var isOuterNegative = span.Bottom < 0 &&
-                              _roundedBottom.TryGetValue(catValue, out var minBot) &&
-                              span.Bottom <= minBot;
+        bool isOuterPositive = span.Top > span.Bottom &&
+                               _roundedTop.TryGetValue(key: catValue, value: out double maxTop) &&
+                               span.Top >= maxTop;
+        bool isOuterNegative = span.Bottom < 0 &&
+                               _roundedBottom.TryGetValue(
+                                   key: catValue,
+                                   value: out double minBot
+                               ) &&
+                               span.Bottom <= minBot;
 
         if (_horizontal)
         {
-            var x0 = ctx.MapXNumeric(bottom);
-            var x1 = ctx.MapXNumeric(top);
+            float x0 = ctx.MapXNumeric(bottom);
+            float x1 = ctx.MapXNumeric(top);
             if (x1 < x0) (x0, x1) = (x1, x0);
             var rect = new Rect(
-                x0,
-                catStart,
-                x1 - x0,
-                barWidth
+                x: x0,
+                y: catStart,
+                width: x1 - x0,
+                height: barWidth
             );
             var end = isOuterPositive ? RoundedEnd.Right :
                 isOuterNegative ? RoundedEnd.Left : RoundedEnd.None;
@@ -251,14 +259,14 @@ public class BarMark<T>(IReadOnlyList<T> data, Func<T, ChartValue> x, Func<T, Ch
         }
         else
         {
-            var y0 = ctx.MapYNumeric(top);
-            var y1 = ctx.MapYNumeric(bottom);
+            float y0 = ctx.MapYNumeric(top);
+            float y1 = ctx.MapYNumeric(bottom);
             if (y1 < y0) (y0, y1) = (y1, y0);
             var rect = new Rect(
-                catStart,
-                y0,
-                barWidth,
-                y1 - y0
+                x: catStart,
+                y: y0,
+                width: barWidth,
+                height: y1 - y0
             );
             var end = isOuterPositive ? RoundedEnd.Top :
                 isOuterNegative ? RoundedEnd.Bottom : RoundedEnd.None;

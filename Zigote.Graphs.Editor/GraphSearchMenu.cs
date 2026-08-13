@@ -59,15 +59,12 @@ public sealed class GraphSearchMenu : Widget
         App.Active?.RequestFocus(_searchField);
     }
 
-    public void Hide()
-    {
-        IsVisible = false;
-    }
+    public void Hide() => IsVisible = false;
 
     private void RefreshResults()
     {
         _results.Children.Clear();
-        var hits = _state.Registry.Search(_query, _state.Graph.DomainId)
+        var hits = _state.Registry.Search(query: _query, domainId: _state.Graph.DomainId)
             .Take(12)
             .ToList();
 
@@ -75,18 +72,18 @@ public sealed class GraphSearchMenu : Widget
         {
             var d = def; // capture
             var row = new Button(
-                def.DisplayName,
-                () =>
+                label: def.DisplayName,
+                onPressed: () =>
                 {
-                    NodeChosen?.Invoke(d.Id, _spawnWorldX, _spawnWorldY);
+                    NodeChosen?.Invoke(arg1: d.Id, arg2: _spawnWorldX, arg3: _spawnWorldY);
                     Hide();
                 }
             ) {
                 Padding = new EdgeInsets(
-                    8f,
-                    4f,
-                    8f,
-                    4f
+                    left: 8f,
+                    top: 4f,
+                    right: 8f,
+                    bottom: 4f
                 ),
                 BackgroundColor = Color.Transparent,
                 TextColor = _theme.OnSurface,
@@ -96,54 +93,58 @@ public sealed class GraphSearchMenu : Widget
         }
 
         if (hits.Count == 0)
-            _results.Children.Add(new Label("No results", _theme.FontSizeBody, _theme.Hint));
+        {
+            _results.Children.Add(
+                new Label(text: "No results", fontSize: _theme.FontSizeBody, color: _theme.Hint)
+            );
+        }
     }
 
     public override Size Measure(Constraints c)
     {
         if (!IsVisible) return _size = Size.Zero;
-        _size = new Size(260f, 320f);
+        _size = new Size(width: 260f, height: 320f);
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         if (!IsVisible) return;
-        _searchField.Measure(Constraints.Tight(_size.Width - 16f, 30f));
-        _searchField.Layout(new Offset(origin.X + 8f, origin.Y + 8f));
-        _results.Measure(Constraints.Tight(_size.Width, _size.Height - 46f));
-        _results.Layout(new Offset(origin.X, origin.Y + 46f));
+        _searchField.Measure(Constraints.Tight(width: _size.Width - 16f, height: 30f));
+        _searchField.Layout(new Offset(x: origin.X + 8f, y: origin.Y + 8f));
+        _results.Measure(Constraints.Tight(width: _size.Width, height: _size.Height - 46f));
+        _results.Layout(new Offset(x: origin.X, y: origin.Y + 46f));
     }
 
     public override void Paint(PaintList paint)
     {
         if (!IsVisible) return;
         paint.AddShadow(
-            Bounds,
-            new Color(
-                0,
-                0,
-                0,
-                0.5f
+            bounds: Bounds,
+            color: new Color(
+                r: 0,
+                g: 0,
+                b: 0,
+                a: 0.5f
             ),
-            8f,
-            20f
+            borderRadius: 8f,
+            blurRadius: 20f
         );
-        paint.AddRect(Bounds, _theme.Surface, 8f);
-        paint.AddBorder(Bounds, _theme.Border, 8f);
+        paint.AddRect(bounds: Bounds, color: _theme.Surface, radius: 8f);
+        paint.AddBorder(bounds: Bounds, color: _theme.Border, radius: 8f);
         _searchField.Paint(paint);
         paint.AddClipStart(
             new Rect(
-                Bounds.X,
-                Bounds.Y + 46f,
-                Bounds.Width,
-                Bounds.Height - 46f
+                x: Bounds.X,
+                y: Bounds.Y + 46f,
+                width: Bounds.Width,
+                height: Bounds.Height - 46f
             )
         );
         _results.Paint(paint);
@@ -152,12 +153,9 @@ public sealed class GraphSearchMenu : Widget
 
     public override Widget? HitTest(Offset point)
     {
-        if (!IsVisible || !Bounds.Contains(point.X, point.Y)) return null;
+        if (!IsVisible || !Bounds.Contains(px: point.X, py: point.Y)) return null;
         return _searchField.HitTest(point) ?? _results.HitTest(point) ?? this;
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return IsVisible ? [_searchField, _results] : [];
-    }
+    public override IEnumerable<Widget> GetChildren() => IsVisible ? [_searchField, _results] : [];
 }

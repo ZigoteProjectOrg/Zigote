@@ -3,6 +3,7 @@ using Zigote.Core.Math3D;
 using Zigote.Editor.History;
 using Zigote.Runtime.Scene;
 using Zigote.UI.Widgets.Controls;
+
 // Dropdown<T> must be referenced with a concrete type — alias for clarity:
 
 namespace Zigote.Editor.Panels;
@@ -13,75 +14,77 @@ public sealed partial class InspectorPanel
     private void BuildCameraSection(SceneNode capturedNode)
     {
         _rows.Add(PropRow.Spacer(4f));
-        _rows.Add(SectionRow("Camera", _theme));
+        _rows.Add(SectionRow(title: "Camera", theme: _theme));
 
         // Plain FOV is only meaningful when the physical camera is not driving it.
         if (!capturedNode.PhysEnabled)
+        {
             _rows.Add(
                 PropRow.Float(
-                    "FOV°",
-                    capturedNode.CameraFovDegrees,
-                    v => _state.History.Execute(
+                    label: "FOV°",
+                    value: capturedNode.CameraFovDegrees,
+                    onChange: v => _state.History.Execute(
                         new ChangePropertyCommand<float>(
-                            _state,
-                            capturedNode.CameraFovDegrees,
-                            v,
-                            val =>
+                            state: _state,
+                            oldValue: capturedNode.CameraFovDegrees,
+                            newValue: v,
+                            setter: val =>
                             {
                                 capturedNode.CameraFovDegrees = val;
                                 capturedNode.PushCameraParams();
                             }
                         )
                     ),
-                    _theme,
-                    5f,
-                    120f,
-                    1f
+                    theme: _theme,
+                    min: 5f,
+                    max: 120f,
+                    step: 1f
                 )
             );
+        }
 
         _rows.Add(
             PropRow.Float(
-                "Near",
-                capturedNode.CameraNear,
-                v => _state.History.Execute(
+                label: "Near",
+                value: capturedNode.CameraNear,
+                onChange: v => _state.History.Execute(
                     new ChangePropertyCommand<float>(
-                        _state,
-                        capturedNode.CameraNear,
-                        v,
-                        val =>
+                        state: _state,
+                        oldValue: capturedNode.CameraNear,
+                        newValue: v,
+                        setter: val =>
                         {
                             capturedNode.CameraNear = val;
                             capturedNode.PushCameraParams();
                         }
                     )
                 ),
-                _theme,
-                0.01f,
-                10f,
-                0.01f
+                theme: _theme,
+                min: 0.01f,
+                max: 10f,
+                step: 0.01f
             )
         );
         _rows.Add(
             PropRow.Float(
-                "Far",
-                capturedNode.CameraFar,
-                v => _state.History.Execute(
+                label: "Far",
+                value: capturedNode.CameraFar,
+                onChange: v => _state.History.Execute(
                     new ChangePropertyCommand<float>(
-                        _state,
-                        capturedNode.CameraFar,
-                        v,
-                        val =>
+                        state: _state,
+                        oldValue: capturedNode.CameraFar,
+                        newValue: v,
+                        setter: val =>
                         {
                             capturedNode.CameraFar = val;
                             capturedNode.PushCameraParams();
                         }
                     )
                 ),
-                _theme,
-                10f,
-                10000f,
-                10f
+                theme: _theme,
+                min: 10f,
+                max: 10000f,
+                step: 10f
             )
         );
 
@@ -89,55 +92,57 @@ public sealed partial class InspectorPanel
         // 3D mesh pass itself still renders perspective — a documented limit; 2D games don't mind.
         _rows.Add(
             PropRow.DropdownRow(
-                "Projection",
-                ["Perspective", "Orthographic (2D)"],
-                Math.Clamp(capturedNode.CameraProjection, 0, 1),
-                i => _state.History.Execute(
+                label: "Projection",
+                items: ["Perspective", "Orthographic (2D)"],
+                selectedIndex: Math.Clamp(value: capturedNode.CameraProjection, min: 0, max: 1),
+                onChange: i => _state.History.Execute(
                     new ChangePropertyCommand<int>(
-                        _state,
-                        capturedNode.CameraProjection,
-                        i,
-                        val =>
+                        state: _state,
+                        oldValue: capturedNode.CameraProjection,
+                        newValue: i,
+                        setter: val =>
                         {
                             capturedNode.CameraProjection = val;
                             Rebuild();
                         }
                     )
                 ),
-                _theme
+                theme: _theme
             )
         );
         if (capturedNode.CameraProjection == 1)
+        {
             _rows.Add(
                 PropRow.Float(
-                    "Ortho Height",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.CameraOrthoSize.Y,
-                        (n, v) => n.CameraOrthoSize = new Vec2(
-                            n.CameraOrthoSize.X,
-                            MathF.Max(0.01f, v)
+                    label: "Ortho Height",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.CameraOrthoSize.Y,
+                        setter: (n, v) => n.CameraOrthoSize = new Vec2(
+                            x: n.CameraOrthoSize.X,
+                            y: MathF.Max(x: 0.01f, y: v)
                         )
                     ),
-                    _theme,
-                    0.1f,
-                    1000f,
-                    0.5f
+                    theme: _theme,
+                    min: 0.1f,
+                    max: 1000f,
+                    step: 0.5f
                 )
             );
+        }
 
         _rows.Add(PropRow.Spacer(4f));
         _rows.Add(
             PropRow.Toggle(
-                "Physical Camera",
-                capturedNode.PhysEnabled,
-                v => _state.History.Execute(
+                label: "Physical Camera",
+                value: capturedNode.PhysEnabled,
+                onChange: v => _state.History.Execute(
                     new ChangePropertyCommand<bool>(
-                        _state,
-                        capturedNode.PhysEnabled,
-                        v,
-                        val =>
+                        state: _state,
+                        oldValue: capturedNode.PhysEnabled,
+                        newValue: v,
+                        setter: val =>
                         {
                             capturedNode.PhysEnabled = val;
                             capturedNode.PushCameraParams();
@@ -145,25 +150,29 @@ public sealed partial class InspectorPanel
                         }
                     )
                 ),
-                _theme
+                theme: _theme
             )
         );
 
         if (!capturedNode.PhysEnabled) return;
 
         // ── Lens ──
-        _rows.Add(SectionRow("Lens", _theme));
+        _rows.Add(SectionRow(title: "Lens", theme: _theme));
         _rows.Add(
             PropRow.DropdownRow(
-                "Sensor",
-                SensorPresetNames,
-                Math.Clamp(capturedNode.PhysSensorPreset, 0, SensorPresetNames.Length - 1),
-                i => _state.History.Execute(
+                label: "Sensor",
+                items: SensorPresetNames,
+                selectedIndex: Math.Clamp(
+                    value: capturedNode.PhysSensorPreset,
+                    min: 0,
+                    max: SensorPresetNames.Length - 1
+                ),
+                onChange: i => _state.History.Execute(
                     new ChangePropertyCommand<int>(
-                        _state,
-                        capturedNode.PhysSensorPreset,
-                        i,
-                        val =>
+                        state: _state,
+                        oldValue: capturedNode.PhysSensorPreset,
+                        newValue: i,
+                        setter: val =>
                         {
                             capturedNode.PhysSensorPreset = val;
                             capturedNode.PushCameraParams();
@@ -171,326 +180,346 @@ public sealed partial class InspectorPanel
                         }
                     )
                 ),
-                _theme
+                theme: _theme
             )
         );
         if (capturedNode.PhysSensorPreset == (int)SensorPreset.Custom)
         {
             _rows.Add(
                 PropRow.Float(
-                    "Sensor W mm",
-                    capturedNode.PhysSensorWidthMm,
-                    v => _state.History.Execute(
+                    label: "Sensor W mm",
+                    value: capturedNode.PhysSensorWidthMm,
+                    onChange: v => _state.History.Execute(
                         new ChangePropertyCommand<float>(
-                            _state,
-                            capturedNode.PhysSensorWidthMm,
-                            v,
-                            val =>
+                            state: _state,
+                            oldValue: capturedNode.PhysSensorWidthMm,
+                            newValue: v,
+                            setter: val =>
                             {
                                 capturedNode.PhysSensorWidthMm = val;
                                 capturedNode.PushCameraParams();
                             }
                         )
                     ),
-                    _theme,
-                    1f,
-                    100f,
-                    0.5f
+                    theme: _theme,
+                    min: 1f,
+                    max: 100f,
+                    step: 0.5f
                 )
             );
             _rows.Add(
                 PropRow.Float(
-                    "Sensor H mm",
-                    capturedNode.PhysSensorHeightMm,
-                    v => _state.History.Execute(
+                    label: "Sensor H mm",
+                    value: capturedNode.PhysSensorHeightMm,
+                    onChange: v => _state.History.Execute(
                         new ChangePropertyCommand<float>(
-                            _state,
-                            capturedNode.PhysSensorHeightMm,
-                            v,
-                            val =>
+                            state: _state,
+                            oldValue: capturedNode.PhysSensorHeightMm,
+                            newValue: v,
+                            setter: val =>
                             {
                                 capturedNode.PhysSensorHeightMm = val;
                                 capturedNode.PushCameraParams();
                             }
                         )
                     ),
-                    _theme,
-                    1f,
-                    100f,
-                    0.5f
+                    theme: _theme,
+                    min: 1f,
+                    max: 100f,
+                    step: 0.5f
                 )
             );
         }
 
         _rows.Add(
             PropRow.Float(
-                "Focal mm",
-                capturedNode.PhysFocalLengthMm,
-                v => _state.History.Execute(
+                label: "Focal mm",
+                value: capturedNode.PhysFocalLengthMm,
+                onChange: v => _state.History.Execute(
                     new ChangePropertyCommand<float>(
-                        _state,
-                        capturedNode.PhysFocalLengthMm,
-                        v,
-                        val =>
+                        state: _state,
+                        oldValue: capturedNode.PhysFocalLengthMm,
+                        newValue: v,
+                        setter: val =>
                         {
                             capturedNode.PhysFocalLengthMm = val;
                             capturedNode.PushCameraParams();
                         }
                     )
                 ),
-                _theme,
-                8f,
-                800f,
-                1f
+                theme: _theme,
+                min: 8f,
+                max: 800f,
+                step: 1f
             )
         );
         _rows.Add(
             PropRow.Float(
-                "f-stop",
-                NodeBind.To(
-                    _state,
-                    capturedNode,
-                    n => n.PhysFStop,
-                    (n, v) => n.PhysFStop = v
+                label: "f-stop",
+                bind: NodeBind.To(
+                    state: _state,
+                    node: capturedNode,
+                    getter: n => n.PhysFStop,
+                    setter: (n, v) => n.PhysFStop = v
                 ),
-                _theme,
-                1f,
-                22f,
-                0.1f
+                theme: _theme,
+                min: 1f,
+                max: 22f,
+                step: 0.1f
             )
         );
 
-        var fov = capturedNode.EffectiveFovDegrees();
+        float fov = capturedNode.EffectiveFovDegrees();
         _rows.Add(
             PropRow.Custom(
-                new Label($"Field of view: {fov:F1}°", _theme.FontSizeCaption, _theme.Hint)
+                new Label(
+                    text: $"Field of view: {fov:F1}°",
+                    fontSize: _theme.FontSizeCaption,
+                    color: _theme.Hint
+                )
             )
         );
 
         // ── Exposure ──
         _rows.Add(PropRow.Spacer(4f));
-        _rows.Add(SectionRow("Exposure", _theme));
+        _rows.Add(SectionRow(title: "Exposure", theme: _theme));
         _rows.Add(
             PropRow.Float(
-                "ISO",
-                NodeBind.To(
-                    _state,
-                    capturedNode,
-                    n => n.PhysIso,
-                    (n, v) => n.PhysIso = v
+                label: "ISO",
+                bind: NodeBind.To(
+                    state: _state,
+                    node: capturedNode,
+                    getter: n => n.PhysIso,
+                    setter: (n, v) => n.PhysIso = v
                 ),
-                _theme,
-                50f,
-                25600f,
-                50f
+                theme: _theme,
+                min: 50f,
+                max: 25600f,
+                step: 50f
             )
         );
         _rows.Add(
             PropRow.Float(
-                "Shutter s",
-                NodeBind.To(
-                    _state,
-                    capturedNode,
-                    n => n.PhysShutterSpeed,
-                    (n, v) => n.PhysShutterSpeed = v
+                label: "Shutter s",
+                bind: NodeBind.To(
+                    state: _state,
+                    node: capturedNode,
+                    getter: n => n.PhysShutterSpeed,
+                    setter: (n, v) => n.PhysShutterSpeed = v
                 ),
-                _theme,
-                0.001f,
-                0.5f,
-                0.001f
+                theme: _theme,
+                min: 0.001f,
+                max: 0.5f,
+                step: 0.001f
             )
         );
-        var ev = PhysicalCameraResolver.Ev100(
-            capturedNode.PhysFStop,
-            capturedNode.PhysShutterSpeed,
-            capturedNode.PhysIso
+        float ev = PhysicalCameraResolver.Ev100(
+            fStop: capturedNode.PhysFStop,
+            shutterSeconds: capturedNode.PhysShutterSpeed,
+            iso: capturedNode.PhysIso
         );
         _rows.Add(
             PropRow.Custom(
-                new Label($"Exposure value: EV {ev:F1}", _theme.FontSizeCaption, _theme.Hint)
+                new Label(
+                    text: $"Exposure value: EV {ev:F1}",
+                    fontSize: _theme.FontSizeCaption,
+                    color: _theme.Hint
+                )
             )
         );
         _rows.Add(
             PropRow.Toggle(
-                "Affect Exposure",
-                NodeBind.To(
-                    _state,
-                    capturedNode,
-                    n => n.PhysAffectExposure,
-                    (n, v) => n.PhysAffectExposure = v
+                label: "Affect Exposure",
+                bind: NodeBind.To(
+                    state: _state,
+                    node: capturedNode,
+                    getter: n => n.PhysAffectExposure,
+                    setter: (n, v) => n.PhysAffectExposure = v
                 ),
-                _theme
+                theme: _theme
             )
         );
 
         // ── Focus ──
         _rows.Add(PropRow.Spacer(4f));
-        _rows.Add(SectionRow("Focus", _theme));
+        _rows.Add(SectionRow(title: "Focus", theme: _theme));
         _rows.Add(
             PropRow.DropdownRow(
-                "Mode",
-                FocusModeNames,
-                Math.Clamp(capturedNode.PhysFocusMode, 0, FocusModeNames.Length - 1),
-                i => _state.History.Execute(
+                label: "Mode",
+                items: FocusModeNames,
+                selectedIndex: Math.Clamp(
+                    value: capturedNode.PhysFocusMode,
+                    min: 0,
+                    max: FocusModeNames.Length - 1
+                ),
+                onChange: i => _state.History.Execute(
                     new ChangePropertyCommand<int>(
-                        _state,
-                        capturedNode.PhysFocusMode,
-                        i,
-                        val =>
+                        state: _state,
+                        oldValue: capturedNode.PhysFocusMode,
+                        newValue: i,
+                        setter: val =>
                         {
                             capturedNode.PhysFocusMode = val;
                             Rebuild();
                         }
                     )
                 ),
-                _theme
+                theme: _theme
             )
         );
         if (capturedNode.PhysFocusMode == (int)FocusModeKind.Manual)
+        {
             _rows.Add(
                 PropRow.Float(
-                    "Distance m",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.PhysManualFocusM,
-                        (n, v) => n.PhysManualFocusM = v
+                    label: "Distance m",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.PhysManualFocusM,
+                        setter: (n, v) => n.PhysManualFocusM = v
                     ),
-                    _theme,
-                    0.1f,
-                    200f,
-                    0.1f
+                    theme: _theme,
+                    min: 0.1f,
+                    max: 200f,
+                    step: 0.1f
                 )
             );
+        }
         else
+        {
             _rows.Add(
                 PropRow.Float(
-                    "AF Speed",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.PhysFocusSpeed,
-                        (n, v) => n.PhysFocusSpeed = v
+                    label: "AF Speed",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.PhysFocusSpeed,
+                        setter: (n, v) => n.PhysFocusSpeed = v
                     ),
-                    _theme,
-                    0f,
-                    20f,
-                    0.5f
+                    theme: _theme,
+                    min: 0f,
+                    max: 20f,
+                    step: 0.5f
                 )
             );
+        }
 
         if (capturedNode.PhysFocusMode == (int)FocusModeKind.Subject)
             BuildFocusTargetRow(capturedNode);
 
         // ── Film ──
         _rows.Add(PropRow.Spacer(4f));
-        _rows.Add(SectionRow("Film", _theme));
+        _rows.Add(SectionRow(title: "Film", theme: _theme));
         _rows.Add(
             PropRow.DropdownRow(
-                "Stock",
-                FilmStockNames,
-                Math.Clamp(capturedNode.PhysFilmStock, 0, FilmStockNames.Length - 1),
-                i => _state.History.Execute(
+                label: "Stock",
+                items: FilmStockNames,
+                selectedIndex: Math.Clamp(
+                    value: capturedNode.PhysFilmStock,
+                    min: 0,
+                    max: FilmStockNames.Length - 1
+                ),
+                onChange: i => _state.History.Execute(
                     new ChangePropertyCommand<int>(
-                        _state,
-                        capturedNode.PhysFilmStock,
-                        i,
-                        val =>
+                        state: _state,
+                        oldValue: capturedNode.PhysFilmStock,
+                        newValue: i,
+                        setter: val =>
                         {
                             capturedNode.PhysFilmStock = val;
                             Rebuild();
                         }
                     )
                 ),
-                _theme
+                theme: _theme
             )
         );
         _rows.Add(
             PropRow.Float(
-                "Strength",
-                NodeBind.To(
-                    _state,
-                    capturedNode,
-                    n => n.PhysFilmStrength,
-                    (n, v) => n.PhysFilmStrength = v
+                label: "Strength",
+                bind: NodeBind.To(
+                    state: _state,
+                    node: capturedNode,
+                    getter: n => n.PhysFilmStrength,
+                    setter: (n, v) => n.PhysFilmStrength = v
                 ),
-                _theme
+                theme: _theme
             )
         );
         _rows.Add(
             PropRow.Toggle(
-                "Affect Grade",
-                NodeBind.To(
-                    _state,
-                    capturedNode,
-                    n => n.PhysAffectGrade,
-                    (n, v) => n.PhysAffectGrade = v
+                label: "Affect Grade",
+                bind: NodeBind.To(
+                    state: _state,
+                    node: capturedNode,
+                    getter: n => n.PhysAffectGrade,
+                    setter: (n, v) => n.PhysAffectGrade = v
                 ),
-                _theme
+                theme: _theme
             )
         );
         _rows.Add(
             PropRow.Toggle(
-                "Affect DoF",
-                NodeBind.To(
-                    _state,
-                    capturedNode,
-                    n => n.PhysAffectDof,
-                    (n, v) => n.PhysAffectDof = v
+                label: "Affect DoF",
+                bind: NodeBind.To(
+                    state: _state,
+                    node: capturedNode,
+                    getter: n => n.PhysAffectDof,
+                    setter: (n, v) => n.PhysAffectDof = v
                 ),
-                _theme
+                theme: _theme
             )
         );
 
         // ── Lens FX (native-effect phase; authored now, rendered once the ABI carries them) ──
         _rows.Add(PropRow.Spacer(4f));
-        _rows.Add(SectionRow("Lens FX", _theme));
+        _rows.Add(SectionRow(title: "Lens FX", theme: _theme));
         _rows.Add(
             PropRow.DropdownRow(
-                "Aperture",
-                ApertureBladeNames,
-                capturedNode.PhysApertureBlades == 0
+                label: "Aperture",
+                items: ApertureBladeNames,
+                selectedIndex: capturedNode.PhysApertureBlades == 0
                     ? 0
-                    : Math.Clamp(capturedNode.PhysApertureBlades - 4, 0, 5),
-                i => _state.History.Execute(
+                    : Math.Clamp(value: capturedNode.PhysApertureBlades - 4, min: 0, max: 5),
+                onChange: i => _state.History.Execute(
                     new ChangePropertyCommand<int>(
-                        _state,
-                        capturedNode.PhysApertureBlades,
-                        i == 0 ? 0 : i + 4,
-                        val => capturedNode.PhysApertureBlades = val
+                        state: _state,
+                        oldValue: capturedNode.PhysApertureBlades,
+                        newValue: i == 0 ? 0 : i + 4,
+                        setter: val => capturedNode.PhysApertureBlades = val
                     )
                 ),
-                _theme
+                theme: _theme
             )
         );
         _rows.Add(
             PropRow.Float(
-                "Anamorphic",
-                NodeBind.To(
-                    _state,
-                    capturedNode,
-                    n => n.PhysAnamorphic,
-                    (n, v) => n.PhysAnamorphic = v
+                label: "Anamorphic",
+                bind: NodeBind.To(
+                    state: _state,
+                    node: capturedNode,
+                    getter: n => n.PhysAnamorphic,
+                    setter: (n, v) => n.PhysAnamorphic = v
                 ),
-                _theme,
-                1f,
-                2f,
-                0.01f
+                theme: _theme,
+                min: 1f,
+                max: 2f,
+                step: 0.01f
             )
         );
         _rows.Add(
             PropRow.Float(
-                "Distortion",
-                NodeBind.To(
-                    _state,
-                    capturedNode,
-                    n => n.PhysDistortionK1,
-                    (n, v) => n.PhysDistortionK1 = v
+                label: "Distortion",
+                bind: NodeBind.To(
+                    state: _state,
+                    node: capturedNode,
+                    getter: n => n.PhysDistortionK1,
+                    setter: (n, v) => n.PhysDistortionK1 = v
                 ),
-                _theme,
-                -0.5f,
-                0.5f,
-                0.01f
+                theme: _theme,
+                min: -0.5f,
+                max: 0.5f,
+                step: 0.01f
             )
         );
     }
@@ -499,36 +528,38 @@ public sealed partial class InspectorPanel
     private void BuildFocusTargetRow(SceneNode capturedNode)
     {
         var targets = new List<SceneNode>();
-        CollectTargetNodes(_state.Scene.Root, capturedNode, targets);
-        var names = new string[targets.Count + 1];
+        CollectTargetNodes(node: _state.Scene.Root, exclude: capturedNode, into: targets);
+        string[] names = new string[targets.Count + 1];
         names[0] = "None";
-        for (var i = 0; i < targets.Count; i++) names[i + 1] = targets[i].Name;
-        var selected = 0;
-        for (var i = 0; i < targets.Count; i++)
+        for (int i = 0; i < targets.Count; i++) names[i + 1] = targets[i].Name;
+        int selected = 0;
+        for (int i = 0; i < targets.Count; i++)
+        {
             if (capturedNode.PhysFocusTargetNodeId == targets[i].Id)
             {
                 selected = i + 1;
                 break;
             }
+        }
 
         _rows.Add(
             PropRow.DropdownRow(
-                "Target",
-                names,
-                selected,
-                i =>
+                label: "Target",
+                items: names,
+                selectedIndex: selected,
+                onChange: i =>
                 {
                     int? id = i == 0 ? null : targets[i - 1].Id;
                     _state.History.Execute(
                         new ChangePropertyCommand<int?>(
-                            _state,
-                            capturedNode.PhysFocusTargetNodeId,
-                            id,
-                            val => capturedNode.PhysFocusTargetNodeId = val
+                            state: _state,
+                            oldValue: capturedNode.PhysFocusTargetNodeId,
+                            newValue: id,
+                            setter: val => capturedNode.PhysFocusTargetNodeId = val
                         )
                     );
                 },
-                _theme
+                theme: _theme
             )
         );
     }
@@ -537,6 +568,6 @@ public sealed partial class InspectorPanel
     {
         if (!node.IsInternal && node != exclude && node.Kind != NodeKind.Camera)
             into.Add(node);
-        foreach (var c in node.Children) CollectTargetNodes(c, exclude, into);
+        foreach (var c in node.Children) CollectTargetNodes(node: c, exclude: exclude, into: into);
     }
 }

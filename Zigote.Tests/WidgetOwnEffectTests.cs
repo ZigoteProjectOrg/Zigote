@@ -1,8 +1,8 @@
 using Xunit;
 using Zigote.Core;
 using Zigote.Core.Paint;
-using Zigote.UI.Host;
 using Zigote.Core.State;
+using Zigote.UI.Host;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Layout;
 
@@ -23,14 +23,16 @@ public class WidgetOwnEffectTests
     {
         var s = new Signal<int>(1);
         var w = new CounterWidget(s);
-        w.Measure(Constraints.Tight(100, 100)); // mounts the widget (OnMount → OwnEffect)
+        w.Measure(
+            Constraints.Tight(width: 100, height: 100)
+        ); // mounts the widget (OnMount → OwnEffect)
 
-        Assert.Equal(1, w.Seen);
-        Assert.Equal(1, w.Runs);
+        Assert.Equal(expected: 1, actual: w.Seen);
+        Assert.Equal(expected: 1, actual: w.Runs);
 
         s.Value = 2;
-        Assert.Equal(2, w.Seen);
-        Assert.Equal(2, w.Runs);
+        Assert.Equal(expected: 2, actual: w.Seen);
+        Assert.Equal(expected: 2, actual: w.Runs);
     }
 
     [Fact]
@@ -38,14 +40,17 @@ public class WidgetOwnEffectTests
     {
         var s = new Signal<int>(1);
         var w = new CounterWidget(s);
-        w.Measure(Constraints.Tight(100, 100));
+        w.Measure(Constraints.Tight(width: 100, height: 100));
 
         w.Detach(); // → unmount → drains what OnMount owned
 
-        var runsAtDetach = w.Runs;
+        int runsAtDetach = w.Runs;
         s.Value = 3;
-        Assert.Equal(runsAtDetach, w.Runs); // disposed → no more runs
-        Assert.Equal(1, w.Cleanups); // the Func<Action> overload ran its final cleanup
+        Assert.Equal(expected: runsAtDetach, actual: w.Runs); // disposed → no more runs
+        Assert.Equal(
+            expected: 1,
+            actual: w.Cleanups
+        ); // the Func<Action> overload ran its final cleanup
         Assert.False(w.Mounted);
     }
 
@@ -54,16 +59,16 @@ public class WidgetOwnEffectTests
     {
         var s = new Signal<int>(1);
         var w = new CounterWidget(s);
-        w.Measure(Constraints.Tight(100, 100));
+        w.Measure(Constraints.Tight(width: 100, height: 100));
         w.Detach();
 
-        w.Measure(Constraints.Tight(100, 100)); // re-mount
+        w.Measure(Constraints.Tight(width: 100, height: 100)); // re-mount
         Assert.True(w.Mounted);
 
-        var runsAtRemount = w.Runs;
+        int runsAtRemount = w.Runs;
         s.Value = 4;
-        Assert.Equal(4, w.Seen);
-        Assert.Equal(runsAtRemount + 1, w.Runs);
+        Assert.Equal(expected: 4, actual: w.Seen);
+        Assert.Equal(expected: runsAtRemount + 1, actual: w.Runs);
     }
 
     // Regression: LeafWidget used to override Attach/Detach without calling base, which skipped the
@@ -77,40 +82,30 @@ public class WidgetOwnEffectTests
         var app = App.Active;
         Assert.False(leaf.Mounted);
 
-        leaf.Attach(app!, null);
+        leaf.Attach(owner: app!, parent: null);
         Assert.True(leaf.Mounted);
-        Assert.Equal(1, leaf.Seen);
+        Assert.Equal(expected: 1, actual: leaf.Seen);
 
         s.Value = 2;
-        Assert.Equal(2, leaf.Seen);
+        Assert.Equal(expected: 2, actual: leaf.Seen);
 
         leaf.Detach();
         Assert.False(leaf.Mounted);
         s.Value = 3;
-        Assert.Equal(2, leaf.Seen); // the owned effect went with the unmount
+        Assert.Equal(expected: 2, actual: leaf.Seen); // the owned effect went with the unmount
     }
 
     private sealed class CounterLeaf(Signal<int> source) : LeafWidget
     {
         public int Seen;
 
-        protected override void OnMount()
-        {
-            OwnEffect(() => Seen = source.Value);
-        }
+        protected override void OnMount() => OwnEffect(() => Seen = source.Value);
 
-        public override Size Measure(Constraints constraints)
-        {
-            return Size.Zero;
-        }
+        public override Size Measure(Constraints constraints) => Size.Zero;
 
-        public override void Layout(Offset origin)
-        {
-        }
+        public override void Layout(Offset origin) { }
 
-        public override void Paint(PaintList paint)
-        {
-        }
+        public override void Paint(PaintList paint) { }
     }
 
     private sealed class CounterWidget(Signal<int> source) : ComposedWidget
@@ -130,9 +125,7 @@ public class WidgetOwnEffectTests
             );
         }
 
-        protected override Widget Build(BuildContext context)
-        {
-            return new SizedBox(10, 10);
-        }
+        protected override Widget Build(BuildContext context) =>
+            new SizedBox(width: 10, height: 10);
     }
 }

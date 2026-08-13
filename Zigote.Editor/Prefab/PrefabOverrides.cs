@@ -32,16 +32,16 @@ public static class PrefabOverrides
     {
         return component switch {
             PrefabComponent.Transform => !Eq(
-                SceneNodeComponents.ReadTransform(instance),
-                SceneNodeComponents.ReadTransform(template)
+                a: SceneNodeComponents.ReadTransform(instance),
+                b: SceneNodeComponents.ReadTransform(template)
             ),
             PrefabComponent.Material => instance.Kind == NodeKind.Mesh && !Eq(
-                SceneNodeComponents.ReadMaterial(instance),
-                SceneNodeComponents.ReadMaterial(template)
+                a: SceneNodeComponents.ReadMaterial(instance),
+                b: SceneNodeComponents.ReadMaterial(template)
             ),
             PrefabComponent.Light => instance.Kind == NodeKind.Light && !Eq(
-                SceneNodeComponents.ReadLight(instance),
-                SceneNodeComponents.ReadLight(template)
+                a: SceneNodeComponents.ReadLight(instance),
+                b: SceneNodeComponents.ReadLight(template)
             ),
             _ => false,
         };
@@ -61,8 +61,11 @@ public static class PrefabOverrides
     public static bool AnyOverridden(SceneNode instance, SceneNode template)
     {
         foreach (var c in ApplicableTo(instance))
-            if (IsOverridden(c, instance, template))
+        {
+            if (IsOverridden(component: c, instance: instance, template: template))
                 return true;
+        }
+
         return false;
     }
 
@@ -73,18 +76,21 @@ public static class PrefabOverrides
         {
             case PrefabComponent.Transform:
                 SceneNodeComponents.WriteTransform(
-                    instance,
-                    SceneNodeComponents.ReadTransform(template)
+                    n: instance,
+                    t: SceneNodeComponents.ReadTransform(template)
                 );
                 break;
             case PrefabComponent.Material:
                 SceneNodeComponents.WriteMaterial(
-                    instance,
-                    SceneNodeComponents.ReadMaterial(template)
+                    n: instance,
+                    m: SceneNodeComponents.ReadMaterial(template)
                 );
                 break;
             case PrefabComponent.Light:
-                SceneNodeComponents.WriteLight(instance, SceneNodeComponents.ReadLight(template));
+                SceneNodeComponents.WriteLight(
+                    n: instance,
+                    l: SceneNodeComponents.ReadLight(template)
+                );
                 break;
         }
     }
@@ -106,19 +112,17 @@ public static class PrefabOverrides
         switch (component)
         {
             case PrefabComponent.Transform when snapshot is Transform t:
-                SceneNodeComponents.WriteTransform(node, t);
+                SceneNodeComponents.WriteTransform(n: node, t: t);
                 break;
             case PrefabComponent.Material when snapshot is NodeMaterial m:
-                SceneNodeComponents.WriteMaterial(node, m);
+                SceneNodeComponents.WriteMaterial(n: node, m: m);
                 break;
             case PrefabComponent.Light when snapshot is NodeLight l:
-                SceneNodeComponents.WriteLight(node, l);
+                SceneNodeComponents.WriteLight(n: node, l: l);
                 break;
         }
     }
 
-    private static bool Eq<T>(T a, T b) where T : struct
-    {
-        return EqualityComparer<T>.Default.Equals(a, b);
-    }
+    private static bool Eq<T>(T a, T b) where T : struct =>
+        EqualityComparer<T>.Default.Equals(x: a, y: b);
 }

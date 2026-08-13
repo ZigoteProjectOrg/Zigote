@@ -29,10 +29,7 @@ public abstract class InheritedWidget : Widget
     public abstract bool UpdateShouldNotify(InheritedWidget oldWidget);
 
     /// <summary>Register <paramref name="w" /> to be rebuilt when this widget's data changes.</summary>
-    internal void AddDependent(Widget w)
-    {
-        _dependents.AddOrUpdate(w, null);
-    }
+    internal void AddDependent(Widget w) => _dependents.AddOrUpdate(key: w, value: null);
 
     /// <summary>
     ///     Rebuild every still-live dependent. Collected/detached dependents are simply absent from the
@@ -58,7 +55,7 @@ public abstract class InheritedWidget : Widget
         ctx.Push(this);
         try
         {
-            _size = Child?.Measure(c) ?? new Size(0f, 0f);
+            _size = Child?.Measure(c) ?? new Size(width: 0f, height: 0f);
             return _size;
         }
         finally
@@ -70,10 +67,10 @@ public abstract class InheritedWidget : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         // Push onto the context during Layout too (not just Measure): some widgets measure their
         // children from their own Layout (e.g. SplitPane, ColorPicker), and those re-measures must still
@@ -91,24 +88,15 @@ public abstract class InheritedWidget : Widget
         }
     }
 
-    public override void Paint(PaintList paint)
-    {
-        Child?.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => Child?.Paint(paint);
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return Child?.HitTest(point) ?? this;
     }
 
-    public override int DebugStateHash()
-    {
-        return Child?.DebugStateHash() ?? 0;
-    }
+    public override int DebugStateHash() => Child?.DebugStateHash() ?? 0;
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(Child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Child);
 }

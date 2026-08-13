@@ -17,43 +17,56 @@ public class LodSystemTests
     [InlineData(50f, 30f, false)] // within budget → visible
     [InlineData(50f, 50f, false)] // exactly at budget → visible
     [InlineData(50f, 70f, true)] // beyond budget → culled
-    public void CulledByDistance_respects_budget(float maxDistance, float distance, bool culled)
-    {
-        Assert.Equal(culled, LodMath.CulledByDistance(maxDistance, distance));
-    }
+    public void CulledByDistance_respects_budget(float maxDistance, float distance, bool culled) =>
+        Assert.Equal(
+            expected: culled,
+            actual: LodMath.CulledByDistance(maxDistance: maxDistance, distance: distance)
+        );
 
     [Fact]
     public void SelectLevel_picks_nearest_covering_then_fallback()
     {
         float[] budgets = [20f, 60f, 0f]; // near, mid, fallback ("covers all")
-        Assert.Equal(0, LodMath.SelectLevel(budgets, 10f)); // high detail
-        Assert.Equal(1, LodMath.SelectLevel(budgets, 40f)); // mid
-        Assert.Equal(2, LodMath.SelectLevel(budgets, 500f)); // fallback
+        Assert.Equal(
+            expected: 0,
+            actual: LodMath.SelectLevel(levelMaxDistances: budgets, distance: 10f)
+        ); // high detail
+        Assert.Equal(
+            expected: 1,
+            actual: LodMath.SelectLevel(levelMaxDistances: budgets, distance: 40f)
+        ); // mid
+        Assert.Equal(
+            expected: 2,
+            actual: LodMath.SelectLevel(levelMaxDistances: budgets, distance: 500f)
+        ); // fallback
     }
 
     [Fact]
     public void SelectLevel_returns_minus_one_when_nothing_covers()
     {
         float[] budgets = [20f, 60f]; // no fallback level
-        Assert.Equal(-1, LodMath.SelectLevel(budgets, 500f)); // whole group culled
+        Assert.Equal(
+            expected: -1,
+            actual: LodMath.SelectLevel(levelMaxDistances: budgets, distance: 500f)
+        ); // whole group culled
     }
 
     [Fact]
     public void Apply_distance_culls_a_node_beyond_its_budget()
     {
         var root = new SceneNode("root");
-        var node = new SceneNode("prop", NodeKind.Mesh) {
-            Position = new Vec3(70f, 0f, 0f),
+        var node = new SceneNode(name: "prop", kind: NodeKind.Mesh) {
+            Position = new Vec3(x: 70f, y: 0f, z: 0f),
             LodMaxDistance = 50f,
         };
         root.AddChild(node);
         var sink = new RecordingSink();
 
-        LodSystem.Apply(root, Vec3.Zero, sink);
+        LodSystem.Apply(root: root, cameraPos: Vec3.Zero, sink: sink);
         Assert.False(sink["prop"]); // 70 > 50 → hidden
 
-        node.Position = new Vec3(30f, 0f, 0f);
-        LodSystem.Apply(root, Vec3.Zero, sink);
+        node.Position = new Vec3(x: 30f, y: 0f, z: 0f);
+        LodSystem.Apply(root: root, cameraPos: Vec3.Zero, sink: sink);
         Assert.True(sink["prop"]); // 30 <= 50 → visible
     }
 
@@ -63,21 +76,27 @@ public class LodSystemTests
         var root = new SceneNode("root");
         var group = new SceneNode("group") {
             LodGroup = true,
-            Position = new Vec3(40f, 0f, 0f),
+            Position = new Vec3(x: 40f, y: 0f, z: 0f),
         };
-        group.AddChild(new SceneNode("near", NodeKind.Mesh) { LodMaxDistance = 20f });
-        group.AddChild(new SceneNode("mid", NodeKind.Mesh) { LodMaxDistance = 60f });
-        group.AddChild(new SceneNode("far", NodeKind.Mesh) { LodMaxDistance = 0f }); // fallback
+        group.AddChild(new SceneNode(name: "near", kind: NodeKind.Mesh) { LodMaxDistance = 20f });
+        group.AddChild(new SceneNode(name: "mid", kind: NodeKind.Mesh) { LodMaxDistance = 60f });
+        group.AddChild(
+            new SceneNode(name: "far", kind: NodeKind.Mesh) { LodMaxDistance = 0f }
+        ); // fallback
         root.AddChild(group);
         var sink = new RecordingSink();
 
-        LodSystem.Apply(root, Vec3.Zero, sink); // distance 40 → "mid"
+        LodSystem.Apply(root: root, cameraPos: Vec3.Zero, sink: sink); // distance 40 → "mid"
         Assert.False(sink["near"]);
         Assert.True(sink["mid"]);
         Assert.False(sink["far"]);
 
-        group.Position = new Vec3(500f, 0f, 0f);
-        LodSystem.Apply(root, Vec3.Zero, sink); // beyond near+mid → fallback "far"
+        group.Position = new Vec3(x: 500f, y: 0f, z: 0f);
+        LodSystem.Apply(
+            root: root,
+            cameraPos: Vec3.Zero,
+            sink: sink
+        ); // beyond near+mid → fallback "far"
         Assert.False(sink["near"]);
         Assert.False(sink["mid"]);
         Assert.True(sink["far"]);
@@ -87,16 +106,16 @@ public class LodSystemTests
     public void Apply_hides_whole_subtree_of_a_culled_ancestor()
     {
         var root = new SceneNode("root");
-        var parent = new SceneNode("parent", NodeKind.Mesh) {
-            Position = new Vec3(100f, 0f, 0f),
+        var parent = new SceneNode(name: "parent", kind: NodeKind.Mesh) {
+            Position = new Vec3(x: 100f, y: 0f, z: 0f),
             LodMaxDistance = 50f,
         };
-        var child = new SceneNode("child", NodeKind.Mesh); // no own limit
+        var child = new SceneNode(name: "child", kind: NodeKind.Mesh); // no own limit
         parent.AddChild(child);
         root.AddChild(parent);
         var sink = new RecordingSink();
 
-        LodSystem.Apply(root, Vec3.Zero, sink);
+        LodSystem.Apply(root: root, cameraPos: Vec3.Zero, sink: sink);
         Assert.False(sink["parent"]); // ancestor beyond budget
         Assert.False(sink["child"]); // inherits hidden
     }
@@ -112,8 +131,8 @@ public class LodSystemTests
     public void StreamingPolicy_decides_by_distance_bands(float distance,
         ResidencyDecision expected)
     {
-        var policy = new StreamingPolicy(50f, 100f);
-        Assert.Equal(expected, policy.Decide(distance));
+        var policy = new StreamingPolicy(LoadDistance: 50f, EvictDistance: 100f);
+        Assert.Equal(expected: expected, actual: policy.Decide(distance));
     }
 
     [Fact]
@@ -121,27 +140,34 @@ public class LodSystemTests
     {
         var p = StreamingPolicy.Unbounded;
         Assert.False(p.Enabled);
-        Assert.Equal(ResidencyDecision.Want, p.Decide(0f));
-        Assert.Equal(ResidencyDecision.Want, p.Decide(1e9f));
+        Assert.Equal(expected: ResidencyDecision.Want, actual: p.Decide(0f));
+        Assert.Equal(expected: ResidencyDecision.Want, actual: p.Decide(1e9f));
     }
 
     [Fact]
     public void StreamingPolicy_hysteresis_evict_beyond_load()
     {
-        var p = StreamingPolicy.WithHysteresis(100f, 1.5f);
-        Assert.Equal(100f, p.LoadDistance);
-        Assert.Equal(150f, p.EvictDistance);
-        Assert.Equal(ResidencyDecision.Keep, p.Decide(120f)); // in the band
+        var p = StreamingPolicy.WithHysteresis(loadDistance: 100f, hysteresis: 1.5f);
+        Assert.Equal(expected: 100f, actual: p.LoadDistance);
+        Assert.Equal(expected: 150f, actual: p.EvictDistance);
+        Assert.Equal(expected: ResidencyDecision.Keep, actual: p.Decide(120f)); // in the band
     }
 
     [Fact]
     public void Apply_residency_wants_near_meshes_drops_far_ones()
     {
         var root = new SceneNode("root");
-        var near = new SceneNode("near", NodeKind.Mesh) { Position = new Vec3(10f, 0f, 0f) };
-        var far = new SceneNode("far", NodeKind.Mesh) { Position = new Vec3(300f, 0f, 0f) };
+        var near =
+            new SceneNode(name: "near", kind: NodeKind.Mesh) {
+                Position = new Vec3(x: 10f, y: 0f, z: 0f),
+            };
+        var far = new SceneNode(name: "far", kind: NodeKind.Mesh) {
+            Position = new Vec3(x: 300f, y: 0f, z: 0f),
+        };
         var empty =
-            new SceneNode("empty") { Position = new Vec3(10f, 0f, 0f) }; // not a mesh → ignored
+            new SceneNode("empty") {
+                Position = new Vec3(x: 10f, y: 0f, z: 0f),
+            }; // not a mesh → ignored
         root.AddChild(near);
         root.AddChild(far);
         root.AddChild(empty);
@@ -149,15 +175,15 @@ public class LodSystemTests
         var vis = new RecordingSink();
         var res = new RecordingResidency();
         LodSystem.Apply(
-            root,
-            Vec3.Zero,
-            vis,
-            res,
-            new StreamingPolicy(50f, 100f)
+            root: root,
+            cameraPos: Vec3.Zero,
+            sink: vis,
+            residency: res,
+            policy: new StreamingPolicy(LoadDistance: 50f, EvictDistance: 100f)
         );
 
-        Assert.Equal("want", res["near"]);
-        Assert.Equal("drop", res["far"]);
+        Assert.Equal(expected: "want", actual: res["near"]);
+        Assert.Equal(expected: "drop", actual: res["far"]);
         Assert.False(res.Saw("empty")); // non-mesh nodes are not streamable
     }
 
@@ -167,13 +193,13 @@ public class LodSystemTests
         // The two-arg overload must still work (no residency) — regression guard for the seam.
         var root = new SceneNode("root");
         root.AddChild(
-            new SceneNode("m", NodeKind.Mesh) {
-                Position = new Vec3(10f, 0f, 0f),
+            new SceneNode(name: "m", kind: NodeKind.Mesh) {
+                Position = new Vec3(x: 10f, y: 0f, z: 0f),
                 LodMaxDistance = 50f,
             }
         );
         var sink = new RecordingSink();
-        LodSystem.Apply(root, Vec3.Zero, sink);
+        LodSystem.Apply(root: root, cameraPos: Vec3.Zero, sink: sink);
         Assert.True(sink["m"]);
     }
 
@@ -182,10 +208,7 @@ public class LodSystemTests
         private readonly Dictionary<string, bool> _visible = new();
         public bool this[string name] => _visible[name];
 
-        public void Set(SceneNode node, bool visible)
-        {
-            _visible[node.Name] = visible;
-        }
+        public void Set(SceneNode node, bool visible) => _visible[node.Name] = visible;
     }
 
     private sealed class RecordingResidency : LodSystem.IResidencySink
@@ -193,19 +216,10 @@ public class LodSystemTests
         private readonly Dictionary<string, string> _calls = new();
         public string this[string name] => _calls[name];
 
-        public void Want(SceneNode node, float distance)
-        {
-            _calls[node.Name] = "want";
-        }
+        public void Want(SceneNode node, float distance) => _calls[node.Name] = "want";
 
-        public void Drop(SceneNode node)
-        {
-            _calls[node.Name] = "drop";
-        }
+        public void Drop(SceneNode node) => _calls[node.Name] = "drop";
 
-        public bool Saw(string name)
-        {
-            return _calls.ContainsKey(name);
-        }
+        public bool Saw(string name) => _calls.ContainsKey(name);
     }
 }

@@ -74,10 +74,8 @@ public sealed class AdwAlertDialog : AdwDialog
 
     /// <summary>Append a response button. Call before <see cref="AdwDialog.Show()" />.</summary>
     public void AddResponse(string id, string label,
-        AdwResponseAppearance appearance = AdwResponseAppearance.Default)
-    {
+        AdwResponseAppearance appearance = AdwResponseAppearance.Default) =>
         _responses.Add((id, label, appearance));
-    }
 
     public override void Close()
     {
@@ -123,7 +121,7 @@ public sealed class AdwAlertDialog : AdwDialog
             var theme = ThemeProvider.Of(context);
             var p = AdwPalette.For(theme);
 
-            var hasBody = !string.IsNullOrEmpty(owner.Body);
+            bool hasBody = !string.IsNullOrEmpty(owner.Body);
             // `.message-area { border-spacing: 24px }`, tightening to 10px once there is both a
             // heading and a body — they belong to each other and shouldn't drift apart.
             var head = new Column(
@@ -132,19 +130,34 @@ public sealed class AdwAlertDialog : AdwDialog
                 mainAxisSize: MainAxisSize.Min
             ) {
                 Children = {
-                    new Label(owner.Heading, AdwTypography.Title2, theme.OnBackground) {
+                    new Label(
+                        text: owner.Heading,
+                        style: AdwTypography.Title2,
+                        color: theme.OnBackground
+                    ) {
                         Align = TextAlign.Center,
                     },
                 },
             };
             if (hasBody)
+            {
                 head.Children.Add(
-                    new Label(owner.Body!, AdwTypography.Body, theme.OnBackground) {
+                    new Label(
+                        text: owner.Body!,
+                        style: AdwTypography.Body,
+                        color: theme.OnBackground
+                    ) {
                         Align = TextAlign.Center,
                     }
                 );
+            }
+
             if (owner.ExtraChild is { } extra)
-                head.Children.Add(new Padding(EdgeInsets.Only(top: Spacing.Sm), extra));
+            {
+                head.Children.Add(
+                    new Padding(padding: EdgeInsets.Only(top: Spacing.Sm), child: extra)
+                );
+            }
 
             var col = new Column(
                 crossAxisAlignment: CrossAxisAlignment.Stretch,
@@ -153,13 +166,13 @@ public sealed class AdwAlertDialog : AdwDialog
                 Children = {
                     // `.message-area { padding-top: 32px; padding-bottom: 9px }` with 24px sides.
                     new Padding(
-                        EdgeInsets.FromLtrb(
-                            Spacing.Xxl,
-                            Spacing.Xxxl,
-                            Spacing.Xxl,
-                            9f
+                        padding: EdgeInsets.FromLtrb(
+                            left: Spacing.Xxl,
+                            top: Spacing.Xxxl,
+                            right: Spacing.Xxl,
+                            bottom: 9f
                         ),
-                        head
+                        child: head
                     ),
                 },
             };
@@ -175,7 +188,12 @@ public sealed class AdwAlertDialog : AdwDialog
             {
                 var row = new Row(spacing: Spacing.Md);
                 foreach (var response in owner._responses)
-                    row.Children.Add(new Expanded(ResponseButton(theme, response)));
+                {
+                    row.Children.Add(
+                        new Expanded(ResponseButton(theme: theme, response: response))
+                    );
+                }
+
                 tray = row;
             }
             else
@@ -186,19 +204,19 @@ public sealed class AdwAlertDialog : AdwDialog
                     mainAxisSize: MainAxisSize.Min
                 );
                 foreach (var response in owner._responses)
-                    stack.Children.Add(ResponseButton(theme, response));
+                    stack.Children.Add(ResponseButton(theme: theme, response: response));
                 tray = stack;
             }
 
             col.Children.Add(
                 new Padding(
-                    EdgeInsets.FromLtrb(
-                        Spacing.Xxl,
-                        Spacing.Md,
-                        Spacing.Xxl,
-                        Spacing.Xxl
+                    padding: EdgeInsets.FromLtrb(
+                        left: Spacing.Xxl,
+                        top: Spacing.Md,
+                        right: Spacing.Xxl,
+                        bottom: Spacing.Xxl
                     ),
-                    tray
+                    child: tray
                 )
             );
             return col;
@@ -222,11 +240,11 @@ public sealed class AdwAlertDialog : AdwDialog
                     height: ResponseHeight,
                     child: new Center {
                         Child = new Padding(
-                            EdgeInsets.Symmetric(Spacing.Xl),
-                            new Label(
-                                response.Label,
-                                AdwTypography.Heading,
-                                AdwStyle.ButtonForeground(theme, style)
+                            padding: EdgeInsets.Symmetric(Spacing.Xl),
+                            child: new Label(
+                                text: response.Label,
+                                style: AdwTypography.Heading,
+                                color: AdwStyle.ButtonForeground(theme: theme, style: style)
                             )
                         ),
                     }
@@ -238,7 +256,7 @@ public sealed class AdwAlertDialog : AdwDialog
                 OnPressed = () => owner.Respond(response.Id),
                 SemanticsLabel = response.Label,
             };
-            pressable.WireFill(box, theme, style);
+            pressable.WireFill(box: box, theme: theme, style: style);
             if (response.Id == owner.DefaultResponse) owner._defaultButton = pressable;
             return pressable;
         }

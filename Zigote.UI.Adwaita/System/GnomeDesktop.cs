@@ -54,7 +54,7 @@ public static class GnomeDesktop
     public static bool IsGnome =>
         OperatingSystem.IsLinux() &&
         (Environment.GetEnvironmentVariable("XDG_CURRENT_DESKTOP") ?? "")
-        .Contains("GNOME", StringComparison.OrdinalIgnoreCase);
+        .Contains(value: "GNOME", comparisonType: StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Read current values and start change monitoring. Idempotent; no-op off GNOME.</summary>
     public static void Start()
@@ -66,7 +66,7 @@ public static class GnomeDesktop
         {
             // One monitor covers everything: the portal emits SettingChanged for every namespace.
             Monitor(
-                "gdbus",
+                exe: "gdbus",
                 "monitor",
                 "--session",
                 "--dest",
@@ -75,8 +75,8 @@ public static class GnomeDesktop
         }
         else
         {
-            Monitor("gsettings", "monitor", "org.gnome.desktop.interface");
-            Monitor("gsettings", "monitor", "org.gnome.desktop.wm.preferences");
+            Monitor(exe: "gsettings", "monitor", "org.gnome.desktop.interface");
+            Monitor(exe: "gsettings", "monitor", "org.gnome.desktop.wm.preferences");
         }
 
         AppDomain.CurrentDomain.ProcessExit += (_, _) =>
@@ -84,6 +84,7 @@ public static class GnomeDesktop
             lock (Gate)
             {
                 foreach (var p in Monitors)
+                {
                     try
                     {
                         p.Kill();
@@ -92,12 +93,15 @@ public static class GnomeDesktop
                     {
                         /* already gone */
                     }
+                }
             }
         };
     }
 
-    /// <summary>True once after any monitored setting changed; the caller then re-reads the
-    ///     properties (already refreshed) and reapplies.</summary>
+    /// <summary>
+    ///     True once after any monitored setting changed; the caller then re-reads the
+    ///     properties (already refreshed) and reapplies.
+    /// </summary>
     public static bool ConsumeDirty()
     {
         if (!_dirty) return false;
@@ -113,13 +117,16 @@ public static class GnomeDesktop
             return;
         }
 
-        var accent = Gsettings("org.gnome.desktop.interface", "accent-color");
+        string? accent = Gsettings(schema: "org.gnome.desktop.interface", key: "accent-color");
         if (accent is not null) Accent = ParseAccent(accent);
 
-        var scheme = Gsettings("org.gnome.desktop.interface", "color-scheme");
+        string? scheme = Gsettings(schema: "org.gnome.desktop.interface", key: "color-scheme");
         if (scheme is not null) PrefersDark = scheme.Contains("prefer-dark");
 
-        var layout = Gsettings("org.gnome.desktop.wm.preferences", "button-layout");
+        string? layout = Gsettings(
+            schema: "org.gnome.desktop.wm.preferences",
+            key: "button-layout"
+        );
         if (layout is not null) (LeftButtons, RightButtons) = ParseButtonLayout(layout);
     }
 
@@ -132,41 +139,46 @@ public static class GnomeDesktop
     /// </summary>
     private static void RereadPortal()
     {
-        var scheme = Portal("org.freedesktop.appearance", "color-scheme");
+        string? scheme = Portal(ns: "org.freedesktop.appearance", key: "color-scheme");
         // 0 = no preference, 1 = prefer dark, 2 = prefer light.
-        if (scheme is not null && int.TryParse(LastToken(scheme), out var pref))
+        if (scheme is not null && int.TryParse(s: LastToken(scheme), result: out int pref))
             PrefersDark = pref == 1;
 
-        var accent = Portal("org.freedesktop.appearance", "accent-color");
+        string? accent = Portal(ns: "org.freedesktop.appearance", key: "accent-color");
         if (accent is not null && ParseAccentRgb(accent) is { } hue) Accent = hue;
 
-        var layout = Portal("org.gnome.desktop.wm.preferences", "button-layout");
+        string? layout = Portal(ns: "org.gnome.desktop.wm.preferences", key: "button-layout");
         if (layout is not null) (LeftButtons, RightButtons) = ParseButtonLayout(layout);
     }
 
     /// <summary>Nearest named accent to a portal <c>(ddd)</c> sRGB triple, e.g. <c>(0.2, 0.5, 0.9)</c>.</summary>
     private static AdwAccent? ParseAccentRgb(string value)
     {
-        var parts = value.Trim().Trim('(', ')').Split(',');
+        string[] parts = value.Trim().Trim('(', ')').Split(',');
         if (parts.Length != 3) return null;
 
         Span<float> rgb = stackalloc float[3];
-        for (var i = 0; i < 3; i++)
+        for (int i = 0; i < 3; i++)
+        {
             if (!float.TryParse(
-                    parts[i].Trim(),
-                    NumberStyles.Float,
-                    CultureInfo.InvariantCulture,
-                    out rgb[i]
+                    s: parts[i].Trim(),
+                    style: NumberStyles.Float,
+                    provider: CultureInfo.InvariantCulture,
+                    result: out rgb[i]
                 ))
                 return null;
+        }
 
-        return AdwAccentColors.Nearest(rgb[0], rgb[1], rgb[2]);
+        return AdwAccentColors.Nearest(r: rgb[0], g: rgb[1], b: rgb[2]);
     }
 
     /// <summary>The last whitespace-separated token — strips gdbus's type prefix (<c>uint32 1</c>).</summary>
     private static string LastToken(string value)
     {
-        var parts = value.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        string[] parts = value.Split(
+            separator: ' ',
+            options: StringSplitOptions.RemoveEmptyEntries
+        );
         return parts.Length == 0 ? value : parts[^1];
     }
 
@@ -192,22 +204,27 @@ public static class GnomeDesktop
     internal static (AdwWindowButton[] Left, AdwWindowButton[] Right) ParseButtonLayout(
         string value)
     {
-        var raw = value.Trim('\'', ' ');
-        var colon = raw.IndexOf(':');
-        var left = colon < 0 ? "" : raw[..colon];
-        var right = colon < 0 ? raw : raw[(colon + 1)..];
+        string raw = value.Trim('\'', ' ');
+        int colon = raw.IndexOf(':');
+        string left = colon < 0 ? "" : raw[..colon];
+        string right = colon < 0 ? raw : raw[(colon + 1)..];
         return (Parse(left), Parse(right));
 
         static AdwWindowButton[] Parse(string side)
         {
             var list = new List<AdwWindowButton>(3);
-            foreach (var token in side.Split(',', StringSplitOptions.RemoveEmptyEntries))
+            foreach (string token in side.Split(
+                         separator: ',',
+                         options: StringSplitOptions.RemoveEmptyEntries
+                     ))
+            {
                 switch (token.Trim())
                 {
                     case "close": list.Add(AdwWindowButton.Close); break;
                     case "minimize": list.Add(AdwWindowButton.Minimize); break;
                     case "maximize": list.Add(AdwWindowButton.Maximize); break;
                 }
+            }
 
             return list.ToArray();
         }
@@ -216,7 +233,7 @@ public static class GnomeDesktop
     private static string? Gsettings(string schema, string key)
     {
         return Run(
-            "gsettings",
+            exe: "gsettings",
             "get",
             schema,
             key
@@ -231,7 +248,8 @@ public static class GnomeDesktop
     /// </summary>
     private static string? Portal(string ns, string key)
     {
-        var raw = PortalCall("ReadOne", ns, key) ?? PortalCall("Read", ns, key);
+        string? raw = PortalCall(method: "ReadOne", ns: ns, key: key) ??
+                      PortalCall(method: "Read", ns: ns, key: key);
         // `(<uint32 1>,)` and the v1 `(<<uint32 1>>,)` both unwrap to the value itself.
         return raw?.Trim().Trim('(', ')', ',').Trim().Trim('<', '>').Trim();
     }
@@ -239,7 +257,7 @@ public static class GnomeDesktop
     private static string? PortalCall(string method, string ns, string key)
     {
         return Run(
-            "gdbus",
+            exe: "gdbus",
             "call",
             "--session",
             "--dest",
@@ -263,10 +281,10 @@ public static class GnomeDesktop
                 RedirectStandardError = true,
                 UseShellExecute = false,
             };
-            foreach (var arg in args) info.ArgumentList.Add(arg);
+            foreach (string arg in args) info.ArgumentList.Add(arg);
             using var p = Process.Start(info);
             if (p is null) return null;
-            var output = p.StandardOutput.ReadToEnd().Trim();
+            string output = p.StandardOutput.ReadToEnd().Trim();
             p.WaitForExit(2000);
             return p.ExitCode == 0 && output.Length > 0 ? output : null;
         }
@@ -284,7 +302,7 @@ public static class GnomeDesktop
                 RedirectStandardOutput = true,
                 UseShellExecute = false,
             };
-            foreach (var arg in args) info.ArgumentList.Add(arg);
+            foreach (string arg in args) info.ArgumentList.Add(arg);
             var p = new Process {
                 StartInfo = info,
                 EnableRaisingEvents = true,
@@ -299,10 +317,7 @@ public static class GnomeDesktop
             };
             if (!p.Start()) return;
             p.BeginOutputReadLine();
-            lock (Gate)
-            {
-                Monitors.Add(p);
-            }
+            lock (Gate) Monitors.Add(p);
         }
         catch
         {

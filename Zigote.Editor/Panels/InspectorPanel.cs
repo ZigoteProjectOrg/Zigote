@@ -16,14 +16,15 @@ using Zigote.Modules.UI.CodeEditor;
 using Zigote.Runtime.Prefab;
 using Zigote.Runtime.Scene;
 using Zigote.Scripting.Compilation;
-// CodeEditor: Adwaita has no source view (nor does libadwaita — GtkSourceView is its own
-// library), so this one Material widget stays. Everything else in the panel is Adwaita.
-using Zigote.UI.Material;
 using Zigote.UI.Host;
+using Zigote.UI.Material;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
+// CodeEditor: Adwaita has no source view (nor does libadwaita — GtkSourceView is its own
+// library), so this one Material widget stays. Everything else in the panel is Adwaita.
+
 // Dropdown<T> must be referenced with a concrete type — alias for clarity:
 
 namespace Zigote.Editor.Panels;
@@ -86,8 +87,12 @@ public sealed partial class InspectorPanel : Widget
     }
 
     private Widget Placeholder => new Padding(
-        EdgeInsets.All(12f),
-        new Label("Nothing selected", _theme.FontSizeBody, _theme.Hint)
+        padding: EdgeInsets.All(12f),
+        child: new Label(
+            text: "Nothing selected",
+            fontSize: _theme.FontSizeBody,
+            color: _theme.Hint
+        )
     );
 
     /// <summary>
@@ -106,16 +111,13 @@ public sealed partial class InspectorPanel : Widget
     /// <summary>Swap the displayed content, keeping it attached to the widget tree.</summary>
     private void SetContent(Widget content)
     {
-        if (ReferenceEquals(_content, content)) return;
+        if (ReferenceEquals(objA: _content, objB: content)) return;
         var previous = _content;
         _content = content;
-        SwapChild(previous, _content); // attach-then-detach; see Widget.SwapChild
+        SwapChild(previous: previous, next: _content); // attach-then-detach; see Widget.SwapChild
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return [_content];
-    }
+    public override IEnumerable<Widget> GetChildren() => [_content];
 
     /// <summary>
     ///     Open the node-based shader editor (Task 2) on a mesh node's material. The graph is
@@ -132,10 +134,10 @@ public sealed partial class InspectorPanel : Widget
         };
 
         var panel = new GraphEditorPanel(
-            graph,
-            registry,
-            _theme,
-            _app,
+            graph: graph,
+            registry: registry,
+            theme: _theme,
+            app: _app,
             inspectorHeader: preview,
             onCompiled: artifact =>
             {
@@ -143,7 +145,7 @@ public sealed partial class InspectorPanel : Widget
                 preview.Compiled =
                     cg; // live, per-pixel material-ball preview reflects the compiled graph
                 wgslView.Text = cg.Wgsl; // the "Generated WGSL" tab tracks the graph
-                ShaderMaterialDomain.ApplyTo(ShaderMaterialDomain.ToMaterial(cg), node);
+                ShaderMaterialDomain.ApplyTo(mat: ShaderMaterialDomain.ToMaterial(cg), node: node);
                 _state.NotifySceneChanged();
             }
         );
@@ -156,14 +158,14 @@ public sealed partial class InspectorPanel : Widget
         // Two tabs: the node canvas and a read-only view of the WGSL the graph generates.
         var stack = new AdwViewStack {
             Pages = {
-                new AdwViewStackPage("nodes", "Nodes", panel),
-                new AdwViewStackPage("wgsl", "Generated WGSL", wgslView),
+                new AdwViewStackPage(name: "nodes", title: "Nodes", child: panel),
+                new AdwViewStackPage(name: "wgsl", title: "Generated WGSL", child: wgslView),
             },
         };
         var root = new AdwToolbarView(stack) {
             TopBars = { new AdwHeaderBar { TitleWidget = new AdwViewSwitcher(stack) } },
         };
-        new Dialog(root, _app) {
+        new Dialog(content: root, app: _app) {
             Dismissible = true,
             WidthFraction = 0.92f,
             HeightFraction = 0.9f,
@@ -179,25 +181,28 @@ public sealed partial class InspectorPanel : Widget
     {
         var registry = VfxNodeEditor.CreateRegistry();
         var graph = VfxNodeEditor.LoadGraph(node);
-        var preview = new VfxPreviewWidget(_theme, 200f);
+        var preview = new VfxPreviewWidget(theme: _theme, height: 200f);
 
         var panel = new GraphEditorPanel(
-            graph,
-            registry,
-            _theme,
-            _app,
+            graph: graph,
+            registry: registry,
+            theme: _theme,
+            app: _app,
             inspectorHeader: preview,
             onCompiled: artifact =>
             {
                 if (artifact is not CompiledVfxGraph cvfx) return;
                 preview.Asset = cvfx.Asset; // live CPU-sim preview reflects the compiled graph
-                VfxNodeEditor.SaveGraph(node, graph); // persist edits back onto the node
+                VfxNodeEditor.SaveGraph(
+                    node: node,
+                    graph: graph
+                ); // persist edits back onto the node
                 _state.NotifySceneChanged();
             }
         );
 
         preview.Asset = VfxGraphCompiler.Compile(graph).Asset; // seed before the first edit
-        new Dialog(panel, _app) {
+        new Dialog(content: panel, app: _app) {
             Dismissible = true,
             WidthFraction = 0.92f,
             HeightFraction = 0.9f,
@@ -225,25 +230,25 @@ public sealed partial class InspectorPanel : Widget
         if (node.AudioUseFile)
         {
             if (string.IsNullOrEmpty(node.AudioClipPath)) return;
-            var path = Path.IsPathRooted(node.AudioClipPath)
+            string path = Path.IsPathRooted(node.AudioClipPath)
                 ? node.AudioClipPath
                 : Path.GetFullPath(node.AudioClipPath);
             if (!File.Exists(path)) return;
-            id = engine.AudioSoundCreateFile(path, node.AudioStreaming);
+            id = engine.AudioSoundCreateFile(path: path, streaming: node.AudioStreaming);
         }
         else
         {
             id = engine.AudioSoundCreateTone(
-                node.AudioFrequency,
-                Math.Clamp(node.AudioWaveform, 0, 4)
+                frequencyHz: node.AudioFrequency,
+                waveform: Math.Clamp(value: node.AudioWaveform, min: 0, max: 4)
             );
         }
 
         if (id == 0) return;
-        engine.AudioSoundSetSpatial(id, false);
-        engine.AudioSoundSetVolume(id, node.AudioVolume);
-        engine.AudioSoundSetPitch(id, node.AudioPitch);
-        engine.AudioSoundSetLooping(id, node.AudioLoop);
+        engine.AudioSoundSetSpatial(id: id, enabled: false);
+        engine.AudioSoundSetVolume(id: id, volume: node.AudioVolume);
+        engine.AudioSoundSetPitch(id: id, pitch: node.AudioPitch);
+        engine.AudioSoundSetLooping(id: id, looping: node.AudioLoop);
         engine.AudioSoundPlay(id);
 
         _previewSound = id;
@@ -294,104 +299,111 @@ public sealed partial class InspectorPanel : Widget
         }
 
         // ── Node header: editable name + kind badge ───────────────────────────
-        var nameField = new AdwEntry { Text = _shown.Name, Compact = true };
+        var nameField = new AdwEntry {
+            Text = _shown.Name,
+            Compact = true,
+        };
         var capturedNode = _shown;
         nameField.OnChanged = name =>
         {
-            var trimmed = name.Trim();
+            string trimmed = name.Trim();
             if (trimmed.Length > 0 && trimmed != capturedNode.Name)
+            {
                 _state.History.Execute(
                     new ChangePropertyCommand<string>(
-                        _state,
-                        capturedNode.Name,
-                        trimmed,
-                        v => capturedNode.Name = v
+                        state: _state,
+                        oldValue: capturedNode.Name,
+                        newValue: trimmed,
+                        setter: v => capturedNode.Name = v
                     )
                 );
+            }
         };
 
-        _rows.Add(PropRow.NodeHeader(nameField, _shown.Kind, _theme));
+        _rows.Add(PropRow.NodeHeader(nameField: nameField, kind: _shown.Kind, theme: _theme));
         _rows.Add(PropRow.Spacer(6f));
 
         // Gameplay tag — queried at play time via the World scripting API (FindAllByTag/OverlapSphere).
         _rows.Add(
             PropRow.Text(
-                "Tag",
-                capturedNode.Tag ?? "",
-                v =>
+                label: "Tag",
+                value: capturedNode.Tag ?? "",
+                onChange: v =>
                 {
-                    var tag = v.Trim();
-                    var newTag = tag.Length == 0 ? null : tag;
+                    string tag = v.Trim();
+                    string? newTag = tag.Length == 0 ? null : tag;
                     if (newTag != capturedNode.Tag)
+                    {
                         _state.History.Execute(
                             new ChangePropertyCommand<string?>(
-                                _state,
-                                capturedNode.Tag,
-                                newTag,
-                                val => capturedNode.Tag = val
+                                state: _state,
+                                oldValue: capturedNode.Tag,
+                                newValue: newTag,
+                                setter: val => capturedNode.Tag = val
                             )
                         );
+                    }
                 },
-                _theme,
-                _app
+                theme: _theme,
+                app: _app
             )
         );
 
         if (capturedNode.IsPrefabInstance) BuildPrefabBanner(capturedNode);
 
         // ── Transform ─────────────────────────────────────────────────────────
-        _rows.Add(SectionRow("Transform", _theme));
+        _rows.Add(SectionRow(title: "Transform", theme: _theme));
         _rows.Add(
             PropRow.Vec3(
-                "Position",
-                NodeBind.To(
-                    _state,
-                    capturedNode,
-                    n => n.Position,
-                    (n, v) => n.Position = v
+                label: "Position",
+                bind: NodeBind.To(
+                    state: _state,
+                    node: capturedNode,
+                    getter: n => n.Position,
+                    setter: (n, v) => n.Position = v
                 ),
-                _theme
+                theme: _theme
             )
         );
         var eulerRad = _shown.Rotation.ToEulerRadians();
         var eulerDeg = new Vec3(
-            eulerRad.X * (180f / MathF.PI),
-            eulerRad.Y * (180f / MathF.PI),
-            eulerRad.Z * (180f / MathF.PI)
+            x: eulerRad.X * (180f / MathF.PI),
+            y: eulerRad.Y * (180f / MathF.PI),
+            z: eulerRad.Z * (180f / MathF.PI)
         );
         _rows.Add(
             PropRow.Vec3(
-                "Rotation (deg)",
-                eulerDeg,
-                v =>
+                label: "Rotation (deg)",
+                current: eulerDeg,
+                setter: v =>
                 {
                     var newRot = Quat.FromEuler(
-                        v.X * (MathF.PI / 180f),
-                        v.Y * (MathF.PI / 180f),
-                        v.Z * (MathF.PI / 180f)
+                        pitch: v.X * (MathF.PI / 180f),
+                        yaw: v.Y * (MathF.PI / 180f),
+                        roll: v.Z * (MathF.PI / 180f)
                     );
                     _state.History.Execute(
                         new ChangePropertyCommand<Quat>(
-                            _state,
-                            capturedNode.Rotation,
-                            newRot,
-                            val => capturedNode.Rotation = val
+                            state: _state,
+                            oldValue: capturedNode.Rotation,
+                            newValue: newRot,
+                            setter: val => capturedNode.Rotation = val
                         )
                     );
                 },
-                _theme
+                theme: _theme
             )
         );
         _rows.Add(
             PropRow.Vec3(
-                "Scale",
-                NodeBind.To(
-                    _state,
-                    capturedNode,
-                    n => n.Scale,
-                    (n, v) => n.Scale = v
+                label: "Scale",
+                bind: NodeBind.To(
+                    state: _state,
+                    node: capturedNode,
+                    getter: n => n.Scale,
+                    setter: (n, v) => n.Scale = v
                 ),
-                _theme
+                theme: _theme
             )
         );
 
@@ -399,506 +411,512 @@ public sealed partial class InspectorPanel : Widget
         if (_shown.Kind == NodeKind.Mesh)
         {
             _rows.Add(PropRow.Spacer(4f));
-            _rows.Add(SectionRow("Mesh", _theme));
+            _rows.Add(SectionRow(title: "Mesh", theme: _theme));
             _rows.Add(
                 PropRow.Path(
-                    "Mesh Path",
-                    _shown.MeshPath ?? "",
-                    v => _state.History.Execute(
+                    label: "Mesh Path",
+                    value: _shown.MeshPath ?? "",
+                    onChange: v => _state.History.Execute(
                         new ChangePropertyCommand<string?>(
-                            _state,
-                            capturedNode.MeshPath,
-                            v,
-                            val => capturedNode.MeshPath = val
+                            state: _state,
+                            oldValue: capturedNode.MeshPath,
+                            newValue: v,
+                            setter: val => capturedNode.MeshPath = val
                         )
                     ),
-                    _state.AssetRoot,
-                    [".glb", ".fbx", ".obj"],
-                    _theme,
-                    _app
+                    rootPath: _state.AssetRoot,
+                    extensions: [".glb", ".fbx", ".obj"],
+                    theme: _theme,
+                    app: _app
                 )
             );
             _rows.Add(PropRow.Spacer(4f));
-            _rows.Add(SectionRow("Material", _theme));
+            _rows.Add(SectionRow(title: "Material", theme: _theme));
             // One-click finish presets (Car Paint / Chrome / Glass / …) + apply-to-all-sub-meshes.
             _rows.Add(PropRow.Custom(BuildPresetRow()));
             _rows.Add(
                 PropRow.Toggle(
-                    "All sub-meshes",
-                    _applyToSubMeshes,
-                    v => _applyToSubMeshes = v,
-                    _theme
+                    label: "All sub-meshes",
+                    value: _applyToSubMeshes,
+                    onChange: v => _applyToSubMeshes = v,
+                    theme: _theme
                 )
             );
             _rows.Add(
                 PropRow.ColorSwatch(
-                    "Color",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.MeshColor,
-                        (n, v) => n.MeshColor = v
+                    label: "Color",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.MeshColor,
+                        setter: (n, v) => n.MeshColor = v
                     ),
-                    _theme,
-                    _app
+                    theme: _theme,
+                    app: _app
                 )
             );
             _rows.Add(
                 PropRow.Float(
-                    "Metallic",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.MeshMetallic,
-                        (n, v) => n.MeshMetallic = v
+                    label: "Metallic",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.MeshMetallic,
+                        setter: (n, v) => n.MeshMetallic = v
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
             _rows.Add(
                 PropRow.Float(
-                    "Roughness",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.MeshRoughness,
-                        (n, v) => n.MeshRoughness = v
+                    label: "Roughness",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.MeshRoughness,
+                        setter: (n, v) => n.MeshRoughness = v
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
             _rows.Add(
                 PropRow.Float(
-                    "Clearcoat",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.MeshClearcoat,
-                        (n, v) => n.MeshClearcoat = v
+                    label: "Clearcoat",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.MeshClearcoat,
+                        setter: (n, v) => n.MeshClearcoat = v
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
             _rows.Add(
                 PropRow.Float(
-                    "Coat Rough",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.MeshClearcoatRoughness,
-                        (n, v) => n.MeshClearcoatRoughness = v
+                    label: "Coat Rough",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.MeshClearcoatRoughness,
+                        setter: (n, v) => n.MeshClearcoatRoughness = v
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
             _rows.Add(
                 PropRow.Float(
-                    "Specular",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.MeshSpecular,
-                        (n, v) => n.MeshSpecular = v
+                    label: "Specular",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.MeshSpecular,
+                        setter: (n, v) => n.MeshSpecular = v
                     ),
-                    _theme,
-                    0f,
-                    2f
+                    theme: _theme,
+                    min: 0f,
+                    max: 2f
                 )
             );
             _rows.Add(
                 PropRow.Float(
-                    "IOR",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.MeshIor,
-                        (n, v) => n.MeshIor = v
+                    label: "IOR",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.MeshIor,
+                        setter: (n, v) => n.MeshIor = v
                     ),
-                    _theme,
-                    1f,
-                    3f
+                    theme: _theme,
+                    min: 1f,
+                    max: 3f
                 )
             );
             _rows.Add(
                 PropRow.Float(
-                    "Transmission",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.MeshTransmission,
-                        (n, v) => n.MeshTransmission = v
+                    label: "Transmission",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.MeshTransmission,
+                        setter: (n, v) => n.MeshTransmission = v
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
             _rows.Add(
                 PropRow.Toggle(
-                    "Double-Sided",
-                    _shown.MeshDoubleSided,
-                    v => _state.History.Execute(
+                    label: "Double-Sided",
+                    value: _shown.MeshDoubleSided,
+                    onChange: v => _state.History.Execute(
                         new ChangePropertyCommand<bool>(
-                            _state,
-                            capturedNode.MeshDoubleSided,
-                            v,
-                            val => capturedNode.MeshDoubleSided = val
+                            state: _state,
+                            oldValue: capturedNode.MeshDoubleSided,
+                            newValue: v,
+                            setter: val => capturedNode.MeshDoubleSided = val
                         )
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
             _rows.Add(
                 PropRow.Vec3Color(
-                    "Emissive",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.MeshEmissive,
-                        (n, v) => n.MeshEmissive = v
+                    label: "Emissive",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.MeshEmissive,
+                        setter: (n, v) => n.MeshEmissive = v
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
             _rows.Add(
                 PropRow.DropdownRow(
-                    "Alpha",
-                    [
+                    label: "Alpha",
+                    items: [
                         "Opaque", "Mask", "Blend", "Glass",
                     ], // 3 = glass (refractive + reflective), set by the glTF importer
-                    (int)_shown.MeshAlphaMode,
-                    i => _state.History.Execute(
+                    selectedIndex: (int)_shown.MeshAlphaMode,
+                    onChange: i => _state.History.Execute(
                         new ChangePropertyCommand<uint>(
-                            _state,
-                            capturedNode.MeshAlphaMode,
-                            (uint)i,
-                            val => capturedNode.MeshAlphaMode = val
+                            state: _state,
+                            oldValue: capturedNode.MeshAlphaMode,
+                            newValue: (uint)i,
+                            setter: val => capturedNode.MeshAlphaMode = val
                         )
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
             _rows.Add(
                 PropRow.Float(
-                    "Alpha Cutoff",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.MeshAlphaCutoff,
-                        (n, v) => n.MeshAlphaCutoff = v
+                    label: "Alpha Cutoff",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.MeshAlphaCutoff,
+                        setter: (n, v) => n.MeshAlphaCutoff = v
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
             _rows.Add(
                 PropRow.Path(
-                    "Texture Path",
-                    _shown.TexturePath ?? "",
-                    v => _state.History.Execute(
+                    label: "Texture Path",
+                    value: _shown.TexturePath ?? "",
+                    onChange: v => _state.History.Execute(
                         new ChangePropertyCommand<string?>(
-                            _state,
-                            capturedNode.TexturePath,
-                            v,
-                            val => capturedNode.TexturePath = val
+                            state: _state,
+                            oldValue: capturedNode.TexturePath,
+                            newValue: v,
+                            setter: val => capturedNode.TexturePath = val
                         )
                     ),
-                    _state.AssetRoot,
-                    [".png", ".jpg", ".jpeg", ".webp", ".gif"],
-                    _theme,
-                    _app
+                    rootPath: _state.AssetRoot,
+                    extensions: [".png", ".jpg", ".jpeg", ".webp", ".gif"],
+                    theme: _theme,
+                    app: _app
                 )
             );
             _rows.Add(
                 PropRow.Path(
-                    "Normal Map",
-                    _shown.NormalTexturePath ?? "",
-                    v => _state.History.Execute(
+                    label: "Normal Map",
+                    value: _shown.NormalTexturePath ?? "",
+                    onChange: v => _state.History.Execute(
                         new ChangePropertyCommand<string?>(
-                            _state,
-                            capturedNode.NormalTexturePath,
-                            v,
-                            val => capturedNode.NormalTexturePath = val
+                            state: _state,
+                            oldValue: capturedNode.NormalTexturePath,
+                            newValue: v,
+                            setter: val => capturedNode.NormalTexturePath = val
                         )
                     ),
-                    _state.AssetRoot,
-                    [".png", ".jpg", ".jpeg", ".webp"],
-                    _theme,
-                    _app
+                    rootPath: _state.AssetRoot,
+                    extensions: [".png", ".jpg", ".jpeg", ".webp"],
+                    theme: _theme,
+                    app: _app
                 )
             );
             _rows.Add(
                 PropRow.Path(
-                    "Emissive Map",
-                    _shown.EmissiveTexturePath ?? "",
-                    v => _state.History.Execute(
+                    label: "Emissive Map",
+                    value: _shown.EmissiveTexturePath ?? "",
+                    onChange: v => _state.History.Execute(
                         new ChangePropertyCommand<string?>(
-                            _state,
-                            capturedNode.EmissiveTexturePath,
-                            v,
-                            val => capturedNode.EmissiveTexturePath = val
+                            state: _state,
+                            oldValue: capturedNode.EmissiveTexturePath,
+                            newValue: v,
+                            setter: val => capturedNode.EmissiveTexturePath = val
                         )
                     ),
-                    _state.AssetRoot,
-                    [".png", ".jpg", ".jpeg", ".webp"],
-                    _theme,
-                    _app
+                    rootPath: _state.AssetRoot,
+                    extensions: [".png", ".jpg", ".jpeg", ".webp"],
+                    theme: _theme,
+                    app: _app
                 )
             );
             _rows.Add(
                 PropRow.DropdownRow(
-                    "Effect",
-                    ["Standard", "CrtTv", "Unlit"],
-                    (int)_shown.MeshEffect,
-                    i => _state.History.Execute(
+                    label: "Effect",
+                    items: ["Standard", "CrtTv", "Unlit"],
+                    selectedIndex: (int)_shown.MeshEffect,
+                    onChange: i => _state.History.Execute(
                         new ChangePropertyCommand<RenderEffect>(
-                            _state,
-                            capturedNode.MeshEffect,
-                            (RenderEffect)i,
-                            val => { capturedNode.MeshEffect = val; }
+                            state: _state,
+                            oldValue: capturedNode.MeshEffect,
+                            newValue: (RenderEffect)i,
+                            setter: val => { capturedNode.MeshEffect = val; }
                         )
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
-            _rows.Add(PropRow.ActionButton("Edit as Nodes…", () => OpenShaderEditor(capturedNode)));
+            _rows.Add(
+                PropRow.ActionButton(
+                    label: "Edit as Nodes…",
+                    onClick: () => OpenShaderEditor(capturedNode)
+                )
+            );
         }
         else if (_shown.Kind == NodeKind.Light)
         {
             _rows.Add(PropRow.Spacer(4f));
-            _rows.Add(SectionRow("Light", _theme));
+            _rows.Add(SectionRow(title: "Light", theme: _theme));
             _rows.Add(
                 PropRow.DropdownRow(
-                    "Type",
-                    ["Directional", "Point", "Spot"],
-                    (int)_shown.LightKind,
-                    i => _state.History.Execute(
+                    label: "Type",
+                    items: ["Directional", "Point", "Spot"],
+                    selectedIndex: (int)_shown.LightKind,
+                    onChange: i => _state.History.Execute(
                         new ChangePropertyCommand<LightType>(
-                            _state,
-                            capturedNode.LightKind,
-                            (LightType)i,
-                            val =>
+                            state: _state,
+                            oldValue: capturedNode.LightKind,
+                            newValue: (LightType)i,
+                            setter: val =>
                             {
                                 capturedNode.LightKind = val;
                                 Rebuild();
                             }
                         )
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
             _rows.Add(
                 PropRow.ColorSwatch(
-                    "Color",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.LightColor,
-                        (n, v) => n.LightColor = v
+                    label: "Color",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.LightColor,
+                        setter: (n, v) => n.LightColor = v
                     ),
-                    _theme,
-                    _app
+                    theme: _theme,
+                    app: _app
                 )
             );
             _rows.Add(
                 PropRow.DropdownRow(
-                    "Preset",
-                    LightPresetNames,
-                    NearestLightPreset(_shown.LightTemperature),
-                    i => _state.History.Execute(
+                    label: "Preset",
+                    items: LightPresetNames,
+                    selectedIndex: NearestLightPreset(_shown.LightTemperature),
+                    onChange: i => _state.History.Execute(
                         new ChangePropertyCommand<float>(
-                            _state,
-                            capturedNode.LightTemperature,
-                            LightPresetKelvin[i],
-                            val =>
+                            state: _state,
+                            oldValue: capturedNode.LightTemperature,
+                            newValue: LightPresetKelvin[i],
+                            setter: val =>
                             {
                                 capturedNode.LightTemperature = val;
                                 Rebuild();
                             }
                         )
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
             _rows.Add(
                 PropRow.Float(
-                    "Temp (K)",
-                    _shown.LightTemperature,
-                    v => _state.History.Execute(
+                    label: "Temp (K)",
+                    value: _shown.LightTemperature,
+                    onChange: v => _state.History.Execute(
                         new ChangePropertyCommand<float>(
-                            _state,
-                            capturedNode.LightTemperature,
-                            v,
-                            val => capturedNode.LightTemperature = val
+                            state: _state,
+                            oldValue: capturedNode.LightTemperature,
+                            newValue: v,
+                            setter: val => capturedNode.LightTemperature = val
                         )
                     ),
-                    _theme,
-                    1500f,
-                    12000f,
-                    100f
+                    theme: _theme,
+                    min: 1500f,
+                    max: 12000f,
+                    step: 100f
                 )
             );
             _rows.Add(
                 PropRow.Float(
-                    "Intensity",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.LightIntensity,
-                        (n, v) => n.LightIntensity = v
+                    label: "Intensity",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.LightIntensity,
+                        setter: (n, v) => n.LightIntensity = v
                     ),
-                    _theme,
-                    0f,
-                    20f,
-                    0.1f
+                    theme: _theme,
+                    min: 0f,
+                    max: 20f,
+                    step: 0.1f
                 )
             );
             if (_shown.LightKind != LightType.Directional)
+            {
                 _rows.Add(
                     PropRow.Float(
-                        "Range",
-                        NodeBind.To(
-                            _state,
-                            capturedNode,
-                            n => n.LightRange,
-                            (n, v) => n.LightRange = v
+                        label: "Range",
+                        bind: NodeBind.To(
+                            state: _state,
+                            node: capturedNode,
+                            getter: n => n.LightRange,
+                            setter: (n, v) => n.LightRange = v
                         ),
-                        _theme,
-                        0f,
-                        200f,
-                        1f
+                        theme: _theme,
+                        min: 0f,
+                        max: 200f,
+                        step: 1f
                     )
                 );
+            }
+
             if (_shown.LightKind == LightType.Spot)
             {
                 _rows.Add(
                     PropRow.Float(
-                        "Inner°",
-                        _shown.SpotInnerAngleDeg,
-                        v => _state.History.Execute(
+                        label: "Inner°",
+                        value: _shown.SpotInnerAngleDeg,
+                        onChange: v => _state.History.Execute(
                             new ChangePropertyCommand<float>(
-                                _state,
-                                capturedNode.SpotInnerAngleDeg,
-                                v,
-                                val => capturedNode.SpotInnerAngleDeg = MathF.Min(
-                                    val,
-                                    capturedNode.SpotOuterAngleDeg
+                                state: _state,
+                                oldValue: capturedNode.SpotInnerAngleDeg,
+                                newValue: v,
+                                setter: val => capturedNode.SpotInnerAngleDeg = MathF.Min(
+                                    x: val,
+                                    y: capturedNode.SpotOuterAngleDeg
                                 )
                             )
                         ),
-                        _theme,
-                        1f,
-                        88f,
-                        1f
+                        theme: _theme,
+                        min: 1f,
+                        max: 88f,
+                        step: 1f
                     )
                 );
                 _rows.Add(
                     PropRow.Float(
-                        "Outer°",
-                        _shown.SpotOuterAngleDeg,
-                        v => _state.History.Execute(
+                        label: "Outer°",
+                        value: _shown.SpotOuterAngleDeg,
+                        onChange: v => _state.History.Execute(
                             new ChangePropertyCommand<float>(
-                                _state,
-                                capturedNode.SpotOuterAngleDeg,
-                                v,
-                                val => capturedNode.SpotOuterAngleDeg = MathF.Max(
-                                    val,
-                                    capturedNode.SpotInnerAngleDeg
+                                state: _state,
+                                oldValue: capturedNode.SpotOuterAngleDeg,
+                                newValue: v,
+                                setter: val => capturedNode.SpotOuterAngleDeg = MathF.Max(
+                                    x: val,
+                                    y: capturedNode.SpotInnerAngleDeg
                                 )
                             )
                         ),
-                        _theme,
-                        1f,
-                        89f,
-                        1f
+                        theme: _theme,
+                        min: 1f,
+                        max: 89f,
+                        step: 1f
                     )
                 );
             }
 
             _rows.Add(
                 PropRow.Toggle(
-                    "Cast Shadows",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.LightCastShadows,
-                        (n, v) => n.LightCastShadows = v
+                    label: "Cast Shadows",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.LightCastShadows,
+                        setter: (n, v) => n.LightCastShadows = v
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
         }
         else if (_shown.Kind == NodeKind.Camera)
-        {
             BuildCameraSection(capturedNode);
-        }
         else if (_shown.Kind == NodeKind.ReflectionProbe)
         {
             _rows.Add(PropRow.Spacer(4f));
-            _rows.Add(SectionRow("Reflection Probe", _theme));
+            _rows.Add(SectionRow(title: "Reflection Probe", theme: _theme));
             _rows.Add(
                 PropRow.Vec3(
-                    "Box Extents",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.ProbeExtents,
-                        (n, v) => n.ProbeExtents = v
+                    label: "Box Extents",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.ProbeExtents,
+                        setter: (n, v) => n.ProbeExtents = v
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
         }
         else if (_shown.Kind == NodeKind.AudioSource)
         {
             _rows.Add(PropRow.Spacer(4f));
-            _rows.Add(SectionRow("Audio Source", _theme));
+            _rows.Add(SectionRow(title: "Audio Source", theme: _theme));
             _rows.Add(
                 PropRow.Toggle(
-                    "Use File",
-                    _shown.AudioUseFile,
-                    v => _state.History.Execute(
+                    label: "Use File",
+                    value: _shown.AudioUseFile,
+                    onChange: v => _state.History.Execute(
                         new ChangePropertyCommand<bool>(
-                            _state,
-                            capturedNode.AudioUseFile,
-                            v,
-                            val =>
+                            state: _state,
+                            oldValue: capturedNode.AudioUseFile,
+                            newValue: v,
+                            setter: val =>
                             {
                                 capturedNode.AudioUseFile = val;
                                 Rebuild();
                             }
                         )
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
             if (_shown.AudioUseFile)
             {
                 _rows.Add(
                     PropRow.Path(
-                        "Clip",
-                        _shown.AudioClipPath ?? "",
-                        v => _state.History.Execute(
+                        label: "Clip",
+                        value: _shown.AudioClipPath ?? "",
+                        onChange: v => _state.History.Execute(
                             new ChangePropertyCommand<string?>(
-                                _state,
-                                capturedNode.AudioClipPath,
-                                v,
-                                val => capturedNode.AudioClipPath = val
+                                state: _state,
+                                oldValue: capturedNode.AudioClipPath,
+                                newValue: v,
+                                setter: val => capturedNode.AudioClipPath = val
                             )
                         ),
-                        _state.AssetRoot,
-                        [".wav", ".ogg", ".mp3", ".flac"],
-                        _theme,
-                        _app
+                        rootPath: _state.AssetRoot,
+                        extensions: [".wav", ".ogg", ".mp3", ".flac"],
+                        theme: _theme,
+                        app: _app
                     )
                 );
                 _rows.Add(
                     PropRow.Toggle(
-                        "Stream",
-                        NodeBind.To(
-                            _state,
-                            capturedNode,
-                            n => n.AudioStreaming,
-                            (n, v) => n.AudioStreaming = v
+                        label: "Stream",
+                        bind: NodeBind.To(
+                            state: _state,
+                            node: capturedNode,
+                            getter: n => n.AudioStreaming,
+                            setter: (n, v) => n.AudioStreaming = v
                         ),
-                        _theme
+                        theme: _theme
                     )
                 );
             }
@@ -906,166 +924,166 @@ public sealed partial class InspectorPanel : Widget
             {
                 _rows.Add(
                     PropRow.DropdownRow(
-                        "Waveform",
-                        ["Sine", "Square", "Triangle", "Sawtooth", "Noise"],
-                        Math.Clamp(_shown.AudioWaveform, 0, 4),
-                        i => _state.History.Execute(
+                        label: "Waveform",
+                        items: ["Sine", "Square", "Triangle", "Sawtooth", "Noise"],
+                        selectedIndex: Math.Clamp(value: _shown.AudioWaveform, min: 0, max: 4),
+                        onChange: i => _state.History.Execute(
                             new ChangePropertyCommand<int>(
-                                _state,
-                                capturedNode.AudioWaveform,
-                                i,
-                                val => capturedNode.AudioWaveform = val
+                                state: _state,
+                                oldValue: capturedNode.AudioWaveform,
+                                newValue: i,
+                                setter: val => capturedNode.AudioWaveform = val
                             )
                         ),
-                        _theme
+                        theme: _theme
                     )
                 );
                 _rows.Add(
                     PropRow.Float(
-                        "Frequency",
-                        NodeBind.To(
-                            _state,
-                            capturedNode,
-                            n => n.AudioFrequency,
-                            (n, v) => n.AudioFrequency = v
+                        label: "Frequency",
+                        bind: NodeBind.To(
+                            state: _state,
+                            node: capturedNode,
+                            getter: n => n.AudioFrequency,
+                            setter: (n, v) => n.AudioFrequency = v
                         ),
-                        _theme,
-                        20f,
-                        4000f,
-                        10f
+                        theme: _theme,
+                        min: 20f,
+                        max: 4000f,
+                        step: 10f
                     )
                 );
             }
 
             _rows.Add(
                 PropRow.Float(
-                    "Volume",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.AudioVolume,
-                        (n, v) => n.AudioVolume = v
+                    label: "Volume",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.AudioVolume,
+                        setter: (n, v) => n.AudioVolume = v
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
             _rows.Add(
                 PropRow.Float(
-                    "Pitch",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.AudioPitch,
-                        (n, v) => n.AudioPitch = v
+                    label: "Pitch",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.AudioPitch,
+                        setter: (n, v) => n.AudioPitch = v
                     ),
-                    _theme,
-                    0.25f,
-                    4f
+                    theme: _theme,
+                    min: 0.25f,
+                    max: 4f
                 )
             );
             _rows.Add(
                 PropRow.Toggle(
-                    "Loop",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.AudioLoop,
-                        (n, v) => n.AudioLoop = v
+                    label: "Loop",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.AudioLoop,
+                        setter: (n, v) => n.AudioLoop = v
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
             _rows.Add(
                 PropRow.Toggle(
-                    "Auto Play",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.AudioAutoPlay,
-                        (n, v) => n.AudioAutoPlay = v
+                    label: "Auto Play",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.AudioAutoPlay,
+                        setter: (n, v) => n.AudioAutoPlay = v
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
             _rows.Add(
                 PropRow.Toggle(
-                    "Spatial (3D)",
-                    _shown.AudioSpatial,
-                    v => _state.History.Execute(
+                    label: "Spatial (3D)",
+                    value: _shown.AudioSpatial,
+                    onChange: v => _state.History.Execute(
                         new ChangePropertyCommand<bool>(
-                            _state,
-                            capturedNode.AudioSpatial,
-                            v,
-                            val =>
+                            state: _state,
+                            oldValue: capturedNode.AudioSpatial,
+                            newValue: v,
+                            setter: val =>
                             {
                                 capturedNode.AudioSpatial = val;
                                 Rebuild();
                             }
                         )
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
             if (_shown.AudioSpatial)
             {
                 _rows.Add(
                     PropRow.Float(
-                        "Min Dist",
-                        NodeBind.To(
-                            _state,
-                            capturedNode,
-                            n => n.AudioMinDistance,
-                            (n, v) => n.AudioMinDistance = v
+                        label: "Min Dist",
+                        bind: NodeBind.To(
+                            state: _state,
+                            node: capturedNode,
+                            getter: n => n.AudioMinDistance,
+                            setter: (n, v) => n.AudioMinDistance = v
                         ),
-                        _theme,
-                        0.1f,
-                        100f,
-                        0.5f
+                        theme: _theme,
+                        min: 0.1f,
+                        max: 100f,
+                        step: 0.5f
                     )
                 );
                 _rows.Add(
                     PropRow.Float(
-                        "Max Dist",
-                        NodeBind.To(
-                            _state,
-                            capturedNode,
-                            n => n.AudioMaxDistance,
-                            (n, v) => n.AudioMaxDistance = v
+                        label: "Max Dist",
+                        bind: NodeBind.To(
+                            state: _state,
+                            node: capturedNode,
+                            getter: n => n.AudioMaxDistance,
+                            setter: (n, v) => n.AudioMaxDistance = v
                         ),
-                        _theme,
-                        1f,
-                        1000f,
-                        1f
+                        theme: _theme,
+                        min: 1f,
+                        max: 1000f,
+                        step: 1f
                     )
                 );
                 _rows.Add(
                     PropRow.Float(
-                        "Rolloff",
-                        NodeBind.To(
-                            _state,
-                            capturedNode,
-                            n => n.AudioRolloff,
-                            (n, v) => n.AudioRolloff = v
+                        label: "Rolloff",
+                        bind: NodeBind.To(
+                            state: _state,
+                            node: capturedNode,
+                            getter: n => n.AudioRolloff,
+                            setter: (n, v) => n.AudioRolloff = v
                         ),
-                        _theme,
-                        0f,
-                        4f,
-                        0.1f
+                        theme: _theme,
+                        min: 0f,
+                        max: 4f,
+                        step: 0.1f
                     )
                 );
             }
 
             _rows.Add(
                 PropRow.ActionButton(
-                    _previewPlaying ? "Stop Preview" : "Preview",
-                    () => TogglePreview(capturedNode)
+                    label: _previewPlaying ? "Stop Preview" : "Preview",
+                    onClick: () => TogglePreview(capturedNode)
                 )
             );
         }
         else if (_shown.Kind == NodeKind.VfxEmitter)
         {
             _rows.Add(PropRow.Spacer(4f));
-            _rows.Add(SectionRow("VFX Emitter", _theme));
+            _rows.Add(SectionRow(title: "VFX Emitter", theme: _theme));
 
             // Live CPU-sim preview of the node's current graph.
             _rows.Add(
@@ -1078,328 +1096,334 @@ public sealed partial class InspectorPanel : Widget
 
             _rows.Add(
                 PropRow.DropdownRow(
-                    "Preset",
-                    VfxPresets.Names.ToArray(),
-                    0,
-                    i =>
+                    label: "Preset",
+                    items: VfxPresets.Names.ToArray(),
+                    selectedIndex: 0,
+                    onChange: i =>
                     {
-                        var json = VfxGraphSerializer.Serialize(
-                            VfxPresets.Create(VfxPresets.Names[i], capturedNode.Name)
+                        string json = VfxGraphSerializer.Serialize(
+                            VfxPresets.Create(preset: VfxPresets.Names[i], name: capturedNode.Name)
                         );
                         _state.History.Execute(
                             new ChangePropertyCommand<string?>(
-                                _state,
-                                capturedNode.VfxGraphJson,
-                                json,
-                                val => capturedNode.VfxGraphJson = val
+                                state: _state,
+                                oldValue: capturedNode.VfxGraphJson,
+                                newValue: json,
+                                setter: val => capturedNode.VfxGraphJson = val
                             )
                         );
                         Rebuild();
                     },
-                    _theme
+                    theme: _theme
                 )
             );
 
             _rows.Add(
                 PropRow.Toggle(
-                    "Play On Start",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.VfxPlayOnStart,
-                        (n, v) => n.VfxPlayOnStart = v
+                    label: "Play On Start",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.VfxPlayOnStart,
+                        setter: (n, v) => n.VfxPlayOnStart = v
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
 
-            _rows.Add(PropRow.ActionButton("Edit as Nodes…", () => OpenVfxEditor(capturedNode)));
+            _rows.Add(
+                PropRow.ActionButton(
+                    label: "Edit as Nodes…",
+                    onClick: () => OpenVfxEditor(capturedNode)
+                )
+            );
         }
         else if (_shown.Kind == NodeKind.Sprite)
         {
             _rows.Add(PropRow.Spacer(4f));
-            _rows.Add(SectionRow("Sprite", _theme));
+            _rows.Add(SectionRow(title: "Sprite", theme: _theme));
             _rows.Add(
                 PropRow.Path(
-                    "Texture",
-                    _shown.TexturePath ?? "",
-                    v => _state.History.Execute(
+                    label: "Texture",
+                    value: _shown.TexturePath ?? "",
+                    onChange: v => _state.History.Execute(
                         new ChangePropertyCommand<string?>(
-                            _state,
-                            capturedNode.TexturePath,
-                            v,
-                            val => capturedNode.TexturePath = val
+                            state: _state,
+                            oldValue: capturedNode.TexturePath,
+                            newValue: v,
+                            setter: val => capturedNode.TexturePath = val
                         )
                     ),
-                    _state.AssetRoot,
-                    [".png", ".jpg", ".jpeg", ".webp", ".gif"],
-                    _theme,
-                    _app
+                    rootPath: _state.AssetRoot,
+                    extensions: [".png", ".jpg", ".jpeg", ".webp", ".gif"],
+                    theme: _theme,
+                    app: _app
                 )
             );
             _rows.Add(
                 PropRow.Float(
-                    "Pixels/Unit",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.SpritePixelsPerUnit,
-                        (n, v) => n.SpritePixelsPerUnit = MathF.Max(0.001f, v)
+                    label: "Pixels/Unit",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.SpritePixelsPerUnit,
+                        setter: (n, v) => n.SpritePixelsPerUnit = MathF.Max(x: 0.001f, y: v)
                     ),
-                    _theme,
-                    1f,
-                    1024f,
-                    1f
+                    theme: _theme,
+                    min: 1f,
+                    max: 1024f,
+                    step: 1f
                 )
             );
             _rows.Add(
                 PropRow.Vec3Color(
-                    "Tint",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => new Vec3(n.SpriteColor.X, n.SpriteColor.Y, n.SpriteColor.Z),
-                        (n, v) => n.SpriteColor = new Vec4(
-                            v.X,
-                            v.Y,
-                            v.Z,
-                            n.SpriteColor.W
+                    label: "Tint",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => new Vec3(
+                            x: n.SpriteColor.X,
+                            y: n.SpriteColor.Y,
+                            z: n.SpriteColor.Z
+                        ),
+                        setter: (n, v) => n.SpriteColor = new Vec4(
+                            x: v.X,
+                            y: v.Y,
+                            z: v.Z,
+                            w: n.SpriteColor.W
                         )
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
             _rows.Add(
                 PropRow.Float(
-                    "Opacity",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.SpriteColor.W,
-                        (n, v) => n.SpriteColor = new Vec4(
-                            n.SpriteColor.X,
-                            n.SpriteColor.Y,
-                            n.SpriteColor.Z,
-                            Math.Clamp(v, 0f, 1f)
+                    label: "Opacity",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.SpriteColor.W,
+                        setter: (n, v) => n.SpriteColor = new Vec4(
+                            x: n.SpriteColor.X,
+                            y: n.SpriteColor.Y,
+                            z: n.SpriteColor.Z,
+                            w: Math.Clamp(value: v, min: 0f, max: 1f)
                         )
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
             _rows.Add(
                 PropRow.Toggle(
-                    "Flip X",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.SpriteFlipX,
-                        (n, v) => n.SpriteFlipX = v
+                    label: "Flip X",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.SpriteFlipX,
+                        setter: (n, v) => n.SpriteFlipX = v
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
             _rows.Add(
                 PropRow.Toggle(
-                    "Flip Y",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.SpriteFlipY,
-                        (n, v) => n.SpriteFlipY = v
+                    label: "Flip Y",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.SpriteFlipY,
+                        setter: (n, v) => n.SpriteFlipY = v
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
             _rows.Add(
                 PropRow.Float(
-                    "Pivot X",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.SpritePivotX,
-                        (n, v) => n.SpritePivotX = v
+                    label: "Pivot X",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.SpritePivotX,
+                        setter: (n, v) => n.SpritePivotX = v
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
             _rows.Add(
                 PropRow.Float(
-                    "Pivot Y",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.SpritePivotY,
-                        (n, v) => n.SpritePivotY = v
+                    label: "Pivot Y",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.SpritePivotY,
+                        setter: (n, v) => n.SpritePivotY = v
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
 
-            _rows.Add(SectionRow("Sprite Sheet", _theme));
+            _rows.Add(SectionRow(title: "Sprite Sheet", theme: _theme));
             _rows.Add(
                 PropRow.Float(
-                    "Columns",
-                    capturedNode.SpriteCols,
-                    v => _state.History.Execute(
+                    label: "Columns",
+                    value: capturedNode.SpriteCols,
+                    onChange: v => _state.History.Execute(
                         new ChangePropertyCommand<int>(
-                            _state,
-                            capturedNode.SpriteCols,
-                            Math.Max(1, (int)v),
-                            val => capturedNode.SpriteCols = val
+                            state: _state,
+                            oldValue: capturedNode.SpriteCols,
+                            newValue: Math.Max(val1: 1, val2: (int)v),
+                            setter: val => capturedNode.SpriteCols = val
                         )
                     ),
-                    _theme,
-                    1f,
-                    64f,
-                    1f
+                    theme: _theme,
+                    min: 1f,
+                    max: 64f,
+                    step: 1f
                 )
             );
             _rows.Add(
                 PropRow.Float(
-                    "Rows",
-                    capturedNode.SpriteRows,
-                    v => _state.History.Execute(
+                    label: "Rows",
+                    value: capturedNode.SpriteRows,
+                    onChange: v => _state.History.Execute(
                         new ChangePropertyCommand<int>(
-                            _state,
-                            capturedNode.SpriteRows,
-                            Math.Max(1, (int)v),
-                            val => capturedNode.SpriteRows = val
+                            state: _state,
+                            oldValue: capturedNode.SpriteRows,
+                            newValue: Math.Max(val1: 1, val2: (int)v),
+                            setter: val => capturedNode.SpriteRows = val
                         )
                     ),
-                    _theme,
-                    1f,
-                    64f,
-                    1f
+                    theme: _theme,
+                    min: 1f,
+                    max: 64f,
+                    step: 1f
                 )
             );
             _rows.Add(
                 PropRow.Float(
-                    "Frame",
-                    capturedNode.SpriteFrame,
-                    v => _state.History.Execute(
+                    label: "Frame",
+                    value: capturedNode.SpriteFrame,
+                    onChange: v => _state.History.Execute(
                         new ChangePropertyCommand<int>(
-                            _state,
-                            capturedNode.SpriteFrame,
-                            Math.Max(0, (int)v),
-                            val => capturedNode.SpriteFrame = val
+                            state: _state,
+                            oldValue: capturedNode.SpriteFrame,
+                            newValue: Math.Max(val1: 0, val2: (int)v),
+                            setter: val => capturedNode.SpriteFrame = val
                         )
                     ),
-                    _theme,
-                    0f,
-                    4095f,
-                    1f
+                    theme: _theme,
+                    min: 0f,
+                    max: 4095f,
+                    step: 1f
                 )
             );
             _rows.Add(
                 PropRow.Float(
-                    "FPS",
-                    NodeBind.To(
-                        _state,
-                        capturedNode,
-                        n => n.SpriteFps,
-                        (n, v) => n.SpriteFps = MathF.Max(0f, v)
+                    label: "FPS",
+                    bind: NodeBind.To(
+                        state: _state,
+                        node: capturedNode,
+                        getter: n => n.SpriteFps,
+                        setter: (n, v) => n.SpriteFps = MathF.Max(x: 0f, y: v)
                     ),
-                    _theme,
-                    0f,
-                    60f,
-                    1f
+                    theme: _theme,
+                    min: 0f,
+                    max: 60f,
+                    step: 1f
                 )
             );
 
-            _rows.Add(SectionRow("Material", _theme));
+            _rows.Add(SectionRow(title: "Material", theme: _theme));
             _rows.Add(
                 PropRow.DropdownRow(
-                    "Blend",
-                    ["Alpha", "Additive", "Opaque"],
-                    Math.Clamp(_shown.SpriteBlend, 0, 2),
-                    i => _state.History.Execute(
+                    label: "Blend",
+                    items: ["Alpha", "Additive", "Opaque"],
+                    selectedIndex: Math.Clamp(value: _shown.SpriteBlend, min: 0, max: 2),
+                    onChange: i => _state.History.Execute(
                         new ChangePropertyCommand<int>(
-                            _state,
-                            capturedNode.SpriteBlend,
-                            i,
-                            val => capturedNode.SpriteBlend = val
+                            state: _state,
+                            oldValue: capturedNode.SpriteBlend,
+                            newValue: i,
+                            setter: val => capturedNode.SpriteBlend = val
                         )
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
             _rows.Add(
                 PropRow.DropdownRow(
-                    "Stage",
-                    ["Scene (HDR)", "Overlay (exact)"],
-                    Math.Clamp(_shown.SpriteStage, 0, 1),
-                    i => _state.History.Execute(
+                    label: "Stage",
+                    items: ["Scene (HDR)", "Overlay (exact)"],
+                    selectedIndex: Math.Clamp(value: _shown.SpriteStage, min: 0, max: 1),
+                    onChange: i => _state.History.Execute(
                         new ChangePropertyCommand<int>(
-                            _state,
-                            capturedNode.SpriteStage,
-                            i,
-                            val => capturedNode.SpriteStage = val
+                            state: _state,
+                            oldValue: capturedNode.SpriteStage,
+                            newValue: i,
+                            setter: val => capturedNode.SpriteStage = val
                         )
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
             _rows.Add(
                 PropRow.Path(
-                    "Shader (.wgsl)",
-                    _shown.SpriteShaderPath ?? "",
-                    v => _state.History.Execute(
+                    label: "Shader (.wgsl)",
+                    value: _shown.SpriteShaderPath ?? "",
+                    onChange: v => _state.History.Execute(
                         new ChangePropertyCommand<string?>(
-                            _state,
-                            capturedNode.SpriteShaderPath,
-                            v,
-                            val => capturedNode.SpriteShaderPath = val
+                            state: _state,
+                            oldValue: capturedNode.SpriteShaderPath,
+                            newValue: v,
+                            setter: val => capturedNode.SpriteShaderPath = val
                         )
                     ),
-                    _state.AssetRoot,
-                    [".wgsl"],
-                    _theme,
-                    _app
+                    rootPath: _state.AssetRoot,
+                    extensions: [".wgsl"],
+                    theme: _theme,
+                    app: _app
                 )
             );
 
-            _rows.Add(SectionRow("Sorting", _theme));
+            _rows.Add(SectionRow(title: "Sorting", theme: _theme));
             _rows.Add(
                 PropRow.Float(
-                    "Layer",
-                    capturedNode.SpriteSortingLayer,
-                    v => _state.History.Execute(
+                    label: "Layer",
+                    value: capturedNode.SpriteSortingLayer,
+                    onChange: v => _state.History.Execute(
                         new ChangePropertyCommand<int>(
-                            _state,
-                            capturedNode.SpriteSortingLayer,
-                            (int)v,
-                            val => capturedNode.SpriteSortingLayer = val
+                            state: _state,
+                            oldValue: capturedNode.SpriteSortingLayer,
+                            newValue: (int)v,
+                            setter: val => capturedNode.SpriteSortingLayer = val
                         )
                     ),
-                    _theme,
-                    -100f,
-                    100f,
-                    1f
+                    theme: _theme,
+                    min: -100f,
+                    max: 100f,
+                    step: 1f
                 )
             );
             _rows.Add(
                 PropRow.Float(
-                    "Order",
-                    capturedNode.SpriteOrderInLayer,
-                    v => _state.History.Execute(
+                    label: "Order",
+                    value: capturedNode.SpriteOrderInLayer,
+                    onChange: v => _state.History.Execute(
                         new ChangePropertyCommand<int>(
-                            _state,
-                            capturedNode.SpriteOrderInLayer,
-                            (int)v,
-                            val => capturedNode.SpriteOrderInLayer = val
+                            state: _state,
+                            oldValue: capturedNode.SpriteOrderInLayer,
+                            newValue: (int)v,
+                            setter: val => capturedNode.SpriteOrderInLayer = val
                         )
                     ),
-                    _theme,
-                    -100f,
-                    100f,
-                    1f
+                    theme: _theme,
+                    min: -100f,
+                    max: 100f,
+                    step: 1f
                 )
             );
         }
-        else if (_shown.Kind == NodeKind.Tilemap)
-        {
-            BuildTilemapRows(capturedNode);
-        }
+        else if (_shown.Kind == NodeKind.Tilemap) BuildTilemapRows(capturedNode);
 
         // A 2D collider belongs to anything that can sit in the 2D world, not to one node kind.
         if (_shown.Kind is NodeKind.Sprite or NodeKind.Tilemap or NodeKind.Empty)
@@ -1408,24 +1432,24 @@ public sealed partial class InspectorPanel : Widget
         if (_shown.Kind is NodeKind.Mesh or NodeKind.Empty)
         {
             _rows.Add(PropRow.Spacer(4f));
-            _rows.Add(SectionRow("Physics", _theme));
+            _rows.Add(SectionRow(title: "Physics", theme: _theme));
             _rows.Add(
                 PropRow.Toggle(
-                    "Use Physics",
-                    _shown.UsePhysics,
-                    v => _state.History.Execute(
+                    label: "Use Physics",
+                    value: _shown.UsePhysics,
+                    onChange: v => _state.History.Execute(
                         new ChangePropertyCommand<bool>(
-                            _state,
-                            capturedNode.UsePhysics,
-                            v,
-                            val =>
+                            state: _state,
+                            oldValue: capturedNode.UsePhysics,
+                            newValue: v,
+                            setter: val =>
                             {
                                 capturedNode.UsePhysics = val;
                                 Rebuild();
                             }
                         )
                     ),
-                    _theme
+                    theme: _theme
                 )
             );
 
@@ -1433,101 +1457,104 @@ public sealed partial class InspectorPanel : Widget
             {
                 _rows.Add(
                     PropRow.Toggle(
-                        "Static",
-                        _shown.IsStatic,
-                        v => _state.History.Execute(
+                        label: "Static",
+                        value: _shown.IsStatic,
+                        onChange: v => _state.History.Execute(
                             new ChangePropertyCommand<bool>(
-                                _state,
-                                capturedNode.IsStatic,
-                                v,
-                                val =>
+                                state: _state,
+                                oldValue: capturedNode.IsStatic,
+                                newValue: v,
+                                setter: val =>
                                 {
                                     capturedNode.IsStatic = val;
                                     Rebuild();
                                 }
                             )
                         ),
-                        _theme
+                        theme: _theme
                     )
                 );
                 _rows.Add(
                     PropRow.Toggle(
-                        "Use Gravity",
-                        NodeBind.To(
-                            _state,
-                            capturedNode,
-                            n => n.UseGravity,
-                            (n, v) => n.UseGravity = v
+                        label: "Use Gravity",
+                        bind: NodeBind.To(
+                            state: _state,
+                            node: capturedNode,
+                            getter: n => n.UseGravity,
+                            setter: (n, v) => n.UseGravity = v
                         ),
-                        _theme
+                        theme: _theme
                     )
                 );
                 _rows.Add(
                     PropRow.DropdownRow(
-                        "Shape",
-                        ["Box", "Sphere", "Capsule", "Cylinder"],
-                        (int)_shown.PhysicsShape,
-                        i => _state.History.Execute(
+                        label: "Shape",
+                        items: ["Box", "Sphere", "Capsule", "Cylinder"],
+                        selectedIndex: (int)_shown.PhysicsShape,
+                        onChange: i => _state.History.Execute(
                             new ChangePropertyCommand<PhysicsShapeType>(
-                                _state,
-                                capturedNode.PhysicsShape,
-                                (PhysicsShapeType)i,
-                                val => capturedNode.PhysicsShape = val
+                                state: _state,
+                                oldValue: capturedNode.PhysicsShape,
+                                newValue: (PhysicsShapeType)i,
+                                setter: val => capturedNode.PhysicsShape = val
                             )
                         ),
-                        _theme
+                        theme: _theme
                     )
                 );
                 _rows.Add(
                     PropRow.Vec3(
-                        "Half Extents",
-                        NodeBind.To(
-                            _state,
-                            capturedNode,
-                            n => n.PhysicsHalfExtents,
-                            (n, v) => n.PhysicsHalfExtents = v
+                        label: "Half Extents",
+                        bind: NodeBind.To(
+                            state: _state,
+                            node: capturedNode,
+                            getter: n => n.PhysicsHalfExtents,
+                            setter: (n, v) => n.PhysicsHalfExtents = v
                         ),
-                        _theme
+                        theme: _theme
                     )
                 );
                 if (!_shown.IsStatic)
+                {
                     _rows.Add(
                         PropRow.Float(
-                            "Mass",
-                            NodeBind.To(
-                                _state,
-                                capturedNode,
-                                n => n.PhysicsMass,
-                                (n, v) => n.PhysicsMass = v
+                            label: "Mass",
+                            bind: NodeBind.To(
+                                state: _state,
+                                node: capturedNode,
+                                getter: n => n.PhysicsMass,
+                                setter: (n, v) => n.PhysicsMass = v
                             ),
-                            _theme,
-                            0.01f,
-                            1000f,
-                            0.5f
+                            theme: _theme,
+                            min: 0.01f,
+                            max: 1000f,
+                            step: 0.5f
                         )
                     );
+                }
+
                 _rows.Add(
                     PropRow.Float(
-                        "Friction",
-                        NodeBind.To(
-                            _state,
-                            capturedNode,
-                            n => n.PhysicsFriction,
-                            (n, v) => n.PhysicsFriction = v
+                        label: "Friction",
+                        bind: NodeBind.To(
+                            state: _state,
+                            node: capturedNode,
+                            getter: n => n.PhysicsFriction,
+                            setter: (n, v) => n.PhysicsFriction = v
                         ),
-                        _theme
+                        theme: _theme
                     )
                 );
                 _rows.Add(
                     PropRow.Float(
-                        "Restitution",
-                        NodeBind.To(
-                            _state,
-                            capturedNode,
-                            n => n.PhysicsRestitution,
-                            (n, v) => n.PhysicsRestitution = v
+                        label: "Restitution",
+                        bind: NodeBind.To(
+                            state: _state,
+                            node: capturedNode,
+                            getter: n => n.PhysicsRestitution,
+                            setter: (n, v) => n.PhysicsRestitution = v
                         ),
-                        _theme
+                        theme: _theme
                     )
                 );
             }
@@ -1535,65 +1562,71 @@ public sealed partial class InspectorPanel : Widget
 
         // ── Script (available on every node kind) ─────────────────────────────
         _rows.Add(PropRow.Spacer(4f));
-        _rows.Add(SectionRow("Script", _theme));
+        _rows.Add(SectionRow(title: "Script", theme: _theme));
         _rows.Add(
             PropRow.Suggest(
-                "Class",
-                _shown.ScriptClass ?? "",
-                q => _state.ScriptRegistry.All
+                label: "Class",
+                value: _shown.ScriptClass ?? "",
+                suggest: q => _state.ScriptRegistry.All
                     .Where(m => string.IsNullOrEmpty(q)
-                                || m.FullName.Contains(q, StringComparison.OrdinalIgnoreCase)
-                                || m.DisplayName.Contains(q, StringComparison.OrdinalIgnoreCase)
+                                || m.FullName.Contains(
+                                    value: q,
+                                    comparisonType: StringComparison.OrdinalIgnoreCase
+                                )
+                                || m.DisplayName.Contains(
+                                    value: q,
+                                    comparisonType: StringComparison.OrdinalIgnoreCase
+                                )
                     )
                     .OrderByDescending(m => m.DisplayName.StartsWith(
-                            q,
-                            StringComparison.OrdinalIgnoreCase
+                            value: q,
+                            comparisonType: StringComparison.OrdinalIgnoreCase
                         )
                     )
                     .ThenBy(m => m.DisplayName)
                     .Select(m => (m.FullName, m.DisplayName))
                     .Take(12)
                     .ToList(),
-                v => _state.History.Execute(
+                onCommit: v => _state.History.Execute(
                     new ChangePropertyCommand<string?>(
-                        _state,
-                        capturedNode.ScriptClass,
-                        v,
-                        val =>
+                        state: _state,
+                        oldValue: capturedNode.ScriptClass,
+                        newValue: v,
+                        setter: val =>
                         {
                             capturedNode.ScriptClass = val;
                             Rebuild();
                         }
                     )
                 ),
-                _theme,
-                _app
+                theme: _theme,
+                app: _app
             )
         );
         _rows.Add(
             PropRow.Path(
-                "Path",
-                _shown.ScriptPath ?? "",
-                v => _state.History.Execute(
+                label: "Path",
+                value: _shown.ScriptPath ?? "",
+                onChange: v => _state.History.Execute(
                     new ChangePropertyCommand<string?>(
-                        _state,
-                        capturedNode.ScriptPath,
-                        v,
-                        val => capturedNode.ScriptPath = val
+                        state: _state,
+                        oldValue: capturedNode.ScriptPath,
+                        newValue: v,
+                        setter: val => capturedNode.ScriptPath = val
                     )
                 ),
-                _state.AssetRoot,
-                [".csproj", ".cs"],
-                _theme,
-                _app
+                rootPath: _state.AssetRoot,
+                extensions: [".csproj", ".cs"],
+                theme: _theme,
+                app: _app
             )
         );
         _rows.Add(
             PropRow.ActionButton(
-                "Build & Reload",
-                () =>
+                label: "Build & Reload",
+                onClick: () =>
                 {
-                    var path = ResolveProjectPath(capturedNode.ScriptPath);
+                    string? path = ResolveProjectPath(capturedNode.ScriptPath);
                     if (path != null) _ = _state.BuildScriptsAsync(path);
                 }
             )
@@ -1601,24 +1634,29 @@ public sealed partial class InspectorPanel : Widget
 
         // Build status
         if (_state.IsScriptBuilding)
-        {
-            _rows.Add(PropRow.StatusLine("Building...", _theme.Hint, _theme));
-        }
+            _rows.Add(PropRow.StatusLine(text: "Building...", color: _theme.Hint, theme: _theme));
         else if (_state.ScriptDiagnostics.Count > 0)
         {
-            var errors =
+            int errors =
                 _state.ScriptDiagnostics.Count(d => d.Severity == DiagnosticSeverity.Error);
-            var warnings =
+            int warnings =
                 _state.ScriptDiagnostics.Count(d => d.Severity == DiagnosticSeverity.Warning);
-            var summary = errors > 0 ? $"{errors} error{(errors != 1 ? "s" : "")}" : "";
+            string summary = errors > 0 ? $"{errors} error{(errors != 1 ? "s" : "")}" : "";
             if (warnings > 0)
+            {
                 summary += (summary.Length > 0 ? ", " : "") +
                            $"{warnings} warning{(warnings != 1 ? "s" : "")}";
+            }
+
             _rows.Add(
-                PropRow.StatusLine(summary, errors > 0 ? _theme.Error : _theme.Accent, _theme)
+                PropRow.StatusLine(
+                    text: summary,
+                    color: errors > 0 ? _theme.Error : _theme.Accent,
+                    theme: _theme
+                )
             );
             foreach (var d in _state.ScriptDiagnostics.Take(8))
-                _rows.Add(PropRow.DiagnosticLine(d, _theme));
+                _rows.Add(PropRow.DiagnosticLine(d: d, theme: _theme));
         }
 
         if (!string.IsNullOrEmpty(_shown.ScriptClass))
@@ -1627,26 +1665,25 @@ public sealed partial class InspectorPanel : Widget
             if (meta?.ExportedFields.Length > 0)
             {
                 _rows.Add(PropRow.Spacer(4f));
-                _rows.Add(SectionRow("Properties", _theme));
+                _rows.Add(SectionRow(title: "Properties", theme: _theme));
                 foreach (var field in meta.ExportedFields)
-                    _rows.Add(BuildExportedFieldRow(field, meta, capturedNode));
+                    _rows.Add(BuildExportedFieldRow(field: field, meta: meta, node: capturedNode));
             }
         }
 
         // Drop rows belonging to a collapsed section (everything between a collapsed header and the
         // next header). Headers always show so the section can be re-expanded.
         var visible = new List<PropRow>(_rows.Count);
-        var collapsing = false;
+        bool collapsing = false;
         foreach (var r in _rows)
+        {
             if (r.IsSectionHeader)
             {
                 collapsing = r.SectionTitle != null && _collapsedSections.Contains(r.SectionTitle);
                 visible.Add(r);
             }
-            else if (!collapsing)
-            {
-                visible.Add(r);
-            }
+            else if (!collapsing) visible.Add(r);
+        }
 
         var col = new Column {
             MainAxisAlignment = MainAxisAlignment.Start,
@@ -1666,45 +1703,63 @@ public sealed partial class InspectorPanel : Widget
         };
         col.Children.Add(
             new Padding(
-                EdgeInsets.All(8f),
-                new ColoredBox(
-                    _theme.Primary.WithAlpha(0.12f),
-                    new Padding(
-                        EdgeInsets.Symmetric(8f, 6f),
-                        new Label($"{count} nodes selected", _theme.FontSizeCaption, _theme.Primary)
+                padding: EdgeInsets.All(8f),
+                child: new ColoredBox(
+                    color: _theme.Primary.WithAlpha(0.12f),
+                    child: new Padding(
+                        padding: EdgeInsets.Symmetric(horizontal: 8f, vertical: 6f),
+                        child: new Label(
+                            text: $"{count} nodes selected",
+                            fontSize: _theme.FontSizeCaption,
+                            color: _theme.Primary
+                        )
                     )
                 )
             )
         );
         col.Children.Add(
             new Padding(
-                EdgeInsets.Symmetric(12f, 4f),
-                new Label(
-                    "Ctrl+click to toggle, Shift+click to range-select.",
-                    _theme.FontSizeCaption,
-                    _theme.Hint
+                padding: EdgeInsets.Symmetric(horizontal: 12f, vertical: 4f),
+                child: new Label(
+                    text: "Ctrl+click to toggle, Shift+click to range-select.",
+                    fontSize: _theme.FontSizeCaption,
+                    color: _theme.Hint
                 )
             )
         );
         foreach (var n in _state.SelectedNodes.Take(20))
+        {
             col.Children.Add(
                 new Padding(
-                    new EdgeInsets(
-                        12f,
-                        2f,
-                        4f,
-                        2f
+                    padding: new EdgeInsets(
+                        left: 12f,
+                        top: 2f,
+                        right: 4f,
+                        bottom: 2f
                     ),
-                    new Label($"  • {n.Name}", _theme.FontSizeCaption, _theme.OnSurface)
+                    child: new Label(
+                        text: $"  • {n.Name}",
+                        fontSize: _theme.FontSizeCaption,
+                        color: _theme.OnSurface
+                    )
                 )
             );
+        }
+
         if (count > 20)
+        {
             col.Children.Add(
                 new Padding(
-                    EdgeInsets.Symmetric(12f, 2f),
-                    new Label($"  … and {count - 20} more", _theme.FontSizeCaption, _theme.Hint)
+                    padding: EdgeInsets.Symmetric(horizontal: 12f, vertical: 2f),
+                    child: new Label(
+                        text: $"  … and {count - 20} more",
+                        fontSize: _theme.FontSizeCaption,
+                        color: _theme.Hint
+                    )
                 )
             );
+        }
+
         RequestLayout();
         return col;
     }
@@ -1718,22 +1773,19 @@ public sealed partial class InspectorPanel : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         _content.Layout(origin);
     }
 
-    public override void Paint(PaintList paint)
-    {
-        _content.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => _content.Paint(paint);
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return _content.HitTest(point);
     }
 }

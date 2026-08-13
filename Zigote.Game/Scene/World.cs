@@ -39,7 +39,7 @@ public sealed class World
 
     public SceneNode3D? ActiveCamera { get; set; }
     public SceneNode3D? ActiveCamera2D { get; set; }
-    public Vec2 ViewportSize { get; set; } = new(1, 1);
+    public Vec2 ViewportSize { get; set; } = new(x: 1, y: 1);
     public double ElapsedSeconds { get; private set; }
     public InputState Input { get; } = new();
 
@@ -47,8 +47,12 @@ public sealed class World
 
     public SceneNode3D CreateNode(string name, Node3DKind kind = Node3DKind.Empty)
     {
-        var node = new SceneNode3D(name, kind) {
-            Handle = ZigoteEngine.Instance!.SceneAddChildNode(0, name, (byte)kind),
+        var node = new SceneNode3D(name: name, kind: kind) {
+            Handle = ZigoteEngine.Instance!.SceneAddChildNode(
+                parentHandle: 0,
+                name: name,
+                kind: (byte)kind
+            ),
         };
         _roots.Add(node);
         return node;
@@ -57,8 +61,12 @@ public sealed class World
     public SceneNode3D CreateChild(SceneNode3D parent, string name,
         Node3DKind kind = Node3DKind.Empty)
     {
-        var node = new SceneNode3D(name, kind) {
-            Handle = ZigoteEngine.Instance!.SceneAddChildNode(parent.Handle, name, (byte)kind),
+        var node = new SceneNode3D(name: name, kind: kind) {
+            Handle = ZigoteEngine.Instance!.SceneAddChildNode(
+                parentHandle: parent.Handle,
+                name: name,
+                kind: (byte)kind
+            ),
         };
         parent.AddChild(node);
         return node;
@@ -80,27 +88,23 @@ public sealed class World
 
     public int AddMesh(Mesh3D mesh)
     {
-        var handle = _meshes.Count;
+        int handle = _meshes.Count;
         _meshes.Add(mesh);
         return handle;
     }
 
     public int AddMaterial(Material3D material)
     {
-        var handle = _materials.Count;
+        int handle = _materials.Count;
         _materials.Add(material);
         return handle;
     }
 
-    public Mesh3D? GetMesh(int handle)
-    {
-        return handle >= 0 && handle < _meshes.Count ? _meshes[handle] : null;
-    }
+    public Mesh3D? GetMesh(int handle) =>
+        handle >= 0 && handle < _meshes.Count ? _meshes[handle] : null;
 
-    public Material3D? GetMaterial(int handle)
-    {
-        return handle >= 0 && handle < _materials.Count ? _materials[handle] : null;
-    }
+    public Material3D? GetMaterial(int handle) =>
+        handle >= 0 && handle < _materials.Count ? _materials[handle] : null;
 
     // ── Per-frame update ─────────────────────────────────────────────────────
 
@@ -124,7 +128,7 @@ public sealed class World
     {
         // Indexed walk over the concrete root list + SceneNode3D.SyncTree — no Descendants() iterator
         // allocation per node per frame, and each node's Sync() now dirty-skips unchanged transforms.
-        for (var i = 0; i < _roots.Count; i++)
+        for (int i = 0; i < _roots.Count; i++)
             _roots[i].SyncTree();
     }
 
@@ -138,7 +142,7 @@ public sealed class World
     public void AttachPhysics(PhysicsWorld physics)
     {
         foreach (var root in _roots)
-            AttachPhysicsNode(physics, root);
+            AttachPhysicsNode(physics: physics, node: root);
         physics.OptimizeBroadPhase();
     }
 
@@ -162,7 +166,7 @@ public sealed class World
         }
 
         foreach (var child in node.Children)
-            AttachPhysicsNode(physics, child);
+            AttachPhysicsNode(physics: physics, node: child);
     }
 
     /// <summary>
@@ -172,26 +176,26 @@ public sealed class World
     public void SyncFromPhysics(PhysicsWorld physics)
     {
         _syncBodies.Clear();
-        for (var i = 0; i < _roots.Count; i++)
+        for (int i = 0; i < _roots.Count; i++)
             CollectDynamicBodies(_roots[i]);
-        var count = _syncBodies.Count;
+        int count = _syncBodies.Count;
         if (count == 0) return;
 
         var ids = _syncIds.Get(count);
-        for (var i = 0; i < count; i++) ids[i] = _syncBodies[i].BodyId;
+        for (int i = 0; i < count; i++) ids[i] = _syncBodies[i].BodyId;
         var xforms = _syncXforms.Get(count * 7);
-        physics.GetBodyTransforms(ids, xforms);
+        physics.GetBodyTransforms(ids: ids, outXforms: xforms);
 
-        for (var i = 0; i < count; i++)
+        for (int i = 0; i < count; i++)
         {
             var node = _syncBodies[i].Node;
-            var b = i * 7;
-            node.Position = new Vec3(xforms[b], xforms[b + 1], xforms[b + 2]);
+            int b = i * 7;
+            node.Position = new Vec3(x: xforms[b], y: xforms[b + 1], z: xforms[b + 2]);
             node.Rotation = new Quat(
-                xforms[b + 3],
-                xforms[b + 4],
-                xforms[b + 5],
-                xforms[b + 6]
+                x: xforms[b + 3],
+                y: xforms[b + 4],
+                z: xforms[b + 5],
+                w: xforms[b + 6]
             );
         }
     }
@@ -203,7 +207,7 @@ public sealed class World
             && !rb.IsStatic)
             _syncBodies.Add((node, rb.BodyId));
 
-        for (var i = 0; i < node.Children.Count; i++)
+        for (int i = 0; i < node.Children.Count; i++)
             CollectDynamicBodies(node.Children[i]);
     }
 
@@ -214,7 +218,7 @@ public sealed class World
         foreach (var root in _roots)
         {
             if (root.Name == name) return root;
-            var found = FindInTree(root, name);
+            var found = FindInTree(node: root, name: name);
             if (found is not null) return found;
         }
 
@@ -225,8 +229,10 @@ public sealed class World
     {
         foreach (var root in _roots)
         foreach (var node in AllNodes(root))
+        {
             if (node is { Active: true, MeshRenderer: { Visible: true } mr } && mr.Layer == layer)
                 yield return node;
+        }
     }
 
     private static SceneNode3D? FindInTree(SceneNode3D node, string name)
@@ -234,7 +240,7 @@ public sealed class World
         foreach (var child in node.Children)
         {
             if (child.Name == name) return child;
-            var found = FindInTree(child, name);
+            var found = FindInTree(node: child, name: name);
             if (found is not null) return found;
         }
 

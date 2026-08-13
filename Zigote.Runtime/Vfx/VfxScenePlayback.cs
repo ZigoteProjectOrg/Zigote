@@ -32,23 +32,23 @@ public sealed class VfxScenePlayback
     }
 
     /// <summary>Register any VfxEmitter nodes in a subtree spawned mid-play (World.Spawn).</summary>
-    public void Add(SceneNode subtree)
-    {
-        Walk(subtree);
-    }
+    public void Add(SceneNode subtree) => Walk(subtree);
 
     /// <summary>Drop the simulators of any VfxEmitter nodes in a subtree destroyed mid-play.</summary>
     public void Remove(SceneNode subtree)
     {
-        _emitters.RemoveAll(e => IsUnder(e.node, subtree));
-        _gpuEmitters.RemoveAll(e => IsUnder(e.node, subtree));
+        _emitters.RemoveAll(e => IsUnder(node: e.node, subtree: subtree));
+        _gpuEmitters.RemoveAll(e => IsUnder(node: e.node, subtree: subtree));
     }
 
     private static bool IsUnder(SceneNode node, SceneNode subtree)
     {
         for (var n = node; n != null; n = n.Parent)
-            if (ReferenceEquals(n, subtree))
+        {
+            if (ReferenceEquals(objA: n, objB: subtree))
                 return true;
+        }
+
         return false;
     }
 
@@ -85,9 +85,13 @@ public sealed class VfxScenePlayback
 
     private static Transform3D WorldTransform(SceneNode node)
     {
-        var local = new Transform3D(node.Position, node.Rotation, node.Scale);
+        var local = new Transform3D(
+            position: node.Position,
+            rotation: node.Rotation,
+            scale: node.Scale
+        );
         return node.Parent is { } parent
-            ? Transform3D.Combine(WorldTransform(parent), local)
+            ? Transform3D.Combine(parent: WorldTransform(parent), child: local)
             : local;
     }
 }

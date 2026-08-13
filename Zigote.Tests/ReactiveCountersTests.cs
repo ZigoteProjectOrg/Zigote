@@ -19,13 +19,13 @@ public class ReactiveCountersTests
     public void Writes_counts_committed_writes_only()
     {
         var s = new Signal<int>(0);
-        var before = Reactive.Writes;
+        long before = Reactive.Writes;
 
         s.Value = 0; // equal → not a write
-        Assert.Equal(before, Reactive.Writes);
+        Assert.Equal(expected: before, actual: Reactive.Writes);
 
         s.Value = 1;
-        Assert.Equal(before + 1, Reactive.Writes);
+        Assert.Equal(expected: before + 1, actual: Reactive.Writes);
     }
 
     [Fact]
@@ -35,24 +35,27 @@ public class ReactiveCountersTests
         var doubled = Computed.From(() => s.Value * 2);
         using var effect = new Effect(() => _ = doubled.Value);
 
-        var before = Reactive.Runs;
+        long before = Reactive.Runs;
         s.Value = 1; // computed recomputes + effect re-runs
-        var afterWrite = Reactive.Runs;
-        Assert.Equal(2, afterWrite - before);
+        long afterWrite = Reactive.Runs;
+        Assert.Equal(expected: 2, actual: afterWrite - before);
 
         // Idle graph: reads are cached, nothing re-derives. This is the assertion that makes the
         // counter readable as "churn" at all.
         _ = doubled.Value;
         _ = doubled.Value;
-        Assert.Equal(afterWrite, Reactive.Runs);
+        Assert.Equal(expected: afterWrite, actual: Reactive.Runs);
 
         // A write whose value is unchanged downstream settles the intermediate without waking the
         // effect — one run, not two.
         var unchanged = Computed.From(() => s.Value > 0);
         using var gate = new Effect(() => _ = unchanged.Value);
-        var beforeSecond = Reactive.Runs;
+        long beforeSecond = Reactive.Runs;
         s.Value = 2; // unchanged stays true → its effect must not re-run
-        Assert.Equal(3, Reactive.Runs - beforeSecond); // doubled, unchanged, doubled's effect
+        Assert.Equal(
+            expected: 3,
+            actual: Reactive.Runs - beforeSecond
+        ); // doubled, unchanged, doubled's effect
     }
 
     [Fact]
@@ -72,16 +75,22 @@ public class ReactiveCountersTests
             // Both bodies are lambdas declared in this test method, so the display class must be
             // unwrapped back to the test — an unnamed "<>c.<M>b__0" row helps nobody.
             Assert.All(
-                hottest,
-                h =>
+                collection: hottest,
+                action: h =>
                     Assert.StartsWith(
-                        nameof(ReactiveCountersTests) + "." +
-                        nameof(Attribution_names_the_body_that_ran),
-                        h.Label
+                        expectedStartString: nameof(ReactiveCountersTests) + "." +
+                                             nameof(Attribution_names_the_body_that_ran),
+                        actualString: h.Label
                     )
             );
-            Assert.Equal(Reactive.HottestReactions().Sum(h => h.Runs), hottest.Sum(h => h.Runs));
-            Assert.True(hottest[0].Runs >= hottest[^1].Runs, "not sorted by run count");
+            Assert.Equal(
+                expected: Reactive.HottestReactions().Sum(h => h.Runs),
+                actual: hottest.Sum(h => h.Runs)
+            );
+            Assert.True(
+                condition: hottest[0].Runs >= hottest[^1].Runs,
+                userMessage: "not sorted by run count"
+            );
         }
         finally
         {
@@ -106,26 +115,26 @@ public class ReactiveCountersTests
     public void PendingDeferred_reports_the_last_drains_backlog()
     {
         var s = new Signal<int>(0);
-        var runs = 0;
+        int runs = 0;
         using var e = new Effect(
-            () =>
+            body: () =>
             {
                 _ = s.Value;
                 runs++;
             },
-            EffectAffinity.Deferred
+            affinity: EffectAffinity.Deferred
         );
 
         Reactive.DrainDeferred(); // clear the construction-time queue
-        Assert.Equal(0, Reactive.PendingDeferred);
+        Assert.Equal(expected: 0, actual: Reactive.PendingDeferred);
 
-        var before = runs;
+        int before = runs;
         s.Value = 1; // parks the effect instead of running it here
-        Assert.Equal(before, runs);
+        Assert.Equal(expected: before, actual: runs);
 
         Reactive.DrainDeferred();
-        Assert.Equal(1, Reactive.PendingDeferred);
-        Assert.Equal(before + 1, runs);
+        Assert.Equal(expected: 1, actual: Reactive.PendingDeferred);
+        Assert.Equal(expected: before + 1, actual: runs);
     }
 
     [Fact]
@@ -134,15 +143,18 @@ public class ReactiveCountersTests
         var count = new Signal<int>(0);
         var watch = new Watch(() => new Label($"{count.Value}"));
 
-        watch.Attach(null!, null);
-        watch.Measure(Constraints.Tight(100f, 20f));
-        Assert.Equal(0, watch.RebuildCount); // first materialisation is not a rebuild
+        watch.Attach(owner: null!, parent: null);
+        watch.Measure(Constraints.Tight(width: 100f, height: 20f));
+        Assert.Equal(
+            expected: 0,
+            actual: watch.RebuildCount
+        ); // first materialisation is not a rebuild
 
-        var before = Watch.Rebuilds;
+        long before = Watch.Rebuilds;
         count.Value = 1;
-        watch.Measure(Constraints.Tight(100f, 20f));
+        watch.Measure(Constraints.Tight(width: 100f, height: 20f));
 
-        Assert.Equal(1, watch.RebuildCount);
-        Assert.Equal(before + 1, Watch.Rebuilds);
+        Assert.Equal(expected: 1, actual: watch.RebuildCount);
+        Assert.Equal(expected: before + 1, actual: Watch.Rebuilds);
     }
 }

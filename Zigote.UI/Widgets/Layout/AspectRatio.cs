@@ -28,14 +28,14 @@ public class AspectRatio : Widget
 
     public override Size Measure(Constraints c)
     {
-        var r = MathF.Max(0.0001f, Ratio);
+        float r = MathF.Max(x: 0.0001f, y: Ratio);
 
-        var w = float.IsFinite(c.MaxWidth)
+        float w = float.IsFinite(c.MaxWidth)
             ? c.MaxWidth
             : float.IsFinite(c.MaxHeight)
                 ? c.MaxHeight * r
                 : 0f;
-        var h = w / r;
+        float h = w / r;
 
         if (float.IsFinite(c.MaxHeight) && h > c.MaxHeight)
         {
@@ -43,34 +43,26 @@ public class AspectRatio : Widget
             w = h * r;
         }
 
-        _size = c.Constrain(new Size(w, h));
-        Child?.Measure(Constraints.Tight(_size.Width, _size.Height));
+        _size = c.Constrain(new Size(width: w, height: h));
+        Child?.Measure(Constraints.Tight(width: _size.Width, height: _size.Height));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         Child?.Layout(origin);
     }
 
-    public override void Paint(PaintList paint)
-    {
-        Child?.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => Child?.Paint(paint);
 
-    public override Widget? HitTest(Offset point)
-    {
-        return Bounds.Contains(point.X, point.Y) ? Child?.HitTest(point) : null;
-    }
+    public override Widget? HitTest(Offset point) =>
+        Bounds.Contains(px: point.X, py: point.Y) ? Child?.HitTest(point) : null;
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(Child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Child);
 }

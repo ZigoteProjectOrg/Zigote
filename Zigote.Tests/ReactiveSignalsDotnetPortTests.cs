@@ -5,7 +5,8 @@ namespace Zigote.Tests;
 
 /// <summary>
 ///     Behaviours ported from the SignalsDotnet suite (github.com/fedeAlterio/SignalsDotnet,
-///     <c>ComputedSignalTests</c> / <c>EffectTests</c>) that <see cref="ReactiveTests" /> did not already
+///     <c>ComputedSignalTests</c> / <c>EffectTests</c>) that <see cref="ReactiveTests" /> did not
+///     already
 ///     pin: exactly-once notification per write from either source, the full branch-switch sequence
 ///     (an abandoned dependency must go quiet, and come back when the branch returns), and the
 ///     "effects run at the end of the atomic operation" contract for <b>nested</b> batches — including
@@ -25,16 +26,16 @@ public class ReactiveSignalsDotnetPortTests
         var b = new Signal<int>(0);
         using var sum = Computed.From(() => a.Value + b.Value);
 
-        var fires = 0;
+        int fires = 0;
         using var _ = sum.Observe(() => fires++);
 
         a.Value = 2;
-        Assert.Equal(1, fires);
-        Assert.Equal(2, sum.Value);
+        Assert.Equal(expected: 1, actual: fires);
+        Assert.Equal(expected: 2, actual: sum.Value);
 
         b.Value = 1;
-        Assert.Equal(2, fires);
-        Assert.Equal(3, sum.Value);
+        Assert.Equal(expected: 2, actual: fires);
+        Assert.Equal(expected: 3, actual: sum.Value);
     }
 
     [Fact]
@@ -47,29 +48,29 @@ public class ReactiveSignalsDotnetPortTests
 
         using var c =
             Computed.From(() => useFallback.Value ? fallback.Value : n1.Value - n2.Value);
-        Assert.Equal(0, c.Value);
+        Assert.Equal(expected: 0, actual: c.Value);
 
-        var fires = 0;
+        int fires = 0;
         using var _ = c.Observe(() => fires++);
 
         fallback.Value = 2; // untaken branch → not a dependency
-        Assert.Equal(0, fires);
+        Assert.Equal(expected: 0, actual: fires);
 
         useFallback.Value = true; // 0 → 2
-        Assert.Equal(1, fires);
+        Assert.Equal(expected: 1, actual: fires);
 
         fallback.Value = 3; // now live
-        Assert.Equal(2, fires);
+        Assert.Equal(expected: 2, actual: fires);
 
         useFallback.Value = false; // back to n1 - n2 == 0
-        Assert.Equal(3, fires);
+        Assert.Equal(expected: 3, actual: fires);
 
         fallback.Value = 11; // abandoned again → silent
-        Assert.Equal(3, fires);
+        Assert.Equal(expected: 3, actual: fires);
 
         n1.Value = 4; // the branch that is live again
-        Assert.Equal(4, fires);
-        Assert.Equal(4, c.Value);
+        Assert.Equal(expected: 4, actual: fires);
+        Assert.Equal(expected: 4, actual: c.Value);
     }
 
     [Fact]
@@ -78,20 +79,20 @@ public class ReactiveSignalsDotnetPortTests
         var n1 = new Signal<int>(0);
         var n2 = new Signal<int>(0);
 
-        var sum = -1;
+        int sum = -1;
         var e = new Effect(() => sum = n1.Value + n2.Value);
-        Assert.Equal(0, sum);
+        Assert.Equal(expected: 0, actual: sum);
 
         n1.Value = 1;
-        Assert.Equal(1, sum);
+        Assert.Equal(expected: 1, actual: sum);
         n1.Value = 2;
-        Assert.Equal(2, sum);
+        Assert.Equal(expected: 2, actual: sum);
         n2.Value = 2;
-        Assert.Equal(4, sum);
+        Assert.Equal(expected: 4, actual: sum);
 
         e.Dispose();
         n2.Value = 3;
-        Assert.Equal(4, sum);
+        Assert.Equal(expected: 4, actual: sum);
     }
 
     [Fact]
@@ -100,14 +101,14 @@ public class ReactiveSignalsDotnetPortTests
         var n1 = new Signal<int>(0);
         var n2 = new Signal<int>(0);
 
-        var runs = 0;
+        int runs = 0;
         using var e = new Effect(() =>
             {
                 _ = n1.Value + n2.Value;
                 runs++;
             }
         );
-        Assert.Equal(1, runs);
+        Assert.Equal(expected: 1, actual: runs);
 
         Reactive.Batch(() =>
             {
@@ -115,10 +116,10 @@ public class ReactiveSignalsDotnetPortTests
                 n2.Value = 3;
                 n1.Value = 4;
                 n1.Value = 3;
-                Assert.Equal(1, runs); // nothing drains mid-batch
+                Assert.Equal(expected: 1, actual: runs); // nothing drains mid-batch
             }
         );
-        Assert.Equal(2, runs); // four writes, one re-run
+        Assert.Equal(expected: 2, actual: runs); // four writes, one re-run
     }
 
     [Fact]
@@ -127,36 +128,36 @@ public class ReactiveSignalsDotnetPortTests
         var n1 = new Signal<int>(0);
         var n2 = new Signal<int>(0);
 
-        var sum = -1;
+        int sum = -1;
         using var _ = new Effect(() => sum = n1.Value + n2.Value);
-        Assert.Equal(0, sum);
+        Assert.Equal(expected: 0, actual: sum);
 
         Reactive.Batch(() =>
             {
                 n1.Value = 1;
-                Assert.Equal(0, sum);
+                Assert.Equal(expected: 0, actual: sum);
                 n1.Value = 2;
-                Assert.Equal(0, sum);
+                Assert.Equal(expected: 0, actual: sum);
             }
         );
-        Assert.Equal(2, sum);
+        Assert.Equal(expected: 2, actual: sum);
 
         Reactive.Batch(() =>
             {
                 n2.Value = 2;
-                Assert.Equal(2, sum);
+                Assert.Equal(expected: 2, actual: sum);
 
                 Reactive.Batch(() =>
                     {
                         n2.Value = 3;
-                        Assert.Equal(2, sum); // inner exit must NOT drain
+                        Assert.Equal(expected: 2, actual: sum); // inner exit must NOT drain
                     }
                 );
 
-                Assert.Equal(2, sum);
+                Assert.Equal(expected: 2, actual: sum);
             }
         );
-        Assert.Equal(5, sum);
+        Assert.Equal(expected: 5, actual: sum);
     }
 
     [Fact]
@@ -164,18 +165,18 @@ public class ReactiveSignalsDotnetPortTests
     {
         // Batch depth and the graph lock are process-wide; 33 threads each running the nested-batch
         // sequence over their OWN signals must not leak a drain into each other's open batch.
-        var failures = 0;
+        int failures = 0;
         Parallel.For(
-            0,
-            33,
-            _ =>
+            fromInclusive: 0,
+            toExclusive: 33,
+            body: _ =>
             {
                 var n1 = new Signal<int>(0);
                 var n2 = new Signal<int>(0);
-                var sum = -1;
+                int sum = -1;
                 using var e = new Effect(() => sum = n1.Value + n2.Value);
 
-                var ok = sum == 0;
+                bool ok = sum == 0;
                 Reactive.Batch(() =>
                     {
                         n1.Value = 1;
@@ -205,6 +206,6 @@ public class ReactiveSignalsDotnetPortTests
             }
         );
 
-        Assert.Equal(0, failures);
+        Assert.Equal(expected: 0, actual: failures);
     }
 }

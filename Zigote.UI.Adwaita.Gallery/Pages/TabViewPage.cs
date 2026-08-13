@@ -5,14 +5,14 @@ public sealed class TabViewPage : ComposedWidget
 {
     /// <summary>Backgrounds standing in for the demo's <c>tab-page-color-1..8</c> classes.</summary>
     private static readonly Color[] PageColors = [
-        Color.Rgb(153, 193, 241),
-        Color.Rgb(143, 240, 164),
-        Color.Rgb(249, 240, 107),
-        Color.Rgb(255, 190, 111),
-        Color.Rgb(246, 97, 81),
-        Color.Rgb(220, 138, 221),
-        Color.Rgb(205, 171, 143),
-        Color.Rgb(222, 221, 218),
+        Color.Rgb(r: 153, g: 193, b: 241),
+        Color.Rgb(r: 143, g: 240, b: 164),
+        Color.Rgb(r: 249, g: 240, b: 107),
+        Color.Rgb(r: 255, g: 190, b: 111),
+        Color.Rgb(r: 246, g: 97, b: 81),
+        Color.Rgb(r: 220, g: 138, b: 221),
+        Color.Rgb(r: 205, g: 171, b: 143),
+        Color.Rgb(r: 222, g: 221, b: 218),
     ];
 
     /// <summary>The pool the demo's "random themed icon" is drawn from.</summary>
@@ -35,21 +35,23 @@ public sealed class TabViewPage : ComposedWidget
     protected override Widget Build(BuildContext context)
     {
         return new GalleryPage(
-            "Tab View",
+            title: "Tab View",
+            description:
             "A modern tab widget: a strip of pinnable, closable tabs over one content area.",
-            MaterialIcons.Tab
+            iconName: MaterialIcons.Tab
         ) {
             ClampWidth = 680f,
             Children = {
                 Demo.Titled(
-                    "Inline",
-                    "The same view sized into the page — each tab's entry renames it.",
-                    new SizedBox(height: 300f, child: Inline())
+                    title: "Inline",
+                    description: "The same view sized into the page — each tab's entry renames it.",
+                    child: new SizedBox(height: 300f, child: Inline())
                 ),
                 Demo.Group(
-                    "Full Size",
+                    title: "Full Size",
+                    description:
                     "The GNOME demo's own window, with the tab menu, the overview and new windows.",
-                    new AdwActionRow("Run the Demo", "AdwTabView + AdwTabBar") {
+                    new AdwActionRow(title: "Run the Demo", subtitle: "AdwTabView + AdwTabBar") {
                         ShowChevron = true,
                         OnActivated = () => ShowDemoWindow(),
                     }
@@ -63,11 +65,11 @@ public sealed class TabViewPage : ComposedWidget
     {
         var view = new AdwTabView();
         var revision = new Signal<int>(0);
-        for (var i = 0; i < 3; i++) view.Append(NewTab(revision));
+        for (int i = 0; i < 3; i++) view.Append(NewTab(revision));
 
         return new ClipRRect(
-            AdwMetrics.CardRadius,
-            new AdwToolbarView(view) {
+            radius: AdwMetrics.CardRadius,
+            child: new AdwToolbarView(view) {
                 TopBars = {
                     new Watch(() =>
                         {
@@ -109,8 +111,10 @@ public sealed class TabViewPage : ComposedWidget
         if (adopted is not null)
             view.Append(adopted);
         else
-            for (var i = 0; i < 3; i++)
+        {
+            for (int i = 0; i < 3; i++)
                 view.Append(NewTab(revision));
+        }
 
         dlg = new AdwDialog(
             new AdwToolbarView(view) {
@@ -120,26 +124,35 @@ public sealed class TabViewPage : ComposedWidget
                         Title = "Tab View Demo",
                         Start = {
                             new Tooltip(
-                                "New Window",
-                                Demo.IconButton(MaterialIcons.Window, () => ShowDemoWindow())
+                                message: "New Window",
+                                child: Demo.IconButton(
+                                    icon: MaterialIcons.Window,
+                                    onPressed: () => ShowDemoWindow()
+                                )
                             ),
                         },
                         End = {
-                            new Watch(() => TabMenu(view, revision)),
+                            new Watch(() => TabMenu(view: view, revision: revision)),
                             new Tooltip(
-                                "View Open Tabs",
-                                new AdwTabButton(view, () => ShowOverview(view, revision))
-                            ),
-                            new Tooltip(
-                                "New Tab",
-                                Demo.IconButton(
-                                    MaterialIcons.Add,
-                                    () => view.Append(NewTab(revision))
+                                message: "View Open Tabs",
+                                child: new AdwTabButton(
+                                    view: view,
+                                    onPressed: () => ShowOverview(view: view, revision: revision)
                                 )
                             ),
                             new Tooltip(
-                                "Close",
-                                Demo.IconButton(MaterialIcons.Close, () => dlg?.Close())
+                                message: "New Tab",
+                                child: Demo.IconButton(
+                                    icon: MaterialIcons.Add,
+                                    onPressed: () => view.Append(NewTab(revision))
+                                )
+                            ),
+                            new Tooltip(
+                                message: "Close",
+                                child: Demo.IconButton(
+                                    icon: MaterialIcons.Close,
+                                    onPressed: () => dlg?.Close()
+                                )
                             ),
                         },
                     },
@@ -164,11 +177,11 @@ public sealed class TabViewPage : ComposedWidget
         string? icon = null)
     {
         var page = new AdwTabPage(
-            title ?? $"Tab {_nextTab++}",
-            new SizedBox(),
-            icon ?? TabIcons[Rng.Next(TabIcons.Length)]
+            title: title ?? $"Tab {_nextTab++}",
+            child: new SizedBox(),
+            iconName: icon ?? TabIcons[Rng.Next(TabIcons.Length)]
         );
-        page.Child = TabContent(page, revision);
+        page.Child = TabContent(page: page, revision: revision);
         return page;
     }
 
@@ -205,21 +218,21 @@ public sealed class TabViewPage : ComposedWidget
     private static Widget TabMenu(AdwTabView view, Signal<int> revision)
     {
         _ = revision.Value; // rebuild on rename / pin
-        var index = view.SelectedIndex; // ... and when the selection moves
+        int index = view.SelectedIndex; // ... and when the selection moves
         if (view.Pages.Count == 0) return new SizedBox();
 
         var page = view.Pages[index];
         var previous = index > 0 ? view.Pages[index - 1] : null;
-        var canCloseBefore = !page.Pinned && previous is not null && !previous.Pinned;
-        var canCloseAfter = index < view.Pages.Count - 1;
-        var hasIcon = page.IconName is not null;
+        bool canCloseBefore = !page.Pinned && previous is not null && !previous.Pinned;
+        bool canCloseAfter = index < view.Pages.Count - 1;
+        bool hasIcon = page.IconName is not null;
 
         return new AdwMenuButton(MaterialIcons.MoreVert) {
             Sections = {
                 new List<AdwMenuItem> {
                     new(
-                        "Move to New Window",
-                        () =>
+                        label: "Move to New Window",
+                        onActivated: () =>
                         {
                             view.Close(page);
                             ShowDemoWindow(page);
@@ -228,37 +241,45 @@ public sealed class TabViewPage : ComposedWidget
                         Enabled = !page.Pinned && view.Pages.Count > 1,
                     },
                     new(
-                        "Duplicate",
-                        () => view.Append(NewTab(revision, page.Title, page.IconName))
+                        label: "Duplicate",
+                        onActivated: () => view.Append(
+                            NewTab(revision: revision, title: page.Title, icon: page.IconName)
+                        )
                     ),
                 },
                 new List<AdwMenuItem> {
-                    new("Pin Tab", () => SetPinned(page, true, revision)) {
+                    new(
+                        label: "Pin Tab",
+                        onActivated: () => SetPinned(page: page, pinned: true, revision: revision)
+                    ) {
                         Enabled = !page.Pinned,
                     },
-                    new("Unpin Tab", () => SetPinned(page, false, revision)) {
+                    new(
+                        label: "Unpin Tab",
+                        onActivated: () => SetPinned(page: page, pinned: false, revision: revision)
+                    ) {
                         Enabled = page.Pinned,
                     },
                 },
                 new List<AdwMenuItem> {
                     // Re-enabling picks a fresh icon rather than restoring the last one.
                     new(
-                        "Icon",
-                        () => SetIcon(
-                            page,
-                            hasIcon ? null : TabIcons[Rng.Next(TabIcons.Length)],
-                            revision
+                        label: "Icon",
+                        onActivated: () => SetIcon(
+                            page: page,
+                            icon: hasIcon ? null : TabIcons[Rng.Next(TabIcons.Length)],
+                            revision: revision
                         )
                     ) {
                         Role = AdwMenuItemRole.Check,
                         Checked = hasIcon,
                     },
                     new(
-                        "Refresh Icon",
-                        () => SetIcon(
-                            page,
-                            TabIcons[Rng.Next(TabIcons.Length)],
-                            revision
+                        label: "Refresh Icon",
+                        onActivated: () => SetIcon(
+                            page: page,
+                            icon: TabIcons[Rng.Next(TabIcons.Length)],
+                            revision: revision
                         )
                     ) {
                         Enabled = hasIcon,
@@ -266,41 +287,43 @@ public sealed class TabViewPage : ComposedWidget
                 },
                 new List<AdwMenuItem> {
                     new(
-                        "Close Other Tabs",
-                        () => CloseRange(
-                            view,
-                            page,
-                            true,
-                            true
+                        label: "Close Other Tabs",
+                        onActivated: () => CloseRange(
+                            view: view,
+                            page: page,
+                            before: true,
+                            after: true
                         )
                     ) {
                         Enabled = canCloseBefore || canCloseAfter,
                     },
                     new(
-                        "Close Tabs to the Left",
-                        () => CloseRange(
-                            view,
-                            page,
-                            true,
-                            false
+                        label: "Close Tabs to the Left",
+                        onActivated: () => CloseRange(
+                            view: view,
+                            page: page,
+                            before: true,
+                            after: false
                         )
                     ) {
                         Enabled = canCloseBefore,
                     },
                     new(
-                        "Close Tabs to the Right",
-                        () => CloseRange(
-                            view,
-                            page,
-                            false,
-                            true
+                        label: "Close Tabs to the Right",
+                        onActivated: () => CloseRange(
+                            view: view,
+                            page: page,
+                            before: false,
+                            after: true
                         )
                     ) {
                         Enabled = canCloseAfter,
                     },
                 },
                 new List<AdwMenuItem> {
-                    new("Close", () => view.Close(page)) { Enabled = !page.Pinned },
+                    new(label: "Close", onActivated: () => view.Close(page)) {
+                        Enabled = !page.Pinned,
+                    },
                 },
             },
         };
@@ -321,10 +344,10 @@ public sealed class TabViewPage : ComposedWidget
     /// <summary>Closes the unpinned tabs before and/or after <paramref name="page" />.</summary>
     private static void CloseRange(AdwTabView view, AdwTabPage page, bool before, bool after)
     {
-        var index = view.Pages.IndexOf(page);
+        int index = view.Pages.IndexOf(page);
         // Collect first: closing shifts the positions of everything after the removed tab.
         var doomed = new List<AdwTabPage>();
-        for (var i = 0; i < view.Pages.Count; i++)
+        for (int i = 0; i < view.Pages.Count; i++)
         {
             if (i == index || view.Pages[i].Pinned) continue;
             if (i < index ? before : after) doomed.Add(view.Pages[i]);

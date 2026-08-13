@@ -22,16 +22,16 @@ public sealed class AdwNavigationPage : ComposedWidget
     public Widget Child
     {
         get => _page;
-        set => this.Set(ref _page, value);
+        set => this.Set(field: ref _page, value: value);
     }
 
-    /// <summary>When false the automatic back button is suppressed and <see cref="AdwNavigationView.Pop" /> refuses.</summary>
+    /// <summary>
+    ///     When false the automatic back button is suppressed and
+    ///     <see cref="AdwNavigationView.Pop" /> refuses.
+    /// </summary>
     public bool CanPop { get; set; } = true;
 
-    protected override Widget Build(BuildContext context)
-    {
-        return Child;
-    }
+    protected override Widget Build(BuildContext context) => Child;
 }
 
 /// <summary>
@@ -46,17 +46,19 @@ public sealed class AdwNavigationView : ComposedWidget
     private readonly List<AdwNavigationPage> _pages = [];
     private readonly AnimationController _slide;
     private readonly Signal<int> _version = new(0);
+    private bool _autoHeaderBar = true;
     private AdwNavigationPage? _moving; // slides above: incoming on push, departing on pop
     private SlideTransition? _movingSlide;
-    private AdwNavigationPage? _under; // painted beneath during a transition
-    private bool _autoHeaderBar = true;
-    private bool _showStartWindowControls = true;
     private bool _showEndWindowControls = true;
+    private bool _showStartWindowControls = true;
+    private AdwNavigationPage? _under; // painted beneath during a transition
 
     public AdwNavigationView(params AdwNavigationPage[] pages)
     {
         _pages.AddRange(pages);
-        _slide = new AnimationController(0.25f, this) { Curve = Curves.EaseOut };
+        _slide = new AnimationController(durationSeconds: 0.25f, vsync: this) {
+            Curve = Curves.EaseOut,
+        };
         _slide.OnTick += OnSlideTick;
         _slide.OnCompleted += EndTransition;
         _slide.OnDismissed += EndTransition;
@@ -66,7 +68,7 @@ public sealed class AdwNavigationView : ComposedWidget
     public bool AutoHeaderBar
     {
         get => _autoHeaderBar;
-        set => this.Set(ref _autoHeaderBar, value);
+        set => this.Set(field: ref _autoHeaderBar, value: value);
     }
 
     /// <summary>
@@ -76,14 +78,14 @@ public sealed class AdwNavigationView : ComposedWidget
     public bool ShowStartWindowControls
     {
         get => _showStartWindowControls;
-        set => this.Set(ref _showStartWindowControls, value);
+        set => this.Set(field: ref _showStartWindowControls, value: value);
     }
 
     /// <inheritdoc cref="ShowStartWindowControls" />
     public bool ShowEndWindowControls
     {
         get => _showEndWindowControls;
-        set => this.Set(ref _showEndWindowControls, value);
+        set => this.Set(field: ref _showEndWindowControls, value: value);
     }
 
     public int Depth => _pages.Count;
@@ -92,7 +94,7 @@ public sealed class AdwNavigationView : ComposedWidget
     {
         var from = _pages.Count > 0 ? _pages[^1] : null;
         _pages.Add(page);
-        if (from is not null && !ReferenceEquals(from, page))
+        if (from is not null && !ReferenceEquals(objA: from, objB: page))
         {
             _under = from;
             _moving = page;
@@ -108,7 +110,7 @@ public sealed class AdwNavigationView : ComposedWidget
         if (_pages.Count <= 1 || !_pages[^1].CanPop) return;
         var top = _pages[^1];
         _pages.RemoveAt(_pages.Count - 1);
-        if (!ReferenceEquals(_pages[^1], top))
+        if (!ReferenceEquals(objA: _pages[^1], objB: top))
         {
             _under = _pages[^1];
             _moving = top;
@@ -127,7 +129,7 @@ public sealed class AdwNavigationView : ComposedWidget
         // The slide distance is this view's live width (known after any layout; a push before the
         // first layout degrades to a near-instant swap).
         if (_movingSlide is not null)
-            _movingSlide.BeginOffset = new Offset(MathF.Max(Bounds.Width, 1f), 0f);
+            _movingSlide.BeginOffset = new Offset(x: MathF.Max(x: Bounds.Width, y: 1f), y: 0f);
         MarkNeedsLayout();
     }
 
@@ -152,10 +154,8 @@ public sealed class AdwNavigationView : ComposedWidget
         Owner?.AddBackHandler(TryPop);
     }
 
-    protected override void OnUnmount()
-    {
+    protected override void OnUnmount() =>
         Owner?.RemoveBackHandler(TryPop); // still set: Widget.Detach unmounts before dropping Owner
-    }
 
     /// <summary>
     ///     The system back action (Android's back button/gesture, an iOS edge swipe) pops the stack.
@@ -184,8 +184,11 @@ public sealed class AdwNavigationView : ComposedWidget
 
                 if (_moving is not null && _under is not null)
                 {
-                    _movingSlide = new SlideTransition(_slide, BuildPage(_moving)) {
-                        BeginOffset = new Offset(MathF.Max(Bounds.Width, 1f), 0f),
+                    _movingSlide = new SlideTransition(
+                        controller: _slide,
+                        child: BuildPage(_moving)
+                    ) {
+                        BeginOffset = new Offset(x: MathF.Max(x: Bounds.Width, y: 1f), y: 0f),
                     };
                     // Clip: mid-slide the moving page pokes out to the right of this view.
                     return new ClipRect(
@@ -208,8 +211,8 @@ public sealed class AdwNavigationView : ComposedWidget
         if (!AutoHeaderBar) return page;
 
         // Depth of this page in the stack; a popped (departing) page sat above the whole stack.
-        var i = _pages.IndexOf(page);
-        var depth = i < 0 ? _pages.Count + 1 : i + 1;
+        int i = _pages.IndexOf(page);
+        int depth = i < 0 ? _pages.Count + 1 : i + 1;
 
         return new Column(crossAxisAlignment: CrossAxisAlignment.Stretch) {
             Children = {

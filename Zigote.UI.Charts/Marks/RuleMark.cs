@@ -70,64 +70,64 @@ public class RuleMark : ChartMark
 
         if (Y.HasValue)
         {
-            var yValue = Y.Value.Numeric;
+            double yValue = Y.Value.Numeric;
             if (ctx.DataProgress < 1f && _hasFromY)
-                yValue = _fromY + (yValue - _fromY) * ctx.DataProgress;
-            var y = Y.Value.Kind == ChartValueKind.Category
+                yValue = _fromY + ((yValue - _fromY) * ctx.DataProgress);
+            float y = Y.Value.Kind == ChartValueKind.Category
                 ? ctx.MapY(Y.Value)
                 : ctx.MapYNumeric(yValue);
             if (y < plot.Y - 0.5f || y > plot.Bottom + 0.5f) return;
             ctx.StrokeLine(
-                plot.X,
-                y,
-                plot.Right,
-                y,
-                color,
-                StrokeWidth,
-                Dash,
-                DashGap
+                x0: plot.X,
+                y0: y,
+                x1: plot.Right,
+                y1: y,
+                color: color,
+                width: StrokeWidth,
+                dash: Dash,
+                gap: DashGap
             );
             if (Label is not null)
             {
-                var size = ctx.Theme.FontSizeCaption;
-                var w = TextMeasure.Width(Label, size);
+                float size = ctx.Theme.FontSizeCaption;
+                float w = TextMeasure.Width(text: Label, fontSize: size);
                 paint.AddText(
-                    Label,
-                    plot.Right - w,
-                    y - 5f,
-                    color,
-                    size
+                    text: Label,
+                    baselineX: plot.Right - w,
+                    baselineY: y - 5f,
+                    color: color,
+                    fontSize: size
                 );
             }
         }
         else if (X.HasValue)
         {
-            var xValue = X.Value.Numeric;
+            double xValue = X.Value.Numeric;
             if (ctx.DataProgress < 1f && _hasFromX)
-                xValue = _fromX + (xValue - _fromX) * ctx.DataProgress;
-            var x = X.Value.Kind == ChartValueKind.Category
+                xValue = _fromX + ((xValue - _fromX) * ctx.DataProgress);
+            float x = X.Value.Kind == ChartValueKind.Category
                 ? ctx.MapX(X.Value)
                 : ctx.MapXNumeric(xValue);
             if (x < plot.X - 0.5f || x > plot.Right + 0.5f) return;
             ctx.StrokeLine(
-                x,
-                plot.Y,
-                x,
-                plot.Bottom,
-                color,
-                StrokeWidth,
-                Dash,
-                DashGap
+                x0: x,
+                y0: plot.Y,
+                x1: x,
+                y1: plot.Bottom,
+                color: color,
+                width: StrokeWidth,
+                dash: Dash,
+                gap: DashGap
             );
             if (Label is not null)
             {
-                var size = ctx.Theme.FontSizeCaption;
+                float size = ctx.Theme.FontSizeCaption;
                 paint.AddText(
-                    Label,
-                    x + 5f,
-                    plot.Y + size,
-                    color,
-                    size
+                    text: Label,
+                    baselineX: x + 5f,
+                    baselineY: plot.Y + size,
+                    color: color,
+                    fontSize: size
                 );
             }
         }

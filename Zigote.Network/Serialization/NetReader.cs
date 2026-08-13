@@ -3,8 +3,10 @@ using System.Text;
 namespace Zigote.Network;
 
 /// <summary>
-///     Reads back values packed by <see cref="NetWriter" />, in the same order they were written. Reading
-///     past the end yields zeros and trips <see cref="Overflow" /> rather than throwing, so a malformed or
+///     Reads back values packed by <see cref="NetWriter" />, in the same order they were written.
+///     Reading
+///     past the end yields zeros and trips <see cref="Overflow" /> rather than throwing, so a
+///     malformed or
 ///     truncated packet degrades safely instead of crashing the receive loop.
 /// </summary>
 public sealed class NetReader
@@ -15,10 +17,7 @@ public sealed class NetReader
     private ulong _scratch;
     private int _scratchBits;
 
-    public NetReader()
-    {
-        _data = [];
-    }
+    public NetReader() => _data = [];
 
     public NetReader(ReadOnlySpan<byte> data)
     {
@@ -30,15 +29,15 @@ public sealed class NetReader
     public bool Overflow { get; private set; }
 
     /// <summary>Bits consumed so far.</summary>
-    public int BitPosition => _readPos * 8 - _scratchBits;
+    public int BitPosition => (_readPos * 8) - _scratchBits;
 
     /// <summary>Bits still available to read.</summary>
-    public int BitsRemaining => _byteLength * 8 - BitPosition;
+    public int BitsRemaining => (_byteLength * 8) - BitPosition;
 
     /// <summary>Point the reader at a new payload, reusing this instance (no allocation).</summary>
     public void SetSource(ReadOnlySpan<byte> data)
     {
-        if (_data.Length < data.Length) _data = new byte[Math.Max(16, data.Length)];
+        if (_data.Length < data.Length) _data = new byte[Math.Max(val1: 16, val2: data.Length)];
         data.CopyTo(_data);
         _byteLength = data.Length;
         _readPos = 0;
@@ -61,42 +60,24 @@ public sealed class NetReader
             _scratchBits += 8;
         }
 
-        var mask = bits >= 32 ? uint.MaxValue : (1u << bits) - 1;
-        var result = (uint)(_scratch & mask);
+        uint mask = bits >= 32 ? uint.MaxValue : (1u << bits) - 1;
+        uint result = (uint)(_scratch & mask);
         _scratch >>= bits;
         _scratchBits -= bits;
         return result;
     }
 
-    public bool ReadBool()
-    {
-        return ReadBits(1) != 0;
-    }
+    public bool ReadBool() => ReadBits(1) != 0;
 
-    public byte ReadByte()
-    {
-        return (byte)ReadBits(8);
-    }
+    public byte ReadByte() => (byte)ReadBits(8);
 
-    public ushort ReadUInt16()
-    {
-        return (ushort)ReadBits(16);
-    }
+    public ushort ReadUInt16() => (ushort)ReadBits(16);
 
-    public short ReadInt16()
-    {
-        return (short)ReadBits(16);
-    }
+    public short ReadInt16() => (short)ReadBits(16);
 
-    public uint ReadUInt32()
-    {
-        return ReadBits(32);
-    }
+    public uint ReadUInt32() => ReadBits(32);
 
-    public int ReadInt32()
-    {
-        return (int)ReadBits(32);
-    }
+    public int ReadInt32() => (int)ReadBits(32);
 
     public ulong ReadUInt64()
     {
@@ -105,33 +86,21 @@ public sealed class NetReader
         return lo | (hi << 32);
     }
 
-    public long ReadInt64()
-    {
-        return (long)ReadUInt64();
-    }
+    public long ReadInt64() => (long)ReadUInt64();
 
-    public float ReadSingle()
-    {
-        return BitConverter.UInt32BitsToSingle(ReadBits(32));
-    }
+    public float ReadSingle() => BitConverter.UInt32BitsToSingle(ReadBits(32));
 
-    public Half ReadHalf()
-    {
-        return BitConverter.UInt16BitsToHalf((ushort)ReadBits(16));
-    }
+    public Half ReadHalf() => BitConverter.UInt16BitsToHalf((ushort)ReadBits(16));
 
-    public double ReadDouble()
-    {
-        return BitConverter.UInt64BitsToDouble(ReadUInt64());
-    }
+    public double ReadDouble() => BitConverter.UInt64BitsToDouble(ReadUInt64());
 
     public uint ReadVarUInt()
     {
         uint result = 0;
-        var shift = 0;
+        int shift = 0;
         while (shift < 35)
         {
-            var b = ReadBits(8);
+            uint b = ReadBits(8);
             result |= (b & 0x7F) << shift;
             if ((b & 0x80) == 0) break;
             shift += 7;
@@ -143,7 +112,7 @@ public sealed class NetReader
     public ulong ReadVarULong()
     {
         ulong result = 0;
-        var shift = 0;
+        int shift = 0;
         while (shift < 70)
         {
             ulong b = ReadBits(8);
@@ -157,7 +126,7 @@ public sealed class NetReader
 
     public int ReadVarInt()
     {
-        var raw = ReadVarUInt();
+        uint raw = ReadVarUInt();
         return (int)(raw >> 1) ^ -(int)(raw & 1);
     }
 
@@ -165,30 +134,30 @@ public sealed class NetReader
     {
         if (max <= min || bits <= 0) return ReadSingle();
 
-        var levels = bits >= 31 ? uint.MaxValue >> 1 : (1u << bits) - 1;
-        var quantized = ReadBits(bits);
-        var t = levels == 0 ? 0f : (float)quantized / levels;
-        return min + t * (max - min);
+        uint levels = bits >= 31 ? uint.MaxValue >> 1 : (1u << bits) - 1;
+        uint quantized = ReadBits(bits);
+        float t = levels == 0 ? 0f : (float)quantized / levels;
+        return min + (t * (max - min));
     }
 
     /// <summary>Read a length-prefixed byte blob. Returns an empty array on overflow.</summary>
     public byte[] ReadBytes()
     {
-        var count = ReadVarUInt();
-        if (count == 0 || count > BitsRemaining / 8 + 1) // guard against a bogus huge length
+        uint count = ReadVarUInt();
+        if (count == 0 || count > (BitsRemaining / 8) + 1) // guard against a bogus huge length
         {
             if (count != 0) Overflow = true;
             return [];
         }
 
-        var result = new byte[count];
-        for (var i = 0; i < count; i++) result[i] = (byte)ReadBits(8);
+        byte[] result = new byte[count];
+        for (int i = 0; i < count; i++) result[i] = (byte)ReadBits(8);
         return result;
     }
 
     public string ReadString()
     {
-        var bytes = ReadBytes();
+        byte[] bytes = ReadBytes();
         return bytes.Length == 0 ? string.Empty : Encoding.UTF8.GetString(bytes);
     }
 

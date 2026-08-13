@@ -13,18 +13,16 @@ public static class ContentFiles
 {
     public const string CompressedExtension = ".zst";
 
-    public static bool Exists(string path)
-    {
-        return File.Exists(path) || File.Exists(path + CompressedExtension);
-    }
+    public static bool Exists(string path) =>
+        File.Exists(path) || File.Exists(path + CompressedExtension);
 
     public static byte[] ReadAllBytes(string path)
     {
         if (File.Exists(path)) return File.ReadAllBytes(path);
 
-        var compressed = path + CompressedExtension;
+        string compressed = path + CompressedExtension;
         if (!File.Exists(compressed))
-            throw new FileNotFoundException($"Content not found: {path}", path);
+            throw new FileNotFoundException(message: $"Content not found: {path}", fileName: path);
 
         using var src = File.OpenRead(compressed);
         using var zstd = new DecompressionStream(src);
@@ -40,18 +38,18 @@ public static class ContentFiles
     public static long WriteCompressed(string src, string dst, int level = 15)
     {
         using var input = new FileStream(
-            src,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.ReadWrite | FileShare.Delete
+            path: src,
+            mode: FileMode.Open,
+            access: FileAccess.Read,
+            share: FileShare.ReadWrite | FileShare.Delete
         );
         using var output = new FileStream(
-            dst + CompressedExtension,
-            FileMode.Create,
-            FileAccess.Write,
-            FileShare.None
+            path: dst + CompressedExtension,
+            mode: FileMode.Create,
+            access: FileAccess.Write,
+            share: FileShare.None
         );
-        using var zstd = new CompressionStream(output, level);
+        using var zstd = new CompressionStream(stream: output, level: level);
         input.CopyTo(zstd);
         zstd.Flush();
         return output.Position;

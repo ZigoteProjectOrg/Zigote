@@ -21,5 +21,6 @@ public struct Particle
     public Color StartColor;
     public uint Seed;
 
-    public readonly float NormalizedAge => Lifetime > 0f ? Math.Clamp(Age / Lifetime, 0f, 1f) : 1f;
+    public readonly float NormalizedAge =>
+        Lifetime > 0f ? Math.Clamp(value: Age / Lifetime, min: 0f, max: 1f) : 1f;
 }

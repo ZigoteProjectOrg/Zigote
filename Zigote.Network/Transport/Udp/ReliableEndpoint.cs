@@ -76,7 +76,7 @@ public sealed class ReliableEndpoint
 
         _orderedBuffers = new Dictionary<ushort, byte[]>[ChannelCount];
         _sequencedLastSeen = new int[ChannelCount];
-        for (var i = 0; i < ChannelCount; i++)
+        for (int i = 0; i < ChannelCount; i++)
         {
             _orderedBuffers[i] = new Dictionary<ushort, byte[]>();
             _sequencedLastSeen[i] = -1;
@@ -90,7 +90,10 @@ public sealed class ReliableEndpoint
     // ---------------------------------------------------------------- send helpers
 
     private int MaxReliablePayload =>
-        Math.Max(16, _config.Mtu - 24); // leave headroom for kind + ids + channel + length prefix
+        Math.Max(
+            val1: 16,
+            val2: _config.Mtu - 24
+        ); // leave headroom for kind + ids + channel + length prefix
 
     public event Action<byte[], DeliveryMethod, byte>? MessageReceived;
     public event Action? KeepAliveDue;
@@ -99,24 +102,28 @@ public sealed class ReliableEndpoint
     {
         if (delivery.IsReliable())
         {
-            if (payload.Length > MaxReliablePayload) SendFragmented(payload, delivery, channel);
+            if (payload.Length > MaxReliablePayload)
+                SendFragmented(payload: payload, delivery: delivery, channel: channel);
             else
+            {
                 EnqueueReliable(
-                    payload,
-                    delivery,
-                    channel,
-                    false,
-                    0,
-                    0,
-                    0
+                    payload: payload,
+                    delivery: delivery,
+                    channel: channel,
+                    isFragment: false,
+                    msgId: 0,
+                    fragIndex: 0,
+                    fragCount: 0
                 );
+            }
+
             return;
         }
 
         if (delivery == DeliveryMethod.UnreliableSequenced)
-            SendUnreliableSequenced(payload, channel);
+            SendUnreliableSequenced(payload: payload, channel: channel);
         else
-            SendUnreliable(payload, channel);
+            SendUnreliable(payload: payload, channel: channel);
     }
 
     public void ReceiveRaw(ReadOnlySpan<byte> datagram)
@@ -153,7 +160,7 @@ public sealed class ReliableEndpoint
         }
 
         // Retransmit any pending reliable past its RTO.
-        var rto = ComputeRto();
+        float rto = ComputeRto();
         foreach (var p in _pending.Values)
         {
             if (_now - p.LastSentTime < rto) continue;
@@ -183,7 +190,7 @@ public sealed class ReliableEndpoint
     private void EnqueueReliable(ReadOnlySpan<byte> payload, DeliveryMethod delivery, byte channel,
         bool isFragment, ulong msgId, uint fragIndex, uint fragCount)
     {
-        var reliableId = _nextReliableId++;
+        ulong reliableId = _nextReliableId++;
         ushort orderedSeq = 0;
         if (delivery.IsOrdered() && !isFragment) orderedSeq = _orderedSendSeq[channel]++;
 
@@ -209,7 +216,7 @@ public sealed class ReliableEndpoint
             _writer.WriteBytes(payload);
         }
 
-        var outgoing = new Outgoing(reliableId, _writer.ToArray());
+        var outgoing = new Outgoing(reliableId: reliableId, datagram: _writer.ToArray());
         if (_pending.Count >= _config.MaxReliableInFlight)
             _backlog.Enqueue(outgoing);
         else
@@ -218,7 +225,7 @@ public sealed class ReliableEndpoint
 
     private void TransmitReliable(Outgoing o)
     {
-        _pending[o.ReliableId] = new Pending(o.Datagram, _now);
+        _pending[o.ReliableId] = new Pending(datagram: o.Datagram, sentTime: _now);
         _sendRaw.Invoke(o.Datagram);
         Stats.PacketsSent++;
         Stats.BytesSent += o.Datagram.Length;
@@ -228,21 +235,21 @@ public sealed class ReliableEndpoint
 
     private void SendFragmented(ReadOnlySpan<byte> payload, DeliveryMethod delivery, byte channel)
     {
-        var msgId = _nextMsgId++;
-        var max = MaxReliablePayload;
-        var fragCount = (uint)((payload.Length + max - 1) / max);
+        ulong msgId = _nextMsgId++;
+        int max = MaxReliablePayload;
+        uint fragCount = (uint)((payload.Length + max - 1) / max);
         for (uint i = 0; i < fragCount; i++)
         {
-            var start = (int)i * max;
-            var len = Math.Min(max, payload.Length - start);
+            int start = (int)i * max;
+            int len = Math.Min(val1: max, val2: payload.Length - start);
             EnqueueReliable(
-                payload.Slice(start, len),
-                delivery,
-                channel,
-                true,
-                msgId,
-                i,
-                fragCount
+                payload: payload.Slice(start: start, length: len),
+                delivery: delivery,
+                channel: channel,
+                isFragment: true,
+                msgId: msgId,
+                fragIndex: i,
+                fragCount: fragCount
             );
         }
     }
@@ -258,7 +265,7 @@ public sealed class ReliableEndpoint
 
     private void SendUnreliableSequenced(ReadOnlySpan<byte> payload, byte channel)
     {
-        var seq = _sequencedSendSeq[channel]++;
+        ushort seq = _sequencedSendSeq[channel]++;
         _writer.Clear();
         _writer.WriteByte((byte)PacketKind.UnreliableSequenced);
         _writer.WriteByte(channel);
@@ -269,7 +276,7 @@ public sealed class ReliableEndpoint
 
     private void SendPing()
     {
-        var nonce = _pingNonce++;
+        uint nonce = _pingNonce++;
         _writer.Clear();
         _writer.WriteByte((byte)PacketKind.Ping);
         _writer.WriteVarUInt(nonce);
@@ -280,7 +287,7 @@ public sealed class ReliableEndpoint
     {
         while (_ackBacklog.Count > 0)
         {
-            var id = _ackBacklog.Dequeue();
+            ulong id = _ackBacklog.Dequeue();
             _writer.Clear();
             _writer.WriteByte((byte)PacketKind.Ack);
             _writer.WriteVarULong(id);
@@ -301,38 +308,42 @@ public sealed class ReliableEndpoint
 
     private void ReadUnreliable()
     {
-        var channel = _reader.ReadByte();
-        var payload = _reader.ReadBytes();
+        byte channel = _reader.ReadByte();
+        byte[] payload = _reader.ReadBytes();
         if (_reader.Overflow) return;
-        MessageReceived?.Invoke(payload, DeliveryMethod.Unreliable, channel);
+        MessageReceived?.Invoke(arg1: payload, arg2: DeliveryMethod.Unreliable, arg3: channel);
     }
 
     private void ReadUnreliableSequenced()
     {
-        var channel = _reader.ReadByte();
-        var seq = (ushort)_reader.ReadVarUInt();
-        var payload = _reader.ReadBytes();
+        byte channel = _reader.ReadByte();
+        ushort seq = (ushort)_reader.ReadVarUInt();
+        byte[] payload = _reader.ReadBytes();
         if (_reader.Overflow) return;
 
-        var last = _sequencedLastSeen[channel];
-        if (last >= 0 && !IsNewer(seq, (ushort)last))
+        int last = _sequencedLastSeen[channel];
+        if (last >= 0 && !IsNewer(a: seq, b: (ushort)last))
         {
             Stats.PacketsDropped++;
             return;
         }
 
         _sequencedLastSeen[channel] = seq;
-        MessageReceived?.Invoke(payload, DeliveryMethod.UnreliableSequenced, channel);
+        MessageReceived?.Invoke(
+            arg1: payload,
+            arg2: DeliveryMethod.UnreliableSequenced,
+            arg3: channel
+        );
     }
 
     private void ReadReliable()
     {
-        var reliableId = _reader.ReadVarULong();
-        var channel = _reader.ReadByte();
+        ulong reliableId = _reader.ReadVarULong();
+        byte channel = _reader.ReadByte();
         var delivery = (DeliveryMethod)_reader.ReadByte();
         ushort orderedSeq = 0;
         if (delivery.IsOrdered()) orderedSeq = (ushort)_reader.ReadVarUInt();
-        var payload = _reader.ReadBytes();
+        byte[] payload = _reader.ReadBytes();
         if (_reader.Overflow) return;
 
         _ackBacklog.Enqueue(
@@ -341,60 +352,62 @@ public sealed class ReliableEndpoint
         if (!MarkReceived(reliableId)) return; // duplicate
 
         if (delivery.IsOrdered())
+        {
             DeliverOrdered(
-                channel,
-                orderedSeq,
-                payload,
-                delivery
+                channel: channel,
+                seq: orderedSeq,
+                payload: payload,
+                delivery: delivery
             );
+        }
         else
-            MessageReceived?.Invoke(payload, delivery, channel);
+            MessageReceived?.Invoke(arg1: payload, arg2: delivery, arg3: channel);
     }
 
     private void ReadAck()
     {
-        var reliableId = _reader.ReadVarULong();
+        ulong reliableId = _reader.ReadVarULong();
         if (_reader.Overflow) return;
-        if (!_pending.Remove(reliableId, out var p)) return;
+        if (!_pending.Remove(key: reliableId, value: out var p)) return;
 
-        var sample = (float)(_now - p.SentTime);
+        float sample = (float)(_now - p.SentTime);
         if (sample > 0) UpdateRtt(sample);
     }
 
     private void ReadFragment()
     {
-        var reliableId = _reader.ReadVarULong();
-        var msgId = _reader.ReadVarULong();
-        var fragIndex = _reader.ReadVarUInt();
-        var fragCount = _reader.ReadVarUInt();
-        var channel = _reader.ReadByte();
+        ulong reliableId = _reader.ReadVarULong();
+        ulong msgId = _reader.ReadVarULong();
+        uint fragIndex = _reader.ReadVarUInt();
+        uint fragCount = _reader.ReadVarUInt();
+        byte channel = _reader.ReadByte();
         var delivery = (DeliveryMethod)_reader.ReadByte();
-        var payload = _reader.ReadBytes();
+        byte[] payload = _reader.ReadBytes();
         if (_reader.Overflow || fragCount == 0 || fragIndex >= fragCount) return;
 
         _ackBacklog.Enqueue(reliableId);
         if (!MarkReceived(reliableId)) return; // duplicate fragment
 
-        if (!_fragments.TryGetValue(msgId, out var asm))
+        if (!_fragments.TryGetValue(key: msgId, value: out var asm))
         {
             asm = new FragmentAssembly(fragCount);
             _fragments[msgId] = asm;
         }
 
-        if (asm.Add(fragIndex, payload) && asm.IsComplete)
+        if (asm.Add(index: fragIndex, payload: payload) && asm.IsComplete)
         {
             _fragments.Remove(msgId);
-            var full = asm.Combine();
+            byte[] full = asm.Combine();
             // Fragmented messages carry no ordered seq, so a fully reassembled one is delivered immediately
             // (its constituent fragments were reliably acked, so it can't be lost — only its parts can race,
             // which reassembly resolves). Ordering relative to non-fragmented ordered messages is not preserved.
-            MessageReceived?.Invoke(full, delivery, channel);
+            MessageReceived?.Invoke(arg1: full, arg2: delivery, arg3: channel);
         }
     }
 
     private void ReadPing()
     {
-        var nonce = _reader.ReadVarUInt();
+        uint nonce = _reader.ReadVarUInt();
         if (_reader.Overflow) return;
         _writer.Clear();
         _writer.WriteByte((byte)PacketKind.Pong);
@@ -402,29 +415,25 @@ public sealed class ReliableEndpoint
         EmitNow(_writer.ToArray());
     }
 
-    private void ReadPong()
-    {
+    private void ReadPong() =>
         _ = _reader.ReadVarUInt(); // nonce — presence already refreshed the receive timer
-    }
 
     private void DeliverOrdered(byte channel, ushort seq, byte[] payload, DeliveryMethod delivery)
     {
         if (seq == _orderedExpected[channel])
         {
-            MessageReceived?.Invoke(payload, delivery, channel);
+            MessageReceived?.Invoke(arg1: payload, arg2: delivery, arg3: channel);
             _orderedExpected[channel]++;
             // Release any contiguous buffered successors.
             var buffer = _orderedBuffers[channel];
-            while (buffer.Remove(_orderedExpected[channel], out var next))
+            while (buffer.Remove(key: _orderedExpected[channel], value: out byte[]? next))
             {
-                MessageReceived?.Invoke(next, delivery, channel);
+                MessageReceived?.Invoke(arg1: next, arg2: delivery, arg3: channel);
                 _orderedExpected[channel]++;
             }
         }
-        else if (IsNewer(seq, (ushort)(_orderedExpected[channel] - 1)))
-        {
+        else if (IsNewer(a: seq, b: (ushort)(_orderedExpected[channel] - 1)))
             _orderedBuffers[channel][seq] = payload; // future packet — buffer until the gap fills
-        }
     }
 
     // ---------------------------------------------------------------- rtt / loss / clock
@@ -439,8 +448,8 @@ public sealed class ReliableEndpoint
         }
         else
         {
-            _rttvar = 0.75f * _rttvar + 0.25f * MathF.Abs(_srtt - sample);
-            _srtt = 0.875f * _srtt + 0.125f * sample;
+            _rttvar = (0.75f * _rttvar) + (0.25f * MathF.Abs(_srtt - sample));
+            _srtt = (0.875f * _srtt) + (0.125f * sample);
         }
 
         Stats.RoundTripTime = _srtt;
@@ -449,15 +458,21 @@ public sealed class ReliableEndpoint
 
     private float ComputeRto()
     {
-        var rto = _srtt * _config.RetransmitRttFactor + 4f * _rttvar;
-        return Math.Clamp(rto, _config.MinRetransmitInterval, _config.MaxRetransmitInterval);
+        float rto = (_srtt * _config.RetransmitRttFactor) + (4f * _rttvar);
+        return Math.Clamp(
+            value: rto,
+            min: _config.MinRetransmitInterval,
+            max: _config.MaxRetransmitInterval
+        );
     }
 
     private void UpdateLossEstimate()
     {
         if (_now - _windowStart < 1.0) return;
         Stats.PacketLoss =
-            _windowSent > 0 ? Math.Clamp((float)_windowResent / _windowSent, 0f, 1f) : 0f;
+            _windowSent > 0
+                ? Math.Clamp(value: (float)_windowResent / _windowSent, min: 0f, max: 1f)
+                : 0f;
         _windowStart = _now;
         _windowSent = 0;
         _windowResent = 0;
@@ -478,10 +493,7 @@ public sealed class ReliableEndpoint
     ///     16-bit wraparound-safe "is <paramref name="a" /> strictly newer than <paramref name="b" />
     ///     ".
     /// </summary>
-    private static bool IsNewer(ushort a, ushort b)
-    {
-        return (ushort)(a - b) is > 0 and < 0x8000;
-    }
+    private static bool IsNewer(ushort a, ushort b) => (ushort)(a - b) is > 0 and < 0x8000;
 
     private readonly struct Outgoing(ulong reliableId, byte[] datagram)
     {
@@ -513,13 +525,13 @@ public sealed class ReliableEndpoint
 
         public byte[] Combine()
         {
-            var total = 0;
-            foreach (var p in _parts) total += p!.Length;
-            var result = new byte[total];
-            var offset = 0;
-            foreach (var p in _parts)
+            int total = 0;
+            foreach (byte[]? p in _parts) total += p!.Length;
+            byte[] result = new byte[total];
+            int offset = 0;
+            foreach (byte[]? p in _parts)
             {
-                p!.CopyTo(result, offset);
+                p!.CopyTo(array: result, index: offset);
                 offset += p.Length;
             }
 

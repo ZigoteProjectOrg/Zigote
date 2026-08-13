@@ -1,11 +1,14 @@
 namespace Zigote.Network;
 
 /// <summary>
-///     Server-side authoritative simulation of one owned object from client inputs. Buffered inputs are
+///     Server-side authoritative simulation of one owned object from client inputs. Buffered inputs
+///     are
 ///     applied in strict sequence order each server tick using the same deterministic step the client
 ///     predicts with; <see cref="LastProcessedSequence" /> is sent back so the client can reconcile.
-///     Tolerant of duplicate, stale and reordered inputs (the client sends recent inputs redundantly over an
-///     unreliable channel): duplicates/stale are ignored, and a missing middle input is skipped rather than
+///     Tolerant of duplicate, stale and reordered inputs (the client sends recent inputs redundantly
+///     over an
+///     unreliable channel): duplicates/stale are ignored, and a missing middle input is skipped rather
+///     than
 ///     stalling the simulation.
 /// </summary>
 public sealed class ServerReconciler<TInput, TState> where TInput : IInputCommand
@@ -37,19 +40,16 @@ public sealed class ServerReconciler<TInput, TState> where TInput : IInputComman
         if (_pending.Count == 0) return;
 
         var keys = _pending.Keys;
-        for (var i = 0; i < keys.Count; i++)
+        for (int i = 0; i < keys.Count; i++)
         {
-            var seq = keys[i];
+            uint seq = keys[i];
             if (seq <= LastProcessedSequence) continue;
-            State = _step(State, _pending[seq], dt);
+            State = _step(arg1: State, arg2: _pending[seq], arg3: dt);
             LastProcessedSequence = seq;
         }
 
         _pending.Clear();
     }
 
-    public void SetState(TState state)
-    {
-        State = state;
-    }
+    public void SetState(TState state) => State = state;
 }

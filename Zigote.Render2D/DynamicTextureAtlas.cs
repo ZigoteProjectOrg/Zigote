@@ -40,7 +40,7 @@ public sealed class DynamicTextureAtlas : IDisposable
         _maxSize = maxSize;
         _padding = padding;
         _filter = filter;
-        Size = Math.Clamp(initialSize, 1, maxSize);
+        Size = Math.Clamp(value: initialSize, min: 1, max: maxSize);
     }
 
     /// <summary>0 until the first <see cref="Commit" />.</summary>
@@ -62,29 +62,29 @@ public sealed class DynamicTextureAtlas : IDisposable
         if (width <= 0 || height <= 0 || width > _maxSize || height > _maxSize) return null;
         if (rgba.Length < width * height * 4) return null;
 
-        var entry = new Entry(rgba.ToArray(), width, height);
+        var entry = new Entry(rgba: rgba.ToArray(), w: width, h: height);
 
         // Fast path: append at the running cursor. This continues exactly the layout a full repack
         // would produce, so a same-size repack could never fit what the cursor can't — grow instead.
         if (TryPlace(
-                entry,
-                Size,
-                ref _penX,
-                ref _penY,
-                ref _shelfH
+                e: entry,
+                size: Size,
+                penX: ref _penX,
+                penY: ref _penY,
+                shelfH: ref _shelfH
             ))
         {
-            Apply(entry, Size);
+            Apply(e: entry, size: Size);
             _entries.Add(entry);
             _dirty = true;
             return entry.Sprite;
         }
 
         _entries.Add(entry);
-        var size = Size;
+        int size = Size;
         while (size < _maxSize)
         {
-            size = Math.Min(size * 2, _maxSize);
+            size = Math.Min(val1: size * 2, val2: _maxSize);
             if (!TryRepack(size)) continue;
             Size = size;
             _dirty = true;
@@ -106,53 +106,57 @@ public sealed class DynamicTextureAtlas : IDisposable
     {
         if (!_dirty) return;
 
-        var size = Size;
-        var stride = size * 4;
-        var needed = size * stride;
+        int size = Size;
+        int stride = size * 4;
+        int needed = size * stride;
         if (_pixels.Length < needed) _pixels = new byte[needed];
-        else Array.Clear(_pixels, 0, needed);
+        else Array.Clear(array: _pixels, index: 0, length: needed);
 
         foreach (var e in _entries)
         {
-            var rowBytes = e.W * 4;
-            for (var row = 0; row < e.H; row++)
+            int rowBytes = e.W * 4;
+            for (int row = 0; row < e.H; row++)
+            {
                 Buffer.BlockCopy(
-                    e.Rgba,
-                    row * rowBytes,
-                    _pixels,
-                    (e.Y + row) * stride + e.X * 4,
-                    rowBytes
+                    src: e.Rgba,
+                    srcOffset: row * rowBytes,
+                    dst: _pixels,
+                    dstOffset: ((e.Y + row) * stride) + (e.X * 4),
+                    count: rowBytes
                 );
+            }
         }
 
         if (TextureHandle != 0) _device.DestroyTexture(TextureHandle);
         TextureHandle = _device.CreateTexture(
-            new ReadOnlySpan<byte>(_pixels, 0, needed),
-            size,
-            size,
-            _filter,
-            true,
-            SpriteWrap.Clamp
+            rgba: new ReadOnlySpan<byte>(array: _pixels, start: 0, length: needed),
+            width: size,
+            height: size,
+            filter: _filter,
+            srgb: true,
+            wrap: SpriteWrap.Clamp
         );
 
-        foreach (var e in _entries) Apply(e, size);
+        foreach (var e in _entries) Apply(e: e, size: size);
         _dirty = false;
     }
 
     private bool TryRepack(int size)
     {
         int penX = 0, penY = 0, shelfH = 0;
-        for (var i = 0; i < _entries.Count; i++)
+        for (int i = 0; i < _entries.Count; i++)
+        {
             if (!TryPlace(
-                    _entries[i],
-                    size,
-                    ref penX,
-                    ref penY,
-                    ref shelfH
+                    e: _entries[i],
+                    size: size,
+                    penX: ref penX,
+                    penY: ref penY,
+                    shelfH: ref shelfH
                 ))
                 return false;
+        }
 
-        for (var i = 0; i < _entries.Count; i++) Apply(_entries[i], size);
+        for (int i = 0; i < _entries.Count; i++) Apply(e: _entries[i], size: size);
         _penX = penX;
         _penY = penY;
         _shelfH = shelfH;
@@ -180,16 +184,16 @@ public sealed class DynamicTextureAtlas : IDisposable
 
     private static void Apply(Entry e, int size)
     {
-        var inv = 1f / size;
+        float inv = 1f / size;
         e.Sprite.PixelX = e.X;
         e.Sprite.PixelY = e.Y;
         e.Sprite.Frame = new SpriteFrame(
-            e.X * inv,
-            e.Y * inv,
-            (e.X + e.W) * inv,
-            (e.Y + e.H) * inv,
-            e.W,
-            e.H
+            U0: e.X * inv,
+            V0: e.Y * inv,
+            U1: (e.X + e.W) * inv,
+            V1: (e.Y + e.H) * inv,
+            PixelWidth: e.W,
+            PixelHeight: e.H
         );
     }
 

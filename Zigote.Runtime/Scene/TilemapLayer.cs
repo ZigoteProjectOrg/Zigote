@@ -45,10 +45,10 @@ public sealed class TilemapLayer
     /// <summary>Tile at a world tile coordinate; <see cref="Tileset.EmptyTile" /> when outside the rect.</summary>
     public int GetTile(int x, int y)
     {
-        var lx = x - OriginX;
-        var ly = y - OriginY;
+        int lx = x - OriginX;
+        int ly = y - OriginY;
         if (lx < 0 || ly < 0 || lx >= Width || ly >= Height) return Tileset.EmptyTile;
-        return Cells[ly * Width + lx];
+        return Cells[(ly * Width) + lx];
     }
 
     /// <summary>
@@ -58,17 +58,17 @@ public sealed class TilemapLayer
     /// </summary>
     public bool SetTile(int x, int y, int tile)
     {
-        var lx = x - OriginX;
-        var ly = y - OriginY;
+        int lx = x - OriginX;
+        int ly = y - OriginY;
         if (lx < 0 || ly < 0 || lx >= Width || ly >= Height)
         {
             if (tile == Tileset.EmptyTile) return false;
-            GrowToInclude(x, y);
+            GrowToInclude(x: x, y: y);
             lx = x - OriginX;
             ly = y - OriginY;
         }
 
-        var i = ly * Width + lx;
+        int i = (ly * Width) + lx;
         if (Cells[i] == tile) return false;
         Cells[i] = tile;
         return true;
@@ -87,25 +87,27 @@ public sealed class TilemapLayer
             return;
         }
 
-        var minX = Math.Min(OriginX, x);
-        var minY = Math.Min(OriginY, y);
-        var maxX = Math.Max(OriginX + Width - 1, x);
-        var maxY = Math.Max(OriginY + Height - 1, y);
-        var w = maxX - minX + 1;
-        var h = maxY - minY + 1;
+        int minX = Math.Min(val1: OriginX, val2: x);
+        int minY = Math.Min(val1: OriginY, val2: y);
+        int maxX = Math.Max(val1: OriginX + Width - 1, val2: x);
+        int maxY = Math.Max(val1: OriginY + Height - 1, val2: y);
+        int w = maxX - minX + 1;
+        int h = maxY - minY + 1;
 
-        var cells = new int[w * h];
-        Array.Fill(cells, Tileset.EmptyTile);
-        var dx = OriginX - minX;
-        var dy = OriginY - minY;
-        for (var row = 0; row < Height; row++)
+        int[] cells = new int[w * h];
+        Array.Fill(array: cells, value: Tileset.EmptyTile);
+        int dx = OriginX - minX;
+        int dy = OriginY - minY;
+        for (int row = 0; row < Height; row++)
+        {
             Array.Copy(
-                Cells,
-                row * Width,
-                cells,
-                (row + dy) * w + dx,
-                Width
+                sourceArray: Cells,
+                sourceIndex: row * Width,
+                destinationArray: cells,
+                destinationIndex: ((row + dy) * w) + dx,
+                length: Width
             );
+        }
 
         Cells = cells;
         OriginX = minX;
@@ -132,10 +134,10 @@ public sealed class TilemapLayer
     {
         if (IsEmpty) return;
         int minX = int.MaxValue, minY = int.MaxValue, maxX = int.MinValue, maxY = int.MinValue;
-        for (var ly = 0; ly < Height; ly++)
-        for (var lx = 0; lx < Width; lx++)
+        for (int ly = 0; ly < Height; ly++)
+        for (int lx = 0; lx < Width; lx++)
         {
-            if (Cells[ly * Width + lx] == Tileset.EmptyTile) continue;
+            if (Cells[(ly * Width) + lx] == Tileset.EmptyTile) continue;
             if (lx < minX) minX = lx;
             if (lx > maxX) maxX = lx;
             if (ly < minY) minY = ly;
@@ -150,17 +152,19 @@ public sealed class TilemapLayer
 
         if (minX == 0 && minY == 0 && maxX == Width - 1 && maxY == Height - 1) return;
 
-        var w = maxX - minX + 1;
-        var h = maxY - minY + 1;
-        var cells = new int[w * h];
-        for (var row = 0; row < h; row++)
+        int w = maxX - minX + 1;
+        int h = maxY - minY + 1;
+        int[] cells = new int[w * h];
+        for (int row = 0; row < h; row++)
+        {
             Array.Copy(
-                Cells,
-                (row + minY) * Width + minX,
-                cells,
-                row * w,
-                w
+                sourceArray: Cells,
+                sourceIndex: ((row + minY) * Width) + minX,
+                destinationArray: cells,
+                destinationIndex: row * w,
+                length: w
             );
+        }
 
         Cells = cells;
         OriginX += minX;

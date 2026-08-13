@@ -18,36 +18,21 @@ public sealed class GraphValue
 
     public bool IsNull => Kind == GraphValueKind.Null;
 
-    public static GraphValue Null()
-    {
-        return new GraphValue(GraphValueKind.Null, null);
-    }
+    public static GraphValue Null() => new(kind: GraphValueKind.Null, raw: null);
 
-    public static GraphValue FromBool(bool v)
-    {
-        return new GraphValue(GraphValueKind.Bool, v);
-    }
+    public static GraphValue FromBool(bool v) => new(kind: GraphValueKind.Bool, raw: v);
 
-    public static GraphValue FromInt(int v)
-    {
-        return new GraphValue(GraphValueKind.Int, v);
-    }
+    public static GraphValue FromInt(int v) => new(kind: GraphValueKind.Int, raw: v);
 
-    public static GraphValue FromFloat(float v)
-    {
-        return new GraphValue(GraphValueKind.Float, v);
-    }
+    public static GraphValue FromFloat(float v) => new(kind: GraphValueKind.Float, raw: v);
 
-    public static GraphValue FromString(string v)
-    {
-        return new GraphValue(GraphValueKind.String, v);
-    }
+    public static GraphValue FromString(string v) => new(kind: GraphValueKind.String, raw: v);
 
     public static GraphValue FromFloat2(float x, float y)
     {
         return new GraphValue(
-            GraphValueKind.Float2,
-            new[] {
+            kind: GraphValueKind.Float2,
+            raw: new[] {
                 x,
                 y,
             }
@@ -57,8 +42,8 @@ public sealed class GraphValue
     public static GraphValue FromFloat3(float x, float y, float z)
     {
         return new GraphValue(
-            GraphValueKind.Float3,
-            new[] {
+            kind: GraphValueKind.Float3,
+            raw: new[] {
                 x,
                 y,
                 z,
@@ -69,8 +54,8 @@ public sealed class GraphValue
     public static GraphValue FromFloat4(float x, float y, float z, float w)
     {
         return new GraphValue(
-            GraphValueKind.Float4,
-            new[] {
+            kind: GraphValueKind.Float4,
+            raw: new[] {
                 x,
                 y,
                 z,
@@ -79,40 +64,19 @@ public sealed class GraphValue
         );
     }
 
-    public bool AsBool()
-    {
-        return (bool)_raw!;
-    }
+    public bool AsBool() => (bool)_raw!;
 
-    public int AsInt()
-    {
-        return (int)_raw!;
-    }
+    public int AsInt() => (int)_raw!;
 
-    public float AsFloat()
-    {
-        return (float)_raw!;
-    }
+    public float AsFloat() => (float)_raw!;
 
-    public string AsString()
-    {
-        return (string)_raw!;
-    }
+    public string AsString() => (string)_raw!;
 
-    public float[] AsFloat2()
-    {
-        return (float[])_raw!;
-    }
+    public float[] AsFloat2() => (float[])_raw!;
 
-    public float[] AsFloat3()
-    {
-        return (float[])_raw!;
-    }
+    public float[] AsFloat3() => (float[])_raw!;
 
-    public float[] AsFloat4()
-    {
-        return (float[])_raw!;
-    }
+    public float[] AsFloat4() => (float[])_raw!;
 
     public override string ToString()
     {

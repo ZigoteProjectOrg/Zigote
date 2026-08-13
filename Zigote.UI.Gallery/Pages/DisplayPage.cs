@@ -18,45 +18,48 @@ internal sealed class DisplayPage : ComposedWidget
     {
         return Sections(
             Section(
-                "Chips",
-                new Wrap(
+                title: "Chips",
+                child: new Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: [
                         new Chip("Plain"),
                         new FilterChip(
-                            new Text("Filter A"),
-                            _filters[0],
-                            v => Set(() => _filters[0] = v)
+                            label: new Text("Filter A"),
+                            selected: _filters[0],
+                            onSelected: v => Set(() => _filters[0] = v)
                         ),
                         new FilterChip(
-                            new Text("Filter B"),
-                            _filters[1],
-                            v => Set(() => _filters[1] = v)
+                            label: new Text("Filter B"),
+                            selected: _filters[1],
+                            onSelected: v => Set(() => _filters[1] = v)
                         ),
                         new ChoiceChip(
-                            new Text("Choice"),
-                            _filters[2],
-                            v => Set(() => _filters[2] = v)
+                            label: new Text("Choice"),
+                            selected: _filters[2],
+                            onSelected: v => Set(() => _filters[2] = v)
                         ),
                     ]
                 )
             ),
             Section(
-                "Badge & avatar",
-                new Row(
+                title: "Badge & avatar",
+                child: new Row(
                     [
-                        new Badge(new Icon(MaterialIcons.Doorbell) { Size = 28 }, 3),
+                        new Badge(child: new Icon(MaterialIcons.Doorbell) { Size = 28 }, count: 3),
                         new SizedBox(24),
-                        new CircleAvatar(new Text("AZ"), Colors.Indigo),
+                        new CircleAvatar(child: new Text("AZ"), backgroundColor: Colors.Indigo),
                         new SizedBox(12),
-                        new CircleAvatar(new Icon(MaterialIcons.Home), Colors.Teal),
+                        new CircleAvatar(
+                            child: new Icon(MaterialIcons.Home),
+                            backgroundColor: Colors.Teal
+                        ),
                     ]
                 )
             ),
             Section(
-                "Dividers",
-                new Column(
+                title: "Dividers",
+                child: new Column(
                     crossAxisAlignment: CrossAxisAlignment.Stretch,
                     children: [
                         new Text("above"),
@@ -74,27 +77,30 @@ internal sealed class DisplayPage : ComposedWidget
                 )
             ),
             Section(
-                "List tiles",
-                new Column(
+                title: "List tiles",
+                child: new Column(
                     crossAxisAlignment: CrossAxisAlignment.Stretch,
                     children: [
                         new ListTile(
-                            new Icon(MaterialIcons.Home),
-                            new Text("Home"),
-                            new Text("Landing screen"),
+                            leading: new Icon(MaterialIcons.Home),
+                            title: new Text("Home"),
+                            subtitle: new Text("Landing screen"),
                             onPressed: () => Toast("Home")
                         ),
                         new Divider(),
                         new ListTile(
-                            new Icon(MaterialIcons.Settings),
-                            new Text("Notifications"),
-                            trailing: new Switch(_switch, v => Set(() => _switch = v)),
+                            leading: new Icon(MaterialIcons.Settings),
+                            title: new Text("Notifications"),
+                            trailing: new Switch(
+                                value: _switch,
+                                onChanged: v => Set(() => _switch = v)
+                            ),
                             onPressed: () => Toast("Notifications")
                         ),
                     ]
                 )
             ),
-            Section("Tooltip", TooltipDemo())
+            Section(title: "Tooltip", child: TooltipDemo())
         );
     }
 
@@ -106,9 +112,12 @@ internal sealed class DisplayPage : ComposedWidget
         const string message = "This is a tooltip";
 
         return new AdaptiveBuilder((_, size) => new Tooltip(
-                message,
-                size == WindowSizeClass.Compact
-                    ? new OutlinedButton(new Text("Tap for a tip"), () => Toast(message))
+                message: message,
+                child: size == WindowSizeClass.Compact
+                    ? new OutlinedButton(
+                        child: new Text("Tap for a tip"),
+                        onPressed: () => Toast(message)
+                    )
                     : new OutlinedButton(new Text("Hover me"))
             )
         );

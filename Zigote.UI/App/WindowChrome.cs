@@ -40,10 +40,19 @@ public static class WindowChrome
     /// <summary>KDE (and Windows) keep system decorations; only GNOME-family desktops get CSD.</summary>
     private static bool IsGnomeDesktop()
     {
-        var desktop = Environment.GetEnvironmentVariable("XDG_CURRENT_DESKTOP") ?? "";
-        return desktop.Contains("GNOME", StringComparison.OrdinalIgnoreCase) ||
-               desktop.Contains("Unity", StringComparison.OrdinalIgnoreCase) ||
-               desktop.Contains("Pantheon", StringComparison.OrdinalIgnoreCase);
+        string desktop = Environment.GetEnvironmentVariable("XDG_CURRENT_DESKTOP") ?? "";
+        return desktop.Contains(
+                   value: "GNOME",
+                   comparisonType: StringComparison.OrdinalIgnoreCase
+               ) ||
+               desktop.Contains(
+                   value: "Unity",
+                   comparisonType: StringComparison.OrdinalIgnoreCase
+               ) ||
+               desktop.Contains(
+                   value: "Pantheon",
+                   comparisonType: StringComparison.OrdinalIgnoreCase
+               );
     }
 }
 

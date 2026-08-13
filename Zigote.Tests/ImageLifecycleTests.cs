@@ -29,10 +29,10 @@ public class ImageLifecycleTests
     {
         image.Measure(
             new Constraints(
-                0,
-                maxW,
-                0,
-                maxH
+                minWidth: 0,
+                maxWidth: maxW,
+                minHeight: 0,
+                maxHeight: maxH
             )
         );
         image.Layout(Offset.Zero);
@@ -45,9 +45,9 @@ public class ImageLifecycleTests
         var image = LaidOut(new Image());
 
         Assert.False(image.HasTexture);
-        Assert.Equal(0, image.TextureBytes);
-        Assert.Equal(0f, image.Bounds.Width);
-        Assert.Equal(0, PaintOf(image).Count);
+        Assert.Equal(expected: 0, actual: image.TextureBytes);
+        Assert.Equal(expected: 0f, actual: image.Bounds.Width);
+        Assert.Equal(expected: 0, actual: PaintOf(image).Count);
     }
 
     [Fact]
@@ -55,58 +55,58 @@ public class ImageLifecycleTests
     {
         // The point of the placeholder: a list row must not resize (and yank the scroll position)
         // when an async load lands.
-        var image = new Image { PlaceholderSize = new Size(180, 260) };
+        var image = new Image { PlaceholderSize = new Size(width: 180, height: 260) };
         LaidOut(image);
-        Assert.Equal(180f, image.Bounds.Width, 1);
-        Assert.Equal(260f, image.Bounds.Height, 1);
+        Assert.Equal(expected: 180f, actual: image.Bounds.Width, precision: 1);
+        Assert.Equal(expected: 260f, actual: image.Bounds.Height, precision: 1);
 
-        image.SetTexture(1, 100, 200);
+        image.SetTexture(textureHandle: 1, width: 100, height: 200);
         LaidOut(image);
-        Assert.Equal(100f, image.Bounds.Width, 1);
-        Assert.Equal(200f, image.Bounds.Height, 1);
+        Assert.Equal(expected: 100f, actual: image.Bounds.Width, precision: 1);
+        Assert.Equal(expected: 200f, actual: image.Bounds.Height, precision: 1);
     }
 
     [Fact]
     public void SetTexture_PaintsTheHandle_AndReportsItsFootprint()
     {
         var image = LaidOut(new Image());
-        image.SetTexture(42, 64, 32);
+        image.SetTexture(textureHandle: 42, width: 64, height: 32);
         LaidOut(image);
 
         Assert.True(image.HasTexture);
-        Assert.Equal((64u, 32u), image.TextureSize);
-        Assert.Equal(64L * 32 * 4, image.TextureBytes);
+        Assert.Equal(expected: (64u, 32u), actual: image.TextureSize);
+        Assert.Equal(expected: 64L * 32 * 4, actual: image.TextureBytes);
 
         var cmd = Assert.Single(PaintOf(image).DebugCommands);
-        Assert.Equal(64u, cmd.ImgPixelW);
-        Assert.Equal(32u, cmd.ImgPixelH);
+        Assert.Equal(expected: 64u, actual: cmd.ImgPixelW);
+        Assert.Equal(expected: 32u, actual: cmd.ImgPixelH);
     }
 
     [Fact]
     public void Measure_FitsWithinConstraints_PreservingAspect()
     {
         var image = new Image();
-        image.SetTexture(7, 1000, 500); // 2:1
-        LaidOut(image, 400, 400);
+        image.SetTexture(textureHandle: 7, width: 1000, height: 500); // 2:1
+        LaidOut(image: image, maxW: 400, maxH: 400);
 
-        Assert.Equal(400f, image.Bounds.Width, 1);
-        Assert.Equal(200f, image.Bounds.Height, 1);
+        Assert.Equal(expected: 400f, actual: image.Bounds.Width, precision: 1);
+        Assert.Equal(expected: 200f, actual: image.Bounds.Height, precision: 1);
     }
 
     [Fact]
     public void Dispose_ReleasesTheTexture_AndStopsPainting()
     {
         var image = new Image();
-        image.SetTexture(9, 16, 16);
+        image.SetTexture(textureHandle: 9, width: 16, height: 16);
         LaidOut(image);
-        Assert.Equal(1, PaintOf(image).Count);
+        Assert.Equal(expected: 1, actual: PaintOf(image).Count);
 
         image.Dispose();
         LaidOut(image);
 
         Assert.False(image.HasTexture);
-        Assert.Equal(0, image.TextureBytes);
-        Assert.Equal(0, PaintOf(image).Count);
+        Assert.Equal(expected: 0, actual: image.TextureBytes);
+        Assert.Equal(expected: 0, actual: PaintOf(image).Count);
 
         image.Dispose(); // idempotent — double dispose must not double-release
         Assert.False(image.HasTexture);
@@ -126,11 +126,11 @@ public class ImageLifecycleTests
     {
         // Re-setting the live handle must not release-then-adopt the very texture it is keeping.
         var image = new Image();
-        image.SetTexture(5, 8, 8);
-        image.SetTexture(5, 8, 8);
+        image.SetTexture(textureHandle: 5, width: 8, height: 8);
+        image.SetTexture(textureHandle: 5, width: 8, height: 8);
 
         Assert.True(image.HasTexture);
-        Assert.Equal((8u, 8u), image.TextureSize);
+        Assert.Equal(expected: (8u, 8u), actual: image.TextureSize);
     }
 
     [Fact]
@@ -139,7 +139,7 @@ public class ImageLifecycleTests
         var image = new Image();
         image.Dispose();
 
-        var ran = false;
+        bool ran = false;
         await image.LoadAsync(_ =>
             {
                 ran = true;

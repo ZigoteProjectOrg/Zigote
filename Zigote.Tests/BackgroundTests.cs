@@ -10,10 +10,7 @@ namespace Zigote.Tests;
 /// </summary>
 public class BackgroundTests
 {
-    private static bool Settle(Background background)
-    {
-        return background.Drain(TimeSpan.FromSeconds(5));
-    }
+    private static bool Settle(Background background) => background.Drain(TimeSpan.FromSeconds(5));
 
     // ── the floor: failures are reported, not swallowed ────────────────────────
 
@@ -25,10 +22,7 @@ public class BackgroundTests
         var previous = Background.OnError;
         Background.OnError = (_, where) =>
         {
-            lock (reported)
-            {
-                reported.Add(where);
-            }
+            lock (reported) reported.Add(where);
         };
 
         try
@@ -36,7 +30,10 @@ public class BackgroundTests
             using var library = background.Child("library");
             library.Run(() => throw new InvalidOperationException("deliberate"));
             Assert.True(Settle(background));
-            Assert.Equal(["app/library.A_throwing_worker_is_reported_against_its_scope"], reported);
+            Assert.Equal(
+                expected: ["app/library.A_throwing_worker_is_reported_against_its_scope"],
+                actual: reported
+            );
         }
         finally
         {
@@ -59,13 +56,13 @@ public class BackgroundTests
             left.Run(() => throw new InvalidOperationException("deliberate"));
             Assert.True(Settle(background));
 
-            var ran = 0;
+            int ran = 0;
             right.Run(() => Interlocked.Increment(ref ran));
             background.Run(() => Interlocked.Increment(ref ran));
             Assert.True(Settle(background));
 
             // Supervision, not cascade: Kotlin's default would have cancelled the scope here.
-            Assert.Equal(2, Volatile.Read(ref ran));
+            Assert.Equal(expected: 2, actual: Volatile.Read(ref ran));
         }
         finally
         {
@@ -80,13 +77,13 @@ public class BackgroundTests
         var left = background.Child("left");
         using var right = background.Child("right");
 
-        var ran = 0;
+        int ran = 0;
         left.Dispose();
         left.Run(() => Interlocked.Increment(ref ran));
         right.Run(() => Interlocked.Increment(ref ran));
         Assert.True(Settle(background));
 
-        Assert.Equal(1, Volatile.Read(ref ran));
+        Assert.Equal(expected: 1, actual: Volatile.Read(ref ran));
     }
 
     [Fact]
@@ -97,9 +94,9 @@ public class BackgroundTests
 
         background.Dispose();
 
-        var ran = 0;
+        int ran = 0;
         child.Run(() => Interlocked.Increment(ref ran));
-        Assert.Equal(0, Volatile.Read(ref ran));
+        Assert.Equal(expected: 0, actual: Volatile.Read(ref ran));
         Assert.True(child.Lifetime.IsCancellationRequested);
     }
 
@@ -112,11 +109,11 @@ public class BackgroundTests
         using var latest = background.Latest();
         var landed = new List<int>();
 
-        latest.Run(_ => 1, landed.Add, TimeSpan.FromMilliseconds(500));
-        latest.Run(_ => 2, landed.Add);
+        latest.Run(work: _ => 1, onUi: landed.Add, delay: TimeSpan.FromMilliseconds(500));
+        latest.Run(work: _ => 2, onUi: landed.Add);
         Assert.True(Settle(background));
 
-        Assert.Equal([2], landed);
+        Assert.Equal(expected: [2], actual: landed);
     }
 
     // ── the frame budget ───────────────────────────────────────────────────────
@@ -126,86 +123,86 @@ public class BackgroundTests
     {
         using var background = Background.Manual();
         const int units = 200;
-        var built = 0;
-        var finished = 0;
+        int built = 0;
+        int finished = 0;
 
         background.Slice(
-            "rows",
-            units,
-            _ => built++,
-            () => finished++,
-            TimeSpan.Zero
+            key: "rows",
+            count: units,
+            step: _ => built++,
+            onDone: () => finished++,
+            firstFrame: TimeSpan.Zero
         );
 
         // Forward progress must not depend on the budget being generous enough for one step:
         // a unit costing more than the whole budget would otherwise never run at all.
-        Assert.Equal(1, built);
+        Assert.Equal(expected: 1, actual: built);
         Assert.False(background.FrameIdle);
 
-        var frames = 0;
+        int frames = 0;
         while (!background.FrameIdle && frames < units * 2)
         {
             background.RunFrame(TimeSpan.Zero);
             frames++;
         }
 
-        Assert.Equal(units, built);
-        Assert.Equal(units - 1, frames);
-        Assert.Equal(1, finished); // exactly once, however many frames it took
+        Assert.Equal(expected: units, actual: built);
+        Assert.Equal(expected: units - 1, actual: frames);
+        Assert.Equal(expected: 1, actual: finished); // exactly once, however many frames it took
     }
 
     [Fact]
     public void Two_slices_share_the_frame_instead_of_one_starving()
     {
         using var background = Background.Manual();
-        var left = 0;
-        var right = 0;
+        int left = 0;
+        int right = 0;
 
         background.Slice(
-            "left",
-            20,
-            _ => left++,
-            null,
-            TimeSpan.Zero
+            key: "left",
+            count: 20,
+            step: _ => left++,
+            onDone: null,
+            firstFrame: TimeSpan.Zero
         );
         background.Slice(
-            "right",
-            20,
-            _ => right++,
-            null,
-            TimeSpan.Zero
+            key: "right",
+            count: 20,
+            step: _ => right++,
+            onDone: null,
+            firstFrame: TimeSpan.Zero
         );
-        for (var i = 0; i < 6; i++) background.RunFrame(TimeSpan.Zero);
+        for (int i = 0; i < 6; i++) background.RunFrame(TimeSpan.Zero);
 
-        Assert.True(left > 1, $"left starved at {left}");
-        Assert.True(right > 1, $"right starved at {right}");
+        Assert.True(condition: left > 1, userMessage: $"left starved at {left}");
+        Assert.True(condition: right > 1, userMessage: $"right starved at {right}");
     }
 
     [Fact]
     public void Starting_a_slice_under_a_running_key_replaces_it()
     {
         using var background = Background.Manual();
-        var first = 0;
-        var second = 0;
+        int first = 0;
+        int second = 0;
 
         background.Slice(
-            "rows",
-            10_000,
-            _ => first++,
-            null,
-            TimeSpan.Zero
+            key: "rows",
+            count: 10_000,
+            step: _ => first++,
+            onDone: null,
+            firstFrame: TimeSpan.Zero
         );
         background.Slice(
-            "rows",
-            10,
-            _ => second++,
-            null,
-            TimeSpan.Zero
+            key: "rows",
+            count: 10,
+            step: _ => second++,
+            onDone: null,
+            firstFrame: TimeSpan.Zero
         );
         while (!background.FrameIdle) background.RunFrame(TimeSpan.FromMilliseconds(1));
 
-        Assert.Equal(10, second);
-        Assert.True(first < 10_000, "the superseded slice kept running");
+        Assert.Equal(expected: 10, actual: second);
+        Assert.True(condition: first < 10_000, userMessage: "the superseded slice kept running");
     }
 
     [Fact]
@@ -214,15 +211,15 @@ public class BackgroundTests
         using var background = Background.Manual();
         var order = new List<int>();
 
-        for (var i = 0; i < 5; i++)
+        for (int i = 0; i < 5; i++)
         {
-            var value = i;
-            background.Post(() => order.Add(value), Deliver.WhenIdle);
+            int value = i;
+            background.Post(ui: () => order.Add(value), deliver: Deliver.WhenIdle);
         }
 
         background.RunFrame(TimeSpan.FromSeconds(1));
 
-        Assert.Equal([0, 1, 2, 3, 4], order);
+        Assert.Equal(expected: [0, 1, 2, 3, 4], actual: order);
     }
 
     [Fact]
@@ -230,21 +227,21 @@ public class BackgroundTests
     {
         using var background = Background.Manual();
         var page = background.Child("page");
-        var built = 0;
+        int built = 0;
 
         page.Slice(
-            "rows",
-            1000,
-            _ => built++,
-            null,
-            TimeSpan.Zero
+            key: "rows",
+            count: 1000,
+            step: _ => built++,
+            onDone: null,
+            firstFrame: TimeSpan.Zero
         );
-        var afterFirstFrame = built;
+        int afterFirstFrame = built;
 
         page.Dispose();
         while (!background.FrameIdle) background.RunFrame(TimeSpan.Zero);
 
-        Assert.Equal(afterFirstFrame, built);
+        Assert.Equal(expected: afterFirstFrame, actual: built);
     }
 
     // ── the idle frame, which is nearly every frame ────────────────────────────
@@ -264,25 +261,28 @@ public class BackgroundTests
     public void RunFrame_advancing_a_slice_allocates_zero()
     {
         using var background = Background.Manual();
-        var built = 0;
+        int built = 0;
 
         // Re-armed inside the iteration, so the steady state being measured is "a slice is filling",
         // not "a slice was started".
         AllocGuard.AssertZeroAlloc(
-            () =>
+            iteration: () =>
             {
                 if (background.FrameIdle)
+                {
                     background.Slice(
-                        "rows",
-                        1_000_000,
-                        _ => built++,
-                        null,
-                        TimeSpan.Zero
+                        key: "rows",
+                        count: 1_000_000,
+                        step: _ => built++,
+                        onDone: null,
+                        firstFrame: TimeSpan.Zero
                     );
+                }
+
                 background.RunFrame(TimeSpan.Zero);
             },
-            20,
-            200
+            warmup: 20,
+            iterations: 200
         );
     }
 }

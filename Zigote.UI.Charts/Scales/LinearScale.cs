@@ -56,18 +56,19 @@ public class LinearScale : ChartScale
         if (Finalized) return;
         Finalized = true;
 
-        var min = _dataMin;
-        var max = _dataMax;
+        double min = _dataMin;
+        double max = _dataMax;
         if (double.IsInfinity(min)) (min, max) = (0, 1); // no data at all
         if (IncludeZero)
         {
-            min = Math.Min(min, 0);
-            max = Math.Max(max, 0);
+            min = Math.Min(val1: min, val2: 0);
+            max = Math.Max(val1: max, val2: 0);
         }
 
         if (Nice)
         {
-            var (nMin, nMax, _) = NiceScale.NiceDomain(min, max, 5);
+            (double nMin, double nMax, _) =
+                NiceScale.NiceDomain(min: min, max: max, targetTicks: 5);
             min = nMin;
             max = nMax;
         }
@@ -90,36 +91,33 @@ public class LinearScale : ChartScale
         _viewMax = max > min ? max : min + 1;
     }
 
-    public override float Normalize(ChartValue value)
-    {
-        return NormalizeNumeric(value.Numeric);
-    }
+    public override float Normalize(ChartValue value) => NormalizeNumeric(value.Numeric);
 
-    public override float NormalizeNumeric(double value)
-    {
-        return (float)((value - _viewMin) / (_viewMax - _viewMin));
-    }
+    public override float NormalizeNumeric(double value) =>
+        (float)((value - _viewMin) / (_viewMax - _viewMin));
 
-    public override double NumericAt(float normalized)
-    {
-        return _viewMin + normalized * (_viewMax - _viewMin);
-    }
+    public override double NumericAt(float normalized) =>
+        _viewMin + (normalized * (_viewMax - _viewMin));
 
     public override void BuildTicksInto(int targetCount, Func<ChartValue, string>? formatter,
         List<ChartTick> into)
     {
         into.Clear();
-        var step = NiceScale.TickStep(_viewMax - _viewMin, targetCount);
-        var values = NiceScale.Ticks(_viewMin, _viewMax, step);
-        foreach (var v in values)
+        double step = NiceScale.TickStep(range: _viewMax - _viewMin, targetTicks: targetCount);
+        var values = NiceScale.Ticks(min: _viewMin, max: _viewMax, step: step);
+        foreach (double v in values)
         {
-            var label = formatter?.Invoke(ChartValue.Number(v)) ?? NiceScale.FormatNumber(v);
-            into.Add(new ChartTick(NormalizeNumeric(v), label, ChartValue.Number(v)));
+            string label = formatter?.Invoke(ChartValue.Number(v)) ?? NiceScale.FormatNumber(v);
+            into.Add(
+                new ChartTick(
+                    position: NormalizeNumeric(v),
+                    label: label,
+                    value: ChartValue.Number(v)
+                )
+            );
         }
     }
 
-    protected override string DefaultTickLabel(ChartValue value)
-    {
-        return NiceScale.FormatNumber(value.Numeric);
-    }
+    protected override string DefaultTickLabel(ChartValue value) =>
+        NiceScale.FormatNumber(value.Numeric);
 }

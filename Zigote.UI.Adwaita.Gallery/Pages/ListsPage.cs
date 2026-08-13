@@ -18,9 +18,9 @@ public sealed class ListsPage : ComposedWidget
         // ponytail: no "separate-rows" group style — the Entry Rows and Button Rows groups render as
         // one card here; a full version needs a per-row card in AdwPreferencesGroup.
         return new GalleryPage(
-            "Boxed Lists",
-            "Every row type libadwaita offers, in the card that groups them.",
-            MaterialIcons.ViewList
+            title: "Boxed Lists",
+            description: "Every row type libadwaita offers, in the card that groups them.",
+            iconName: MaterialIcons.ViewList
         ) {
             Children = {
                 TitleAndSuffixGroup(),
@@ -29,7 +29,7 @@ public sealed class ListsPage : ComposedWidget
                 new AdwPreferencesGroup("Spin Rows") {
                     Rows = {
                         new AdwSpinRow(
-                            "Spin Row",
+                            title: "Spin Row",
                             value: 50,
                             min: 0,
                             max: 100,
@@ -53,9 +53,9 @@ public sealed class ListsPage : ComposedWidget
     {
         return new AdwPreferencesGroup {
             Rows = {
-                new AdwActionRow("Rows Have a Title", "They also have a subtitle"),
+                new AdwActionRow(title: "Rows Have a Title", subtitle: "They also have a subtitle"),
                 new AdwActionRow("Rows Can Have Suffix Widgets") {
-                    Suffixes = { new AdwButton("Action", () => { }) },
+                    Suffixes = { new AdwButton(label: "Action", onPressed: () => { }) },
                 },
             },
         };
@@ -97,16 +97,16 @@ public sealed class ListsPage : ComposedWidget
                 new AdwEntryRow("Entry Row"),
                 new AdwEntryRow("Entry With Confirmation") {
                     Suffix = Demo.IconButton(
-                        MaterialIcons.Check,
-                        () => host.Toast("Changes applied")
+                        icon: MaterialIcons.Check,
+                        onPressed: () => host.Toast("Changes applied")
                     ),
                 },
                 new AdwEntryRow("Entry With Suffix") {
                     Suffix = new Tooltip(
-                        "Copy",
-                        Demo.IconButton(
-                            MaterialIcons.ContentCopy,
-                            () => host.Toast("Copied to clipboard")
+                        message: "Copy",
+                        child: Demo.IconButton(
+                            icon: MaterialIcons.ContentCopy,
+                            onPressed: () => host.Toast("Copied to clipboard")
                         )
                     ),
                 },
@@ -121,10 +121,10 @@ public sealed class ListsPage : ComposedWidget
         // a full version needs a filter entry inside the AdwComboRow popover.
         return new AdwPreferencesGroup("Combo Rows") {
             Rows = {
-                new AdwComboRow("Combo Row", ["Foo", "Bar", "Baz"]),
+                new AdwComboRow(title: "Combo Row", items: ["Foo", "Bar", "Baz"]),
                 new AdwComboRow(
-                    "Enumeration Combo Row",
-                    Licenses,
+                    title: "Enumeration Combo Row",
+                    items: Licenses,
                     subtitle: "This combo row was created from an enumeration"
                 ),
             },
@@ -143,10 +143,10 @@ public sealed class ListsPage : ComposedWidget
                 },
                 new AdwExpanderRow("Expander Row With an Action") {
                     HeaderSuffix = new Tooltip(
-                        "Copy",
-                        Demo.IconButton(
-                            MaterialIcons.ContentCopy,
-                            () => host.Toast("Copied to clipboard")
+                        message: "Copy",
+                        child: Demo.IconButton(
+                            icon: MaterialIcons.ContentCopy,
+                            onPressed: () => host.Toast("Copied to clipboard")
                         )
                     ),
                     Rows = {
@@ -168,15 +168,9 @@ public sealed class ListsPage : ComposedWidget
         };
     }
 
-    private static Widget Nested()
-    {
-        return new AdwActionRow("A Nested Row");
-    }
+    private static Widget Nested() => new AdwActionRow("A Nested Row");
 
-    private static Widget AnotherNested()
-    {
-        return new AdwActionRow("Another Nested Row");
-    }
+    private static Widget AnotherNested() => new AdwActionRow("Another Nested Row");
 
     private static Widget PropertyRowsGroup(ThemeData theme)
     {
@@ -191,8 +185,16 @@ public sealed class ListsPage : ComposedWidget
                         mainAxisSize: MainAxisSize.Min
                     ) {
                         Children = {
-                            new Label("Property Row", AdwTypography.Caption, theme.TextSecondary),
-                            new Label("Value", AdwTypography.Body, theme.OnSurface),
+                            new Label(
+                                text: "Property Row",
+                                style: AdwTypography.Caption,
+                                color: theme.TextSecondary
+                            ),
+                            new Label(
+                                text: "Value",
+                                style: AdwTypography.Body,
+                                color: theme.OnSurface
+                            ),
                         },
                     },
                 },
@@ -203,7 +205,7 @@ public sealed class ListsPage : ComposedWidget
     private static Widget SuffixGroup()
     {
         return new AdwPreferencesGroup("Groups With Suffix") {
-            HeaderSuffix = new AdwButton("Suffix", () => { }) {
+            HeaderSuffix = new AdwButton(label: "Suffix", onPressed: () => { }) {
                 IconName = MaterialIcons.Add,
                 Style = AdwButtonStyle.Flat,
                 Compact = true,
@@ -216,12 +218,19 @@ public sealed class ListsPage : ComposedWidget
     {
         return new AdwPreferencesGroup("Button Rows") {
             Rows = {
-                new AdwButtonRow("Add Input Source", () => { }, MaterialIcons.Add),
-                new AdwButtonRow("Add Calendar", () => { }) {
+                new AdwButtonRow(
+                    title: "Add Input Source",
+                    onPressed: () => { },
+                    iconName: MaterialIcons.Add
+                ),
+                new AdwButtonRow(title: "Add Calendar", onPressed: () => { }) {
                     EndIconName = MaterialIcons.OpenInNew,
                 },
-                new AdwButtonRow("Delete Event", () => { }) { Destructive = true },
-                new AdwButtonRow("Search", () => { }) { Suggested = true },
+                new AdwButtonRow(
+                    title: "Delete Event",
+                    onPressed: () => { }
+                ) { Destructive = true },
+                new AdwButtonRow(title: "Search", onPressed: () => { }) { Suggested = true },
             },
         };
     }

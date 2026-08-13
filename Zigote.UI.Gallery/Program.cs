@@ -15,10 +15,7 @@ namespace Gallery;
 // there is no reason for a phone build to have its own divergent startup path.
 public static class Program
 {
-    public static void Main()
-    {
-        new GalleryApp().Run();
-    }
+    public static void Main() => new GalleryApp().Run();
 }
 
 /// <summary>
@@ -77,7 +74,7 @@ internal sealed class GalleryApp : MaterialApp
                 Delegates = [GalleryL10n.Delegate],
                 SupportedLocales = [.. GalleryL10n.SupportedLocales],
                 FallbackLocale = Locale.En,
-                OnLocaleChanged = locale => GalleryFonts.Apply(App, locale),
+                OnLocaleChanged = locale => GalleryFonts.Apply(app: App, locale: locale),
                 Child = _navigator,
             }
         );
@@ -96,7 +93,7 @@ internal sealed class GalleryApp : MaterialApp
         base.OnInit();
         if (App is not { } app) return;
 
-        DevTools.Install(app, DevToolsProfile.TwoD);
+        DevTools.Install(app: app, profile: DevToolsProfile.TwoD);
 
         // The language switcher renders every locale's native name regardless of the active
         // face, so the pan-Unicode font is also registered as its own family.
@@ -105,22 +102,26 @@ internal sealed class GalleryApp : MaterialApp
         // The scope resolves the system locale on first build; mirror that resolution here so a
         // CJK/Arabic boot locale gets its pan-Unicode face before the first frame.
         var boot = LocaleResolution.Resolve(
-            Locale.System,
-            GalleryL10n.SupportedLocales,
-            Locale.En
+            preferred: Locale.System,
+            supported: GalleryL10n.SupportedLocales,
+            fallback: Locale.En
         );
-        GalleryFonts.Apply(app, boot);
+        GalleryFonts.Apply(app: app, locale: boot);
     }
 
     private List<Page> BuildPages(GalleryRoute route)
     {
-        _home ??= new HomePage(_theme, _navigation);
+        _home ??= new HomePage(theme: _theme, navigation: _navigation);
         var pages = new List<Page> {
-            new MaterialPage(_home, new ValueKey<string>("home"), "home"),
+            new MaterialPage(child: _home, key: new ValueKey<string>("home"), name: "home"),
         };
 
         if (route.DemoId is { } id && DemoRegistry.Find(id) is { } demo)
-            pages.Add(new MaterialPage(new DemoPage(demo), new ValueKey<string>(id), id));
+        {
+            pages.Add(
+                new MaterialPage(child: new DemoPage(demo), key: new ValueKey<string>(id), name: id)
+            );
+        }
 
         return pages;
     }

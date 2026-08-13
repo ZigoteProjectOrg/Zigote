@@ -35,14 +35,16 @@ public class Transform(Offset translation, Widget? child = null) : Widget
 
     public Widget? Child { get; set; } = child;
 
-    public static Transform Translate(float dx, float dy, Widget? child = null)
-    {
-        return new Transform(new Offset(dx, dy), child);
-    }
+    private bool HasAffine => Scale != 1f || RotationRadians != 0f;
+
+    public static Transform Translate(float dx, float dy, Widget? child = null) => new(
+        translation: new Offset(x: dx, y: dy),
+        child: child
+    );
 
     public static Transform Rotate(float radians, Widget? child = null, Offset? origin = null)
     {
-        return new Transform(Offset.Zero, child) {
+        return new Transform(translation: Offset.Zero, child: child) {
             RotationRadians = radians,
             Origin = origin,
         };
@@ -50,13 +52,11 @@ public class Transform(Offset translation, Widget? child = null) : Widget
 
     public static Transform Scaled(float scale, Widget? child = null, Offset? origin = null)
     {
-        return new Transform(Offset.Zero, child) {
+        return new Transform(translation: Offset.Zero, child: child) {
             Scale = scale,
             Origin = origin,
         };
     }
-
-    private bool HasAffine => Scale != 1f || RotationRadians != 0f;
 
     /// <summary>
     ///     The full transform in layout (absolute) coordinates:
@@ -64,14 +64,14 @@ public class Transform(Offset translation, Widget? child = null) : Widget
     /// </summary>
     private Matrix2D BuildMatrix()
     {
-        var origin = Origin ?? new Offset(_size.Width * 0.5f, _size.Height * 0.5f);
-        var px = Bounds.X + origin.X;
-        var py = Bounds.Y + origin.Y;
+        var origin = Origin ?? new Offset(x: _size.Width * 0.5f, y: _size.Height * 0.5f);
+        float px = Bounds.X + origin.X;
+        float py = Bounds.Y + origin.Y;
 
-        var m = Matrix2D.Translation(Translation.X + px, Translation.Y + py);
+        var m = Matrix2D.Translation(dx: Translation.X + px, dy: Translation.Y + py);
         if (RotationRadians != 0f) m *= Matrix2D.Rotation(RotationRadians);
-        if (Scale != 1f) m *= Matrix2D.Scale(Scale, Scale);
-        return m * Matrix2D.Translation(-px, -py);
+        if (Scale != 1f) m *= Matrix2D.Scale(sx: Scale, sy: Scale);
+        return m * Matrix2D.Translation(dx: -px, dy: -py);
     }
 
     public override Size Measure(Constraints c)
@@ -84,10 +84,10 @@ public class Transform(Offset translation, Widget? child = null) : Widget
     {
         // Layout is untransformed — Transform does not move its slot, only its paint/hit position.
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         Child?.Layout(origin);
     }
@@ -103,7 +103,7 @@ public class Transform(Offset translation, Widget? child = null) : Widget
         }
         else
         {
-            paint.PushTranslate(Translation.X, Translation.Y);
+            paint.PushTranslate(dx: Translation.X, dy: Translation.Y);
             Child.Paint(paint);
             paint.PopTranslate();
         }
@@ -114,15 +114,16 @@ public class Transform(Offset translation, Widget? child = null) : Widget
         if (Child is null) return null;
         if (!HasAffine)
             // Invert the translation so the point maps back into the child's laid-out space.
-            return Child.HitTest(new Offset(point.X - Translation.X, point.Y - Translation.Y));
+        {
+            return Child.HitTest(
+                new Offset(x: point.X - Translation.X, y: point.Y - Translation.Y)
+            );
+        }
 
         // A singular transform (scale 0) paints nothing hit-testable.
         if (!BuildMatrix().TryInvert(out var inverse)) return null;
         return Child.HitTest(inverse.Apply(point));
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(Child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Child);
 }

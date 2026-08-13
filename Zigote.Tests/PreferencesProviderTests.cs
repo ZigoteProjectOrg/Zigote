@@ -8,11 +8,11 @@ namespace Zigote.Tests;
 
 internal sealed class EditorTestPrefs : PreferencesProvider
 {
-    public EditorTestPrefs(PreferenceStore store) : base(store, "editor")
+    public EditorTestPrefs(PreferenceStore store) : base(store: store, prefix: "editor")
     {
-        ShowGrid = Register("showGrid", true);
-        UiScale = Register("uiScale", 1.0);
-        Theme = Register("theme", PrefTheme.Dark);
+        ShowGrid = Register(key: "showGrid", defaultValue: true);
+        UiScale = Register(key: "uiScale", defaultValue: 1.0);
+        Theme = Register(key: "theme", defaultValue: PrefTheme.Dark);
     }
 
     public Preference<bool> ShowGrid { get; }
@@ -22,10 +22,10 @@ internal sealed class EditorTestPrefs : PreferencesProvider
 
 internal sealed class GameplayTestPrefs : PreferencesProvider
 {
-    public GameplayTestPrefs(PreferenceStore store) : base(store, "gameplay")
+    public GameplayTestPrefs(PreferenceStore store) : base(store: store, prefix: "gameplay")
     {
-        Difficulty = Register("difficulty", 2);
-        MasterVolume = Register("masterVolume", 0.8);
+        Difficulty = Register(key: "difficulty", defaultValue: 2);
+        MasterVolume = Register(key: "masterVolume", defaultValue: 0.8);
     }
 
     public Preference<int> Difficulty { get; }
@@ -43,9 +43,7 @@ public sealed class PreferencesProviderTests : IDisposable
         {
             _dir.Delete(true);
         }
-        catch (IOException)
-        {
-        }
+        catch (IOException) { }
     }
 
     [Fact]
@@ -57,7 +55,7 @@ public sealed class PreferencesProviderTests : IDisposable
 
         editor.ShowGrid.Value = false;
 
-        Assert.Equal("editor.showGrid", editor.ShowGrid.Key);
+        Assert.Equal(expected: "editor.showGrid", actual: editor.ShowGrid.Key);
         Assert.True(backing.Contains("editor.showGrid"));
     }
 
@@ -69,9 +67,9 @@ public sealed class PreferencesProviderTests : IDisposable
         var gameplay = new GameplayTestPrefs(store);
 
         var providers = store.Providers;
-        Assert.Equal(2, providers.Count);
-        Assert.Same(editor, providers[0]);
-        Assert.Same(gameplay, providers[1]);
+        Assert.Equal(expected: 2, actual: providers.Count);
+        Assert.Same(expected: editor, actual: providers[0]);
+        Assert.Same(expected: gameplay, actual: providers[1]);
     }
 
     [Fact]
@@ -81,12 +79,12 @@ public sealed class PreferencesProviderTests : IDisposable
         var editor = new EditorTestPrefs(store);
 
         Assert.Equal(
-            ["editor.showGrid", "editor.uiScale", "editor.theme"],
-            editor.Preferences.Select(p => p.Key)
+            expected: ["editor.showGrid", "editor.uiScale", "editor.theme"],
+            actual: editor.Preferences.Select(p => p.Key)
         );
         Assert.Equal(
-            [typeof(bool), typeof(double), typeof(PrefTheme)],
-            editor.Preferences.Select(p => p.ValueType)
+            expected: [typeof(bool), typeof(double), typeof(PrefTheme)],
+            actual: editor.Preferences.Select(p => p.ValueType)
         );
     }
 
@@ -103,15 +101,18 @@ public sealed class PreferencesProviderTests : IDisposable
         foreach (var provider in store.Providers)
         foreach (var preference in provider.Preferences)
         {
-            var key = preference.Key;
+            string key = preference.Key;
             subscriptions.Add(preference.Observe(() => refreshed.Add(key)));
         }
 
         editor.UiScale.Value = 2.0;
         editor.Theme.Value = PrefTheme.Light;
-        ((IPreference)editor.UiScale).Reset();
+        editor.UiScale.Reset();
 
-        Assert.Equal(["editor.uiScale", "editor.theme", "editor.uiScale"], refreshed);
+        Assert.Equal(
+            expected: ["editor.uiScale", "editor.theme", "editor.uiScale"],
+            actual: refreshed
+        );
         foreach (var subscription in subscriptions) subscription.Dispose();
     }
 
@@ -130,12 +131,12 @@ public sealed class PreferencesProviderTests : IDisposable
         editor.Reset();
 
         Assert.True(editor.ShowGrid.Value);
-        Assert.Equal(1.0, editor.UiScale.Value);
+        Assert.Equal(expected: 1.0, actual: editor.UiScale.Value);
         Assert.False(editor.ShowGrid.IsSet);
         Assert.False(backing.Contains("editor.showGrid"));
         Assert.False(backing.Contains("editor.uiScale"));
 
-        Assert.Equal(5, gameplay.Difficulty.Value);
+        Assert.Equal(expected: 5, actual: gameplay.Difficulty.Value);
         Assert.True(gameplay.Difficulty.IsSet);
         Assert.True(backing.Contains("gameplay.difficulty"));
     }
@@ -146,7 +147,7 @@ public sealed class PreferencesProviderTests : IDisposable
         using var store = new PreferenceStore(new InMemoryKeyValueStore());
         var editor = new EditorTestPrefs(store);
 
-        var runs = 0;
+        int runs = 0;
         using var effect = new Effect(() =>
             {
                 _ = editor.ShowGrid.Value;
@@ -154,13 +155,13 @@ public sealed class PreferencesProviderTests : IDisposable
                 runs++;
             }
         );
-        Assert.Equal(1, runs);
+        Assert.Equal(expected: 1, actual: runs);
 
         editor.ShowGrid.Value = false; // 2
         editor.UiScale.Value = 2.0; // 3
         editor.Reset(); // both change back, but batched: 4, not 5
 
-        Assert.Equal(4, runs);
+        Assert.Equal(expected: 4, actual: runs);
     }
 
     [Fact]
@@ -169,7 +170,7 @@ public sealed class PreferencesProviderTests : IDisposable
         using var store = new PreferenceStore(new InMemoryKeyValueStore());
         var editor = new EditorTestPrefs(store);
 
-        var runs = 0;
+        int runs = 0;
         using var effect = new Effect(() =>
             {
                 _ = editor.ShowGrid.Value;
@@ -179,7 +180,7 @@ public sealed class PreferencesProviderTests : IDisposable
 
         editor.Reset(); // every value already equals its default — no notifications
 
-        Assert.Equal(1, runs);
+        Assert.Equal(expected: 1, actual: runs);
         Assert.False(editor.ShowGrid.IsSet);
     }
 
@@ -196,15 +197,15 @@ public sealed class PreferencesProviderTests : IDisposable
 
         store.ResetAll();
 
-        Assert.Equal(PrefTheme.Dark, editor.Theme.Value);
-        Assert.Equal(0.8, gameplay.MasterVolume.Value);
+        Assert.Equal(expected: PrefTheme.Dark, actual: editor.Theme.Value);
+        Assert.Equal(expected: 0.8, actual: gameplay.MasterVolume.Value);
         Assert.Empty(backing.Keys());
     }
 
     [Fact]
     public void Provider_RoundTrips_OnSqliteBackend()
     {
-        var dbPath = Path.Combine(_dir.FullName, "prefs.db");
+        string dbPath = Path.Combine(path1: _dir.FullName, path2: "prefs.db");
 
         using (var store = new PreferenceStore(new SqliteKeyValueStore(dbPath)))
         {
@@ -217,8 +218,8 @@ public sealed class PreferencesProviderTests : IDisposable
         using var reopened = new PreferenceStore(new SqliteKeyValueStore(dbPath));
         var prefs = new EditorTestPrefs(reopened);
 
-        Assert.Equal(1.75, prefs.UiScale.Value);
-        Assert.Equal(PrefTheme.Light, prefs.Theme.Value);
+        Assert.Equal(expected: 1.75, actual: prefs.UiScale.Value);
+        Assert.Equal(expected: PrefTheme.Light, actual: prefs.Theme.Value);
         Assert.True(prefs.UiScale.IsSet);
         Assert.False(prefs.ShowGrid.IsSet);
         Assert.True(prefs.ShowGrid.Value);

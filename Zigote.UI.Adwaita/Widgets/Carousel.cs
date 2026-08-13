@@ -27,24 +27,24 @@ public sealed class AdwCarousel : Widget
     internal readonly Signal<int> PositionSignal = new(0);
 
     private readonly SmoothScroller _scroller;
-    private Size _size;
-    private float _pageWidth;
+    private bool _armed;
+    private float _dragStartOffset;
+    private float _dragStartX;
+    private bool _dragging;
     private float _lastPageWidth = -1f;
+    private float _pageWidth;
+    private Size _size;
+    private bool _touchDragging;
     private float _wheelAccum;
+
     private long _wheelLastMs;
+
     // Not long.MinValue: `now - long.MinValue` overflows to a large NEGATIVE number, which reads as
     // "paged a moment ago" and made the debounce below swallow every wheel event ever — the whole
     // wheel and trackpad path was dead until the first drag. Halved, the subtraction stays in range.
     private long _wheelPagedMs = long.MinValue / 2;
-    private bool _armed;
-    private bool _dragging;
-    private bool _touchDragging;
-    private float _dragStartX;
-    private float _dragStartOffset;
 
-    public AdwCarousel(params Widget[] pages) : this((IEnumerable<Widget>)pages)
-    {
-    }
+    public AdwCarousel(params Widget[] pages) : this((IEnumerable<Widget>)pages) { }
 
     public AdwCarousel(IEnumerable<Widget> pages)
     {
@@ -70,7 +70,7 @@ public sealed class AdwCarousel : Widget
 
     private void GoTo(int index)
     {
-        index = Math.Clamp(index, 0, Math.Max(0, Pages.Count - 1));
+        index = Math.Clamp(value: index, min: 0, max: Math.Max(val1: 0, val2: Pages.Count - 1));
         if (_pageWidth > 0f) _scroller.AnimateTo(index * _pageWidth);
         SetPosition(index);
     }
@@ -86,47 +86,50 @@ public sealed class AdwCarousel : Widget
     {
         float width;
         if (float.IsFinite(c.MaxWidth))
-        {
             width = c.MaxWidth;
-        }
         else
         {
             // Unbounded width: size to the widest page's intrinsic width.
             width = 0f;
             foreach (var page in Pages)
+            {
                 width = MathF.Max(
-                    width,
-                    page.Measure(
+                    x: width,
+                    y: page.Measure(
                         new Constraints(
-                            0,
-                            float.PositiveInfinity,
-                            0,
-                            c.MaxHeight
+                            minWidth: 0,
+                            maxWidth: float.PositiveInfinity,
+                            minHeight: 0,
+                            maxHeight: c.MaxHeight
                         )
                     ).Width
                 );
+            }
         }
 
-        var height = 0f;
+        float height = 0f;
         foreach (var page in Pages)
+        {
             height = MathF.Max(
-                height,
-                page.Measure(
+                x: height,
+                y: page.Measure(
                     new Constraints(
-                        width,
-                        width,
-                        0,
-                        c.MaxHeight
+                        minWidth: width,
+                        maxWidth: width,
+                        minHeight: 0,
+                        maxHeight: c.MaxHeight
                     )
                 ).Height
             );
+        }
+
         if (float.IsFinite(c.MaxHeight)) height = c.MaxHeight;
 
         // Re-measure tight so every page fills the resolved page box.
-        foreach (var page in Pages) page.Measure(Constraints.Tight(width, height));
+        foreach (var page in Pages) page.Measure(Constraints.Tight(width: width, height: height));
 
         _pageWidth = width;
-        _scroller.Max = MathF.Max(0f, (Pages.Count - 1) * width);
+        _scroller.Max = MathF.Max(x: 0f, y: (Pages.Count - 1) * width);
         _scroller.Reclamp();
         if (MathF.Abs(width - _lastPageWidth) > 0.5f)
         {
@@ -135,22 +138,22 @@ public sealed class AdwCarousel : Widget
             _scroller.JumpTo(PositionSignal.Peek() * width);
         }
 
-        _size = c.Constrain(new Size(width, height));
+        _size = c.Constrain(new Size(width: width, height: height));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
-        var x = origin.X - _scroller.Offset;
+        float x = origin.X - _scroller.Offset;
         foreach (var page in Pages)
         {
-            page.Layout(new Offset(x, origin.Y));
+            page.Layout(new Offset(x: x, y: origin.Y));
             x += _pageWidth;
         }
     }
@@ -171,7 +174,7 @@ public sealed class AdwCarousel : Widget
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
 
         // ponytail: an Interactive carousel claims the whole pointer so a drag can start anywhere
         // (nearly every widget claims hits, so "children first" would leave no drag surface).
@@ -202,7 +205,7 @@ public sealed class AdwCarousel : Widget
     public override void OnPointerMove(Offset point)
     {
         if (!_armed) return;
-        var dx = point.X - _dragStartX;
+        float dx = point.X - _dragStartX;
         if (!_dragging && MathF.Abs(dx) > DragSlop) _dragging = true;
         if (_dragging) _scroller.JumpTo(_dragStartOffset - dx);
     }
@@ -242,13 +245,13 @@ public sealed class AdwCarousel : Widget
     {
         if (!Interactive || Pages.Count < 2 || _pageWidth <= 0f)
         {
-            base.OnScroll(dx, dy);
+            base.OnScroll(dx: dx, dy: dy);
             return;
         }
 
         // Dominant axis; dy is negated so wheel-down means forward (matches ScrollView's signs).
-        var delta = MathF.Abs(dx) > MathF.Abs(dy) ? dx : -dy;
-        var now = Environment.TickCount64;
+        float delta = MathF.Abs(dx) > MathF.Abs(dy) ? dx : -dy;
+        long now = Environment.TickCount64;
         if (now - _wheelLastMs > WheelDebounceMs) _wheelAccum = 0f; // idle timeout: new gesture
         _wheelLastMs = now;
         if (now - _wheelPagedMs < WheelDebounceMs) return; // just paged: swallow the gesture tail
@@ -263,10 +266,8 @@ public sealed class AdwCarousel : Widget
 
     // ── Touch drag ──────────────────────────────────────────────────────────────
 
-    public override bool CanTouchScroll(bool vertical)
-    {
-        return Interactive && !vertical && Pages.Count > 1;
-    }
+    public override bool CanTouchScroll(bool vertical) =>
+        Interactive && !vertical && Pages.Count > 1;
 
     public override void OnTouchScroll(float dx, float dy)
     {
@@ -311,22 +312,19 @@ public sealed class AdwCarousel : Widget
         _scroller.Dispose(); // ticker recreated lazily on the next animation
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return Pages;
-    }
+    public override IEnumerable<Widget> GetChildren() => Pages;
 
     /// <summary>Only the current page is focus/semantics-reachable.</summary>
     public override IEnumerable<Widget> GetVisibleChildren()
     {
-        var i = PositionSignal.Peek();
+        int i = PositionSignal.Peek();
         if (i >= 0 && i < Pages.Count) yield return Pages[i];
     }
 
-    public override int DebugStateHash()
-    {
-        return HashCode.Combine(_scroller.Offset, Pages.Count);
-    }
+    public override int DebugStateHash() => HashCode.Combine(
+        value1: _scroller.Offset,
+        value2: Pages.Count
+    );
 }
 
 /// <summary>8px page dots for an <see cref="AdwCarousel" />; clicking a dot jumps to its page.</summary>
@@ -335,11 +333,11 @@ public sealed class AdwCarouselIndicatorDots(AdwCarousel carousel) : ComposedWid
     protected override Widget Build(BuildContext context)
     {
         return CarouselIndicator.Build(
-            context,
-            carousel,
-            8f,
-            8f,
-            4f
+            context: context,
+            carousel: carousel,
+            width: 8f,
+            height: 8f,
+            radius: 4f
         );
     }
 }
@@ -350,11 +348,11 @@ public sealed class AdwCarouselIndicatorLines(AdwCarousel carousel) : ComposedWi
     protected override Widget Build(BuildContext context)
     {
         return CarouselIndicator.Build(
-            context,
-            carousel,
-            24f,
-            3f,
-            1.5f
+            context: context,
+            carousel: carousel,
+            width: 24f,
+            height: 3f,
+            radius: 1.5f
         );
     }
 }
@@ -376,11 +374,11 @@ file static class CarouselIndicator
         var theme = ThemeProvider.Of(context);
         return new Watch(() =>
             {
-                var pos = carousel.PositionSignal.Value;
+                int pos = carousel.PositionSignal.Value;
                 var row = new Row(spacing: Spacing.Sm, mainAxisSize: MainAxisSize.Min);
-                for (var i = 0; i < carousel.Pages.Count; i++)
+                for (int i = 0; i < carousel.Pages.Count; i++)
                 {
-                    var index = i;
+                    int index = i;
                     row.Children.Add(
                         new Pressable {
                             FocusRadius = radius,
@@ -388,16 +386,19 @@ file static class CarouselIndicator
                             SelectedState = index == pos,
                             OnPressed = () => carousel.Position = index,
                             Child = new SizedBox(
-                                width,
-                                height,
+                                width: width,
+                                height: height,
                                 // The carousel's own indicators: currentColor for the current page,
                                 // 30% of it for the rest — the same relationship every Adwaita
                                 // indicator (tab bar, view switcher badge) uses.
-                                new DecoratedBox {
+                                child: new DecoratedBox {
                                     Radius = radius,
                                     Fill = index == pos
                                         ? theme.OnSurface
-                                        : AdwPalette.Fill(theme, AdwStyle.DimmerOpacity),
+                                        : AdwPalette.Fill(
+                                            theme: theme,
+                                            percent: AdwStyle.DimmerOpacity
+                                        ),
                                 }
                             ),
                         }

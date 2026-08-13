@@ -16,9 +16,9 @@ public sealed class AdwEntryRow : ComposedWidget
     private TextField? _field;
     private bool _floating;
     private bool _obscure;
+    private Widget? _suffix;
     private string _text;
     private string _title;
-    private Widget? _suffix;
 
     public AdwEntryRow(string title = "", string text = "", Action<string>? onChanged = null)
     {
@@ -30,7 +30,7 @@ public sealed class AdwEntryRow : ComposedWidget
     public string Title
     {
         get => _title;
-        set => this.Set(ref _title, value);
+        set => this.Set(field: ref _title, value: value);
     }
 
     public Action<string>? OnChanged { get; set; }
@@ -66,7 +66,7 @@ public sealed class AdwEntryRow : ComposedWidget
     public Widget? Suffix
     {
         get => _suffix;
-        set => this.Set(ref _suffix, value);
+        set => this.Set(field: ref _suffix, value: value);
     }
 
     protected override Widget Build(BuildContext context)
@@ -88,7 +88,7 @@ public sealed class AdwEntryRow : ComposedWidget
         };
         _field.OnFocusChange = _ => SyncFloat();
 
-        _caption = new Label("", AdwTypography.Caption, p.DimLabel) {
+        _caption = new Label(text: "", style: AdwTypography.Caption, color: p.DimLabel) {
             MaxLines = 1,
             Overflow = TextOverflow.Ellipsis,
         };
@@ -106,15 +106,24 @@ public sealed class AdwEntryRow : ComposedWidget
             // AnimatedSize eases the caption slot between 0 and its natural height, clipping while
             // in flight — the ~150ms title float.
             Children = {
-                new AnimatedSize(_captionBox, 0.15f, Curves.EaseOut),
+                new AnimatedSize(child: _captionBox, duration: 0.15f, curve: Curves.EaseOut),
                 _field,
             },
         };
 
         var row = new Row(crossAxisAlignment: CrossAxisAlignment.Center);
         // Leading inset + min-height strut (see AdwActionRow).
-        row.Children.Add(new SizedBox(AdwMetrics.RowPaddingX, AdwMetrics.RowMinHeight));
-        row.Children.Add(new Expanded(new Padding(EdgeInsets.Symmetric(0f, Spacing.Xs), column)));
+        row.Children.Add(
+            new SizedBox(width: AdwMetrics.RowPaddingX, height: AdwMetrics.RowMinHeight)
+        );
+        row.Children.Add(
+            new Expanded(
+                new Padding(
+                    padding: EdgeInsets.Symmetric(horizontal: 0f, vertical: Spacing.Xs),
+                    child: column
+                )
+            )
+        );
         if (Suffix is not null)
         {
             // `> .editable-area > .apply-button { margin-left: 6px }`.
@@ -128,7 +137,7 @@ public sealed class AdwEntryRow : ComposedWidget
 
     private void SyncFloat()
     {
-        var floating = _field!.Focused || _field.Text.Length > 0;
+        bool floating = _field!.Focused || _field.Text.Length > 0;
         if (floating == _floating) return;
         _floating = floating;
         ApplyFloat();
@@ -159,9 +168,9 @@ public sealed class AdwEntryRow : ComposedWidget
 public sealed class AdwPasswordEntryRow : ComposedWidget
 {
     private bool _revealed;
-    private string _title;
-    private string _text;
     private AdwEntryRow? _row;
+    private string _text;
+    private string _title;
 
     public AdwPasswordEntryRow(
         string title = "",
@@ -176,7 +185,7 @@ public sealed class AdwPasswordEntryRow : ComposedWidget
     public string Title
     {
         get => _title;
-        set => this.Set(ref _title, value);
+        set => this.Set(field: ref _title, value: value);
     }
 
     /// <summary>
@@ -199,9 +208,9 @@ public sealed class AdwPasswordEntryRow : ComposedWidget
     protected override Widget Build(BuildContext context)
     {
         var row = _row = new AdwEntryRow(
-            Title,
-            _text,
-            v =>
+            title: Title,
+            text: _text,
+            onChanged: v =>
             {
                 _text = v;
                 OnChanged?.Invoke(v);

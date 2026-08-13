@@ -20,49 +20,56 @@ public sealed class WelcomePage : ComposedWidget
         var host = GalleryHost.Of(context);
 
         var start = new AdwPreferencesGroup(
-            "Start Here",
-            "A few pages that show what the toolkit is made of."
+            title: "Start Here",
+            description: "A few pages that show what the toolkit is made of."
         );
-        foreach (var (page, icon, blurb) in StartHere)
+        foreach ((string page, string icon, string blurb) in StartHere)
+        {
             start.Rows.Add(
-                new AdwActionRow(page, blurb) {
+                new AdwActionRow(title: page, subtitle: blurb) {
                     IconName = icon,
                     ShowChevron = true,
                     OnActivated = () => host.Open(page),
                 }
             );
+        }
 
         return new GalleryPage(
-            "Adwaita on Zigote UI",
+            title: "Adwaita on Zigote UI",
+            description:
             "The GNOME widget set, laid out and animated by Zigote's own retained widget tree.",
-            MaterialIcons.AutoAwesome
+            iconName: MaterialIcons.AutoAwesome
         ) {
             Children = {
                 Demo.Bar(
-                    new AdwButton("Preferences", host.ShowPreferences) {
+                    new AdwButton(label: "Preferences", onPressed: host.ShowPreferences) {
                         Style = AdwButtonStyle.Suggested,
                         Pill = true,
                     },
-                    new AdwButton("Shortcuts", GalleryShortcuts.Show) { Pill = true },
-                    new AdwButton("New Window", host.App.NewWindow) { Pill = true }
+                    new AdwButton(label: "Shortcuts", onPressed: GalleryShortcuts.Show) {
+                        Pill = true,
+                    },
+                    new AdwButton(label: "New Window", onPressed: host.App.NewWindow) {
+                        Pill = true,
+                    }
                 ),
                 start,
                 new AdwPreferencesGroup(
-                    "In This Build",
-                    "Everything in the sidebar is live — no screenshots, no mock rows."
+                    title: "In This Build",
+                    description: "Everything in the sidebar is live — no screenshots, no mock rows."
                 ) {
                     Rows = {
                         new AdwActionRow(
-                            $"{GalleryRegistry.Entries.Length} pages",
-                            "One per widget family, each with its controls wired up"
+                            title: $"{GalleryRegistry.Entries.Length} pages",
+                            subtitle: "One per widget family, each with its controls wired up"
                         ) { IconName = MaterialIcons.Widgets },
                         new AdwActionRow(
-                            "9 system accents",
-                            "Switch appearance or accent and every open window follows"
+                            title: "9 system accents",
+                            subtitle: "Switch appearance or accent and every open window follows"
                         ) { IconName = MaterialIcons.ColorLens },
                         new AdwActionRow(
-                            "One adaptive shell",
-                            "The panes fold into a single page below 620 px"
+                            title: "One adaptive shell",
+                            subtitle: "The panes fold into a single page below 620 px"
                         ) { IconName = MaterialIcons.Devices },
                     },
                 },

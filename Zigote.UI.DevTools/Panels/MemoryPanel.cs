@@ -5,11 +5,11 @@ using Zigote.UI.Charts.Marks;
 using Zigote.UI.Debug;
 using Zigote.UI.DevTools.Diagnostics;
 using Zigote.UI.DevTools.Widgets;
+using Zigote.UI.Host;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.DevTools.Panels;
 
@@ -22,95 +22,95 @@ public sealed class MemoryPanel : IDevPanel
 {
     private const double TextRefreshMs = 250.0;
 
-    private static readonly Color Blue = Color.Rgb(10, 132, 255);
-    private static readonly Color Green = Color.Rgb(48, 209, 88);
-    private static readonly Color Orange = Color.Rgb(255, 159, 10);
-    private static readonly Color Red = Color.Rgb(255, 69, 58);
-    private static readonly Color Yellow = Color.Rgb(255, 214, 10);
+    private static readonly Color Blue = Color.Rgb(r: 10, g: 132, b: 255);
+    private static readonly Color Green = Color.Rgb(r: 48, g: 209, b: 88);
+    private static readonly Color Orange = Color.Rgb(r: 255, g: 159, b: 10);
+    private static readonly Color Red = Color.Rgb(r: 255, g: 69, b: 58);
+    private static readonly Color Yellow = Color.Rgb(r: 255, g: 214, b: 10);
 
     private readonly DevChartCard _allocCard;
-    private readonly DevKeyValue _allocRate = new("Allocations", valueColor: Orange);
+    private readonly DevKeyValue _allocRate = new(key: "Allocations", valueColor: Orange);
     private readonly DevChartCard _gcCard;
     private readonly DevKeyValue _gcCounts = new("Gen 0 / 1 / 2");
     private readonly DevKeyValue _heapInfo = new("Heap");
-    private readonly DevMeter _managed = new("Managed heap", Green);
+    private readonly DevMeter _managed = new(key: "Managed heap", color: Green);
     private readonly DevChartCard _memCard;
     private readonly DevKeyValue _pause = new("GC pause");
-    private readonly DevMeter _unmanaged = new("Unmanaged", Blue);
-    private long _lastText;
+    private readonly CachedText _tAlloc = new();
+    private readonly CachedText _tGcCounts = new();
+    private readonly CachedText _tHeapInfo = new();
 
     // Per-readout caches: Refresh runs every frame while the panel is open, so all formatting goes
     // through CachedText (zero-alloc while the rendered text is unchanged).
     private readonly CachedText _tManaged = new();
-    private readonly CachedText _tUnmanaged = new();
-    private readonly CachedText _tAlloc = new();
-    private readonly CachedText _tGcCounts = new();
     private readonly CachedText _tPause = new();
-    private readonly CachedText _tHeapInfo = new();
+    private readonly CachedText _tUnmanaged = new();
+    private readonly DevMeter _unmanaged = new(key: "Unmanaged", color: Blue);
+    private long _lastText;
 
     public MemoryPanel()
     {
         var mem = DevChart.Sparkline();
         AddArea(
-            mem,
-            DevChartData.WorkingSetMb,
-            "working set",
-            Blue,
-            0.15f
+            chart: mem,
+            ring: DevChartData.WorkingSetMb,
+            name: "working set",
+            color: Blue,
+            op: 0.15f
         );
         AddArea(
-            mem,
-            DevChartData.GcHeapMb,
-            "GC heap",
-            Green,
-            0.25f
+            chart: mem,
+            ring: DevChartData.GcHeapMb,
+            name: "GC heap",
+            color: Green,
+            op: 0.25f
         );
         _memCard = new DevChartCard(
-            mem,
-            84f,
-            120f,
-            "Heap vs process — 2 min"
+            chart: mem,
+            height: 84f,
+            windowSeconds: 120f,
+            title: "Heap vs process — 2 min"
         );
 
         var alloc = DevChart.Sparkline();
         AddArea(
-            alloc,
-            DevChartData.AllocMbPerSec,
-            "alloc MB/s",
-            Orange,
-            0.3f
+            chart: alloc,
+            ring: DevChartData.AllocMbPerSec,
+            name: "alloc MB/s",
+            color: Orange,
+            op: 0.3f
         );
         _allocCard = new DevChartCard(
-            alloc,
-            60f,
-            120f,
-            "Allocation rate — MB/s"
+            chart: alloc,
+            height: 60f,
+            windowSeconds: 120f,
+            title: "Allocation rate — MB/s"
         );
 
         var gc = DevChart.Sparkline();
         AddLine(
-            gc,
-            DevChartData.Gen0PerSec,
-            "gen0 /s",
-            Yellow
+            chart: gc,
+            ring: DevChartData.Gen0PerSec,
+            name: "gen0 /s",
+            color: Yellow
         );
         AddLine(
-            gc,
-            DevChartData.Gen1PerSec,
-            "gen1 /s",
-            Orange
+            chart: gc,
+            ring: DevChartData.Gen1PerSec,
+            name: "gen1 /s",
+            color: Orange
         );
         AddLine(
-            gc,
-            DevChartData.Gen2PerSec,
-            "gen2 /s",
-            Red
+            chart: gc,
+            ring: DevChartData.Gen2PerSec,
+            name: "gen2 /s",
+            color: Red
         );
         _gcCard = new DevChartCard(
-            gc,
-            60f,
-            120f,
-            "GC collections /s"
+            chart: gc,
+            height: 60f,
+            windowSeconds: 120f,
+            title: "GC collections /s"
         );
     }
 
@@ -137,7 +137,14 @@ public sealed class MemoryPanel : IDevPanel
                 _gcCounts,
                 _pause,
                 new SizedBox(height: Spacing.Sm),
-                new Button("Force GC (gen 2)", () => GC.Collect(2, GCCollectionMode.Forced, true)) {
+                new Button(
+                    label: "Force GC (gen 2)",
+                    onPressed: () => GC.Collect(
+                        generation: 2,
+                        mode: GCCollectionMode.Forced,
+                        blocking: true
+                    )
+                ) {
                     Style = ButtonStyle.Outlined,
                 },
             },
@@ -146,23 +153,23 @@ public sealed class MemoryPanel : IDevPanel
 
     public void Refresh(float dt)
     {
-        var rev = DevChartData.Revision;
-        var now = DevChartData.Time;
+        int rev = DevChartData.Revision;
+        float now = DevChartData.Time;
         var t = App.Active?.Theme ?? ThemeData.Dark;
-        _memCard.Sync(rev, now, t);
-        _allocCard.Sync(rev, now, t);
-        _gcCard.Sync(rev, now, t);
+        _memCard.Sync(revision: rev, now: now, theme: t);
+        _allocCard.Sync(revision: rev, now: now, theme: t);
+        _gcCard.Sync(revision: rev, now: now, theme: t);
 
-        var ws = DebugStats.MemMb;
-        var heap = DebugStats.GcMb;
-        var unmanaged = MathF.Max(0f, ws - heap);
-        var total = MathF.Max(1f, ws);
+        float ws = DebugStats.MemMb;
+        float heap = DebugStats.GcMb;
+        float unmanaged = MathF.Max(x: 0f, y: ws - heap);
+        float total = MathF.Max(x: 1f, y: ws);
         _managed.Value = _tManaged.Update($"{heap:F1} MB");
         _managed.Fraction = heap / total;
         _unmanaged.Value = _tUnmanaged.Update($"{unmanaged:F0} MB  (native · runtime · GPU)");
         _unmanaged.Fraction = unmanaged / total;
 
-        var alloc = DevChartData.AllocMbPerSec.Latest.Value;
+        float alloc = DevChartData.AllocMbPerSec.Latest.Value;
         _allocRate.Value = _tAlloc.Update($"{alloc:F2} MB/s");
         _allocRate.ValueColor = alloc > 8f ? Orange : t.OnSurface;
 
@@ -175,7 +182,7 @@ public sealed class MemoryPanel : IDevPanel
 
     private void RefreshText(ThemeData t)
     {
-        var nowTs = Stopwatch.GetTimestamp();
+        long nowTs = Stopwatch.GetTimestamp();
         if ((nowTs - _lastText) * 1000.0 / Stopwatch.Frequency < TextRefreshMs) return;
         _lastText = nowTs;
         try
@@ -183,7 +190,7 @@ public sealed class MemoryPanel : IDevPanel
             var info = GC.GetGCMemoryInfo();
             _pause.Value = _tPause.Update($"{info.PauseTimePercentage:F2} % of time");
             _pause.ValueColor = t.Hint;
-            var frag = info.FragmentedBytes / (1024.0 * 1024.0);
+            double frag = info.FragmentedBytes / (1024.0 * 1024.0);
             _heapInfo.Value = _tHeapInfo.Update(
                 $"committed {info.TotalCommittedBytes / (1024.0 * 1024.0):F0} MB · frag {frag:F1} MB"
             );
@@ -198,7 +205,7 @@ public sealed class MemoryPanel : IDevPanel
     private static void AddArea(Chart chart, TimeSeriesRing ring, string name, Color color,
         float op)
     {
-        var m = AreaMark.Of(ring, s => s.Time, s => s.Value);
+        var m = AreaMark.Of(data: ring, x: s => s.Time, y: s => s.Value);
         m.Name = name;
         m.Color = color;
         m.Opacity = op;
@@ -207,7 +214,7 @@ public sealed class MemoryPanel : IDevPanel
 
     private static void AddLine(Chart chart, TimeSeriesRing ring, string name, Color color)
     {
-        var m = LineMark.Of(ring, s => s.Time, s => s.Value);
+        var m = LineMark.Of(data: ring, x: s => s.Time, y: s => s.Value);
         m.Name = name;
         m.Color = color;
         m.Interpolation = ChartInterpolation.Step;

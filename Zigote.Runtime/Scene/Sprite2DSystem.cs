@@ -23,15 +23,15 @@ namespace Zigote.Runtime.Scene;
 public sealed class Sprite2DSystem : IDisposable
 {
     private readonly Dictionary<int, float> _animElapsed = new();
+
+    // Second index on the UNRESOLVED path, so the per-frame lookup never has to canonicalise.
+    // Both are cleared together in Clear().
+    private readonly Dictionary<string, SpriteTexture?> _byRawPath = new();
     private readonly Camera2D _defaultCamera = new();
     private readonly Dictionary<(int Blend, int Stage, uint Shader), Material2D> _materials = new();
     private readonly Renderer2D _renderer;
     private readonly Dictionary<string, uint> _shaders = new();
     private readonly Dictionary<string, SpriteTexture?> _textures = new();
-
-    // Second index on the UNRESOLVED path, so the per-frame lookup never has to canonicalise.
-    // Both are cleared together in Clear().
-    private readonly Dictionary<string, SpriteTexture?> _byRawPath = new();
     private readonly Dictionary<string, (Tileset Set, SpriteFrame[] Frames)?> _tilesets = new();
 
     private readonly Dictionary<string, (Tileset Set, SpriteFrame[] Frames)?> _tilesetsByRawPath =
@@ -52,10 +52,7 @@ public sealed class Sprite2DSystem : IDisposable
     /// <summary>Draw batches emitted by the last <see cref="Render" /> (diagnostics).</summary>
     public int BatchCount => _renderer.BatchCount;
 
-    public void Dispose()
-    {
-        Clear();
-    }
+    public void Dispose() => Clear();
 
     /// <summary>Destroy every cached texture/shader (scene close, project switch, host dispose).</summary>
     public void Clear()
@@ -70,10 +67,7 @@ public sealed class Sprite2DSystem : IDisposable
     }
 
     /// <summary>Drop play-session animation state (play stop). Caches stay warm for edit mode.</summary>
-    public void ResetPlayState()
-    {
-        _animElapsed.Clear();
-    }
+    public void ResetPlayState() => _animElapsed.Clear();
 
     /// <summary>Load (and cache) a sprite texture by path; null when missing/undecodable (cached too).</summary>
     public SpriteTexture? GetTexture(string path, SpriteFilter filter = SpriteFilter.Linear,
@@ -85,10 +79,10 @@ public sealed class Sprite2DSystem : IDisposable
         // frame, and Path.GetFullPath allocates a fresh string every call — with a few hundred
         // sprites that was tens of KB of garbage per frame and periodic gen0 pauses, for a lookup
         // that almost always resolves to something already loaded.
-        if (_byRawPath.TryGetValue(path, out var byRaw)) return byRaw;
+        if (_byRawPath.TryGetValue(key: path, value: out var byRaw)) return byRaw;
 
-        var abs = Path.GetFullPath(path);
-        if (_textures.TryGetValue(abs, out var cached))
+        string abs = Path.GetFullPath(path);
+        if (_textures.TryGetValue(key: abs, value: out var cached))
         {
             _byRawPath[path] = cached;
             return cached;
@@ -96,11 +90,11 @@ public sealed class Sprite2DSystem : IDisposable
 
         var tex = File.Exists(abs)
             ? SpriteTexture.Load(
-                Device,
-                abs,
-                filter,
-                srgb,
-                wrap
+                device: Device,
+                path: abs,
+                filter: filter,
+                srgb: srgb,
+                wrap: wrap
             )
             : null;
         _textures[abs] = tex;
@@ -112,8 +106,8 @@ public sealed class Sprite2DSystem : IDisposable
     public uint GetShader(string path)
     {
         if (string.IsNullOrEmpty(path)) return 0;
-        var abs = Path.GetFullPath(path);
-        if (_shaders.TryGetValue(abs, out var cached)) return cached;
+        string abs = Path.GetFullPath(path);
+        if (_shaders.TryGetValue(key: abs, value: out uint cached)) return cached;
         uint handle = 0;
         try
         {
@@ -132,8 +126,13 @@ public sealed class Sprite2DSystem : IDisposable
     public void AdvanceAnimation(SceneNode node, float dt)
     {
         if (node is { Kind: NodeKind.Sprite, SpriteFps: > 0f })
-            _animElapsed[node.Id] = (_animElapsed.TryGetValue(node.Id, out var t) ? t : 0f) + dt;
-        for (var i = 0; i < node.Children.Count; i++) AdvanceAnimation(node.Children[i], dt);
+        {
+            _animElapsed[node.Id] =
+                (_animElapsed.TryGetValue(key: node.Id, value: out float t) ? t : 0f) + dt;
+        }
+
+        for (int i = 0; i < node.Children.Count; i++)
+            AdvanceAnimation(node: node.Children[i], dt: dt);
     }
 
     /// <summary>
@@ -143,14 +142,15 @@ public sealed class Sprite2DSystem : IDisposable
     /// </summary>
     public Mat4 ResolvePlayCamera(SceneNode root, float viewportW, float viewportH)
     {
-        if (Sprites.Camera is { } script) return script.ViewProjection(viewportW, viewportH);
+        if (Sprites.Camera is { } script)
+            return script.ViewProjection(viewportW: viewportW, viewportH: viewportH);
 
         var cam = FindOrthoCamera(root);
         if (cam != null)
         {
             var world = WorldTransform(cam);
-            _defaultCamera.Position = new Vec2(world.Position.X, world.Position.Y);
-            _defaultCamera.OrthoHeight = MathF.Max(0.01f, cam.CameraOrthoSize.Y);
+            _defaultCamera.Position = new Vec2(x: world.Position.X, y: world.Position.Y);
+            _defaultCamera.OrthoHeight = MathF.Max(x: 0.01f, y: cam.CameraOrthoSize.Y);
             _defaultCamera.Rotation = world.Rotation.ToEulerRadians().Z;
             _defaultCamera.Zoom = 1f;
         }
@@ -162,7 +162,7 @@ public sealed class Sprite2DSystem : IDisposable
             _defaultCamera.Zoom = 1f;
         }
 
-        return _defaultCamera.ViewProjection(viewportW, viewportH);
+        return _defaultCamera.ViewProjection(viewportW: viewportW, viewportH: viewportH);
     }
 
     /// <summary>
@@ -176,18 +176,18 @@ public sealed class Sprite2DSystem : IDisposable
         bool includeScriptQueue)
     {
         ComputeCullRect(in sceneViewProjection);
-        var overlay = Camera2D.PixelOverlay(viewportW, viewportH);
+        var overlay = Camera2D.PixelOverlay(viewportW: viewportW, viewportH: viewportH);
         _renderer.Begin(
-            sceneViewProjection,
-            overlay,
-            viewportW,
-            viewportH
+            sceneViewProjection: sceneViewProjection,
+            overlayViewProjection: overlay,
+            viewportW: viewportW,
+            viewportH: viewportH
         );
-        CollectNode(root, includeScriptQueue);
+        CollectNode(node: root, playMode: includeScriptQueue);
         if (includeScriptQueue)
         {
             var queue = CollectionsMarshal.AsSpan(Sprites.Draws);
-            for (var i = 0; i < queue.Length; i++) _renderer.Draw(in queue[i]);
+            for (int i = 0; i < queue.Length; i++) _renderer.Draw(in queue[i]);
         }
 
         _renderer.End();
@@ -196,13 +196,16 @@ public sealed class Sprite2DSystem : IDisposable
     private void CollectNode(SceneNode node, bool playMode)
     {
         if (node.Visible)
+        {
             switch (node.Kind)
             {
-                case NodeKind.Sprite: DrawSpriteNode(node, playMode); break;
+                case NodeKind.Sprite: DrawSpriteNode(node: node, playMode: playMode); break;
                 case NodeKind.Tilemap: DrawTilemapNode(node); break;
             }
+        }
 
-        for (var i = 0; i < node.Children.Count; i++) CollectNode(node.Children[i], playMode);
+        for (int i = 0; i < node.Children.Count; i++)
+            CollectNode(node: node.Children[i], playMode: playMode);
     }
 
     private void DrawSpriteNode(SceneNode node, bool playMode)
@@ -210,25 +213,26 @@ public sealed class Sprite2DSystem : IDisposable
         var tex = GetTexture(node.TexturePath ?? "");
         if (tex == null) return;
 
-        var cols = Math.Max(1, node.SpriteCols);
-        var rows = Math.Max(1, node.SpriteRows);
-        var frameIndex = Math.Clamp(node.SpriteFrame, 0, cols * rows - 1);
-        if (playMode && node.SpriteFps > 0f && _animElapsed.TryGetValue(node.Id, out var elapsed))
+        int cols = Math.Max(val1: 1, val2: node.SpriteCols);
+        int rows = Math.Max(val1: 1, val2: node.SpriteRows);
+        int frameIndex = Math.Clamp(value: node.SpriteFrame, min: 0, max: (cols * rows) - 1);
+        if (playMode && node.SpriteFps > 0f &&
+            _animElapsed.TryGetValue(key: node.Id, value: out float elapsed))
             frameIndex = (int)(elapsed * node.SpriteFps) % (cols * rows);
 
-        var col = frameIndex % cols;
-        var row = frameIndex / cols;
+        int col = frameIndex % cols;
+        int row = frameIndex / cols;
         var frame = new SpriteFrame(
-            col / (float)cols,
-            row / (float)rows,
-            (col + 1) / (float)cols,
-            (row + 1) / (float)rows,
-            tex.Width / cols,
-            tex.Height / rows
+            U0: col / (float)cols,
+            V0: row / (float)rows,
+            U1: (col + 1) / (float)cols,
+            V1: (row + 1) / (float)rows,
+            PixelWidth: tex.Width / cols,
+            PixelHeight: tex.Height / rows
         );
 
         var world = WorldTransform(node);
-        var ppu = MathF.Max(0.001f, node.SpritePixelsPerUnit);
+        float ppu = MathF.Max(x: 0.001f, y: node.SpritePixelsPerUnit);
 
         _renderer.Draw(
             new SpriteDraw {
@@ -247,9 +251,17 @@ public sealed class Sprite2DSystem : IDisposable
                 CornerRadius = node.SpriteCornerRadius,
                 BorderWidth = node.SpriteBorderWidth,
                 SortingLayer =
-                    (short)Math.Clamp(node.SpriteSortingLayer, short.MinValue, short.MaxValue),
+                    (short)Math.Clamp(
+                        value: node.SpriteSortingLayer,
+                        min: short.MinValue,
+                        max: short.MaxValue
+                    ),
                 OrderInLayer =
-                    (short)Math.Clamp(node.SpriteOrderInLayer, short.MinValue, short.MaxValue),
+                    (short)Math.Clamp(
+                        value: node.SpriteOrderInLayer,
+                        min: short.MinValue,
+                        max: short.MaxValue
+                    ),
                 Texture = tex.Handle,
                 Material = MaterialFor(node),
             }
@@ -259,20 +271,20 @@ public sealed class Sprite2DSystem : IDisposable
     /// <summary>Shared Material2D per (blend, stage, shader) so consecutive same-material sprites batch.</summary>
     private Material2D? MaterialFor(SceneNode node)
     {
-        var shader = string.IsNullOrEmpty(node.SpriteShaderPath)
+        uint shader = string.IsNullOrEmpty(node.SpriteShaderPath)
             ? 0u
             : GetShader(node.SpriteShaderPath);
-        return MaterialFor(node.SpriteBlend, node.SpriteStage, shader);
+        return MaterialFor(blend: node.SpriteBlend, stage: node.SpriteStage, shader: shader);
     }
 
     private Material2D? MaterialFor(int blend, int stage, uint shader)
     {
         if (blend == 0 && stage == 0 && shader == 0) return null; // Material2D.Default
         var key = (blend, stage, shader);
-        if (_materials.TryGetValue(key, out var mat)) return mat;
+        if (_materials.TryGetValue(key: key, value: out var mat)) return mat;
         mat = new Material2D {
-            Blend = (Blend2D)Math.Clamp(blend, 0, 2),
-            Stage = (Stage2D)Math.Clamp(stage, 0, 1),
+            Blend = (Blend2D)Math.Clamp(value: blend, min: 0, max: 2),
+            Stage = (Stage2D)Math.Clamp(value: stage, min: 0, max: 1),
             ShaderHandle = shader,
         };
         _materials[key] = mat;
@@ -285,10 +297,10 @@ public sealed class Sprite2DSystem : IDisposable
     public (Tileset Set, SpriteFrame[] Frames)? GetTileset(string? path)
     {
         if (string.IsNullOrEmpty(path)) return null;
-        if (_tilesetsByRawPath.TryGetValue(path, out var byRaw)) return byRaw;
+        if (_tilesetsByRawPath.TryGetValue(key: path, value: out var byRaw)) return byRaw;
 
-        var abs = Path.GetFullPath(path);
-        if (_tilesets.TryGetValue(abs, out var cached))
+        string abs = Path.GetFullPath(path);
+        if (_tilesets.TryGetValue(key: abs, value: out var cached))
         {
             _tilesetsByRawPath[path] = cached;
             return cached;
@@ -334,23 +346,23 @@ public sealed class Sprite2DSystem : IDisposable
         if (tex == null || ts.Frames.Length == 0) return;
 
         var world = WorldTransform(node);
-        var size = MathF.Max(1e-4f, node.TileWorldSize);
-        var stepX = size * world.Scale.X;
-        var stepY = size * world.Scale.Y;
-        var rot = world.Rotation.ToEulerRadians().Z;
-        var cos = MathF.Cos(rot);
-        var sin = MathF.Sin(rot);
-        var material = MaterialFor(node.TilemapBlend, node.TilemapStage, 0u);
+        float size = MathF.Max(x: 1e-4f, y: node.TileWorldSize);
+        float stepX = size * world.Scale.X;
+        float stepY = size * world.Scale.Y;
+        float rot = world.Rotation.ToEulerRadians().Z;
+        float cos = MathF.Cos(rot);
+        float sin = MathF.Sin(rot);
+        var material = MaterialFor(blend: node.TilemapBlend, stage: node.TilemapStage, shader: 0u);
         var tint = node.TilemapColor;
 
         // Cull to the camera rect in this node's tile space. Skipped for a rotated map (the rect no
         // longer maps to a tile range) — rotated tilemaps are rare and still draw correctly, just
         // without the early-out.
-        var cull = _cullValid && MathF.Abs(rot) < 1e-4f && stepX > 1e-6f && stepY > 1e-6f;
-        var minTx = int.MinValue;
-        var maxTx = int.MaxValue;
-        var minTy = int.MinValue;
-        var maxTy = int.MaxValue;
+        bool cull = _cullValid && MathF.Abs(rot) < 1e-4f && stepX > 1e-6f && stepY > 1e-6f;
+        int minTx = int.MinValue;
+        int maxTx = int.MaxValue;
+        int minTy = int.MinValue;
+        int maxTy = int.MaxValue;
         if (cull)
         {
             minTx = (int)MathF.Floor((_cullMinX - world.Position.X) / stepX) - 1;
@@ -363,34 +375,42 @@ public sealed class Sprite2DSystem : IDisposable
         {
             if (!layer.Visible || layer.IsEmpty || layer.Opacity <= 0f) continue;
 
-            var x0 = Math.Max(layer.OriginX, minTx);
-            var x1 = Math.Min(layer.OriginX + layer.Width - 1, maxTx);
-            var y0 = Math.Max(layer.OriginY, minTy);
-            var y1 = Math.Min(layer.OriginY + layer.Height - 1, maxTy);
+            int x0 = Math.Max(val1: layer.OriginX, val2: minTx);
+            int x1 = Math.Min(val1: layer.OriginX + layer.Width - 1, val2: maxTx);
+            int y0 = Math.Max(val1: layer.OriginY, val2: minTy);
+            int y1 = Math.Min(val1: layer.OriginY + layer.Height - 1, val2: maxTy);
             if (x0 > x1 || y0 > y1) continue;
 
             var color = new Vec4(
-                tint.X,
-                tint.Y,
-                tint.Z,
-                tint.W * Math.Clamp(layer.Opacity, 0f, 1f)
+                x: tint.X,
+                y: tint.Y,
+                z: tint.Z,
+                w: tint.W * Math.Clamp(value: layer.Opacity, min: 0f, max: 1f)
             );
-            var sortLayer = (short)Math.Clamp(layer.SortingLayer, short.MinValue, short.MaxValue);
-            var order = (short)Math.Clamp(layer.OrderInLayer, short.MinValue, short.MaxValue);
+            short sortLayer = (short)Math.Clamp(
+                value: layer.SortingLayer,
+                min: short.MinValue,
+                max: short.MaxValue
+            );
+            short order = (short)Math.Clamp(
+                value: layer.OrderInLayer,
+                min: short.MinValue,
+                max: short.MaxValue
+            );
 
-            for (var ty = y0; ty <= y1; ty++)
-            for (var tx = x0; tx <= x1; tx++)
+            for (int ty = y0; ty <= y1; ty++)
+            for (int tx = x0; tx <= x1; tx++)
             {
-                var tile = layer.GetTile(tx, ty);
+                int tile = layer.GetTile(x: tx, y: ty);
                 if (tile < 0 || tile >= ts.Frames.Length) continue;
 
                 // Cell centre in the node's local 2D space, rotated into world.
-                var lx = (tx + 0.5f) * stepX;
-                var ly = (ty + 0.5f) * stepY;
+                float lx = (tx + 0.5f) * stepX;
+                float ly = (ty + 0.5f) * stepY;
                 _renderer.Draw(
                     new SpriteDraw {
-                        X = world.Position.X + lx * cos - ly * sin,
-                        Y = world.Position.Y + lx * sin + ly * cos,
+                        X = world.Position.X + (lx * cos) - (ly * sin),
+                        Y = world.Position.Y + (lx * sin) + (ly * cos),
                         Z = world.Position.Z,
                         Rotation = rot,
                         Width = stepX,
@@ -422,13 +442,13 @@ public sealed class Sprite2DSystem : IDisposable
         _cullMaxX = float.MinValue;
         _cullMaxY = float.MinValue;
 
-        for (var i = 0; i < 8; i++)
+        for (int i = 0; i < 8; i++)
         {
             var ndc = new Vec4(
-                (i & 1) == 0 ? -1f : 1f,
-                (i & 2) == 0 ? -1f : 1f,
-                (i & 4) == 0 ? 0f : 1f,
-                1f
+                x: (i & 1) == 0 ? -1f : 1f,
+                y: (i & 2) == 0 ? -1f : 1f,
+                z: (i & 4) == 0 ? 0f : 1f,
+                w: 1f
             );
             var p = inv.MulVec4(ndc);
             if (MathF.Abs(p.W) < 1e-6f)
@@ -437,13 +457,13 @@ public sealed class Sprite2DSystem : IDisposable
                 return;
             }
 
-            var invW = 1f / p.W;
-            var x = p.X * invW;
-            var y = p.Y * invW;
-            _cullMinX = MathF.Min(_cullMinX, x);
-            _cullMaxX = MathF.Max(_cullMaxX, x);
-            _cullMinY = MathF.Min(_cullMinY, y);
-            _cullMaxY = MathF.Max(_cullMaxY, y);
+            float invW = 1f / p.W;
+            float x = p.X * invW;
+            float y = p.Y * invW;
+            _cullMinX = MathF.Min(x: _cullMinX, y: x);
+            _cullMaxX = MathF.Max(x: _cullMaxX, y: x);
+            _cullMinY = MathF.Min(x: _cullMinY, y: y);
+            _cullMaxY = MathF.Max(x: _cullMaxY, y: y);
         }
 
         _cullValid = _cullMaxX >= _cullMinX && _cullMaxY >= _cullMinY;
@@ -452,7 +472,7 @@ public sealed class Sprite2DSystem : IDisposable
     private static SceneNode? FindOrthoCamera(SceneNode node)
     {
         if (node is { Kind: NodeKind.Camera, CameraProjection: 1 }) return node;
-        for (var i = 0; i < node.Children.Count; i++)
+        for (int i = 0; i < node.Children.Count; i++)
         {
             var found = FindOrthoCamera(node.Children[i]);
             if (found != null) return found;
@@ -463,9 +483,13 @@ public sealed class Sprite2DSystem : IDisposable
 
     private static Transform3D WorldTransform(SceneNode node)
     {
-        var local = new Transform3D(node.Position, node.Rotation, node.Scale);
+        var local = new Transform3D(
+            position: node.Position,
+            rotation: node.Rotation,
+            scale: node.Scale
+        );
         return node.Parent is { } parent
-            ? Transform3D.Combine(WorldTransform(parent), local)
+            ? Transform3D.Combine(parent: WorldTransform(parent), child: local)
             : local;
     }
 }

@@ -17,10 +17,10 @@ namespace Zigote.Tests;
 /// </summary>
 public class MaterialApiConsistencyTests
 {
-    private static Offset Center(Widget w)
-    {
-        return new Offset(w.Bounds.X + w.Bounds.Width / 2f, w.Bounds.Y + w.Bounds.Height / 2f);
-    }
+    private static Offset Center(Widget w) => new(
+        x: w.Bounds.X + (w.Bounds.Width / 2f),
+        y: w.Bounds.Y + (w.Bounds.Height / 2f)
+    );
 
     // ── TextEditingController binding ─────────────────────────────────────────
 
@@ -29,27 +29,27 @@ public class MaterialApiConsistencyTests
     {
         var controller = new TextEditingController("seed");
         var field = new TextField(controller);
-        Assert.Equal("seed", field.Text);
+        Assert.Equal(expected: "seed", actual: field.Text);
 
         controller.Text = "external";
-        Assert.Equal("external", field.Text);
+        Assert.Equal(expected: "external", actual: field.Text);
 
         controller.Clear();
-        Assert.Equal(string.Empty, field.Text);
+        Assert.Equal(expected: string.Empty, actual: field.Text);
     }
 
     [Fact]
     public void Controller_ReceivesTypedEdits_WithoutEcho()
     {
         var controller = new TextEditingController();
-        var notifications = 0;
+        int notifications = 0;
         controller.Changed += _ => notifications++;
         var field = new TextField(controller);
 
         field.OnTextInput("hi");
 
-        Assert.Equal("hi", controller.Text);
-        Assert.Equal(0, notifications); // write-back is silent — no feedback loop
+        Assert.Equal(expected: "hi", actual: controller.Text);
+        Assert.Equal(expected: 0, actual: notifications); // write-back is silent — no feedback loop
     }
 
     [Fact]
@@ -62,8 +62,8 @@ public class MaterialApiConsistencyTests
         controller.Clear();
         field.OnTextInput("x");
 
-        Assert.Equal("x", field.Text);
-        Assert.Equal("x", controller.Text);
+        Assert.Equal(expected: "x", actual: field.Text);
+        Assert.Equal(expected: "x", actual: controller.Text);
     }
 
     [Fact]
@@ -75,7 +75,7 @@ public class MaterialApiConsistencyTests
         field.Detach();
         controller.Text = "b";
 
-        Assert.Equal("a", field.Text);
+        Assert.Equal(expected: "a", actual: field.Text);
     }
 
     [Fact]
@@ -85,12 +85,12 @@ public class MaterialApiConsistencyTests
         var field = new TextField(onSubmitted: v => submitted = v);
         field.OnTextInput("go");
         field.OnKey(
-            '\0',
-            40,
-            true,
-            Modifiers.None
+            keyChar: '\0',
+            scancode: 40,
+            down: true,
+            mods: Modifiers.None
         ); // Return
-        Assert.Equal("go", submitted);
+        Assert.Equal(expected: "go", actual: submitted);
     }
 
     // ── Text softWrap ─────────────────────────────────────────────────────────
@@ -100,16 +100,20 @@ public class MaterialApiConsistencyTests
     {
         // Heuristic measurer: width = chars × fontSize × 0.55, height = fontSize × 1.2.
         var c = new Constraints(maxWidth: 60f, maxHeight: 600f);
-        var style = new TextStyle(10f, FontWeight.Normal, 1.2f);
+        var style = new TextStyle(Size: 10f, Weight: FontWeight.Normal, LineHeight: 1.2f);
 
         // Default wraps to "aaaa bbbb" / "cccc dddd" / "eeee" → 3 lines of 12 px.
-        var wrapped = new Text("aaaa bbbb cccc dddd eeee", style);
-        Assert.Equal(36f, wrapped.Measure(c).Height, 2);
+        var wrapped = new Text(data: "aaaa bbbb cccc dddd eeee", style: style);
+        Assert.Equal(expected: 36f, actual: wrapped.Measure(c).Height, precision: 2);
 
-        var single = new Text("aaaa bbbb cccc dddd eeee", style, softWrap: false);
+        var single = new Text(data: "aaaa bbbb cccc dddd eeee", style: style, softWrap: false);
         var size = single.Measure(c);
-        Assert.Equal(12f, size.Height, 2);
-        Assert.Equal(60f, size.Width, 2); // clipped to the box, not grown to fit
+        Assert.Equal(expected: 12f, actual: size.Height, precision: 2);
+        Assert.Equal(
+            expected: 60f,
+            actual: size.Width,
+            precision: 2
+        ); // clipped to the box, not grown to fit
     }
 
     // ── ListView padding ──────────────────────────────────────────────────────
@@ -118,42 +122,42 @@ public class MaterialApiConsistencyTests
     public void ListView_Padding_InsetsRows_AndNarrowsTheirWidth()
     {
         var rows = new List<Widget>();
-        for (var i = 0; i < 3; i++) rows.Add(new RowBox());
+        for (int i = 0; i < 3; i++) rows.Add(new RowBox());
         var list = new ListView(
-            rows,
-            20,
-            EdgeInsets.All(10f)
+            children: rows,
+            itemExtent: 20,
+            padding: EdgeInsets.All(10f)
         ) { Smooth = false };
 
-        list.Measure(Constraints.Tight(200f, 100f));
+        list.Measure(Constraints.Tight(width: 200f, height: 100f));
         list.Layout(Offset.Zero);
 
-        Assert.Equal(10f, rows[0].Bounds.X, 2);
-        Assert.Equal(10f, rows[0].Bounds.Y, 2);
-        Assert.Equal(30f, rows[1].Bounds.Y, 2);
-        Assert.Equal(180f, ((RowBox)rows[0]).LastMaxWidth, 2);
+        Assert.Equal(expected: 10f, actual: rows[0].Bounds.X, precision: 2);
+        Assert.Equal(expected: 10f, actual: rows[0].Bounds.Y, precision: 2);
+        Assert.Equal(expected: 30f, actual: rows[1].Bounds.Y, precision: 2);
+        Assert.Equal(expected: 180f, actual: ((RowBox)rows[0]).LastMaxWidth, precision: 2);
     }
 
     [Fact]
     public void ListView_Padding_ExtendsTheScrollRange()
     {
         var rows = new List<Widget>();
-        for (var i = 0; i < 10; i++) rows.Add(new RowBox());
+        for (int i = 0; i < 10; i++) rows.Add(new RowBox());
         var list = new ListView(
-            rows,
-            20,
-            EdgeInsets.All(10f)
+            children: rows,
+            itemExtent: 20,
+            padding: EdgeInsets.All(10f)
         ) { Smooth = false };
-        list.Measure(Constraints.Tight(200f, 100f));
+        list.Measure(Constraints.Tight(width: 200f, height: 100f));
         list.Layout(Offset.Zero);
 
         // Content = 10 × 20 + 20 padding = 220; viewport 100 → max scroll 120 (3 ticks × 40).
-        list.OnScroll(0f, -3f);
-        list.Measure(Constraints.Tight(200f, 100f));
+        list.OnScroll(dx: 0f, dy: -3f);
+        list.Measure(Constraints.Tight(width: 200f, height: 100f));
         list.Layout(Offset.Zero);
 
         // At max scroll the last row's bottom leaves room for the 10 px bottom inset.
-        Assert.Equal(70f, rows[9].Bounds.Y, 2);
+        Assert.Equal(expected: 70f, actual: rows[9].Bounds.Y, precision: 2);
     }
 
     // ── Float-standardized numeric controls ───────────────────────────────────
@@ -161,21 +165,21 @@ public class MaterialApiConsistencyTests
     [Fact]
     public void Slider_FloatCtor_StepsAndNotifiesInFloat()
     {
-        var last = float.NaN;
+        float last = float.NaN;
         var slider = new Slider(
-            0.25f,
-            0f,
-            1f,
-            v => last = v
+            value: 0.25f,
+            min: 0f,
+            max: 1f,
+            onChanged: v => last = v
         );
         slider.OnKey(
-            '\0',
-            79,
-            true,
-            Modifiers.None
+            keyChar: '\0',
+            scancode: 79,
+            down: true,
+            mods: Modifiers.None
         ); // Right → +5 %
-        Assert.Equal(0.3f, slider.Value, 3);
-        Assert.Equal(0.3f, last, 3);
+        Assert.Equal(expected: 0.3f, actual: slider.Value, precision: 3);
+        Assert.Equal(expected: 0.3f, actual: last, precision: 3);
     }
 
     [Fact]
@@ -183,41 +187,41 @@ public class MaterialApiConsistencyTests
     {
         var fired = new List<float>();
         var stepper = new Stepper(
-            9.5f,
-            1f,
-            0f,
-            10f,
-            fired.Add
+            value: 9.5f,
+            step: 1f,
+            min: 0f,
+            max: 10f,
+            onChanged: fired.Add
         );
 
         stepper.OnKey(
-            '\0',
-            82,
-            true,
-            Modifiers.None
+            keyChar: '\0',
+            scancode: 82,
+            down: true,
+            mods: Modifiers.None
         ); // Up press
         stepper.OnKey(
-            '\0',
-            82,
-            false,
-            Modifiers.None
+            keyChar: '\0',
+            scancode: 82,
+            down: false,
+            mods: Modifiers.None
         ); // release → bump
 
-        Assert.Equal(10f, stepper.Value, 3);
-        Assert.Equal(new[] { 10f }, fired);
+        Assert.Equal(expected: 10f, actual: stepper.Value, precision: 3);
+        Assert.Equal(expected: new[] { 10f }, actual: fired);
 
         // Already at Max: another bump neither moves nor re-fires.
         stepper.OnKey(
-            '\0',
-            82,
-            true,
-            Modifiers.None
+            keyChar: '\0',
+            scancode: 82,
+            down: true,
+            mods: Modifiers.None
         );
         stepper.OnKey(
-            '\0',
-            82,
-            false,
-            Modifiers.None
+            keyChar: '\0',
+            scancode: 82,
+            down: false,
+            mods: Modifiers.None
         );
         Assert.Single(fired);
     }
@@ -227,23 +231,23 @@ public class MaterialApiConsistencyTests
     [Fact]
     public void TabBar_OnChanged_FiresOnKeyboardSelection()
     {
-        var got = -1;
-        var tabs = new TabBar([new Tab("A"), new Tab("B")], onChanged: i => got = i);
+        int got = -1;
+        var tabs = new TabBar(tabs: [new Tab("A"), new Tab("B")], onChanged: i => got = i);
         tabs.OnKey(
-            '\0',
-            79,
-            true,
-            Modifiers.None
+            keyChar: '\0',
+            scancode: 79,
+            down: true,
+            mods: Modifiers.None
         ); // Right
-        Assert.Equal(1, got);
-        Assert.Equal(1, tabs.SelectedIndex);
+        Assert.Equal(expected: 1, actual: got);
+        Assert.Equal(expected: 1, actual: tabs.SelectedIndex);
     }
 
     [Fact]
     public void Checkbox_ValueProperty_TogglesThroughTap()
     {
         var cb = new Checkbox(false);
-        cb.Measure(Constraints.Loose(100, 100));
+        cb.Measure(Constraints.Loose(width: 100, height: 100));
         cb.Layout(Offset.Zero);
         var hit = cb.HitTest(Center(cb))!;
         hit.OnPointerDown(Center(cb));
@@ -256,40 +260,41 @@ public class MaterialApiConsistencyTests
     [Fact]
     public void Button_NullOnPressed_IsDisabled_AndEnablesOnRebuild()
     {
-        var btn = new Button("Hi", null);
-        btn.Measure(Constraints.Loose(200, 100));
+        var btn = new Button(label: "Hi", onPressed: null);
+        btn.Measure(Constraints.Loose(width: 200, height: 100));
         btn.Layout(Offset.Zero);
         var hit = Assert.IsType<Pressable>(btn.HitTest(Center(btn)));
         Assert.False(hit.Enabled);
 
-        var clicks = 0;
+        int clicks = 0;
         btn.OnPressed = () => clicks++;
         btn.MarkNeedsBuild();
-        btn.Measure(Constraints.Loose(200, 100));
+        btn.Measure(Constraints.Loose(width: 200, height: 100));
         btn.Layout(Offset.Zero);
 
         hit = Assert.IsType<Pressable>(btn.HitTest(Center(btn)));
         Assert.True(hit.Enabled);
         hit.OnPointerDown(Center(btn));
         hit.OnPointerUp(Center(btn));
-        Assert.Equal(1, clicks);
+        Assert.Equal(expected: 1, actual: clicks);
     }
 
     [Fact]
     public void AliasButtons_NullOnPressedDisables_ExplicitEnabledFalseWins()
     {
         var inert = new OutlinedButton(new Text("Go"));
-        inert.Measure(Constraints.Loose(200, 100));
+        inert.Measure(Constraints.Loose(width: 200, height: 100));
         inert.Layout(Offset.Zero);
         Assert.False(Assert.IsType<Pressable>(inert.HitTest(Center(inert))).Enabled);
 
-        var vetoed = new ElevatedButton(new Text("Go"), () => { }) { Enabled = false };
-        vetoed.Measure(Constraints.Loose(200, 100));
+        var vetoed =
+            new ElevatedButton(child: new Text("Go"), onPressed: () => { }) { Enabled = false };
+        vetoed.Measure(Constraints.Loose(width: 200, height: 100));
         vetoed.Layout(Offset.Zero);
         Assert.False(Assert.IsType<Pressable>(vetoed.HitTest(Center(vetoed))).Enabled);
 
-        var live = new TextButton(new Text("Go"), () => { });
-        live.Measure(Constraints.Loose(200, 100));
+        var live = new TextButton(child: new Text("Go"), onPressed: () => { });
+        live.Measure(Constraints.Loose(width: 200, height: 100));
         live.Layout(Offset.Zero);
         Assert.True(Assert.IsType<Pressable>(live.HitTest(Center(live))).Enabled);
     }
@@ -303,22 +308,20 @@ public class MaterialApiConsistencyTests
         public override Size Measure(Constraints c)
         {
             LastMaxWidth = c.MaxWidth;
-            _size = c.Constrain(new Size(c.MaxWidth, c.MaxHeight));
+            _size = c.Constrain(new Size(width: c.MaxWidth, height: c.MaxHeight));
             return _size;
         }
 
         public override void Layout(Offset origin)
         {
             Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                _size.Width,
-                _size.Height
+                x: origin.X,
+                y: origin.Y,
+                width: _size.Width,
+                height: _size.Height
             );
         }
 
-        public override void Paint(PaintList paint)
-        {
-        }
+        public override void Paint(PaintList paint) { }
     }
 }

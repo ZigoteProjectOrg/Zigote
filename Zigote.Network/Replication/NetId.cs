@@ -13,33 +13,15 @@ public readonly struct NetId(uint value) : IEquatable<NetId>
     public uint Value { get; } = value;
     public bool IsValid => Value != InvalidValue;
 
-    public bool Equals(NetId other)
-    {
-        return Value == other.Value;
-    }
+    public bool Equals(NetId other) => Value == other.Value;
 
-    public override bool Equals(object? obj)
-    {
-        return obj is NetId o && Equals(o);
-    }
+    public override bool Equals(object? obj) => obj is NetId o && Equals(o);
 
-    public override int GetHashCode()
-    {
-        return (int)Value;
-    }
+    public override int GetHashCode() => (int)Value;
 
-    public override string ToString()
-    {
-        return IsValid ? $"NetId({Value})" : "NetId(none)";
-    }
+    public override string ToString() => IsValid ? $"NetId({Value})" : "NetId(none)";
 
-    public static bool operator ==(NetId a, NetId b)
-    {
-        return a.Value == b.Value;
-    }
+    public static bool operator ==(NetId a, NetId b) => a.Value == b.Value;
 
-    public static bool operator !=(NetId a, NetId b)
-    {
-        return a.Value != b.Value;
-    }
+    public static bool operator !=(NetId a, NetId b) => a.Value != b.Value;
 }

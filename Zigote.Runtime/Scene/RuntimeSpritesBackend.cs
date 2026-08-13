@@ -14,17 +14,14 @@ public sealed class RuntimeSpritesBackend(Sprite2DSystem sprites) : ISpritesBack
 
     public SpriteTexture? LoadTexture(string path, SpriteFilter filter, bool srgb, SpriteWrap wrap)
     {
-        var resolved = Path.IsPathRooted(path) ? path : Path.GetFullPath(path);
+        string resolved = Path.IsPathRooted(path) ? path : Path.GetFullPath(path);
         return sprites.GetTexture(
-            resolved,
-            filter,
-            srgb,
-            wrap
+            path: resolved,
+            filter: filter,
+            srgb: srgb,
+            wrap: wrap
         );
     }
 
-    public uint CreateShader(string wgsl)
-    {
-        return Device.CreateShader(wgsl);
-    }
+    public uint CreateShader(string wgsl) => Device.CreateShader(wgsl);
 }

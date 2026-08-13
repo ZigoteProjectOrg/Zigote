@@ -16,10 +16,7 @@ public static class VfxPresets
     public static IReadOnlyList<string> Names { get; } =
         ["Sparks", "Fire", "Smoke", "Magic", "Rain"];
 
-    public static GraphDocument CreateDefault(string name = "VFX")
-    {
-        return Sparks(name);
-    }
+    public static GraphDocument CreateDefault(string name = "VFX") => Sparks(name);
 
     public static GraphDocument Create(string preset, string name)
     {
@@ -34,8 +31,14 @@ public static class VfxPresets
 
     private static GraphDocument Sparks(string name)
     {
-        var b = new Builder(name, o => { o.Properties["capacity"] = GraphValue.FromInt(512); });
-        b.Spawn(VfxNodeLibrary.SpawnRate, n => n.Properties["rate"] = GraphValue.FromFloat(80f));
+        var b = new Builder(
+            name: name,
+            configureOutput: o => { o.Properties["capacity"] = GraphValue.FromInt(512); }
+        );
+        b.Spawn(
+            defId: VfxNodeLibrary.SpawnRate,
+            cfg: n => n.Properties["rate"] = GraphValue.FromFloat(80f)
+        );
         b.Shape(n =>
             {
                 n.Properties["shape"] = GraphValue.FromInt((int)EmissionShape.Cone);
@@ -44,54 +47,57 @@ public static class VfxPresets
             }
         );
         b.Init(
-            VfxNodeLibrary.InitVelocity,
-            n =>
+            defId: VfxNodeLibrary.InitVelocity,
+            cfg: n =>
             {
                 n.Properties["speed_min"] = GraphValue.FromFloat(3f);
                 n.Properties["speed_max"] = GraphValue.FromFloat(6f);
             }
         );
         b.Init(
-            VfxNodeLibrary.InitSize,
-            n =>
+            defId: VfxNodeLibrary.InitSize,
+            cfg: n =>
             {
                 n.Properties["size_min"] = GraphValue.FromFloat(0.03f);
                 n.Properties["size_max"] = GraphValue.FromFloat(0.08f);
             }
         );
         b.Init(
-            VfxNodeLibrary.InitLifetime,
-            n =>
+            defId: VfxNodeLibrary.InitLifetime,
+            cfg: n =>
             {
                 n.Properties["life_min"] = GraphValue.FromFloat(0.6f);
                 n.Properties["life_max"] = GraphValue.FromFloat(1.2f);
             }
         );
         b.Update(
-            VfxNodeLibrary.Gravity,
-            n => n.Properties["gravity"] = GraphValue.FromFloat3(0f, -6f, 0f)
+            defId: VfxNodeLibrary.Gravity,
+            cfg: n => n.Properties["gravity"] = GraphValue.FromFloat3(x: 0f, y: -6f, z: 0f)
         );
-        b.Update(VfxNodeLibrary.Drag, n => n.Properties["drag"] = GraphValue.FromFloat(1f));
         b.Update(
-            VfxNodeLibrary.ColorOverLife,
-            n => SetRamp(
-                n,
-                new ColorStop(0f, Color.White),
-                new ColorStop(0.4f, new Color(1f, 0.6f, 0.15f)),
+            defId: VfxNodeLibrary.Drag,
+            cfg: n => n.Properties["drag"] = GraphValue.FromFloat(1f)
+        );
+        b.Update(
+            defId: VfxNodeLibrary.ColorOverLife,
+            cfg: n => SetRamp(
+                node: n,
+                new ColorStop(position: 0f, color: Color.White),
+                new ColorStop(position: 0.4f, color: new Color(r: 1f, g: 0.6f, b: 0.15f)),
                 new ColorStop(
-                    1f,
-                    new Color(
-                        0.6f,
-                        0.1f,
-                        0f,
-                        0f
+                    position: 1f,
+                    color: new Color(
+                        r: 0.6f,
+                        g: 0.1f,
+                        b: 0f,
+                        a: 0f
                     )
                 )
             )
         );
         b.Update(
-            VfxNodeLibrary.AlphaOverLife,
-            n =>
+            defId: VfxNodeLibrary.AlphaOverLife,
+            cfg: n =>
             {
                 n.Properties["profile"] = GraphValue.FromInt(2); // Fade Out
                 n.Properties["scale"] = GraphValue.FromFloat(1f);
@@ -103,8 +109,14 @@ public static class VfxPresets
 
     private static GraphDocument Fire(string name)
     {
-        var b = new Builder(name, o => o.Properties["capacity"] = GraphValue.FromInt(1024));
-        b.Spawn(VfxNodeLibrary.SpawnRate, n => n.Properties["rate"] = GraphValue.FromFloat(60f));
+        var b = new Builder(
+            name: name,
+            configureOutput: o => o.Properties["capacity"] = GraphValue.FromInt(1024)
+        );
+        b.Spawn(
+            defId: VfxNodeLibrary.SpawnRate,
+            cfg: n => n.Properties["rate"] = GraphValue.FromFloat(60f)
+        );
         b.Shape(n =>
             {
                 n.Properties["shape"] = GraphValue.FromInt((int)EmissionShape.Cone);
@@ -113,65 +125,65 @@ public static class VfxPresets
             }
         );
         b.Init(
-            VfxNodeLibrary.InitVelocity,
-            n =>
+            defId: VfxNodeLibrary.InitVelocity,
+            cfg: n =>
             {
                 n.Properties["speed_min"] = GraphValue.FromFloat(1f);
                 n.Properties["speed_max"] = GraphValue.FromFloat(2f);
             }
         );
         b.Init(
-            VfxNodeLibrary.InitSize,
-            n =>
+            defId: VfxNodeLibrary.InitSize,
+            cfg: n =>
             {
                 n.Properties["size_min"] = GraphValue.FromFloat(0.4f);
                 n.Properties["size_max"] = GraphValue.FromFloat(0.7f);
             }
         );
         b.Init(
-            VfxNodeLibrary.InitLifetime,
-            n =>
+            defId: VfxNodeLibrary.InitLifetime,
+            cfg: n =>
             {
                 n.Properties["life_min"] = GraphValue.FromFloat(1f);
                 n.Properties["life_max"] = GraphValue.FromFloat(1.8f);
             }
         );
         b.Update(
-            VfxNodeLibrary.Turbulence,
-            n =>
+            defId: VfxNodeLibrary.Turbulence,
+            cfg: n =>
             {
                 n.Properties["strength"] = GraphValue.FromFloat(1.5f);
                 n.Properties["frequency"] = GraphValue.FromFloat(2f);
             }
         );
         b.Update(
-            VfxNodeLibrary.ColorOverLife,
-            n => SetRamp(
-                n,
-                new ColorStop(0f, new Color(1f, 0.9f, 0.3f)),
-                new ColorStop(0.5f, new Color(1f, 0.35f, 0.05f)),
+            defId: VfxNodeLibrary.ColorOverLife,
+            cfg: n => SetRamp(
+                node: n,
+                new ColorStop(position: 0f, color: new Color(r: 1f, g: 0.9f, b: 0.3f)),
+                new ColorStop(position: 0.5f, color: new Color(r: 1f, g: 0.35f, b: 0.05f)),
                 new ColorStop(
-                    1f,
-                    new Color(
-                        0.2f,
-                        0.02f,
-                        0f,
-                        0f
+                    position: 1f,
+                    color: new Color(
+                        r: 0.2f,
+                        g: 0.02f,
+                        b: 0f,
+                        a: 0f
                     )
                 )
             )
         );
         b.Update(
-            VfxNodeLibrary.SizeOverLife,
-            n =>
+            defId: VfxNodeLibrary.SizeOverLife,
+            cfg: n =>
             {
                 n.Properties["profile"] = GraphValue.FromInt(6); // Grow-Shrink
                 n.Properties["scale"] = GraphValue.FromFloat(1f);
             }
         );
         b.Update(
-            VfxNodeLibrary.AlphaOverLife,
-            n => n.Properties["profile"] = GraphValue.FromInt(2)
+            defId: VfxNodeLibrary.AlphaOverLife,
+            cfg: n => n.Properties["profile"] = GraphValue.FromInt(2)
         );
         b.Render(n => n.Properties["blend"] = GraphValue.FromInt((int)VfxBlendMode.Additive));
         return b.Doc;
@@ -179,8 +191,14 @@ public static class VfxPresets
 
     private static GraphDocument Smoke(string name)
     {
-        var b = new Builder(name, o => o.Properties["capacity"] = GraphValue.FromInt(512));
-        b.Spawn(VfxNodeLibrary.SpawnRate, n => n.Properties["rate"] = GraphValue.FromFloat(18f));
+        var b = new Builder(
+            name: name,
+            configureOutput: o => o.Properties["capacity"] = GraphValue.FromInt(512)
+        );
+        b.Spawn(
+            defId: VfxNodeLibrary.SpawnRate,
+            cfg: n => n.Properties["rate"] = GraphValue.FromFloat(18f)
+        );
         b.Shape(n =>
             {
                 n.Properties["shape"] = GraphValue.FromInt((int)EmissionShape.Cone);
@@ -189,63 +207,66 @@ public static class VfxPresets
             }
         );
         b.Init(
-            VfxNodeLibrary.InitVelocity,
-            n =>
+            defId: VfxNodeLibrary.InitVelocity,
+            cfg: n =>
             {
                 n.Properties["speed_min"] = GraphValue.FromFloat(0.5f);
                 n.Properties["speed_max"] = GraphValue.FromFloat(1f);
             }
         );
         b.Init(
-            VfxNodeLibrary.InitSize,
-            n =>
+            defId: VfxNodeLibrary.InitSize,
+            cfg: n =>
             {
                 n.Properties["size_min"] = GraphValue.FromFloat(0.5f);
                 n.Properties["size_max"] = GraphValue.FromFloat(0.8f);
             }
         );
         b.Init(
-            VfxNodeLibrary.InitLifetime,
-            n =>
+            defId: VfxNodeLibrary.InitLifetime,
+            cfg: n =>
             {
                 n.Properties["life_min"] = GraphValue.FromFloat(3f);
                 n.Properties["life_max"] = GraphValue.FromFloat(5f);
             }
         );
         b.Init(
-            VfxNodeLibrary.InitColor,
-            n =>
+            defId: VfxNodeLibrary.InitColor,
+            cfg: n =>
                 n.Properties["color"] = GraphValue.FromFloat4(
-                    0.5f,
-                    0.5f,
-                    0.52f,
-                    1f
+                    x: 0.5f,
+                    y: 0.5f,
+                    z: 0.52f,
+                    w: 1f
                 )
         );
         b.Update(
-            VfxNodeLibrary.Gravity,
-            n => n.Properties["gravity"] = GraphValue.FromFloat3(0f, 0.4f, 0f)
+            defId: VfxNodeLibrary.Gravity,
+            cfg: n => n.Properties["gravity"] = GraphValue.FromFloat3(x: 0f, y: 0.4f, z: 0f)
         );
-        b.Update(VfxNodeLibrary.Drag, n => n.Properties["drag"] = GraphValue.FromFloat(0.5f));
         b.Update(
-            VfxNodeLibrary.Turbulence,
-            n =>
+            defId: VfxNodeLibrary.Drag,
+            cfg: n => n.Properties["drag"] = GraphValue.FromFloat(0.5f)
+        );
+        b.Update(
+            defId: VfxNodeLibrary.Turbulence,
+            cfg: n =>
             {
                 n.Properties["strength"] = GraphValue.FromFloat(0.4f);
                 n.Properties["frequency"] = GraphValue.FromFloat(0.6f);
             }
         );
         b.Update(
-            VfxNodeLibrary.SizeOverLife,
-            n =>
+            defId: VfxNodeLibrary.SizeOverLife,
+            cfg: n =>
             {
                 n.Properties["profile"] = GraphValue.FromInt(4); // Grow
                 n.Properties["scale"] = GraphValue.FromFloat(2.2f);
             }
         );
         b.Update(
-            VfxNodeLibrary.AlphaOverLife,
-            n =>
+            defId: VfxNodeLibrary.AlphaOverLife,
+            cfg: n =>
             {
                 n.Properties["profile"] = GraphValue.FromInt(3); // Fade In-Out
                 n.Properties["scale"] = GraphValue.FromFloat(0.5f);
@@ -262,8 +283,14 @@ public static class VfxPresets
 
     private static GraphDocument Magic(string name)
     {
-        var b = new Builder(name, o => o.Properties["capacity"] = GraphValue.FromInt(768));
-        b.Spawn(VfxNodeLibrary.SpawnRate, n => n.Properties["rate"] = GraphValue.FromFloat(50f));
+        var b = new Builder(
+            name: name,
+            configureOutput: o => o.Properties["capacity"] = GraphValue.FromInt(768)
+        );
+        b.Spawn(
+            defId: VfxNodeLibrary.SpawnRate,
+            cfg: n => n.Properties["rate"] = GraphValue.FromFloat(50f)
+        );
         b.Shape(n =>
             {
                 n.Properties["shape"] = GraphValue.FromInt((int)EmissionShape.Sphere);
@@ -271,58 +298,61 @@ public static class VfxPresets
             }
         );
         b.Init(
-            VfxNodeLibrary.InitVelocity,
-            n =>
+            defId: VfxNodeLibrary.InitVelocity,
+            cfg: n =>
             {
                 n.Properties["speed_min"] = GraphValue.FromFloat(0.2f);
                 n.Properties["speed_max"] = GraphValue.FromFloat(0.6f);
             }
         );
         b.Init(
-            VfxNodeLibrary.InitSize,
-            n =>
+            defId: VfxNodeLibrary.InitSize,
+            cfg: n =>
             {
                 n.Properties["size_min"] = GraphValue.FromFloat(0.06f);
                 n.Properties["size_max"] = GraphValue.FromFloat(0.12f);
             }
         );
         b.Init(
-            VfxNodeLibrary.InitLifetime,
-            n =>
+            defId: VfxNodeLibrary.InitLifetime,
+            cfg: n =>
             {
                 n.Properties["life_min"] = GraphValue.FromFloat(1.5f);
                 n.Properties["life_max"] = GraphValue.FromFloat(2.5f);
             }
         );
         b.Update(
-            VfxNodeLibrary.Vortex,
-            n =>
+            defId: VfxNodeLibrary.Vortex,
+            cfg: n =>
             {
-                n.Properties["axis"] = GraphValue.FromFloat3(0f, 1f, 0f);
+                n.Properties["axis"] = GraphValue.FromFloat3(x: 0f, y: 1f, z: 0f);
                 n.Properties["strength"] = GraphValue.FromFloat(3f);
             }
         );
-        b.Update(VfxNodeLibrary.Drag, n => n.Properties["drag"] = GraphValue.FromFloat(0.3f));
         b.Update(
-            VfxNodeLibrary.ColorOverLife,
-            n => SetRamp(
-                n,
-                new ColorStop(0f, new Color(0.3f, 0.9f, 1f)),
-                new ColorStop(0.5f, new Color(0.8f, 0.4f, 1f)),
+            defId: VfxNodeLibrary.Drag,
+            cfg: n => n.Properties["drag"] = GraphValue.FromFloat(0.3f)
+        );
+        b.Update(
+            defId: VfxNodeLibrary.ColorOverLife,
+            cfg: n => SetRamp(
+                node: n,
+                new ColorStop(position: 0f, color: new Color(r: 0.3f, g: 0.9f, b: 1f)),
+                new ColorStop(position: 0.5f, color: new Color(r: 0.8f, g: 0.4f, b: 1f)),
                 new ColorStop(
-                    1f,
-                    new Color(
-                        0.4f,
-                        0.1f,
-                        0.8f,
-                        0f
+                    position: 1f,
+                    color: new Color(
+                        r: 0.4f,
+                        g: 0.1f,
+                        b: 0.8f,
+                        a: 0f
                     )
                 )
             )
         );
         b.Update(
-            VfxNodeLibrary.AlphaOverLife,
-            n => n.Properties["profile"] = GraphValue.FromInt(2)
+            defId: VfxNodeLibrary.AlphaOverLife,
+            cfg: n => n.Properties["profile"] = GraphValue.FromInt(2)
         );
         b.Render(n => n.Properties["blend"] = GraphValue.FromInt((int)VfxBlendMode.Additive));
         return b.Doc;
@@ -330,52 +360,58 @@ public static class VfxPresets
 
     private static GraphDocument Rain(string name)
     {
-        var b = new Builder(name, o => o.Properties["capacity"] = GraphValue.FromInt(2048));
-        b.Spawn(VfxNodeLibrary.SpawnRate, n => n.Properties["rate"] = GraphValue.FromFloat(200f));
+        var b = new Builder(
+            name: name,
+            configureOutput: o => o.Properties["capacity"] = GraphValue.FromInt(2048)
+        );
+        b.Spawn(
+            defId: VfxNodeLibrary.SpawnRate,
+            cfg: n => n.Properties["rate"] = GraphValue.FromFloat(200f)
+        );
         b.Shape(n =>
             {
                 n.Properties["shape"] = GraphValue.FromInt((int)EmissionShape.Box);
-                n.Properties["box"] = GraphValue.FromFloat3(5f, 0.1f, 5f);
-                n.Properties["direction"] = GraphValue.FromFloat3(0f, -1f, 0f);
+                n.Properties["box"] = GraphValue.FromFloat3(x: 5f, y: 0.1f, z: 5f);
+                n.Properties["direction"] = GraphValue.FromFloat3(x: 0f, y: -1f, z: 0f);
             }
         );
         b.Init(
-            VfxNodeLibrary.InitVelocity,
-            n =>
+            defId: VfxNodeLibrary.InitVelocity,
+            cfg: n =>
             {
                 n.Properties["speed_min"] = GraphValue.FromFloat(8f);
                 n.Properties["speed_max"] = GraphValue.FromFloat(10f);
             }
         );
         b.Init(
-            VfxNodeLibrary.InitSize,
-            n =>
+            defId: VfxNodeLibrary.InitSize,
+            cfg: n =>
             {
                 n.Properties["size_min"] = GraphValue.FromFloat(0.02f);
                 n.Properties["size_max"] = GraphValue.FromFloat(0.04f);
             }
         );
         b.Init(
-            VfxNodeLibrary.InitLifetime,
-            n =>
+            defId: VfxNodeLibrary.InitLifetime,
+            cfg: n =>
             {
                 n.Properties["life_min"] = GraphValue.FromFloat(1f);
                 n.Properties["life_max"] = GraphValue.FromFloat(1.5f);
             }
         );
         b.Init(
-            VfxNodeLibrary.InitColor,
-            n =>
+            defId: VfxNodeLibrary.InitColor,
+            cfg: n =>
                 n.Properties["color"] = GraphValue.FromFloat4(
-                    0.6f,
-                    0.7f,
-                    0.9f,
-                    0.7f
+                    x: 0.6f,
+                    y: 0.7f,
+                    z: 0.9f,
+                    w: 0.7f
                 )
         );
         b.Update(
-            VfxNodeLibrary.Gravity,
-            n => n.Properties["gravity"] = GraphValue.FromFloat3(0f, -9.8f, 0f)
+            defId: VfxNodeLibrary.Gravity,
+            cfg: n => n.Properties["gravity"] = GraphValue.FromFloat3(x: 0f, y: -9.8f, z: 0f)
         );
         b.Render(n => n.Properties["blend"] = GraphValue.FromInt((int)VfxBlendMode.AlphaBlend));
         return b.Doc;
@@ -402,10 +438,10 @@ public static class VfxPresets
                 SchemaId = VfxNodeLibrary.EmitterSchema,
             };
             _output = Add(
-                VfxNodeLibrary.Output,
-                820f,
-                200f,
-                configureOutput
+                defId: VfxNodeLibrary.Output,
+                x: 820f,
+                y: 200f,
+                cfg: configureOutput
             );
         }
 
@@ -414,60 +450,60 @@ public static class VfxPresets
         public void Spawn(string defId, Action<GraphNode> cfg)
         {
             Block(
-                60f,
-                ref _inY,
-                defId,
-                "out.spawn",
-                "in.spawn",
-                cfg
+                x: 60f,
+                y: ref _inY,
+                defId: defId,
+                fromPin: "out.spawn",
+                toPin: "in.spawn",
+                cfg: cfg
             );
         }
 
         public void Shape(Action<GraphNode> cfg)
         {
             Block(
-                60f,
-                ref _inY,
-                VfxNodeLibrary.Shape,
-                "out.shape",
-                "in.shape",
-                cfg
+                x: 60f,
+                y: ref _inY,
+                defId: VfxNodeLibrary.Shape,
+                fromPin: "out.shape",
+                toPin: "in.shape",
+                cfg: cfg
             );
         }
 
         public void Init(string defId, Action<GraphNode> cfg)
         {
             Block(
-                60f,
-                ref _inY,
-                defId,
-                "out.init",
-                "in.init",
-                cfg
+                x: 60f,
+                y: ref _inY,
+                defId: defId,
+                fromPin: "out.init",
+                toPin: "in.init",
+                cfg: cfg
             );
         }
 
         public void Update(string defId, Action<GraphNode> cfg)
         {
             Block(
-                440f,
-                ref _upY,
-                defId,
-                "out.update",
-                "in.update",
-                cfg
+                x: 440f,
+                y: ref _upY,
+                defId: defId,
+                fromPin: "out.update",
+                toPin: "in.update",
+                cfg: cfg
             );
         }
 
         public void Render(Action<GraphNode> cfg)
         {
             Block(
-                440f,
-                ref _upY,
-                VfxNodeLibrary.Render,
-                "out.render",
-                "in.render",
-                cfg
+                x: 440f,
+                y: ref _upY,
+                defId: VfxNodeLibrary.Render,
+                fromPin: "out.render",
+                toPin: "in.render",
+                cfg: cfg
             );
         }
 
@@ -475,16 +511,16 @@ public static class VfxPresets
             Action<GraphNode> cfg)
         {
             var node = Add(
-                defId,
-                x,
-                y,
-                cfg
+                defId: defId,
+                x: x,
+                y: y,
+                cfg: cfg
             );
             y += 96f;
             Doc.Edges.Add(
                 new GraphEdge {
-                    From = new GraphPinEndpoint(node.Id, fromPin),
-                    To = new GraphPinEndpoint(_output.Id, toPin),
+                    From = new GraphPinEndpoint(NodeId: node.Id, PinId: fromPin),
+                    To = new GraphPinEndpoint(NodeId: _output.Id, PinId: toPin),
                 }
             );
         }

@@ -12,35 +12,17 @@ public readonly struct ColliderHandle(uint id) : IEquatable<ColliderHandle>
     public uint Id { get; } = id;
     public bool IsValid => Id != 0;
 
-    public bool Equals(ColliderHandle other)
-    {
-        return Id == other.Id;
-    }
+    public bool Equals(ColliderHandle other) => Id == other.Id;
 
-    public override bool Equals(object? obj)
-    {
-        return obj is ColliderHandle h && Equals(h);
-    }
+    public override bool Equals(object? obj) => obj is ColliderHandle h && Equals(h);
 
-    public override int GetHashCode()
-    {
-        return (int)Id;
-    }
+    public override int GetHashCode() => (int)Id;
 
-    public static bool operator ==(ColliderHandle a, ColliderHandle b)
-    {
-        return a.Id == b.Id;
-    }
+    public static bool operator ==(ColliderHandle a, ColliderHandle b) => a.Id == b.Id;
 
-    public static bool operator !=(ColliderHandle a, ColliderHandle b)
-    {
-        return a.Id != b.Id;
-    }
+    public static bool operator !=(ColliderHandle a, ColliderHandle b) => a.Id != b.Id;
 
-    public override string ToString()
-    {
-        return Id == 0 ? "ColliderHandle.None" : $"ColliderHandle({Id})";
-    }
+    public override string ToString() => Id == 0 ? "ColliderHandle.None" : $"ColliderHandle({Id})";
 }
 
 /// <summary>

@@ -18,10 +18,7 @@ public static class FocusTraversal
     ///     A focusable is reachable only if it has a non-degenerate laid-out rect (not
     ///     collapsed/off-screen).
     /// </summary>
-    public static bool IsFocusVisible(Widget w)
-    {
-        return w.Bounds.Width > 0.5f && w.Bounds.Height > 0.5f;
-    }
+    public static bool IsFocusVisible(Widget w) => w.Bounds.Width > 0.5f && w.Bounds.Height > 0.5f;
 
     /// <summary>
     ///     Depth-first (reading order) collection of the visible focusables under
@@ -33,13 +30,13 @@ public static class FocusTraversal
         // Visible children only: a hidden TabView page / covered navigator route keeps its last
         // laid-out (non-zero) bounds, so the per-widget rect check alone can't exclude it.
         foreach (var child in scope.GetVisibleChildren())
-            Collect(child, into);
+            Collect(scope: child, into: into);
     }
 
     public static List<Widget> Focusables(Widget scope)
     {
         var list = new List<Widget>();
-        Collect(scope, list);
+        Collect(scope: scope, into: list);
         return list;
     }
 
@@ -47,8 +44,11 @@ public static class FocusTraversal
     {
         if (w.Focusable && IsFocusVisible(w)) return true;
         foreach (var child in w.GetVisibleChildren())
+        {
             if (HasFocusable(child))
                 return true;
+        }
+
         return false;
     }
 
@@ -69,11 +69,11 @@ public static class FocusTraversal
         // Attach, so an unmounted subtree (and every headless test) has none, and the answer would
         // silently degrade to "no groups" — the exact bug this is meant to prevent.
         List<(Widget Widget, IFocusGroup? Group)> all = [];
-        CollectGrouped(scope, null, all);
+        CollectGrouped(w: scope, group: null, into: all);
 
         var focusedGroup = focused is null
             ? null
-            : all.FirstOrDefault(e => ReferenceEquals(e.Widget, focused)).Group;
+            : all.FirstOrDefault(e => ReferenceEquals(objA: e.Widget, objB: focused)).Group;
 
         List<Widget> order = [];
         IFocusGroup? current = null;
@@ -88,10 +88,10 @@ public static class FocusTraversal
 
             // A group's focusables are contiguous in reading order, so its run is represented by
             // one entry and the rest are skipped.
-            if (ReferenceEquals(group, current)) continue;
+            if (ReferenceEquals(objA: group, objB: current)) continue;
             current = group;
             // Tab leaves from wherever the arrows left off; otherwise the group's own target.
-            var keep = ReferenceEquals(group, focusedGroup) && focused is not null
+            var keep = ReferenceEquals(objA: group, objB: focusedGroup) && focused is not null
                 ? focused
                 : group.TabTarget ?? widget;
             if (IsFocusVisible(keep)) order.Add(keep);
@@ -109,7 +109,8 @@ public static class FocusTraversal
     {
         var inner = w as IFocusGroup ?? group;
         if (w.Focusable && IsFocusVisible(w)) into.Add((w, inner));
-        foreach (var child in w.GetVisibleChildren()) CollectGrouped(child, inner, into);
+        foreach (var child in w.GetVisibleChildren())
+            CollectGrouped(w: child, group: inner, into: into);
     }
 
     /// <summary>
@@ -119,7 +120,7 @@ public static class FocusTraversal
     public static Widget? NextInTab(IReadOnlyList<Widget> order, Widget? current, bool backwards)
     {
         if (order.Count == 0) return null;
-        var idx = current is null ? -1 : IndexOf(order, current);
+        int idx = current is null ? -1 : IndexOf(order: order, w: current);
         if (backwards) idx = idx <= 0 ? order.Count - 1 : idx - 1;
         else idx = (idx + 1) % order.Count;
         return order[idx];
@@ -135,19 +136,19 @@ public static class FocusTraversal
         float dy)
     {
         var fb = current.Bounds;
-        float fx = fb.X + fb.Width / 2f, fy = fb.Y + fb.Height / 2f;
+        float fx = fb.X + (fb.Width / 2f), fy = fb.Y + (fb.Height / 2f);
         Widget? best = null;
-        var bestScore = float.MaxValue;
+        float bestScore = float.MaxValue;
         foreach (var c in order)
         {
-            if (ReferenceEquals(c, current)) continue;
+            if (ReferenceEquals(objA: c, objB: current)) continue;
             var cb = c.Bounds;
-            float cx = cb.X + cb.Width / 2f, cy = cb.Y + cb.Height / 2f;
+            float cx = cb.X + (cb.Width / 2f), cy = cb.Y + (cb.Height / 2f);
             float ex = cx - fx, ey = cy - fy;
-            var along = ex * dx + ey * dy;
+            float along = (ex * dx) + (ey * dy);
             if (along <= 1f) continue; // not ahead in the pressed direction
-            var cross = MathF.Abs(ex * dy - ey * dx);
-            var score = along + cross * 2f;
+            float cross = MathF.Abs((ex * dy) - (ey * dx));
+            float score = along + (cross * 2f);
             if (score < bestScore)
             {
                 bestScore = score;
@@ -160,9 +161,12 @@ public static class FocusTraversal
 
     private static int IndexOf(IReadOnlyList<Widget> order, Widget w)
     {
-        for (var i = 0; i < order.Count; i++)
-            if (ReferenceEquals(order[i], w))
+        for (int i = 0; i < order.Count; i++)
+        {
+            if (ReferenceEquals(objA: order[i], objB: w))
                 return i;
+        }
+
         return -1;
     }
 }

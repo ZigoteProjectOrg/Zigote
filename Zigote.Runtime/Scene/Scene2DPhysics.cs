@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Zigote.Core.Math3D;
 using Zigote.Physics2D;
 using Zigote.Render2D;
@@ -38,27 +39,31 @@ public static class Scene2DPhysics
         Func<string?, Tileset?>? tilesetLoader = null)
     {
         Bake(
-            root,
-            tilesetLoader,
-            shape =>
+            root: root,
+            tilesetLoader: tilesetLoader,
+            emit: shape =>
             {
                 if (shape.IsCircle)
+                {
                     world.AddCircle(
-                        shape.Center,
-                        shape.Radius,
-                        shape.Layer,
-                        shape.IsTrigger,
-                        shape.Source
+                        center: shape.Center,
+                        radius: shape.Radius,
+                        layer: shape.Layer,
+                        isTrigger: shape.IsTrigger,
+                        userData: shape.Source
                     );
+                }
                 else
+                {
                     world.AddBox(
-                        shape.Center,
-                        shape.HalfExtents,
-                        shape.Layer,
-                        shape.IsTrigger,
-                        shape.OneWayUp,
-                        shape.Source
+                        center: shape.Center,
+                        halfExtents: shape.HalfExtents,
+                        layer: shape.Layer,
+                        isTrigger: shape.IsTrigger,
+                        oneWayUp: shape.OneWayUp,
+                        userData: shape.Source
                     );
+                }
             }
         );
     }
@@ -68,48 +73,47 @@ public static class Scene2DPhysics
     ///     so what it shows is exactly what the simulation receives — merged tile runs included.
     /// </summary>
     public static void Bake(SceneNode root, Func<string?, Tileset?>? tilesetLoader,
-        Action<Baked2DShape> emit)
-    {
-        Collect(root, emit, tilesetLoader);
-    }
+        Action<Baked2DShape> emit) =>
+        Collect(node: root, emit: emit, loader: tilesetLoader);
 
     private static void Collect(SceneNode node, Action<Baked2DShape> emit,
         Func<string?, Tileset?>? loader)
     {
         if (node.Visible)
         {
-            if (node.Collider2DEnabled) AddNodeCollider(node, emit);
+            if (node.Collider2DEnabled) AddNodeCollider(node: node, emit: emit);
             if (node is { Kind: NodeKind.Tilemap, TilemapCollision: true })
-                AddTilemapColliders(node, emit, loader);
+                AddTilemapColliders(node: node, emit: emit, loader: loader);
         }
 
-        for (var i = 0; i < node.Children.Count; i++) Collect(node.Children[i], emit, loader);
+        for (int i = 0; i < node.Children.Count; i++)
+            Collect(node: node.Children[i], emit: emit, loader: loader);
     }
 
     private static void AddNodeCollider(SceneNode node, Action<Baked2DShape> emit)
     {
         var w = WorldTransform(node);
         var center = new Vec2(
-            w.Position.X + node.Collider2DOffset.X,
-            w.Position.Y + node.Collider2DOffset.Y
+            x: w.Position.X + node.Collider2DOffset.X,
+            y: w.Position.Y + node.Collider2DOffset.Y
         );
 
         if (node.Collider2DShape == 1)
         {
             // Circles cannot be non-uniformly scaled in an AABB world — take the larger axis so the
             // authored shape is never smaller than what the editor drew.
-            var scale = MathF.Max(MathF.Abs(w.Scale.X), MathF.Abs(w.Scale.Y));
-            var r = MathF.Max(1e-4f, node.Collider2DRadius * scale);
+            float scale = MathF.Max(x: MathF.Abs(w.Scale.X), y: MathF.Abs(w.Scale.Y));
+            float r = MathF.Max(x: 1e-4f, y: node.Collider2DRadius * scale);
             emit(
                 new Baked2DShape(
-                    true,
-                    center,
-                    new Vec2(r, r),
-                    r,
-                    node.Collider2DLayer,
-                    node.Collider2DIsTrigger,
-                    false,
-                    node
+                    IsCircle: true,
+                    Center: center,
+                    HalfExtents: new Vec2(x: r, y: r),
+                    Radius: r,
+                    Layer: node.Collider2DLayer,
+                    IsTrigger: node.Collider2DIsTrigger,
+                    OneWayUp: false,
+                    Source: node
                 )
             );
             return;
@@ -117,17 +121,17 @@ public static class Scene2DPhysics
 
         emit(
             new Baked2DShape(
-                false,
-                center,
-                new Vec2(
-                    MathF.Max(1e-4f, node.Collider2DSize.X * MathF.Abs(w.Scale.X)),
-                    MathF.Max(1e-4f, node.Collider2DSize.Y * MathF.Abs(w.Scale.Y))
+                IsCircle: false,
+                Center: center,
+                HalfExtents: new Vec2(
+                    x: MathF.Max(x: 1e-4f, y: node.Collider2DSize.X * MathF.Abs(w.Scale.X)),
+                    y: MathF.Max(x: 1e-4f, y: node.Collider2DSize.Y * MathF.Abs(w.Scale.Y))
                 ),
-                0f,
-                node.Collider2DLayer,
-                node.Collider2DIsTrigger,
-                node.Collider2DOneWayUp,
-                node
+                Radius: 0f,
+                Layer: node.Collider2DLayer,
+                IsTrigger: node.Collider2DIsTrigger,
+                OneWayUp: node.Collider2DOneWayUp,
+                Source: node
             )
         );
     }
@@ -146,33 +150,33 @@ public static class Scene2DPhysics
         if (tileset is null) return;
 
         var w = WorldTransform(node);
-        var stepX = MathF.Max(1e-4f, node.TileWorldSize) * w.Scale.X;
-        var stepY = MathF.Max(1e-4f, node.TileWorldSize) * w.Scale.Y;
-        var halfY = stepY * 0.5f;
+        float stepX = MathF.Max(x: 1e-4f, y: node.TileWorldSize) * w.Scale.X;
+        float stepY = MathF.Max(x: 1e-4f, y: node.TileWorldSize) * w.Scale.Y;
+        float halfY = stepY * 0.5f;
 
         foreach (var layer in node.TilemapLayers)
         {
             if (!layer.Visible || layer.IsEmpty) continue;
 
-            for (var ty = layer.OriginY; ty < layer.OriginY + layer.Height; ty++)
+            for (int ty = layer.OriginY; ty < layer.OriginY + layer.Height; ty++)
             {
-                var runStart = int.MinValue;
-                var runOneWay = false;
+                int runStart = int.MinValue;
+                bool runOneWay = false;
 
-                for (var tx = layer.OriginX; tx <= layer.OriginX + layer.Width; tx++)
+                for (int tx = layer.OriginX; tx <= layer.OriginX + layer.Width; tx++)
                 {
                     // One past the end closes any open run without a duplicated tail block.
-                    var inside = tx < layer.OriginX + layer.Width;
-                    var tile = inside ? layer.GetTile(tx, ty) : Tileset.EmptyTile;
-                    var solid = inside && tileset.IsSolid(tile);
-                    var oneWay = solid && tileset.IsOneWay(tile);
+                    bool inside = tx < layer.OriginX + layer.Width;
+                    int tile = inside ? layer.GetTile(x: tx, y: ty) : Tileset.EmptyTile;
+                    bool solid = inside && tileset.IsSolid(tile);
+                    bool oneWay = solid && tileset.IsOneWay(tile);
 
                     if (runStart != int.MinValue && (!solid || oneWay != runOneWay))
                     {
                         EmitRun(
-                            runStart,
-                            tx - 1,
-                            runOneWay
+                            from: runStart,
+                            to: tx - 1,
+                            oneWay: runOneWay
                         );
                         runStart = int.MinValue;
                     }
@@ -188,20 +192,20 @@ public static class Scene2DPhysics
 
                 void EmitRun(int from, int to, bool oneWay)
                 {
-                    var tiles = to - from + 1;
+                    int tiles = to - from + 1;
                     emit(
                         new Baked2DShape(
-                            false,
-                            new Vec2(
-                                w.Position.X + (from + tiles * 0.5f) * stepX,
-                                w.Position.Y + (ty + 0.5f) * stepY
+                            IsCircle: false,
+                            Center: new Vec2(
+                                x: w.Position.X + ((from + (tiles * 0.5f)) * stepX),
+                                y: w.Position.Y + ((ty + 0.5f) * stepY)
                             ),
-                            new Vec2(tiles * stepX * 0.5f, halfY),
-                            0f,
-                            node.Collider2DLayer,
-                            false,
-                            oneWay,
-                            node
+                            HalfExtents: new Vec2(x: tiles * stepX * 0.5f, y: halfY),
+                            Radius: 0f,
+                            Layer: node.Collider2DLayer,
+                            IsTrigger: false,
+                            OneWayUp: oneWay,
+                            Source: node
                         )
                     );
                 }
@@ -214,10 +218,10 @@ public static class Scene2DPhysics
         if (string.IsNullOrEmpty(path)) return null;
         try
         {
-            var abs = Path.GetFullPath(path);
+            string abs = Path.GetFullPath(path);
             return File.Exists(abs) ? Tileset.Load(abs) : null;
         }
-        catch (Exception e) when (e is IOException or System.Text.Json.JsonException)
+        catch (Exception e) when (e is IOException or JsonException)
         {
             return null;
         }
@@ -225,9 +229,13 @@ public static class Scene2DPhysics
 
     private static Transform3D WorldTransform(SceneNode node)
     {
-        var local = new Transform3D(node.Position, node.Rotation, node.Scale);
+        var local = new Transform3D(
+            position: node.Position,
+            rotation: node.Rotation,
+            scale: node.Scale
+        );
         return node.Parent is { } parent
-            ? Transform3D.Combine(WorldTransform(parent), local)
+            ? Transform3D.Combine(parent: WorldTransform(parent), child: local)
             : local;
     }
 }

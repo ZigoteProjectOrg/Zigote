@@ -48,21 +48,15 @@ public sealed class TreeView<T> : Widget where T : notnull
         _onSelect = onSelect;
         _collapsed = new HashSet<T>(comparer ?? EqualityComparer<T>.Default);
         Comparer = comparer ?? EqualityComparer<T>.Default;
-        _expand = new AnimationController(Motion.Standard, this) { Curve = Curves.EaseOut };
+        _expand = new AnimationController(durationSeconds: Motion.Standard, vsync: this) {
+            Curve = Curves.EaseOut,
+        };
         _expand.OnTick += MarkNeedsPaint;
         _expand.OnCompleted += () =>
         {
             _animActive = false;
             MarkNeedsPaint();
         };
-    }
-
-
-    // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
-    // re-attach rebinds instead of leaking one per attach cascade.
-    protected override void OnMount()
-    {
-        _expand.AttachTicker(this);
     }
 
 
@@ -86,18 +80,20 @@ public sealed class TreeView<T> : Widget where T : notnull
 
     // Effective metrics. 24pt rows and a chevron inside them are a pointer rhythm; on a phone the
     // rows grow to a finger target and the per-level indent tightens so deep nodes keep their label.
-    private float RowH => _compact ? MathF.Max(RowHeight, TouchMetrics.MinTarget) : RowHeight;
+    private float RowH => _compact ? MathF.Max(x: RowHeight, y: TouchMetrics.MinTarget) : RowHeight;
 
-    private float Indent => _compact ? MathF.Min(IndentPerLevel, 12f) : IndentPerLevel;
+    private float Indent => _compact ? MathF.Min(x: IndentPerLevel, y: 12f) : IndentPerLevel;
 
-    public bool IsExpanded(T node)
-    {
-        return !_collapsed.Contains(node);
-    }
+
+    // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
+    // re-attach rebinds instead of leaking one per attach cascade.
+    protected override void OnMount() => _expand.AttachTicker(this);
+
+    public bool IsExpanded(T node) => !_collapsed.Contains(node);
 
     public void SetExpanded(T node, bool expanded)
     {
-        var changed = expanded ? _collapsed.Remove(node) : _collapsed.Add(node);
+        bool changed = expanded ? _collapsed.Remove(node) : _collapsed.Add(node);
         if (!changed) return;
         if (expanded) PlayExpand(node);
         MarkNeedsLayout();
@@ -105,7 +101,7 @@ public sealed class TreeView<T> : Widget where T : notnull
 
     public void ToggleExpanded(T node)
     {
-        var nowExpanded = _collapsed.Remove(node);
+        bool nowExpanded = _collapsed.Remove(node);
         if (!nowExpanded) _collapsed.Add(node);
         if (nowExpanded) PlayExpand(node);
         MarkNeedsLayout();
@@ -125,17 +121,19 @@ public sealed class TreeView<T> : Widget where T : notnull
     private (int Start, int End) AnimatingRange()
     {
         if (!_animActive) return (0, 0);
-        var ni = -1;
-        for (var i = 0; i < _flat.Count; i++)
-            if (Comparer.Equals(_flat[i].Node, _animNode))
+        int ni = -1;
+        for (int i = 0; i < _flat.Count; i++)
+        {
+            if (Comparer.Equals(x: _flat[i].Node, y: _animNode))
             {
                 ni = i;
                 break;
             }
+        }
 
         if (ni < 0) return (0, 0);
-        var depth = _flat[ni].Depth;
-        var end = ni + 1;
+        int depth = _flat[ni].Depth;
+        int end = ni + 1;
         while (end < _flat.Count && _flat[end].Depth > depth) end++;
         return (ni + 1, end);
     }
@@ -143,25 +141,27 @@ public sealed class TreeView<T> : Widget where T : notnull
     private void Flatten()
     {
         _flat.Clear();
-        foreach (var r in _roots) FlattenNode(r, 0);
+        foreach (var r in _roots) FlattenNode(node: r, depth: 0);
     }
 
     private void FlattenNode(T node, int depth)
     {
         var children = _childrenOf(node);
-        var hasChildren = children.Count > 0;
-        var expanded = IsExpanded(node);
+        bool hasChildren = children.Count > 0;
+        bool expanded = IsExpanded(node);
         _flat.Add(
             new Row(
-                node,
-                depth,
-                hasChildren,
-                expanded
+                node: node,
+                depth: depth,
+                hasChildren: hasChildren,
+                expanded: expanded
             )
         );
         if (hasChildren && expanded)
+        {
             foreach (var c in children)
-                FlattenNode(c, depth + 1);
+                FlattenNode(node: c, depth: depth + 1);
+        }
     }
 
     public override Size Measure(Constraints c)
@@ -169,19 +169,19 @@ public sealed class TreeView<T> : Widget where T : notnull
         _theme = ThemeProvider.Of(BuildContext.Current);
         _compact = TouchMetrics.IsCompact;
         Flatten();
-        var w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 240f;
-        var h = _flat.Count * RowH;
-        _size = c.Constrain(new Size(w, h));
+        float w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 240f;
+        float h = _flat.Count * RowH;
+        _size = c.Constrain(new Size(width: w, height: h));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
@@ -193,8 +193,8 @@ public sealed class TreeView<T> : Widget where T : notnull
     {
         if (_flat.Count == 0 || RowH <= 0f) return (0, -1);
         if (clip is not { } c) return (0, _flat.Count - 1);
-        var first = Math.Max(0, (int)((c.Y - Bounds.Y) / RowH));
-        var last = Math.Min(_flat.Count - 1, (int)((c.Bottom - Bounds.Y) / RowH));
+        int first = Math.Max(val1: 0, val2: (int)((c.Y - Bounds.Y) / RowH));
+        int last = Math.Min(val1: _flat.Count - 1, val2: (int)((c.Bottom - Bounds.Y) / RowH));
         return (first, last);
     }
 
@@ -205,98 +205,100 @@ public sealed class TreeView<T> : Widget where T : notnull
 
         // Virtualize: iterate only the rows inside the active clip window (the ancestor scroll viewport
         // intersected with our bounds) instead of walking every flattened row.
-        var (first, last) = VisibleRange(paint.CurrentClip);
-        var (animStart, animEnd) = AnimatingRange();
-        var animT = _expand.Value;
-        var fs = _theme.FontSizeCaption;
-        for (var i = first; i <= last; i++)
+        (int first, int last) = VisibleRange(paint.CurrentClip);
+        (int animStart, int animEnd) = AnimatingRange();
+        float animT = _expand.Value;
+        float fs = _theme.FontSizeCaption;
+        for (int i = first; i <= last; i++)
         {
             var row = _flat[i];
-            var rowY = Bounds.Y + i * RowH;
+            float rowY = Bounds.Y + (i * RowH);
 
             // Freshly revealed descendant rows fade + slide into place while the node expands.
-            var animating = _animActive && i >= animStart && i < animEnd;
+            bool animating = _animActive && i >= animStart && i < animEnd;
             if (animating)
             {
-                paint.PushAlpha(Math.Clamp(animT, 0f, 1f));
-                paint.PushTranslate(0f, -(1f - animT) * 6f);
+                paint.PushAlpha(Math.Clamp(value: animT, min: 0f, max: 1f));
+                paint.PushTranslate(dx: 0f, dy: -(1f - animT) * 6f);
             }
 
-            var isSelected = Selected is not null && Comparer.Equals(Selected, row.Node);
-            var isHover = i == _hoverIndex;
+            bool isSelected = Selected is not null && Comparer.Equals(x: Selected, y: row.Node);
+            bool isHover = i == _hoverIndex;
 
             var bg = isSelected ? _theme.Primary.WithAlpha(0.22f)
                 : isHover ? _theme.OnSurface.WithAlpha(0.06f)
                 : new Color(
-                    0,
-                    0,
-                    0,
-                    0
+                    r: 0,
+                    g: 0,
+                    b: 0,
+                    a: 0
                 );
             if (bg.A > 0f)
+            {
                 paint.AddRect(
-                    new Rect(
-                        Bounds.X + 4f,
-                        rowY + 1f,
-                        _size.Width - 8f,
-                        RowH - 2f
+                    bounds: new Rect(
+                        x: Bounds.X + 4f,
+                        y: rowY + 1f,
+                        width: _size.Width - 8f,
+                        height: RowH - 2f
                     ),
-                    bg,
-                    Radii.Sm
+                    color: bg,
+                    radius: Radii.Sm
                 );
+            }
 
-            var indent = 8f + row.Depth * Indent;
+            float indent = 8f + (row.Depth * Indent);
 
             // Disclosure chevron — only when the node has children.
             if (row.HasChildren)
             {
-                var glyph = row.Expanded ? Icons.ChevronDown : Icons.ChevronRight;
+                string glyph = row.Expanded ? Icons.ChevronDown : Icons.ChevronRight;
                 Icons.Draw(
-                    paint,
-                    glyph,
-                    new Rect(
-                        Bounds.X + indent,
-                        rowY,
-                        14f,
-                        RowH
+                    paint: paint,
+                    glyph: glyph,
+                    box: new Rect(
+                        x: Bounds.X + indent,
+                        y: rowY,
+                        width: 14f,
+                        height: RowH
                     ),
-                    _theme.TextMuted,
-                    14f
+                    color: _theme.TextMuted,
+                    size: 14f
                 );
             }
 
-            var contentX = Bounds.X + indent + 16f;
+            float contentX = Bounds.X + indent + 16f;
 
             // Optional leading icon.
             if (IconOf is not null)
             {
-                var glyph = IconOf(row.Node);
+                string glyph = IconOf(row.Node);
                 if (!string.IsNullOrEmpty(glyph))
                 {
                     Icons.Draw(
-                        paint,
-                        glyph,
-                        new Rect(
-                            contentX,
-                            rowY,
-                            16f,
-                            RowH
+                        paint: paint,
+                        glyph: glyph,
+                        box: new Rect(
+                            x: contentX,
+                            y: rowY,
+                            width: 16f,
+                            height: RowH
                         ),
-                        _theme.OnSurface,
-                        15f
+                        color: _theme.OnSurface,
+                        size: 15f
                     );
                     contentX += 20f;
                 }
             }
 
             var fg = isSelected ? _theme.OnSurface : _theme.OnSurface.WithAlpha(0.9f);
-            var textY = rowY + (RowH - fs) / 2f + fs * 0.8f;
+            float textY = rowY + ((RowH - fs) / 2f) + (fs * 0.8f);
             paint.AddText(
-                _labelOf(row.Node),
-                contentX,
-                textY,
-                fg,
-                fs
+                text: _labelOf(row.Node),
+                baselineX: contentX,
+                baselineY: textY,
+                color: fg,
+                fontSize: fs
             );
 
             if (animating)
@@ -311,14 +313,14 @@ public sealed class TreeView<T> : Widget where T : notnull
 
     private int RowIndexAt(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return -1;
-        var idx = (int)((point.Y - Bounds.Y) / RowH);
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return -1;
+        int idx = (int)((point.Y - Bounds.Y) / RowH);
         return idx >= 0 && idx < _flat.Count ? idx : -1;
     }
 
     public override void OnPointerMove(Offset point)
     {
-        var idx = RowIndexAt(point);
+        int idx = RowIndexAt(point);
         if (idx != _hoverIndex)
         {
             _hoverIndex = idx;
@@ -336,14 +338,14 @@ public sealed class TreeView<T> : Widget where T : notnull
     public override void OnPointerDown(Offset point)
     {
         App.Active?.RequestFocus(this);
-        var idx = RowIndexAt(point);
+        int idx = RowIndexAt(point);
         if (idx < 0) return;
         var row = _flat[idx];
 
         // Click on the disclosure chevron toggles expansion.
-        var indent = 8f + row.Depth * Indent;
-        var chevronLeft = Bounds.X + indent;
-        var chevronW = _compact ? 24f : 14f;
+        float indent = 8f + (row.Depth * Indent);
+        float chevronLeft = Bounds.X + indent;
+        float chevronW = _compact ? 24f : 14f;
         if (row.HasChildren && point.X >= chevronLeft && point.X <= chevronLeft + chevronW)
         {
             ToggleExpanded(row.Node);
@@ -357,12 +359,12 @@ public sealed class TreeView<T> : Widget where T : notnull
 
     public override int DebugStateHash()
     {
-        var sel = Selected is null ? 0 : Comparer.GetHashCode(Selected);
+        int sel = Selected is null ? 0 : Comparer.GetHashCode(Selected);
         return HashCode.Combine(
-            _flat.Count,
-            _hoverIndex,
-            sel,
-            _collapsed.Count
+            value1: _flat.Count,
+            value2: _hoverIndex,
+            value3: sel,
+            value4: _collapsed.Count
         );
     }
 

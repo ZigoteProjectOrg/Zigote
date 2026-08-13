@@ -11,28 +11,25 @@ public class FakeGlass : Widget
 {
     private Size _size;
 
-    public FakeGlass(Widget? child = null)
-    {
-        Child = child;
-    }
+    public FakeGlass(Widget? child = null) => Child = child;
 
     public Widget? Child { get; set; }
 
     public Color Color { get; set; } = new(
-        0.95f,
-        0.96f,
-        0.98f,
-        0.18f
+        r: 0.95f,
+        g: 0.96f,
+        b: 0.98f,
+        a: 0.18f
     );
 
     public float BorderRadius { get; set; } = 15f;
     public float BorderWidth { get; set; } = 1f;
 
     public Color BorderColor { get; set; } = new(
-        1f,
-        1f,
-        1f,
-        0.22f
+        r: 1f,
+        g: 1f,
+        b: 1f,
+        a: 0.22f
     );
 
     public override Size Measure(Constraints c)
@@ -44,10 +41,10 @@ public class FakeGlass : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         Child?.Layout(origin);
     }
@@ -56,27 +53,27 @@ public class FakeGlass : Widget
     {
         // 1. Draw a soft dark drop shadow for layer separation
         paint.AddShadow(
-            Bounds,
-            new Color(
-                0f,
-                0f,
-                0f,
-                0.12f
+            bounds: Bounds,
+            color: new Color(
+                r: 0f,
+                g: 0f,
+                b: 0f,
+                a: 0.12f
             ),
-            BorderRadius,
-            14f,
-            2f
+            borderRadius: BorderRadius,
+            blurRadius: 14f,
+            spread: 2f
         );
 
         // 2. Draw the frosted glass base card
-        paint.AddRect(Bounds, Color, BorderRadius);
+        paint.AddRect(bounds: Bounds, color: Color, radius: BorderRadius);
 
         // 3. Draw a crisp white inner border to simulate light reflection on edges
         paint.AddBorder(
-            Bounds,
-            BorderColor,
-            BorderRadius,
-            BorderWidth
+            bounds: Bounds,
+            color: BorderColor,
+            radius: BorderRadius,
+            width: BorderWidth
         );
 
         Child?.Paint(paint);
@@ -84,12 +81,9 @@ public class FakeGlass : Widget
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return Child?.HitTest(point) ?? this;
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(Child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Child);
 }

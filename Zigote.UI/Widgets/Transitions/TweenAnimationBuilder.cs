@@ -17,7 +17,10 @@ public sealed class TweenAnimationBuilder<T> : ImplicitlyAnimatedWidget
     private Size _size;
 
     public TweenAnimationBuilder(Tween<T> tween, Func<T, Widget> builder,
-        float duration = 0.25f, Func<float, float>? curve = null) : base(duration, curve)
+        float duration = 0.25f, Func<float, float>? curve = null) : base(
+        durationSeconds: duration,
+        curve: curve
+    )
     {
         _tween = tween;
         Builder = builder;
@@ -32,7 +35,7 @@ public sealed class TweenAnimationBuilder<T> : ImplicitlyAnimatedWidget
         get => _tween.End;
         set
         {
-            if (EqualityComparer<T>.Default.Equals(value, _tween.End)) return;
+            if (EqualityComparer<T>.Default.Equals(x: value, y: _tween.End)) return;
             _tween.Begin = _tween.Evaluate(Progress);
             _tween.End = value;
             Animate();
@@ -41,7 +44,7 @@ public sealed class TweenAnimationBuilder<T> : ImplicitlyAnimatedWidget
 
     private void RebuildIfNeeded()
     {
-        var p = Progress;
+        float p = Progress;
         if (!float.IsNaN(_lastProgress) && MathF.Abs(p - _lastProgress) < 0.001f &&
             _built is not null) return;
         _lastProgress = p;
@@ -50,7 +53,7 @@ public sealed class TweenAnimationBuilder<T> : ImplicitlyAnimatedWidget
         // child ~60×/second — disposing and re-creating everything it owns each time.
         var previous = _built;
         _built = Builder(_tween.Evaluate(p));
-        SwapChild(previous, _built);
+        SwapChild(previous: previous, next: _built);
     }
 
     public override Size Measure(Constraints c)
@@ -63,27 +66,21 @@ public sealed class TweenAnimationBuilder<T> : ImplicitlyAnimatedWidget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         _built?.Layout(origin);
     }
 
-    public override void Paint(PaintList paint)
-    {
-        _built?.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => _built?.Paint(paint);
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return _built?.HitTest(point) ?? this;
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return _built is not null ? [_built] : [];
-    }
+    public override IEnumerable<Widget> GetChildren() => _built is not null ? [_built] : [];
 }

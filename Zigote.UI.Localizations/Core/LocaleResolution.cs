@@ -13,10 +13,12 @@ namespace Zigote.UI.Localizations;
 public static class LocaleResolution
 {
     /// <summary>Resolve a single preferred locale against the supported set.</summary>
-    public static Locale Resolve(Locale preferred, IReadOnlyList<Locale> supported, Locale fallback)
-    {
-        return Resolve(new[] { preferred }, supported, fallback);
-    }
+    public static Locale
+        Resolve(Locale preferred, IReadOnlyList<Locale> supported, Locale fallback) => Resolve(
+        preferred: new[] { preferred },
+        supported: supported,
+        fallback: fallback
+    );
 
     /// <summary>
     ///     Resolve an ordered preference list against the supported set. Earlier preferences win over
@@ -35,36 +37,56 @@ public static class LocaleResolution
             if (want.IsEmpty) continue;
 
             // 1. Exact match (language + script + region).
-            if (Contains(supported, want, out var exact)) return exact;
+            if (Contains(supported: supported, candidate: want, match: out var exact)) return exact;
 
             // 2. When a script is requested, honour it before dropping to a region match — the writing
             //    system matters more than the region. Prefer a same-language + same-script entry (any
             //    region) so e.g. zh-Hant-CN picks zh-Hant-TW over zh-CN.
             if (want.Script is not null)
+            {
                 foreach (var s in supported)
-                    if (string.Equals(s.Language, want.Language, StringComparison.Ordinal)
-                        && string.Equals(s.Script, want.Script, StringComparison.Ordinal))
+                {
+                    if (string.Equals(
+                            a: s.Language,
+                            b: want.Language,
+                            comparisonType: StringComparison.Ordinal
+                        )
+                        && string.Equals(
+                            a: s.Script,
+                            b: want.Script,
+                            comparisonType: StringComparison.Ordinal
+                        ))
                         return s;
+                }
+            }
 
             // 3. Language + region, ignoring script differences.
             var langRegion = want.WithoutScript();
-            if (langRegion != want && Contains(supported, langRegion, out var lr)) return lr;
+            if (langRegion != want && Contains(
+                    supported: supported,
+                    candidate: langRegion,
+                    match: out var lr
+                )) return lr;
 
             // 4. Language-only exact entry.
             var langOnly = want.LanguageOnly();
-            if (Contains(supported, langOnly, out var lo)) return lo;
+            if (Contains(supported: supported, candidate: langOnly, match: out var lo)) return lo;
 
             // 5. Any supported locale in the same language (prefer a script match, then first).
             Locale? sameLangScript = null;
             Locale? sameLang = null;
             foreach (var s in supported)
             {
-                if (!string.Equals(s.Language, want.Language, StringComparison.Ordinal)) continue;
+                if (!string.Equals(
+                        a: s.Language,
+                        b: want.Language,
+                        comparisonType: StringComparison.Ordinal
+                    )) continue;
                 sameLang ??= s;
                 if (want.Script is not null && string.Equals(
-                        s.Script,
-                        want.Script,
-                        StringComparison.Ordinal
+                        a: s.Script,
+                        b: want.Script,
+                        comparisonType: StringComparison.Ordinal
                     ))
                 {
                     sameLangScript = s;
@@ -85,11 +107,13 @@ public static class LocaleResolution
         out Locale match)
     {
         foreach (var s in supported)
+        {
             if (s == candidate)
             {
                 match = s;
                 return true;
             }
+        }
 
         match = default;
         return false;
@@ -98,8 +122,11 @@ public static class LocaleResolution
     private static Locale DefaultOf(IReadOnlyList<Locale> preferred)
     {
         foreach (var p in preferred)
+        {
             if (!p.IsEmpty)
                 return p;
+        }
+
         return Locale.En;
     }
 }

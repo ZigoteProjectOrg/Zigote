@@ -37,31 +37,34 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
         var zigFiles = context.AdditionalTextsProvider
             .Where(static file =>
                 {
-                    var p = file.Path.Replace('\\', '/');
+                    string p = file.Path.Replace(oldChar: '\\', newChar: '/');
                     return p.EndsWith(".zig") && p.Contains("/ffi/");
                 }
             )
             .Select(static (file, cancellationToken) =>
                 {
                     var text = file.GetText(cancellationToken);
-                    return (Path: file.Path.Replace('\\', '/'),
+                    return (Path: file.Path.Replace(oldChar: '\\', newChar: '/'),
                         Text: text?.ToString() ?? string.Empty);
                 }
             )
             .Collect();
 
         context.RegisterSourceOutput(
-            zigFiles,
-            static (spc, files) =>
+            source: zigFiles,
+            action: static (spc, files) =>
             {
                 // Deterministic order (path-sorted) so the generated output is stable across builds.
                 var ordered = files
                     .Where(static f => !string.IsNullOrEmpty(f.Text))
-                    .OrderBy(static f => f.Path, StringComparer.Ordinal);
+                    .OrderBy(keySelector: static f => f.Path, comparer: StringComparer.Ordinal);
 
-                var source = GenerateBindings(ordered);
+                string? source = GenerateBindings(ordered);
                 if (source is null) return;
-                spc.AddSource("NativeEngine.g.cs", SourceText.From(source, Encoding.UTF8));
+                spc.AddSource(
+                    hintName: "NativeEngine.g.cs",
+                    sourceText: SourceText.From(text: source, encoding: Encoding.UTF8)
+                );
             }
         );
     }
@@ -72,10 +75,12 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
         // unique in the shared lib, so a duplicate would only ever be an authoring mistake).
         var functions = new List<ZigFunction>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var (_, text) in files)
+        foreach ((string _, string text) in files)
         foreach (var fn in ParseZigFunctions(text))
+        {
             if (seen.Add(fn.EntryPoint))
                 functions.Add(fn);
+        }
 
         if (functions.Count == 0) return null;
 
@@ -106,7 +111,7 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
 
             sb.Append($"    {func.Visibility} static extern {func.ReturnType} {func.Name}(");
 
-            for (var i = 0; i < func.Parameters.Count; i++)
+            for (int i = 0; i < func.Parameters.Count; i++)
             {
                 var param = func.Parameters[i];
                 sb.Append($"{param.Type} {param.Name}");
@@ -125,18 +130,18 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
     private static List<ZigFunction> ParseZigFunctions(string source)
     {
         var functions = new List<ZigFunction>();
-        var index = 0;
+        int index = 0;
 
         while (true)
         {
-            index = source.IndexOf("export fn ", index);
+            index = source.IndexOf(value: "export fn ", startIndex: index);
             if (index == -1) break;
 
             // A real declaration is always top-level, hence always at column 0. Anything indented is
             // the phrase appearing inside something else — a doc comment, or a string literal in a
             // test that greps these very declarations — and must not emit a binding. Matching on the
             // column covers every such case at once; matching on `//` covered only the first.
-            if (source.LastIndexOf('\n', index) + 1 != index)
+            if (source.LastIndexOf(value: '\n', startIndex: index) + 1 != index)
             {
                 index += "export fn ".Length;
                 continue;
@@ -144,18 +149,17 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
 
             index += "export fn ".Length;
 
-            var openParen = source.IndexOf("(", index);
+            int openParen = source.IndexOf(value: "(", startIndex: index);
             if (openParen == -1) break;
 
-            var fnName = source.Substring(index, openParen - index).Trim();
+            string fnName = source.Substring(startIndex: index, length: openParen - index).Trim();
 
-            var depth = 1;
-            var closeParen = -1;
-            for (var i = openParen + 1; i < source.Length; i++)
+            int depth = 1;
+            int closeParen = -1;
+            for (int i = openParen + 1; i < source.Length; i++)
+            {
                 if (source[i] == '(')
-                {
                     depth++;
-                }
                 else if (source[i] == ')')
                 {
                     depth--;
@@ -165,36 +169,43 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
                         break;
                     }
                 }
+            }
 
             if (closeParen == -1) break;
 
-            var paramsStr = source.Substring(openParen + 1, closeParen - openParen - 1);
+            string paramsStr = source.Substring(
+                startIndex: openParen + 1,
+                length: closeParen - openParen - 1
+            );
 
-            var nextBrace = source.IndexOf("{", closeParen);
+            int nextBrace = source.IndexOf(value: "{", startIndex: closeParen);
             if (nextBrace == -1) break;
 
-            var returnTypeStr = source.Substring(closeParen + 1, nextBrace - closeParen - 1).Trim();
+            string returnTypeStr = source.Substring(
+                startIndex: closeParen + 1,
+                length: nextBrace - closeParen - 1
+            ).Trim();
 
             var func = new ZigFunction();
             func.EntryPoint = fnName;
 
-            var stripped = fnName.StartsWith("zigote_") ? fnName.Substring(7) : fnName;
+            string stripped = fnName.StartsWith("zigote_") ? fnName.Substring(7) : fnName;
             func.Name = SnakeToPascal(stripped);
             func.Visibility = "public";
 
-            func.ReturnType = MapZigTypeToCSharp("", returnTypeStr);
+            func.ReturnType = MapZigTypeToCSharp(paramName: "", zigType: returnTypeStr);
 
             var paramSegments = SplitParameters(paramsStr);
-            foreach (var segment in paramSegments)
+            foreach (string segment in paramSegments)
             {
-                var colonIdx = segment.IndexOf(':');
+                int colonIdx = segment.IndexOf(':');
                 if (colonIdx == -1) continue;
 
-                var paramName = segment.Substring(0, colonIdx).Trim();
-                var paramType = segment.Substring(colonIdx + 1).Trim();
+                string paramName = segment.Substring(startIndex: 0, length: colonIdx).Trim();
+                string paramType = segment.Substring(colonIdx + 1).Trim();
 
-                var csharpName = SnakeToCamel(paramName);
-                var csharpType = MapZigTypeToCSharp(paramName, paramType);
+                string csharpName = SnakeToCamel(paramName);
+                string csharpType = MapZigTypeToCSharp(paramName: paramName, zigType: paramType);
 
                 func.Parameters.Add(
                     new ZigParameter {
@@ -215,26 +226,24 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
     {
         var list = new List<string>();
         var sb = new StringBuilder();
-        var depth = 0;
-        for (var i = 0; i < paramsStr.Length; i++)
+        int depth = 0;
+        for (int i = 0; i < paramsStr.Length; i++)
         {
-            var c = paramsStr[i];
+            char c = paramsStr[i];
             if (c == '(') depth++;
             else if (c == ')') depth--;
 
             if (c == ',' && depth == 0)
             {
-                var p = sb.ToString().Trim();
+                string p = sb.ToString().Trim();
                 if (!string.IsNullOrEmpty(p)) list.Add(p);
                 sb.Clear();
             }
             else
-            {
                 sb.Append(c);
-            }
         }
 
-        var last = sb.ToString().Trim();
+        string last = sb.ToString().Trim();
         if (!string.IsNullOrEmpty(last)) list.Add(last);
         return list;
     }
@@ -248,20 +257,20 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
 
         if (zigType.StartsWith("[*c]const ") || zigType.StartsWith("[*]const "))
         {
-            var innerType = zigType.Substring(zigType.IndexOf("const ") + 6).Trim();
-            return MapZigTypeToCSharp("", innerType) + "*";
+            string innerType = zigType.Substring(zigType.IndexOf("const ") + 6).Trim();
+            return MapZigTypeToCSharp(paramName: "", zigType: innerType) + "*";
         }
 
         if (zigType.StartsWith("[*c]") || zigType.StartsWith("[*]"))
         {
-            var innerType = zigType.Substring(zigType.IndexOf("]") + 1).Trim();
-            return MapZigTypeToCSharp("", innerType) + "*";
+            string innerType = zigType.Substring(zigType.IndexOf("]") + 1).Trim();
+            return MapZigTypeToCSharp(paramName: "", zigType: innerType) + "*";
         }
 
         if (zigType.StartsWith("*"))
         {
-            var innerType = zigType.Substring(1).Trim();
-            var csharpInnerType = MapSingleZigTypeToCSharp(innerType);
+            string innerType = zigType.Substring(1).Trim();
+            string csharpInnerType = MapSingleZigTypeToCSharp(innerType);
             if (paramName.StartsWith("out_")) return "out " + csharpInnerType;
             return csharpInnerType + "*";
         }
@@ -270,57 +279,65 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
     }
 
     /// <summary>
-    ///     Map a Zig C-callconv function-pointer type (e.g. <c>?*const fn (u32, u32, u32) callconv(.c)
-    ///     void</c>) to a C# unmanaged function pointer <c>delegate* unmanaged[Cdecl]&lt;…&gt;</c>, parsing
+    ///     Map a Zig C-callconv function-pointer type (e.g.
+    ///     <c>
+    ///         ?*const fn (u32, u32, u32) callconv(.c)
+    ///         void
+    ///     </c>
+    ///     ) to a C# unmanaged function pointer <c>delegate* unmanaged[Cdecl]&lt;…&gt;</c>, parsing
     ///     the real parameter and return types rather than assuming a fixed shape.
     /// </summary>
     private static string MapFnPointer(string zigType)
     {
-        var fnIdx = zigType.IndexOf("fn", StringComparison.Ordinal);
-        var open = fnIdx >= 0 ? zigType.IndexOf('(', fnIdx) : -1;
+        int fnIdx = zigType.IndexOf(value: "fn", comparisonType: StringComparison.Ordinal);
+        int open = fnIdx >= 0 ? zigType.IndexOf(value: '(', startIndex: fnIdx) : -1;
         if (open < 0) return "delegate* unmanaged[Cdecl]<int, byte*, void>"; // defensive fallback
 
-        var close = MatchingParen(zigType, open);
-        var paramsStr = zigType.Substring(open + 1, close - open - 1);
+        int close = MatchingParen(s: zigType, open: open);
+        string paramsStr = zigType.Substring(startIndex: open + 1, length: close - open - 1);
 
         // Return type follows the callconv(...) clause.
-        var retType = "void";
-        var ccIdx = zigType.IndexOf("callconv", close, StringComparison.Ordinal);
+        string retType = "void";
+        int ccIdx = zigType.IndexOf(
+            value: "callconv",
+            startIndex: close,
+            comparisonType: StringComparison.Ordinal
+        );
         if (ccIdx >= 0)
         {
-            var ccOpen = zigType.IndexOf('(', ccIdx);
-            var ccClose = MatchingParen(zigType, ccOpen);
+            int ccOpen = zigType.IndexOf(value: '(', startIndex: ccIdx);
+            int ccClose = MatchingParen(s: zigType, open: ccOpen);
             retType = zigType.Substring(ccClose + 1).Trim();
         }
 
         var args = new List<string>();
-        foreach (var p in SplitParameters(paramsStr))
+        foreach (string p in SplitParameters(paramsStr))
         {
             // A parameter may be "name: type" or a bare "type".
-            var t = p;
-            var colon = p.IndexOf(':');
+            string t = p;
+            int colon = p.IndexOf(':');
             if (colon >= 0) t = p.Substring(colon + 1).Trim();
-            args.Add(MapZigTypeToCSharp("", t));
+            args.Add(MapZigTypeToCSharp(paramName: "", zigType: t));
         }
 
         args.Add(retType is "void" or "" ? "void" : MapSingleZigTypeToCSharp(retType));
-        return "delegate* unmanaged[Cdecl]<" + string.Join(", ", args) + ">";
+        return "delegate* unmanaged[Cdecl]<" + string.Join(separator: ", ", values: args) + ">";
     }
 
     /// <summary>Index of the ')' matching the '(' at <paramref name="open" /> (nesting-aware).</summary>
     private static int MatchingParen(string s, int open)
     {
-        var depth = 0;
-        for (var i = open; i < s.Length; i++)
+        int depth = 0;
+        for (int i = open; i < s.Length; i++)
+        {
             if (s[i] == '(')
-            {
                 depth++;
-            }
             else if (s[i] == ')')
             {
                 depth--;
                 if (depth == 0) return i;
             }
+        }
 
         return s.Length - 1;
     }
@@ -346,15 +363,17 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
     private static string SnakeToCamel(string snake)
     {
         if (string.IsNullOrEmpty(snake)) return snake;
-        var parts = snake.Split('_');
+        string[] parts = snake.Split('_');
         var sb = new StringBuilder();
         sb.Append(parts[0]);
-        for (var i = 1; i < parts.Length; i++)
+        for (int i = 1; i < parts.Length; i++)
+        {
             if (parts[i].Length > 0)
             {
                 sb.Append(char.ToUpperInvariant(parts[i][0]));
                 sb.Append(parts[i].Substring(1));
             }
+        }
 
         return sb.ToString();
     }
@@ -362,21 +381,21 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
     private static string SnakeToPascal(string snake)
     {
         if (string.IsNullOrEmpty(snake)) return snake;
-        var parts = snake.Split('_');
+        string[] parts = snake.Split('_');
         var sb = new StringBuilder();
-        foreach (var part in parts)
+        foreach (string part in parts)
+        {
             if (part.Length > 0)
             {
-                if (part.Equals("3d", StringComparison.OrdinalIgnoreCase))
-                {
+                if (part.Equals(value: "3d", comparisonType: StringComparison.OrdinalIgnoreCase))
                     sb.Append("3D");
-                }
                 else
                 {
                     sb.Append(char.ToUpperInvariant(part[0]));
                     sb.Append(part.Substring(1));
                 }
             }
+        }
 
         return sb.ToString();
     }

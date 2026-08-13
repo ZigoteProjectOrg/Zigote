@@ -23,124 +23,127 @@ internal static class DemoRegistry
 {
     public static readonly IReadOnlyList<DemoInfo> All = [
         new(
-            "basics",
-            MaterialIcons.Widgets,
-            Colors.Blue,
-            l => l.DemoBasicsTitle,
-            l => l.DemoBasicsDesc,
-            () => new BasicsPage()
+            Id: "basics",
+            Icon: MaterialIcons.Widgets,
+            Accent: Colors.Blue,
+            Title: l => l.DemoBasicsTitle,
+            Description: l => l.DemoBasicsDesc,
+            BuildPage: () => new BasicsPage()
         ),
         new(
-            "selection",
-            MaterialIcons.ToggleOn,
-            Colors.Green,
-            l => l.DemoSelectionTitle,
-            l => l.DemoSelectionDesc,
-            () => new SelectionPage()
+            Id: "selection",
+            Icon: MaterialIcons.ToggleOn,
+            Accent: Colors.Green,
+            Title: l => l.DemoSelectionTitle,
+            Description: l => l.DemoSelectionDesc,
+            BuildPage: () => new SelectionPage()
         ),
         new(
-            "inputs",
-            MaterialIcons.Keyboard,
-            Colors.Indigo,
-            l => l.DemoInputsTitle,
-            l => l.DemoInputsDesc,
-            () => new InputsPage()
+            Id: "inputs",
+            Icon: MaterialIcons.Keyboard,
+            Accent: Colors.Indigo,
+            Title: l => l.DemoInputsTitle,
+            Description: l => l.DemoInputsDesc,
+            BuildPage: () => new InputsPage()
         ),
         new(
-            "display",
-            MaterialIcons.Style,
-            Colors.Teal,
-            l => l.DemoDisplayTitle,
-            l => l.DemoDisplayDesc,
-            () => new DisplayPage()
+            Id: "display",
+            Icon: MaterialIcons.Style,
+            Accent: Colors.Teal,
+            Title: l => l.DemoDisplayTitle,
+            Description: l => l.DemoDisplayDesc,
+            BuildPage: () => new DisplayPage()
         ),
         new(
-            "progress",
-            MaterialIcons.Downloading,
-            Colors.Cyan,
-            l => l.DemoProgressTitle,
-            l => l.DemoProgressDesc,
-            () => new ProgressPage()
+            Id: "progress",
+            Icon: MaterialIcons.Downloading,
+            Accent: Colors.Cyan,
+            Title: l => l.DemoProgressTitle,
+            Description: l => l.DemoProgressDesc,
+            BuildPage: () => new ProgressPage()
         ),
         new(
-            "layout",
-            MaterialIcons.Dashboard,
-            Colors.Orange,
-            l => l.DemoLayoutTitle,
-            l => l.DemoLayoutDesc,
-            () => new LayoutPage()
+            Id: "layout",
+            Icon: MaterialIcons.Dashboard,
+            Accent: Colors.Orange,
+            Title: l => l.DemoLayoutTitle,
+            Description: l => l.DemoLayoutDesc,
+            BuildPage: () => new LayoutPage()
         ),
         new(
-            "overlays",
-            MaterialIcons.Layers,
-            Colors.Purple,
-            l => l.DemoOverlaysTitle,
-            l => l.DemoOverlaysDesc,
-            () => new OverlaysPage()
+            Id: "overlays",
+            Icon: MaterialIcons.Layers,
+            Accent: Colors.Purple,
+            Title: l => l.DemoOverlaysTitle,
+            Description: l => l.DemoOverlaysDesc,
+            BuildPage: () => new OverlaysPage()
         ),
         new(
-            "editors",
-            MaterialIcons.Palette,
-            Colors.Pink,
-            l => l.DemoEditorsTitle,
-            l => l.DemoEditorsDesc,
-            () => new EditorsPage()
+            Id: "editors",
+            Icon: MaterialIcons.Palette,
+            Accent: Colors.Pink,
+            Title: l => l.DemoEditorsTitle,
+            Description: l => l.DemoEditorsDesc,
+            BuildPage: () => new EditorsPage()
         ),
         new(
-            "data",
-            MaterialIcons.AccountTree,
-            Colors.Brown,
-            l => l.DemoDataTitle,
-            l => l.DemoDataDesc,
-            () => new DataPage()
+            Id: "data",
+            Icon: MaterialIcons.AccountTree,
+            Accent: Colors.Brown,
+            Title: l => l.DemoDataTitle,
+            Description: l => l.DemoDataDesc,
+            BuildPage: () => new DataPage()
         ),
         new(
-            "charts",
-            MaterialIcons.ShowChart,
-            Colors.Red,
-            l => l.DemoChartsTitle,
-            l => l.DemoChartsDesc,
-            () => new ChartsPage()
+            Id: "charts",
+            Icon: MaterialIcons.ShowChart,
+            Accent: Colors.Red,
+            Title: l => l.DemoChartsTitle,
+            Description: l => l.DemoChartsDesc,
+            BuildPage: () => new ChartsPage()
         ),
         new(
-            "animate",
-            MaterialIcons.AutoAwesome,
-            Colors.Amber,
-            l => l.DemoAnimateTitle,
-            l => l.DemoAnimateDesc,
-            () => new AnimatePage()
+            Id: "animate",
+            Icon: MaterialIcons.AutoAwesome,
+            Accent: Colors.Amber,
+            Title: l => l.DemoAnimateTitle,
+            Description: l => l.DemoAnimateDesc,
+            BuildPage: () => new AnimatePage()
         ),
         new(
-            "drag-drop",
-            MaterialIcons.PanTool,
-            Colors.BlueGrey,
-            l => l.DemoDragDropTitle,
-            l => l.DemoDragDropDesc,
-            () => new DragDropPage()
+            Id: "drag-drop",
+            Icon: MaterialIcons.PanTool,
+            Accent: Colors.BlueGrey,
+            Title: l => l.DemoDragDropTitle,
+            Description: l => l.DemoDragDropDesc,
+            BuildPage: () => new DragDropPage()
         ),
         new(
-            "video",
-            MaterialIcons.Movie,
-            Colors.DeepOrange,
-            l => l.DemoVideoTitle,
-            l => l.DemoVideoDesc,
-            () => new VideoPage()
+            Id: "video",
+            Icon: MaterialIcons.Movie,
+            Accent: Colors.DeepOrange,
+            Title: l => l.DemoVideoTitle,
+            Description: l => l.DemoVideoDesc,
+            BuildPage: () => new VideoPage()
         ),
         new(
-            "localization",
-            MaterialIcons.Translate,
-            Colors.DeepPurple,
-            l => l.DemoLocalizationTitle,
-            l => l.DemoLocalizationDesc,
-            () => new LocalizationPage()
+            Id: "localization",
+            Icon: MaterialIcons.Translate,
+            Accent: Colors.DeepPurple,
+            Title: l => l.DemoLocalizationTitle,
+            Description: l => l.DemoLocalizationDesc,
+            BuildPage: () => new LocalizationPage()
         ),
     ];
 
     public static DemoInfo? Find(string id)
     {
         foreach (var demo in All)
+        {
             if (demo.Id == id)
                 return demo;
+        }
+
         return null;
     }
 }

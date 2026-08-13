@@ -46,8 +46,8 @@ public sealed class InfoPanel : Widget
     {
         _static.Clear();
 
-        var ver = Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "dev";
-        var build =
+        string ver = Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "dev";
+        string build =
 #if DEBUG
             "Debug";
 #else
@@ -76,7 +76,8 @@ public sealed class InfoPanel : Widget
             );
             var ups = caps.AvailableUpscalers().Where(u => u != UpscalerSelection.Off).ToArray();
             _static.Add(
-                ("Graphics", "Upscalers", ups.Length > 0 ? string.Join(", ", ups) : "None")
+                ("Graphics", "Upscalers",
+                    ups.Length > 0 ? string.Join(separator: ", ", values: ups) : "None")
             );
             _static.Add(("Graphics", "ABI", $"v{RendererAbiInfo.ExpectedAbiVersion}"));
         }
@@ -92,7 +93,7 @@ public sealed class InfoPanel : Widget
     /// </summary>
     private void RefreshLive()
     {
-        var now = App.Active?.Time ?? 0f;
+        float now = App.Active?.Time ?? 0f;
         if (now - _lastLiveT < 0.4f) return;
         _lastLiveT = now;
 
@@ -124,6 +125,7 @@ public sealed class InfoPanel : Widget
 
         var engine = ZigoteEngine.Instance;
         if (engine != null)
+        {
             try
             {
                 rows.Add(
@@ -135,9 +137,10 @@ public sealed class InfoPanel : Widget
             {
                 /* not ready */
             }
+        }
 
-        var dt = App.Active?.DeltaTime ?? 0f;
-        var fps = dt > 0f ? 1f / dt : 0f;
+        float dt = App.Active?.DeltaTime ?? 0f;
+        float fps = dt > 0f ? 1f / dt : 0f;
         rows.Add(("Renderer (live)", "FPS", $"{fps:F0}  ({dt * 1000f:F1} ms)"));
         rows.Add(("Renderer (live)", "Draw calls", _stats.DrawCalls.ToString()));
         rows.Add(("Renderer (live)", "Triangles", FormatCount(_stats.Triangles)));
@@ -169,7 +172,7 @@ public sealed class InfoPanel : Widget
 
     private float ContentHeight(IReadOnlyList<(string Section, string Label, string Value)> rows)
     {
-        var h = 0f;
+        float h = 0f;
         string? section = null;
         foreach (var r in rows)
         {
@@ -187,18 +190,18 @@ public sealed class InfoPanel : Widget
 
     public override Size Measure(Constraints c)
     {
-        var w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 280f;
-        _size = new Size(w, ContentHeight(BuildRows()));
+        float w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 280f;
+        _size = new Size(width: w, height: ContentHeight(BuildRows()));
         return _size;
     }
 
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
     }
 
@@ -207,9 +210,9 @@ public sealed class InfoPanel : Widget
         RefreshLive();
         var rows = BuildRows();
 
-        var fs = _theme.FontSizeCaption;
-        var x = Bounds.X;
-        var y = Bounds.Y;
+        float fs = _theme.FontSizeCaption;
+        float x = Bounds.X;
+        float y = Bounds.Y;
         string? section = null;
 
         foreach (var r in rows)
@@ -219,21 +222,21 @@ public sealed class InfoPanel : Widget
                 y += SectionGap;
                 // Accent bar + section title.
                 paint.AddRect(
-                    new Rect(
-                        x,
-                        y + 4f,
-                        3f,
-                        fs
+                    bounds: new Rect(
+                        x: x,
+                        y: y + 4f,
+                        width: 3f,
+                        height: fs
                     ),
-                    _theme.Primary,
-                    1.5f
+                    color: _theme.Primary,
+                    radius: 1.5f
                 );
                 paint.AddText(
-                    r.Section,
-                    x + 8f,
-                    y + HeaderH * 0.62f,
-                    _theme.Primary,
-                    _theme.FontSizeBody,
+                    text: r.Section,
+                    baselineX: x + 8f,
+                    baselineY: y + (HeaderH * 0.62f),
+                    color: _theme.Primary,
+                    fontSize: _theme.FontSizeBody,
                     fontWeight: FontWeight.SemiBold
                 );
                 y += HeaderH;
@@ -241,18 +244,18 @@ public sealed class InfoPanel : Widget
             }
 
             paint.AddText(
-                r.Label,
-                x,
-                y + RowH * 0.72f,
-                _theme.Hint,
-                fs
+                text: r.Label,
+                baselineX: x,
+                baselineY: y + (RowH * 0.72f),
+                color: _theme.Hint,
+                fontSize: fs
             );
             paint.AddText(
-                r.Value,
-                x + ValueX,
-                y + RowH * 0.72f,
-                _theme.OnSurface,
-                fs
+                text: r.Value,
+                baselineX: x + ValueX,
+                baselineY: y + (RowH * 0.72f),
+                color: _theme.OnSurface,
+                fontSize: fs
             );
             y += RowH;
         }

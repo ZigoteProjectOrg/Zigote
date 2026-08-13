@@ -18,23 +18,23 @@ public sealed class SpriteSheet
     public SpriteFrame Frame(int index)
     {
         if (_frames.Length == 0) return SpriteFrame.Full;
-        return _frames[Math.Clamp(index, 0, _frames.Length - 1)];
+        return _frames[Math.Clamp(value: index, min: 0, max: _frames.Length - 1)];
     }
 
     public static SpriteSheet FromGrid(SpriteTexture texture, int cols, int rows,
         int marginX = 0, int marginY = 0, int spacingX = 0, int spacingY = 0)
     {
         return new SpriteSheet(
-            texture,
-            GridFrames(
-                texture.Width,
-                texture.Height,
-                cols,
-                rows,
-                marginX,
-                marginY,
-                spacingX,
-                spacingY
+            texture: texture,
+            frames: GridFrames(
+                texWidth: texture.Width,
+                texHeight: texture.Height,
+                cols: cols,
+                rows: rows,
+                marginX: marginX,
+                marginY: marginY,
+                spacingX: spacingX,
+                spacingY: spacingY
             )
         );
     }
@@ -49,24 +49,24 @@ public sealed class SpriteSheet
     {
         if (texWidth <= 0 || texHeight <= 0 || cols <= 0 || rows <= 0) return [];
 
-        var cellW = (texWidth - 2 * marginX - (cols - 1) * spacingX) / cols;
-        var cellH = (texHeight - 2 * marginY - (rows - 1) * spacingY) / rows;
-        var invW = 1f / texWidth;
-        var invH = 1f / texHeight;
+        int cellW = (texWidth - (2 * marginX) - ((cols - 1) * spacingX)) / cols;
+        int cellH = (texHeight - (2 * marginY) - ((rows - 1) * spacingY)) / rows;
+        float invW = 1f / texWidth;
+        float invH = 1f / texHeight;
 
         var frames = new SpriteFrame[cols * rows];
-        for (var row = 0; row < rows; row++)
-        for (var col = 0; col < cols; col++)
+        for (int row = 0; row < rows; row++)
+        for (int col = 0; col < cols; col++)
         {
-            var x = marginX + col * (cellW + spacingX);
-            var y = marginY + row * (cellH + spacingY);
-            frames[row * cols + col] = new SpriteFrame(
-                x * invW,
-                y * invH,
-                (x + cellW) * invW,
-                (y + cellH) * invH,
-                cellW,
-                cellH
+            int x = marginX + (col * (cellW + spacingX));
+            int y = marginY + (row * (cellH + spacingY));
+            frames[(row * cols) + col] = new SpriteFrame(
+                U0: x * invW,
+                V0: y * invH,
+                U1: (x + cellW) * invW,
+                V1: (y + cellH) * invH,
+                PixelWidth: cellW,
+                PixelHeight: cellH
             );
         }
 

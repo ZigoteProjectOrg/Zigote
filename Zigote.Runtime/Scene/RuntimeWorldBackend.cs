@@ -52,8 +52,8 @@ internal sealed class RuntimeWorldBackend : IWorldBackend
 
     // Live play entities (authored at play start + spawned), keyed by SceneNode.Id.
     private readonly Dictionary<int, SceneNode> _nodes = new();
-    private readonly List<uint> _pendingDestroys = [];
     private readonly HashSet<uint> _pendingDestroySet = [];
+    private readonly List<uint> _pendingDestroys = [];
 
     // Deferred structural ops (applied by ApplyDeferred after scripts ran, before physics steps).
     private readonly List<(uint child, uint parent)> _pendingReparents = [];
@@ -85,7 +85,10 @@ internal sealed class RuntimeWorldBackend : IWorldBackend
         _scripts = scripts;
         _ecs = ecs;
         _hooks = hooks;
-        RegisterSubtree(root, false); // authored entities: findable/taggable from tick 0
+        RegisterSubtree(
+            node: root,
+            spawned: false
+        ); // authored entities: findable/taggable from tick 0
     }
 
     internal SceneNode Root { get; }
@@ -103,7 +106,7 @@ internal sealed class RuntimeWorldBackend : IWorldBackend
         var node = doc.InstantiateNode();
         node.Position = position;
         node.Rotation = rotation;
-        return Integrate(node, parentNode);
+        return Integrate(node: node, parentNode: parentNode);
     }
 
     public EntityHandle SpawnEmpty(string name, Vec3 position, EntityHandle parent)
@@ -111,7 +114,7 @@ internal sealed class RuntimeWorldBackend : IWorldBackend
         var parentNode = ResolveParent(parent);
         if (parentNode == null) return EntityHandle.None;
 
-        return Integrate(new SceneNode(name) { Position = position }, parentNode);
+        return Integrate(node: new SceneNode(name) { Position = position }, parentNode: parentNode);
     }
 
     public void Destroy(EntityHandle entity)
@@ -121,92 +124,77 @@ internal sealed class RuntimeWorldBackend : IWorldBackend
         if (_pendingDestroySet.Add(entity.Id)) _pendingDestroys.Add(entity.Id);
     }
 
-    public bool IsAlive(EntityHandle entity)
-    {
-        return entity.IsValid && _nodes.ContainsKey((int)entity.Id);
-    }
+    public bool IsAlive(EntityHandle entity) =>
+        entity.IsValid && _nodes.ContainsKey((int)entity.Id);
 
     // ── Transform / state ─────────────────────────────────────────────────────
 
-    public Vec3 GetPosition(EntityHandle entity)
-    {
-        return TryNode(entity.Id, out var n) ? n.Position : Vec3.Zero;
-    }
+    public Vec3 GetPosition(EntityHandle entity) =>
+        TryNode(id: entity.Id, node: out var n) ? n.Position : Vec3.Zero;
 
     public void SetPosition(EntityHandle entity, Vec3 position)
     {
-        if (TryNode(entity.Id, out var n))
+        if (TryNode(id: entity.Id, node: out var n))
         {
             n.Position = position;
             _spatialDirty = true;
         }
     }
 
-    public Quat GetRotation(EntityHandle entity)
-    {
-        return TryNode(entity.Id, out var n) ? n.Rotation : Quat.Identity;
-    }
+    public Quat GetRotation(EntityHandle entity) =>
+        TryNode(id: entity.Id, node: out var n) ? n.Rotation : Quat.Identity;
 
     public void SetRotation(EntityHandle entity, Quat rotation)
     {
-        if (TryNode(entity.Id, out var n))
+        if (TryNode(id: entity.Id, node: out var n))
         {
             n.Rotation = rotation;
             _spatialDirty = true; // descendants' world positions move with the parent's rotation
         }
     }
 
-    public Vec3 GetScale(EntityHandle entity)
-    {
-        return TryNode(entity.Id, out var n) ? n.Scale : Vec3.One;
-    }
+    public Vec3 GetScale(EntityHandle entity) =>
+        TryNode(id: entity.Id, node: out var n) ? n.Scale : Vec3.One;
 
     public void SetScale(EntityHandle entity, Vec3 scale)
     {
-        if (TryNode(entity.Id, out var n))
+        if (TryNode(id: entity.Id, node: out var n))
         {
             n.Scale = scale;
             _spatialDirty = true; // descendants' world positions move with the parent's scale
         }
     }
 
-    public Vec3 GetWorldPosition(EntityHandle entity)
-    {
-        return TryNode(entity.Id, out var n) ? WorldTransform(n).Position : Vec3.Zero;
-    }
+    public Vec3 GetWorldPosition(EntityHandle entity) => TryNode(id: entity.Id, node: out var n)
+        ? WorldTransform(n).Position
+        : Vec3.Zero;
 
-    public bool GetVisible(EntityHandle entity)
-    {
-        return TryNode(entity.Id, out var n) && n.Visible;
-    }
+    public bool GetVisible(EntityHandle entity) =>
+        TryNode(id: entity.Id, node: out var n) && n.Visible;
 
     public void SetVisible(EntityHandle entity, bool visible)
     {
-        if (!TryNode(entity.Id, out var n)) return;
+        if (!TryNode(id: entity.Id, node: out var n)) return;
         if (!_spawnedIds.Contains(n.Id) && !_savedVisible.ContainsKey(n.Id))
             _savedVisible[n.Id] = (n, n.Visible);
         n.Visible = visible;
     }
 
-    public string? GetName(EntityHandle entity)
-    {
-        return TryNode(entity.Id, out var n) ? n.Name : null;
-    }
+    public string? GetName(EntityHandle entity) =>
+        TryNode(id: entity.Id, node: out var n) ? n.Name : null;
 
-    public string? GetTag(EntityHandle entity)
-    {
-        return _tags.TagOf((int)entity.Id);
-    }
+    public string? GetTag(EntityHandle entity) => _tags.TagOf((int)entity.Id);
 
     public void SetTag(EntityHandle entity, string? tag)
     {
         // Session-local: the index changes, the authored node.Tag never does — play can't edit the scene.
-        if (TryNode(entity.Id, out _)) _tags.Set((int)entity.Id, tag);
+        if (TryNode(id: entity.Id, node: out _)) _tags.Set(id: (int)entity.Id, tag: tag);
     }
 
     public EntityHandle GetParent(EntityHandle entity)
     {
-        return TryNode(entity.Id, out var n) && n.Parent is { } p && _nodes.ContainsKey(p.Id)
+        return TryNode(id: entity.Id, node: out var n) && n.Parent is { } p &&
+               _nodes.ContainsKey(p.Id)
             ? new EntityHandle((uint)p.Id)
             : EntityHandle.None;
     }
@@ -221,29 +209,26 @@ internal sealed class RuntimeWorldBackend : IWorldBackend
 
     public EntityHandle Find(string name)
     {
-        var found = FindByName(Root, name);
+        var found = FindByName(node: Root, name: name);
         return found != null ? new EntityHandle((uint)found.Id) : EntityHandle.None;
     }
 
     public int FindAllByTag(string tag, List<EntityHandle> results)
     {
         results.Clear();
-        _tags.WithTag(tag, _scratch);
-        foreach (var id in _scratch) results.Add(new EntityHandle((uint)id));
+        _tags.WithTag(tag: tag, results: _scratch);
+        foreach (int id in _scratch) results.Add(new EntityHandle((uint)id));
         return results.Count;
     }
 
-    public int CountByTag(string tag)
-    {
-        return _tags.Count(tag);
-    }
+    public int CountByTag(string tag) => _tags.Count(tag);
 
     public int OverlapSphere(Vec3 center, float radius, List<EntityHandle> results, string? tag)
     {
         results.Clear();
         EnsureSpatial();
-        _spatial.Query(center, radius, _scratch);
-        foreach (var id in _scratch)
+        _spatial.Query(center: center, radius: radius, results: _scratch);
+        foreach (int id in _scratch)
         {
             if (tag != null && _tags.TagOf(id) != tag) continue;
             results.Add(new EntityHandle((uint)id));
@@ -255,15 +240,15 @@ internal sealed class RuntimeWorldBackend : IWorldBackend
     public EntityHandle Nearest(Vec3 center, float maxRadius, string? tag, EntityHandle ignore)
     {
         EnsureSpatial();
-        _spatial.Query(center, maxRadius, _scratch);
-        var bestId = 0;
-        var bestD2 = float.MaxValue;
-        foreach (var id in _scratch)
+        _spatial.Query(center: center, radius: maxRadius, results: _scratch);
+        int bestId = 0;
+        float bestD2 = float.MaxValue;
+        foreach (int id in _scratch)
         {
             if (ignore.IsValid && (uint)id == ignore.Id) continue;
             if (tag != null && _tags.TagOf(id) != tag) continue;
-            if (!_spatial.TryGetPosition(id, out var pos)) continue;
-            var d2 = (pos - center).LengthSq();
+            if (!_spatial.TryGetPosition(id: id, position: out var pos)) continue;
+            float d2 = (pos - center).LengthSq();
             if (d2 < bestD2)
             {
                 bestD2 = d2;
@@ -279,33 +264,25 @@ internal sealed class RuntimeWorldBackend : IWorldBackend
     public Component? GetComponent(EntityHandle entity, Type type)
     {
         var comps = _scripts.GetComponents((int)entity.Id);
-        for (var i = 0; i < comps.Count; i++)
+        for (int i = 0; i < comps.Count; i++)
+        {
             if (type.IsInstanceOfType(comps[i]))
                 return comps[i];
+        }
+
         return null;
     }
 
-    public Component? AddComponent(EntityHandle entity, Type type)
-    {
-        return TryNode(entity.Id, out var n) ? _scripts.AddComponent(n, type) : null;
-    }
+    public Component? AddComponent(EntityHandle entity, Type type) =>
+        TryNode(id: entity.Id, node: out var n) ? _scripts.AddComponent(node: n, type: type) : null;
 
-    public Component? FindComponent(Type type)
-    {
-        return FindComponentIn(Root, type);
-    }
+    public Component? FindComponent(Type type) => FindComponentIn(node: Root, type: type);
 
-    public Entity EcsEntity(EntityHandle entity)
-    {
-        return _ecs?.EntityOf((int)entity.Id) ?? Entity.Null;
-    }
+    public Entity EcsEntity(EntityHandle entity) => _ecs?.EntityOf((int)entity.Id) ?? Entity.Null;
 
     // ── Session driving (GameSession) ─────────────────────────────────────────
 
-    internal void BeginTick()
-    {
-        _tick++;
-    }
+    internal void BeginTick() => _tick++;
 
     /// <summary>
     ///     Apply deferred reparents + destroys. Reentrancy-safe: an OnDestroy may queue more
@@ -313,19 +290,21 @@ internal sealed class RuntimeWorldBackend : IWorldBackend
     /// </summary>
     internal void ApplyDeferred()
     {
-        for (var i = 0; i < _pendingReparents.Count; i++)
+        for (int i = 0; i < _pendingReparents.Count; i++)
         {
-            var (childId, parentId) = _pendingReparents[i];
-            if (!TryNode(childId, out var child)) continue;
-            var parent = parentId == 0 ? Root : TryNode(parentId, out var p) ? p : null;
-            if (parent != null) ExecuteReparent(child, parent);
+            (uint childId, uint parentId) = _pendingReparents[i];
+            if (!TryNode(id: childId, node: out var child)) continue;
+            var parent = parentId == 0 ? Root : TryNode(id: parentId, node: out var p) ? p : null;
+            if (parent != null) ExecuteReparent(node: child, newParent: parent);
         }
 
         _pendingReparents.Clear();
 
-        for (var i = 0; i < _pendingDestroys.Count; i++) // index-based: OnDestroy may append
-            if (TryNode(_pendingDestroys[i], out var node))
+        for (int i = 0; i < _pendingDestroys.Count; i++) // index-based: OnDestroy may append
+        {
+            if (TryNode(id: _pendingDestroys[i], node: out var node))
                 ExecuteDestroy(node);
+        }
 
         _pendingDestroys.Clear();
         _pendingDestroySet.Clear();
@@ -346,14 +325,14 @@ internal sealed class RuntimeWorldBackend : IWorldBackend
 
         _spawnedRoots.Clear();
 
-        for (var i = _authoredRestore.Count - 1; i >= 0; i--) // reverse: undo-stack replay
+        for (int i = _authoredRestore.Count - 1; i >= 0; i--) // reverse: undo-stack replay
         {
             var rec = _authoredRestore[i];
             // Native handles are stale for a moved node; recreate the subtree cleanly on next sync.
             rec.node.RemoveFromNative();
             rec.node.Parent?.RemoveChild(rec.node);
-            var index = Math.Min(rec.index, rec.parent.Children.Count);
-            rec.parent.Children.Insert(index, rec.node);
+            int index = Math.Min(val1: rec.index, val2: rec.parent.Children.Count);
+            rec.parent.Children.Insert(index: index, item: rec.node);
             rec.node.Parent = rec.parent;
         }
 
@@ -367,13 +346,13 @@ internal sealed class RuntimeWorldBackend : IWorldBackend
     private SceneNode? ResolveParent(EntityHandle parent)
     {
         if (!parent.IsValid) return Root;
-        return TryNode(parent.Id, out var node) ? node : null;
+        return TryNode(id: parent.Id, node: out var node) ? node : null;
     }
 
     private EntityHandle Integrate(SceneNode node, SceneNode parentNode)
     {
         parentNode.AddChild(node);
-        RegisterSubtree(node, true);
+        RegisterSubtree(node: node, spawned: true);
         _spawnedRoots.Add(node);
         _spatialDirty = true;
 
@@ -388,10 +367,8 @@ internal sealed class RuntimeWorldBackend : IWorldBackend
     ///     Graft an externally-built subtree (an additively-loaded scene) through the spawn machinery,
     ///     so it gets the full integration AND the ledger removes it on play stop.
     /// </summary>
-    internal EntityHandle IntegrateExternal(SceneNode subtreeRoot, SceneNode parentNode)
-    {
-        return Integrate(subtreeRoot, parentNode);
-    }
+    internal EntityHandle IntegrateExternal(SceneNode subtreeRoot, SceneNode parentNode) =>
+        Integrate(node: subtreeRoot, parentNode: parentNode);
 
     /// <summary>
     ///     Destroy immediately, bypassing the per-tick deferral — only for the scene-swap path, which
@@ -400,12 +377,12 @@ internal sealed class RuntimeWorldBackend : IWorldBackend
     internal void DestroyNow(EntityHandle entity)
     {
         if (!entity.IsValid || entity.Id == (uint)Root.Id) return;
-        if (TryNode(entity.Id, out var node)) ExecuteDestroy(node);
+        if (TryNode(id: entity.Id, node: out var node)) ExecuteDestroy(node);
     }
 
     private void ExecuteDestroy(SceneNode node)
     {
-        if (ReferenceEquals(node, Root)) return;
+        if (ReferenceEquals(objA: node, objB: Root)) return;
 
         // Spawned subtrees nested under this node get the full treatment first, so their ledger
         // entries clear and their session resources release individually.
@@ -413,14 +390,19 @@ internal sealed class RuntimeWorldBackend : IWorldBackend
         {
             List<SceneNode>? nested = null;
             foreach (var r in _spawnedRoots)
-                if (!ReferenceEquals(r, node) && IsUnder(r, node))
+            {
+                if (!ReferenceEquals(objA: r, objB: node) && IsUnder(node: r, subtree: node))
                     (nested ??= []).Add(r);
+            }
+
             if (nested != null)
+            {
                 foreach (var r in nested)
                     ExecuteDestroy(r);
+            }
         }
 
-        var wasSpawned = _spawnedIds.Contains(node.Id);
+        bool wasSpawned = _spawnedIds.Contains(node.Id);
         var parent = node.Parent;
 
         _scripts.DetachSubtree(node); // OnDisable/OnDestroy while the node is still in the tree
@@ -440,9 +422,9 @@ internal sealed class RuntimeWorldBackend : IWorldBackend
 
     private void ExecuteReparent(SceneNode node, SceneNode newParent)
     {
-        if (ReferenceEquals(node, Root)) return;
-        if (ReferenceEquals(node.Parent, newParent)) return;
-        if (IsUnder(newParent, node)) return; // refuse cycles
+        if (ReferenceEquals(objA: node, objB: Root)) return;
+        if (ReferenceEquals(objA: node.Parent, objB: newParent)) return;
+        if (IsUnder(node: newParent, subtree: node)) return; // refuse cycles
 
         if (!_spawnedIds.Contains(node.Id) && node.Parent is { } parent &&
             _authoredRestoreIds.Add(node.Id))
@@ -458,9 +440,9 @@ internal sealed class RuntimeWorldBackend : IWorldBackend
     private SceneNode? FindByName(SceneNode node, string name)
     {
         if (node.Name == name && _nodes.ContainsKey(node.Id)) return node;
-        for (var i = 0; i < node.Children.Count; i++)
+        for (int i = 0; i < node.Children.Count; i++)
         {
-            var found = FindByName(node.Children[i], name);
+            var found = FindByName(node: node.Children[i], name: name);
             if (found != null) return found;
         }
 
@@ -470,12 +452,15 @@ internal sealed class RuntimeWorldBackend : IWorldBackend
     private Component? FindComponentIn(SceneNode node, Type type)
     {
         var comps = _scripts.GetComponents(node.Id);
-        for (var i = 0; i < comps.Count; i++)
+        for (int i = 0; i < comps.Count; i++)
+        {
             if (type.IsInstanceOfType(comps[i]))
                 return comps[i];
-        for (var i = 0; i < node.Children.Count; i++)
+        }
+
+        for (int i = 0; i < node.Children.Count; i++)
         {
-            var found = FindComponentIn(node.Children[i], type);
+            var found = FindComponentIn(node: node.Children[i], type: type);
             if (found != null) return found;
         }
 
@@ -486,7 +471,7 @@ internal sealed class RuntimeWorldBackend : IWorldBackend
 
     private bool TryNode(uint id, out SceneNode node)
     {
-        if (_nodes.TryGetValue((int)id, out var n))
+        if (_nodes.TryGetValue(key: (int)id, value: out var n))
         {
             node = n;
             return true;
@@ -501,7 +486,7 @@ internal sealed class RuntimeWorldBackend : IWorldBackend
         if (node.IsInternal) return; // editor gizmos are not gameplay entities
 
         _nodes[node.Id] = node;
-        if (!string.IsNullOrEmpty(node.Tag)) _tags.Set(node.Id, node.Tag);
+        if (!string.IsNullOrEmpty(node.Tag)) _tags.Set(id: node.Id, tag: node.Tag);
         if (spawned)
         {
             _spawnedIds.Add(node.Id);
@@ -512,12 +497,13 @@ internal sealed class RuntimeWorldBackend : IWorldBackend
                 if (node.Parent is { } parent)
                 {
                     var pe = _ecs.EntityOf(parent.Id);
-                    if (!pe.IsNull) _ecs.World.SetParent(e, pe);
+                    if (!pe.IsNull) _ecs.World.SetParent(child: e, parent: pe);
                 }
             }
         }
 
-        for (var i = 0; i < node.Children.Count; i++) RegisterSubtree(node.Children[i], spawned);
+        for (int i = 0; i < node.Children.Count; i++)
+            RegisterSubtree(node: node.Children[i], spawned: spawned);
     }
 
     private void UnregisterSubtree(SceneNode node)
@@ -525,16 +511,16 @@ internal sealed class RuntimeWorldBackend : IWorldBackend
         _nodes.Remove(node.Id);
         _tags.Remove(node.Id);
         _spawnedIds.Remove(node.Id);
-        for (var i = 0; i < node.Children.Count; i++) UnregisterSubtree(node.Children[i]);
+        for (int i = 0; i < node.Children.Count; i++) UnregisterSubtree(node.Children[i]);
     }
 
     private PrefabDocument? LoadPrefab(string path)
     {
         if (string.IsNullOrWhiteSpace(path)) return null;
-        var full = Path.IsPathRooted(path)
+        string full = Path.IsPathRooted(path)
             ? path
             : Path.GetFullPath(path); // cwd = project dir (host convention)
-        if (_prefabs.TryGetValue(full, out var cached)) return cached;
+        if (_prefabs.TryGetValue(key: full, value: out var cached)) return cached;
 
         PrefabDocument? doc = null;
         try
@@ -560,8 +546,8 @@ internal sealed class RuntimeWorldBackend : IWorldBackend
         // One walk carrying the accumulated parent transform (per-node WorldTransform recursion
         // would be O(N·depth)). The scene root itself is not a spatial hit.
         var rootWorld = WorldTransform(Root);
-        for (var i = 0; i < Root.Children.Count; i++)
-            InsertSpatialSubtree(Root.Children[i], rootWorld);
+        for (int i = 0; i < Root.Children.Count; i++)
+            InsertSpatialSubtree(node: Root.Children[i], parentWorld: rootWorld);
 
         _spatialStamp = _tick;
         _spatialDirty = false;
@@ -572,28 +558,39 @@ internal sealed class RuntimeWorldBackend : IWorldBackend
         if (node.IsInternal) return; // mirrors RegisterSubtree: gizmo subtrees are not entities
 
         var world = Transform3D.Combine(
-            parentWorld,
-            new Transform3D(node.Position, node.Rotation, node.Scale)
+            parent: parentWorld,
+            child: new Transform3D(
+                position: node.Position,
+                rotation: node.Rotation,
+                scale: node.Scale
+            )
         );
-        if (_nodes.ContainsKey(node.Id)) _spatial.Insert(node.Id, world.Position);
-        for (var i = 0; i < node.Children.Count; i++)
-            InsertSpatialSubtree(node.Children[i], world);
+        if (_nodes.ContainsKey(node.Id)) _spatial.Insert(id: node.Id, position: world.Position);
+        for (int i = 0; i < node.Children.Count; i++)
+            InsertSpatialSubtree(node: node.Children[i], parentWorld: world);
     }
 
     private static bool IsUnder(SceneNode node, SceneNode subtree)
     {
         for (var n = node; n != null; n = n.Parent)
-            if (ReferenceEquals(n, subtree))
+        {
+            if (ReferenceEquals(objA: n, objB: subtree))
                 return true;
+        }
+
         return false;
     }
 
     /// World transform of a node (parent-baked), matching how native composes node.world_transform.
     private static Transform3D WorldTransform(SceneNode node)
     {
-        var local = new Transform3D(node.Position, node.Rotation, node.Scale);
+        var local = new Transform3D(
+            position: node.Position,
+            rotation: node.Rotation,
+            scale: node.Scale
+        );
         return node.Parent is { } parent
-            ? Transform3D.Combine(WorldTransform(parent), local)
+            ? Transform3D.Combine(parent: WorldTransform(parent), child: local)
             : local;
     }
 }

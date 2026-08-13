@@ -38,22 +38,22 @@ public static class DockLayoutStore
             var ids = data.Panels.Where(knownPanels.Contains).Distinct().ToList();
             if (ids.Count == 0) return null;
             return new DockLeaf(ids) {
-                ActiveIndex = Math.Clamp(data.Active, 0, ids.Count - 1),
+                ActiveIndex = Math.Clamp(value: data.Active, min: 0, max: ids.Count - 1),
                 Collapsed = data.Collapsed,
             };
         }
 
         if (data.First != null && data.Second != null)
         {
-            var f = FromData(data.First, knownPanels);
-            var s = FromData(data.Second, knownPanels);
+            var f = FromData(data: data.First, knownPanels: knownPanels);
+            var s = FromData(data: data.Second, knownPanels: knownPanels);
             if (f == null) return s;
             if (s == null) return f;
             return new DockSplit(
-                f,
-                s,
-                data.Vertical,
-                data.Ratio
+                first: f,
+                second: s,
+                vertical: data.Vertical,
+                ratio: data.Ratio
             );
         }
 

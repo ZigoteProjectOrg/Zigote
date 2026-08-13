@@ -26,7 +26,7 @@ public sealed class SqliteKeyValueStore : IKeyValueStore
         ValidateTableName(tableName);
         _table = tableName;
 
-        var connectionString = new SqliteConnectionStringBuilder {
+        string connectionString = new SqliteConnectionStringBuilder {
             DataSource = path,
             Pooling = false,
         }.ToString();
@@ -46,8 +46,8 @@ public sealed class SqliteKeyValueStore : IKeyValueStore
         {
             using var command = _connection.CreateCommand();
             command.CommandText = $"SELECT value FROM \"{_table}\" WHERE key = $key;";
-            command.Parameters.AddWithValue("$key", key);
-            var result = command.ExecuteScalar();
+            command.Parameters.AddWithValue(parameterName: "$key", value: key);
+            object? result = command.ExecuteScalar();
             if (result is string s)
             {
                 value = s;
@@ -69,8 +69,8 @@ public sealed class SqliteKeyValueStore : IKeyValueStore
             command.CommandText =
                 $"INSERT INTO \"{_table}\" (key, value) VALUES ($key, $value) " +
                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value;";
-            command.Parameters.AddWithValue("$key", key);
-            command.Parameters.AddWithValue("$value", value);
+            command.Parameters.AddWithValue(parameterName: "$key", value: key);
+            command.Parameters.AddWithValue(parameterName: "$value", value: value);
             command.ExecuteNonQuery();
         }
     }
@@ -82,7 +82,7 @@ public sealed class SqliteKeyValueStore : IKeyValueStore
         {
             using var command = _connection.CreateCommand();
             command.CommandText = $"DELETE FROM \"{_table}\" WHERE key = $key;";
-            command.Parameters.AddWithValue("$key", key);
+            command.Parameters.AddWithValue(parameterName: "$key", value: key);
             return command.ExecuteNonQuery() > 0;
         }
     }
@@ -94,7 +94,7 @@ public sealed class SqliteKeyValueStore : IKeyValueStore
         {
             using var command = _connection.CreateCommand();
             command.CommandText = $"SELECT 1 FROM \"{_table}\" WHERE key = $key;";
-            command.Parameters.AddWithValue("$key", key);
+            command.Parameters.AddWithValue(parameterName: "$key", value: key);
             return command.ExecuteScalar() is not null;
         }
     }
@@ -122,16 +122,11 @@ public sealed class SqliteKeyValueStore : IKeyValueStore
         }
     }
 
-    public void Flush()
-    {
-    }
+    public void Flush() { }
 
     public void Dispose()
     {
-        lock (_connection)
-        {
-            _connection.Dispose();
-        }
+        lock (_connection) _connection.Dispose();
     }
 
     private void Execute(string sql)
@@ -144,18 +139,20 @@ public sealed class SqliteKeyValueStore : IKeyValueStore
     private static void ValidateTableName(string tableName)
     {
         ArgumentException.ThrowIfNullOrEmpty(tableName);
-        var first = tableName[0];
-        var valid = char.IsAsciiLetter(first) || first == '_';
-        for (var i = 1; valid && i < tableName.Length; i++)
+        char first = tableName[0];
+        bool valid = char.IsAsciiLetter(first) || first == '_';
+        for (int i = 1; valid && i < tableName.Length; i++)
         {
-            var c = tableName[i];
+            char c = tableName[i];
             valid = char.IsAsciiLetterOrDigit(c) || c == '_';
         }
 
         if (!valid)
+        {
             throw new ArgumentException(
-                $"Table name '{tableName}' must match [A-Za-z_][A-Za-z0-9_]*.",
-                nameof(tableName)
+                message: $"Table name '{tableName}' must match [A-Za-z_][A-Za-z0-9_]*.",
+                paramName: nameof(tableName)
             );
+        }
     }
 }

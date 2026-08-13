@@ -46,7 +46,7 @@ namespace Zigote.Videoplayer;
 /// await player.OpenAsync("/media/clip.mkv");
 /// player.Speed.Value = 1.5;
 /// player.Play();
-///
+/// 
 /// // one label, bound to one signal — see VideoControls for the whole transport
 /// var elapsed = new Text("0:00");
 /// player.Position.Observe(() =&gt; elapsed.Text = $"{player.Position.Value:mm\\:ss}");
@@ -98,7 +98,10 @@ public sealed class VideoPlayer : IDisposable
     /// <summary>Set once the audio cursor is proven unusable; never re-tried for this pipeline.</summary>
     private bool _useWallClock;
 
-    /// <summary>The caller asked to play. Distinct from <see cref="State" />, which also reports buffering.</summary>
+    /// <summary>
+    ///     The caller asked to play. Distinct from <see cref="State" />, which also reports
+    ///     buffering.
+    /// </summary>
     private bool _wantPlay;
 
     /// <param name="audio">
@@ -114,11 +117,13 @@ public sealed class VideoPlayer : IDisposable
         // keyboard shortcut on exactly the same path.
         _subscriptions.Add(Volume.Subscribe(_ => ApplyVolume()));
         _subscriptions.Add(Muted.Subscribe(_ => ApplyVolume()));
-        _subscriptions.Add(Speed.Subscribe(_ =>
-            {
-                if (_pipe is not null) Restart(_mediaTime);
-            }
-        ));
+        _subscriptions.Add(
+            Speed.Subscribe(_ =>
+                {
+                    if (_pipe is not null) Restart(_mediaTime);
+                }
+            )
+        );
     }
 
     /// <summary>Where the player is. The whole transport UI can bind to just this.</summary>
@@ -180,7 +185,11 @@ public sealed class VideoPlayer : IDisposable
     /// <summary>Fraction of the way through, 0–1. Zero when the duration is unknown.</summary>
     public double Progress =>
         Duration > TimeSpan.Zero
-            ? Math.Clamp(_position.Value.TotalSeconds / Duration.TotalSeconds, 0, 1)
+            ? Math.Clamp(
+                value: _position.Value.TotalSeconds / Duration.TotalSeconds,
+                min: 0,
+                max: 1
+            )
             : 0;
 
     /// <summary>Whether the transport is advancing — buffering counts, since the intent is to play.</summary>
@@ -236,19 +245,19 @@ public sealed class VideoPlayer : IDisposable
         CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(source);
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
 
         StopPipeline();
         _media.Value = null;
         _error.Value = null;
         _wantPlay = false;
         SetPosition(0);
-        MaxHeight = Math.Max(0, maxHeight);
+        MaxHeight = Math.Max(val1: 0, val2: maxHeight);
         _state.Value = PlaybackState.Opening;
 
         try
         {
-            _media.Value = await FFmpeg.ProbeAsync(source, ct).ConfigureAwait(false);
+            _media.Value = await FFmpeg.ProbeAsync(source: source, ct: ct).ConfigureAwait(false);
             _state.Value = PlaybackState.Ready;
             return _media.Value;
         }
@@ -320,18 +329,16 @@ public sealed class VideoPlayer : IDisposable
     {
         if (_disposed || _media.Value is null) return;
 
-        var target = position.TotalSeconds;
-        if (Duration > TimeSpan.Zero) target = Math.Clamp(target, 0, Duration.TotalSeconds);
+        double target = position.TotalSeconds;
+        if (Duration > TimeSpan.Zero)
+            target = Math.Clamp(value: target, min: 0, max: Duration.TotalSeconds);
 
-        SetPosition(Math.Max(0, target));
+        SetPosition(Math.Max(val1: 0, val2: target));
         Restart(_mediaTime);
     }
 
     /// <summary>Seek by a delta — the ±10 s keys, without the clamping arithmetic at the call site.</summary>
-    public void SeekBy(TimeSpan delta)
-    {
-        Seek(_position.Value + delta);
-    }
+    public void SeekBy(TimeSpan delta) => Seek(_position.Value + delta);
 
     /// <summary>
     ///     One frame of the host's loop: advance the clock, present whatever frame is due, notice the
@@ -349,18 +356,21 @@ public sealed class VideoPlayer : IDisposable
             return;
         }
 
-        var output = OutputTime(pipe);
-        var target = (long)Math.Floor(output * pipe.Fps + PresentSlackFrames);
-        var presented = PresentDue(pipe, target);
+        double output = OutputTime(pipe);
+        long target = (long)Math.Floor((output * pipe.Fps) + PresentSlackFrames);
+        bool presented = PresentDue(pipe: pipe, targetIndex: target);
 
-        if (_wantPlay && _state.Value != PlaybackState.Playing && Primed(pipe, presented))
+        if (_wantPlay && _state.Value != PlaybackState.Playing && Primed(
+                pipe: pipe,
+                presentedThisTick: presented
+            ))
         {
             ResumeClock();
             _state.Value = PlaybackState.Playing;
         }
 
-        SetPosition(pipe.StartSeconds + output * Rate());
-        _buffered.Value = TimeSpan.FromSeconds(ReadAhead(pipe, output));
+        SetPosition(pipe.StartSeconds + (output * Rate()));
+        _buffered.Value = TimeSpan.FromSeconds(ReadAhead(pipe: pipe, output: output));
 
         if (_wantPlay && Finished(pipe)) HandleEnd(pipe);
         else if (_wantPlay && _state.Value == PlaybackState.Playing && Starved(pipe))
@@ -392,8 +402,12 @@ public sealed class VideoPlayer : IDisposable
         if (_media.Value is null || _disposed) return;
 
         var media = _media.Value;
-        var fps = FFmpeg.SaneFrameRate(media.Video?.FrameRate ?? 25.0);
-        var pipe = new Pipeline(atSeconds, fps, FrameQueueCapacity(media, fps));
+        double fps = FFmpeg.SaneFrameRate(media.Video?.FrameRate ?? 25.0);
+        var pipe = new Pipeline(
+            startSeconds: atSeconds,
+            fps: fps,
+            capacity: FrameQueueCapacity(media: media, fps: fps)
+        );
 
         try
         {
@@ -421,23 +435,26 @@ public sealed class VideoPlayer : IDisposable
         // Geometry has to be known before the first read: rawvideo carries no header, so the frame
         // size is the only thing that says where one frame ends and the next begins. This mirrors
         // what the scale filter in the arguments will do.
-        var (w, h) = ScaledSize(media.Video!, MaxHeight);
+        (int w, int h) = ScaledSize(track: media.Video!, maxHeight: MaxHeight);
         pipe.Width = w;
         pipe.Height = h;
 
         pipe.Video = Spawn(
-            FFmpeg.VideoArgs(
-                media.Source,
-                pipe.StartSeconds,
-                pipe.Fps,
-                Rate(),
-                MaxHeight
+            args: FFmpeg.VideoArgs(
+                source: media.Source,
+                startSeconds: pipe.StartSeconds,
+                fps: pipe.Fps,
+                speed: Rate(),
+                maxHeight: MaxHeight
             ),
-            pipe
+            pipe: pipe
         );
 
         var stdout = pipe.Video.StandardOutput.BaseStream;
-        pipe.VideoThread = StartThread("zigote-video-decode", () => ReadVideo(pipe, stdout));
+        pipe.VideoThread = StartThread(
+            name: "zigote-video-decode",
+            body: () => ReadVideo(pipe: pipe, stdout: stdout)
+        );
     }
 
     private void StartAudio(Pipeline pipe)
@@ -447,15 +464,22 @@ public sealed class VideoPlayer : IDisposable
         pipe.AudioStreamId = _audio.CreateStream();
         if (pipe.AudioStreamId == 0) return;
 
-        _audio.SetSpatial(pipe.AudioStreamId, false);
-        _audio.SetVolume(pipe.AudioStreamId, Gain());
+        _audio.SetSpatial(id: pipe.AudioStreamId, enabled: false);
+        _audio.SetVolume(id: pipe.AudioStreamId, volume: Gain());
 
-        pipe.Audio = Spawn(FFmpeg.AudioArgs(_media.Value!.Source, pipe.StartSeconds, Rate()), pipe);
+        pipe.Audio = Spawn(
+            args: FFmpeg.AudioArgs(
+                source: _media.Value!.Source,
+                startSeconds: pipe.StartSeconds,
+                speed: Rate()
+            ),
+            pipe: pipe
+        );
 
         var stdout = pipe.Audio.StandardOutput.BaseStream;
         pipe.AudioThread = StartThread(
-            "zigote-audio-decode",
-            () => ReadAudio(pipe, stdout, _audio)
+            name: "zigote-audio-decode",
+            body: () => ReadAudio(pipe: pipe, stdout: stdout, audio: _audio)
         );
     }
 
@@ -470,11 +494,14 @@ public sealed class VideoPlayer : IDisposable
     {
         if (media.Video is not { } track) return MinFrameQueueDepth;
 
-        var (w, h) = ScaledSize(track, MaxHeight);
-        var frameBytes = (long)Math.Max(1, w) * Math.Max(1, h) * 4;
-        var byBytes = (int)Math.Min(int.MaxValue, Math.Max(1, MaxBufferBytes / frameBytes));
-        var bySeconds = (int)Math.Ceiling(TargetBufferSeconds * fps);
-        return Math.Max(MinFrameQueueDepth, Math.Min(byBytes, bySeconds));
+        (int w, int h) = ScaledSize(track: track, maxHeight: MaxHeight);
+        long frameBytes = (long)Math.Max(val1: 1, val2: w) * Math.Max(val1: 1, val2: h) * 4;
+        int byBytes = (int)Math.Min(
+            val1: int.MaxValue,
+            val2: Math.Max(val1: 1, val2: MaxBufferBytes / frameBytes)
+        );
+        int bySeconds = (int)Math.Ceiling(TargetBufferSeconds * fps);
+        return Math.Max(val1: MinFrameQueueDepth, val2: Math.Min(val1: byBytes, val2: bySeconds));
     }
 
     /// <summary>
@@ -486,31 +513,32 @@ public sealed class VideoPlayer : IDisposable
         if (maxHeight <= 0 || track.Height <= maxHeight || track.Height <= 0)
             return (track.Width, track.Height);
 
-        var scale = (double)maxHeight / track.Height;
-        var width = (int)Math.Round(track.Width * scale / 2.0) * 2;
-        return (Math.Max(2, width), maxHeight);
+        double scale = (double)maxHeight / track.Height;
+        int width = (int)Math.Round(track.Width * scale / 2.0) * 2;
+        return (Math.Max(val1: 2, val2: width), maxHeight);
     }
 
     private static Process Spawn(IEnumerable<string> args, Pipeline pipe)
     {
-        var psi = new ProcessStartInfo(FFmpeg.FfmpegPath)
-        {
+        var psi = new ProcessStartInfo(FFmpeg.FfmpegPath) {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
-        foreach (var a in args) psi.ArgumentList.Add(a);
+        foreach (string a in args) psi.ArgumentList.Add(a);
 
         var proc = Process.Start(psi)
-                   ?? throw new InvalidOperationException($"Could not start '{FFmpeg.FfmpegPath}'.");
+                   ?? throw new InvalidOperationException(
+                       $"Could not start '{FFmpeg.FfmpegPath}'."
+                   );
 
         // Drained on its own thread: a full stderr pipe blocks ffmpeg mid-decode, and the tail of it
         // is the only explanation available when a source turns out to be unplayable.
         var stderr = proc.StandardError;
         StartThread(
-            "zigote-ffmpeg-stderr",
-            () =>
+            name: "zigote-ffmpeg-stderr",
+            body: () =>
             {
                 try
                 {
@@ -528,8 +556,7 @@ public sealed class VideoPlayer : IDisposable
 
     private static Thread StartThread(string name, Action body)
     {
-        var t = new Thread(() => body())
-        {
+        var t = new Thread(() => body()) {
             IsBackground = true, // never keeps the process alive past a forgotten Dispose
             Name = name,
         };
@@ -539,7 +566,7 @@ public sealed class VideoPlayer : IDisposable
 
     private static void ReadVideo(Pipeline pipe, Stream stdout)
     {
-        var frameBytes = pipe.Width * pipe.Height * 4;
+        int frameBytes = pipe.Width * pipe.Height * 4;
         if (frameBytes <= 0)
         {
             pipe.VideoEof = true;
@@ -551,10 +578,10 @@ public sealed class VideoPlayer : IDisposable
         {
             while (!pipe.Cancelled)
             {
-                var buffer = pipe.RentFrame(frameBytes);
+                byte[] buffer = pipe.RentFrame(frameBytes);
                 try
                 {
-                    stdout.ReadExactly(buffer, 0, frameBytes);
+                    stdout.ReadExactly(buffer: buffer, offset: 0, count: frameBytes);
                 }
                 catch (Exception)
                 {
@@ -565,7 +592,7 @@ public sealed class VideoPlayer : IDisposable
 
                 // Blocks once the ring is full — that backpressure is what throttles ffmpeg, and
                 // what keeps a fast network source from decoding the whole file into RAM.
-                pipe.Frames.Add(new Frame(buffer, index));
+                pipe.Frames.Add(new Frame(Buffer: buffer, Index: index));
                 pipe.QueuedIndex = index++;
             }
         }
@@ -583,18 +610,28 @@ public sealed class VideoPlayer : IDisposable
     {
         // 16 KB ≈ 85 ms of 48 kHz stereo: small enough that a seek does not strand much decoded
         // audio, large enough that the push is not the hot path.
-        var buffer = new byte[16 * 1024];
-        var id = pipe.AudioStreamId;
+        byte[] buffer = new byte[16 * 1024];
+        uint id = pipe.AudioStreamId;
 
         try
         {
-            PushAll(pipe, audio, id, FFmpeg.WavHeader());
+            PushAll(
+                pipe: pipe,
+                audio: audio,
+                id: id,
+                bytes: FFmpeg.WavHeader()
+            );
 
             while (!pipe.Cancelled)
             {
-                var read = stdout.Read(buffer, 0, buffer.Length);
+                int read = stdout.Read(buffer: buffer, offset: 0, count: buffer.Length);
                 if (read <= 0) break;
-                if (!PushAll(pipe, audio, id, buffer.AsSpan(0, read))) break;
+                if (!PushAll(
+                        pipe: pipe,
+                        audio: audio,
+                        id: id,
+                        bytes: buffer.AsSpan(start: 0, length: read)
+                    )) break;
             }
         }
         catch (Exception)
@@ -614,11 +651,11 @@ public sealed class VideoPlayer : IDisposable
     /// </summary>
     private static bool PushAll(Pipeline pipe, IAudioApi audio, uint id, ReadOnlySpan<byte> bytes)
     {
-        var offset = 0;
+        int offset = 0;
         while (offset < bytes.Length)
         {
             if (pipe.Cancelled) return false;
-            var taken = audio.StreamPush(id, bytes[offset..]);
+            int taken = audio.StreamPush(id: id, bytes: bytes[offset..]);
             if (taken > 0)
             {
                 offset += taken;
@@ -675,7 +712,7 @@ public sealed class VideoPlayer : IDisposable
 
         if (newest is null) return false;
 
-        Upload(newest.Value.Buffer, pipe.Width, pipe.Height);
+        Upload(rgba: newest.Value.Buffer, width: pipe.Width, height: pipe.Height);
         pipe.ReturnFrame(newest.Value.Buffer);
         return true;
     }
@@ -684,7 +721,7 @@ public sealed class VideoPlayer : IDisposable
     {
         if (ZigoteEngine.Instance is null || width <= 0 || height <= 0) return;
 
-        var pixels = rgba.AsSpan(0, width * height * 4);
+        var pixels = rgba.AsSpan(start: 0, length: width * height * 4);
 
         // Steady state: the texture, its view and its bind group were built for the first frame and
         // every frame after it is a texel overwrite. Creating and releasing a 1080p texture sixty
@@ -692,12 +729,21 @@ public sealed class VideoPlayer : IDisposable
         // allocator and the engine's image registry to draw the same rectangle.
         if (TextureHandle != 0
             && FrameSize == ((uint)width, (uint)height)
-            && ZigoteEngine.UpdateTextureRgba(TextureHandle, pixels, (uint)width, (uint)height))
+            && ZigoteEngine.UpdateTextureRgba(
+                textureHandle: TextureHandle,
+                rgba: pixels,
+                width: (uint)width,
+                height: (uint)height
+            ))
             return;
 
         // First frame, or the geometry changed under us (a new source): an overwrite cannot resize,
         // so take a fresh handle and drop the old one.
-        var handle = ZigoteEngine.LoadTextureFromRgba(pixels, (uint)width, (uint)height);
+        ulong handle = ZigoteEngine.LoadTextureFromRgba(
+            rgba: pixels,
+            width: (uint)width,
+            height: (uint)height
+        );
         if (handle == 0) return;
 
         if (TextureHandle != 0) ZigoteEngine.ReleaseTexture(TextureHandle);
@@ -715,7 +761,7 @@ public sealed class VideoPlayer : IDisposable
         if (_useWallClock || pipe.AudioStreamId == 0 || _audio is null)
             return _wall.Elapsed.TotalSeconds;
 
-        var cursor = _audio.Cursor(pipe.AudioStreamId);
+        float cursor = _audio.Cursor(pipe.AudioStreamId);
         if (cursor < 0)
         {
             _useWallClock = true;
@@ -741,16 +787,16 @@ public sealed class VideoPlayer : IDisposable
     /// </summary>
     private double ReadAhead(Pipeline pipe, double output)
     {
-        var ahead = double.PositiveInfinity;
+        double ahead = double.PositiveInfinity;
 
         if (pipe.HasVideo)
         {
-            var queuedOutput = (pipe.QueuedIndex + 1) / pipe.Fps;
-            ahead = Math.Max(0, queuedOutput - output);
+            double queuedOutput = (pipe.QueuedIndex + 1) / pipe.Fps;
+            ahead = Math.Max(val1: 0, val2: queuedOutput - output);
         }
 
         if (pipe.AudioStreamId != 0 && _audio is not null && !pipe.AudioEof)
-            ahead = Math.Min(ahead, _audio.StreamBuffered(pipe.AudioStreamId));
+            ahead = Math.Min(val1: ahead, val2: _audio.StreamBuffered(pipe.AudioStreamId));
 
         return double.IsFinite(ahead) ? ahead * Rate() : 0;
     }
@@ -758,7 +804,7 @@ public sealed class VideoPlayer : IDisposable
     /// <summary>Enough decoded on both sides to start the clock without stuttering immediately.</summary>
     private bool Primed(Pipeline pipe, bool presentedThisTick)
     {
-        var haveVideo = !pipe.HasVideo || presentedThisTick || TextureHandle != 0;
+        bool haveVideo = !pipe.HasVideo || presentedThisTick || TextureHandle != 0;
         if (!haveVideo) return false;
 
         if (pipe.AudioStreamId == 0 || _useWallClock || _audio is null) return true;
@@ -767,10 +813,8 @@ public sealed class VideoPlayer : IDisposable
     }
 
     /// <summary>Playing, but the decoder has fallen behind and there is nothing left to present.</summary>
-    private static bool Starved(Pipeline pipe)
-    {
-        return pipe.HasVideo && !pipe.VideoEof && pipe.Frames.Count == 0;
-    }
+    private static bool Starved(Pipeline pipe) =>
+        pipe.HasVideo && !pipe.VideoEof && pipe.Frames.Count == 0;
 
     private bool Finished(Pipeline pipe)
     {
@@ -789,7 +833,7 @@ public sealed class VideoPlayer : IDisposable
         // so report it as a failure rather than as a zero-length video that played fine.
         if (pipe.HasVideo && TextureHandle == 0)
         {
-            var errors = pipe.Errors();
+            string errors = pipe.Errors();
             Fail(
                 errors.Length > 0
                     ? FFmpeg.Tail(errors)
@@ -814,20 +858,14 @@ public sealed class VideoPlayer : IDisposable
     // ── transport plumbing ──────────────────────────────────────────────────────
 
     /// <summary>Rate actually handed to ffmpeg — the signal is free-form, the pipeline is not.</summary>
-    private double Rate()
-    {
-        return Math.Clamp(Speed.Value, 0.25, 4.0);
-    }
+    private double Rate() => Math.Clamp(value: Speed.Value, min: 0.25, max: 4.0);
 
     /// <summary>Gain actually handed to the mixer, mute folded in.</summary>
-    private float Gain()
-    {
-        return Muted.Value ? 0f : Math.Clamp(Volume.Value, 0f, 1f);
-    }
+    private float Gain() => Muted.Value ? 0f : Math.Clamp(value: Volume.Value, min: 0f, max: 1f);
 
     private void SetPosition(double seconds)
     {
-        _mediaTime = Math.Max(0, seconds);
+        _mediaTime = Math.Max(val1: 0, val2: seconds);
         _position.Value = TimeSpan.FromSeconds(_mediaTime);
     }
 
@@ -848,7 +886,7 @@ public sealed class VideoPlayer : IDisposable
     private void ApplyVolume()
     {
         if (_pipe?.AudioStreamId is > 0)
-            _audio?.SetVolume(_pipe.AudioStreamId, Gain());
+            _audio?.SetVolume(id: _pipe.AudioStreamId, volume: Gain());
     }
 
     private void Fail(string message)
@@ -868,6 +906,9 @@ public sealed class VideoPlayer : IDisposable
     /// </summary>
     private sealed class Pipeline(double startSeconds, double fps, int capacity) : IDisposable
     {
+        public readonly double Fps = fps;
+        public readonly BlockingCollection<Frame> Frames = new(capacity);
+        public readonly double StartSeconds = startSeconds;
         private readonly CancellationTokenSource _cts = new();
         private readonly StringBuilder _errors = new();
 
@@ -883,18 +924,15 @@ public sealed class VideoPlayer : IDisposable
         /// </summary>
         private readonly ConcurrentBag<byte[]> _spare = [];
 
-        public readonly double Fps = fps;
-        public readonly BlockingCollection<Frame> Frames = new(capacity);
-        public readonly double StartSeconds = startSeconds;
+        public Process? Audio;
+        public volatile bool AudioEof;
+        public uint AudioStreamId;
+        public Thread? AudioThread;
+        public int Height;
 
         /// <summary>Index of the newest frame handed to the queue; -1 before the first one.</summary>
         public long QueuedIndex = -1;
 
-        public Process? Audio;
-        public uint AudioStreamId;
-        public volatile bool AudioEof;
-        public Thread? AudioThread;
-        public int Height;
         public Process? Video;
         public volatile bool VideoEof;
         public Thread? VideoThread;
@@ -925,9 +963,7 @@ public sealed class VideoPlayer : IDisposable
             // The readers are background threads that exit as soon as their pipe closes; not joining
             // keeps teardown off the frame budget. Queued frames were pool-rented — dropping them is
             // allowed, the pool simply allocates fresh ones.
-            while (Frames.TryTake(out _))
-            {
-            }
+            while (Frames.TryTake(out _)) { }
         }
 
         private static void Kill(Process? proc)
@@ -950,7 +986,7 @@ public sealed class VideoPlayer : IDisposable
         /// <summary>A buffer of exactly <paramref name="frameBytes" />, recycled where possible.</summary>
         public byte[] RentFrame(int frameBytes)
         {
-            return _spare.TryTake(out var buffer) && buffer.Length == frameBytes
+            return _spare.TryTake(out byte[]? buffer) && buffer.Length == frameBytes
                 ? buffer
                 : new byte[frameBytes];
         }
@@ -966,16 +1002,14 @@ public sealed class VideoPlayer : IDisposable
         {
             lock (_errors)
             {
-                if (_errors.Length < 4096) _errors.AppendLine(line);
+                if (_errors.Length < 4096)
+                    _errors.AppendLine(line);
             }
         }
 
         public string Errors()
         {
-            lock (_errors)
-            {
-                return _errors.ToString();
-            }
+            lock (_errors) return _errors.ToString();
         }
     }
 }

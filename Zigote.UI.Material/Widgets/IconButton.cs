@@ -42,16 +42,16 @@ public sealed class IconButton : ComposedWidget
 
         // 24pt icon + 16 padding is 40 — under the 44pt finger target, and the small icon sizes
         // toolbars use land near 34. Floor the whole box on a phone; the icon itself is unchanged.
-        var box = TouchMetrics.AtLeast((IconSize ?? 24f) + 16f);
+        float box = TouchMetrics.AtLeast((IconSize ?? 24f) + 16f);
         Widget result = new Pressable {
-            Child = new SizedBox(box, box, new Center(_icon)),
+            Child = new SizedBox(width: box, height: box, child: new Center(_icon)),
             OnPressed = () => OnPressed?.Invoke(),
             Enabled = OnPressed is not null,
             FocusRadius = box / 2f,
             SemanticsLabel = Tooltip,
         };
 
-        if (Tooltip is { } t) result = new Tooltip(t, result);
+        if (Tooltip is { } t) result = new Tooltip(message: t, child: result);
         return result;
     }
 }

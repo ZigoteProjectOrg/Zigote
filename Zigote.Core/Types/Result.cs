@@ -30,19 +30,11 @@ public readonly record struct Result<T>
 
     public bool IsOk => Error is null;
 
-    public static Result<T> Ok(T value)
-    {
-        return new Result<T>(value, null);
-    }
+    public static Result<T> Ok(T value) => new(value: value, error: null);
 
-    public static Result<T> Fail(string error)
-    {
-        return new Result<T>(default, error);
-    }
+    public static Result<T> Fail(string error) => new(value: default, error: error);
 
     /// <summary>Fold both cases into one value, so a caller cannot forget the failure.</summary>
-    public TOut Match<TOut>(Func<T, TOut> ok, Func<string, TOut> fail)
-    {
-        return Error is { } error ? fail(error) : ok(Value!);
-    }
+    public TOut Match<TOut>(Func<T, TOut> ok, Func<string, TOut> fail) =>
+        Error is { } error ? fail(error) : ok(Value!);
 }

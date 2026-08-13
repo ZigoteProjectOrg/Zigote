@@ -42,22 +42,26 @@ public class SelectableTextTests
         var st = Make("Hello world");
 
         // Caret 2 sits at x=11; caret 5 at 27.5. Points near those land on them.
-        Drag(st, new Offset(2 * CharW + 1f, 5f), new Offset(5 * CharW + 1f, 5f));
+        Drag(
+            st: st,
+            from: new Offset(x: (2 * CharW) + 1f, y: 5f),
+            to: new Offset(x: (5 * CharW) + 1f, y: 5f)
+        );
 
         Assert.True(st.HasSelection);
-        Assert.Equal("llo", st.SelectedText);
+        Assert.Equal(expected: "llo", actual: st.SelectedText);
     }
 
     [Fact]
     public void Click_WithoutDrag_ClearsSelection()
     {
         var st = Make("Hello");
-        Drag(st, new Offset(0f, 5f), new Offset(3 * CharW, 5f));
+        Drag(st: st, from: new Offset(x: 0f, y: 5f), to: new Offset(x: 3 * CharW, y: 5f));
         Assert.True(st.HasSelection);
 
         // Click far from the drag origin (headless Time is constant, so a nearby second press
         // would alias into the double-click window and word-select instead).
-        var p = new Offset(4 * CharW + 1f, 5f);
+        var p = new Offset(x: (4 * CharW) + 1f, y: 5f);
         st.OnPointerDown(p);
         st.OnPointerUp(p);
         Assert.False(st.HasSelection);
@@ -67,27 +71,31 @@ public class SelectableTextTests
     public void DoubleClick_SelectsWord()
     {
         var st = Make("Hello world");
-        var p = new Offset(7 * CharW, 5f); // inside "world"
+        var p = new Offset(x: 7 * CharW, y: 5f); // inside "world"
 
         st.OnPointerDown(p);
         st.OnPointerUp(p);
         st.OnPointerDown(p); // headless Time is constant → within double-click window
         st.OnPointerUp(p);
 
-        Assert.Equal("world", st.SelectedText);
+        Assert.Equal(expected: "world", actual: st.SelectedText);
     }
 
     [Fact]
     public void DragAcrossWrappedLines_SelectsThroughLineBreak()
     {
-        var st = Make("Hello world", 30f); // wraps to "Hello" / "world"
+        var st = Make(text: "Hello world", maxWidth: 30f); // wraps to "Hello" / "world"
 
-        var lineH = Fs * 1.2f;
-        Drag(st, new Offset(2 * CharW, lineH * 0.5f), new Offset(2 * CharW, lineH * 1.5f));
+        float lineH = Fs * 1.2f;
+        Drag(
+            st: st,
+            from: new Offset(x: 2 * CharW, y: lineH * 0.5f),
+            to: new Offset(x: 2 * CharW, y: lineH * 1.5f)
+        );
 
         // From caret 2 on line 0 to caret 2 of "world" (global index 8): "llo w" minus the
         // wrap-collapsed space renders as "llo" + "wo" of the concatenated source text.
-        Assert.Equal("llo wo", st.SelectedText);
+        Assert.Equal(expected: "llo wo", actual: st.SelectedText);
     }
 
     [Fact]
@@ -96,48 +104,48 @@ public class SelectableTextTests
         var st = Make("abc def");
 
         st.SelectAll();
-        Assert.Equal("abc def", st.SelectedText);
+        Assert.Equal(expected: "abc def", actual: st.SelectedText);
 
         st.OnKey(
-            '\0',
-            ScEscape,
-            true,
-            Modifiers.None
+            keyChar: '\0',
+            scancode: ScEscape,
+            down: true,
+            mods: Modifiers.None
         );
         Assert.False(st.HasSelection);
 
         // Shift+Right twice from the cleared caret (position 0) → "ab".
         st.OnKey(
-            '\0',
-            ScRight,
-            true,
-            Modifiers.Shift
+            keyChar: '\0',
+            scancode: ScRight,
+            down: true,
+            mods: Modifiers.Shift
         );
         st.OnKey(
-            '\0',
-            ScRight,
-            true,
-            Modifiers.Shift
+            keyChar: '\0',
+            scancode: ScRight,
+            down: true,
+            mods: Modifiers.Shift
         );
-        Assert.Equal("ab", st.SelectedText);
+        Assert.Equal(expected: "ab", actual: st.SelectedText);
 
         // Shift+Left shrinks back to "a".
         st.OnKey(
-            '\0',
-            ScLeft,
-            true,
-            Modifiers.Shift
+            keyChar: '\0',
+            scancode: ScLeft,
+            down: true,
+            mods: Modifiers.Shift
         );
-        Assert.Equal("a", st.SelectedText);
+        Assert.Equal(expected: "a", actual: st.SelectedText);
 
         // Shift+End extends to the end.
         st.OnKey(
-            '\0',
-            ScEnd,
-            true,
-            Modifiers.Shift
+            keyChar: '\0',
+            scancode: ScEnd,
+            down: true,
+            mods: Modifiers.Shift
         );
-        Assert.Equal("abc def", st.SelectedText);
+        Assert.Equal(expected: "abc def", actual: st.SelectedText);
     }
 
     [Fact]
@@ -145,44 +153,44 @@ public class SelectableTextTests
     {
         var st = Make("abc");
         st.OnKey(
-            'a',
-            0,
-            true,
-            Modifiers.Cmd
+            keyChar: 'a',
+            scancode: 0,
+            down: true,
+            mods: Modifiers.Cmd
         );
-        Assert.Equal("abc", st.SelectedText);
+        Assert.Equal(expected: "abc", actual: st.SelectedText);
 
         // No native engine loaded — copy must be a no-op, not a crash.
         st.OnKey(
-            'c',
-            0,
-            true,
-            Modifiers.Cmd
+            keyChar: 'c',
+            scancode: 0,
+            down: true,
+            mods: Modifiers.Cmd
         );
-        Assert.Equal("abc", st.SelectedText);
+        Assert.Equal(expected: "abc", actual: st.SelectedText);
     }
 
     [Fact]
     public void SelectionPaintsTintRects_UnderText()
     {
-        var st = Make("Hello world", 30f);
+        var st = Make(text: "Hello world", maxWidth: 30f);
         var clean = new PaintList();
         st.Paint(clean);
-        var before = CountRects(clean);
+        int before = CountRects(clean);
 
         st.SelectAll();
         var selected = new PaintList();
         st.Paint(selected);
 
         // One tint rect per run (two wrapped lines → two runs).
-        Assert.Equal(before + 2, CountRects(selected));
+        Assert.Equal(expected: before + 2, actual: CountRects(selected));
     }
 
     [Fact]
     public void MultiSpan_SelectionCrossesStyleBoundaries()
     {
         var st = new SelectableText(
-            new TextSpan("red ", Color.Red),
+            new TextSpan(text: "red ", color: Color.Red),
             new TextSpan("blue") { Weight = FontWeight.Bold }
         ) {
             FontSize = Fs,
@@ -191,8 +199,12 @@ public class SelectableTextTests
         st.Measure(new Constraints(maxWidth: 1000f, maxHeight: 600f));
         st.Layout(Offset.Zero);
 
-        Drag(st, new Offset(2 * CharW + 1f, 5f), new Offset(6 * CharW + 1f, 5f));
-        Assert.Equal("d bl", st.SelectedText);
+        Drag(
+            st: st,
+            from: new Offset(x: (2 * CharW) + 1f, y: 5f),
+            to: new Offset(x: (6 * CharW) + 1f, y: 5f)
+        );
+        Assert.Equal(expected: "d bl", actual: st.SelectedText);
     }
 
     [Fact]
@@ -212,10 +224,13 @@ public class SelectableTextTests
 
     private static int CountRects(PaintList paint)
     {
-        var n = 0;
-        for (var i = 0; i < paint.DebugCommands.Count; i++)
+        int n = 0;
+        for (int i = 0; i < paint.DebugCommands.Count; i++)
+        {
             if ((PaintCommandKind)paint.DebugCommands[i].Kind == PaintCommandKind.Rect)
                 n++;
+        }
+
         return n;
     }
 }
@@ -243,26 +258,27 @@ public class RichTextAllocationTests
             new TextSpan(" jumps over the lazy dog. ") { Color = Color.Red },
             new TextSpan("Inline code") {
                 Background = new Color(
-                    0.5f,
-                    0.5f,
-                    0.2f,
-                    0.4f
+                    r: 0.5f,
+                    g: 0.5f,
+                    b: 0.2f,
+                    a: 0.4f
                 ),
             }
         ) { FontSize = 12f };
         var paint = new PaintList();
         var c = new Constraints(maxWidth: 180f, maxHeight: 600f);
 
-        for (var i = 0; i < 200; i++) Frame(root, paint, c);
+        for (int i = 0; i < 200; i++) Frame(root: root, paint: paint, c: c);
         Assert.True(paint.Count > 0);
 
         const int frames = 500;
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var i = 0; i < frames; i++) Frame(root, paint, c);
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < frames; i++) Frame(root: root, paint: paint, c: c);
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
         Assert.True(
-            allocated == 0,
+            condition: allocated == 0,
+            userMessage:
             $"RichText hot path allocated {allocated} B over {frames} frames; expected 0."
         );
     }
@@ -276,18 +292,19 @@ public class RichTextAllocationTests
         var paint = new PaintList();
         var c = new Constraints(maxWidth: 120f, maxHeight: 600f);
 
-        Frame(root, paint, c);
+        Frame(root: root, paint: paint, c: c);
         root.SelectAll();
 
-        for (var i = 0; i < 200; i++) Frame(root, paint, c);
+        for (int i = 0; i < 200; i++) Frame(root: root, paint: paint, c: c);
 
         const int frames = 500;
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var i = 0; i < frames; i++) Frame(root, paint, c);
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < frames; i++) Frame(root: root, paint: paint, c: c);
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
         Assert.True(
-            allocated == 0,
+            condition: allocated == 0,
+            userMessage:
             $"SelectableText hot path allocated {allocated} B over {frames} frames; expected 0."
         );
     }
@@ -303,18 +320,19 @@ public class RichTextAllocationTests
         root.Layout(Offset.Zero);
 
         // Warm the drag path (first move may lazily JIT).
-        root.OnPointerDown(new Offset(5f, 5f));
-        for (var i = 0; i < 100; i++)
-            root.OnPointerMove(new Offset(5f + i % 60, 5f + i % 30));
+        root.OnPointerDown(new Offset(x: 5f, y: 5f));
+        for (int i = 0; i < 100; i++)
+            root.OnPointerMove(new Offset(x: 5f + (i % 60), y: 5f + (i % 30)));
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var i = 0; i < 500; i++)
-            root.OnPointerMove(new Offset(5f + i % 60, 5f + i % 30));
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        root.OnPointerUp(new Offset(60f, 30f));
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 500; i++)
+            root.OnPointerMove(new Offset(x: 5f + (i % 60), y: 5f + (i % 30)));
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        root.OnPointerUp(new Offset(x: 60f, y: 30f));
 
         Assert.True(
-            allocated == 0,
+            condition: allocated == 0,
+            userMessage:
             $"Selection drag tracking allocated {allocated} B over 500 moves; expected 0."
         );
     }

@@ -26,64 +26,65 @@ public sealed class AvatarPage : ComposedWidget
     {
         _initialText = RandomName();
         _text = _initialText;
-        _avatar = new AdwAvatar(112f, _initialText);
+        _avatar = new AdwAvatar(size: 112f, text: _initialText);
     }
 
     protected override Widget Build(BuildContext context)
     {
         return new GalleryPage(
-            "Avatar",
+            title: "Avatar",
+            description:
             "Initials from a name, a colour derived from it, and a glyph when there is neither.",
-            ""
+            iconName: ""
         ) {
             Children = {
-                Demo.Stage(_avatar, Spacing.Xxl),
+                Demo.Stage(child: _avatar, padding: Spacing.Xxl),
                 Demo.Group(
-                    "This Avatar",
-                    null,
+                    title: "This Avatar",
+                    description: null,
                     new AdwEntryRow(
-                        "Name",
-                        _initialText,
-                        s =>
+                        title: "Name",
+                        text: _initialText,
+                        onChanged: s =>
                         {
                             _text = s;
                             ApplyText();
                         }
                     ),
                     new AdwSwitchRow(
-                        "Show Initials",
-                        "Off falls back to the person glyph",
-                        true,
-                        on =>
+                        title: "Show Initials",
+                        subtitle: "Off falls back to the person glyph",
+                        value: true,
+                        onChanged: on =>
                         {
                             _showInitials = on;
                             ApplyText();
                         }
                     ),
                     new AdwSpinRow(
-                        "Size",
-                        null,
-                        112,
-                        24,
-                        320,
-                        8,
-                        v => _avatar.Size = (float)v
+                        title: "Size",
+                        subtitle: null,
+                        value: 112,
+                        min: 24,
+                        max: 320,
+                        step: 8,
+                        onChanged: v => _avatar.Size = (float)v
                     )
                 ),
                 Demo.Titled(
-                    "Sizes",
-                    "The sizes a GNOME app actually uses: row, header, sheet, page.",
-                    Demo.Stage(
+                    title: "Sizes",
+                    description: "The sizes a GNOME app actually uses: row, header, sheet, page.",
+                    child: Demo.Stage(
                         new Row(
                             spacing: Spacing.Lg,
                             mainAxisSize: MainAxisSize.Min,
                             crossAxisAlignment: CrossAxisAlignment.Center
                         ) {
                             Children = {
-                                new AdwAvatar(24f, "Ada Lovelace"),
-                                new AdwAvatar(32f, "Grace Hopper"),
-                                new AdwAvatar(48f, "Alan Turing"),
-                                new AdwAvatar(64f, iconName: MaterialIcons.Person),
+                                new AdwAvatar(size: 24f, text: "Ada Lovelace"),
+                                new AdwAvatar(size: 32f, text: "Grace Hopper"),
+                                new AdwAvatar(size: 48f, text: "Alan Turing"),
+                                new AdwAvatar(size: 64f, iconName: MaterialIcons.Person),
                             },
                         }
                     )
@@ -93,19 +94,21 @@ public sealed class AvatarPage : ComposedWidget
         };
     }
 
-    private void ApplyText()
-    {
-        _avatar.Text = _showInitials ? _text : null;
-    }
+    private void ApplyText() => _avatar.Text = _showInitials ? _text : null;
 
     private static Widget Contacts()
     {
-        var group = new AdwPreferencesGroup("Contacts", "The 40 px avatar as a row prefix");
-        for (var i = 0; i < 12; i++)
+        var group = new AdwPreferencesGroup(
+            title: "Contacts",
+            description: "The 40 px avatar as a row prefix"
+        );
+        for (int i = 0; i < 12; i++)
         {
-            var name = RandomName();
+            string name = RandomName();
             group.Rows.Add(
-                new AdwActionRow(name, "Available") { Prefix = new AdwAvatar(40f, name) }
+                new AdwActionRow(title: name, subtitle: "Available") {
+                    Prefix = new AdwAvatar(size: 40f, text: name),
+                }
             );
         }
 

@@ -18,77 +18,32 @@ namespace Zigote.Tests;
 /// </summary>
 public class FocusGroupTabOrderTests
 {
-    /// <summary>A focus group of N buttons, the <paramref name="target" />th being its Tab target.</summary>
-    private sealed class Group : Widget, IFocusGroup
-    {
-        private readonly Column _column = new() {
-            CrossAxisAlignment = CrossAxisAlignment.Stretch,
-            MainAxisSize = MainAxisSize.Min,
-        };
-
-        public Group(int count, int target)
-        {
-            for (var i = 0; i < count; i++)
-                _column.Children.Add(
-                    new Pressable {
-                        SemanticsLabel = $"row{i}",
-                        Child = new SizedBox(80f, 20f),
-                    }
-                );
-            TabTarget = Row(target);
-        }
-
-        public Widget? TabTarget { get; }
-
-        public Widget Row(int i)
-        {
-            return _column.Children[i];
-        }
-
-        public override Size Measure(Constraints c)
-        {
-            return _column.Measure(c);
-        }
-
-        public override void Layout(Offset origin)
-        {
-            Bounds = new Rect(
-                origin.X,
-                origin.Y,
-                80f,
-                _column.Children.Count * 20f
-            );
-            _column.Layout(origin);
-        }
-
-        public override void Paint(PaintList paint)
-        {
-            _column.Paint(paint);
-        }
-
-        public override IEnumerable<Widget> GetChildren()
-        {
-            return [_column];
-        }
-    }
-
     private static (Widget Root, Group Group, Pressable Before, Pressable After) Tree()
     {
         var before = new Pressable {
             SemanticsLabel = "before",
-            Child = new SizedBox(80f, 20f),
+            Child = new SizedBox(width: 80f, height: 20f),
         };
-        var after = new Pressable { SemanticsLabel = "after", Child = new SizedBox(80f, 20f) };
-        var group = new Group(5, 2);
+        var after = new Pressable {
+            SemanticsLabel = "after",
+            Child = new SizedBox(width: 80f, height: 20f),
+        };
+        var group = new Group(count: 5, target: 2);
         var root = new ThemeProvider(
-            ThemeData.Dark,
-            new Column(
+            data: ThemeData.Dark,
+            child: new Column(
                 crossAxisAlignment: CrossAxisAlignment.Stretch,
                 mainAxisSize: MainAxisSize.Min
-            ) { Children = { before, group, after } }
+            ) {
+                Children = {
+                    before,
+                    group,
+                    after,
+                },
+            }
         );
-        root.Measure(Constraints.Tight(200f, 400f));
-        root.Layout(new Offset(0f, 0f));
+        root.Measure(Constraints.Tight(width: 200f, height: 400f));
+        root.Layout(new Offset(x: 0f, y: 0f));
         return (root, group, before, after);
     }
 
@@ -99,9 +54,12 @@ public class FocusGroupTabOrderTests
 
         // Every row is focusable; only one of them is a Tab stop, between the outside buttons.
         var all = FocusTraversal.Focusables(root);
-        var order = FocusTraversal.TabOrder(root, null);
-        Assert.True(all.Count > order.Count, $"expected grouping to shrink {all.Count}");
-        Assert.Equal([before, group.TabTarget!, after], order);
+        var order = FocusTraversal.TabOrder(scope: root, focused: null);
+        Assert.True(
+            condition: all.Count > order.Count,
+            userMessage: $"expected grouping to shrink {all.Count}"
+        );
+        Assert.Equal(expected: [before, group.TabTarget!, after], actual: order);
     }
 
     [Fact]
@@ -110,10 +68,13 @@ public class FocusGroupTabOrderTests
         var (root, group, _, after) = Tree();
         var inside = group.Row(4); // arrowed down to the last row
 
-        var order = FocusTraversal.TabOrder(root, inside);
-        Assert.Contains(inside, order);
-        Assert.DoesNotContain(group.TabTarget!, order);
-        Assert.Equal(after, FocusTraversal.NextInTab(order, inside, false));
+        var order = FocusTraversal.TabOrder(scope: root, focused: inside);
+        Assert.Contains(expected: inside, collection: order);
+        Assert.DoesNotContain(expected: group.TabTarget!, collection: order);
+        Assert.Equal(
+            expected: after,
+            actual: FocusTraversal.NextInTab(order: order, current: inside, backwards: false)
+        );
     }
 
     [Fact]
@@ -123,26 +84,39 @@ public class FocusGroupTabOrderTests
         var all = FocusTraversal.Focusables(root);
 
         // Directional traversal uses the ungrouped list, so Down walks row to row.
-        var next = FocusTraversal.Directional(all, group.Row(1), 0f, 1f);
-        Assert.Equal(group.Row(2), next);
+        var next = FocusTraversal.Directional(
+            order: all,
+            current: group.Row(1),
+            dx: 0f,
+            dy: 1f
+        );
+        Assert.Equal(expected: group.Row(2), actual: next);
     }
 
     [Fact]
     public void ATreeWithNoGroupsIsUnchanged()
     {
-        var a = new Pressable { Child = new SizedBox(80f, 20f) };
-        var b = new Pressable { Child = new SizedBox(80f, 20f) };
+        var a = new Pressable { Child = new SizedBox(width: 80f, height: 20f) };
+        var b = new Pressable { Child = new SizedBox(width: 80f, height: 20f) };
         var root = new ThemeProvider(
-            ThemeData.Dark,
-            new Column(
+            data: ThemeData.Dark,
+            child: new Column(
                 crossAxisAlignment: CrossAxisAlignment.Stretch,
                 mainAxisSize: MainAxisSize.Min
-            ) { Children = { a, b } }
+            ) {
+                Children = {
+                    a,
+                    b,
+                },
+            }
         );
-        root.Measure(Constraints.Tight(200f, 200f));
-        root.Layout(new Offset(0f, 0f));
+        root.Measure(Constraints.Tight(width: 200f, height: 200f));
+        root.Layout(new Offset(x: 0f, y: 0f));
 
-        Assert.Equal(FocusTraversal.Focusables(root), FocusTraversal.TabOrder(root, null));
+        Assert.Equal(
+            expected: FocusTraversal.Focusables(root),
+            actual: FocusTraversal.TabOrder(scope: root, focused: null)
+        );
     }
 
     /// <summary>The real subject: AdwSidebar is a group whose Tab target is the selected row.</summary>
@@ -151,19 +125,64 @@ public class FocusGroupTabOrderTests
     {
         var sidebar = new AdwSidebar(
             new AdwSidebarSection(
-                null,
-                new AdwSidebarItem("General", Icons.Settings),
-                new AdwSidebarItem("Appearance", Icons.Palette),
-                new AdwSidebarItem("Advanced", Icons.Tune)
+                title: null,
+                new AdwSidebarItem(title: "General", iconName: Icons.Settings),
+                new AdwSidebarItem(title: "Appearance", iconName: Icons.Palette),
+                new AdwSidebarItem(title: "Advanced", iconName: Icons.Tune)
             )
         ) { Selected = 1 };
-        var root = new ThemeProvider(ThemeData.Dark, sidebar);
-        root.Measure(Constraints.Tight(260f, 400f));
-        root.Layout(new Offset(0f, 0f));
+        var root = new ThemeProvider(data: ThemeData.Dark, child: sidebar);
+        root.Measure(Constraints.Tight(width: 260f, height: 400f));
+        root.Layout(new Offset(x: 0f, y: 0f));
 
-        Assert.Equal(3, FocusTraversal.Focusables(root).Count);
-        var order = FocusTraversal.TabOrder(root, null);
+        Assert.Equal(expected: 3, actual: FocusTraversal.Focusables(root).Count);
+        var order = FocusTraversal.TabOrder(scope: root, focused: null);
         Assert.Single(order);
-        Assert.Same(((IFocusGroup)sidebar).TabTarget, order[0]);
+        Assert.Same(expected: sidebar.TabTarget, actual: order[0]);
+    }
+
+    /// <summary>A focus group of N buttons, the <paramref name="target" />th being its Tab target.</summary>
+    private sealed class Group : Widget, IFocusGroup
+    {
+        private readonly Column _column = new() {
+            CrossAxisAlignment = CrossAxisAlignment.Stretch,
+            MainAxisSize = MainAxisSize.Min,
+        };
+
+        public Group(int count, int target)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                _column.Children.Add(
+                    new Pressable {
+                        SemanticsLabel = $"row{i}",
+                        Child = new SizedBox(width: 80f, height: 20f),
+                    }
+                );
+            }
+
+            TabTarget = Row(target);
+        }
+
+        public Widget? TabTarget { get; }
+
+        public Widget Row(int i) => _column.Children[i];
+
+        public override Size Measure(Constraints c) => _column.Measure(c);
+
+        public override void Layout(Offset origin)
+        {
+            Bounds = new Rect(
+                x: origin.X,
+                y: origin.Y,
+                width: 80f,
+                height: _column.Children.Count * 20f
+            );
+            _column.Layout(origin);
+        }
+
+        public override void Paint(PaintList paint) => _column.Paint(paint);
+
+        public override IEnumerable<Widget> GetChildren() => [_column];
     }
 }

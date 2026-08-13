@@ -48,36 +48,31 @@ public class Flexible : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         Child.Layout(origin);
     }
 
-    public override void Paint(PaintList paint)
-    {
-        Child.Paint(paint);
-    }
+    public override void Paint(PaintList paint) => Child.Paint(paint);
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         return Child.HitTest(point);
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return _childArray;
-    }
+    public override IEnumerable<Widget> GetChildren() => _childArray;
 }
 
 /// <summary>A flex child that fills its entire share of the main axis (<see cref="FlexFit.Tight" />).</summary>
-public class Expanded(Widget child, int flex = 1) : Flexible(child, flex, FlexFit.Tight);
+public class Expanded(Widget child, int flex = 1)
+    : Flexible(child: child, flex: flex, fit: FlexFit.Tight);
 
 /// <summary>A zero-size flexible gap (an <see cref="Expanded" /> with a transparent child).</summary>
-public class Spacer(int flex = 1) : Expanded(new SizedBox(), flex);
+public class Spacer(int flex = 1) : Expanded(child: new SizedBox(), flex: flex);
 
 // ── Shared flex layout logic ───────────────────────────────────────────────────
 
@@ -106,19 +101,19 @@ internal static class FlexLayout
         if (metrics.Length < children.Count)
             metrics = new ChildMetrics[children.Count];
         else
-            Array.Clear(metrics, 0, children.Count);
+            Array.Clear(array: metrics, index: 0, length: children.Count);
 
-        var maxCross = 0f;
+        float maxCross = 0f;
         // Seed with the fixed inter-child gaps so the per-child available space, the flex
         // distribution, and the MainAxisSize.Min total all see only what spacing leaves over.
-        var totalFixed = children.Count > 1 ? spacing * (children.Count - 1) : 0f;
-        var totalFlex = 0;
+        float totalFixed = children.Count > 1 ? spacing * (children.Count - 1) : 0f;
+        int totalFlex = 0;
 
-        var mainMax = axis == 0 ? c.MaxWidth : c.MaxHeight;
-        var crossMax = axis == 0 ? c.MaxHeight : c.MaxWidth;
+        float mainMax = axis == 0 ? c.MaxWidth : c.MaxHeight;
+        float crossMax = axis == 0 ? c.MaxHeight : c.MaxWidth;
 
         // Pass 1 — measure non-flex children
-        for (var i = 0; i < children.Count; i++)
+        for (int i = 0; i < children.Count; i++)
         {
             if (children[i] is Flexible exp)
             {
@@ -129,7 +124,7 @@ internal static class FlexLayout
             // Remaining main-axis space for this child. If a prior child reported an infinite extent
             // (e.g. a fill widget mistakenly placed in an unbounded scroll), ∞ − ∞ is NaN — treat that
             // as still-unbounded so a stray infinity can't poison this child's constraints.
-            var avail = mainMax - totalFixed;
+            float avail = mainMax - totalFixed;
             if (float.IsNaN(avail)) avail = float.PositiveInfinity;
 
             var childC = axis == 0
@@ -141,67 +136,71 @@ internal static class FlexLayout
             // that poisons layout/paint with NaN. When unbounded, fall through to the loose constraint
             // above (min 0) so the child measures to its natural cross size instead of crashing.
             if (crossAlign == CrossAxisAlignment.Stretch && float.IsFinite(crossMax))
+            {
                 childC = axis == 0
                     ? new Constraints(maxWidth: avail, minHeight: crossMax, maxHeight: crossMax)
-                    : new Constraints(crossMax, crossMax, maxHeight: avail);
+                    : new Constraints(minWidth: crossMax, maxWidth: crossMax, maxHeight: avail);
+            }
 
             var sz = children[i].Measure(childC);
-            metrics[i] = new ChildMetrics(sz, 0f);
+            metrics[i] = new ChildMetrics(size: sz, crossOffset: 0f);
             totalFixed += axis == 0 ? sz.Width : sz.Height;
-            maxCross = MathF.Max(maxCross, axis == 0 ? sz.Height : sz.Width);
+            maxCross = MathF.Max(x: maxCross, y: axis == 0 ? sz.Height : sz.Width);
         }
 
         // Pass 2 — measure flex children
-        var remaining = MathF.Max(0f, mainMax - totalFixed);
+        float remaining = MathF.Max(x: 0f, y: mainMax - totalFixed);
         if (totalFlex > 0 && float.IsFinite(mainMax))
-            for (var i = 0; i < children.Count; i++)
+        {
+            for (int i = 0; i < children.Count; i++)
             {
                 if (children[i] is not Flexible exp) continue;
 
-                var share = remaining * exp.Flex / totalFlex;
+                float share = remaining * exp.Flex / totalFlex;
                 // Tight fit fills the whole share; loose fit may be smaller (min main = 0).
-                var mainMin = exp.Fit == FlexFit.Tight ? share : 0f;
+                float mainMin = exp.Fit == FlexFit.Tight ? share : 0f;
                 // Stretch pins the cross-min only when the cross axis is bounded; an unbounded
                 // (scrolling) cross axis measures the flex child loose instead of forcing ∞ (→ NaN).
-                var stretch = crossAlign == CrossAxisAlignment.Stretch && float.IsFinite(crossMax);
-                var crossMin = stretch ? crossMax : 0f;
+                bool stretch = crossAlign == CrossAxisAlignment.Stretch && float.IsFinite(crossMax);
+                float crossMin = stretch ? crossMax : 0f;
 
                 var childC = axis == 0
                     ? new Constraints(
-                        mainMin,
-                        share,
-                        crossMin,
-                        crossMax
+                        minWidth: mainMin,
+                        maxWidth: share,
+                        minHeight: crossMin,
+                        maxHeight: crossMax
                     )
                     : new Constraints(
-                        crossMin,
-                        crossMax,
-                        mainMin,
-                        share
+                        minWidth: crossMin,
+                        maxWidth: crossMax,
+                        minHeight: mainMin,
+                        maxHeight: share
                     );
 
                 var sz = exp.Measure(childC);
-                metrics[i] = new ChildMetrics(sz, 0f);
+                metrics[i] = new ChildMetrics(size: sz, crossOffset: 0f);
                 totalFixed += axis == 0 ? sz.Width : sz.Height;
-                maxCross = MathF.Max(maxCross, axis == 0 ? sz.Height : sz.Width);
+                maxCross = MathF.Max(x: maxCross, y: axis == 0 ? sz.Height : sz.Width);
             }
+        }
 
-        var mainTotal = mainSize == MainAxisSize.Min ? totalFixed :
+        float mainTotal = mainSize == MainAxisSize.Min ? totalFixed :
             float.IsFinite(mainMax) ? mainMax : totalFixed;
-        var ownMain = axis == 0 ? mainTotal : maxCross;
-        var ownCross = axis == 0 ? maxCross : mainTotal;
-        var size = c.Constrain(new Size(ownMain, ownCross));
+        float ownMain = axis == 0 ? mainTotal : maxCross;
+        float ownCross = axis == 0 ? maxCross : mainTotal;
+        var size = c.Constrain(new Size(width: ownMain, height: ownCross));
 
         // Pass 3 — cross-axis offsets, against the extent this flex ACTUALLY got rather than the
         // widest child. The two differ whenever an ancestor pins the cross axis: a Column inside a
         // Stretch parent is constrained to the full width, but its children were only as wide as
         // their content — centering against that content width left the whole thing hugging the
         // leading edge. Which is what an album header centred "in the middle of the phone" did.
-        var finalCross = axis == 0 ? size.Height : size.Width;
-        for (var i = 0; i < children.Count; i++)
+        float finalCross = axis == 0 ? size.Height : size.Width;
+        for (int i = 0; i < children.Count; i++)
         {
-            var childCross = axis == 0 ? metrics[i].Size.Height : metrics[i].Size.Width;
-            var crossOff = crossAlign switch {
+            float childCross = axis == 0 ? metrics[i].Size.Height : metrics[i].Size.Width;
+            float crossOff = crossAlign switch {
                 CrossAxisAlignment.Center => (finalCross - childCross) / 2f,
                 CrossAxisAlignment.End => finalCross - childCross,
                 _ => 0f,
@@ -209,7 +208,10 @@ internal static class FlexLayout
             if (!float.IsFinite(crossOff))
                 crossOff = 0f; // ∞ − ∞ from an infinite child → no offset
             // A child wider than the box (an overflow) must not be pushed off the leading edge too.
-            metrics[i] = new ChildMetrics(metrics[i].Size, MathF.Max(0f, crossOff));
+            metrics[i] = new ChildMetrics(
+                size: metrics[i].Size,
+                crossOffset: MathF.Max(x: 0f, y: crossOff)
+            );
         }
 
         return size;
@@ -229,28 +231,28 @@ internal static class FlexLayout
         // layout — reconciliation, or a re-entrant relayout from a native live-resize / drop callback),
         // lay out only the measured prefix this frame instead of indexing past the array and crashing.
         // The mutation that added children marks NeedsLayout, so the next frame re-measures and corrects.
-        var count = Math.Min(children.Count, metrics.Length);
+        int count = Math.Min(val1: children.Count, val2: metrics.Length);
 
-        var totalChildMain = 0f;
-        for (var i = 0; i < count; i++)
+        float totalChildMain = 0f;
+        for (int i = 0; i < count; i++)
             totalChildMain += axis == 0 ? metrics[i].Size.Width : metrics[i].Size.Height;
         // Fixed gaps count as occupied main-axis space: alignment distributes only what remains.
         if (count > 1) totalChildMain += spacing * (count - 1);
 
-        var ownMain = axis == 0 ? bounds.Width : bounds.Height;
-        var extra = ownMain - totalChildMain;
+        float ownMain = axis == 0 ? bounds.Width : bounds.Height;
+        float extra = ownMain - totalChildMain;
         if (!float.IsFinite(extra))
             extra = 0f; // ∞ − ∞ from an infinite child → distribute no slack
-        extra = MathF.Max(0f, extra);
-        var n = count;
+        extra = MathF.Max(x: 0f, y: extra);
+        int n = count;
 
-        var startOffset = mainAlign switch {
+        float startOffset = mainAlign switch {
             MainAxisAlignment.Center => extra / 2f,
             MainAxisAlignment.End => extra,
             MainAxisAlignment.SpaceAround => n > 0 ? extra / n / 2f : 0f,
             _ => 0f,
         };
-        var gap = mainAlign switch {
+        float gap = mainAlign switch {
             MainAxisAlignment.SpaceBetween => n > 1 ? extra / (n - 1) : 0f,
             MainAxisAlignment.SpaceAround => n > 0 ? extra / n : 0f,
             MainAxisAlignment.SpaceEvenly => n > 0 ? extra / (n + 1) : 0f,
@@ -261,22 +263,22 @@ internal static class FlexLayout
         // RTL mirrors the whole main axis on a horizontal flex: child i's leading edge measured from
         // the RIGHT edge instead of the left, so both the child order and the alignment slack flip
         // (MainAxisAlignment.Start hugs the right edge). Only meaningful with a finite own extent.
-        var mirror = rtl && axis == 0 && float.IsFinite(ownMain);
+        bool mirror = rtl && axis == 0 && float.IsFinite(ownMain);
 
-        var cursor = startOffset;
+        float cursor = startOffset;
 
-        for (var i = 0; i < count; i++)
+        for (int i = 0; i < count; i++)
         {
-            var mainSz = axis == 0 ? metrics[i].Size.Width : metrics[i].Size.Height;
-            var crossOff = metrics[i].CrossOffset;
+            float mainSz = axis == 0 ? metrics[i].Size.Width : metrics[i].Size.Height;
+            float crossOff = metrics[i].CrossOffset;
 
-            var mainPos = mirror
+            float mainPos = mirror
                 ? bounds.X + ownMain - cursor - mainSz
                 : (axis == 0 ? bounds.X : bounds.Y) + cursor;
 
             var origin = axis == 0
-                ? new Offset(mainPos, bounds.Y + crossOff)
-                : new Offset(bounds.X + crossOff, mainPos);
+                ? new Offset(x: mainPos, y: bounds.Y + crossOff)
+                : new Offset(x: bounds.X + crossOff, y: mainPos);
 
             children[i].Layout(origin);
             cursor += mainSz + gap + spacing;
@@ -287,14 +289,14 @@ internal static class FlexLayout
     {
         // Index, not foreach: a foreach over the list would still be fine here (concrete List, non-
         // boxing), but the plain index keeps the loop trivially inlinable and allocation-free.
-        for (var i = 0; i < children.Count; i++) children[i].Paint(paint);
+        for (int i = 0; i < children.Count; i++) children[i].Paint(paint);
     }
 
     internal static Widget? HitTest(List<Widget> children, Rect bounds, Offset point)
     {
-        if (!bounds.Contains(point.X, point.Y)) return null;
+        if (!bounds.Contains(px: point.X, py: point.Y)) return null;
         // Reverse so top-painted (last) child wins
-        for (var i = children.Count - 1; i >= 0; i--)
+        for (int i = children.Count - 1; i >= 0; i--)
         {
             var hit = children[i].HitTest(point);
             if (hit != null) return hit;

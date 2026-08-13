@@ -34,6 +34,8 @@ namespace Zigote.UI.Host;
 /// </summary>
 public static class WidgetPreview
 {
+    private const BindingFlags Any = BindingFlags.Public | BindingFlags.NonPublic;
+
     /// <summary>The widget to show, or null when the process is a normal app run.</summary>
     public static string? Target =>
         Environment.GetEnvironmentVariable("ZIGOTE_PREVIEW") is { Length: > 0 } t ? t : null;
@@ -47,7 +49,7 @@ public static class WidgetPreview
         if (Environment.GetEnvironmentVariable("ZIGOTE_PREVIEW_LIST") is not { Length: > 0 })
             return false;
 
-        foreach (var name in Candidates()) Console.Out.WriteLine(name);
+        foreach (string name in Candidates()) Console.Out.WriteLine(name);
         return true;
     }
 
@@ -77,18 +79,18 @@ public static class WidgetPreview
         var factories = types
             .SelectMany(t => t.GetMethods(Any | BindingFlags.Static))
             .Where(m => !m.Name.Contains('<'))
-            .Where(m => m.GetParameters().Length == 0 && typeof(Widget).IsAssignableFrom(m.ReturnType))
+            .Where(m =>
+                m.GetParameters().Length == 0 && typeof(Widget).IsAssignableFrom(m.ReturnType)
+            )
             .Select(m => $"{m.DeclaringType!.FullName}.{m.Name}");
 
         return widgets.Concat(factories).Distinct().Order(StringComparer.Ordinal);
     }
 
-    private const BindingFlags Any = BindingFlags.Public | BindingFlags.NonPublic;
-
-    private static ConstructorInfo? Ctor(Type type)
-    {
-        return type.GetConstructor(Any | BindingFlags.Instance, Type.EmptyTypes);
-    }
+    private static ConstructorInfo? Ctor(Type type) => type.GetConstructor(
+        bindingAttr: Any | BindingFlags.Instance,
+        types: Type.EmptyTypes
+    );
 
     /// <summary>
     ///     The widget named by <paramref name="target" />, or a widget describing why it could not be
@@ -109,18 +111,18 @@ public static class WidgetPreview
             }
 
             // Not a type — the last segment may be a static factory method on the type before it.
-            var split = target.LastIndexOf('.');
+            int split = target.LastIndexOf('.');
             if (split > 0 && FindType(target[..split]) is { } owner)
             {
                 var method = owner.GetMethod(
-                    target[(split + 1)..],
-                    Any | BindingFlags.Static,
-                    null,
-                    Type.EmptyTypes,
-                    null
+                    name: target[(split + 1)..],
+                    bindingAttr: Any | BindingFlags.Static,
+                    binder: null,
+                    types: Type.EmptyTypes,
+                    modifiers: null
                 );
                 if (method is not null && typeof(Widget).IsAssignableFrom(method.ReturnType))
-                    return (Widget)method.Invoke(null, null)!;
+                    return (Widget)method.Invoke(obj: null, parameters: null)!;
             }
 
             return Message($"No widget type or static factory named '{target}'.");
@@ -129,7 +131,9 @@ public static class WidgetPreview
         {
             // TargetInvocationException from a factory that threw is the interesting case: show the
             // inner message, which is the one the author's code produced.
-            return Message($"{target} failed to construct:\n{(e as TargetInvocationException)?.InnerException ?? e}");
+            return Message(
+                $"{target} failed to construct:\n{(e as TargetInvocationException)?.InnerException ?? e}"
+            );
         }
     }
 
@@ -149,14 +153,11 @@ public static class WidgetPreview
         return Message($"{target} threw:\n{error.Message}");
     }
 
-    private static Widget Message(string text)
-    {
-        return new Center(child: new Text(text));
-    }
+    private static Widget Message(string text) => new Center(child: new Text(text));
 
     private static Assembly? ListedAssembly()
     {
-        var name = Environment.GetEnvironmentVariable("ZIGOTE_PREVIEW_ASSEMBLY");
+        string? name = Environment.GetEnvironmentVariable("ZIGOTE_PREVIEW_ASSEMBLY");
         if (name is not { Length: > 0 }) return Assembly.GetEntryAssembly();
         return AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name == name)
                ?? LoadNeighbours().FirstOrDefault(a => a.GetName().Name == name);
@@ -169,11 +170,12 @@ public static class WidgetPreview
     private static Type? FindType(string fullName)
     {
         var loaded = AppDomain.CurrentDomain.GetAssemblies()
-            .Select(a => a.GetType(fullName, false))
+            .Select(a => a.GetType(name: fullName, throwOnError: false))
             .FirstOrDefault(t => t is not null);
         if (loaded is not null) return loaded;
 
-        return LoadNeighbours().Select(a => a.GetType(fullName, false)).FirstOrDefault(t => t is not null);
+        return LoadNeighbours().Select(a => a.GetType(name: fullName, throwOnError: false))
+            .FirstOrDefault(t => t is not null);
     }
 
     /// <summary>
@@ -186,7 +188,10 @@ public static class WidgetPreview
             .Select(a => a.GetName().Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var path in Directory.EnumerateFiles(AppContext.BaseDirectory, "*.dll"))
+        foreach (string path in Directory.EnumerateFiles(
+                     path: AppContext.BaseDirectory,
+                     searchPattern: "*.dll"
+                 ))
         {
             if (loaded.Contains(Path.GetFileNameWithoutExtension(path))) continue;
             Assembly? assembly = null;

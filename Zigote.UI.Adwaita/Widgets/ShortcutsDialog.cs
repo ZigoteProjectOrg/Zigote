@@ -33,10 +33,7 @@ public sealed class AdwShortcutsSection
     public List<AdwShortcutsItem> Items { get; }
 
     /// <summary>Append an item. Call before showing the dialog.</summary>
-    public void Add(AdwShortcutsItem item)
-    {
-        Items.Add(item);
-    }
+    public void Add(AdwShortcutsItem item) => Items.Add(item);
 }
 
 /// <summary>
@@ -69,10 +66,7 @@ public sealed class AdwShortcutsDialog : AdwDialog
     public string Title { get; init; } = "Keyboard Shortcuts";
 
     /// <summary>Append a section. Call before <see cref="AdwDialog.Show()" />.</summary>
-    public void Add(AdwShortcutsSection section)
-    {
-        _sections.Add(section);
-    }
+    public void Add(AdwShortcutsSection section) => _sections.Add(section);
 
     /// <summary>The dialog body: a header bar over a scrolling page of boxed lists.</summary>
     private sealed class Content(AdwShortcutsDialog owner) : ComposedWidget
@@ -84,15 +78,19 @@ public sealed class AdwShortcutsDialog : AdwDialog
             {
                 var group = new AdwPreferencesGroup(section.Title);
                 foreach (var item in section.Items)
+                {
                     group.Rows.Add(
-                        new AdwActionRow(item.Title, item.Subtitle) {
+                        new AdwActionRow(title: item.Title, subtitle: item.Subtitle) {
                             Suffixes = { new AdwShortcutLabel(item.Accelerator) },
                         }
                     );
+                }
+
                 page.Groups.Add(group);
             }
 
             if (page.Groups.Count == 0)
+            {
                 page.Groups.Add(
                     new AdwStatusPage {
                         IconName = MaterialIcons.Keyboard,
@@ -100,6 +98,7 @@ public sealed class AdwShortcutsDialog : AdwDialog
                         Compact = true,
                     }
                 );
+            }
 
             // No ScrollView around the page: AdwPreferencesPage scrolls itself, and wrapping it
             // measures it with unbounded height — both scrollers then compute a zero extent and

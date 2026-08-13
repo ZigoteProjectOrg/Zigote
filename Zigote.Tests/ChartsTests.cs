@@ -21,8 +21,12 @@ namespace Zigote.Tests;
 public class ChartsTests
 {
     private static readonly List<Sale> Sales = [
-        new("Jan", 120, "West"), new("Feb", 180, "West"), new("Mar", 90, "West"),
-        new("Jan", 60, "East"), new("Feb", 40, "East"), new("Mar", 150, "East"),
+        new(Month: "Jan", Revenue: 120, Region: "West"),
+        new(Month: "Feb", Revenue: 180, Region: "West"),
+        new(Month: "Mar", Revenue: 90, Region: "West"),
+        new(Month: "Jan", Revenue: 60, Region: "East"),
+        new(Month: "Feb", Revenue: 40, Region: "East"),
+        new(Month: "Mar", Revenue: 150, Region: "East"),
     ];
     // ── NiceScale ─────────────────────────────────────────────────────────────
 
@@ -31,18 +35,24 @@ public class ChartsTests
     [InlineData(1, 5, 0.2)]
     [InlineData(7, 5, 1)]
     [InlineData(0.55, 5, 0.1)]
-    public void NiceScale_TickStep_Uses125Ladder(double range, int target, double expected)
-    {
-        Assert.Equal(expected, NiceScale.TickStep(range, target), 9);
-    }
+    public void NiceScale_TickStep_Uses125Ladder(double range, int target, double expected) =>
+        Assert.Equal(
+            expected: expected,
+            actual: NiceScale.TickStep(range: range, targetTicks: target),
+            precision: 9
+        );
 
     [Fact]
     public void NiceScale_NiceDomain_RoundsOutward()
     {
-        var (min, max, step) = NiceScale.NiceDomain(0.13, 9.8, 5);
-        Assert.Equal(0, min, 9);
-        Assert.Equal(10, max, 9);
-        Assert.Equal(2, step, 9);
+        (double min, double max, double step) = NiceScale.NiceDomain(
+            min: 0.13,
+            max: 9.8,
+            targetTicks: 5
+        );
+        Assert.Equal(expected: 0, actual: min, precision: 9);
+        Assert.Equal(expected: 10, actual: max, precision: 9);
+        Assert.Equal(expected: 2, actual: step, precision: 9);
     }
 
     [Theory]
@@ -50,10 +60,10 @@ public class ChartsTests
     [InlineData(2_300_000, "2.3M")]
     [InlineData(950, "950")]
     [InlineData(0.5, "0.5")]
-    public void NiceScale_FormatNumber_Compacts(double v, string expected)
-    {
-        Assert.Equal(expected, NiceScale.FormatNumber(v));
-    }
+    public void NiceScale_FormatNumber_Compacts(double v, string expected) => Assert.Equal(
+        expected: expected,
+        actual: NiceScale.FormatNumber(v)
+    );
 
     // ── Scales ────────────────────────────────────────────────────────────────
 
@@ -65,13 +75,16 @@ public class ChartsTests
         s.Include(97);
         s.FinalizeDomain();
 
-        Assert.Equal(0, s.DomainMin, 6);
-        Assert.Equal(100, s.DomainMax, 6);
-        Assert.Equal(0.5f, s.NormalizeNumeric(50), 3);
+        Assert.Equal(expected: 0, actual: s.DomainMin, precision: 6);
+        Assert.Equal(expected: 100, actual: s.DomainMax, precision: 6);
+        Assert.Equal(expected: 0.5f, actual: s.NormalizeNumeric(50), precision: 3);
 
-        var ticks = s.BuildTicks(5, null);
+        var ticks = s.BuildTicks(targetCount: 5, formatter: null);
         Assert.True(ticks.Count >= 4);
-        Assert.All(ticks, t => Assert.InRange(t.Position, -0.001f, 1.001f));
+        Assert.All(
+            collection: ticks,
+            action: t => Assert.InRange(actual: t.Position, low: -0.001f, high: 1.001f)
+        );
     }
 
     [Fact]
@@ -83,8 +96,8 @@ public class ChartsTests
         };
         s.Include(500);
         s.FinalizeDomain();
-        Assert.Equal(-10, s.DomainMin, 6);
-        Assert.Equal(10, s.DomainMax, 6);
+        Assert.Equal(expected: -10, actual: s.DomainMin, precision: 6);
+        Assert.Equal(expected: 10, actual: s.DomainMax, precision: 6);
     }
 
     [Fact]
@@ -111,15 +124,17 @@ public class ChartsTests
         s.Include("A"); // duplicate keeps first slot
         s.FinalizeDomain();
 
-        Assert.Equal(2, s.Categories.Count);
-        Assert.Equal(0.25f, s.Normalize("A"), 3);
-        Assert.Equal(0.75f, s.Normalize("B"), 3);
-        Assert.Equal(0.5f, s.NormalizedBandWidth, 3);
+        Assert.Equal(expected: 2, actual: s.Categories.Count);
+        Assert.Equal(expected: 0.25f, actual: s.Normalize("A"), precision: 3);
+        Assert.Equal(expected: 0.75f, actual: s.Normalize("B"), precision: 3);
+        Assert.Equal(expected: 0.5f, actual: s.NormalizedBandWidth, precision: 3);
 
         var wide = new BandScale();
-        for (var i = 0; i < 30; i++) wide.Include($"c{i}");
+        for (int i = 0; i < 30; i++) wide.Include($"c{i}");
         wide.FinalizeDomain();
-        Assert.True(wide.BuildTicks(6, null).Count <= 8); // thinned, not 30 labels
+        Assert.True(
+            wide.BuildTicks(targetCount: 6, formatter: null).Count <= 8
+        ); // thinned, not 30 labels
     }
 
     [Fact]
@@ -129,46 +144,52 @@ public class ChartsTests
         s.Include(1);
         s.Include(1000);
         s.FinalizeDomain();
-        Assert.Equal(0f, s.NormalizeNumeric(1), 3);
-        Assert.Equal(1f, s.NormalizeNumeric(1000), 3);
-        Assert.Equal(1f / 3f, s.NormalizeNumeric(10), 3);
+        Assert.Equal(expected: 0f, actual: s.NormalizeNumeric(1), precision: 3);
+        Assert.Equal(expected: 1f, actual: s.NormalizeNumeric(1000), precision: 3);
+        Assert.Equal(expected: 1f / 3f, actual: s.NormalizeNumeric(10), precision: 3);
     }
 
     [Fact]
     public void TimeScale_PicksCalendarUnits()
     {
         var s = new TimeScale();
-        s.Include(new DateTime(2026, 1, 15));
-        s.Include(new DateTime(2026, 7, 15));
+        s.Include(new DateTime(year: 2026, month: 1, day: 15));
+        s.Include(new DateTime(year: 2026, month: 7, day: 15));
         s.FinalizeDomain();
 
-        var ticks = s.BuildTicks(6, null);
+        var ticks = s.BuildTicks(targetCount: 6, formatter: null);
         Assert.True(ticks.Count is >= 4 and <= 9);
-        Assert.Contains(ticks, t => t.Label == "Feb"); // month-aligned labels
+        Assert.Contains(
+            collection: ticks,
+            filter: t => t.Label == "Feb"
+        ); // month-aligned labels
 
         var day = new TimeScale();
         day.Include(
             new DateTime(
-                2026,
-                3,
-                1,
-                0,
-                0,
-                0
+                year: 2026,
+                month: 3,
+                day: 1,
+                hour: 0,
+                minute: 0,
+                second: 0
             )
         );
         day.Include(
             new DateTime(
-                2026,
-                3,
-                1,
-                23,
-                59,
-                0
+                year: 2026,
+                month: 3,
+                day: 1,
+                hour: 23,
+                minute: 59,
+                second: 0
             )
         );
         day.FinalizeDomain();
-        Assert.Contains(day.BuildTicks(6, null), t => t.Label.Contains(':')); // HH:mm labels
+        Assert.Contains(
+            collection: day.BuildTicks(targetCount: 6, formatter: null),
+            filter: t => t.Label.Contains(':')
+        ); // HH:mm labels
     }
 
     // ── Stacking ──────────────────────────────────────────────────────────────
@@ -178,15 +199,15 @@ public class ChartsTests
     {
         var spans = new Dictionary<(string, ChartValue), StackedSpan>();
         StackCompute.Compute(
-            [("a", "x", 3.0), ("b", "x", 2.0), ("c", "x", -4.0)],
-            ["a", "b", "c"],
-            ChartStacking.Standard,
-            spans
+            points: [("a", "x", 3.0), ("b", "x", 2.0), ("c", "x", -4.0)],
+            seriesOrder: ["a", "b", "c"],
+            mode: ChartStacking.Standard,
+            result: spans
         );
 
-        Assert.Equal(new StackedSpan(0, 3), spans[("a", "x")]);
-        Assert.Equal(new StackedSpan(3, 5), spans[("b", "x")]);
-        Assert.Equal(new StackedSpan(-4, 0), spans[("c", "x")]);
+        Assert.Equal(expected: new StackedSpan(Bottom: 0, Top: 3), actual: spans[("a", "x")]);
+        Assert.Equal(expected: new StackedSpan(Bottom: 3, Top: 5), actual: spans[("b", "x")]);
+        Assert.Equal(expected: new StackedSpan(Bottom: -4, Top: 0), actual: spans[("c", "x")]);
     }
 
     [Fact]
@@ -194,15 +215,15 @@ public class ChartsTests
     {
         var spans = new Dictionary<(string, ChartValue), StackedSpan>();
         StackCompute.Compute(
-            [("a", "x", 1.0), ("b", "x", 3.0)],
-            ["a", "b"],
-            ChartStacking.Normalized,
-            spans
+            points: [("a", "x", 1.0), ("b", "x", 3.0)],
+            seriesOrder: ["a", "b"],
+            mode: ChartStacking.Normalized,
+            result: spans
         );
 
-        Assert.Equal(0.25, spans[("a", "x")].Value, 9);
-        Assert.Equal(0.75, spans[("b", "x")].Value, 9);
-        Assert.Equal(1.0, spans[("b", "x")].Top, 9);
+        Assert.Equal(expected: 0.25, actual: spans[("a", "x")].Value, precision: 9);
+        Assert.Equal(expected: 0.75, actual: spans[("b", "x")].Value, precision: 9);
+        Assert.Equal(expected: 1.0, actual: spans[("b", "x")].Top, precision: 9);
     }
 
     [Fact]
@@ -210,14 +231,14 @@ public class ChartsTests
     {
         var spans = new Dictionary<(string, ChartValue), StackedSpan>();
         StackCompute.Compute(
-            [("a", "x", 2.0), ("b", "x", 2.0)],
-            ["a", "b"],
-            ChartStacking.Center,
-            spans
+            points: [("a", "x", 2.0), ("b", "x", 2.0)],
+            seriesOrder: ["a", "b"],
+            mode: ChartStacking.Center,
+            result: spans
         );
 
-        Assert.Equal(-2.0, spans[("a", "x")].Bottom, 9);
-        Assert.Equal(2.0, spans[("b", "x")].Top, 9);
+        Assert.Equal(expected: -2.0, actual: spans[("a", "x")].Bottom, precision: 9);
+        Assert.Equal(expected: 2.0, actual: spans[("b", "x")].Top, precision: 9);
     }
 
     // ── Geometry ──────────────────────────────────────────────────────────────
@@ -227,31 +248,36 @@ public class ChartsTests
     {
         float[] xs = [0, 1, 2, 3, 4];
         float[] ys = [0, 10, 10, 0, 0];
-        var slopes = ChartGeometry.MonotoneSlopes(xs, ys);
+        float[] slopes = ChartGeometry.MonotoneSlopes(xs: xs, ys: ys);
 
         // Flat segments must stay flat (no wiggle past the data range).
-        for (var x = 1.0f; x <= 2.0f; x += 0.1f)
+        for (float x = 1.0f; x <= 2.0f; x += 0.1f)
+        {
             Assert.InRange(
-                ChartGeometry.EvaluateMonotone(
-                    xs,
-                    ys,
-                    slopes,
-                    x
+                actual: ChartGeometry.EvaluateMonotone(
+                    xs: xs,
+                    ys: ys,
+                    slopes: slopes,
+                    x: x
                 ),
-                9.999f,
-                10.001f
+                low: 9.999f,
+                high: 10.001f
             );
-        for (var x = 0.0f; x <= 4.0f; x += 0.05f)
+        }
+
+        for (float x = 0.0f; x <= 4.0f; x += 0.05f)
+        {
             Assert.InRange(
-                ChartGeometry.EvaluateMonotone(
-                    xs,
-                    ys,
-                    slopes,
-                    x
+                actual: ChartGeometry.EvaluateMonotone(
+                    xs: xs,
+                    ys: ys,
+                    slopes: slopes,
+                    x: x
                 ),
-                -0.001f,
-                10.001f
+                low: -0.001f,
+                high: 10.001f
             );
+        }
     }
 
     [Fact]
@@ -259,36 +285,36 @@ public class ChartsTests
     {
         // Quarter arc from 12 o'clock to 3 o'clock around (0,0) r=10.
         var cubics = ChartGeometry.ArcToCubics(
-            0,
-            0,
-            10,
-            0,
-            MathF.PI / 2f
+            cx: 0,
+            cy: 0,
+            radius: 10,
+            startAngle: 0,
+            endAngle: MathF.PI / 2f
         );
         Assert.Single(cubics);
         var c = cubics[0];
-        Assert.Equal(0f, c.X0, 3);
-        Assert.Equal(-10f, c.Y0, 3);
-        Assert.Equal(10f, c.X3, 3);
-        Assert.Equal(0f, c.Y3, 3);
+        Assert.Equal(expected: 0f, actual: c.X0, precision: 3);
+        Assert.Equal(expected: -10f, actual: c.Y0, precision: 3);
+        Assert.Equal(expected: 10f, actual: c.X3, precision: 3);
+        Assert.Equal(expected: 0f, actual: c.Y3, precision: 3);
 
         // A full half circle splits into two segments.
         Assert.Equal(
-            2,
-            ChartGeometry.ArcToCubics(
-                0,
-                0,
-                10,
-                0,
-                MathF.PI
+            expected: 2,
+            actual: ChartGeometry.ArcToCubics(
+                cx: 0,
+                cy: 0,
+                radius: 10,
+                startAngle: 0,
+                endAngle: MathF.PI
             ).Count
         );
     }
 
     private static Chart LaidOut(Chart chart, float w = 600, float h = 300)
     {
-        chart.Measure(Constraints.Tight(w, h));
-        chart.Layout(new Offset(0, 0));
+        chart.Measure(Constraints.Tight(width: w, height: h));
+        chart.Layout(new Offset(x: 0, y: 0));
         return chart;
     }
 
@@ -297,7 +323,7 @@ public class ChartsTests
     {
         var chart = new Chart {
             Marks = {
-                BarMark.Of(Sales, d => d.Month, d => d.Revenue),
+                BarMark.Of(data: Sales, x: d => d.Month, y: d => d.Revenue),
                 new RuleMark {
                     Y = 200,
                     Label = "Target",
@@ -311,11 +337,11 @@ public class ChartsTests
         Assert.True(chart.PlotRect.Width > 400 && chart.PlotRect.Height > 180);
         Assert.IsType<BandScale>(chart.ResolvedXScale);
         var y = Assert.IsType<LinearScale>(chart.ResolvedYScale);
-        Assert.Equal(0, y.DomainMin, 6);
+        Assert.Equal(expected: 0, actual: y.DomainMin, precision: 6);
         Assert.True(y.DomainMax >= 200); // stacked column (180+40=220) and the rule fit
 
-        Assert.Equal(3, chart.XTicks.Count);
-        Assert.Equal(2, chart.LegendEntries.Count); // West + East
+        Assert.Equal(expected: 3, actual: chart.XTicks.Count);
+        Assert.Equal(expected: 2, actual: chart.LegendEntries.Count); // West + East
 
         var paint = new PaintList();
         chart.Paint(paint);
@@ -327,21 +353,21 @@ public class ChartsTests
     public void Chart_Hover_ResolvesColumnCluster_AndTapFires()
     {
         var chart = new Chart {
-            Marks = { LineMark.Of(Sales, d => d.Month, d => d.Revenue) },
+            Marks = { LineMark.Of(data: Sales, x: d => d.Month, y: d => d.Revenue) },
         };
         ((LineMark<Sale>)chart.Marks[0]).SeriesBy = d => d.Region;
         LaidOut(chart);
 
         // Hover the middle of the plot: both series report a point at the nearest month.
         var mid = new Offset(
-            chart.PlotRect.X + chart.PlotRect.Width / 2f,
-            chart.PlotRect.Y + chart.PlotRect.Height / 2f
+            x: chart.PlotRect.X + (chart.PlotRect.Width / 2f),
+            y: chart.PlotRect.Y + (chart.PlotRect.Height / 2f)
         );
         chart.OnPointerMove(mid);
         var hover = chart.CurrentHover;
         Assert.NotNull(hover);
-        Assert.Equal(2, hover.Points.Count);
-        Assert.Equal("Feb", hover.XLabel);
+        Assert.Equal(expected: 2, actual: hover.Points.Count);
+        Assert.Equal(expected: "Feb", actual: hover.XLabel);
 
         ChartHoverInfo? tapped = null;
         chart.OnPointTap = info => tapped = info;
@@ -364,18 +390,19 @@ public class ChartsTests
     {
         // The hover registry is collected lazily on the first query after a relayout — hovering
         // right after an InvalidateData + layout must still resolve points.
-        var data = Enumerable.Range(0, 50).Select(i => ((double)i, Math.Sin(i / 5.0))).ToList();
+        var data = Enumerable.Range(start: 0, count: 50)
+            .Select(i => ((double)i, Math.Sin(i / 5.0))).ToList();
         var chart = new Chart {
             Animated = false,
-            Marks = { LineMark.Of(data, d => d.Item1, d => d.Item2) },
+            Marks = { LineMark.Of(data: data, x: d => d.Item1, y: d => d.Item2) },
         };
         LaidOut(chart);
         chart.InvalidateData();
         LaidOut(chart);
 
         var mid = new Offset(
-            chart.PlotRect.X + chart.PlotRect.Width / 2f,
-            chart.PlotRect.Y + chart.PlotRect.Height / 2f
+            x: chart.PlotRect.X + (chart.PlotRect.Width / 2f),
+            y: chart.PlotRect.Y + (chart.PlotRect.Height / 2f)
         );
         chart.OnPointerMove(mid);
         Assert.NotNull(chart.CurrentHover);
@@ -387,16 +414,17 @@ public class ChartsTests
     {
         // An actively-updating chart re-resolves the hover under the last pointer position on
         // relayout instead of dropping the overlay.
-        var data = Enumerable.Range(0, 50).Select(i => ((double)i, Math.Sin(i / 5.0))).ToList();
+        var data = Enumerable.Range(start: 0, count: 50)
+            .Select(i => ((double)i, Math.Sin(i / 5.0))).ToList();
         var chart = new Chart {
             Animated = false,
-            Marks = { LineMark.Of(data, d => d.Item1, d => d.Item2) },
+            Marks = { LineMark.Of(data: data, x: d => d.Item1, y: d => d.Item2) },
         };
         LaidOut(chart);
 
         var mid = new Offset(
-            chart.PlotRect.X + chart.PlotRect.Width / 2f,
-            chart.PlotRect.Y + chart.PlotRect.Height / 2f
+            x: chart.PlotRect.X + (chart.PlotRect.Width / 2f),
+            y: chart.PlotRect.Y + (chart.PlotRect.Height / 2f)
         );
         chart.OnPointerMove(mid);
         Assert.NotNull(chart.CurrentHover);
@@ -415,18 +443,19 @@ public class ChartsTests
     [Fact]
     public void Chart_PinOnTap_PersistsAcrossUpdates_TogglesAndDrops()
     {
-        var data = Enumerable.Range(0, 50).Select(i => ((double)i, Math.Sin(i / 5.0))).ToList();
+        var data = Enumerable.Range(start: 0, count: 50)
+            .Select(i => ((double)i, Math.Sin(i / 5.0))).ToList();
         var chart = new Chart {
             Animated = false,
-            Marks = { LineMark.Of(data, d => d.Item1, d => d.Item2) },
+            Marks = { LineMark.Of(data: data, x: d => d.Item1, y: d => d.Item2) },
         };
         LaidOut(chart);
         var pins = new List<ChartHoverInfo?>();
         chart.OnPinChanged = p => pins.Add(p);
 
         var mid = new Offset(
-            chart.PlotRect.X + chart.PlotRect.Width / 2f,
-            chart.PlotRect.Y + chart.PlotRect.Height / 2f
+            x: chart.PlotRect.X + (chart.PlotRect.Width / 2f),
+            y: chart.PlotRect.Y + (chart.PlotRect.Height / 2f)
         );
         chart.OnPointerMove(mid);
         chart.OnPointerDown(mid);
@@ -442,7 +471,7 @@ public class ChartsTests
         chart.InvalidateData();
         LaidOut(chart);
         Assert.NotNull(chart.PinnedHover);
-        Assert.Equal(pinnedX, chart.PinnedHover.X);
+        Assert.Equal(expected: pinnedX, actual: chart.PinnedHover.X);
 
         // The pinned overlay paints (accent crosshair + pin dot + column-anchored tooltip).
         var paint = new PaintList();
@@ -455,7 +484,7 @@ public class ChartsTests
         chart.OnPointerDown(mid);
         chart.OnPointerUp(mid);
         Assert.Null(chart.PinnedHover);
-        Assert.Equal(2, pins.Count);
+        Assert.Equal(expected: 2, actual: pins.Count);
         Assert.Null(pins[1]);
 
         // Re-pin, then shift the data so the pinned x no longer exists → the pin drops.
@@ -464,7 +493,9 @@ public class ChartsTests
         chart.OnPointerUp(mid);
         Assert.NotNull(chart.PinnedHover);
         data.Clear();
-        data.AddRange(Enumerable.Range(1000, 50).Select(i => ((double)i, Math.Sin(i / 5.0))));
+        data.AddRange(
+            Enumerable.Range(start: 1000, count: 50).Select(i => ((double)i, Math.Sin(i / 5.0)))
+        );
         chart.InvalidateData();
         LaidOut(chart);
         Assert.Null(chart.PinnedHover);
@@ -479,33 +510,35 @@ public class ChartsTests
         // hover registry must NOT be rebuilt per invalidate (lazy), the resolve scratch
         // (_resolved/_seriesOrder/groups/triples/spans) must be reused, and stacking keys are the
         // raw ChartValues (no per-point key strings) — this was ~150+ KB per invalidate.
-        var data = Enumerable.Range(0, 500).Select(i => ((double)i, Math.Sin(i / 15.0)))
+        var data = Enumerable.Range(start: 0, count: 500)
+            .Select(i => ((double)i, Math.Sin(i / 15.0)))
             .ToList();
         ChartMark mark = kind == "area"
-            ? AreaMark.Of(data, d => d.Item1, d => d.Item2)
-            : LineMark.Of(data, d => d.Item1, d => d.Item2);
+            ? AreaMark.Of(data: data, x: d => d.Item1, y: d => d.Item2)
+            : LineMark.Of(data: data, x: d => d.Item1, y: d => d.Item2);
         var chart = new Chart {
             Animated = false,
             Marks = { mark },
         };
         LaidOut(chart);
-        for (var i = 0; i < 50; i++)
+        for (int i = 0; i < 50; i++)
         {
             chart.InvalidateData();
             LaidOut(chart);
         }
 
         const int rounds = 100;
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var i = 0; i < rounds; i++)
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < rounds; i++)
         {
             chart.InvalidateData();
             LaidOut(chart);
         }
 
-        var perRound = (GC.GetAllocatedBytesForCurrentThread() - before) / rounds;
+        long perRound = (GC.GetAllocatedBytesForCurrentThread() - before) / rounds;
         Assert.True(
-            perRound < 8_000,
+            condition: perRound < 8_000,
+            userMessage:
             $"Resolve path allocated {perRound} B/invalidate; expected well under 8 KB " +
             "(ticks/labels only — no hover-registry rebuild, no fresh resolve collections)."
         );
@@ -515,7 +548,7 @@ public class ChartsTests
     public void Chart_HorizontalBars_WhenYIsCategory()
     {
         var chart = new Chart {
-            Marks = { BarMark.Of(Sales, d => d.Revenue, d => d.Month) },
+            Marks = { BarMark.Of(data: Sales, x: d => d.Revenue, y: d => d.Month) },
         };
         LaidOut(chart);
 
@@ -531,7 +564,7 @@ public class ChartsTests
     [Fact]
     public void Chart_StackedArea_ExtendsDomainToStackTop()
     {
-        var area = AreaMark.Of(Sales, d => d.Month, d => d.Revenue);
+        var area = AreaMark.Of(data: Sales, x: d => d.Month, y: d => d.Revenue);
         area.SeriesBy = d => d.Region;
         var chart = new Chart { Marks = { area } };
         LaidOut(chart);
@@ -554,21 +587,21 @@ public class ChartsTests
             ("C", 20),
         };
         var chart = new Chart {
-            Marks = { SectorMark.Of(data, d => d.Value, d => d.Name) },
+            Marks = { SectorMark.Of(data: data, value: d => d.Value, category: d => d.Name) },
         };
-        LaidOut(chart, 400);
+        LaidOut(chart: chart, w: 400);
 
         Assert.Empty(chart.XTicks); // polar-only chart hides the cartesian axes
-        Assert.Equal(3, chart.LegendEntries.Count);
+        Assert.Equal(expected: 3, actual: chart.LegendEntries.Count);
 
         // 'A' spans the first half of the sweep; just right of 12 o'clock lands inside it.
-        var cx = chart.PlotRect.X + chart.PlotRect.Width / 2f;
-        var cy = chart.PlotRect.Y + chart.PlotRect.Height / 2f;
-        var r = MathF.Min(chart.PlotRect.Width, chart.PlotRect.Height) / 2f * 0.7f;
-        chart.OnPointerMove(new Offset(cx + r * 0.5f, cy - r * 0.5f));
+        float cx = chart.PlotRect.X + (chart.PlotRect.Width / 2f);
+        float cy = chart.PlotRect.Y + (chart.PlotRect.Height / 2f);
+        float r = MathF.Min(x: chart.PlotRect.Width, y: chart.PlotRect.Height) / 2f * 0.7f;
+        chart.OnPointerMove(new Offset(x: cx + (r * 0.5f), y: cy - (r * 0.5f)));
         var hover = chart.CurrentHover;
         Assert.NotNull(hover);
-        Assert.Equal("A", hover.XLabel);
+        Assert.Equal(expected: "A", actual: hover.XLabel);
 
         var paint = new PaintList();
         chart.Paint(paint);
@@ -579,16 +612,16 @@ public class ChartsTests
     [Fact]
     public void Chart_TimeSeries_PointsAndLog()
     {
-        var start = new DateTime(2026, 1, 1);
-        var series = Enumerable.Range(0, 90)
-            .Select(i => (Day: start.AddDays(i), Value: Math.Pow(10, 1 + i / 45.0)))
+        var start = new DateTime(year: 2026, month: 1, day: 1);
+        var series = Enumerable.Range(start: 0, count: 90)
+            .Select(i => (Day: start.AddDays(i), Value: Math.Pow(x: 10, y: 1 + (i / 45.0))))
             .ToList();
 
         var chart = new Chart {
             YScale = new LogScale(),
             Marks = {
-                LineMark.Of(series, d => d.Day, d => d.Value),
-                PointMark.Of(series, d => d.Day, d => d.Value),
+                LineMark.Of(data: series, x: d => d.Day, y: d => d.Value),
+                PointMark.Of(data: series, x: d => d.Day, y: d => d.Value),
             },
         };
         LaidOut(chart);
@@ -612,67 +645,78 @@ public class ChartsTests
         s.Include(0);
         s.Include(100);
         s.FinalizeDomain();
-        Assert.Equal((0.0, 100.0), s.FullExtent);
+        Assert.Equal(expected: (0.0, 100.0), actual: s.FullExtent);
 
-        s.SetVisibleWindow(20, 40);
-        Assert.Equal(0.5f, s.NormalizeNumeric(30), 3);
-        Assert.All(s.BuildTicks(5, null), t => Assert.InRange(t.Position, -0.001f, 1.001f));
+        s.SetVisibleWindow(min: 20, max: 40);
+        Assert.Equal(expected: 0.5f, actual: s.NormalizeNumeric(30), precision: 3);
+        Assert.All(
+            collection: s.BuildTicks(targetCount: 5, formatter: null),
+            action: t => Assert.InRange(actual: t.Position, low: -0.001f, high: 1.001f)
+        );
     }
 
     [Fact]
     public void BandScale_VisibleWindow_ShowsIndexRange()
     {
         var s = new BandScale();
-        for (var i = 0; i < 10; i++) s.Include($"c{i}");
+        for (int i = 0; i < 10; i++) s.Include($"c{i}");
         s.FinalizeDomain();
 
-        s.SetVisibleWindow(2, 6); // categories 2..5 visible
-        Assert.Equal(0.25f, s.NormalizedBandWidth, 3);
-        Assert.Equal(0.375f, s.Normalize("c3"), 3); // (3.5 - 2) / 4
-        Assert.All(s.BuildTicks(10, null), t => Assert.InRange(t.Position, -0.03f, 1.03f));
+        s.SetVisibleWindow(min: 2, max: 6); // categories 2..5 visible
+        Assert.Equal(expected: 0.25f, actual: s.NormalizedBandWidth, precision: 3);
+        Assert.Equal(
+            expected: 0.375f,
+            actual: s.Normalize("c3"),
+            precision: 3
+        ); // (3.5 - 2) / 4
+        Assert.All(
+            collection: s.BuildTicks(targetCount: 10, formatter: null),
+            action: t => Assert.InRange(actual: t.Position, low: -0.03f, high: 1.03f)
+        );
     }
 
     [Fact]
     public void Chart_ScrollableX_StartsAtEnd_PansAndClamps()
     {
-        var data = Enumerable.Range(0, 100).Select(i => ((double)i, Math.Sin(i / 5.0)))
+        var data = Enumerable.Range(start: 0, count: 100)
+            .Select(i => ((double)i, Math.Sin(i / 5.0)))
             .ToList();
         var chart = new Chart {
             Animated = false,
             ScrollableX = true,
             VisibleXDomainLength = 20.0,
-            Marks = { LineMark.Of(data, d => d.Item1, d => d.Item2) },
+            Marks = { LineMark.Of(data: data, x: d => d.Item1, y: d => d.Item2) },
         };
         LaidOut(chart);
 
         // Nice domain of 0..99 is 0..100 → the initial window sticks to the newest data.
-        Assert.Equal(80.0, chart.ScrollOffsetX, 2);
+        Assert.Equal(expected: 80.0, actual: chart.ScrollOffsetX, precision: 2);
 
         chart.ScrollOffsetX = 30;
         LaidOut(chart);
         var x = Assert.IsType<LinearScale>(chart.ResolvedXScale);
-        Assert.Equal(0.5f, x.NormalizeNumeric(40), 3);
+        Assert.Equal(expected: 0.5f, actual: x.NormalizeNumeric(40), precision: 3);
 
         // Drag right by 100px → window pans toward earlier data, tap suppressed.
         ChartHoverInfo? tapped = null;
         chart.OnPointTap = i => tapped = i;
         var mid = new Offset(
-            chart.PlotRect.X + chart.PlotRect.Width / 2f,
-            chart.PlotRect.Y + chart.PlotRect.Height / 2f
+            x: chart.PlotRect.X + (chart.PlotRect.Width / 2f),
+            y: chart.PlotRect.Y + (chart.PlotRect.Height / 2f)
         );
         chart.OnPointerDown(mid);
-        chart.OnPointerMove(new Offset(mid.X + 100f, mid.Y));
-        chart.OnPointerUp(new Offset(mid.X + 100f, mid.Y));
+        chart.OnPointerMove(new Offset(x: mid.X + 100f, y: mid.Y));
+        chart.OnPointerUp(new Offset(x: mid.X + 100f, y: mid.Y));
 
-        var expected = 30.0 - 100.0 * 20.0 / chart.PlotRect.Width;
-        Assert.Equal(expected, chart.ScrollOffsetX, 2);
+        double expected = 30.0 - (100.0 * 20.0 / chart.PlotRect.Width);
+        Assert.Equal(expected: expected, actual: chart.ScrollOffsetX, precision: 2);
         Assert.Null(tapped);
         Assert.Null(chart.CurrentHover);
 
         // Clamp at the front edge.
         chart.ScrollOffsetX = -500;
         LaidOut(chart);
-        Assert.Equal(0.0, chart.ScrollOffsetX, 2);
+        Assert.Equal(expected: 0.0, actual: chart.ScrollOffsetX, precision: 2);
 
         var paint = new PaintList();
         chart.Paint(paint);
@@ -682,55 +726,57 @@ public class ChartsTests
     [Fact]
     public void Chart_ScrollableY_WindowsValueAxis_AndPansWithVerticalDrag()
     {
-        var data = Enumerable.Range(0, 100).Select(i => ((double)i, (double)i)).ToList();
+        var data = Enumerable.Range(start: 0, count: 100).Select(i => ((double)i, (double)i))
+            .ToList();
         var chart = new Chart {
             Animated = false,
             ScrollableY = true,
             VisibleYDomainLength = 20.0,
-            Marks = { LineMark.Of(data, d => d.Item1, d => d.Item2) },
+            Marks = { LineMark.Of(data: data, x: d => d.Item1, y: d => d.Item2) },
         };
         LaidOut(chart);
 
         // Y is not stick-to-end → starts at the bottom of the (nice) domain.
-        Assert.Equal(0.0, chart.ScrollOffsetY, 2);
+        Assert.Equal(expected: 0.0, actual: chart.ScrollOffsetY, precision: 2);
         var y = Assert.IsType<LinearScale>(chart.ResolvedYScale);
-        Assert.Equal(0f, y.NormalizeNumeric(0), 3);
-        Assert.Equal(1f, y.NormalizeNumeric(20), 3);
+        Assert.Equal(expected: 0f, actual: y.NormalizeNumeric(0), precision: 3);
+        Assert.Equal(expected: 1f, actual: y.NormalizeNumeric(20), precision: 3);
 
         // Dragging down reveals higher values (offset increases).
         var mid = new Offset(
-            chart.PlotRect.X + chart.PlotRect.Width / 2f,
-            chart.PlotRect.Y + chart.PlotRect.Height / 2f
+            x: chart.PlotRect.X + (chart.PlotRect.Width / 2f),
+            y: chart.PlotRect.Y + (chart.PlotRect.Height / 2f)
         );
         chart.OnPointerDown(mid);
-        chart.OnPointerMove(new Offset(mid.X, mid.Y + chart.PlotRect.Height / 2f));
-        chart.OnPointerUp(new Offset(mid.X, mid.Y + chart.PlotRect.Height / 2f));
+        chart.OnPointerMove(new Offset(x: mid.X, y: mid.Y + (chart.PlotRect.Height / 2f)));
+        chart.OnPointerUp(new Offset(x: mid.X, y: mid.Y + (chart.PlotRect.Height / 2f)));
         Assert.True(chart.ScrollOffsetY > 0.0);
     }
 
     [Fact]
     public void Chart_ZoomBy_ShrinksWindow_KeepingFocusPoint()
     {
-        var data = Enumerable.Range(0, 100).Select(i => ((double)i, Math.Sin(i / 5.0)))
+        var data = Enumerable.Range(start: 0, count: 100)
+            .Select(i => ((double)i, Math.Sin(i / 5.0)))
             .ToList();
         var chart = new Chart {
             Animated = false,
             ZoomableX = true,
-            Marks = { LineMark.Of(data, d => d.Item1, d => d.Item2) },
+            Marks = { LineMark.Of(data: data, x: d => d.Item1, y: d => d.Item2) },
         };
         LaidOut(chart);
         Assert.IsType<LinearScale>(chart.ResolvedXScale);
 
         // Zoom 2× around the plot centre (domain ~50 for a 0..100 nice domain).
         var centre = new Offset(
-            chart.PlotRect.X + chart.PlotRect.Width / 2f,
-            chart.PlotRect.Y + 10f
+            x: chart.PlotRect.X + (chart.PlotRect.Width / 2f),
+            y: chart.PlotRect.Y + 10f
         );
-        chart.ZoomBy(2.0, centre);
+        chart.ZoomBy(factor: 2.0, focus: centre);
         LaidOut(chart);
         var x = Assert.IsType<LinearScale>(chart.ResolvedXScale);
         // The visible window halved (0..100 → ~25..75), so 50 stays centred.
-        Assert.Equal(0.5f, x.NormalizeNumeric(50), 2);
+        Assert.Equal(expected: 0.5f, actual: x.NormalizeNumeric(50), precision: 2);
         Assert.True(x.NormalizeNumeric(24) < 0f); // 24 now off the left edge
 
         chart.ResetZoom();
@@ -744,11 +790,12 @@ public class ChartsTests
     [Fact]
     public void Chart_XSelection_ReportsDomainRange_AndClearsOnClick()
     {
-        var data = Enumerable.Range(0, 50).Select(i => ((double)i, (double)i)).ToList();
+        var data = Enumerable.Range(start: 0, count: 50).Select(i => ((double)i, (double)i))
+            .ToList();
         var chart = new Chart {
             Animated = false,
             EnableXSelection = true,
-            Marks = { LineMark.Of(data, d => d.Item1, d => d.Item2) },
+            Marks = { LineMark.Of(data: data, x: d => d.Item1, y: d => d.Item2) },
         };
         LaidOut(chart);
 
@@ -756,26 +803,26 @@ public class ChartsTests
         chart.OnXRangeSelected = r => reported = r;
 
         var plot = chart.PlotRect;
-        var x0 = plot.X + plot.Width * 0.25f;
-        var x1 = plot.X + plot.Width * 0.75f;
-        var y = plot.Y + plot.Height / 2f;
-        chart.OnPointerDown(new Offset(x0, y));
-        chart.OnPointerMove(new Offset(x1, y));
-        chart.OnPointerUp(new Offset(x1, y));
+        float x0 = plot.X + (plot.Width * 0.25f);
+        float x1 = plot.X + (plot.Width * 0.75f);
+        float y = plot.Y + (plot.Height / 2f);
+        chart.OnPointerDown(new Offset(x: x0, y: y));
+        chart.OnPointerMove(new Offset(x: x1, y: y));
+        chart.OnPointerUp(new Offset(x: x1, y: y));
 
         Assert.NotNull(reported);
         Assert.NotNull(chart.SelectedXRange);
         // Nice domain 0..49 → 0..50; the quarter/three-quarter marks map to ~12.5 and ~37.5.
-        Assert.InRange(chart.SelectedXRange!.Value.Min, 10.0, 15.0);
-        Assert.InRange(chart.SelectedXRange!.Value.Max, 35.0, 40.0);
+        Assert.InRange(actual: chart.SelectedXRange!.Value.Min, low: 10.0, high: 15.0);
+        Assert.InRange(actual: chart.SelectedXRange!.Value.Max, low: 35.0, high: 40.0);
 
         var paint = new PaintList();
         chart.Paint(paint);
         paint.Validate(); // selection band drawn
 
         // A click (no drag) clears it.
-        chart.OnPointerDown(new Offset(x0, y));
-        chart.OnPointerUp(new Offset(x0 + 1f, y));
+        chart.OnPointerDown(new Offset(x: x0, y: y));
+        chart.OnPointerUp(new Offset(x: x0 + 1f, y: y));
         Assert.Null(chart.SelectedXRange);
         Assert.Null(reported);
     }
@@ -785,13 +832,15 @@ public class ChartsTests
     [Fact]
     public void Chart_DualYAxes_IndependentScales_SharedSeriesColors()
     {
-        var priceData = Enumerable.Range(0, 12).Select(i => ((double)i, 100.0 + i)).ToList();
-        var volData = Enumerable.Range(0, 12).Select(i => ((double)i, (double)(i * 1000)))
+        var priceData = Enumerable.Range(start: 0, count: 12)
+            .Select(i => ((double)i, 100.0 + i)).ToList();
+        var volData = Enumerable.Range(start: 0, count: 12)
+            .Select(i => ((double)i, (double)(i * 1000)))
             .ToList();
 
-        var price = LineMark.Of(priceData, d => d.Item1, d => d.Item2);
+        var price = LineMark.Of(data: priceData, x: d => d.Item1, y: d => d.Item2);
         price.Name = "price";
-        var vol = BarMark.Of(volData, d => d.Item1, d => d.Item2);
+        var vol = BarMark.Of(data: volData, x: d => d.Item1, y: d => d.Item2);
         vol.Name = "volume";
         vol.UseSecondaryYAxis = true;
 
@@ -822,10 +871,11 @@ public class ChartsTests
     [Fact]
     public void Chart_Annotation_ProjectsToDataPosition_AndPaints()
     {
-        var data = Enumerable.Range(0, 10).Select(i => ((double)i, (double)i)).ToList();
+        var data = Enumerable.Range(start: 0, count: 10).Select(i => ((double)i, (double)i))
+            .ToList();
         var chart = new Chart {
             Animated = false,
-            Marks = { LineMark.Of(data, d => d.Item1, d => d.Item2) },
+            Marks = { LineMark.Of(data: data, x: d => d.Item1, y: d => d.Item2) },
             Annotations = {
                 new ChartAnnotation {
                     X = 5.0,
@@ -841,7 +891,10 @@ public class ChartsTests
         chart.Paint(paint);
         paint.Validate();
         // A text command for the annotation label is present.
-        Assert.Contains(paint.DebugCommands, c => c.Kind == (byte)PaintCommandKind.Text);
+        Assert.Contains(
+            collection: paint.DebugCommands,
+            filter: c => c.Kind == (byte)PaintCommandKind.Text
+        );
     }
 
     // ── Decimation / LOD ──────────────────────────────────────────────────────
@@ -849,10 +902,10 @@ public class ChartsTests
     [Fact]
     public void Lttb_PreservesEndpointsAndExtremes()
     {
-        var n = 1000;
-        var xs = new float[n];
-        var ys = new float[n];
-        for (var i = 0; i < n; i++)
+        int n = 1000;
+        float[] xs = new float[n];
+        float[] ys = new float[n];
+        for (int i = 0; i < n; i++)
         {
             xs[i] = i;
             ys[i] = MathF.Sin(i / 20f);
@@ -860,28 +913,35 @@ public class ChartsTests
 
         ys[500] = 99f; // a spike the decimation must keep
 
-        var idx = ChartGeometry.LttbIndices(xs, ys, 50);
+        int[]? idx = ChartGeometry.LttbIndices(xs: xs, ys: ys, threshold: 50);
         Assert.NotNull(idx);
-        Assert.Equal(50, idx!.Length);
-        Assert.Equal(0, idx[0]);
-        Assert.Equal(n - 1, idx[^1]);
-        Assert.Contains(500, idx); // the spike survived
+        Assert.Equal(expected: 50, actual: idx!.Length);
+        Assert.Equal(expected: 0, actual: idx[0]);
+        Assert.Equal(expected: n - 1, actual: idx[^1]);
+        Assert.Contains(expected: 500, collection: idx); // the spike survived
         // Indices strictly ascending.
-        for (var i = 1; i < idx.Length; i++) Assert.True(idx[i] > idx[i - 1]);
+        for (int i = 1; i < idx.Length; i++) Assert.True(idx[i] > idx[i - 1]);
 
         // Already-small series pass through untouched.
-        Assert.Null(ChartGeometry.LttbIndices(xs.AsSpan(0, 10), ys.AsSpan(0, 10), 50));
+        Assert.Null(
+            ChartGeometry.LttbIndices(
+                xs: xs.AsSpan(start: 0, length: 10),
+                ys: ys.AsSpan(start: 0, length: 10),
+                threshold: 50
+            )
+        );
     }
 
     [Fact]
     public void Chart_LineMark_MaxRenderPoints_CutsStrokeCommands()
     {
-        var data = Enumerable.Range(0, 2000).Select(i => ((double)i, Math.Sin(i / 30.0)))
+        var data = Enumerable.Range(start: 0, count: 2000)
+            .Select(i => ((double)i, Math.Sin(i / 30.0)))
             .ToList();
 
         int PaintCommandCount(int cap)
         {
-            var line = LineMark.Of(data, d => d.Item1, d => d.Item2);
+            var line = LineMark.Of(data: data, x: d => d.Item1, y: d => d.Item2);
             line.Interpolation = ChartInterpolation.Linear;
             line.MaxRenderPoints = cap;
             var chart = new Chart {
@@ -895,11 +955,11 @@ public class ChartsTests
             return paint.Count;
         }
 
-        var full = PaintCommandCount(0);
-        var capped = PaintCommandCount(100);
+        int full = PaintCommandCount(0);
+        int capped = PaintCommandCount(100);
         Assert.True(
-            capped < full / 2,
-            $"decimated ({capped}) should be far below full ({full})"
+            condition: capped < full / 2,
+            userMessage: $"decimated ({capped}) should be far below full ({full})"
         );
     }
 
@@ -917,17 +977,26 @@ public class ChartsTests
         // A live chart (LiveLineChart-style) repaints every frame, so the whole mark paint path must
         // be zero-alloc in steady state: slopes in a reused scratch, render-order caches without
         // hoisted sort closures, bar keys resolved once per data resolve, no boxed enumerators.
-        var data = Enumerable.Range(0, 200).Select(i => ((double)i, Math.Sin(i / 15.0)))
+        var data = Enumerable.Range(start: 0, count: 200)
+            .Select(i => ((double)i, Math.Sin(i / 15.0)))
             .ToList();
-        var linear = LineMark.Of(data, d => d.Item1, d => d.Item2);
+        var linear = LineMark.Of(data: data, x: d => d.Item1, y: d => d.Item2);
         linear.Interpolation = ChartInterpolation.Linear;
         ChartMark mark = kind switch {
-            "monotone-line" => LineMark.Of(data, d => d.Item1, d => d.Item2),
+            "monotone-line" => LineMark.Of(data: data, x: d => d.Item1, y: d => d.Item2),
             "linear-line" => linear,
-            "area" => AreaMark.Of(data, d => d.Item1, d => d.Item2),
-            "bars" => BarMark.Of(data.Take(12).ToList(), d => d.Item1, d => d.Item2),
-            "function" => new FunctionLineMark(static x => Math.Sin(x / 15.0), 0, 200),
-            _ => PointMark.Of(data, d => d.Item1, d => d.Item2),
+            "area" => AreaMark.Of(data: data, x: d => d.Item1, y: d => d.Item2),
+            "bars" => BarMark.Of(
+                data: data.Take(12).ToList(),
+                x: d => d.Item1,
+                y: d => d.Item2
+            ),
+            "function" => new FunctionLineMark(
+                function: static x => Math.Sin(x / 15.0),
+                xMin: 0,
+                xMax: 200
+            ),
+            _ => PointMark.Of(data: data, x: d => d.Item1, y: d => d.Item2),
         };
         var chart = new Chart {
             Animated = false,
@@ -945,21 +1014,23 @@ public class ChartsTests
         }
 
         if (kind == "overlay")
+        {
             chart.OverlayPainter = static (p, proxy) => p.AddRect(
-                new Rect(
-                    proxy.PlotRect.X,
-                    proxy.PositionY(0.5),
-                    proxy.PlotRect.Width,
-                    2f
+                bounds: new Rect(
+                    x: proxy.PlotRect.X,
+                    y: proxy.PositionY(0.5),
+                    width: proxy.PlotRect.Width,
+                    height: 2f
                 ),
-                Color.Rgb(52, 199, 89)
+                color: Color.Rgb(r: 52, g: 199, b: 89)
             );
+        }
 
         LaidOut(chart);
         var paint = new PaintList();
 
         // Warm up past tiered JIT and populate the Utf8 / TextMeasure / PaintList-capacity caches.
-        for (var i = 0; i < 200; i++)
+        for (int i = 0; i < 200; i++)
         {
             paint.Clear();
             chart.Paint(paint);
@@ -968,18 +1039,18 @@ public class ChartsTests
         Assert.True(paint.Count > 10);
 
         const int frames = 300;
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var i = 0; i < frames; i++)
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < frames; i++)
         {
             paint.Clear();
             chart.Paint(paint);
         }
 
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
         Assert.True(
-            allocated == 0,
-            $"{kind} chart paint allocated {allocated} B over {frames} frames " +
-            $"({allocated / (double)frames:F2} B/frame); expected 0."
+            condition: allocated == 0,
+            userMessage: $"{kind} chart paint allocated {allocated} B over {frames} frames " +
+                         $"({allocated / (double)frames:F2} B/frame); expected 0."
         );
     }
 
@@ -994,9 +1065,13 @@ public class ChartsTests
             Nice = false,
         };
         linear.FinalizeDomain();
-        Assert.Equal(20, linear.NumericAt(linear.NormalizeNumeric(20)), 9);
-        Assert.Equal(10, linear.NumericAt(0f), 9);
-        Assert.Equal(30, linear.NumericAt(1f), 9);
+        Assert.Equal(
+            expected: 20,
+            actual: linear.NumericAt(linear.NormalizeNumeric(20)),
+            precision: 9
+        );
+        Assert.Equal(expected: 10, actual: linear.NumericAt(0f), precision: 9);
+        Assert.Equal(expected: 30, actual: linear.NumericAt(1f), precision: 9);
 
         var log = new LogScale {
             Min = 1,
@@ -1004,7 +1079,11 @@ public class ChartsTests
         };
         log.FinalizeDomain();
         // Round trip through a float normalize + pow10 — compare at float precision.
-        Assert.Equal(100, log.NumericAt(log.NormalizeNumeric(100)), 2);
+        Assert.Equal(
+            expected: 100,
+            actual: log.NumericAt(log.NormalizeNumeric(100)),
+            precision: 2
+        );
 
         var band = new BandScale();
         band.Include("A");
@@ -1012,7 +1091,11 @@ public class ChartsTests
         band.Include("C");
         band.FinalizeDomain();
         // Band 1's centre normalizes to 0.5 → NumericAt gives back the band-index magnitude 1.5.
-        Assert.Equal(1.5, band.NumericAt(band.Normalize(ChartValue.Category("B"))), 6);
+        Assert.Equal(
+            expected: 1.5,
+            actual: band.NumericAt(band.Normalize(ChartValue.Category("B"))),
+            precision: 6
+        );
     }
 
     [Fact]
@@ -1026,7 +1109,7 @@ public class ChartsTests
         };
         var chart = new Chart {
             Animated = false,
-            Marks = { LineMark.Of(data, d => d.X, d => d.Y) },
+            Marks = { LineMark.Of(data: data, x: d => d.X, y: d => d.Y) },
             XScale = new LinearScale {
                 Min = 0,
                 Max = 10,
@@ -1042,17 +1125,21 @@ public class ChartsTests
 
         var proxy = chart.Proxy;
         Assert.True(proxy.IsValid);
-        Assert.Equal(chart.PlotRect.X + chart.PlotRect.Width / 2f, proxy.PositionX(5), 2);
-        Assert.Equal(chart.PlotRect.Bottom, proxy.PositionY(0), 2);
-        Assert.Equal(chart.PlotRect.Y, proxy.PositionY(100), 2);
+        Assert.Equal(
+            expected: chart.PlotRect.X + (chart.PlotRect.Width / 2f),
+            actual: proxy.PositionX(5),
+            precision: 2
+        );
+        Assert.Equal(expected: chart.PlotRect.Bottom, actual: proxy.PositionY(0), precision: 2);
+        Assert.Equal(expected: chart.PlotRect.Y, actual: proxy.PositionY(100), precision: 2);
 
         // Screen → domain inverts the projection.
-        Assert.Equal(5, proxy.XValueAt(proxy.PositionX(5)), 4);
-        Assert.Equal(42, proxy.YValueAt(proxy.PositionY(42)), 3);
+        Assert.Equal(expected: 5, actual: proxy.XValueAt(proxy.PositionX(5)), precision: 4);
+        Assert.Equal(expected: 42, actual: proxy.YValueAt(proxy.PositionY(42)), precision: 3);
 
-        var p = proxy.Position(5, 50);
-        Assert.Equal(proxy.PositionX(5), p.X, 3);
-        Assert.Equal(proxy.PositionY(50), p.Y, 3);
+        var p = proxy.Position(x: 5, y: 50);
+        Assert.Equal(expected: proxy.PositionX(5), actual: p.X, precision: 3);
+        Assert.Equal(expected: proxy.PositionY(50), actual: p.Y, precision: 3);
     }
 
     // ── Axis customization (TickValues + TickStyle) ───────────────────────────
@@ -1062,7 +1149,7 @@ public class ChartsTests
     {
         var chart = new Chart {
             Animated = false,
-            Marks = { BarMark.Of(Sales, d => d.Month, d => d.Revenue) },
+            Marks = { BarMark.Of(data: Sales, x: d => d.Month, y: d => d.Revenue) },
             YScale = new LinearScale {
                 Min = 0,
                 Max = 300,
@@ -1075,10 +1162,10 @@ public class ChartsTests
         };
         LaidOut(chart);
 
-        Assert.Equal(3, chart.YTicks.Count);
-        Assert.Equal("150u", chart.YTicks[1].Label);
-        Assert.Equal(150, chart.YTicks[1].Value.Numeric, 6);
-        Assert.Equal(0.5f, chart.YTicks[1].Position, 3);
+        Assert.Equal(expected: 3, actual: chart.YTicks.Count);
+        Assert.Equal(expected: "150u", actual: chart.YTicks[1].Label);
+        Assert.Equal(expected: 150, actual: chart.YTicks[1].Value.Numeric, precision: 6);
+        Assert.Equal(expected: 0.5f, actual: chart.YTicks[1].Position, precision: 3);
     }
 
     [Fact]
@@ -1093,7 +1180,7 @@ public class ChartsTests
             return LaidOut(
                 new Chart {
                     Animated = false,
-                    Marks = { LineMark.Of(data, d => d.X, d => d.Y) },
+                    Marks = { LineMark.Of(data: data, x: d => d.X, y: d => d.Y) },
                     YAxis = { TickStyle = style },
                 }
             );
@@ -1107,10 +1194,11 @@ public class ChartsTests
             return paint.Count;
         }
 
-        var full = PaintCount(Build(null));
-        var hidden = PaintCount(Build(static _ => new AxisTickStyle { HideGrid = true }));
+        int full = PaintCount(Build(null));
+        int hidden = PaintCount(Build(static _ => new AxisTickStyle { HideGrid = true }));
         Assert.True(
-            hidden < full,
+            condition: hidden < full,
+            userMessage:
             $"hiding every y grid line should shrink the paint list ({hidden} vs {full})"
         );
     }
@@ -1122,7 +1210,7 @@ public class ChartsTests
     {
         var chart = new Chart {
             Animated = false,
-            Marks = { new FunctionLineMark(Math.Sin, 0, 4 * Math.PI) },
+            Marks = { new FunctionLineMark(function: Math.Sin, xMin: 0, xMax: 4 * Math.PI) },
         };
         LaidOut(chart);
 
@@ -1145,7 +1233,7 @@ public class ChartsTests
         // (whose NaN validation would throw).
         var chart = new Chart {
             Animated = false,
-            Marks = { new FunctionLineMark(static x => 1.0 / x, -5, 5) },
+            Marks = { new FunctionLineMark(function: static x => 1.0 / x, xMin: -5, xMax: 5) },
             YScale = new LinearScale {
                 Min = -3,
                 Max = 3,
@@ -1170,7 +1258,9 @@ public class ChartsTests
         var chart = new Chart {
             Animated = false,
             Marks = {
-                new FunctionLineMark(static x => 1.0 / x, -12, 12) { Dash = 4f },
+                new FunctionLineMark(function: static x => 1.0 / x, xMin: -12, xMax: 12) {
+                    Dash = 4f,
+                },
             },
             YScale = new LinearScale {
                 Min = -1.5,
@@ -1182,22 +1272,22 @@ public class ChartsTests
             VisibleXDomainLength = 12,
             MinVisibleFraction = 0.0001,
         };
-        LaidOut(chart, 1400, 260);
+        LaidOut(chart: chart, w: 1400, h: 260);
 
         // ⌘-scroll hard into the left edge, then pan the window onto the pole.
-        for (var i = 0; i < 6; i++)
+        for (int i = 0; i < 6; i++)
         {
-            chart.ZoomBy(4.0, new Offset(chart.PlotRect.X + 2f, 130f));
-            LaidOut(chart, 1400, 260);
+            chart.ZoomBy(factor: 4.0, focus: new Offset(x: chart.PlotRect.X + 2f, y: 130f));
+            LaidOut(chart: chart, w: 1400, h: 260);
         }
 
         chart.ScrollOffsetX = -0.001;
-        LaidOut(chart, 1400, 260);
+        LaidOut(chart: chart, w: 1400, h: 260);
 
         var paint = new PaintList();
         chart.Paint(paint);
         paint.Validate();
-        Assert.InRange(paint.Count, 20, 50_000);
+        Assert.InRange(actual: paint.Count, low: 20, high: 50_000);
     }
 
     // ── Vectorized array factories ────────────────────────────────────────────
@@ -1210,7 +1300,7 @@ public class ChartsTests
 
         var paired = new Chart {
             Animated = false,
-            Marks = { LineMark.Of(xs, ys) },
+            Marks = { LineMark.Of(xs: xs, ys: ys) },
         };
         LaidOut(paired);
         Assert.IsType<LinearScale>(paired.ResolvedXScale);
@@ -1239,9 +1329,9 @@ public class ChartsTests
         // A live stacked chart re-resolves (and therefore re-stacks) many times a second; with a
         // caller-owned scratch the per-x column maps are pooled, so the warm path allocates nothing.
         var points = new List<(string Series, ChartValue X, double Value)>();
-        for (var x = 0; x < 20; x++)
+        for (int x = 0; x < 20; x++)
         {
-            points.Add(("a", x, 1 + x % 3));
+            points.Add(("a", x, 1 + (x % 3)));
             points.Add(("b", x, 2.0));
             points.Add(("c", x, x % 2 == 0 ? 3.0 : -1.0));
         }
@@ -1254,42 +1344,51 @@ public class ChartsTests
         var result = new Dictionary<(string, ChartValue), StackedSpan>();
         var scratch = new StackScratch();
 
-        for (var i = 0; i < 50; i++)
+        for (int i = 0; i < 50; i++)
+        {
             StackCompute.Compute(
-                points,
-                order,
-                ChartStacking.Normalized,
-                result,
-                scratch
+                points: points,
+                seriesOrder: order,
+                mode: ChartStacking.Normalized,
+                result: result,
+                scratch: scratch
             );
+        }
 
         const int iterations = 200;
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var i = 0; i < iterations; i++)
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < iterations; i++)
+        {
             StackCompute.Compute(
-                points,
-                order,
-                ChartStacking.Normalized,
-                result,
-                scratch
+                points: points,
+                seriesOrder: order,
+                mode: ChartStacking.Normalized,
+                result: result,
+                scratch: scratch
             );
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        }
+
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
         Assert.True(
-            allocated == 0,
+            condition: allocated == 0,
+            userMessage:
             $"stacked resolve allocated {allocated} B over {iterations} computes; expected 0."
         );
-        Assert.Equal(60, result.Count);
+        Assert.Equal(expected: 60, actual: result.Count);
     }
 
     // ── Native polygon fill (command emission) ────────────────────────────────
 
     private static int CountKind(PaintList paint, PaintCommandKind kind)
     {
-        var c = 0;
+        int c = 0;
         foreach (var cmd in paint.DebugCommands)
+        {
             if (cmd.Kind == (byte)kind)
                 c++;
+        }
+
         return c;
     }
 
@@ -1298,20 +1397,32 @@ public class ChartsTests
     {
         var paint = new PaintList();
         paint.AddPolygon(
-            [new Offset(0, 0), new Offset(10, 0), new Offset(5, 10)],
-            Color.Rgb(200, 100, 50)
+            points: [new Offset(x: 0, y: 0), new Offset(x: 10, y: 0), new Offset(x: 5, y: 10)],
+            color: Color.Rgb(r: 200, g: 100, b: 50)
         );
-        Assert.Equal(1, CountKind(paint, PaintCommandKind.Polygon));
+        Assert.Equal(
+            expected: 1,
+            actual: CountKind(paint: paint, kind: PaintCommandKind.Polygon)
+        );
 
         // < 3 points is a no-op.
-        paint.AddPolygon([new Offset(0, 0), new Offset(1, 1)], Color.White);
-        Assert.Equal(1, CountKind(paint, PaintCommandKind.Polygon));
+        paint.AddPolygon(
+            points: [new Offset(x: 0, y: 0), new Offset(x: 1, y: 1)],
+            color: Color.White
+        );
+        Assert.Equal(
+            expected: 1,
+            actual: CountKind(paint: paint, kind: PaintCommandKind.Polygon)
+        );
 
         // NaN is rejected.
         Assert.Throws<ArgumentException>(() =>
             paint.AddPolygon(
-                [new Offset(float.NaN, 0), new Offset(1, 0), new Offset(0, 1)],
-                Color.White
+                points: [
+                    new Offset(x: float.NaN, y: 0), new Offset(x: 1, y: 0),
+                    new Offset(x: 0, y: 1),
+                ],
+                color: Color.White
             )
         );
     }
@@ -1321,8 +1432,9 @@ public class ChartsTests
     [InlineData(ChartSymbol.Diamond)]
     public void Chart_FilledSymbols_EmitPolygons(ChartSymbol symbol)
     {
-        var data = Enumerable.Range(0, 6).Select(i => ((double)i, Math.Sin(i))).ToList();
-        var pts = PointMark.Of(data, d => d.Item1, d => d.Item2);
+        var data = Enumerable.Range(start: 0, count: 6).Select(i => ((double)i, Math.Sin(i)))
+            .ToList();
+        var pts = PointMark.Of(data: data, x: d => d.Item1, y: d => d.Item2);
         pts.Symbol = symbol;
         pts.Size = 10f;
         var chart = new Chart {
@@ -1334,7 +1446,10 @@ public class ChartsTests
         var paint = new PaintList();
         chart.Paint(paint);
         paint.Validate();
-        Assert.Equal(6, CountKind(paint, PaintCommandKind.Polygon)); // one per point
+        Assert.Equal(
+            expected: 6,
+            actual: CountKind(paint: paint, kind: PaintCommandKind.Polygon)
+        ); // one per point
     }
 
     [Fact]
@@ -1348,34 +1463,37 @@ public class ChartsTests
 
         var pie = new Chart {
             Animated = false,
-            Marks = { SectorMark.Of(data, d => d.Item2, d => d.Item1) },
+            Marks = { SectorMark.Of(data: data, value: d => d.Item2, category: d => d.Item1) },
         };
-        LaidOut(pie, 400);
+        LaidOut(chart: pie, w: 400);
         var piePaint = new PaintList();
         pie.Paint(piePaint);
         piePaint.Validate();
-        Assert.True(CountKind(piePaint, PaintCommandKind.Polygon) >= 3); // ≥ one fan per slice
+        Assert.True(
+            CountKind(paint: piePaint, kind: PaintCommandKind.Polygon) >= 3
+        ); // ≥ one fan per slice
 
-        var donutMark = SectorMark.Of(data, d => d.Item2, d => d.Item1);
+        var donutMark = SectorMark.Of(data: data, value: d => d.Item2, category: d => d.Item1);
         donutMark.InnerRadiusFraction = 0.6f;
         var donut = new Chart {
             Animated = false,
             Marks = { donutMark },
         };
-        LaidOut(donut, 400);
+        LaidOut(chart: donut, w: 400);
         var donutPaint = new PaintList();
         donut.Paint(donutPaint);
         donutPaint.Validate();
         // Donut wedges tessellate into multiple quads per slice.
-        Assert.True(CountKind(donutPaint, PaintCommandKind.Polygon) > 3);
+        Assert.True(CountKind(paint: donutPaint, kind: PaintCommandKind.Polygon) > 3);
     }
 
     [Fact]
     public void Chart_AreaPolygonFill_EmitsTrapezoids()
     {
-        var data = Enumerable.Range(0, 20).Select(i => ((double)i, 5.0 + Math.Sin(i / 2.0)))
+        var data = Enumerable.Range(start: 0, count: 20)
+            .Select(i => ((double)i, 5.0 + Math.Sin(i / 2.0)))
             .ToList();
-        var area = AreaMark.Of(data, d => d.Item1, d => d.Item2);
+        var area = AreaMark.Of(data: data, x: d => d.Item1, y: d => d.Item2);
         area.UsePolygonFill = true;
         var chart = new Chart {
             Animated = false,
@@ -1386,14 +1504,16 @@ public class ChartsTests
         var paint = new PaintList();
         chart.Paint(paint);
         paint.Validate();
-        Assert.True(CountKind(paint, PaintCommandKind.Polygon) > 5); // trapezoid run
+        Assert.True(
+            CountKind(paint: paint, kind: PaintCommandKind.Polygon) > 5
+        ); // trapezoid run
     }
 
     [Fact]
     public void Chart_AnimatedDataUpdate_MorphsBarGeometry()
     {
         var items = new List<Item> { new() { V = 10 } };
-        var bar = BarMark.Of(items, _ => "A", d => d.V);
+        var bar = BarMark.Of(data: items, x: _ => "A", y: d => d.V);
         bar.CornerRadius = 0f; // plain AddRect so the bar is directly observable
         var chart = new Chart {
             Animated = false,
@@ -1408,22 +1528,26 @@ public class ChartsTests
         };
         LaidOut(chart);
 
-        var topBefore = BarTop(chart);
+        float topBefore = BarTop(chart);
         items[0].V = 20;
         chart.InvalidateData(true); // progress 0 → still shows the old height
         LaidOut(chart);
-        Assert.Equal(topBefore, BarTop(chart), 1);
+        Assert.Equal(expected: topBefore, actual: BarTop(chart), precision: 1);
 
         // Drive this chart's animation directly (not the global Ticker.AdvanceAll, which races with
         // xUnit's parallel test classes on shared static state).
         chart.AdvanceAnimation(0.15f); // mid-flight
-        var topMid = BarTop(chart);
+        float topMid = BarTop(chart);
         chart.AdvanceAnimation(2f); // settle
-        var topAfter = BarTop(chart);
+        float topAfter = BarTop(chart);
 
-        Assert.True(topAfter < topBefore, "bar should end taller (smaller screen y)");
         Assert.True(
-            topMid < topBefore && topMid > topAfter,
+            condition: topAfter < topBefore,
+            userMessage: "bar should end taller (smaller screen y)"
+        );
+        Assert.True(
+            condition: topMid < topBefore && topMid > topAfter,
+            userMessage:
             $"mid-animation top {topMid} must sit between {topAfter} and {topBefore}"
         );
 
@@ -1432,11 +1556,14 @@ public class ChartsTests
             var paint = new PaintList();
             chart.Paint(paint);
             paint.Validate();
-            var top = float.MaxValue;
+            float top = float.MaxValue;
             foreach (var cmd in paint.DebugCommands)
+            {
                 if (cmd.Kind == (byte)PaintCommandKind.Rect)
-                    top = MathF.Min(top, cmd.RectY);
-            Assert.NotEqual(float.MaxValue, top);
+                    top = MathF.Min(x: top, y: cmd.RectY);
+            }
+
+            Assert.NotEqual(expected: float.MaxValue, actual: top);
             return top;
         }
     }
@@ -1444,20 +1571,20 @@ public class ChartsTests
     [Fact]
     public void Chart_Relayout_IsStable_AfterDataMutation()
     {
-        var data = new List<Sale> { new("Jan", 10, "W") };
-        var bar = BarMark.Of(data, d => d.Month, d => d.Revenue);
+        var data = new List<Sale> { new(Month: "Jan", Revenue: 10, Region: "W") };
+        var bar = BarMark.Of(data: data, x: d => d.Month, y: d => d.Revenue);
         var chart = new Chart { Marks = { bar } };
         LaidOut(chart);
-        var firstTicks = chart.YTicks.Count;
+        int firstTicks = chart.YTicks.Count;
 
-        data.Add(new Sale("Feb", 500, "W"));
+        data.Add(new Sale(Month: "Feb", Revenue: 500, Region: "W"));
         chart.InvalidateData();
         LaidOut(chart); // relayout re-resolves scales through Reset()
 
         var y = Assert.IsType<LinearScale>(chart.ResolvedYScale);
         Assert.True(y.DomainMax >= 500);
         Assert.True(firstTicks > 0 && chart.YTicks.Count > 0);
-        Assert.Equal(2, chart.XTicks.Count);
+        Assert.Equal(expected: 2, actual: chart.XTicks.Count);
     }
 
     // ── Chart widget, end to end (headless) ──────────────────────────────────

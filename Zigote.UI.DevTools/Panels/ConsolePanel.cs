@@ -1,17 +1,18 @@
 using Zigote.Core;
 using Zigote.Core.Diagnostics;
 using Zigote.UI.DevTools.Widgets;
+using Zigote.UI.Host;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
-using Zigote.UI.Host;
 
 namespace Zigote.UI.DevTools.Panels;
 
 /// <summary>
 ///     Interactive console: a real focusable <see cref="DevConsoleField" /> over a live tail of the
-///     <see cref="DebugLog" /> (command echoes + results). Runs the <see cref="DebugCommands" /> registry —
+///     <see cref="DebugLog" /> (command echoes + results). Runs the <see cref="DebugCommands" />
+///     registry —
 ///     try <c>help</c>. Click the field (or focus it) to type; Tab completes, ↑/↓ recall history.
 /// </summary>
 public sealed class ConsolePanel : IDevPanel
@@ -54,12 +55,16 @@ public sealed class ConsolePanel : IDevPanel
         DebugLog.CopyInto(_all);
         var t = App.Active?.Theme ?? ThemeData.Dark;
         var rows = new List<Widget>();
-        var start = Math.Max(0, _all.Count - MaxRows);
-        for (var i = start; i < _all.Count; i++)
+        int start = Math.Max(val1: 0, val2: _all.Count - MaxRows);
+        for (int i = start; i < _all.Count; i++)
         {
             var e = _all[i];
             rows.Add(
-                new Label(e.Message, DevKit.CaptionSize, LevelColor(e.Level, t)) {
+                new Label(
+                    text: e.Message,
+                    fontSize: DevKit.CaptionSize,
+                    color: LevelColor(level: e.Level, t: t)
+                ) {
                     MaxLines = 1,
                     Overflow = TextOverflow.Ellipsis,
                     FontFamily = "code",

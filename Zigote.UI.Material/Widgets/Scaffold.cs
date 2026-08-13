@@ -50,19 +50,19 @@ public sealed class Scaffold : Widget
 
         // On an unbounded axis (e.g. inside a parent ScrollView) size to the app bar + body content
         // rather than infinity — an infinite size poisons flex layout (∞ − ∞ → NaN) and crashes paint.
-        var w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 0f;
-        var h = float.IsFinite(c.MaxHeight)
+        float w = float.IsFinite(c.MaxWidth) ? c.MaxWidth : 0f;
+        float h = float.IsFinite(c.MaxHeight)
             ? c.MaxHeight
-            : _barH + (Body?.Measure(new Constraints(0, w)).Height ?? 0f);
-        _size = c.Constrain(new Size(w, h));
+            : _barH + (Body?.Measure(new Constraints(minWidth: 0, maxWidth: w)).Height ?? 0f);
+        _size = c.Constrain(new Size(width: w, height: h));
 
         if (AppBar != null)
-            AppBar.Measure(Constraints.Tight(_size.Width, _barH));
+            AppBar.Measure(Constraints.Tight(width: _size.Width, height: _barH));
 
-        var bodyH = Math.Max(0, _size.Height - _barH - _bottomInset);
-        Body?.Measure(Constraints.Tight(_size.Width, bodyH));
+        float bodyH = Math.Max(val1: 0, val2: _size.Height - _barH - _bottomInset);
+        Body?.Measure(Constraints.Tight(width: _size.Width, height: bodyH));
 
-        FloatingActionButton?.Measure(Constraints.Tight(FabSize, FabSize));
+        FloatingActionButton?.Measure(Constraints.Tight(width: FabSize, height: FabSize));
 
         return _size;
     }
@@ -70,21 +70,21 @@ public sealed class Scaffold : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
 
         AppBar?.Layout(origin);
 
-        var bodyY = origin.Y + _barH;
-        Body?.Layout(new Offset(origin.X, bodyY));
+        float bodyY = origin.Y + _barH;
+        Body?.Layout(new Offset(x: origin.X, y: bodyY));
 
         FloatingActionButton?.Layout(
             new Offset(
-                origin.X + _size.Width - FabSize - FabPadding,
-                origin.Y + _size.Height - _bottomInset - FabSize - FabPadding
+                x: origin.X + _size.Width - FabSize - FabPadding,
+                y: origin.Y + _size.Height - _bottomInset - FabSize - FabPadding
             )
         );
     }
@@ -92,7 +92,7 @@ public sealed class Scaffold : Widget
     public override void Paint(PaintList paint)
     {
         var bg = BackgroundColor.A > 0f ? BackgroundColor : _theme.Background;
-        paint.AddRect(Bounds, bg);
+        paint.AddRect(bounds: Bounds, color: bg);
 
         Body?.Paint(paint);
         AppBar?.Paint(paint);
@@ -101,7 +101,7 @@ public sealed class Scaffold : Widget
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
 
         var fabHit = FloatingActionButton?.HitTest(point);
         if (fabHit != null) return fabHit;

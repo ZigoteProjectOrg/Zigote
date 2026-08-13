@@ -1,30 +1,22 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Text;
 using Zigote.Core;
-using Zigote.Core.Animation;
-using Zigote.Core.Diagnostics;
 using Zigote.Core.Engine;
 using Zigote.Core.Events;
-using Zigote.Core.Native;
-using Zigote.Core.Paint;
-using Zigote.Core.Rendering;
-using Zigote.Core.State;
-using Zigote.UI.Debug;
-using Zigote.UI.Licensing;
 using Zigote.UI.Semantics;
-using Zigote.UI.TextShaping;
-using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
-using Zigote.UI.Widgets.Controls;
-using Zigote.UI.Widgets.Focus;
-using MediaQueryData = Zigote.UI.Widgets.MediaQueryData;
 
 namespace Zigote.UI.Host;
 
 public partial class App
 {
+    /// <summary>
+    ///     How long a hidden window's frame loop blocks between turns. Ten times a second is more
+    ///     than enough for audio buffers, network pumps and a media-key round trip, and costs
+    ///     essentially nothing next to a 60 Hz render loop.
+    /// </summary>
+    private const int HiddenFrameIntervalMs = 100;
     // ── Titlebar drag arbitration ─────────────────────────────────────────────
     // The native SDL hit-test asks the app, per pointer position, whether the point is a
     // draggable titlebar area. This is what lets real controls live in the titlebar band:
@@ -33,121 +25,12 @@ public partial class App
     private static readonly Dictionary<Type, bool> InteractiveTypeCache = new();
     private static bool _dragProviderInstalled;
 
-    private static unsafe void EnsureDragHitProvider(ZigoteEngine engine)
-    {
-        if (_dragProviderInstalled) return;
-        _dragProviderInstalled = true;
-        engine.WindowChromeSetHitProvider(
-            (nint)(delegate* unmanaged[Cdecl]<uint, float, float, int>)&DragHitTrampoline
-        );
-    }
-
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    private static int DragHitTrampoline(uint windowId, float x, float y)
-    {
-        var main = MainApp;
-        if (main is null) return -1;
-        var app = main.WindowId == windowId ? main : null;
-        if (app is null)
-            for (var i = 0; i < main._secondaryWindows.Count; i++)
-                if (main._secondaryWindows[i].WindowId == windowId)
-                {
-                    app = main._secondaryWindows[i];
-                    break;
-                }
-
-        return app?.DragHitTest(x, y) ?? -1;
-    }
-
     /// <summary>
-    ///     Chromed windows (MacUnified especially) may have roots that don't cover the whole
-    ///     window — e.g. content padded below the traffic-light band — which would violate the
-    ///     renderer's opaque-full-screen-root contract and expose the renderer's debug clear
-    ///     color. Guarantee the contract by painting the window background under the root.
+    ///     Per-frame damage logging to stderr (<c>ZIGOTE_DEBUG_DAMAGE=1</c>): each presented frame's
+    ///     FULL/PARTIAL decision, damage rects, and per-layer dirty state. Diagnostic only.
     /// </summary>
-    private void PaintChromeBackdrop()
-    {
-        if (ChromeStyle == WindowChromeStyle.System) return;
-        _paint.AddRect(
-            new Rect(
-                0f,
-                0f,
-                HostLogicalWidth,
-                HostLogicalHeight
-            ),
-            Theme.Background
-        );
-    }
-
-    /// <summary>1 = draggable titlebar point, 0 = interactive content, -1 = no opinion.</summary>
-    internal int DragHitTest(float x, float y)
-    {
-        if (ChromeStyle == WindowChromeStyle.System) return -1;
-        var point = new Offset(x, y);
-
-        // An open overlay owns the pointer — never hijack its clicks into a window drag.
-        for (var i = _overlays.Count - 1; i >= 0; i--)
-            if (_overlays[i].HitTest(point) is not null)
-                return 0;
-
-        if (ChromeStyle == WindowChromeStyle.AdwaitaCsd)
-        {
-            if (_root is WindowChromeHost host)
-                return host.Bar.Bounds.Contains(x, y) && host.Bar.IsDragPoint(point) ? 1 : 0;
-
-            // Strip suppressed: the app's registered headerbars are the titlebar — gaps drag,
-            // interactive controls inside them stay clickable.
-            for (var i = 0; i < CsdDragSurfaces.Count; i++)
-            {
-                var surface = CsdDragSurfaces[i];
-                if (!surface.Bounds.Contains(x, y)) continue;
-                for (var w = surface.HitTest(point); w is not null && w != surface; w = w.Parent)
-                    if (IsInteractive(w))
-                        return 0;
-                return 1;
-            }
-
-            return 0;
-        }
-
-        // MacUnified: the top band drags wherever nothing interactive claims the point.
-        if (y >= TitleBarDragHeight) return 0;
-        var deepest = _root?.HitTest(point);
-        for (var w = deepest; w is not null && w != _root; w = w.Parent)
-            if (IsInteractive(w))
-                return 0;
-        return 1;
-    }
-
-    /// <summary>
-    ///     Does this widget react to the pointer? Focusable, or overrides a pointer virtual.
-    ///     Reflection once per concrete type (cached) — called from the native hit-test on
-    ///     pointer moves, so it must be cheap.
-    /// </summary>
-    private static bool IsInteractive(Widget w)
-    {
-        if (w.Focusable) return true;
-        var type = w.GetType();
-        if (InteractiveTypeCache.TryGetValue(type, out var known)) return known;
-        var interactive =
-            Overrides(type, nameof(Widget.OnPointerDown)) ||
-            Overrides(type, nameof(Widget.OnScroll)) ||
-            Overrides(type, nameof(Widget.OnRightClick));
-        InteractiveTypeCache[type] = interactive;
-        return interactive;
-
-        static bool Overrides(Type type, string name)
-        {
-            return type.GetMethod(name)?.DeclaringType != typeof(Widget);
-        }
-    }
-
-    /// <summary>
-    ///     How long a hidden window's frame loop blocks between turns. Ten times a second is more
-    ///     than enough for audio buffers, network pumps and a media-key round trip, and costs
-    ///     essentially nothing next to a 60 Hz render loop.
-    /// </summary>
-    private const int HiddenFrameIntervalMs = 100;
+    public static readonly bool DebugDamageLog =
+        Environment.GetEnvironmentVariable("ZIGOTE_DEBUG_DAMAGE") == "1";
 
     public bool ShouldQuit => Engine.ShouldQuit;
 
@@ -172,13 +55,6 @@ public partial class App
     ///     this only affects idle partial-change frames such as a blinking caret or a value-drag.
     /// </summary>
     public bool PartialRepaintEnabled { get; set; } = true;
-
-    /// <summary>
-    ///     Per-frame damage logging to stderr (<c>ZIGOTE_DEBUG_DAMAGE=1</c>): each presented frame's
-    ///     FULL/PARTIAL decision, damage rects, and per-layer dirty state. Diagnostic only.
-    /// </summary>
-    public static readonly bool DebugDamageLog =
-        Environment.GetEnvironmentVariable("ZIGOTE_DEBUG_DAMAGE") == "1";
 
     /// <summary>
     ///     Software cap on the (continuous) render loop, in frames per second. 0 = "whatever the
@@ -210,23 +86,10 @@ public partial class App
     ///         144 Hz screen, and one asking for 240 still gets 144.
     ///     </para>
     /// </summary>
-    public long FrameIntervalTicks => ComputeFrameIntervalTicks(DisplayRefreshHz, FrameRateLimit);
-
-    /// <summary>
-    ///     The <see cref="FrameIntervalTicks" /> arithmetic, split out so it can be exercised without
-    ///     an OS window. <paramref name="displayHz" /> &lt;= 0 falls back to 60.
-    /// </summary>
-    internal static long ComputeFrameIntervalTicks(float displayHz, int frameRateLimit)
-    {
-        if (displayHz <= 0) displayHz = 60f;
-        // double, not float: Stopwatch.Frequency is 1e9 on Linux, and float has ~7 digits — a float
-        // divide rounds the interval by a tick, which is enough to fail an exact comparison.
-        var ticks = (long)(Stopwatch.Frequency / (double)displayHz);
-        // Slower of the two: an explicit cap throttles below the panel, never above it.
-        if (frameRateLimit > 0)
-            ticks = Math.Max(ticks, Stopwatch.Frequency / frameRateLimit);
-        return Math.Max(1, ticks);
-    }
+    public long FrameIntervalTicks => ComputeFrameIntervalTicks(
+        displayHz: DisplayRefreshHz,
+        frameRateLimit: FrameRateLimit
+    );
 
     /// <summary>
     ///     Whether the OS window has keyboard focus (SDL focus gained/lost — tracked from
@@ -292,17 +155,6 @@ public partial class App
     public List<(KeyChord Chord, Action Run)> Accelerators { get; } = [];
 
     /// <summary>
-    ///     Whether an app shortcut fires or yields to whatever holds focus: a Ctrl/Cmd/Alt chord is a
-    ///     command and always fires; an unmodified one loses to a focused text editor, where it is
-    ///     typing. Shift alone stays "typing" — Shift+Space is still a space.
-    /// </summary>
-    internal static bool ShortcutOutranksFocus(Modifiers modifiers, Widget? focused)
-    {
-        return modifiers.HasCommand() || modifiers.HasFlag(Modifiers.Alt) ||
-               focused is not ITextInputClient;
-    }
-
-    /// <summary>
     ///     Optional platform accessibility bridge. When assigned, the app rebuilds the
     ///     <see cref="SemanticsNode" /> tree after any layout/focus change and pushes it here so a native
     ///     screen reader can read the UI. <c>null</c> (the default) keeps the tree available for the
@@ -353,4 +205,154 @@ public partial class App
 
     /// <summary>This window's HiDPI scale.</summary>
     public float HostScale => NativeWindow?.Scale ?? Engine.Scale;
+
+    private static unsafe void EnsureDragHitProvider(ZigoteEngine engine)
+    {
+        if (_dragProviderInstalled) return;
+        _dragProviderInstalled = true;
+        engine.WindowChromeSetHitProvider(
+            (nint)(delegate* unmanaged[Cdecl]<uint, float, float, int>)&DragHitTrampoline
+        );
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static int DragHitTrampoline(uint windowId, float x, float y)
+    {
+        var main = MainApp;
+        if (main is null) return -1;
+        var app = main.WindowId == windowId ? main : null;
+        if (app is null)
+        {
+            for (int i = 0; i < main._secondaryWindows.Count; i++)
+            {
+                if (main._secondaryWindows[i].WindowId == windowId)
+                {
+                    app = main._secondaryWindows[i];
+                    break;
+                }
+            }
+        }
+
+        return app?.DragHitTest(x: x, y: y) ?? -1;
+    }
+
+    /// <summary>
+    ///     Chromed windows (MacUnified especially) may have roots that don't cover the whole
+    ///     window — e.g. content padded below the traffic-light band — which would violate the
+    ///     renderer's opaque-full-screen-root contract and expose the renderer's debug clear
+    ///     color. Guarantee the contract by painting the window background under the root.
+    /// </summary>
+    private void PaintChromeBackdrop()
+    {
+        if (ChromeStyle == WindowChromeStyle.System) return;
+        _paint.AddRect(
+            bounds: new Rect(
+                x: 0f,
+                y: 0f,
+                width: HostLogicalWidth,
+                height: HostLogicalHeight
+            ),
+            color: Theme.Background
+        );
+    }
+
+    /// <summary>1 = draggable titlebar point, 0 = interactive content, -1 = no opinion.</summary>
+    internal int DragHitTest(float x, float y)
+    {
+        if (ChromeStyle == WindowChromeStyle.System) return -1;
+        var point = new Offset(x: x, y: y);
+
+        // An open overlay owns the pointer — never hijack its clicks into a window drag.
+        for (int i = _overlays.Count - 1; i >= 0; i--)
+        {
+            if (_overlays[i].HitTest(point) is not null)
+                return 0;
+        }
+
+        if (ChromeStyle == WindowChromeStyle.AdwaitaCsd)
+        {
+            if (_root is WindowChromeHost host)
+            {
+                return host.Bar.Bounds.Contains(px: x, py: y) && host.Bar.IsDragPoint(point)
+                    ? 1
+                    : 0;
+            }
+
+            // Strip suppressed: the app's registered headerbars are the titlebar — gaps drag,
+            // interactive controls inside them stay clickable.
+            for (int i = 0; i < CsdDragSurfaces.Count; i++)
+            {
+                var surface = CsdDragSurfaces[i];
+                if (!surface.Bounds.Contains(px: x, py: y)) continue;
+                for (var w = surface.HitTest(point); w is not null && w != surface; w = w.Parent)
+                {
+                    if (IsInteractive(w))
+                        return 0;
+                }
+
+                return 1;
+            }
+
+            return 0;
+        }
+
+        // MacUnified: the top band drags wherever nothing interactive claims the point.
+        if (y >= TitleBarDragHeight) return 0;
+        var deepest = _root?.HitTest(point);
+        for (var w = deepest; w is not null && w != _root; w = w.Parent)
+        {
+            if (IsInteractive(w))
+                return 0;
+        }
+
+        return 1;
+    }
+
+    /// <summary>
+    ///     Does this widget react to the pointer? Focusable, or overrides a pointer virtual.
+    ///     Reflection once per concrete type (cached) — called from the native hit-test on
+    ///     pointer moves, so it must be cheap.
+    /// </summary>
+    private static bool IsInteractive(Widget w)
+    {
+        if (w.Focusable) return true;
+        var type = w.GetType();
+        if (InteractiveTypeCache.TryGetValue(key: type, value: out bool known)) return known;
+        bool interactive =
+            Overrides(type: type, name: nameof(Widget.OnPointerDown)) ||
+            Overrides(type: type, name: nameof(Widget.OnScroll)) ||
+            Overrides(type: type, name: nameof(Widget.OnRightClick));
+        InteractiveTypeCache[type] = interactive;
+        return interactive;
+
+        static bool Overrides(Type type, string name) =>
+            type.GetMethod(name)?.DeclaringType != typeof(Widget);
+    }
+
+    /// <summary>
+    ///     The <see cref="FrameIntervalTicks" /> arithmetic, split out so it can be exercised without
+    ///     an OS window. <paramref name="displayHz" /> &lt;= 0 falls back to 60.
+    /// </summary>
+    internal static long ComputeFrameIntervalTicks(float displayHz, int frameRateLimit)
+    {
+        if (displayHz <= 0) displayHz = 60f;
+        // double, not float: Stopwatch.Frequency is 1e9 on Linux, and float has ~7 digits — a float
+        // divide rounds the interval by a tick, which is enough to fail an exact comparison.
+        long ticks = (long)(Stopwatch.Frequency / (double)displayHz);
+        // Slower of the two: an explicit cap throttles below the panel, never above it.
+        if (frameRateLimit > 0)
+            ticks = Math.Max(val1: ticks, val2: Stopwatch.Frequency / frameRateLimit);
+        return Math.Max(val1: 1, val2: ticks);
+    }
+
+    /// <summary>
+    ///     Whether an app shortcut fires or yields to whatever holds focus: a Ctrl/Cmd/Alt chord is a
+    ///     command and always fires; an unmodified one loses to a focused text editor, where it is
+    ///     typing. Shift alone stays "typing" — Shift+Space is still a space.
+    /// </summary>
+    internal static bool ShortcutOutranksFocus(Modifiers modifiers, Widget? focused)
+    {
+        return modifiers.HasCommand() || modifiers.HasFlag(Modifiers.Alt) ||
+               focused is not ITextInputClient;
+    }
 }

@@ -1,12 +1,12 @@
 using Xunit;
 using Zigote.Core;
 using Zigote.Core.Paint;
+using Zigote.UI.Adwaita;
 using Zigote.UI.Debug;
 using Zigote.UI.DevTools;
 using Zigote.UI.DevTools.Diagnostics;
 using Zigote.UI.DevTools.Panels;
 using Zigote.UI.DevTools.Widgets;
-using Zigote.UI.Adwaita;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Layout;
@@ -15,7 +15,8 @@ namespace Zigote.Tests;
 
 /// <summary>
 ///     Headless coverage of the widget/chart devtools overlay: every App-independent panel is built,
-///     refreshed and painted into a real <see cref="PaintList" /> (whose NaN validation is the canary),
+///     refreshed and painted into a real <see cref="PaintList" /> (whose NaN validation is the
+///     canary),
 ///     plus the profile gating, formatting, and diagnostics rings. Panels that need a live
 ///     <c>App</c>/engine (UI Inspector, Semantics, Renderer stats) are exercised at runtime instead.
 /// </summary>
@@ -40,13 +41,13 @@ public class DevToolsTests
     public void EveryPanel_BuildRefreshPaint_DoesNotThrow()
     {
         DevChartData.Install();
-        for (var i = 0; i < 5; i++) DebugStats.Sample(0.016f);
+        for (int i = 0; i < 5; i++) DebugStats.Sample(0.016f);
 
         foreach (var panel in AppIndependentPanels())
         {
             var root = new ThemeProvider(
-                ThemeData.Dark,
-                DevPage.Group(panel.Build(BuildContext.Current))
+                data: ThemeData.Dark,
+                child: DevPage.Group(panel.Build(BuildContext.Current))
             );
             Measure(root);
             root.Paint(new PaintList());
@@ -64,7 +65,7 @@ public class DevToolsTests
 
     private static void Measure(Widget w)
     {
-        w.Measure(Constraints.Tight(DevToolsPanel.PanelWidth - 24f, 1400f));
+        w.Measure(Constraints.Tight(width: DevToolsPanel.PanelWidth - 24f, height: 1400f));
         w.Layout(Offset.Zero);
     }
 
@@ -77,20 +78,23 @@ public class DevToolsTests
     public void EveryPanel_BuildRefreshPaint_AtPhoneWidth_DoesNotThrow()
     {
         DevChartData.Install();
-        for (var i = 0; i < 5; i++) DebugStats.Sample(0.016f);
+        for (int i = 0; i < 5; i++) DebugStats.Sample(0.016f);
 
         foreach (var panel in AppIndependentPanels())
         {
             var root = new MediaQuery(
-                new MediaQueryData(390f, 780f),
-                new ThemeProvider(ThemeData.Dark, DevPage.Group(panel.Build(BuildContext.Current)))
+                data: new MediaQueryData(width: 390f, height: 780f),
+                child: new ThemeProvider(
+                    data: ThemeData.Dark,
+                    child: DevPage.Group(panel.Build(BuildContext.Current))
+                )
             );
-            root.Measure(Constraints.Tight(390f, 780f));
+            root.Measure(Constraints.Tight(width: 390f, height: 780f));
             root.Layout(Offset.Zero);
             root.Paint(new PaintList());
 
             panel.Refresh(0.016f);
-            root.Measure(Constraints.Tight(390f, 780f));
+            root.Measure(Constraints.Tight(width: 390f, height: 780f));
             root.Layout(Offset.Zero);
             root.Paint(new PaintList());
         }
@@ -117,11 +121,11 @@ public class DevToolsTests
 
         var grouped = Assert.IsType<Column>(DevPage.Group(source));
         // header, [a b] card, note, [c] card
-        Assert.Equal(4, grouped.Children.Count);
-        Assert.Same(header, grouped.Children[0]);
-        Assert.Same(note, grouped.Children[2]);
-        Assert.Equal(2, GroupRows(grouped.Children[1]));
-        Assert.Equal(1, GroupRows(grouped.Children[3]));
+        Assert.Equal(expected: 4, actual: grouped.Children.Count);
+        Assert.Same(expected: header, actual: grouped.Children[0]);
+        Assert.Same(expected: note, actual: grouped.Children[2]);
+        Assert.Equal(expected: 2, actual: GroupRows(grouped.Children[1]));
+        Assert.Equal(expected: 1, actual: GroupRows(grouped.Children[3]));
 
         static int GroupRows(Widget w)
         {
@@ -137,40 +141,38 @@ public class DevToolsTests
     public void KeyValueRow_HeightFollowsSizeClass(float screenWidth, float expected)
     {
         var root = new MediaQuery(
-            new MediaQueryData(screenWidth, 800f),
-            new ThemeProvider(ThemeData.Dark, new DevKeyValue("key", "value"))
+            data: new MediaQueryData(width: screenWidth, height: 800f),
+            child: new ThemeProvider(
+                data: ThemeData.Dark,
+                child: new DevKeyValue(key: "key", value: "value")
+            )
         );
         var size = root.Measure(
             new Constraints(
-                0f,
-                300f,
-                0f,
-                800f
+                minWidth: 0f,
+                maxWidth: 300f,
+                minHeight: 0f,
+                maxHeight: 800f
             )
         );
-        Assert.Equal(expected, size.Height);
+        Assert.Equal(expected: expected, actual: size.Height);
     }
 
     // ── Profile gating ──
 
     [Fact]
-    public void TwoDProfile_HidesRender3D()
-    {
-        Assert.False(DevToolsProfile.TwoD.ShowsRender3D());
-    }
+    public void TwoDProfile_HidesRender3D() => Assert.False(DevToolsProfile.TwoD.ShowsRender3D());
 
     [Fact]
-    public void ThreeDProfile_ShowsRender3D()
-    {
+    public void ThreeDProfile_ShowsRender3D() =>
         Assert.True(DevToolsProfile.ThreeD.ShowsRender3D());
-    }
 
     [Fact]
     public void Categories_HaveLabels()
     {
-        Assert.Equal("General", DevCategory.Generic.Label());
-        Assert.Equal("2D · UI", DevCategory.Ui2D.Label());
-        Assert.Equal("3D · Render", DevCategory.Render3D.Label());
+        Assert.Equal(expected: "General", actual: DevCategory.Generic.Label());
+        Assert.Equal(expected: "2D · UI", actual: DevCategory.Ui2D.Label());
+        Assert.Equal(expected: "3D · Render", actual: DevCategory.Render3D.Label());
     }
 
     // ── Formatting ──
@@ -179,25 +181,25 @@ public class DevToolsTests
     [InlineData(500L, "500")]
     [InlineData(12_345L, "12.3K")]
     [InlineData(4_500_000L, "4.5M")]
-    public void DevFormat_Count_Abbreviates(long n, string expected)
-    {
-        Assert.Equal(expected, DevFormat.Count(n));
-    }
+    public void DevFormat_Count_Abbreviates(long n, string expected) => Assert.Equal(
+        expected: expected,
+        actual: DevFormat.Count(n)
+    );
 
     [Theory]
     [InlineData(512UL, "512 B")]
     [InlineData(1536UL, "1.5 KB")]
     [InlineData(5UL * 1024 * 1024, "5.0 MB")]
-    public void DevFormat_Bytes_Scales(ulong bytes, string expected)
-    {
-        Assert.Equal(expected, DevFormat.Bytes(bytes));
-    }
+    public void DevFormat_Bytes_Scales(ulong bytes, string expected) => Assert.Equal(
+        expected: expected,
+        actual: DevFormat.Bytes(bytes)
+    );
 
     [Fact]
     public void DevFormat_Uptime_Formats()
     {
-        Assert.Equal("1h 2m 5s", DevFormat.Uptime(3725f));
-        Assert.Equal("45s", DevFormat.Uptime(45f));
+        Assert.Equal(expected: "1h 2m 5s", actual: DevFormat.Uptime(3725f));
+        Assert.Equal(expected: "45s", actual: DevFormat.Uptime(45f));
     }
 
     // ── Diagnostics rings ──
@@ -206,31 +208,31 @@ public class DevToolsTests
     public void TimeSeriesRing_IsChronologicalAndBounded()
     {
         var ring = new TimeSeriesRing(3);
-        ring.Push(0f, 1f);
-        ring.Push(1f, 2f);
-        ring.Push(2f, 3f);
-        ring.Push(3f, 4f); // evicts the oldest
-        Assert.Equal(3, ring.Count);
-        Assert.Equal(2f, ring[0].Value); // oldest survivor
-        Assert.Equal(4f, ring.Latest.Value);
-        Assert.Equal(4f, ring.Max());
+        ring.Push(time: 0f, value: 1f);
+        ring.Push(time: 1f, value: 2f);
+        ring.Push(time: 2f, value: 3f);
+        ring.Push(time: 3f, value: 4f); // evicts the oldest
+        Assert.Equal(expected: 3, actual: ring.Count);
+        Assert.Equal(expected: 2f, actual: ring[0].Value); // oldest survivor
+        Assert.Equal(expected: 4f, actual: ring.Latest.Value);
+        Assert.Equal(expected: 4f, actual: ring.Max());
     }
 
     [Fact]
     public void TimeSeriesRing_SanitizesNonFinite()
     {
         var ring = new TimeSeriesRing(2);
-        ring.Push(0f, float.NaN);
-        ring.Push(1f, float.PositiveInfinity);
-        Assert.Equal(0f, ring[0].Value);
-        Assert.Equal(0f, ring[1].Value);
+        ring.Push(time: 0f, value: float.NaN);
+        ring.Push(time: 1f, value: float.PositiveInfinity);
+        Assert.Equal(expected: 0f, actual: ring[0].Value);
+        Assert.Equal(expected: 0f, actual: ring[1].Value);
     }
 
     [Fact]
     public void DevChartData_Sample_AdvancesRevisionAndRings()
     {
         DevChartData.Install();
-        var beforeRev = DevChartData.Revision;
+        int beforeRev = DevChartData.Revision;
         // The fast ring pushes at a 0.25 s cadence; a single 0.3 s frame guarantees a wave.
         DebugStats.Sample(0.3f);
         Assert.True(DevChartData.Revision > beforeRev);
@@ -240,7 +242,7 @@ public class DevToolsTests
     [Fact]
     public void DebugDraws_StayActive_WhilePanelsAreClosed()
     {
-        var c = new DevToolsController(null!, DevToolsProfile.TwoD);
+        var c = new DevToolsController(app: null!, profile: DevToolsProfile.TwoD);
         Assert.False(c.DebugDrawActive);
         Assert.False(c.WantsContinuousFrame);
 

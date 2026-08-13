@@ -27,10 +27,16 @@ public sealed record BottomSheetStyle
     /// <summary>Top-corner radius of the card. Default: <see cref="Radii.Xl" />.</summary>
     public float? CornerRadius { get; init; }
 
-    /// <summary>Drop shadow under the card. Default: <see cref="Elevation.Z3" />. Pass <see cref="Elevation.None" /> for flat.</summary>
+    /// <summary>
+    ///     Drop shadow under the card. Default: <see cref="Elevation.Z3" />. Pass
+    ///     <see cref="Elevation.None" /> for flat.
+    /// </summary>
     public ShadowStyle? Shadow { get; init; }
 
-    /// <summary>Scrim painted over the page behind a modal sheet. Default: <see cref="ThemeData.OverlayBackground" />.</summary>
+    /// <summary>
+    ///     Scrim painted over the page behind a modal sheet. Default:
+    ///     <see cref="ThemeData.OverlayBackground" />.
+    /// </summary>
     public Color? BarrierColor { get; init; }
 
     /// <summary>Show the drag pill at the top of the card (also the sheet's drag surface).</summary>
@@ -54,11 +60,11 @@ public sealed record BottomSheetStyle
     internal Resolved Resolve(ThemeData theme)
     {
         return new Resolved(
-            Background ?? theme.Surface,
-            CornerRadius ?? Radii.Xl,
-            Shadow ?? Elevation.Z3,
-            BarrierColor ?? theme.OverlayBackground,
-            DragHandleColor ?? theme.Label3
+            Background: Background ?? theme.Surface,
+            CornerRadius: CornerRadius ?? Radii.Xl,
+            Shadow: Shadow ?? Elevation.Z3,
+            BarrierColor: BarrierColor ?? theme.OverlayBackground,
+            DragHandleColor: DragHandleColor ?? theme.Label3
         );
     }
 

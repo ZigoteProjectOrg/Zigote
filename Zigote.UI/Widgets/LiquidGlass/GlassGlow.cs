@@ -18,10 +18,7 @@ public class GlassGlow : Widget
     private Offset _pointerPos = Offset.Zero;
     private Size _size;
 
-    public GlassGlow(Widget? child = null)
-    {
-        Child = child;
-    }
+    public GlassGlow(Widget? child = null) => Child = child;
 
     public Widget? Child { get; set; }
 
@@ -34,10 +31,10 @@ public class GlassGlow : Widget
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
-            origin.X,
-            origin.Y,
-            _size.Width,
-            _size.Height
+            x: origin.X,
+            y: origin.Y,
+            width: _size.Width,
+            height: _size.Height
         );
         Child?.Layout(origin);
     }
@@ -46,7 +43,7 @@ public class GlassGlow : Widget
     {
         if (Child != null)
         {
-            if (!ReferenceEquals(_glassResolvedFor, Child))
+            if (!ReferenceEquals(objA: _glassResolvedFor, objB: Child))
             {
                 _glassResolvedFor = Child;
                 _glass = FindLiquidGlass(Child);
@@ -58,8 +55,8 @@ public class GlassGlow : Widget
                 if (_isPressed || _isHovered)
                 {
                     // Convert screen pointer coordinates to local coordinates relative to the LiquidGlass center
-                    var glassCenterX = glass.Bounds.X + glass.Bounds.Width / 2f;
-                    var glassCenterY = glass.Bounds.Y + glass.Bounds.Height / 2f;
+                    float glassCenterX = glass.Bounds.X + (glass.Bounds.Width / 2f);
+                    float glassCenterY = glass.Bounds.Y + (glass.Bounds.Height / 2f);
                     glass.GlowX = _pointerPos.X - glassCenterX;
                     glass.GlowY = _pointerPos.Y - glassCenterY;
                 }
@@ -125,15 +122,12 @@ public class GlassGlow : Widget
 
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(point.X, point.Y)) return null;
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
         // Descend so a nested interactive child (Button/etc.) becomes the hit target and can gain focus
         // + keyboard activation. Returning `this` swallowed all input to children. The cursor-follow
         // glow now only tracks while the child itself does not capture the pointer.
         return Child?.HitTest(point) ?? this;
     }
 
-    public override IEnumerable<Widget> GetChildren()
-    {
-        return ChildOrEmpty(Child);
-    }
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Child);
 }

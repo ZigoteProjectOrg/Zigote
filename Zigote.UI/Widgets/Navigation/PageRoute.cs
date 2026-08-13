@@ -12,15 +12,12 @@ public abstract class PageRoute<T> : Route<T>
     /// <summary>Fraction of the page width the entering page is offset by at the start of the slide.</summary>
     public float SlideFraction { get; init; } = 0.25f;
 
-    public override Offset TransitionOffset(Size size, float t)
-    {
-        return new Offset((1f - t) * size.Width * SlideFraction, 0f);
-    }
+    public override Offset TransitionOffset(Size size, float t) => new(
+        x: (1f - t) * size.Width * SlideFraction,
+        y: 0f
+    );
 
-    public override float TransitionOpacity(float t)
-    {
-        return t;
-    }
+    public override float TransitionOpacity(float t) => t;
 }
 
 /// <summary>
@@ -39,17 +36,12 @@ public class MaterialPageRoute<T> : PageRoute<T>
         Settings = settings ?? RouteSettings.Empty;
     }
 
-    protected override Widget BuildContent(BuildContext context)
-    {
-        return _builder(context);
-    }
+    protected override Widget BuildContent(BuildContext context) => _builder(context);
 }
 
 /// <summary>Non-generic <see cref="MaterialPageRoute{T}" /> (result type <c>object?</c>).</summary>
 public sealed class MaterialPageRoute : MaterialPageRoute<object?>
 {
     public MaterialPageRoute(WidgetBuilder builder, RouteSettings? settings = null)
-        : base(builder, settings)
-    {
-    }
+        : base(builder: builder, settings: settings) { }
 }
