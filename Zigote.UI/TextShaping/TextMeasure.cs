@@ -33,7 +33,9 @@ public static class TextMeasure
         float fontSize,
         FontWeight weight = FontWeight.Normal,
         FontStyle style = FontStyle.Normal,
-        string? fontFamily = null)
+        string? fontFamily = null,
+        float letterSpacing = 0f,
+        float wordSpacing = 0f)
     {
         if (string.IsNullOrEmpty(text) || fontSize <= 0f) return Size.Zero;
 
@@ -42,7 +44,9 @@ public static class TextMeasure
             Size: fontSize,
             Weight: weight,
             Style: style,
-            FontFamily: fontFamily
+            FontFamily: fontFamily,
+            LetterSpacing: letterSpacing,
+            WordSpacing: wordSpacing
         );
         if (_cache.TryGetValue(key: key, value: out var cached)) return cached;
         if (_previous.TryGetValue(key: key, value: out cached))
@@ -58,6 +62,8 @@ public static class TextMeasure
                 fontSize: fontSize,
                 weight: weight,
                 style: style,
+                letterSpacing: letterSpacing,
+                wordSpacing: wordSpacing,
                 fontFamily: fontFamily
             )
             : new Size(width: text.Length * fontSize * 0.55f, height: fontSize * 1.2f);
@@ -80,14 +86,18 @@ public static class TextMeasure
         float fontSize,
         FontWeight weight = FontWeight.Normal,
         FontStyle style = FontStyle.Normal,
-        string? fontFamily = null)
+        string? fontFamily = null,
+        float letterSpacing = 0f,
+        float wordSpacing = 0f)
     {
         return Measure(
             text: text,
             fontSize: fontSize,
             weight: weight,
             style: style,
-            fontFamily: fontFamily
+            fontFamily: fontFamily,
+            letterSpacing: letterSpacing,
+            wordSpacing: wordSpacing
         ).Width;
     }
 
@@ -103,5 +113,7 @@ public static class TextMeasure
         float Size,
         FontWeight Weight,
         FontStyle Style,
-        string? FontFamily);
+        string? FontFamily,
+        float LetterSpacing,
+        float WordSpacing);
 }

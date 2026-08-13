@@ -677,6 +677,8 @@ public sealed unsafe class ZigoteEngine : IDisposable
         float maxWidth = float.PositiveInfinity,
         FontWeight weight = FontWeight.Normal,
         FontStyle style = FontStyle.Normal,
+        float letterSpacing = 0f,
+        float wordSpacing = 0f,
         string? fontFamily = null)
     {
         if (string.IsNullOrEmpty(text)) return Size.Zero;
@@ -711,6 +713,8 @@ public sealed unsafe class ZigoteEngine : IDisposable
                 maxWidth: float.IsPositiveInfinity(maxWidth) ? 0f : maxWidth,
                 fontWeight: (ushort)weight,
                 fontStyle: (byte)style,
+                letterSpacing: letterSpacing,
+                wordSpacing: wordSpacing,
                 fontFamily: fp,
                 fontFamilyLen: (uint)familyLen
             );

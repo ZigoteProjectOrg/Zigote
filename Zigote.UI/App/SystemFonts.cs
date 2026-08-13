@@ -160,12 +160,60 @@ public static class SystemFonts
     }
 
     /// <summary>
+    ///     The platform's color-emoji faces, best first. All three majors ship one: Apple Color
+    ///     Emoji (sbix strikes), Segoe UI Emoji, and some form of Noto Color Emoji. The engine
+    ///     probes each candidate and refuses those its color path cannot render (COLR-outline-only
+    ///     builds), so listing an incompatible file here is harmless.
+    /// </summary>
+    private static IEnumerable<string> EmojiCandidates()
+    {
+        if (OperatingSystem.IsMacOS())
+        {
+            return [
+                "/System/Library/Fonts/Apple Color Emoji.ttc",
+                "/System/Library/Fonts/Apple Color Emoji.ttf",
+            ];
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            string fonts = Path.Combine(
+                path1: Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                path2: "Fonts"
+            );
+            return [Path.Combine(path1: fonts, path2: "seguiemj.ttf")];
+        }
+
+        return [
+            "/usr/share/fonts/noto-color-emoji/NotoColorEmoji.ttf",
+            "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+            "/usr/share/fonts/google-noto-emoji/NotoColorEmoji.ttf",
+        ];
+    }
+
+    /// <summary>
     ///     Load every fallback face that exists on this machine and register it with the engine.
     ///     Missing files are skipped in silence: a system without a CJK font is not a broken one,
     ///     it just cannot draw CJK, and there is nothing the app can do about it.
+    ///     <para>
+    ///         With <paramref name="needColorEmoji" /> (no color-emoji font bundled with the app),
+    ///         the platform's own color-emoji face is registered too — the same borrowing rationale
+    ///         as the script fallbacks, and the face users already know from every other app.
+    ///     </para>
     /// </summary>
-    public static void Register(ZigoteEngine engine)
+    public static void Register(ZigoteEngine engine, bool needColorEmoji = false)
     {
+        if (needColorEmoji)
+        {
+            foreach (string path in EmojiCandidates())
+            {
+                if (!SafeExists(path)) continue;
+                if (!engine.LoadFont(name: "emoji", path: path)) continue;
+                // The engine probes color capability and refuses what it cannot draw.
+                if (engine.AddEmojiFont("emoji")) break;
+            }
+        }
+
         int index = 0;
         foreach (string path in Candidates().Distinct(StringComparer.Ordinal))
         {

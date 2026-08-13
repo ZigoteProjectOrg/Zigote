@@ -266,17 +266,29 @@ public partial class App : IDisposable
         string iconFont = Path.Combine(path1: fontsDir, path2: "MaterialIcons-Regular.ttf");
         if (File.Exists(iconFont)) Engine.LoadFont(name: "MaterialIcons", path: iconFont);
 
-        // Color-emoji atlas needs a CBDT/CBLC/sbix font. The bundled Noto Emoji is monochrome
-        // (incompatible with the color path), so emoji are only enabled if a color font is
-        // bundled as Fonts/NotoColorEmoji.ttf — keeping the build free of system-font reliance.
+        // Color-emoji atlas needs a font with BGRA bitmap strikes (CBDT/CBLC or sbix). A bundled
+        // Fonts/NotoColorEmoji.ttf wins if present; otherwise the platform's own color-emoji face
+        // is borrowed (Apple Color Emoji, Segoe UI Emoji, a system Noto) — see SystemFonts. The
+        // engine probes registration and refuses fonts its color path cannot actually draw, so a
+        // COLR-outline-only candidate degrades to the monochrome fallback below instead of
+        // silently capturing every emoji and rendering nothing.
         string colorEmoji = Path.Combine(path1: fontsDir, path2: "NotoColorEmoji.ttf");
-        if (File.Exists(colorEmoji) && Engine.LoadFont(name: "emoji", path: colorEmoji))
-            Engine.AddEmojiFont("emoji");
+        bool emojiRegistered = File.Exists(colorEmoji) &&
+                               Engine.LoadFont(name: "emoji", path: colorEmoji) &&
+                               Engine.AddEmojiFont("emoji");
 
         // Scripts the bundled face cannot draw — Japanese, Korean, Chinese, Arabic, Thai — come
         // from the platform's own fonts. Registered last, so the app's own faces always win for
         // the characters they do cover. See SystemFonts for why these are borrowed, not bundled.
-        SystemFonts.Register(Engine);
+        SystemFonts.Register(engine: Engine, needColorEmoji: !emojiRegistered);
+
+        // The bundled monochrome Noto Emoji is the last resort: registered as a plain script
+        // fallback (not the color path), it turns emoji on systems without any usable color font
+        // from .notdef boxes into legible outline glyphs. Registered after the script fallbacks
+        // so CJK/Arabic text never resolves through an emoji face.
+        string monoEmoji = Path.Combine(path1: fontsDir, path2: "NotoEmoji-Regular.ttf");
+        if (File.Exists(monoEmoji) && Engine.LoadFont(name: "emoji-mono", path: monoEmoji))
+            Engine.AddFallbackFont("emoji-mono");
         _lastTicks = _clock.ElapsedTicks;
 
         // Every animation tick routes through RequestFrameAction. It must request a *relayout*, not

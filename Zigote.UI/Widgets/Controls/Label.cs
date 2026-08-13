@@ -167,7 +167,8 @@ public class Label : Widget
                             fontSize: _fontSize,
                             weight: FontWeight,
                             style: FontStyle,
-                            fontFamily: FontFamily
+                            fontFamily: FontFamily,
+                            letterSpacing: LetterSpacing
                         )
                     );
                 }
@@ -185,7 +186,8 @@ public class Label : Widget
             fontSize: _fontSize,
             weight: FontWeight,
             style: FontStyle,
-            fontFamily: FontFamily
+            fontFamily: FontFamily,
+            letterSpacing: LetterSpacing
         );
         float lineH = full.Height > 0f ? full.Height : _fontSize * lh;
 
@@ -239,7 +241,8 @@ public class Label : Widget
             fontSize: _fontSize,
             weight: FontWeight,
             style: FontStyle,
-            fontFamily: FontFamily
+            fontFamily: FontFamily,
+            letterSpacing: LetterSpacing
         );
 
         _lines.Clear();
@@ -260,7 +263,8 @@ public class Label : Widget
                     fontSize: _fontSize,
                     weight: FontWeight,
                     style: FontStyle,
-                    fontFamily: FontFamily
+                    fontFamily: FontFamily,
+                    letterSpacing: LetterSpacing
                 );
                 if (cur.Length == 0)
                 {
@@ -312,7 +316,8 @@ public class Label : Widget
             fontSize: _fontSize,
             weight: FontWeight,
             style: FontStyle,
-            fontFamily: FontFamily
+            fontFamily: FontFamily,
+            letterSpacing: LetterSpacing
         );
         if (ellipsisW >= maxWidth) return Ellipsis;
 
@@ -328,7 +333,8 @@ public class Label : Widget
                 fontSize: _fontSize,
                 weight: FontWeight,
                 style: FontStyle,
-                fontFamily: FontFamily
+                fontFamily: FontFamily,
+                letterSpacing: LetterSpacing
             );
             if (w <= budget) lo = mid;
             else hi = mid - 1;
@@ -393,7 +399,8 @@ public class Label : Widget
                     fontSize: _fontSize,
                     weight: FontWeight,
                     style: FontStyle,
-                    fontFamily: FontFamily
+                    fontFamily: FontFamily,
+                    letterSpacing: LetterSpacing
                 );
                 float lineX = Align switch {
                     TextAlign.Center => Bounds.X + ((Bounds.Width - lineW) / 2f),
@@ -426,7 +433,8 @@ public class Label : Widget
             fontSize: _fontSize,
             weight: FontWeight,
             style: FontStyle,
-            fontFamily: FontFamily
+            fontFamily: FontFamily,
+            letterSpacing: LetterSpacing
         );
 
         float drawX = Align switch {

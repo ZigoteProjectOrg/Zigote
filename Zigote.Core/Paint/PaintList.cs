@@ -316,7 +316,10 @@ public sealed unsafe class PaintList
         cmd.BaselineX = baselineX + _offsetX;
         cmd.BaselineY = baselineY + _offsetY;
         cmd.FontSize = fontSize;
-        cmd.LineHeight = lineHeight;
+        // The C# API takes a line-height FACTOR (1.2 = 120%); the native renderer steps embedded
+        // newlines by an ABSOLUTE pixel distance. Convert here, at the single choke point —
+        // passing the factor straight through stacked every '\n' line ~1px below the previous one.
+        cmd.LineHeight = lineHeight > 0f ? lineHeight * fontSize : 0f;
         cmd.FontWeight = (ushort)fontWeight;
         cmd.FontStyle = (byte)fontStyle;
         cmd.LetterSpacing = letterSpacing;
