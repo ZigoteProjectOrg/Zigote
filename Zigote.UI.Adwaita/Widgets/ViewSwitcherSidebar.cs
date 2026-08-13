@@ -77,8 +77,10 @@ public sealed class AdwViewSwitcherSidebar : ComposedWidget
 
     /// <summary>
     ///     `view-switcher-sidebar .indicator` — a rounded count chip in currentColor 40% with a
-    ///     white label, not a bare dim number: the badge has to read at a glance down a column of
-    ///     rows.
+    ///     currentColor label, not a bare dim number: the badge has to read at a glance down a
+    ///     column of rows. The label takes the row's text colour (<see cref="ThemeData.OnBackground" />),
+    ///     which is what `currentColor` resolves to — a fixed white label is invisible over the
+    ///     light-tinted chip in the light theme.
     /// </summary>
     private static Widget Indicator(ThemeData theme, int count)
     {
@@ -87,7 +89,7 @@ public sealed class AdwViewSwitcherSidebar : ComposedWidget
             Fill = AdwPalette.Fill(theme, 0.4f),
             Child = new Padding(
                 EdgeInsets.Symmetric(AdwMetrics.RowSpacing, 1f),
-                new Label(count.ToString(), AdwTypography.CaptionHeading, Color.White)
+                new Label(count.ToString(), AdwTypography.CaptionHeading, theme.OnBackground)
             ),
         };
     }

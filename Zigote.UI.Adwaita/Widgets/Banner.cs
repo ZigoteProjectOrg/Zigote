@@ -135,8 +135,9 @@ public sealed class AdwBanner : ComposedWidget
     /// <summary>
     ///     Reports the child's height scaled by the controller value and clips while animating —
     ///     the bar slides down into view / retracts up out of it.
-    ///     ponytail: hand-rolled instead of SlideTransition+AnimatedSize — those don't override
-    ///     GetChildren, so their subtree never attaches; reuse them once that's fixed.
+    ///     Hand-rolled rather than SlideTransition+AnimatedSize: neither models a height *factor*
+    ///     driven by an external controller (SlideTransition moves without resizing; AnimatedSize
+    ///     eases between natural sizes on its own schedule).
     /// </summary>
     private sealed class HeightReveal(AnimationController anim, Widget child) : Widget
     {

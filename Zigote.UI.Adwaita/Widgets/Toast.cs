@@ -275,8 +275,9 @@ public sealed class AdwToastOverlay : ComposedWidget
     /// <summary>
     ///     Presentation wrapper for the toast pill: rises ~12px while fading in (controller forward),
     ///     pure fade on the way out (controller reverse).
-    ///     ponytail: hand-rolled instead of SlideTransition+FadeTransition — those don't override
-    ///     GetChildren, so their subtree never attaches; reuse them once that's fixed.
+    ///     Hand-rolled rather than SlideTransition+FadeTransition: the slide is status-asymmetric
+    ///     (rise in, fade-only out), which a transition driven by one controller value cannot
+    ///     express — and this widget carries the toast's Alert semantics either way.
     /// </summary>
     private sealed class PresentLayer(AnimationController anim, AdwToast toast, Widget child)
         : Widget

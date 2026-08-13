@@ -53,12 +53,22 @@ public sealed class ColorAndCompletionPage : ComposedWidget
                         }
                     )
                 ),
+                // A full-width band of the picked colour, so the swatch reads at a glance and not
+                // just as a 24px chip in the row above. A childless DecoratedBox constrains to
+                // Size.Zero under loose constraints, so it needs tightening on BOTH axes to paint:
+                // Expanded gives it a tight width, Stretch a tight height.
                 new Watch(() => Demo.Stage(
                         new SizedBox(
                             height: 64f,
-                            child: new DecoratedBox {
-                                Fill = _color.Value,
-                                Radius = AdwMetrics.CardRadius,
+                            child: new Row(crossAxisAlignment: CrossAxisAlignment.Stretch) {
+                                Children = {
+                                    new Expanded(
+                                        new DecoratedBox {
+                                            Fill = _color.Value,
+                                            Radius = AdwMetrics.CardRadius,
+                                        }
+                                    ),
+                                },
                             }
                         ),
                         Spacing.Md

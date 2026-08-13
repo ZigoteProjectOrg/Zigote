@@ -57,4 +57,11 @@ public sealed class ScaleTransition(AnimationController controller, Widget? chil
         if (!Bounds.Contains(point.X, point.Y)) return null;
         return Child?.HitTest(point) ?? this;
     }
+
+    public override IEnumerable<Widget> GetChildren()
+    {
+        // Without this the subtree never attaches — no theme, no focus, no semantics. The other
+        // implicit transitions (AnimatedOpacity, AnimatedSize) already report their child.
+        return ChildOrEmpty(Child);
+    }
 }

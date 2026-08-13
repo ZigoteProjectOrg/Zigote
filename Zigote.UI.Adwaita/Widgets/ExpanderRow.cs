@@ -105,21 +105,17 @@ public sealed class AdwExpanderRow : ComposedWidget
                 ) { Enabled = Enabled }
             );
 
-        // Retained switcher: the Watch mutates its Child (triggering the crossfade) and returns the
-        // same instance every time — Watch keeps it, nothing rebuilds.
-        // ponytail: opacity crossfade of the two glyphs; upgrade to a real rotation when the paint
-        // pipeline grows a rotate primitive.
-        var chevron = new AnimatedSwitcher(duration: 0.15f, curve: Curves.EaseOut);
+        // Retained chevron: the Watch retargets it (triggering the spin) and returns the same
+        // instance every time — Watch keeps it, nothing rebuilds. libadwaita rotates
+        // `image.expander-row-arrow` half a turn on `:checked`; now that the paint pipeline has a
+        // rotate primitive (Transform), this is that rotation rather than a glyph crossfade.
+        var chevron = new SpinChevron();
         header.Suffixes.Add(
             new Watch(() =>
                 {
                     // `image.expander-row-arrow` is .dimmed, and `&:checked` takes it to opacity 1
                     // in --accent-color — the expanded state is accent-marked, not just rotated.
-                    chevron.Child = new IconGlyph(
-                        _expanded.Value ? MaterialIcons.ExpandLess : Icons.ChevronDown,
-                        AdwMetrics.IconSize,
-                        _expanded.Value ? theme.PrimaryDark : p.DimLabel
-                    );
+                    chevron.Set(_expanded.Value, p.DimLabel, theme.PrimaryDark);
                     return chevron;
                 }
             )
@@ -173,6 +169,93 @@ public sealed class AdwExpanderRow : ComposedWidget
     private void ToggleExpanded()
     {
         if (_enableExpansion) _expanded.Value = !_expanded.Value;
+    }
+
+    /// <summary>
+    ///     The expander chevron: one glyph spun half a turn over ~200ms as the row expands — the
+    ///     GTK arrow flip — with the tint eased dim-label → accent along the same curve. A theme
+    ///     swap retints without spinning (a palette change is not an interaction); the first call
+    ///     snaps, so a row built already-expanded starts settled.
+    /// </summary>
+    private sealed class SpinChevron : ImplicitlyAnimatedWidget
+    {
+        private readonly IconGlyph _glyph;
+        private readonly Transform _spin;
+        private ColorTween _color = new(Color.Transparent, Color.Transparent);
+        private bool _first = true;
+        private float _fromAngle, _toAngle;
+
+        public SpinChevron() : base(0.2f, Curves.EaseOut)
+        {
+            _glyph = new IconGlyph(Icons.ChevronDown, AdwMetrics.IconSize);
+            _spin = new Transform(Offset.Zero, _glyph);
+            Controller.OnTick += Apply;
+        }
+
+        public void Set(bool expanded, Color dim, Color accent)
+        {
+            var angle = expanded ? MathF.PI : 0f; // 0.5turn clockwise, like the CSS
+            var color = expanded ? accent : dim;
+
+            if (_first)
+            {
+                _first = false;
+                _fromAngle = _toAngle = angle;
+                _color = new ColorTween(color, color);
+                Apply();
+                return;
+            }
+
+            if (MathF.Abs(angle - _toAngle) < 1e-3f)
+            {
+                // Same state, new palette — theme swaps retint in place, no spin.
+                _color = new ColorTween(color, color);
+                Apply();
+                return;
+            }
+
+            _fromAngle = CurrentAngle(); // ease from whatever is on screen, even mid-flight
+            _toAngle = angle;
+            _color = new ColorTween(_glyph.Color ?? color, color);
+            Animate();
+        }
+
+        private float CurrentAngle()
+        {
+            return _fromAngle + (_toAngle - _fromAngle) * Progress;
+        }
+
+        private void Apply()
+        {
+            _spin.RotationRadians = CurrentAngle();
+            _glyph.Color = _color.Evaluate(Progress);
+        }
+
+        public override Size Measure(Constraints c)
+        {
+            return _spin.Measure(c);
+        }
+
+        public override void Layout(Offset origin)
+        {
+            _spin.Layout(origin);
+            Bounds = _spin.Bounds;
+        }
+
+        public override void Paint(PaintList paint)
+        {
+            _spin.Paint(paint);
+        }
+
+        public override Widget? HitTest(Offset point)
+        {
+            return null; // decoration only — the row itself is the press target
+        }
+
+        public override IEnumerable<Widget> GetChildren()
+        {
+            return ChildOrEmpty(_spin);
+        }
     }
 
     /// <summary>
