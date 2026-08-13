@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>Zigote.UI.Functional</RootNamespace>
+        <AssemblyName>Zigote.UI.Functional</AssemblyName>
+        <Description>Function → Widget authoring for Zigote.UI: write components as plain functions.</Description>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Zigote.Core\Zigote.Core.csproj"/>
+        <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
+    </ItemGroup>
+
+</Project>

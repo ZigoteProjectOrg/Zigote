@@ -39,6 +39,8 @@
       "Zigote.UI.DevTools\\Zigote.UI.DevTools.csproj",
       "Zigote.UI.FSharp.Tests\\Zigote.UI.FSharp.Tests.fsproj",
       "Zigote.UI.FSharp\\Zigote.UI.FSharp.fsproj",
+      "Zigote.UI.Functional.Tests\\Zigote.UI.Functional.Tests.csproj",
+      "Zigote.UI.Functional\\Zigote.UI.Functional.csproj",
       "Zigote.UI.Localizations.Tests\\Zigote.UI.Localizations.Tests.csproj",
       "Zigote.UI.Localizations\\Zigote.UI.Localizations.csproj",
       "Zigote.UI.Material\\Zigote.UI.Material.csproj",
