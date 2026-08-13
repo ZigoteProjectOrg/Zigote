@@ -326,9 +326,27 @@ public static class InspectServer
             case "props":
                 return Props(app: app, argument: argument);
 
+            case "stats":
+                return StatsJson();
+
             default:
                 return Error($"unknown command '{command}'");
         }
+    }
+
+    /// <summary>
+    ///     The frame/CPU/memory sample <see cref="DebugStats" /> keeps every frame anyway, as one
+    ///     JSON line — the from-outside readout a perf run needs (drive the app over this socket,
+    ///     then ask what it cost). Frame times only mean render pace while the loop actually
+    ///     renders every iteration, i.e. under <c>ZIGOTE_CONTINUOUS=1</c> or while animating; an
+    ///     idle app's dt is just its event-wait timeout.
+    /// </summary>
+    private static string StatsJson()
+    {
+        return string.Create(
+            provider: CultureInfo.InvariantCulture,
+            $"{{\"fps\":{DebugStats.Fps:0.#},\"fps_min\":{DebugStats.FpsMin:0.#},\"fps_max\":{DebugStats.FpsMax:0.#},\"frame_ms\":{DebugStats.FrameMs:0.###},\"cpu_pct\":{DebugStats.CpuPct:0.#},\"mem_mb\":{DebugStats.MemMb:0.#},\"gc_mb\":{DebugStats.GcMb:0.#},\"ui_paint_commands\":{DebugStats.UiPaintCommands},\"overlay_paint_commands\":{DebugStats.OverlayPaintCommands}}}"
+        );
     }
 
     /// <summary>
