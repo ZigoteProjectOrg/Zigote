@@ -12,6 +12,7 @@ Recipes assume the usings from [`README.md`](README.md#project-setup).
 - [Load something async, with loading / error / retry](#load-something-async-with-loading--error--retry)
 - [Debounced search with latest-wins cancellation](#debounced-search-with-latest-wins-cancellation)
 - [A list of fifty thousand rows](#a-list-of-fifty-thousand-rows)
+- [An image grid from the network](#an-image-grid-from-the-network)
 - [Master/detail that folds at phone width](#masterdetail-that-folds-at-phone-width)
 - [A form with validation](#a-form-with-validation)
 - [Background work without hitching the frame](#background-work-without-hitching-the-frame)
@@ -83,18 +84,18 @@ public sealed class ProfilePage(ProfileBloc bloc, int userId) : ComposedWidget
         return new Watch(() => bloc.State.Value switch
         {
             { Busy: true }            => new Center(new Spinner()),
-            { Error: { } message }    => Retry(message),
+            { Error: { } message }    => Retry(ctx, message),
             { User: { } user }        => Content(user),
             _                         => SizedBox.Shrink(),
         });
     }
 
-    private Widget Retry(string message) => new Center(new Column(
+    private Widget Retry(BuildContext ctx, string message) => new Center(new Column(
         mainAxisSize: MainAxisSize.Min,
         spacing: Spacing.Md,
         children:
         [
-            new Label(message) { Color = ThemeData.Dark.Error },
+            new Label(message) { Color = Theme.Of(ctx).Error },
             new Button("Try again", () => bloc.Add(new ProfileEvent.Requested(userId))),
         ]));
 
@@ -213,6 +214,10 @@ public static class ProgressiveRows
 }
 ```
 
+`Slice` runs its first chunk inline and parks the rest for the frame loop — the fill advances only
+if your app calls `Background.RunFrame(budget)` once per frame. See
+[Background work](#background-work-without-hitching-the-frame) for the two lines that wire it.
+
 Variable-height rows — set `HeightOf` and the list keeps a prefix-sum offset table and
 binary-searches the visible window, so cost stays O(viewport) rather than O(count):
 
@@ -230,6 +235,46 @@ Two rules for the list itself:
 
 ---
 
+## An image grid from the network
+
+Three pieces, each doing one job: `NetworkCache.FetchAsync` fetches a URL **once** to disk —
+duplicate in-flight requests share one fetch, and a concurrency gate keeps a screenful of tiles from
+stampeding the server. `Image.LoadAsync` decodes off the UI thread behind a per-core gate and
+reports through `OnLoaded`/`OnFailed`, both on the UI thread. `GridView.Rebind` is the append step —
+it re-points the grid at a new item count without losing the scroll position.
+
+```csharp
+private readonly ListView _grid;
+private int _count;
+
+public FeedPage()
+{
+    _grid = GridView.Builder(crossAxisCount: 3, itemCount: 0, CellFor,
+                             mainAxisSpacing: 2, crossAxisSpacing: 2);
+}
+
+private Widget CellFor(int i)
+{
+    var image = new Image();
+    _ = image.LoadAsync(ct => NetworkCache.FetchAsync(Feed.UrlOf(i), ct), maxDim: 512);
+    return image;                    // fire-and-forget is safe: the task never faults
+}
+
+private void GrowTo(int count) =>    // called when the feed pages in more items
+    GridView.Rebind(_grid, crossAxisCount: 3, itemCount: _count = count, CellFor,
+                    mainAxisSpacing: 2, crossAxisSpacing: 2);   // keepScroll defaults to true
+```
+
+Cells are virtualized, so a cell scrolled out is destroyed and rebuilt on re-entry — the disk cache
+is what makes that re-entry cheap, and a second `LoadAsync` on a recycled `Image` cancels the first,
+so a recycled cell never shows a stale row's picture. `maxDim` caps the decoded texture's longest
+edge; feeds don't need 4K tiles.
+
+For the tap-to-open viewer, wrap the full image in `InteractiveViewer` — pan and pinch-zoom as a
+paint-and-hit-test transform, so nothing re-lays-out while the user zooms.
+
+---
+
 ## Master/detail that folds at phone width
 
 `AdaptiveBuilder` rebuilds only when the size class crosses a breakpoint, and cross-fades the swap.
@@ -240,11 +285,14 @@ public sealed class LibraryShell : ComposedWidget
 {
     private readonly Sidebar _sidebar = new();      // hoisted: shared by both layouts,
     private readonly DetailPane _detail = new();    // so selection and scroll survive the fold
+    private readonly Signal<bool> _showDetail = new(false);   // written when a row is picked
 
     protected override Widget Build(BuildContext ctx) =>
         new AdaptiveBuilder((_, sizeClass) => sizeClass switch
         {
-            WindowSizeClass.Compact => _showDetail.Value ? _detail : _sidebar,
+            // The builder re-runs only when the size CLASS changes; the Watch is what reacts
+            // to _showDetail flipping while the window stays compact.
+            WindowSizeClass.Compact => new Watch(() => _showDetail.Value ? _detail : _sidebar),
             _ => new Row(children:
                  [
                      new SizedBox(width: 260, child: _sidebar),
@@ -304,13 +352,13 @@ public sealed class SignupForm : ComposedWidget
         spacing: Spacing.Md,
         children:
         [
-            Field("Email", v => _draft.Value = _draft.Value with { Email = v }, _emailError),
-            Field("Password", v => _draft.Value = _draft.Value with { Password = v }, _passwordError,
+            Field(ctx, "Email", v => _draft.Value = _draft.Value with { Email = v }, _emailError),
+            Field(ctx, "Password", v => _draft.Value = _draft.Value with { Password = v }, _passwordError,
                   obscure: true),
             new Watch(() => new Button("Create account", _valid.Value ? Submit : null)),
         ]);
 
-    private static Widget Field(string hint, Action<string> onChanged,
+    private static Widget Field(BuildContext ctx, string hint, Action<string> onChanged,
                                 Computed<string?> error, bool obscure = false) =>
         new Column(
             crossAxisAlignment: CrossAxisAlignment.Stretch,
@@ -324,7 +372,7 @@ public sealed class SignupForm : ComposedWidget
 
                 // Scoped to the error alone: typing repaints one caption, not the form.
                 new Watch(() => error.Value is { } message
-                    ? new Label(message) { Style = Label.LabelStyle.Caption, Color = ThemeData.Dark.Error }
+                    ? new Label(message) { Style = Label.LabelStyle.Caption, Color = Theme.Of(ctx).Error }
                     : SizedBox.Shrink()),
             ]);
 
@@ -343,7 +391,12 @@ Note `_valid.Value ? Submit : null` — a null callback disables the button. Tha
 
 ## Background work without hitching the frame
 
-`Background` is the worker pool. It marshals results back to the UI thread for you.
+`Background` is the worker pool. It marshals results back to the UI thread for you. There is no
+ambient instance — build one at the composition root and pass it (or a named `Child` scope) down:
+
+```csharp
+var background = new Background(app.Post, app.RequestLayout);   // once, at the root
+```
 
 ```csharp
 // Fire and forget, result delivered on the UI thread
@@ -365,7 +418,9 @@ var latest = background.Latest();
 background.Slice(key, count, i => DoOne(i), onDone: () => _status.Text = "Done");
 ```
 
-Give the frame loop a budget for deferred work in your app's `OnUpdate`:
+`Slice` chunks and `Deliver.WhenIdle` results advance **only** when the frame loop grants them a
+budget — without this call a sliced fill stops after its first chunk, silently. Grant it in your
+app's `OnUpdate`:
 
 ```csharp
 protected override void OnUpdate(float dt)
@@ -407,7 +462,8 @@ public sealed class ConfirmPage(string question) : ComposedWidget
 ```
 
 For a true modal over the current screen rather than a pushed route, use `Dialog` — it traps focus,
-dims behind, and dismisses on Esc:
+dims behind, and dismisses on Esc. It answers through callbacks (`onConfirm` / `onCancel`), not an
+awaited result; when the caller needs the value, push the route above instead:
 
 ```csharp
 Dialog.Confirm("Delete track", $"Remove {name} from your library?",
@@ -418,17 +474,19 @@ Dialog.Confirm("Delete track", $"Remove {name} from your library?",
 
 ## Follow the system theme
 
-`ZigoteApp` syncs `Theme` into the tree each frame, so assigning it is enough:
+`ZigoteApp` syncs `Theme` into the tree each frame, so assigning it is enough — and the OS reports
+appearance flips through `App.SystemThemeChanged`:
 
 ```csharp
 public sealed class MyApp : ZigoteApp
 {
-    private readonly Signal<bool> _dark = new(true);
+    public MyApp() { Home = new Shell(); }
 
-    public MyApp()
+    protected override void OnInit()
     {
-        Home = new Shell();
-        _dark.Changed += dark => Theme = dark ? ThemeData.Dark : ThemeData.Light;
+        base.OnInit();
+        App!.SystemThemeChanged += t =>
+            Theme = t == SystemTheme.Dark ? ThemeData.Dark : ThemeData.Light;
     }
 }
 ```
@@ -439,10 +497,13 @@ the accent colour, live:
 ```csharp
 public sealed class MyApp : AdwaitaApp
 {
+    private readonly Label _status = new("");
+
     public MyApp() : base(title: "My App") { Home = new Shell(); }
 
     protected override void OnInit()
     {
+        base.OnInit();   // the CSD chrome and the system-style wiring live here — never skip it
         SystemStyleChanged += () => _status.Text =
             $"{(SystemPrefersDark ? "dark" : "light")}, accent {SystemAccent}";
     }
@@ -518,21 +579,22 @@ rebinding possible.
 
 ```csharp
 private const string ActionSearch  = "app.search";
-private const string ActionDismiss = "app.dismiss";
+private const string ActionPalette = "app.palette";
 
 protected override void OnInit()
 {
+    base.OnInit();
     var window = App!;
 
     window.Keymap.Bind(ActionSearch,  KeyChord.Command(KeyCode.F));
-    window.Keymap.Bind(ActionDismiss, new KeyChord(KeyCode.Escape));
+    window.Keymap.Bind(ActionPalette, KeyChord.Command(KeyCode.K));
 
     window.OnShortcut = action =>
     {
         switch (action)
         {
-            case ActionSearch:  _shell.FocusSearch(); return true;
-            case ActionDismiss: return _shell.DismissTop();   // false → let the framework handle Esc
+            case ActionSearch:  _shell.FocusSearch();   return true;
+            case ActionPalette: _shell.OpenPalette();   return true;
             default:            return false;
         }
     };
@@ -540,7 +602,17 @@ protected override void OnInit()
 ```
 
 `KeyChord.Command(...)` is Cmd on macOS and Ctrl elsewhere. Returning `false` lets the event continue
-to the framework's own handling (Esc dismissing the top overlay, Tab traversal).
+to the framework's own handling (Tab traversal, the built-in bindings).
+
+Three rules the keymap enforces, learned the hard way:
+
+- **A chord resolves to the first matching action in bind order — and the built-ins are already
+  bound.** Esc, in particular, is taken (`app.overlay.dismiss`) and handled before `OnShortcut` is
+  consulted, so do not bind Esc; dismissal behaviour belongs to overlays, which already have it.
+- **Modifier-less chords are withheld while a text editor has focus**, so a plain-letter shortcut
+  never fires into someone's typing. Use a modifier for anything global.
+- **On macOS, chords that live in the native menu (⌘S, ⌘Z, …) arrive as menu actions**, not key
+  events — put those on `AppMenu` items rather than the keymap.
 
 ---
 
@@ -606,32 +678,35 @@ var button = tree.Flatten().First(n => n.Role == SemanticsRole.Button);
 Assert.Equal("Save", button.Label);
 ```
 
+`Mount` above is the whole harness — there is no shipped `TestHost` type; `Zigote.Tests` writes the
+same few lines per file. For deterministic background work, `Background.Manual()` gives you an
+instance with no frame loop and `Drain(timeout)` pumps it, so "the result landed" is an assertion
+rather than a sleep.
+
 Bloc tests need no widget tree at all, and a `SyncBloc` (or any handler that does not await) has
 already applied its state change by the time `Add` returns — no pumping, no polling, no
 `await Task.Delay(1)`.
-
-Don't reference `Zigote.Editor` from a test project: it initialises the native engine.
 
 ---
 
 ## Wire up error reporting
 
-Two seams, and both default to swallowing into a debug log. Set them at startup or you will lose
-exceptions from async handlers and workers.
+Three seams, and all default to swallowing into a debug log. Set them at startup or you will lose
+exceptions from throwing effects, async handlers and workers.
 
 ```csharp
 protected override void OnInit()
 {
+    base.OnInit();
+    Reactive.OnError     = ex => Log.Error(ex, "reactive");
     BlocErrors.OnError   = (ex, origin) => Log.Error(ex, "bloc {Origin}", origin);
     Background.OnError   = (ex, origin) => Log.Error(ex, "background {Origin}", origin);
 }
 ```
 
-Or, with `Zigote.Logging` referenced, one call routes both into Serilog:
-
-```csharp
-AppLog.CaptureFailures();
-```
+Or, with `Zigote.Logging` referenced, `AppLog.CaptureFailures()` routes the reactive and bloc seams
+(plus unobserved task and appdomain exceptions) into Serilog. `Background.OnError` is **not** among
+them — wire that one yourself either way.
 
 A throwing bloc handler is reported and the pump carries on — one bad event does not take the screen
 down. That is only useful if someone is listening.

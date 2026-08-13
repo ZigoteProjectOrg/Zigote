@@ -33,8 +33,9 @@ that tree alive and mutates it. Layout, painting, input, focus, animation, navig
 editing are all implemented here, in `Zigote.UI`, on top of a small C ABI into a native library.
 
 Nothing is delegated to the platform's toolkit. Text is shaped with HarfBuzz and rasterised with
-FreeType inside the engine, so a window looks the same everywhere; wgpu picks Metal, Vulkan or D3D12
-per OS without the code above knowing.
+FreeType inside the engine — down to synthetic bold and oblique for faces that lack the style, and
+the platform's color emoji — so a window looks the same everywhere; wgpu picks Metal, Vulkan or
+D3D12 per OS without the code above knowing.
 
 The repository also contains a **3D engine, a gameplay layer and a visual editor**. Those are
 separate systems that sit next to the UI framework, not under it — an app never pays for them.
@@ -176,9 +177,10 @@ emitted paint commands, no window required.
 
 | Area | What is in it |
 | --- | --- |
-| **Layout** | `Column`, `Row`, `Stack`, `Wrap`, `Expanded`, `Padding`, `Align`, `SizedBox`, `ScrollView`, virtualized `ListView`/`GridView`, `SplitPane`, `TreeView<T>`, `ReorderableList`, `InteractiveViewer` (pan / pinch-zoom) |
-| **Controls** | `Label`, `Button`, `Checkbox`, `Radio<T>`, `Switch`, `Slider`, `Dropdown<T>`, `TabBar`, `Card`, `Dialog`, `Snackbar`, `Tooltip`, `ContextMenu`, `Chip`, `Popover`, `ColorPicker`, `CurveEditor`, `CodeEditor` |
-| **Text & input** | `TextField` single- and multi-line with full IME composition, selection, undo; engine-backed shaping and measurement |
+| **Layout** | `Column`, `Row`, `Stack`, `Wrap`, `Expanded`, `Padding`, `Align`, `SizedBox`, `ScrollView`, virtualized `ListView`/`GridView`, `InteractiveViewer` (pan / pinch-zoom) |
+| **Controls** | `Label`, `Button`, `Card`, `Dialog`, `Snackbar`, `Tooltip`, `ContextMenu`, `Popover`, `RichText`, `SelectableText`, `Pressable` |
+| **Text & input** | Engine-backed shaping and measurement, selection, undo, and the IME seam (`ITextInputClient`). The editable `TextField` itself ships in `Zigote.UI.Material` — see below. |
+| **Liquid Glass** | `LiquidGlass` surfaces over media — the shader anchors the backdrop per pixel, the theme picks the glass family — plus `LiquidGlassLayer`, blend groups and `GlassGlow` |
 | **Animation** | Explicit transitions, implicit `AnimatedOpacity`/`AnimatedAlign`/`AnimatedSwitcher`, and a fluent API: `widget.Animate().Fade(500.ms).Scale(delay: 500.ms)` |
 | **Navigation** | Navigator 2.0 — imperative `Push`/`Pop`, named routes, or a declarative page stack driven by a signal |
 | **Windowing** | Multiple OS windows, overlays, drag & drop (in-app and OS files), one `AppMenu` model → native `NSMenu` on macOS and an in-window menu bar elsewhere |
@@ -186,25 +188,34 @@ emitted paint commands, no window required.
 | **Focus & a11y** | Tab / arrow / Esc traversal with modal traps, and a platform-neutral semantics tree |
 | **Hot reload** | Edit a `Build()` under `dotnet watch` and the running UI updates — instances and fields survive |
 
+The form controls live one package up, in **[`Zigote.UI.Material`](Zigote.UI.Material/README.md)**,
+and the kernel deliberately does not duplicate them: `TextField` (single- and multi-line with full
+IME composition), `Checkbox`, `Radio<T>`, `Switch`, `Slider`, `Dropdown<T>`, `TabBar`, `Chip`,
+`SplitPane`, `TreeView<T>`, `ReorderableList`, `ColorPicker`, `CurveEditor`, `CodeEditor`.
+
 Full detail: [`Zigote.UI/README.md`](Zigote.UI/README.md).
 
 Around the kernel: [`Zigote.UI.Charts`](Zigote.UI.Charts/README.md) (declarative charting),
 [`Zigote.UI.Localizations`](Zigote.UI.Localizations/README.md) (locales, plural rules, typed messages
 from ARB), [`Zigote.UI.DevTools`](Zigote.UI.DevTools/README.md),
-[`Zigote.UI.BottomSheet`](Zigote.UI.BottomSheet/README.md), `Zigote.UI.FSharp` (F# ergonomics:
+[`Zigote.UI.BottomSheet`](Zigote.UI.BottomSheet/README.md),
+[`Zigote.UI.Functional`](Zigote.UI.Functional/README.md) (a component as a plain function, via one
+widget: `View`), `Zigote.UI.FSharp` ([F# ergonomics](Zigote.UI.FSharp/README.md):
 `signal` / `computed` / `watch`), and `Zigote.Modules.UI.CodeEditor`.
 
 ---
 
 ## Design systems
 
-A design system in Zigote is a **surface over the one kernel, not a fork**. Both of the ones that
-ship compose the same primitives, so they share theming, focus, semantics and hot reload — and
-mixing them in a single app is supported.
+A design system in Zigote is a **layer over the kernel, not a fork**. Both of the ones that ship
+compose the same primitives, so they share theming, focus, semantics and hot reload — and mixing
+them in a single app is supported. They are not quite peers, though: `Zigote.UI.Material` doubles
+as the framework's control library, and Adwaita builds on it — `AdwEntry` is Material's `TextField`
+under Adwaita styling.
 
 | | |
 | --- | --- |
-| **[`Zigote.UI.Adwaita`](Zigote.UI.Adwaita/README.md)** | The GNOME **Adwaita** design language: 94 `Adw*` types, both appearances, the nine GNOME 47 accents, boxed-list rows, adaptive navigation, and client-side decorations the app draws itself. Not a GTK binding — nothing links against GTK, GLib or libadwaita, so an Adwaita app runs unchanged on macOS and Windows. |
+| **[`Zigote.UI.Adwaita`](Zigote.UI.Adwaita/README.md)** | The GNOME **Adwaita** design language, tracking libadwaita 1.10 (GNOME 51): 100 `Adw*` types, both appearances, the nine accents, boxed-list rows, adaptive navigation, and client-side decorations the app draws itself — down to traffic lights that reveal their glyphs on hover, as macOS does. Not a GTK binding — nothing links against GTK, GLib or libadwaita, so an Adwaita app runs unchanged on macOS and Windows. |
 | **[`Zigote.UI.Material`](Zigote.UI.Material/README.md)** | The **Material** vocabulary with the Flutter names and named-argument constructors — `Scaffold`, `AppBar`, `ListTile`, `ElevatedButton`, `FloatingActionButton`. A Material tree ports across almost line for line. |
 
 <table>
@@ -251,7 +262,7 @@ the editor, and export.
 | **macOS** (arm64, x64) | Primary development platform — built, run and tested daily. |
 | **Linux** (x64, arm64) | Builds natively in CI (`linux-x64`) and cross-compiles from any host. arm64 is wired up but sees less exercise. |
 | **Windows** (x64) | Builds natively in CI (`win-x64`, MSVC ABI). Cross-compiling from macOS/Linux uses Zig's bundled MinGW (GNU ABI). |
-| **iOS / Android** | In bring-up. Touch, lifecycle, safe area and both native builds work; the gallery runs on the iOS simulator and the Android emulator. `zigote add android` scaffolds an Android head. See [`docs/mobile-port.md`](docs/mobile-port.md). |
+| **iOS / Android** | In bring-up. Touch, lifecycle, safe area and both native builds work; the gallery runs on the iOS simulator and the Android emulator. `zigote add android` scaffolds an Android head. See [`docs/mobile.md`](docs/mobile.md). |
 
 One SDL3 + wgpu code path everywhere. Self-contained per-OS bundles come from
 [`.github/workflows/release.yml`](.github/workflows/release.yml) or locally via
@@ -288,7 +299,7 @@ tests.
 - **[`Zigote.UI.HelloWorld`](Zigote.UI.HelloWorld/README.md)** — hello world and a counter in one
   annotated file. The place to start.
 - **`Zigote.UI.Gallery`** — the framework end to end: widgets, navigation, theming, charts,
-  localization, DevTools, and a BLoC-driven shell.
+  localization, DevTools, and a signal-driven shell.
 - **[`Zigote.UI.Adwaita.Gallery`](Zigote.UI.Adwaita.Gallery/README.md)** — 37 pages of the GNOME
   design system, an adaptive shell, multi-window, and a headless `--self-test`.
 - **`Zigote.UI.FSharp.Gallery`** — the same kernel from F#.
@@ -307,10 +318,11 @@ tests.
 | [`docs/games-and-3d.md`](docs/games-and-3d.md) | The 3D renderer, gameplay layer, editor and export pipeline. |
 | [`docs/preferences-and-persistence.md`](docs/preferences-and-persistence.md) | Reactive settings and key-value storage. |
 | [`docs/assets.md`](docs/assets.md) | Fonts, images and content bundling. |
-| [`docs/mobile-port.md`](docs/mobile-port.md) · [`docs/mobile-port-android.md`](docs/mobile-port-android.md) | iOS / Android bring-up status. |
+| [`docs/mobile.md`](docs/mobile.md) | iOS / Android: what works, how to run it, what is open. |
 | [`tools/rider/README.md`](tools/rider/README.md) | The Rider plugin — colour swatches, widget preview, widget/semantics trees — and the editor-agnostic inspect protocol behind it. |
 | [`docs/mcp-server.md`](docs/mcp-server.md) | The MCP server — LLM agents launch, screenshot and drive a running app over the same inspect protocol. |
 | [`Zigote.Engine/docs/`](Zigote.Engine/docs/README.md) | The native Zig + wgpu backend: rendering, FFI, subsystems, building. |
+| [`docs/README.md`](docs/README.md) | The full index — including [`docs/notes/`](docs/README.md#engineering-notes), the design records and bring-up journals behind the decisions. |
 
 The XML doc comments are the reference manual, and most of them explain *why*, not just *what* —
 `Zigote.UI/Widgets/Widget.cs`, `Zigote.Core/State/Signal.cs` and `Zigote.UI/App/App.cs` are the three
@@ -329,6 +341,7 @@ worth reading first.
 | `Zigote.Engine` | The native Zig + wgpu backend — wgpu, SDL3, HarfBuzz + FreeType, Jolt, flecs, miniaudio, Assimp, behind a C ABI (git submodule). |
 | `Zigote.Generators` | Roslyn source generators (FFI bindings, DSL codegen). |
 | `Zigote.Cli` | `zigote create` / `zigote add android` — scaffolds an app and its platform heads; `zigote preview` runs one widget on its own. |
+| `Zigote.Mcp` | MCP server over stdio — an LLM agent launches, drives and screenshots a running app through the inspect protocol. See [`docs/mcp-server.md`](docs/mcp-server.md). |
 
 </details>
 
@@ -354,6 +367,7 @@ worth reading first.
 | Project | Purpose |
 | --- | --- |
 | `Zigote.Runtime` | Scenes, prefabs, animation and the frame loop shipped games run on. |
+| `Zigote.Game` | `GameApp` — an `App` with a fixed-timestep game loop: `OnFixedStep` at a constant dt, `OnUpdate` per render frame. |
 | `Zigote.Scripting` | Component lifecycle and C# hot reload (Edit & Continue). |
 | `Zigote.ECS` · `Zigote.World` · `Zigote.Save` | flecs entities; spawning, tags, spatial queries; save & load. |
 | `Zigote.Physics2D` · `Zigote.Render2D` · `Zigote.Vfx` · `Zigote.Cinematics` | 2D physics and sprites, particles, physically-based camera. (3D physics is Jolt, in the native engine.) |
@@ -372,8 +386,9 @@ dotnet run  --project Zigote.UI.Adwaita.Gallery -- --self-test  # every gallery 
 dotnet run  --project Zigote.SmokeTest                          # boots the real renderer (needs a GPU)
 ```
 
-`Zigote.Tests` is 165 files covering the kernel, the design systems, blocs, preferences and the
-reactive graph — all without a window. `Zigote.SmokeTest` is the other half: it opens a real SDL3
+`Zigote.Tests` is 169 files covering the kernel, the design systems, blocs, preferences and the
+reactive graph — and reaching well into the game stack (ECS, physics, graphs, runtime) — all
+without a window. `Zigote.SmokeTest` is the other half: it opens a real SDL3
 window and presents frames through wgpu, so it is deliberately **not** part of `dotnet test`.
 
 `Zigote.Ecs.Benchmark`, `Zigote.Bloc.Benchmark` and `Zigote.Reactive.Benchmark` are BenchmarkDotNet

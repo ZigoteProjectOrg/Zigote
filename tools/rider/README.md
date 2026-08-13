@@ -166,6 +166,7 @@ a free port and prints it; loopback only, and off unless asked for.
 | `stream [scale] [fps]` | one JSON header line (`{"format","stream","scale"}` — the density every frame is at, since a raw BMP has nowhere to carry it), then each changed frame as 4-byte big-endian length + BMP, pushed until the client hangs up |
 | `window hide\|show` | `{"ok":true}` |
 | `props ID` | `{"id","type","props":{…},"x","y","w","h"}` |
+| `stats` | `{"fps","fps_min","fps_max","frame_ms","cpu_pct","mem_mb","gc_mb","ui_paint_commands","overlay_paint_commands"}` — the sample DevTools keeps; frame pace is only meaningful under `ZIGOTE_CONTINUOUS=1` |
 
 Injected input takes the exact pipeline OS input does — hit-testing, focus, shortcuts — so a scripted
 click is a real click. `stream` sends nothing while the picture is unchanged — and does no capture

@@ -1,9 +1,15 @@
 # DevTools widget tree — design
 
+**Status: shipped.** Everything under [Design](#design) is implemented in
+`Zigote.UI.DevTools/Panels/UiInspectorPanel.cs` and the problems below are fixed; this note is kept
+as the record of why the panel is shaped the way it is. Two details drifted after writing: the
+guide-depth clamp is spelled `DevTreeGuides.MaxDepth` in code, and while the old 400-row cap is
+gone, a `MaxNodes = 20000` ceiling (matching the inspect protocol's) now bounds pathological trees.
+
 Scope: the **Widget tree** and **Selected** sections of `Zigote.UI.DevTools/Panels/UiInspectorPanel.cs`,
 plus the on-screen debug toggles that sit above them.
 
-## What is wrong today
+## What was wrong before this design
 
 | Problem | Cause |
 | --- | --- |

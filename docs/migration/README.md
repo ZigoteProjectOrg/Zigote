@@ -67,8 +67,8 @@ Three things to notice, because they all differ from where you came from:
 |---|---|
 | `Zigote.UI` | Always. The kernel: layout, controls, focus, navigation, animation, semantics. Terse, positional constructors, Zigote-native names. |
 | `Zigote.UI.Material` | You are porting Material or Flutter code. Material names (`Scaffold`, `AppBar`, `ElevatedButton`, `ListTile`, `TextField`) with named-argument constructors, over the same kernel. Also the home of `TextField`, `Dropdown`, `Slider`, `Switch`, `TabBar` — the kernel does not duplicate them. |
-| `Zigote.UI.Adwaita` | You want the GNOME look — on any OS. 94 `Adw*` types: `AdwHeaderBar`, `AdwNavigationSplitView`, the boxed-list rows, `AdwPreferencesDialog`, adaptive breakpoints, and client-side decorations the app draws itself. On GNOME it follows the system light/dark and accent live; on macOS it hosts the traffic lights in its own header bar. See [`Zigote.UI.Adwaita/README.md`](../../Zigote.UI.Adwaita/README.md). |
-| `Zigote.Bloc` | Any app with more than trivial state. Events in, ordered; state out as signals. |
+| `Zigote.UI.Adwaita` | You want the GNOME look — on any OS. 100 `Adw*` types: `AdwHeaderBar`, `AdwNavigationSplitView`, the boxed-list rows, `AdwPreferencesDialog`, adaptive breakpoints, and client-side decorations the app draws itself. On GNOME it follows the system light/dark and accent live; on macOS it hosts the traffic lights in its own header bar. See [`Zigote.UI.Adwaita/README.md`](../../Zigote.UI.Adwaita/README.md). |
+| `Zigote.Bloc` | Logic that outgrows plain signals — events in, ordered, one at a time; state out as signals. (The shipped sample apps stay on signals alone; reach for a bloc when ordering and cancellation start to matter.) |
 | `Zigote.UI.Charts` | Declarative charts. |
 | `Zigote.UI.Localizations` | Locales, plural rules, typed message codegen. |
 
@@ -101,6 +101,8 @@ By hand, if you would rather see every line:
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Your Zigote checkout. The scaffolder writes this for you (from $ZIGOTE_ROOT). -->
+    <ZigoteRoot>../Zigote</ZigoteRoot>
   </PropertyGroup>
 
   <ItemGroup>
@@ -115,14 +117,17 @@ A `GlobalUsings.cs` pays for itself immediately — the widget types live in sev
 
 ```csharp
 global using Zigote.Bloc;
-global using Zigote.Core;                    // Color, Size, Offset, Rect, EdgeInsets, Constraints
+global using Zigote.Core;                      // Color, Size, Offset, Rect, EdgeInsets, Constraints
 global using Zigote.Core.Paint;
 global using Zigote.Core.State;
+global using Zigote.Core.Threading;            // Background, Latest, Deliver
 global using Zigote.UI.Host;
+global using Zigote.UI.Material;               // TextField, Scaffold, Checkbox — the control library
 global using Zigote.UI.Theme;
 global using Zigote.UI.Widgets;
 global using Zigote.UI.Widgets.Controls;
 global using Zigote.UI.Widgets.Layout;
+global using Zigote.UI.Widgets.Navigation;     // Navigator, and the ctx.Push/Pop extensions
 global using Zigote.UI.Widgets.Transitions;
 ```
 
@@ -142,7 +147,7 @@ Stated up front so you do not go looking:
   readers will not see your app. If you are under an accessibility mandate, that is a blocker today.
 - **No web target.**
 - **Mobile is in bring-up.** Touch, lifecycle, safe-area and the Android/iOS native builds work; see
-  `docs/mobile-port.md` for what is still open.
+  [`docs/mobile.md`](../mobile.md) for what is still open.
 - **No third-party widget ecosystem.** What ships is what exists.
 
 ---
@@ -159,5 +164,5 @@ manual — most of them explain *why*, not just *what*.
 | What does the frame loop do? | `Zigote.UI/App/App.cs` |
 | What controls exist? | `Zigote.UI/Widgets/Controls/`, `Zigote.UI.Material/Widgets/` |
 | How do I test this? | `Zigote.Tests/` — every test is headless |
-| An app end to end | `Zigote.UI.Gallery/` — navigation, theming, charts, i18n, a BLoC-driven shell |
+| An app end to end | `Zigote.UI.Gallery/` — navigation, theming, charts, i18n, a signal-driven shell |
 | The smallest possible app | [`Zigote.UI.HelloWorld/`](../../Zigote.UI.HelloWorld/README.md) — one annotated file |

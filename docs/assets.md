@@ -79,6 +79,16 @@ that exists for that file. Ambiguity always keeps the file.
 Font licences are paired with their font: `LICENSE-NotoEmoji-OFL.txt` ships only while a `NotoEmoji*`
 file does, since the OFL attaches to redistribution of the font itself.
 
+### Font subsetting is its own switch
+
+Shaking decides which font *files* ship; **`EnableFontStripping`** (`build/Zigote.Fonts.targets`)
+rewrites the kept ones down to the glyphs the app can reach. It is independently opt-in, and it
+needs HarfBuzz's `hb-subset` on the build machine (`brew install harfbuzz`; point `FontSubsetTool`
+elsewhere or add flags with `FontSubsetExtraArgs`). The codepoint ranges come from `FontUnicodes` —
+set it by hand, or turn on shaking and let the same literal scan derive it. The 66 MB → 0.66 MB row
+below is **both** switches on; shaking alone only drops whole files. `ZigoteShakeRoots` (default
+`Assets;Fonts`) names the directories shaking is allowed to delete from.
+
 ### What it cannot see
 
 A path assembled at runtime — `$"Assets/Icons/{name}.png"` — is two literals that name no file, so the
@@ -95,7 +105,8 @@ and loads user scripts at runtime.
 
 For fonts specifically, a dropped codepoint is usually not fatal: the glyph router falls back to the
 system faces `SystemFonts` registers (Hiragino/PingFang on macOS, Yu Gothic/Segoe UI on Windows,
-fontconfig elsewhere). Two exceptions are worth knowing:
+fontconfig elsewhere) — and, for emoji, to the platform's own colour face (Apple Color Emoji, Segoe
+UI Emoji, a system Noto Color Emoji) when the app bundles none. Two exceptions are worth knowing:
 
 - Below **U+0100** there is no fallback — the router returns the primary face without consulting them —
   so that range is always kept, regardless of what the scan found.
@@ -114,7 +125,7 @@ Publishing the Adwaita gallery for `osx-arm64` with shaking and font subsetting 
 | Bundle (NativeAOT) | 104.7 MB | 46.0 MB |
 
 Only the `Fonts/` row is a property of this feature; the bundle totals also move with whatever else the
-app links, so treat them as a snapshot rather than a target.
-
-`NotoEmoji-Regular.ttf` drops out of every shaking-enabled app: `App.cs` only ever looks for a *colour*
-emoji font (`NotoColorEmoji.ttf`, not bundled), so the monochrome one it ships was loaded by nothing.
+app links, so treat them as a snapshot rather than a target. (The snapshot predates the emoji
+fallback pass: `App.cs` now loads `NotoEmoji-Regular.ttf` as the last-resort monochrome emoji
+fallback behind the platform's colour face, so that file — and its paired OFL licence — survive
+shaking today.)

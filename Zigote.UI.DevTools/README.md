@@ -62,6 +62,6 @@ Registered under `app`: `menu`, `compact`, `popout` (devtools in their own OS wi
 
 ## See also
 
-- [`docs/devtools-widget-tree.md`](../docs/devtools-widget-tree.md) — design of the widget-tree inspector (virtualised
+- [`docs/notes/devtools-widget-tree.md`](../docs/notes/devtools-widget-tree.md) — design of the widget-tree inspector (virtualised
   rows, depth guidelines, the Selected section).
 - [`Zigote.UI.HelloWorld`](../Zigote.UI.HelloWorld/README.md) — smallest host that installs it.

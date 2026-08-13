@@ -140,9 +140,12 @@ Environment hooks for hands-free verification (they combine):
 
 | Variable | Effect |
 | --- | --- |
+| `ZIGOTE_SCENE=balls` | Boot into the HDRI material-showcase scene instead of the project's startup scene. |
+| `ZIGOTE_VIEW=2d` | Open the viewport straight into 2D authoring mode. |
 | `ZIGOTE_AUTOPLAY=1` | Enter play mode automatically once scripts finish building. |
 | `ZIGOTE_SHOT=/path/out.bmp` | Dump the native 3D framebuffer (no HUD or UI overlay) to a file. |
 | `ZIGOTE_SHOT_FRAME=N` | Which frame to capture. Forces continuous rendering so the counter advances. |
+| `ZIGOTE_OPEN_SETTINGS=1` | Open the Settings window on boot. |
 | `ZIGOTE_GAMEPAD=1` | Enable SDL gamepad input. |
 
 ---

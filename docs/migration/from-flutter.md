@@ -122,7 +122,7 @@ widget, not a separate base class.
 | `ValueListenableBuilder` | `OwnEffect(() => …)` | Writes into retained children; allocates nothing |
 | `const` widgets | *(nothing)* | Nothing to optimize — trees are not rebuilt |
 | `Container` | `Container` | `color:`, `padding:`, `margin:`, `decoration:`, `alignment:`, `constraints:` |
-| `Column`/`Row` | `Column`/`Row` | Same alignment enums, plus a `spacing:` argument |
+| `Column`/`Row` | `Column`/`Row` | Same alignment enums (minus `CrossAxisAlignment.Baseline`), plus a `spacing:` argument |
 | `Expanded`/`Flexible`/`Spacer` | `Expanded`/`Flexible`/`Spacer` | Positional: `new Expanded(child, flex: 2)` |
 | `Stack`/`Positioned` | `Stack`/`Positioned` | |
 | `Padding`/`Center`/`Align` | `Padding`/`Center`/`Align` | `EdgeInsets.All/Symmetric/Only/FromLtrb` |
@@ -137,7 +137,7 @@ widget, not a separate base class.
 | `SingleChildScrollView` | `SingleChildScrollView` / `ScrollView` | |
 | `ListView(children:)` | `ListView(children:)` | Virtualized layout; construction is O(n) — see [Lists](#lists) |
 | `ListView.builder` | `ListView.Builder(count, i => …)` | Virtualizes construction too — rows built on demand |
-| `GridView` | `GridView.Count(...)`, `ResponsiveGrid` | Sizes to content; wrap in a scroll view |
+| `GridView` | `GridView.Count(...)`, `ResponsiveGrid` (Material) | Sizes to content; wrap in a scroll view |
 | `GridView.builder` | `GridView.Builder(cols, count, i => …)` | Virtualized and self-scrolling |
 | `ReorderableListView` | `ReorderableList` | |
 | `Draggable`/`DragTarget` | `Draggable<T>`/`DragTarget<T>` | Also handles OS file/text drops |
@@ -194,7 +194,8 @@ widget, not a separate base class.
 | `provider` / `InheritedNotifier` | `InheritedWidget`, or plain constructor injection |
 | `riverpod` providers | `Signal<T>` + `Computed<T>` + `Watch` |
 | `flutter_bloc` `Bloc`/`Cubit` | `Zigote.Bloc`'s `Bloc<TEvent, TState>` / `SyncBloc<,>` |
-| `BlocBuilder` / `BlocSelector` | `new Watch(() => …)` reading `bloc.State.Value` |
+| `BlocBuilder` | `new Watch(() => …)` reading `bloc.State.Value` |
+| `BlocSelector` | `bloc.Select(s => s.Part)` — a memoised `Computed<T>`; observers wake only when the projection changes |
 | `BlocListener` | `OwnEffect(() => …)` or `bloc.Subscribe(...)` |
 | `get_it` / `injectable` | Constructor injection at the composition root. There is no container. |
 
@@ -280,6 +281,11 @@ else
     background.Slice(list, count, i => list.AddItem(build(i)));
 ```
 
+`Slice` advances only when your app grants the frame loop a budget —
+`background.RunFrame(TimeSpan.FromMilliseconds(4))` once per `OnUpdate`; without it the fill stops
+after the first chunk (the [cookbook](cookbook.md#background-work-without-hitching-the-frame) shows
+the wiring).
+
 For variable-height rows, set `HeightOf` (index → height) and the list keeps a prefix-sum table and
 binary-searches the visible window — still O(viewport), and it works in builder mode, since the
 height comes from the index and not from the built widget:
@@ -302,9 +308,9 @@ every rebuild. Here it evaluates once, at first measure. Move it into a `Watch` 
 either mutate the existing ones (`_switcher.Child = _pages[i]`) or call `MarkNeedsBuild`.
 `MarkNeedsLayout` only relayouts what is already there.
 
-**Recreating widgets loses state.** In Flutter, `Button('x', onTap)` in `build` is free and the
-element tree preserves state. Here it is a new object with no hover, no focus, no animation. Hoist to
-a field and mutate.
+**Recreating widgets loses state.** In Flutter, constructing an `ElevatedButton` in `build` every
+frame is free — the element tree preserves state behind it. Here it is a new object with no hover,
+no focus, no animation. Hoist to a field and mutate.
 
 **A `Watch` swap tears down its subtree.** Anything stateful inside it (a `ListView`'s scroll offset,
 a focused `TextField`) is destroyed on every swap. Hoist the stateful child to a field, mutate it
@@ -323,7 +329,8 @@ Set `Home` in the constructor; build its contents lazily on the first `Build` if
 **No `const` constructors.** They would do nothing.
 
 **Async errors are yours.** There is no `FlutterError.onError`. Wire `BlocErrors.OnError` and
-`Background.OnError`, or use `Zigote.Logging`'s `AppLog.CaptureFailures()` to route both into Serilog.
+`Background.OnError` yourself — `Zigote.Logging`'s `AppLog.CaptureFailures()` routes the reactive
+and bloc seams into Serilog, but not `Background.OnError`, which you set alongside it.
 
 ---
 
@@ -344,7 +351,7 @@ Set `Home` in the constructor; build its contents lazily on the first `Build` if
 - **Accessibility.** The semantics tree is built; no platform bridge ships. Screen readers see
   nothing. This is the hard one.
 - **Web.** No target.
-- **Mobile maturity.** Bring-up, not a shipped platform. See `docs/mobile-port.md`.
+- **Mobile maturity.** Bring-up, not a shipped platform. See [`docs/mobile.md`](../mobile.md).
 - **pub.dev.** No third-party widgets. Anything not in the box, you write.
 - **Text input edge cases.** IME composition is wired end to end and works, but Flutter has a decade
   of RTL, dead-key and platform-gesture fixes you are not inheriting.

@@ -108,10 +108,14 @@ Toggle("Show grid", isOn: $showGrid)
 ```
 
 ```csharp
-public sealed class EditorPreferences(PreferenceStore store) : PreferencesProvider(store, "editor")
+public sealed class EditorPreferences : PreferencesProvider
 {
-    public Preference<bool> ShowGrid { get; } = /* Register in ctor */ null!;
-    // ShowGrid = Register("showGrid", true);   → key "editor.showGrid", persisted, reactive
+    public Preference<bool> ShowGrid { get; }
+
+    public EditorPreferences(PreferenceStore store) : base(store, "editor")
+    {
+        ShowGrid = Register("showGrid", true);   // key "editor.showGrid", persisted, reactive
+    }
 }
 
 new Watch(() => new Switch(prefs.ShowGrid.Value, v => prefs.ShowGrid.Value = v))
@@ -196,20 +200,21 @@ helper method (your `.buttonStyle`).
 | `.task { }` | `OnMount()` + `Background.RunAsync(async ct => …)` |
 | `.task(id:) { }` | `OwnEffect(() => { var id = _id.Value; … })` — auto-tracks the id |
 | `.onChange(of: x) { }` | `OwnEffect(() => { _ = _x.Value; … })`, or `_x.Changed += …` |
-| structured cancellation on disappear | `Bloc.Restart()` / `Bloc.Track()` / the state's `OwnEffect` |
+| structured cancellation on disappear | the bloc's `Restart()`/`Track()` (protected — used from inside the bloc) / the widget's `OwnEffect` |
 | `@MainActor` | there is one UI thread; `App.Post(action)` hops onto it |
 
 `.task(id:)` and `.onChange`, ported:
 
 ```csharp
+private readonly Latest _reload;   // = background.Latest(), one slot per unit of work
+
 protected override void OnMount()
 {
     // Re-runs whenever _userId changes. No dependency list — the effect tracks what it reads.
     OwnEffect(() =>
     {
         var id = _userId.Value;
-        var token = _reload.Restart();       // latest-wins: cancels the in-flight load
-        _ = LoadAsync(id, token);
+        _reload.RunAsync(ct => LoadAsync(id, ct));   // latest-wins: supersedes the in-flight load
     });
 
     // .onDisappear cleanup, per run: return a thunk.
@@ -235,7 +240,7 @@ effect outlives the widget and keeps firing against a detached tree.
 | `Animatable` / `animatableData` | `AnimationController` + `MarkNeedsPaint` in `OnTick` |
 | `TimelineView` / repeating | `controller.Repeat(reverse: true)` |
 | `matchedGeometryEffect` | *(no equivalent)* — hoist the shared widget and animate its position |
-| `.transaction` / `Animation.spring` | `Curves.*` on the controller; no spring solver ships |
+| `.transaction` / `Animation.spring` | `Curves.*` on the controller — `Curves.Spring` is an easing approximation, not a physics solver |
 
 ```csharp
 // The "withAnimation" equivalent: the widget owns the animation, you just set the value.
@@ -290,6 +295,10 @@ private void Show(ImmutableArray<Track> tracks)
     _env.Background.Slice(_list, tracks.Length, i => _list.AddItem(RowFor(tracks[i])));
 }
 ```
+
+`Slice` advances only when the app grants the frame loop a budget — `RunFrame(budget)` once per
+frame; the [cookbook](cookbook.md#background-work-without-hitching-the-frame) shows the wiring.
+(`_env` is your own services record, injected at the root — see concepts.md §7.)
 
 Variable-height rows — the analogue of a `List` with mixed cell heights:
 
@@ -418,7 +427,7 @@ lifetime directly.
   builds a complete semantics tree but ships no platform bridge — screen readers see nothing. If you
   are under an accessibility mandate, this is a blocker today, not a rough edge.
 - **iOS.** Mobile is in bring-up (touch, lifecycle, safe area and native builds work; see
-  `docs/mobile-port.md`). SwiftUI on iPhone is not something this replaces.
+  [`docs/mobile.md`](../mobile.md)). SwiftUI on iPhone is not something this replaces.
 - **Deep Apple integration.** No SwiftData, no CloudKit, no WidgetKit, no App Intents, no Catalyst.
 - **The declarative sugar.** Modifier chains, `@Binding` projection, `matchedGeometryEffect`, spring
   animations, and previews all have to be written out longhand or done without.

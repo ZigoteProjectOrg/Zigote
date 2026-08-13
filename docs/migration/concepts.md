@@ -179,8 +179,10 @@ user reorders.
 
 ## 7. Inherited data
 
-`InheritedWidget` propagates data down the tree; `ThemeProvider` and `MediaQuery` are the built-in
-ones, injected by `ZigoteApp` at the root.
+`InheritedWidget` propagates data down the tree. `ThemeProvider` is the built-in one, injected by
+`ZigoteApp` at the root; `MediaQuery.Of(ctx)` falls back to the ambient window metrics the frame
+loop maintains, so it works with no `MediaQuery` widget in the tree — place one only to override
+the values for a subtree.
 
 ```csharp
 var theme = Theme.Of(ctx);              // registers ctx's builder as a dependent
@@ -193,14 +195,20 @@ var isPhone = media.SizeClass == WindowSizeClass.Compact;
 `InheritedWidget` and overriding `UpdateShouldNotify`.
 
 For app-wide services, prefer plain constructor injection at the composition root over an inherited
-widget. Zigote has no DI container and does not want one — pass an `AppEnv` record down.
+widget. Zigote has no DI container and does not want one — pass a record of your services down
+(`record AppEnv(...)` is a convention you define; the framework ships no such type).
 
 ## 8. Threading
 
 One UI thread. The frame loop, layout, paint and event dispatch all run on it.
 
-- Signal writes from any thread are legal and are marshalled.
+- Signal writes from any thread are legal. What runs *where* is explicit: `Watch` marshals its
+  subtree swap to the UI thread, but an `Effect` runs per its `EffectAffinity` — the default
+  `Inline` runs the body **on the writing thread**; `Deferred` parks it for the frame loop. Any
+  effect body that touches widgets must be `Deferred`.
 - `App.Post(action)` queues work onto the UI thread, drained at the top of the next frame.
+- `Reactive.Batch(() => { name.Value = n; age.Value = a; })` coalesces several writes into one
+  pass — one effect drain, one layout, one redraw.
 - `Zigote.Core.Threading.Background` is the worker pool: `Run`, `RunAsync`, `Latest()` for
   latest-wins work, `Slice` for chunked work with a per-frame budget.
 - A `Bloc` owns its own concurrency: `Restart()` cancels the previous unit of work, `Track()` ties a
@@ -226,6 +234,11 @@ protected override void OnMount()
 Everything registered with `Own`/`OwnEffect`/`CreateTicker` is released automatically —
 override `OnUnmount` only for teardown those cannot express.
 
+One thread caveat: `OwnEffect` bodies run inline, on whichever thread wrote the signal. That is
+fine while every writer is the UI thread; if a background thread feeds the signal (a bloc emitting
+from an async continuation, say), register `Own(new Effect(body, EffectAffinity.Deferred))` instead,
+so the body lands on the frame loop rather than mutating widgets cross-thread.
+
 One-time composition — building the child widgets you keep in fields — belongs in the **constructor**,
 not `OnMount`: it should happen once per instance, not once per mount.
 
@@ -246,4 +259,4 @@ full restart — which is the usual reason a hot-reloaded change "did nothing".
 2. State that outlives a frame goes in a field, a `Signal`, or a `Bloc` — never a `Build` local.
 3. `Watch` is how a signal reaches the tree. Scope it tight; hoist stateful children out of it.
 4. Mutate and `MarkNeedsLayout`. `MarkNeedsBuild` is the exception, not the habit.
-5. Scope what you subscribe to with `Own`/`OwnEffect`/`Bind` in `OnMount`.
+5. Scope what you subscribe to with `Own`/`OwnEffect` in `OnMount`.

@@ -1,6 +1,10 @@
 # Simplifying `Zigote.UI.FSharp` — drop the VDOM, drop the codegen
 
-**Status:** done — see §5 for what shipped and §6 for the rules the change imposes on app code
+**Status:** done — see §5 for what shipped and §6 for the rules the change imposes on app code.
+User-facing documentation of what remains lives in
+[`Zigote.UI.FSharp/README.md`](../../Zigote.UI.FSharp/README.md); this note is the decision record.
+(§3's "final layout" predates §5: `Widgets.fs` was never created — `WidgetOps` went into
+`Reactive.fs`, so the module is two files.)
 **Scope:** `Zigote.UI.FSharp`, `Zigote.UI.FSharp.Codegen`, `Zigote.UI.FSharp.Gallery`, `Zigote.UI.FSharp.Tests`
 **Reference implementation:** Palco (`~/ZigoteProjects/Palco`) — a ~55-file F# app that already
 builds against Zigote's C# widget API with none of this layer.

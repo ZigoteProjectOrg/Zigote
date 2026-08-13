@@ -1,6 +1,23 @@
 # Zigote Android Bring-up — Ordered Implementation Plan
 
-**Goal:** Gallery running on the Android emulator (API 34, arm64, gfxstream Vulkan via MoltenVK), mirroring the working iOS-simulator shapes. Sources: 4 research reports (libc recipe, SDL patch, .NET host, wgpu/lifecycle), all facts probe-verified unless flagged in **Risks**. Extends the Android section of `docs/mobile-port.md`.
+> **Executed — kept as the decision record.** The plan below was carried out and the Gallery runs
+> on the emulator; the current user-facing state is [`../mobile.md`](../mobile.md). Where the
+> shipped code diverged from this text, the code won:
+>
+> - **Step 5's headline decision was reversed.** What shipped is this document's own Risk-1
+>   fallback (design A): all Java `Bind=false`, a small Java `ZigoteActivity` subclass as the
+>   launcher (`mobile/android/JavaSources/com/zigote/app/`), and registration from a managed
+>   `[Application]` subclass (`ZigoteApplication.cs`).
+> - The registration API is **`MobileHost.SetAndroidMain`** (`Zigote.Core/Native/MobileHost.cs`),
+>   not the `RegisterAndroidMain` named below.
+> - The head lives at `Zigote.UI.Gallery.Android/` (and `<App>.Android/` via `zigote add android`),
+>   not `mobile/android/ZigoteApp.Android.csproj`; RIDs shipped as `android-arm64` only.
+> - Conflict C1 shipped unresolved as warned: native code targets API 34, `minSdk` is 26 —
+>   revisit before targeting hardware broader than the emulator.
+>
+> Scratchpad paths cited below were session-scoped and are gone.
+
+**Goal:** Gallery running on the Android emulator (API 34, arm64, gfxstream Vulkan via MoltenVK), mirroring the working iOS-simulator shapes. Sources: 4 research reports (libc recipe, SDL patch, .NET host, wgpu/lifecycle), all facts probe-verified unless flagged in **Risks**. Extends the Android section of [`mobile-port.md`](mobile-port.md).
 
 **Constants used throughout:**
 

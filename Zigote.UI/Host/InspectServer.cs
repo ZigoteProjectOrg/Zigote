@@ -19,7 +19,7 @@ namespace Zigote.UI.Host;
 ///     <para>
 ///         This is what the IDE panels read, and — like <see cref="WidgetPreview" /> — it is
 ///         deliberately
-///         not an IDE feature. It is a socket and four one-word commands, so a Rider tool window, a
+///         not an IDE feature. It is a socket of one-word commands, so a Rider tool window, a
 ///         terminal (<c>echo widgets | nc 127.0.0.1 $port</c>), a test or a script all get the same
 ///         data
 ///         with nothing installed. Nothing here knows an editor exists.
@@ -54,6 +54,10 @@ namespace Zigote.UI.Host;
 ///         </item>
 ///         <item><c>window hide|show</c> — the app's own window, which a preview does not want.</item>
 ///         <item><c>props ID</c> — one widget's properties, by the id the tree reports.</item>
+///         <item>
+///             <c>stats</c> — the frame/CPU/memory sample <c>DebugStats</c> keeps, as one JSON
+///             object.
+///         </item>
 ///     </list>
 ///     <para>
 ///         Every command is answered on the UI thread through <see cref="App.Post" /> and the socket

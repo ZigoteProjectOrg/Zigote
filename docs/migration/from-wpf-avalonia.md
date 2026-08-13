@@ -132,11 +132,19 @@ protected override void OnMount()
 }
 ```
 
-For a list the user reorders, give the rows keys so the retained instances survive:
+For a list the user reorders, reuse the row *instances* — `ListView.SetItems` keeps whatever you
+hand it but runs no key reconciler, so a fresh `RowFor(t)` per update is a fresh row with reset
+state. Cache by id and hand back the same objects:
 
 ```csharp
-_list.SetItems(tracks.Select(t => RowFor(t, key: new ValueKey<int>(t.Id))).ToList());
+private readonly Dictionary<int, Widget> _rows = [];
+private Widget RowOf(Track t) => _rows.TryGetValue(t.Id, out var w) ? w : _rows[t.Id] = RowFor(t);
+
+_list.SetItems(tracks.Select(RowOf).ToList(), keepScroll: true);
 ```
+
+(`Key`/`ValueKey<T>` reconciliation exists in exactly one place — `MultiChildWidget.SetChildren`,
+on a `Row`/`Column` whose children are replaced wholesale. See [`concepts.md`](concepts.md) §6.)
 
 ### `RelativeSource`, `ElementName`, `FindAncestor`
 
@@ -278,13 +286,14 @@ classes, and you should always use a named step rather than a literal:
 | `ControlMetrics` | control heights, checkbox / radio / switch / slider metrics |
 | `Elevation` | `Z1`/`Z2`/`Z3` shadow styles, `paint.AddElevation(...)` |
 
-A "style" is a method:
+A "style" is a method — reading the *ambient* theme, never a static `ThemeData.Dark.X`, which would
+bake dark-mode colours into a light UI:
 
 ```csharp
-private static Button PrimaryButton(string label, Action? onPressed) =>
+private static Button PrimaryButton(BuildContext ctx, string label, Action? onPressed) =>
     new(label, onPressed)
     {
-        BackgroundColor = ThemeData.Dark.Accent,
+        BackgroundColor = Theme.Of(ctx).Accent,
         Radius          = Radii.Md,
         Padding         = EdgeInsets.Symmetric(horizontal: Spacing.Lg, vertical: Spacing.Sm),
     };
@@ -301,7 +310,8 @@ public sealed class TagChip(string text, Action onRemove) : ComposedWidget
         return new Container(
             decoration: new BoxDecoration(
                 color: theme.SurfaceAlt,
-                borderRadius: BorderRadius.Circular(Radii.Capsule)),
+                // Capsule is 9999 — clamp to half the control's height at the call site.
+                borderRadius: BorderRadius.Circular(Radii.Xl)),
             padding: EdgeInsets.Symmetric(horizontal: Spacing.Sm, vertical: Spacing.Xxs),
             child: new Row(
                 mainAxisSize: MainAxisSize.Min,
@@ -324,9 +334,10 @@ public sealed class TagChip(string text, Action onRemove) : ComposedWidget
 you must do is tell the framework when a change matters:
 
 ```csharp
-public sealed class Meter : Widget
+public sealed class Meter : LeafWidget
 {
     private float _value;
+    private Size _size;
 
     public float Value
     {
@@ -338,6 +349,14 @@ public sealed class Meter : Widget
             MarkNeedsPaint();      // colour/geometry changed, size did not
         }
     }
+
+    public override Size Measure(Constraints c) => _size = c.Constrain(new Size(120, 8));
+
+    public override void Layout(Offset origin) =>
+        Bounds = new Rect(origin.X, origin.Y, _size.Width, _size.Height);
+
+    public override void Paint(PaintList paint) =>
+        paint.AddRect(new Rect(Bounds.X, Bounds.Y, Bounds.Width * _value, Bounds.Height), Colors.Blue);
 }
 ```
 
@@ -359,8 +378,8 @@ is for genuine primitives — canvases, virtualized lists, text editors, animate
 | `Dispatcher.Invoke` / `InvokeAsync` | `App.Post(action)` — drained at the top of the next frame |
 | `Dispatcher.CheckAccess` | not needed; signal writes are marshalled for you |
 | `BackgroundWorker` / `Task.Run` | `Zigote.Core.Threading.Background` — `Run`, `RunAsync`, `Latest()`, `Slice` |
-| `CancellationTokenSource` per operation | `Bloc.Restart()` — latest-wins, one call |
-| `IDisposable` subscriptions | `Bloc.Track(sub)`, or `Widget.Own` / `Widget.OwnEffect` |
+| `CancellationTokenSource` per operation | the bloc's `Restart()` (protected — from inside the bloc), or `Background.Latest()` |
+| `IDisposable` subscriptions | the bloc's `Track(sub)`; in widgets `Own` / `OwnEffect` — all subclass-internal |
 
 Writing a signal from a worker thread is legal: the frame loop is woken and the subtree swap happens
 on the UI thread in the next `Measure`.

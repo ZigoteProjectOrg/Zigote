@@ -80,14 +80,14 @@ recomposition stays narrow — just made explicit.
 | `remember(key) { x }` | a field + recompute when the key changes | No implicit key invalidation |
 | `rememberSaveable` | *(nothing built in)* | Persist via `Zigote.Preferences` / `Zigote.Persistence` |
 | `mutableStateOf` | `Signal<T>` | Thread-safe writes; marshalled to the UI thread |
-| `mutableStateListOf` | `Signal<ImmutableArray<T>>` | Write a new array; the signal compares by reference |
+| `mutableStateListOf` | `Signal<ImmutableArray<T>>` | Write a new array; default equality sees a fresh array as a change |
 | `derivedStateOf { … }` | `Computed.From(() => …)` | Auto-tracks, caches, no key list |
 | `snapshotFlow { … }.collect` | `OwnEffect(() => …)` | Auto-tracks its reads |
 | implicit recomposition scope | `new Watch(() => …)` | **Explicit.** |
 | `LaunchedEffect(Unit) { … }` | `OnMount()` + `Background.RunAsync` | |
 | `LaunchedEffect(key) { … }` | `OwnEffect(() => { … })` reading the key signal | |
 | `DisposableEffect { … onDispose { } }` | `OwnEffect(() => { …; return cleanup; })` | Cleanup runs before each re-run and on dispose |
-| `rememberCoroutineScope()` | the bloc's `Restart()` / `Track()`, or `Background` | |
+| `rememberCoroutineScope()` | the bloc's `Restart()` / `Track()` (protected — used from inside the bloc), or a `Background` scope | |
 | `CompositionLocal` / `ProvidableCompositionLocal` | `InheritedWidget` | `ctx.DependOn<T>()` |
 | `LocalDensity` / `LocalConfiguration` | `MediaQuery.Of(ctx)` | `.DevicePixelRatio`, `.Size`, `.SizeClass` |
 | `MaterialTheme.colorScheme` | `Theme.Of(ctx)` → `ThemeData` | |
@@ -129,7 +129,7 @@ object per stage. If a wrapper stack gets deep enough to hurt readability, facto
 | `Box` | `Stack` |
 | `Spacer(Modifier.weight(1f))` | `new Spacer()` |
 | `LazyColumn` | `ListView.Builder` — see [Lists](#lazycolumn-and-lazyverticalgrid) |
-| `LazyVerticalGrid` | `GridView.Builder`, `ResponsiveGrid` |
+| `LazyVerticalGrid` | `GridView.Builder` (lazy); `ResponsiveGrid` (Material, materialized) |
 | `Text` | `Label` (or `Text`, an alias taking a `TextStyle`) |
 | `Button` / `OutlinedButton` / `TextButton` | `Button`, or Material's `ElevatedButton` / `OutlinedButton` / `TextButton` |
 | `Icon` / `IconButton` | `Icon` / `IconButton` |
@@ -161,6 +161,7 @@ public sealed class ProfilePage : ComposedWidget
 
     protected override void OnMount()
     {
+        // _env is your own services record, injected at the root — see concepts.md §7.
         _env.Background.RunAsync(async ct =>
         {
             var user = await _api.LoadAsync(UserId, ct);
@@ -180,14 +181,15 @@ public sealed class ProfilePage : ComposedWidget
 does the rest:
 
 ```csharp
+private readonly Latest _reload;   // = background.Latest(), one slot per unit of work
+
 protected override void OnMount()
 {
     // Re-runs whenever _userId changes. No key list — the effect tracks what it reads.
     OwnEffect(() =>
     {
         var id = _userId.Value;
-        var token = _reload.Restart();          // latest-wins: cancels the previous load
-        _ = LoadAsync(id, token);
+        _reload.RunAsync(ct => LoadAsync(id, ct));   // latest-wins: supersedes the previous load
     });
 }
 ```
@@ -202,9 +204,11 @@ OwnEffect(() =>
 });
 ```
 
-Always use `OwnEffect`, never `new Effect(...)`. Signals hold observers strongly, so a bare effect
-outlives the widget and keeps firing against a detached tree. And if you override `Dispose`, call
-`base.Dispose()` — that is what releases them.
+Always use `OwnEffect`, never a bare `new Effect(...)`. Signals hold observers strongly, so a bare
+effect outlives the widget and keeps firing against a detached tree; everything registered with
+`Own`/`OwnEffect` is released on `OnUnmount` (widgets have no `Dispose`). One thread caveat: effect
+bodies run on whichever thread wrote the signal — if a background thread feeds one, register
+`Own(new Effect(body, EffectAffinity.Deferred))` so the body lands on the frame loop instead.
 
 ---
 
@@ -248,6 +252,9 @@ private void ShowTracks(ImmutableArray<Track> tracks)
     _env.Background.Slice(_list, tracks.Length, i => _list.AddItem(RowFor(tracks[i])));
 }
 ```
+
+`Slice` advances only when the app grants the frame loop a budget — `RunFrame(budget)` once per
+frame; the [cookbook](cookbook.md#background-work-without-hitching-the-frame) shows the wiring.
 
 Variable-height rows: set `HeightOf` and the list keeps a prefix-sum table and binary-searches the
 visible window.
@@ -307,7 +314,7 @@ is there when you need the real ratio.
 - **Accessibility.** The semantics tree is built; no platform bridge ships. TalkBack / screen readers
   see nothing. Compose's accessibility is genuinely good and this is a real regression.
 - **Android and iOS maturity.** Compose is mobile-first; Zigote's mobile support is in bring-up. See
-  `docs/mobile-port.md`.
+  [`docs/mobile.md`](../mobile.md).
 - **Web / wasm.** No target.
 - **Kotlin.** Coroutines, structured concurrency, sealed-class exhaustiveness and DSL builders are
   nice things you are trading for C#'s. `Bloc` + `Background` + `record` + pattern matching cover most

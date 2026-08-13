@@ -22,8 +22,10 @@ Each layer depends only on the one below it:
 ┌────────────────────────────────────────────────────────────────────────┐
 │  Your app                                                              │
 ├────────────────────────────────────────────────────────────────────────┤
-│  Design systems   Zigote.UI.Adwaita (GNOME) · Zigote.UI.Material       │
-│  and add-ons      Charts · Localizations · DevTools · BottomSheet      │
+│  Design systems   Zigote.UI.Adwaita (GNOME) — builds on Material       │
+│  and add-ons      Zigote.UI.Material — Material vocabulary and the     │
+│                   framework's control library (TextField, Checkbox, …) │
+│                   Charts · Localizations · DevTools · BottomSheet      │
 ├────────────────────────────────────────────────────────────────────────┤
 │  Kernel           Zigote.UI — widgets, layout, paint, input, focus,    │
 │                   navigation, animation, semantics  (headless-testable)│
@@ -38,9 +40,12 @@ Each layer depends only on the one below it:
 
 Two things follow from that shape:
 
-- **Design systems are surfaces over one kernel, not forks.** Adwaita and Material compose the same
+- **Design systems are layers over one kernel, not forks.** Adwaita and Material compose the same
   primitives and share the theme, focus, semantics and hot-reload machinery, so mixing them in one
-  app is normal and supported.
+  app is normal and supported. They are stacked, not siblings: `Zigote.UI.Material` doubles as the
+  framework's control library — the kernel deliberately does not duplicate `TextField`, `Checkbox`
+  or `Slider` — and `Zigote.UI.Adwaita` builds on it (`AdwEntry` derives from Material's
+  `TextField`).
 - **`Zigote.UI` depends on nothing above the GPU.** The whole widget layer is headlessly testable —
   build a tree, lay it out, dispatch synthetic input, assert on the emitted paint commands. Every
   test in `Zigote.Tests` runs without a window.
@@ -91,7 +96,7 @@ Six primitives, in `Zigote.Core/State/` unless noted:
 | `Signal<T>` | What is true now? | `Zigote.Core.State.Signal<T>` |
 | `Trigger` | That it happened (valueless source) | `Zigote.Core.State.Trigger` |
 | `Computed<T>` | What can be derived? | `Computed.From(...)` |
-| `LinkedSignal<T>` | Derived, but locally overridable | `Linked.From(...)` |
+| `LinkedSignal<T>` | Derived, but locally overridable | `LinkedSignal.From(...)` |
 | `Effect` | What imperative work reacts to state? | `new Effect(body, affinity)` |
 | `Bloc<TEvent, TState>` | How does the app behave? | `Zigote.Bloc` |
 | `Watch` | How does a signal reach the tree? | `Zigote.UI.Widgets.Watch` |
@@ -168,8 +173,8 @@ in the next `Measure`. F# apps use the same widget through `watch`.
 ## Threading
 
 **Signals are not thread-affine.** Every graph mutation runs under one re-entrant global lock
-(`Reactive.Gate`), so a signal may be written from any thread — a timer, an async completion, an
-audio or network thread. The lock is uncontended in single-threaded UI use.
+(internal to the graph), so a signal may be written from any thread — a timer, an async completion,
+an audio or network thread. The lock is uncontended in single-threaded UI use.
 
 What *is* constrained is where reaction bodies run:
 
@@ -295,10 +300,11 @@ reactive graph.
 |---|---|
 | `Zigote.Core` | `Signal`/`Computed`/`Effect`/`LinkedSignal`/`Trigger`/`Reactive`, `Threading.Background`, plus the native seam: paint & event ABI, math, animation, assets, diagnostics registries |
 | `Zigote.UI` | Widgets, layout, theming, navigation (Navigator 2.0), focus, semantics, `Watch` |
-| `Zigote.UI.Adwaita` | The GNOME Adwaita design system on the kernel — 94 `Adw*` types, live system theming, client-side decorations ([README](../Zigote.UI.Adwaita/README.md)) |
-| `Zigote.UI.Material` | The Material vocabulary with the Flutter names ([README](../Zigote.UI.Material/README.md)) |
+| `Zigote.UI.Material` | The Material vocabulary with the Flutter names, and the framework's control library — `TextField`, `Checkbox`, `Slider`, `TabBar` live here, not in the kernel ([README](../Zigote.UI.Material/README.md)) |
+| `Zigote.UI.Adwaita` | The GNOME Adwaita design system, over the kernel and Material — 100 `Adw*` types, live system theming, client-side decorations ([README](../Zigote.UI.Adwaita/README.md)) |
 | `Zigote.UI.Charts`, `.Localizations`, `.BottomSheet` | Charting, i18n, draggable sheets |
-| `Zigote.UI.FSharp` | F# reactive ergonomics (`signal`/`computed`/`effect`/`watch`) + `Host.run` |
+| `Zigote.UI.Functional` | Components as plain functions, via one widget: `View` ([README](../Zigote.UI.Functional/README.md)) |
+| `Zigote.UI.FSharp` | F# reactive ergonomics (`signal`/`computed`/`effect`/`watch`) + `Host.run` ([README](../Zigote.UI.FSharp/README.md)) |
 | `Zigote.UI.DevTools` | Debug overlay: panels, charts, diagnostics |
 
 **App services**
@@ -314,6 +320,7 @@ reactive graph.
 | `Zigote.Network` | Transport, replication, prediction, sync |
 | `Zigote.Reactive.R3` | Optional R3 bridge |
 | `Zigote.Cli` | `zigote create` / `zigote add android` — project scaffolding, no framework dependency |
+| `Zigote.Mcp` | MCP server over stdio: LLM agents drive a running app through the inspect protocol ([docs](mcp-server.md)) |
 
 **Games, 3D and hosts** — the separate stack, documented in [`games-and-3d.md`](games-and-3d.md):
 `Zigote.Runtime`, `Zigote.Scripting`, `Zigote.ECS`, `Zigote.World`, `Zigote.Save`,
@@ -367,6 +374,11 @@ Writes into the graph go through `Reactive.Sync`. The signal stays the single so
 - **`Zigote.UI.DevTools`** — one line installs an overlay over an `App` (<kbd>Shift</kbd>+<kbd>D</kbd>):
   `UiInspectorPanel` (select-on-screen, live tree, box model, constraints, property dump) and
   `PerformancePanel` (rolling frame chart + hottest scopes).
+- **The inspect protocol** — `Zigote.UI.Host.InspectServer`, a loopback-only socket an app opens
+  when `ZIGOTE_INSPECT` is set: one-word verbs (`widgets`, `semantics`, `props`, `shot`, `stats` —
+  frame, CPU and memory cost — `input`, `theme`, `locale`, `preview`, `window`, …) that read the
+  live trees, capture frames and inject input. The Rider plugin and the MCP server are both clients
+  of this one protocol ([`mcp-server.md`](mcp-server.md), [`tools/rider`](../tools/rider/README.md)).
 - **Rebuild counters** — the Reactive panel, also readable as variables and from the console
   (`get reactive.runs`):
 

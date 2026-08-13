@@ -1,6 +1,6 @@
 # Zigote.UI.Adwaita
 
-The **GNOME Adwaita** design system, implemented on Zigote's widget kernel: 94 `Adw*` types, both appearances, the nine
+The **GNOME Adwaita** design system, implemented on Zigote's widget kernel: 100 `Adw*` types, both appearances, the nine
 system accents, the boxed-list row vocabulary, adaptive navigation, and client-side decorations the app draws itself.
 Tokens and metrics track **libadwaita 1.10 (GNOME 51)** — every colour, radius and state fill here has a line of
 `src/stylesheet/` behind it.

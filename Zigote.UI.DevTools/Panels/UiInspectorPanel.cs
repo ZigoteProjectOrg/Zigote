@@ -62,7 +62,7 @@ public sealed class UiInspectorPanel(DevToolsController controller) : IDevPanel
     );
 
     // The tree is a flat row model + a virtualized list: only the rows inside the viewport are built,
-    // so a 20k-node tree costs what a 20-node one does. See docs/devtools-widget-tree.md.
+    // so a 20k-node tree costs what a 20-node one does. See docs/notes/devtools-widget-tree.md.
     private readonly List<TreeNode> _rows = [];
 
     private readonly DevSearchField _search = new() { Placeholder = "search widgets" };

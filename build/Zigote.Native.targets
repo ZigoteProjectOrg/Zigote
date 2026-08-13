@@ -51,10 +51,10 @@
     <_RidOS Condition="$(_Rid.StartsWith('osx'))">macos</_RidOS>
     <_RidOS Condition="$(_Rid.StartsWith('win'))">windows</_RidOS>
     <!-- Order matters: 'android' RIDs must not fall into the generic 'linux' bucket (they map to
-         the same OS tag but the -android ABI triple + NDK sysroot). iOS/Android are SCAFFOLDING:
-         the triples resolve and wgpu-native prebuilts exist for them, but the vendored SDL build
-         has no UIKit/Android video driver yet and iOS ultimately needs a static-lib step instead
-         of a dylib — see docs/mobile-port.md before using these. -->
+         the same OS tag but the -android ABI triple + NDK sysroot). Both mobile targets are in
+         bring-up: the vendored SDL builds UIKit and Android video drivers, the Gallery runs on
+         the iOS simulator and the Android emulator, and ios device RIDs use the static-lib step —
+         see docs/mobile.md for the current state before using these. -->
     <_RidOS Condition="$(_Rid.StartsWith('android'))">android</_RidOS>
     <_RidOS Condition="$(_Rid.StartsWith('ios'))">ios</_RidOS>
     <_RidOS Condition="'$(_RidOS)' == '' And $(_Rid.StartsWith('linux'))">linux</_RidOS>

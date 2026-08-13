@@ -1,8 +1,8 @@
-# Preferences & Persistence — design
+# Preferences & Persistence
 
 **Zigote.Preferences** is a declarative, reactive preferences layer: every preference is a persisted
 signal (`Preference<T> : IReadableSignal<T>`) that plugs directly into the existing reactive graph in
-`Zigote.Core.State` — `Computed`, `Effect`, `Watch`, and `Ui.bind` all work on it unchanged.
+`Zigote.Core.State` — `Computed`, `Effect`, `Watch`, and the F# `watch` all work on it unchanged.
 **Zigote.Persistence** is the storage-agnostic base it writes through: a small, synchronous,
 thread-safe key-value contract plus two built-in backends (in-memory, JSON file).
 **Zigote.Persistence.SQLite** adds a SQLite backend on top of the `Microsoft.Data.Sqlite` NuGet

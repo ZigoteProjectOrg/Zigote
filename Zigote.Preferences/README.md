@@ -1,7 +1,7 @@
 # Zigote.Preferences
 
 **Declarative, reactive preferences.** Every preference is a persisted signal —
-`Preference<T> : IReadableSignal<T>` — so `Computed`, `Effect`, `Watch`, and `Ui.bind` work on it unchanged. Values
+`Preference<T> : IReadableSignal<T>` — so `Computed`, `Effect`, `Watch`, and the F# `watch` work on it unchanged. Values
 write through to an `IKeyValueStore` (`Zigote.Persistence`) as JSON; the backend (memory, JSON file, SQLite) is chosen
 at the composition root and nothing downstream changes.
 

@@ -32,7 +32,7 @@ The `-v q --nologo` matters: stdout is the MCP protocol stream, and those flags 
 | `launch` | `dotnet run` a project with `ZIGOTE_INSPECT=0`, wait for the announced port, remember it as the default target. `watch: true` runs it under `dotnet watch` instead — save a file and the UI hot-reloads in place, surviving even the port change a rude-edit restart causes. Optional `preview` (sets `ZIGOTE_PREVIEW`) and `hide_window`. |
 | `stop` | Kill an app `launch` started — one by pid, or all of them. |
 | `logs` | The last lines a launched app printed — build errors, log output, unhandled exceptions. Kept after the app exits, because a crash's output is read after the crash. |
-| `screenshot` | The current frame as a PNG, plus its size in layout points. Taken at the end of a frame, so a shot after `tap` shows the tap's effect. |
+| `screenshot` | The current frame as a PNG, plus its size in layout points. Taken at the end of a frame, so a shot after `tap` shows the tap's effect. `scale` shrinks it for token-frugal checks. |
 | `find` | Search without dumping a tree: `label`/`role` match the semantics tree, `type` the widget tree. Matches come back with bounds and a tappable center point. |
 | `tap_widget` | Find by semantic label and click the center — no coordinate math. Ambiguity is an error that lists the matches, resolvable with `role` or `index`. |
 | `wait_for` | Poll until a label appears (or, with `gone`, disappears) — async dialogs, loading pages, clearing toasts. |
@@ -49,6 +49,12 @@ The `-v q --nologo` matters: stdout is the MCP protocol stream, and those flags 
 Every mutating tool (`tap`, `tap_widget`, `drag`, `scroll`, `type_text`, `press_key`,
 `set_preview`, `resize`, `set_theme`, `set_locale`) takes `screenshot: true` to return the
 resulting frame in the same call — act and observe in one round trip.
+
+One protocol verb has no typed tool yet: `stats` returns the frame/CPU/memory sample DevTools
+keeps — `fps` (with min/max), `frame_ms`, `cpu_pct`, `mem_mb`, `gc_mb` and the paint-command
+counts — as one JSON object, via `raw_command { command: "stats" }`. Drive the app, then ask what
+it cost. The frame numbers only mean render pace under continuous rendering (`ZIGOTE_CONTINUOUS=1`);
+an idle retained UI presents no frames, which is the point.
 
 A typical agent session:
 
