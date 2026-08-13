@@ -233,8 +233,10 @@ public static class InspectServer
 
             case "window":
                 // Preview mode hides the app's own window: two windows showing the same thing, one of
-                // them laid out for a phone, is worse than none.
+                // them laid out for a phone, is worse than none. The Dock tile goes with it on macOS,
+                // where hiding a window leaves the app in the Dock and the ⌘-Tab switcher regardless.
                 app.Engine.MainWindowSetVisible(argument != "hide");
+                app.Engine.AppSetDockVisible(argument != "hide");
                 return "{\"ok\":true}";
 
             case "props":
@@ -344,14 +346,15 @@ public static class InspectServer
         var path = Path.Combine(Path.GetTempPath(), $"zigote-shot-{Environment.ProcessId}.bmp");
         try
         {
-            if (!app.CaptureUi(path, scale))
+            if (!app.CaptureUi(path, scale, out var density))
                 return Error("the engine could not capture a frame — nothing has been painted yet");
 
             // The layout size, not the window's: with a device preview set they differ, and the panel
-            // scales the picture by what it is told.
+            // scales the picture by what it is told. The picture itself is w×h × `scale` pixels, so a
+            // viewer needs the density that was actually used — not the one that was asked for.
             var json = new StringBuilder("{\"format\":\"bmp\",\"w\":").Append((uint)app.LayoutWidth);
             json.Append(",\"h\":").Append((uint)app.LayoutHeight);
-            json.Append(",\"scale\":").Append(Round(scale));
+            json.Append(",\"scale\":").Append(Round(density));
             json.Append(",\"data\":\"").Append(Convert.ToBase64String(File.ReadAllBytes(path)));
             return json.Append("\"}").ToString();
         }
@@ -470,7 +473,9 @@ public static class InspectServer
         var fps = parts.Length > 1 && int.TryParse(parts[1], out var f) ? Math.Clamp(f, 1, 60) : 30;
 
         // The handshake: a client of an older server gets {"error":…} here and knows to fall back.
-        writer.Write("{\"format\":\"bmp\",\"stream\":true}\n");
+        // It carries the density because a raw frame has no envelope to put it in, and a viewer that
+        // guesses 1× draws a 2× picture at twice the size.
+        writer.Write($"{{\"format\":\"bmp\",\"stream\":true,\"scale\":{Round(app.CaptureDensity(scale))}}}\n");
 
         stream.WriteTimeout = (int)Timeout.TotalMilliseconds; // a wedged client fails, not hangs
         var path = Path.Combine(Path.GetTempPath(), $"zigote-stream-{Environment.ProcessId}-{Environment.CurrentManagedThreadId}.bmp");

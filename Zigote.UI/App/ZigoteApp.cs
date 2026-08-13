@@ -305,7 +305,13 @@ public class ZigoteApp
         var headless = Environment.GetEnvironmentVariable("ZIGOTE_PREVIEW_HEADLESS") is "1" or "true";
         if ((_preview is not null || headless) &&
             Environment.GetEnvironmentVariable("ZIGOTE_PREVIEW_WINDOW") is not "show")
+        {
             uiApp.Engine.MainWindowSetVisible(false);
+            // …and off the Dock with it, on macOS: a hidden window still leaves a foreground app,
+            // so the preview showed up as a bouncing icon and a ⌘-Tab slot for a window that
+            // cannot be brought back.
+            uiApp.Engine.AppSetDockVisible(false);
+        }
 
         while (!uiApp.ShouldQuit)
         {

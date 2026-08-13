@@ -922,8 +922,23 @@ public partial class App : IDisposable
     ///         submit — what the window shows is what the BMP shows.
     ///     </para>
     /// </summary>
-    internal bool CaptureUi(string path, float scale = 1f)
+    internal bool CaptureUi(string path, float scale = 1f) => CaptureUi(path, scale, out _);
+
+    /// <inheritdoc cref="CaptureUi(string,float)" />
+    /// <param name="density">
+    ///     The scale the frame was actually captured at — <paramref name="scale" /> unless the pixel cap
+    ///     lowered it. A viewer divides the image's pixel size by this to get back to layout points, so
+    ///     it must be the effective value and not the requested one.
+    /// </param>
+    internal bool CaptureUi(string path, float scale, out float density)
     {
+        // The target is sized in PIXELS while the tree is laid out in POINTS, so a 2× capture needs a
+        // 2×-sized texture as well as a 2× paint transform. Passing the point size with scale > 1 does
+        // not capture at higher density — it renders the UI twice as large into a same-sized texture,
+        // which is a crop of the top-left corner. Capped so a big window at scale 4 cannot ask for a
+        // texture past what the backend will allocate (and a shot that large is not a preview).
+        density = CaptureDensity(scale);
+
         if (_paint.Count == 0) return false;
         if (_overlayPaint.Count == 0)
         {
@@ -936,13 +951,27 @@ public partial class App : IDisposable
             _capturePaint.AppendFrom(_overlayPaint);
             Engine.SubmitPaintCommands(_capturePaint);
         }
+
         return Engine.CaptureUiBmp(
             path,
-            (uint)MathF.Max(1f, LayoutWidth),
-            (uint)MathF.Max(1f, LayoutHeight),
-            scale
+            (uint)MathF.Max(1f, LayoutWidth * density),
+            (uint)MathF.Max(1f, LayoutHeight * density),
+            density
         );
     }
+
+    /// <summary>
+    ///     The density a capture at <paramref name="scale" /> will actually use — lower only when the
+    ///     pixel cap bites. Public to the host so a viewer can be told the density up front, before the
+    ///     first frame of a stream exists to measure.
+    /// </summary>
+    internal float CaptureDensity(float scale) => MathF.Max(
+        0.1f,
+        MathF.Min(scale, MaxCapturePixels / MathF.Max(1f, MathF.Max(LayoutWidth, LayoutHeight)))
+    );
+
+    /// <summary>Longest edge a capture may reach, in pixels — under every backend's texture limit.</summary>
+    private const float MaxCapturePixels = 8192f;
 
     private void DrainPosted()
     {

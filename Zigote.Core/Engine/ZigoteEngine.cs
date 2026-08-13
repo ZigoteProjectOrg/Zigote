@@ -375,6 +375,18 @@ public sealed unsafe class ZigoteEngine : IDisposable
         if (!_disposed) NativeEngine.MainWindowSetVisible(_handle, visible ? 1u : 0u);
     }
 
+    /// <summary>
+    ///     Whether the application appears in the Dock and the ⌘-Tab switcher (macOS; a no-op
+    ///     elsewhere). Application-wide, not per-window: hiding the main window leaves the process
+    ///     a foreground app, so an app with nothing on screen keeps a Dock tile that brings back
+    ///     nothing. Showing it again also brings the app forward, which is what restores its menu
+    ///     bar.
+    /// </summary>
+    public void AppSetDockVisible(bool visible)
+    {
+        if (!_disposed) NativeEngine.AppSetDockVisible(visible);
+    }
+
     // ── Window chrome (in-app titlebars) ──────────────────────────────────────
     // All take the SDL window id (the ZgEvent.WindowId / FileDialog parenting domain).
 
