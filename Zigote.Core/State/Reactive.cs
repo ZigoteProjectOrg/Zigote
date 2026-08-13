@@ -649,7 +649,7 @@ public static class Reactive
     private static int _deferredCount;
 
     /// <inheritdoc cref="_inReaction" />
-    internal static bool InReaction => InReaction;
+    internal static bool InReaction => _inReaction;
 
     /// <summary>
     ///     The reaction currently running (its reads become dependencies). Plain static, NOT
