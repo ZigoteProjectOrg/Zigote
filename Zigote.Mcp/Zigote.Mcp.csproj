@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      `Zigote.Mcp` — an MCP (Model Context Protocol) server over stdio, so LLM tools such as
+      Claude Code can run a Zigote app, see its widget tree and screenshots, and drive it with
+      synthetic input. It is the same four-word inspect protocol the Rider plugin speaks
+      (Zigote.UI.Host.InspectServer), re-exposed as typed MCP tools:
+
+        claude mcp add zigote - dotnet run -v q -nologo -project Zigote.Mcp
+
+      or register via the checked-in .mcp.json at the repo root.
+    -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <RootNamespace>Zigote.Mcp</RootNamespace>
+        <InvariantGlobalization>true</InvariantGlobalization>
+    </PropertyGroup>
+
+    <!--
+      No project references and no packages on purpose, mirroring Zigote.Cli: this process talks
+      to a running app over a loopback socket and to the MCP client over stdio. Referencing
+      Zigote.UI would drag the native build into what is a thin protocol bridge, and the MCP
+      JSON-RPC framing is small enough that System.Text.Json (BCL) covers all of it.
+    -->
+
+</Project>

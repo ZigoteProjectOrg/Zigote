@@ -309,6 +309,7 @@ tests.
 | [`docs/assets.md`](docs/assets.md) | Fonts, images and content bundling. |
 | [`docs/mobile-port.md`](docs/mobile-port.md) · [`docs/mobile-port-android.md`](docs/mobile-port-android.md) | iOS / Android bring-up status. |
 | [`tools/rider/README.md`](tools/rider/README.md) | The Rider plugin — colour swatches, widget preview, widget/semantics trees — and the editor-agnostic inspect protocol behind it. |
+| [`docs/mcp-server.md`](docs/mcp-server.md) | The MCP server — LLM agents launch, screenshot and drive a running app over the same inspect protocol. |
 | [`Zigote.Engine/docs/`](Zigote.Engine/docs/README.md) | The native Zig + wgpu backend: rendering, FFI, subsystems, building. |
 
 The XML doc comments are the reference manual, and most of them explain *why*, not just *what* —

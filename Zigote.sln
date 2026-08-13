@@ -103,6 +103,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zigote.Bloc.Benchmark", "Zi
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zigote.Cli", "Zigote.Cli\Zigote.Cli.csproj", "{2C61B844-CE6E-4967-A367-BAEE5DC6DE6F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zigote.Mcp", "Zigote.Mcp\Zigote.Mcp.csproj", "{0E1E82BC-8826-4F00-B6AD-E445D686D865}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -713,6 +715,18 @@ Global
 		{2C61B844-CE6E-4967-A367-BAEE5DC6DE6F}.Release|x64.Build.0 = Release|Any CPU
 		{2C61B844-CE6E-4967-A367-BAEE5DC6DE6F}.Release|x86.ActiveCfg = Release|Any CPU
 		{2C61B844-CE6E-4967-A367-BAEE5DC6DE6F}.Release|x86.Build.0 = Release|Any CPU
+		{0E1E82BC-8826-4F00-B6AD-E445D686D865}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0E1E82BC-8826-4F00-B6AD-E445D686D865}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0E1E82BC-8826-4F00-B6AD-E445D686D865}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{0E1E82BC-8826-4F00-B6AD-E445D686D865}.Debug|x64.Build.0 = Debug|Any CPU
+		{0E1E82BC-8826-4F00-B6AD-E445D686D865}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{0E1E82BC-8826-4F00-B6AD-E445D686D865}.Debug|x86.Build.0 = Debug|Any CPU
+		{0E1E82BC-8826-4F00-B6AD-E445D686D865}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0E1E82BC-8826-4F00-B6AD-E445D686D865}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0E1E82BC-8826-4F00-B6AD-E445D686D865}.Release|x64.ActiveCfg = Release|Any CPU
+		{0E1E82BC-8826-4F00-B6AD-E445D686D865}.Release|x64.Build.0 = Release|Any CPU
+		{0E1E82BC-8826-4F00-B6AD-E445D686D865}.Release|x86.ActiveCfg = Release|Any CPU
+		{0E1E82BC-8826-4F00-B6AD-E445D686D865}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
