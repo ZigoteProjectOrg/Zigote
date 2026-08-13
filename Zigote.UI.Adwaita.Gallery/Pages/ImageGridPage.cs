@@ -47,6 +47,11 @@ public sealed class ImageGridPage : ComposedWidget
     private int _cached;
     private int _page;
 
+    // Read in Build (registering the page as a theme dependent, so a theme flip rebuilds it and
+    // the Watches below), then used by the Footer/Status builders — which run under a Watch,
+    // where BuildContext.Current is not a reliable place to look the provider up.
+    private ThemeData _theme = ThemeData.Dark;
+
     public ImageGridPage()
     {
         _grid = GridView.Builder(
@@ -68,6 +73,8 @@ public sealed class ImageGridPage : ComposedWidget
 
     protected override Widget Build(BuildContext context)
     {
+        _theme = ThemeProvider.Of(context);
+
         // The status readout is not furniture below the grid any more — it is a glass toolbar
         // floating over it, with the fetch pill stacking above. The pictures scroll straight
         // under both and refract through the lens, which is the Liquid Glass arrangement:
@@ -185,6 +192,9 @@ public sealed class ImageGridPage : ComposedWidget
 
     private Widget Footer()
     {
+        // Content on glass follows the pane's family, not the page palette — white on the dark
+        // theme's dark glass, ink on the light theme's milky glass.
+        var theme = _theme;
         if (_error.Value is { } message)
         {
             // An interactive pane: the Pressable drives the gel response, so the glass thickens
@@ -197,7 +207,7 @@ public sealed class ImageGridPage : ComposedWidget
                     child: new Label(
                         text: $"{message} — Try Again",
                         style: AdwTypography.Caption,
-                        color: Color.White
+                        color: LiquidPane.OnGlass(theme)
                     ) {
                         MaxLines = 1,
                         Overflow = TextOverflow.Ellipsis,
@@ -234,7 +244,7 @@ public sealed class ImageGridPage : ComposedWidget
                             new Label(
                                 text: "Fetching more",
                                 style: AdwTypography.Caption,
-                                color: Color.White
+                                color: LiquidPane.OnGlass(theme)
                             ),
                         },
                     }
@@ -254,12 +264,15 @@ public sealed class ImageGridPage : ComposedWidget
                 ? $"End of the feed — {_cached} of {count} came straight off the disk"
                 : $"Click a picture to zoom it · {_cached} of {count} came straight off the disk";
 
-        // White on the pane's own scrim in both app themes: what is behind this toolbar is
-        // whatever the feed served, not the page background.
+        // Content colour follows the pane's glass family (see LiquidPane.OnGlass): what is behind
+        // this toolbar is whatever the feed served, and the pane's adaptive scrim keeps that
+        // family legible over it.
+        var theme = _theme;
         return new LiquidPane {
-            Elevation = 7f,
+            Elevation = 0f,
+            Adapt = 1f,
             Child = new Padding(
-                padding: EdgeInsets.Symmetric(horizontal: Spacing.Lg, vertical: Spacing.Sm),
+                padding: EdgeInsets.Symmetric(horizontal: Spacing.Lg, vertical: Spacing.Xl),
                 child: new Row(
                     spacing: Spacing.Sm,
                     mainAxisSize: MainAxisSize.Min,
@@ -269,12 +282,12 @@ public sealed class ImageGridPage : ComposedWidget
                         new Label(
                             text: $"{count} pictures",
                             style: AdwTypography.Monospace,
-                            color: Color.White
+                            color: LiquidPane.OnGlassMuted(theme)
                         ),
                         new Label(
                             text: caption,
                             style: AdwTypography.Caption,
-                            color: Color.White.WithAlpha(0.72f)
+                            color: LiquidPane.OnGlassMuted(theme)
                         ) {
                             MaxLines = 1,
                             Overflow = TextOverflow.Ellipsis,

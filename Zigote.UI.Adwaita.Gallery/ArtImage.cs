@@ -180,17 +180,19 @@ internal sealed class ArtCredit(string artist) : ComposedWidget
 {
     protected override Widget Build(BuildContext context)
     {
-        // Liquid Glass rather than the theme, for the reason the old flat chip carried its own
-        // black: it has to read on a bright sky and on a black coat, and it does not know which it
-        // landed on. The over-media pane's scrim answers exactly that — and the lens refracts the
-        // artwork through itself, so the chip belongs to the picture instead of covering it.
+        // Liquid Glass rather than a flat chip, because this rides on a picture it cannot see: the
+        // pane's adaptive scrim answers the bright-sky/black-coat problem per pixel, the theme
+        // picks the glass family (dark glass + white here, light glass + ink there), and the lens
+        // refracts the artwork through itself, so the chip belongs to the picture instead of
+        // covering it.
+        var theme = ThemeProvider.Of(context);
         return new LiquidPane {
             Child = new Padding(
                 padding: EdgeInsets.Symmetric(horizontal: Spacing.Sm, vertical: Spacing.Xxs),
                 child: new Label(
                     text: $"Art by {artist}",
                     style: AdwTypography.Caption,
-                    color: Color.White
+                    color: LiquidPane.OnGlass(theme)
                 ) {
                     MaxLines = 1,
                     Overflow = TextOverflow.Ellipsis,

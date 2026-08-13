@@ -518,9 +518,16 @@ public sealed unsafe class PaintList
         Push(cmd: cmd, text: null, pixels: bytes);
     }
 
+    /// <param name="adapt">
+    ///     Adaptive-luminance strength in [-1, 1]: negative anchors the backdrop dark (glass that
+    ///     carries light content), positive anchors it light (dark content), 0 leaves the backdrop
+    ///     alone. The shader compresses whatever is behind the glass toward that anchor per pixel,
+    ///     which is what keeps content legible over media the widget cannot see.
+    /// </param>
     public void AddLiquidGlass(Rect bounds, Color color, float radius, float thickness, float glowX,
         float glowY,
-        float pinch)
+        float pinch,
+        float adapt = 0f)
     {
         CheckBounds(bounds);
         CheckColor(color);
@@ -535,6 +542,10 @@ public sealed unsafe class PaintList
         cmd.BaselineX = glowX; // directional — NOT offset-shifted
         cmd.BaselineY = glowY;
         cmd.FontSize = pinch;
+        // Glass carries no text metrics, so LineHeight is free to be the adaptive-luminance knob.
+        // Scaled by the ambient opacity for the same reason as thickness: the backdrop tone shift
+        // must fade with the pane, or glass inside a fade pops in already scrimmed.
+        cmd.LineHeight = Math.Clamp(value: adapt, min: -1f, max: 1f) * _currentAlpha;
         Push(cmd: cmd, text: null, pixels: null);
     }
 

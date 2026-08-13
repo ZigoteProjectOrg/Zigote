@@ -30,6 +30,12 @@ public class LiquidGlass : Widget
     public float Thickness { get; set; } = 8f;
     public float Pinch { get; set; } = 0f;
 
+    /// <summary>
+    ///     Adaptive-luminance strength in [-1, 1]: negative anchors the backdrop dark (glass that
+    ///     carries light content), positive anchors it light (dark content), 0 = off.
+    /// </summary>
+    public float Adapt { get; set; } = 0f;
+
     // Local coordinates for responsive cursor/touch glow
     public float GlowX { get; set; } = 0f;
     public float GlowY { get; set; } = 0f;
@@ -82,7 +88,8 @@ public class LiquidGlass : Widget
             thickness: _resolvedThickness,
             glowX: GlowX,
             glowY: GlowY,
-            pinch: _resolvedPinch
+            pinch: _resolvedPinch,
+            adapt: Adapt
         );
 
         Child?.Paint(paint);

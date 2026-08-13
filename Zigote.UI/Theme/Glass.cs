@@ -14,13 +14,36 @@ namespace Zigote.UI.Theme;
 /// </summary>
 public static class Glass
 {
+    /// <summary>Adaptive-luminance strength for system controls — gentle, so glass sitting on the
+    ///     theme's own surfaces barely moves while glass floating over media still gets rescued.</summary>
+    private const float AdaptStrength = 0.6f;
+
+    /// <summary>
+    ///     The adaptive anchor for a glass surface (see <see cref="PaintList.AddLiquidGlass" />).
+    ///     Direction follows the content the glass carries: a strongly tinted pane keeps content
+    ///     chosen against its tint (a deep accent means light content → anchor dark), while barely
+    ///     tinted glass carries <see cref="ThemeData.OnSurface" /> content, so the theme decides.
+    /// </summary>
+    private static float AutoAdapt(ThemeData theme, Color tint, float tintStrength)
+    {
+        bool darkGlass = tintStrength >= 0.3f
+            ? tint.R * 0.299f + tint.G * 0.587f + tint.B * 0.114f < 0.5f
+            : theme.IsDark;
+        return darkGlass ? -AdaptStrength : AdaptStrength;
+    }
+
     /// <summary>Paint a Liquid Glass surface filling <paramref name="bounds" />.</summary>
     /// <param name="tintStrength">0 = clear glass, 1 = fully colour-tinted by <paramref name="tint" />.</param>
     /// <param name="elevation">Soft float shadow size; 0 disables it (for inline / nested glass).</param>
+    /// <param name="adapt">
+    ///     Adaptive-luminance override in [-1, 1] (negative = anchor the backdrop dark, positive =
+    ///     light, 0 = off); null derives it from the tint and theme.
+    /// </param>
     public static void Surface(
         PaintList paint, Rect bounds, ThemeData theme,
         float radius, Color tint, float tintStrength,
-        bool hovered = false, bool pressed = false, float elevation = 6f)
+        bool hovered = false, bool pressed = false, float elevation = 6f,
+        float? adapt = null)
     {
         // Floating drop shadow — glass planes hover above whatever is behind them.
         if (elevation > 0f)
@@ -56,7 +79,8 @@ public static class Glass
             thickness: thickness,
             glowX: theme.GlassGlowX,
             glowY: theme.GlassGlowY,
-            pinch: pinch
+            pinch: pinch,
+            adapt: adapt ?? AutoAdapt(theme: theme, tint: tint, tintStrength: tintStrength)
         );
 
         // Rim: a hairline that reads as the glass edge catching light, brighter when interactive.
@@ -147,7 +171,8 @@ public static class Glass
             thickness: thickness,
             glowX: theme.GlassGlowX,
             glowY: theme.GlassGlowY,
-            pinch: pinch
+            pinch: pinch,
+            adapt: AutoAdapt(theme: theme, tint: theme.GlassTint, tintStrength: strength)
         );
         paint.AddBorder(
             bounds: bounds,
