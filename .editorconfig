@@ -1,10 +1,38 @@
+# The style this repo is written in — one file, three readers.
+#
+#   • Rider / ReSharper and `jb cleanupcode` read everything here, including the `resharper_*` keys.
+#     Those are what shape a widget tree into tall Flutter-style form; nothing else can.
+#   • The IDE and `dotnet format` read the `dotnet_*` / `csharp_*` keys, which are Roslyn's own.
+#   • The compiler reads none of it. IDE#### rules only break a build under
+#     <EnforceCodeStyleInBuild>, which no project sets, so the severities below are advice in the
+#     editor and in `dotnet format`, not a gate. Promoting them to a gate is one property in
+#     Directory.Build.props, on purpose, on a day someone means it.
+#
+# The linting half is ported from Dart's `lint: ^2.8.0` (its strict profile — the one for apps
+# rather than published packages), family by family. Three quarters of that list needs no port: C#
+# has no `dynamic` in this codebase, switch exhaustiveness and return-type declarations are compiler
+# errors, and the Flutter-specific rules have no meaning here. What is deliberately *not* ported is
+# written down where it would have gone, so the next reader does not re-derive it.
+
 root = true
 
+# ── Every file ────────────────────────────────────────────────────────────────
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# ── C# ────────────────────────────────────────────────────────────────────────
 [*.cs]
 max_line_length = 100
 resharper_csharp_max_line_length = 100
 
-# Invocations
+# Invocations: expand outermost-first, one dangling `)` per level. ReSharper's defaults are
+# fill-style (wrap the innermost call, keep what is already there), which is what turns a widget
+# tree into a staircase — `keep_existing = false` is what lets these settings win at all.
 resharper_csharp_keep_existing_invocation_parens_arrangement = false
 resharper_csharp_wrap_arguments_style = chop_if_long
 resharper_csharp_max_invocation_arguments_on_line = 3
@@ -12,17 +40,311 @@ resharper_csharp_wrap_after_invocation_lpar = true
 resharper_csharp_wrap_before_invocation_rpar = true
 resharper_csharp_align_multiline_argument = false
 
-# Object/collection initializers
+# Object / collection initializers — `Children = { … }` is a widget tree's other half.
 resharper_csharp_keep_existing_initializer_arrangement = false
 resharper_csharp_wrap_object_and_collection_initializer_style = chop_if_long
 resharper_csharp_max_initializer_elements_on_line = 1
 resharper_csharp_place_simple_initializer_on_single_line = true
 resharper_csharp_initializer_braces = end_of_line
 
-# Array initializers / collection expressions
+# Array initializers and collection expressions.
 resharper_csharp_wrap_array_initializer_style = chop_if_long
 resharper_csharp_max_array_initializer_elements_on_line = 1
 
-# Trailing commas
+# Trailing commas enforce in BOTH directions: `singleline = false` actively removes them from a
+# one-line list, which is why it is set rather than left out.
 resharper_trailing_comma_in_multiline_lists = true
 resharper_trailing_comma_in_singleline_lists = false
+
+# Named arguments — `home:`, `title:`, `child:` — are the house style for constructing widgets, and
+# ReSharper's argument style is the only thing that decides their fate. Measured, both directions:
+#
+#   named      → adds names everywhere, MathF.Max(x: 0.1f, y: …) and Math.Clamp(value: f, min: 1)
+#                included. There is no way to scope it to constructors.
+#   positional → strips hand-written names, and setting the matching inspections to `none` does
+#                NOT stop it: code cleanup follows the style setting, never the severity.
+#
+# There is no "keep as written" value, so the setting is the wrong lever and the profile is the
+# right one: keep the **Arguments** item out of whatever cleanup runs on save (Rider's built-in
+# "Reformat Code" has none of these items — "Reformat & Apply Syntax Style" has all of them, and it
+# is what silently un-named a constructor call in this repo). `named` is recorded here so that the
+# direction is unambiguous when a cleanup *is* run deliberately, and so Alt+Enter offers the name
+# rather than offering to take it away. The inspections are off because a hint on every positional
+# call in a math-heavy engine is noise, not lint.
+resharper_csharp_arguments_literal = named
+resharper_csharp_arguments_string_literal = named
+resharper_csharp_arguments_named = named
+resharper_csharp_arguments_anonymous_function = named
+resharper_csharp_arguments_other = named
+resharper_csharp_arguments_skip_single = true
+resharper_arguments_style_literal_highlighting = none
+resharper_arguments_style_string_literal_highlighting = none
+resharper_arguments_style_named_expression_highlighting = none
+resharper_arguments_style_anonymous_function_highlighting = none
+resharper_arguments_style_other_highlighting = none
+
+# Braces: `lint` wants them always (curly_braces_in_flow_control_structures). Not ported as-is —
+# this codebase guards with brace-less one-liners on purpose (`if (!_disposed) Native…();`, 56 of
+# them in App.cs alone) and they read better than three lines would. Required the moment the body
+# wraps, which is the case that actually bites.
+resharper_csharp_braces_for_ifelse = required_for_multiline
+resharper_csharp_braces_for_for = required_for_multiline
+resharper_csharp_braces_for_foreach = required_for_multiline
+resharper_csharp_braces_for_while = required_for_multiline
+resharper_csharp_braces_for_using = required_for_multiline
+resharper_csharp_braces_for_lock = required_for_multiline
+csharp_prefer_braces = when_multiline:suggestion
+
+# Bodies: ReSharper only offers "always expression" or "always block" — no third value — and either
+# would rewrite a thousand members, so both keys stay out and Roslyn's `when_on_single_line`
+# describes the actual habit instead. Empty bodies stay on one line: `{ }`.
+resharper_csharp_empty_block_style = together_same_line
+csharp_style_expression_bodied_methods = when_on_single_line:suggestion
+csharp_style_expression_bodied_constructors = when_on_single_line:silent
+csharp_style_expression_bodied_operators = when_on_single_line:suggestion
+csharp_style_expression_bodied_properties = when_on_single_line:suggestion
+csharp_style_expression_bodied_indexers = when_on_single_line:suggestion
+csharp_style_expression_bodied_accessors = when_on_single_line:suggestion
+csharp_style_expression_bodied_lambdas = when_on_single_line:suggestion
+csharp_style_expression_bodied_local_functions = when_on_single_line:suggestion
+
+# Layout Roslyn also has an opinion about, so `dotnet format` and Rider agree.
+csharp_new_line_before_open_brace = all
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+csharp_indent_case_contents = true
+csharp_indent_switch_labels = true
+csharp_indent_labels = one_less_than_current
+csharp_space_after_cast = false
+csharp_space_after_keywords_in_control_flow_statements = true
+csharp_space_between_method_declaration_parameter_list_parentheses = false
+csharp_space_between_method_call_parameter_list_parentheses = false
+csharp_preserve_single_line_blocks = true
+csharp_preserve_single_line_statements = true
+csharp_style_allow_embedded_statements_on_same_line_experimental = true:silent
+
+# ── Usings ────────────────────────────────────────────────────────────────────
+# `lint`: directives_ordering, implementation_imports, unnecessary_library_directive.
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = false
+csharp_using_directive_placement = outside_namespace:warning
+# Measured: 28 of these in Zigote.UI. Fix them in the file you are already in — never in a sweep.
+# "Unnecessary" is judged against *this* compilation, and a using that only a platform `#if` branch
+# needs looks unnecessary from the branch that is compiling.
+dotnet_diagnostic.IDE0005.severity = warning
+
+# ── Language style ────────────────────────────────────────────────────────────
+# The `prefer_*` / `unnecessary_*` half of `lint`, in C#. `suggestion` is the severity that matches
+# how Dart surfaces its lints (info in the editor, listed by `dart analyze`, never a build break);
+# `warning` is reserved for the few that are about correctness or that the whole repo already obeys,
+# and `silent` records a preference without nagging.
+
+# unnecessary_this — this codebase has zero `this.` qualifications; keep it that way.
+dotnet_style_qualification_for_field = false:warning
+dotnet_style_qualification_for_property = false:warning
+dotnet_style_qualification_for_method = false:warning
+dotnet_style_qualification_for_event = false:warning
+
+# Language keywords over BCL names (`int`, not `Int32`).
+dotnet_style_predefined_type_for_locals_parameters_members = true:warning
+dotnet_style_predefined_type_for_member_access = true:warning
+
+# `var` where the type is already on the line, spelled out where it is the documentation —
+# the closest C# has to Dart's omit_local_variable_types + prefer_final_locals pairing.
+csharp_style_var_for_built_in_types = false:silent
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = true:silent
+
+# File-scoped namespaces: all 246 files in Zigote.UI and Zigote.Core already are.
+csharp_style_namespace_declarations = file_scoped:warning
+
+# prefer_final_fields / avoid_field_initializers_in_const_classes.
+dotnet_style_readonly_field = true:suggestion
+dotnet_style_require_accessibility_modifiers = for_non_interface_members:warning
+
+# prefer_null_aware_operators, prefer_if_null_operators, unnecessary_null_checks.
+dotnet_style_coalesce_expression = true:suggestion
+dotnet_style_null_propagation = true:suggestion
+dotnet_style_prefer_is_null_check_over_reference_equality_method = true:suggestion
+csharp_style_conditional_delegate_call = true:suggestion
+csharp_style_prefer_null_check_over_type_check = true:suggestion
+csharp_style_throw_expression = true:suggestion
+
+# prefer_collection_literals, prefer_inlined_adds, prefer_spread_collections.
+dotnet_style_object_initializer = true:suggestion
+dotnet_style_collection_initializer = true:suggestion
+dotnet_style_prefer_collection_expression = when_types_loosely_match:suggestion
+
+# exhaustive_cases, prefer_if_elements_to_conditional_expressions, use_enums — pattern matching is
+# where C# puts all of these.
+csharp_style_prefer_pattern_matching = true:suggestion
+csharp_style_pattern_matching_over_is_with_cast_check = true:suggestion
+csharp_style_pattern_matching_over_as_with_null_check = true:suggestion
+csharp_style_prefer_switch_expression = true:suggestion
+csharp_style_prefer_not_pattern = true:suggestion
+csharp_style_prefer_extended_property_pattern = true:suggestion
+
+# unnecessary_brace_in_string_interps, avoid_bool_literals_in_conditional_expressions,
+# noop_primitive_operations, unnecessary_parenthesis, unnecessary_const, unnecessary_new.
+dotnet_style_prefer_simplified_interpolation = true:suggestion
+dotnet_style_prefer_simplified_boolean_expressions = true:suggestion
+dotnet_style_prefer_compound_assignment = true:suggestion
+dotnet_style_explicit_tuple_names = true:warning
+dotnet_style_prefer_inferred_tuple_names = true:suggestion
+dotnet_style_prefer_inferred_anonymous_type_member_names = true:suggestion
+dotnet_style_prefer_auto_properties = true:suggestion
+dotnet_style_parentheses_in_arithmetic_binary_operators = always_for_clarity:silent
+dotnet_style_parentheses_in_relational_binary_operators = always_for_clarity:silent
+dotnet_style_parentheses_in_other_binary_operators = always_for_clarity:silent
+dotnet_style_parentheses_in_other_operators = never_if_unnecessary:suggestion
+csharp_prefer_simple_default_expression = true:suggestion
+csharp_prefer_simple_using_statement = true:suggestion
+csharp_style_deconstructed_variable_declaration = true:suggestion
+csharp_style_inlined_variable_declaration = true:suggestion
+csharp_style_prefer_index_operator = true:suggestion
+csharp_style_prefer_range_operator = true:suggestion
+csharp_style_prefer_tuple_swap = true:suggestion
+csharp_style_prefer_local_over_anonymous_function = true:suggestion
+csharp_style_prefer_utf8_string_literals = true:suggestion
+csharp_style_prefer_readonly_struct = true:suggestion
+csharp_style_prefer_readonly_struct_member = true:suggestion
+
+# use_super_parameters / prefer_initializing_formals: a primary constructor is that, in C#.
+csharp_style_prefer_primary_constructors = true:suggestion
+
+# `new()` where the type is already stated, the type spelled out where it is not — which is why a
+# widget-tree argument keeps `new SizedBox(…)` while a field initializer becomes `= new()`.
+resharper_csharp_object_creation_when_type_evident = target_typed
+resharper_csharp_object_creation_when_type_not_evident = explicitly_typed
+csharp_style_implicit_object_creation_when_type_is_apparent = true:suggestion
+
+# A `Main` in a class, not a top-level statement — every entry point here is a class.
+csharp_style_prefer_top_level_statements = false:silent
+
+# ── Dead code and leftovers ───────────────────────────────────────────────────
+# unreachable_from_main, unnecessary_statements, avoid_unused_constructor_parameters,
+# no_self_assignments, unnecessary_overrides.
+dotnet_diagnostic.IDE0035.severity = warning
+dotnet_diagnostic.IDE0051.severity = warning
+dotnet_diagnostic.IDE0079.severity = warning
+# A field written and never read is usually dead, but sometimes it is a handle held to keep a
+# subscription alive — five in Zigote.UI are of that kind, so this asks rather than tells.
+dotnet_diagnostic.IDE0052.severity = suggestion
+dotnet_diagnostic.IDE0059.severity = suggestion
+dotnet_diagnostic.IDE0060.severity = suggestion
+dotnet_code_quality_unused_parameters = non_public:suggestion
+csharp_style_unused_value_assignment_preference = discard_variable:suggestion
+csharp_style_unused_value_expression_statement_preference = discard_variable:silent
+
+# empty_catches, throw_in_finally, control_flow_in_finally, hash_and_equals — the correctness
+# handful, kept at `suggestion` so they surface in the editor without turning on analyzers that no
+# build currently runs. Promote these (and add <AnalysisMode>) the day the repo wants a gate.
+dotnet_diagnostic.CA1067.severity = suggestion
+dotnet_diagnostic.CA2200.severity = suggestion
+dotnet_diagnostic.CA2219.severity = suggestion
+dotnet_diagnostic.CA1827.severity = suggestion
+dotnet_diagnostic.CA1860.severity = suggestion
+resharper_empty_general_catch_clause_highlighting = warning
+
+# Not ported, for the record: avoid_print (needs BannedApiAnalyzers — `Console.WriteLine` is a
+# banned-symbols list, not a style key), always_use_package_imports / avoid_relative_lib_imports
+# (C# has no import paths), and the Flutter rules (sort_child_properties_last, use_colored_box,
+# sized_box_for_whitespace) whose Zigote equivalent is the tall-style block at the top of this file.
+
+# ── Naming ────────────────────────────────────────────────────────────────────
+# camel_case_types, constant_identifier_names, non_constant_identifier_names,
+# no_leading_underscores_for_local_identifiers.
+dotnet_naming_style.pascal_case.capitalization = pascal_case
+dotnet_naming_style.camel_case.capitalization = camel_case
+dotnet_naming_style.underscore_camel_case.capitalization = camel_case
+dotnet_naming_style.underscore_camel_case.required_prefix = _
+dotnet_naming_style.interface_prefix.capitalization = pascal_case
+dotnet_naming_style.interface_prefix.required_prefix = I
+dotnet_naming_style.type_parameter_prefix.capitalization = pascal_case
+dotnet_naming_style.type_parameter_prefix.required_prefix = T
+
+dotnet_naming_symbols.types_and_members.applicable_kinds = namespace, class, struct, enum, delegate, event, method, property, local_function
+dotnet_naming_symbols.types_and_members.applicable_accessibilities = *
+dotnet_naming_rule.types_and_members_are_pascal_case.symbols = types_and_members
+dotnet_naming_rule.types_and_members_are_pascal_case.style = pascal_case
+dotnet_naming_rule.types_and_members_are_pascal_case.severity = suggestion
+
+dotnet_naming_symbols.interfaces.applicable_kinds = interface
+dotnet_naming_rule.interfaces_start_with_i.symbols = interfaces
+dotnet_naming_rule.interfaces_start_with_i.style = interface_prefix
+dotnet_naming_rule.interfaces_start_with_i.severity = warning
+
+dotnet_naming_symbols.type_parameters.applicable_kinds = type_parameter
+dotnet_naming_rule.type_parameters_start_with_t.symbols = type_parameters
+dotnet_naming_rule.type_parameters_start_with_t.style = type_parameter_prefix
+dotnet_naming_rule.type_parameters_start_with_t.severity = warning
+
+dotnet_naming_symbols.constants.applicable_kinds = field
+dotnet_naming_symbols.constants.required_modifiers = const
+dotnet_naming_rule.constants_are_pascal_case.symbols = constants
+dotnet_naming_rule.constants_are_pascal_case.style = pascal_case
+dotnet_naming_rule.constants_are_pascal_case.severity = suggestion
+
+dotnet_naming_symbols.public_fields.applicable_kinds = field
+dotnet_naming_symbols.public_fields.applicable_accessibilities = public, protected, protected_internal
+dotnet_naming_rule.public_fields_are_pascal_case.symbols = public_fields
+dotnet_naming_rule.public_fields_are_pascal_case.style = pascal_case
+dotnet_naming_rule.public_fields_are_pascal_case.severity = suggestion
+
+# A cached static is a name in its own right (`Ordered`, `Gate`), an instance field is state (`_head`).
+dotnet_naming_symbols.static_readonly_fields.applicable_kinds = field
+dotnet_naming_symbols.static_readonly_fields.applicable_accessibilities = private, internal
+dotnet_naming_symbols.static_readonly_fields.required_modifiers = static, readonly
+dotnet_naming_rule.static_readonly_fields_are_pascal_case.symbols = static_readonly_fields
+dotnet_naming_rule.static_readonly_fields_are_pascal_case.style = pascal_case
+dotnet_naming_rule.static_readonly_fields_are_pascal_case.severity = silent
+
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private, internal
+dotnet_naming_rule.private_fields_are_underscore_camel_case.symbols = private_fields
+dotnet_naming_rule.private_fields_are_underscore_camel_case.style = underscore_camel_case
+dotnet_naming_rule.private_fields_are_underscore_camel_case.severity = suggestion
+
+dotnet_naming_symbols.locals_and_parameters.applicable_kinds = parameter, local
+dotnet_naming_rule.locals_and_parameters_are_camel_case.symbols = locals_and_parameters
+dotnet_naming_rule.locals_and_parameters_are_camel_case.style = camel_case
+dotnet_naming_rule.locals_and_parameters_are_camel_case.severity = suggestion
+
+# ── F# ────────────────────────────────────────────────────────────────────────
+[*.{fs,fsi,fsx}]
+max_line_length = 100
+fsharp_max_value_binding_width = 100
+fsharp_multiline_bracket_style = aligned
+
+# ── Project and data files ────────────────────────────────────────────────────
+[*.{csproj,fsproj,props,targets,sln,slnx,nuspec}]
+indent_size = 4
+
+[*.{json,yml,yaml,toml}]
+indent_size = 2
+
+[*.md]
+# Two trailing spaces is a hard line break — a formatter must not "fix" those.
+trim_trailing_whitespace = false
+
+# ── Sources other toolchains own ──────────────────────────────────────────────
+# `zig fmt`, ktlint and clang-format are the authorities here; these keys only stop an editor from
+# fighting them before the real formatter runs.
+[*.{zig,wgsl}]
+indent_size = 4
+
+[*.{kt,kts,gradle}]
+indent_size = 4
+
+[*.{c,h,m,mm}]
+indent_size = 4
+
+[*.{sh,bash}]
+indent_size = 2
+
+# ── Generated ─────────────────────────────────────────────────────────────────
+# Bindings come out of root.zig and ARB files come out of the generator; linting them reports on a
+# generator, in a file nobody edits.
+[{**/obj/**,**/bin/**,*.g.cs,*.generated.cs,*.Designer.cs}]
+generated_code = true
