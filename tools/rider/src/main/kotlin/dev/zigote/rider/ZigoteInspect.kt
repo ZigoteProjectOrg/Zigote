@@ -47,12 +47,22 @@ object ZigoteInspect {
      * Blocks until the socket dies — run it on its own thread. [register] receives the open socket so
      * the owner can close it to stop the stream. Returns false immediately when the server predates
      * the command (it answers `{"error":…}`), so the caller can fall back to polling `shot`.
+     *
+     * [scale] is the capture density asked for; the header answers with the one granted, which
+     * [onFrame] is handed alongside every frame — a raw BMP carries no envelope to put it in, and a
+     * reader that assumes 1× draws a 2× picture at twice its size. A server too old to report one
+     * captured at 1×, which is the fallback.
      */
-    fun stream(port: Int, register: (Socket) -> Unit, onFrame: (ByteArray) -> Unit): Boolean {
+    fun stream(
+        port: Int,
+        scale: Double,
+        register: (Socket) -> Unit,
+        onFrame: (ByteArray, Double) -> Unit,
+    ): Boolean {
         Socket(InetAddress.getLoopbackAddress(), port).use { socket ->
             register(socket)
             socket.getOutputStream().apply {
-                write("stream\n".toByteArray())
+                write("stream ${fmt(scale)}\n".toByteArray())
                 flush()
             }
 
@@ -65,6 +75,9 @@ object ZigoteInspect {
                 header.append(c.toChar())
             }
             if (header.contains("\"error\"")) return false
+            val granted = runCatching {
+                ((Json.parse(header.toString()) as? Map<*, *>)?.get("scale") as? Double) ?: 1.0
+            }.getOrDefault(1.0).takeIf { it > 0 } ?: 1.0
 
             val length = ByteArray(4)
             while (true) {
@@ -77,10 +90,13 @@ object ZigoteInspect {
                 if (size <= 0 || size > 256 shl 20) return true
                 val frame = ByteArray(size)
                 readFully(input, frame)
-                onFrame(frame)
+                onFrame(frame, granted)
             }
         }
     }
+
+    /** Locale-independent: `stream 2` must not go out as `stream 2,0` on a comma-decimal machine. */
+    internal fun fmt(v: Double): String = String.format(java.util.Locale.ROOT, "%.2f", v)
 
     private fun readFully(input: java.io.InputStream, into: ByteArray) {
         var at = 0

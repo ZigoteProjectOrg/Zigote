@@ -57,9 +57,35 @@ Three tabs, all views of one running app.
 
 | Tab | What it shows |
 | --- | --- |
-| **Preview** | The app's frame, drawn in the tab — and **live**: click, drag, scroll and type on the picture and it happens in the app (click the picture first so it has keyboard focus). Pick a project, a widget, a device (and **Landscape** to rotate it), a theme, a locale; `Zoom` is Fit / 100% / 200%. **Live** streams frames at animation rate as they change; off, the picture refreshes after each click instead. The **Locale** combo appears only when the app has a `LocalizationsScope`. |
+| **Preview** | The app's frame, drawn in the tab — and **live**: click, drag, scroll and type on the picture and it happens in the app (click the picture first so it has keyboard focus). Pick a project, a widget, a device (and **Landscape** to rotate it), a theme, a locale; `Zoom` is Fit / 100% / 200%. **Live** streams frames at animation rate as they change; off, the picture refreshes after each click instead. The **Locale** combo appears only when the app has a `LocalizationsScope`, and a narrow panel collapses the toolbar to its essentials (see **Compact toolbar**). |
 | **Widgets** | The live widget tree. Select a node to outline it on the frame and read its properties; the filter keeps a 300-node tree navigable. |
 | **Semantics** | The accessibility tree the app would hand a screen reader — role, label, actions, size. |
+
+### Compact toolbar
+
+The full toolbar needs ~1600 points to fit on one row, so in a tool window docked to the right edge it
+wraps into five — 127 px taken from the picture in a 420-point panel. Compact keeps what a preview is
+*used* through (**Run app**, **Stop**, **Refresh**, **Live**, the widget and the device) and gets that
+down to two rows: captions become tooltips, the verbs become icons, and the widget name drops its
+namespace (`ImageGridPage`, with the whole name still on hover). Wider than that it is a single row.
+
+It follows the panel's width on its own below 700 points; the chevron at the start of the toolbar
+overrides it in either direction, and from then on the width stops deciding — a mode that undoes what
+you just clicked is worse than no mode. Nothing moves into a menu: expanding puts every control back
+where it was.
+
+### Density
+
+The frame is captured at the density it is about to be drawn at — on a Retina MacBook that is two
+pixels per point, so the picture lands on the screen 1:1 instead of being a half-resolution image the
+compositor enlarges. That is the difference between preview text that looks soft next to the same app
+in its own window and text that looks identical to it.
+
+It is *what is drawn*, not what the display could do, so the bill matches the picture: shrunk to half
+size under **Fit** — a docked panel showing a desktop-sized app — it costs exactly what 1× cost. Full
+size at 100% on a Retina panel is four times the pixels, and a capture is roughly linear in them
+(~24 ms at 1×, ~88 ms at 2× for a 1240×820 app here), which **Live** spends as frame rate. Shrink the
+panel, pick a phone device, or turn Live off for the still that costs nothing to be sharp.
 
 ### Devices
 
@@ -73,7 +99,9 @@ wrong is the one mistake a device preview exists to catch.
 - Phones, tablets and desktop sizes for checking a specific one.
 
 In preview mode the app's own window is **hidden** — two windows showing the same thing, one of them
-laid out for a phone, is worse than none. `ZIGOTE_PREVIEW_WINDOW=show` keeps it visible.
+laid out for a phone, is worse than none. On macOS it leaves the Dock and the ⌘-Tab switcher too:
+hiding a window there still leaves a foreground app, so the preview used to sit in the Dock as an
+icon that brought back nothing. `ZIGOTE_PREVIEW_WINDOW=show` keeps both.
 
 ### Hot reload
 
@@ -81,7 +109,8 @@ Off by default, and that is a Linux problem rather than a preference: `dotnet wa
 watcher per directory, and next to a running Rider that reliably exhausts the inotify **instance**
 limit — the app starts, prints its port, and watch kills it a second later. Tick **Hot reload** to run
 under `dotnet watch` anyway (raise `fs.inotify.max_user_instances` first if it exits immediately);
-leave it off and use **Refresh**, which costs a frame rather than a restart.
+leave it off and use **Refresh**, which costs a frame rather than a restart. The limit is inotify's,
+so on macOS — where `dotnet watch` watches through FSEvents — the tick is the default worth having.
 
 Two things the plugin does to make watch actually usable inside Rider:
 
@@ -125,7 +154,7 @@ a free port and prints it; loopback only, and off unless asked for.
 | `semantics` | `{"tree":{"id","role","label","value","hint","flags","actions","x","y","w","h","children":[…]}}` |
 | `targets` | `{"targets":["My.App.SettingsPage", …]}` |
 | `preview <Type>` | `{"ok":true}` — swaps the shown widget live |
-| `shot [scale]` | `{"format":"bmp","w","h","scale","data":"<base64>"}` |
+| `shot [scale]` | `{"format":"bmp","w","h","scale","data":"<base64>"}` — `w`/`h` are layout points, the picture is that × `scale` pixels |
 | `size WxH` / `size window` | `{"ok":true,"w","h"}` — lay the live tree out at a device size |
 | `theme dark\|light` | `{"ok":true,"w","h"}` |
 | `locales` | `{"current":"en","locales":["en","es","ar"]}` — empty when the app has no `LocalizationsScope` |
@@ -134,7 +163,7 @@ a free port and prints it; loopback only, and off unless asked for.
 | `input move X Y` / `input scroll X Y DX DY` | `{"ok":true}` — pointer move / wheel ticks |
 | `input keydown\|keyup NAME [shift+ctrl+alt+cmd]` | `{"ok":true}` — a physical key, by `KeyCode` name |
 | `input text …` | `{"ok":true}` — commit text to the focused widget, verbatim |
-| `stream [scale] [fps]` | one JSON header line, then each changed frame as 4-byte big-endian length + BMP, pushed until the client hangs up |
+| `stream [scale] [fps]` | one JSON header line (`{"format","stream","scale"}` — the density every frame is at, since a raw BMP has nowhere to carry it), then each changed frame as 4-byte big-endian length + BMP, pushed until the client hangs up |
 | `window hide\|show` | `{"ok":true}` |
 | `props ID` | `{"id","type","props":{…},"x","y","w","h"}` |
 
@@ -143,8 +172,6 @@ click is a real click. `stream` sends nothing while the picture is unchanged —
 work at all while nothing repaints, so a stream attached to an idle app costs it nothing. A blocking
 read doubles as "wait for the next repaint". Captures composite the overlay layer and are taken at
 the *end* of a frame — the dialog or menu a click just opened is in the very next picture.
-| `window hide\|show` | `{"ok":true}` |
-| `props ID` | `{"id","type","props":{…},"x","y","w","h"}` |
 
 Anything unparseable comes back as `{"error":"…"}`. So the same three views are available to a VS Code
 extension, a script, or a shell:
@@ -152,6 +179,9 @@ extension, a script, or a shell:
 ```sh
 echo widgets | nc 127.0.0.1 41337 | jq '.tree.children[0].type'
 ```
+
+LLM agents get the same protocol as typed MCP tools — launch, screenshot, tap, tree — through
+[`Zigote.Mcp`](../../docs/mcp-server.md).
 
 ---
 

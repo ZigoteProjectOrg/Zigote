@@ -136,12 +136,32 @@ class InteractivityTest {
     fun `mapping is inverse of the zoom factor and clamping stays on the picture`() {
         val session = ZigoteSession(null).apply { exec = Exec.Inline }
         val canvas = Canvas({ "100%" }, session)
-        canvas.image = java.awt.image.BufferedImage(100, 50, java.awt.image.BufferedImage.TYPE_INT_RGB)
+        canvas.show(java.awt.image.BufferedImage(100, 50, java.awt.image.BufferedImage.TYPE_INT_RGB), 1.0)
         canvas.setSize(100, 50)
 
         assertEquals(25f to 10f, canvas.toApp(25, 10))
         assertNull(canvas.toApp(150, 10)) // off the picture
         assertEquals(99f to 10f, canvas.toAppClamped(150, 10)) // a drag that slipped off
+    }
+
+    /**
+     * The HiDPI capture, from the coordinates' side: a denser picture is the same widget, so nothing
+     * about where a click lands may change with it. Without the density divided back out, a 2× frame
+     * reads as a picture twice the size — clicks land at half their real position and the panel asks
+     * the scroll pane for twice the room.
+     */
+    @Test
+    fun `a picture captured at 2x still measures in layout points`() {
+        val session = ZigoteSession(null).apply { exec = Exec.Inline }
+        val canvas = Canvas({ "100%" }, session)
+        // 200×100 pixels at 2× is the same 100×50 point widget as above.
+        canvas.show(java.awt.image.BufferedImage(200, 100, java.awt.image.BufferedImage.TYPE_INT_RGB), 2.0)
+        canvas.setSize(100, 50)
+
+        assertEquals(25f to 10f, canvas.toApp(25, 10))
+        assertNull(canvas.toApp(150, 10))
+        assertEquals(99f to 10f, canvas.toAppClamped(150, 10))
+        assertEquals(java.awt.Dimension(100, 50), canvas.preferredSize)
     }
 
     // ── the frame stream ──────────────────────────────────────────────────────
@@ -165,7 +185,7 @@ class InteractivityTest {
 
         val frames = mutableListOf<ByteArray>()
         val ended = runCatching {
-            ZigoteInspect.stream(socket.localPort, {}) { frames += it }
+            ZigoteInspect.stream(socket.localPort, 1.0, {}) { bytes, _ -> frames += bytes }
         }
         // The server closing mid-read surfaces as an IOException — that is "ended", not "unsupported".
         assertTrue(ended.isFailure || ended.getOrNull() == true)
@@ -186,7 +206,45 @@ class InteractivityTest {
             client.close()
         }
 
-        assertFalse(ZigoteInspect.stream(socket.localPort, {}) { })
+        assertFalse(ZigoteInspect.stream(socket.localPort, 1.0, {}) { _, _ -> })
+    }
+
+    /**
+     * A streamed frame is raw BMP with no envelope, so the density it was captured at can only come
+     * from the header — and a header without one is a server that captured at 1×.
+     */
+    @Test
+    fun `the stream header's density reaches every frame`() {
+        val socket = ServerSocket(0)
+        server = socket
+        val asked = java.util.concurrent.LinkedBlockingQueue<String>()
+        thread(isDaemon = true) {
+            val client = socket.accept()
+            asked += client.getInputStream().bufferedReader().readLine()
+            val out = DataOutputStream(client.getOutputStream())
+            out.write("{\"format\":\"bmp\",\"stream\":true,\"scale\":2}\n".toByteArray())
+            out.writeInt(3)
+            out.write(byteArrayOf(1, 2, 3))
+            out.flush()
+            client.close()
+        }
+
+        val densities = mutableListOf<Double>()
+        runCatching { ZigoteInspect.stream(socket.localPort, 2.0, {}) { _, scale -> densities += scale } }
+
+        assertEquals(listOf(2.0), densities)
+        assertEquals("stream 2.00", asked.poll(5, java.util.concurrent.TimeUnit.SECONDS))
+    }
+
+    /** The panel asks for a density at all — a bare `shot` is the 1× picture this stopped being. */
+    @Test
+    fun `the panel asks for a capture density`() {
+        val panel = panel()
+        try {
+            waitFor("a shot with a scale") { sent.any { it.startsWith("shot ") } }
+        } finally {
+            panel.dispose()
+        }
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

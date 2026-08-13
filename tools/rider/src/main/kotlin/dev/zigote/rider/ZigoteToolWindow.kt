@@ -1,5 +1,6 @@
 package dev.zigote.rider
 
+import com.intellij.icons.AllIcons
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.DumbAware
@@ -18,6 +19,7 @@ import com.intellij.ui.treeStructure.Tree
 import java.awt.BorderLayout
 import java.awt.BasicStroke
 import java.awt.Color
+import java.awt.Component
 import java.awt.Dimension
 import java.awt.FlowLayout
 import java.awt.Graphics
@@ -31,8 +33,11 @@ import java.io.ByteArrayInputStream
 import java.util.Base64
 import javax.imageio.ImageIO
 import javax.swing.DefaultComboBoxModel
+import javax.swing.DefaultListCellRenderer
+import javax.swing.Icon
 import javax.swing.JButton
 import javax.swing.JComponent
+import javax.swing.JList
 import javax.swing.JPanel
 import javax.swing.JSplitPane
 import javax.swing.Scrollable
@@ -94,28 +99,128 @@ internal class PreviewPanel(
         override fun toString() = file.nameWithoutExtension
     }
 
+    /** Whether the toolbar is collapsed to its essentials — see [autoCompact]. */
+    private var compactOn = false
+
+    /** Set the first time the toggle is pressed; from then on the width rule stops deciding. */
+    private var compactChosen = false
+
     private val projectsModel = DefaultComboBoxModel<Proj>()
-    private val projectCombo = ComboBox(projectsModel)
+    private val projectCombo = ComboBox(projectsModel).apply { toolTipText = "Project that Run app starts" }
 
     private val targets = DefaultComboBoxModel<String>()
     private val combo = ComboBox(targets).apply {
         // Bounded, or one long type name ("AdwaitaGallery.Pages.ImageGridPage") sets the toolbar's
         // width and pushes the buttons out of a docked panel.
-        prototypeDisplayValue = "Some.Namespace.SomePage"
+        prototypeDisplayValue = FULL_NAME
         maximumSize = Dimension(260, preferredSize.height)
+        // Compact drops the namespace — "ImageGridPage" is the part being read anyway, and the whole
+        // name is still the tooltip and still what selects. Rendering, not the model: everything that
+        // talks to the app keeps sending the type name it was given.
+        renderer = object : DefaultListCellRenderer() {
+            override fun getListCellRendererComponent(
+                list: JList<*>?,
+                value: Any?,
+                index: Int,
+                selected: Boolean,
+                focused: Boolean,
+            ): Component {
+                val full = value as? String
+                val shown = if (compactOn) full?.substringAfterLast('.') else full
+                return super.getListCellRendererComponent(list, shown, index, selected, focused)
+            }
+        }
     }
     private val devices = ComboBox(DefaultComboBoxModel(Devices.all.toTypedArray()))
+        .apply { toolTipText = "Size the app lays its live tree out at" }
     private val landscape = JBCheckBox("Landscape")
-    private val theme: ComboBox<String> = ComboBox(arrayOf("Dark", "Light"))
+    private val theme: ComboBox<String> = ComboBox(arrayOf("Dark", "Light")).apply { toolTipText = "App theme" }
     private val locales = DefaultComboBoxModel<String>()
-    private val localeCombo = ComboBox(locales)
-    private val localeLabel = JBLabel("Locale:")
+    private val localeCombo = ComboBox(locales).apply { toolTipText = "App locale" }
+    private val localeCaption = JBLabel("Locale:")
     private val zoom: ComboBox<String> = ComboBox(arrayOf(FIT, "100%", "200%"))
+        .apply { toolTipText = "Zoom the picture" }
     private val live = JBCheckBox("Live")
     private val hotReload = JBCheckBox("Hot reload")
     private val status = JBLabel("")
     private val canvas = Canvas({ zoom.selectedItem as? String ?: FIT }, session)
     private var populating = false
+
+    private val runButton = JButton("Run app").apply { addActionListener { launch() } }
+    private val stopButton = JButton("Stop").apply { addActionListener { session.stop() } }
+    private val attachButton = JButton("Attach…").apply { addActionListener { attach() } }
+    private val refreshButton = JButton("Refresh").apply { addActionListener { sync() } }
+    private val projectCaption = JBLabel("Project:")
+    private val widgetCaption = JBLabel("Widget:")
+    private val deviceCaption = JBLabel("Device:")
+    private val themeCaption = JBLabel("Theme:")
+    private val zoomCaption = JBLabel("Zoom:")
+
+    /** Collapses the toolbar to the essentials, and back. Icon-only, because width is its whole point. */
+    private val compactToggle = JButton().apply { addActionListener { chooseCompact(!compactOn) } }
+
+    private val toolbar = JPanel(WrapLayout())
+
+    /**
+     * The toolbar, in order, and what each control is worth when there is no room for all of them.
+     *
+     * Compact is a filter over this one list rather than a second arrangement of the same controls:
+     * the controls stay where they are and the ones a preview does not need every minute go
+     * invisible, which [WrapLayout] then stops reserving a row for. A second arrangement would drift
+     * from this one on the first control added to either.
+     *
+     * Essential is what a preview is *used* through — start and stop the app, watch it live, choose
+     * what to show and how big. The rest is set once and left alone, which is exactly what the toggle
+     * is for.
+     */
+    private val items = listOf(
+        Item(compactToggle, essential = true),
+        Item(runButton, essential = true, icon = AllIcons.Actions.Execute),
+        Item(stopButton, essential = true, icon = AllIcons.Actions.Suspend),
+        Item(refreshButton, essential = true, icon = AllIcons.Actions.Refresh),
+        Item(attachButton),
+        Item(live, essential = true),
+        Item(hotReload),
+        Item(projectCombo, projectCaption),
+        Item(combo, widgetCaption, essential = true),
+        Item(devices, deviceCaption, essential = true),
+        Item(landscape),
+        Item(theme, themeCaption),
+        Item(localeCombo, localeCaption, available = { locales.size > 0 }),
+        Item(zoom, zoomCaption),
+        Item(status, essential = true),
+    )
+
+    /**
+     * One control in the toolbar: its caption, whether compact keeps it, and — for the verbs — the
+     * icon it shrinks to.
+     *
+     * A button's words are remembered here because compact takes them away, and become its tooltip,
+     * so an icon-only **Run app** still says what it is. [available] is for a control that has
+     * nothing to offer at all, like the locale combo of an app with no `LocalizationsScope`; compact
+     * must not make it reappear.
+     */
+    private class Item(
+        val control: JComponent,
+        val caption: JBLabel? = null,
+        val essential: Boolean = false,
+        val icon: Icon? = null,
+        val available: () -> Boolean = { true },
+    ) {
+        private val words = (control as? JButton)?.text
+
+        init {
+            if (icon != null) control.toolTipText = words
+        }
+
+        /** Icon-only while [on], the words back when there is room for them again. */
+        fun shrink(on: Boolean) {
+            val button = control as? JButton ?: return
+            if (icon == null) return
+            button.text = if (on) "" else words
+            button.icon = if (on) icon else null
+        }
+    }
 
     // The polled fallback for Live against an app built before `stream` existed. Half a second:
     // fast enough to watch a reload land, slow enough to stay off the app's critical path.
@@ -124,6 +229,9 @@ internal class PreviewPanel(
     /** The open frame stream, closed to stop it; null while polling or not live. */
     @Volatile
     private var streamSocket: java.net.Socket? = null
+
+    /** The capture density the open stream was started with — see [retuneStream]. */
+    private var streamScale: Double = 1.0
 
     /** The port the panel last pushed its state to — a change means the app restarted or was swapped. */
     private var appliedPort: Int? = null
@@ -161,16 +269,28 @@ internal class PreviewPanel(
         }, "zigote-input").apply { isDaemon = true }.start()
     }
 
-    // Resizing fires a burst of events; only the size it settles at is worth a relayout in the app.
-    private val resizeDebounce = Timer(250) { applyDevice() }.apply { isRepeats = false }
+    // Resizing fires a burst of events; only the size it settles at is worth acting on. Under
+    // "Panel (adapt)" that means a relayout in the app; under a fixed device size the layout does not
+    // change but the size it is *drawn* at does, and with it the density worth capturing.
+    private val resizeDebounce = Timer(250) {
+        if (devices.selectedItem === Devices.PANEL) applyDevice() else if (streamSocket == null) shot()
+        retuneStream()
+    }.apply { isRepeats = false }
 
     init {
-        combo.addActionListener { showSelected() }
+        combo.addActionListener {
+            // The full type name, wherever the combo is only showing the tail of it.
+            combo.toolTipText = combo.selectedItem as? String
+            showSelected()
+        }
         devices.addActionListener { applyDevice() }
         landscape.addActionListener { applyDevice() }
         theme.addActionListener { applyTheme() }
         localeCombo.addActionListener { applyLocale() }
-        zoom.addActionListener { canvas.revalidate(); canvas.repaint() }
+        // Zoom changes what the picture is drawn at, and so what density is worth capturing: at 200%
+        // a 1× frame is enlarged four-fold on a Retina panel. Live re-opens at the new density; the
+        // still path picks it up on its next shot anyway.
+        zoom.addActionListener { canvas.revalidate(); canvas.repaint(); retuneStream(); if (streamSocket == null) shot() }
         live.addActionListener { if (live.isSelected) startLive() else stopLive() }
         hotReload.addActionListener { session.hotReload = hotReload.isSelected }
 
@@ -197,22 +317,13 @@ internal class PreviewPanel(
 
         // WrapLayout, not FlowLayout: a docked tool window is narrower than this toolbar, and plain
         // FlowLayout hides every control past the first row rather than wrapping the panel taller.
-        // Actions come first so that if anything is ever clipped, it is not how you start.
-        add(JPanel(WrapLayout()).apply {
-            add(JButton("Run app").apply { addActionListener { launch() } })
-            add(JButton("Stop").apply { addActionListener { session.stop() } })
-            add(JButton("Attach…").apply { addActionListener { attach() } })
-            add(JButton("Refresh").apply { addActionListener { sync() } })
-            add(live)
-            add(hotReload)
-            add(JBLabel("Project:")); add(projectCombo)
-            add(JBLabel("Widget:")); add(combo)
-            add(JBLabel("Device:")); add(devices)
-            add(landscape)
-            add(JBLabel("Theme:")); add(theme)
-            add(localeLabel); add(localeCombo)
-            add(JBLabel("Zoom:")); add(zoom)
-            add(status)
+        // Actions come first — behind the collapse toggle, which has to stay reachable to undo itself —
+        // so that if anything is ever clipped, it is not how you start.
+        add(toolbar.apply {
+            for (item in items) {
+                item.caption?.let { add(it) }
+                add(item.control)
+            }
         }, BorderLayout.NORTH)
 
         val scroll = JBScrollPane(canvas)
@@ -224,13 +335,19 @@ internal class PreviewPanel(
         scroll.viewport.addComponentListener(object : ComponentAdapter() {
             override fun componentResized(e: ComponentEvent) {
                 canvas.viewport = scroll.viewport.extentSize
-                if (devices.selectedItem === Devices.PANEL) resizeDebounce.restart()
+                resizeDebounce.restart()
                 canvas.revalidate()
             }
         })
 
+        // The panel's own width decides whether the toolbar is worth its rows — see [autoCompact].
+        addComponentListener(object : ComponentAdapter() {
+            override fun componentResized(e: ComponentEvent) = autoCompact()
+        })
+
         session.onChanged { sync() }
         session.onHighlight { canvas.repaint() }
+        applyToolbar()
         sync()
     }
 
@@ -256,15 +373,80 @@ internal class PreviewPanel(
     internal fun selectedLocale(): String? = localeCombo.selectedItem as? String
     internal fun selectLocale(tag: String) { localeCombo.selectedItem = tag }
     internal fun selectLandscape(on: Boolean) { landscape.isSelected = on; applyDevice() }
+    internal fun compactForTest(): Boolean = compactOn
+    internal fun chooseCompactForTest(on: Boolean) = chooseCompact(on)
+    internal fun widthChangedForTest(width: Int) { setSize(width, 600); autoCompact() }
+    internal fun shownCountForTest(): Int = items.count { it.control.isVisible }
+    internal fun captionShownForTest(): Boolean = widgetCaption.isVisible
+    internal fun runButtonForTest(): JButton = runButton
+
+    /** The rows the toolbar takes from the picture at a given panel width — what compact is for. */
+    internal fun toolbarHeightForTest(width: Int): Int {
+        toolbar.setSize(width, 1)
+        return toolbar.preferredSize.height
+    }
+
+    // ── compact ───────────────────────────────────────────────────────────────
+
+    /** Show what this mode keeps, hide the rest, and let [WrapLayout] re-wrap around it. */
+    private fun applyToolbar() {
+        compactToggle.icon = if (compactOn) AllIcons.General.ChevronDown else AllIcons.General.ChevronUp
+        compactToggle.toolTipText =
+            if (compactOn) "Show every preview control" else "Compact toolbar — keep the essentials"
+        // The prototype is what bounds the combo's width, so compact has to shorten that too, or the
+        // short names are drawn in a box still sized for a fully qualified one.
+        combo.prototypeDisplayValue = if (compactOn) SHORT_NAME else FULL_NAME
+
+        for (item in items) {
+            val shown = item.available() && (!compactOn || item.essential)
+            item.control.isVisible = shown
+            // A caption is width spent saying what the control next to it already looks like; in a
+            // compact row that is a whole control's worth, and the tooltip says the same thing.
+            item.caption?.isVisible = shown && !compactOn
+            item.shrink(compactOn)
+        }
+
+        toolbar.revalidate()
+        toolbar.repaint()
+    }
+
+    /** The user's own choice, which from then on outranks the width rule. */
+    private fun chooseCompact(on: Boolean) {
+        compactChosen = true
+        setCompact(on)
+    }
+
+    private fun setCompact(on: Boolean) {
+        if (on == compactOn) return
+        compactOn = on
+        applyToolbar()
+    }
+
+    /**
+     * Compact follows the panel's width until the toggle is pressed once.
+     *
+     * A tool window docked to a side is narrower than this toolbar however it is arranged, and every
+     * row it wraps into is a row taken from the picture. Measured: the full toolbar needs ~1600 points
+     * to fit in one row, so at a 420-point panel it wraps into five (127 px of the picture) where
+     * compact takes two (58 px). Below [COMPACT_BELOW] it is three rows or more and the controls stop
+     * being worth what they cost; above it, hiding anything gains at most a single row.
+     *
+     * The flag is the point of the rule: a mode that silently overrides what the user just clicked is
+     * worse than no automatic mode at all.
+     */
+    private fun autoCompact() {
+        if (compactChosen || width <= 0) return
+        setCompact(width < COMPACT_BELOW)
+    }
 
     private fun sync() {
         val open = session.port
         if (open == null) {
             status.text = session.state
-            canvas.image = null
+            canvas.show(null, 1.0)
             targets.removeAllElements()
             locales.removeAllElements()
-            showLocale(false)
+            applyToolbar()
             appliedPort = null
             stopLive()
             return
@@ -291,16 +473,20 @@ internal class PreviewPanel(
     private fun startLive() {
         val port = session.port ?: return
         stopLive()
+        // Fixed for the stream's life, so remember it: a later zoom or resize wanting a different
+        // density has to restart the stream, and [retuneStream] compares against this.
+        val want = canvas.captureScale()
+        streamScale = want
         session.exec.background {
             // `stream` blocks for the stream's whole life; IOException just means it ended (the app
             // died or stopLive closed the socket) — only a false return means "server too old".
             val supported = runCatching {
-                ZigoteInspect.stream(port, { streamSocket = it }) { bytes ->
+                ZigoteInspect.stream(port, want, { streamSocket = it }) { bytes, granted ->
                     val img = ImageIO.read(ByteArrayInputStream(bytes))
                     if (img != null) session.exec.ui {
                         if (live.isSelected) {
-                            canvas.image = img
-                            status.text = "${img.width}×${img.height} live"
+                            canvas.show(img, granted)
+                            status.text = "${(img.width / granted).toInt()}×${(img.height / granted).toInt()} live"
                         }
                     }
                 }
@@ -316,6 +502,20 @@ internal class PreviewPanel(
         timer.stop()
         streamSocket?.close()
         streamSocket = null
+    }
+
+    /**
+     * A stream captures at the density fixed when it opened, so zooming in — or growing the panel
+     * under "Fit" — leaves it sending a picture coarser than the one being drawn, which is the blur
+     * this whole path exists to avoid. Reopening is cheap (one socket) but not free, so only a
+     * difference worth seeing does it: the window either side of 1 covers a viewport nudged by a few
+     * pixels, where a restart would be visible and the gain would not.
+     */
+    private fun retuneStream() {
+        if (streamSocket == null || !live.isSelected) return
+        val want = canvas.captureScale()
+        if (want < streamScale * 1.15 && want > streamScale * 0.6) return
+        startLive()
     }
 
     private fun launch() {
@@ -399,7 +599,9 @@ internal class PreviewPanel(
                 } finally {
                     populating = false
                 }
-                showLocale(supported.isNotEmpty())
+                // The combo is only worth its width when the app has locales to offer; [applyToolbar]
+                // reads that off the model it was just filled from.
+                applyToolbar()
 
                 // A restarted app woke up in its default locale; put the user's choice back.
                 val want = localeChosen
@@ -416,11 +618,6 @@ internal class PreviewPanel(
         }
     }
 
-    private fun showLocale(visible: Boolean) {
-        localeLabel.isVisible = visible
-        localeCombo.isVisible = visible
-    }
-
     /** Swap the app's locale live — the same reactive path a settings screen would use. */
     private fun applyLocale() {
         if (populating || session.port == null) return
@@ -431,9 +628,14 @@ internal class PreviewPanel(
 
     private fun shot() {
         if (session.port == null) return
-        query(session, "shot", status) { reply ->
+        val want = canvas.captureScale()
+        query(session, "shot ${ZigoteInspect.fmt(want)}", status) { reply ->
             val data = reply.text("data") ?: return@query
-            canvas.image = ImageIO.read(ByteArrayInputStream(Base64.getDecoder().decode(data)))
+            // The density the app granted, not the one asked for: a server too old for `shot <scale>`
+            // ignores the argument and answers at 1×, and drawing that as if it were 2× halves the
+            // picture. `scale` is absent there, so the fallback is the honest one.
+            val granted = (reply["scale"] as? Double)?.takeIf { it > 0 } ?: 1.0
+            canvas.show(ImageIO.read(ByteArrayInputStream(Base64.getDecoder().decode(data))), granted)
             status.text = "${reply.int("w")}×${reply.int("h")}"
         }
     }
@@ -448,6 +650,14 @@ internal class PreviewPanel(
 
     companion object {
         private const val FIT = "Fit"
+
+        // What bounds the widget combo: a fully qualified name expanded, its last segment compacted.
+        private const val FULL_NAME = "Some.Namespace.SomePage"
+        private const val SHORT_NAME = "SomeWidgetPage"
+
+        // Panel points. Wide enough that a bottom-docked tool window keeps every control, narrow
+        // enough that a side-docked one — the shape this exists for — collapses.
+        private const val COMPACT_BELOW = 700
     }
 }
 
@@ -474,11 +684,51 @@ internal class Canvas(
     var onInput: ((String) -> Unit)? = null
 
     var image: BufferedImage? = null
-        set(value) {
-            field = value
-            revalidate()
-            repaint()
-        }
+        private set
+
+    /**
+     * Image pixels per layout point — the density [image] was captured at. Every other number here is
+     * in layout points (the space the app reports bounds in and takes input in), so this is divided
+     * out in exactly one place, [pointSize], and nothing downstream has to know the picture is denser
+     * than the coordinates.
+     */
+    var imageScale: Double = 1.0
+        private set
+
+    /** A new frame and the density it was captured at; the two must never be set apart. */
+    fun show(frame: BufferedImage?, scale: Double) {
+        image = frame
+        imageScale = if (scale.isFinite() && scale > 0) scale else 1.0
+        revalidate()
+        repaint()
+    }
+
+    /**
+     * The density the next capture should use: device pixels per layout point, for the size the
+     * picture will actually be drawn at.
+     *
+     * The panel is drawn on the IDE's screen, so on a Retina MacBook one layout point covers two
+     * device pixels — a 1× capture is a half-resolution image the compositor then has to enlarge,
+     * which is what makes preview text look soft next to the same app in its own window. Asking for
+     * more than the drawn size, on the other hand, is bytes over the socket and offscreen render work
+     * in the app that lands in the same pixels: under "Fit" at half size, 1× is already exact.
+     */
+    fun captureScale(): Double {
+        val drawn = image?.let { factor(it) } ?: 1.0
+        return (deviceScale() * drawn).coerceIn(MIN_CAPTURE, MAX_CAPTURE)
+    }
+
+    /**
+     * Device pixels per logical pixel for the screen this panel is on — AWT's own number rather than
+     * the IDE's, because it is the one that decides whether the blit is 1:1. 1.0 with no peer yet
+     * (headless tests, a panel built before it is shown), which is also the safe under-estimate.
+     */
+    private fun deviceScale(): Double =
+        graphicsConfiguration?.defaultTransform?.scaleX?.takeIf { it > 0 } ?: 1.0
+
+    /** The picture's size in layout points — what everything below measures against. */
+    private fun pointSize(img: BufferedImage): Pair<Double, Double> =
+        img.width / imageScale to img.height / imageScale
 
     init {
         // Keyboard goes to the app under preview, which needs two things: focus on the canvas
@@ -548,8 +798,9 @@ internal class Canvas(
     private fun geometry(): Triple<Double, Int, Int>? {
         val img = image ?: return null
         val factor = factor(img)
-        val w = (img.width * factor).toInt()
-        val h = (img.height * factor).toInt()
+        val (pw, ph) = pointSize(img)
+        val w = (pw * factor).toInt()
+        val h = (ph * factor).toInt()
         return Triple(factor, maxOf(0, (width - w) / 2), maxOf(0, (height - h) / 2))
     }
 
@@ -557,9 +808,10 @@ internal class Canvas(
     internal fun toApp(px: Int, py: Int): Pair<Float, Float>? {
         val img = image ?: return null
         val (factor, x0, y0) = geometry() ?: return null
+        val (pw, ph) = pointSize(img)
         val ax = (px - x0) / factor
         val ay = (py - y0) / factor
-        if (ax < 0 || ay < 0 || ax >= img.width || ay >= img.height) return null
+        if (ax < 0 || ay < 0 || ax >= pw || ay >= ph) return null
         return ax.toFloat() to ay.toFloat()
     }
 
@@ -567,26 +819,32 @@ internal class Canvas(
     internal fun toAppClamped(px: Int, py: Int): Pair<Float, Float>? {
         val img = image ?: return null
         val (factor, x0, y0) = geometry() ?: return null
-        val ax = ((px - x0) / factor).coerceIn(0.0, img.width - 1.0)
-        val ay = ((py - y0) / factor).coerceIn(0.0, img.height - 1.0)
+        val (pw, ph) = pointSize(img)
+        val ax = ((px - x0) / factor).coerceIn(0.0, pw - 1.0)
+        val ay = ((py - y0) / factor).coerceIn(0.0, ph - 1.0)
         return ax.toFloat() to ay.toFloat()
     }
 
-    private fun factor(img: BufferedImage): Double = when (zoom()) {
-        "200%" -> 2.0
-        "100%" -> 1.0
-        // Fit: never enlarge. A 400×300 widget blown up to fill a wide tab looks like a bug report.
-        else -> minOf(
-            1.0,
-            viewport.width.toDouble() / img.width,
-            viewport.height.toDouble() / img.height,
-        ).coerceAtLeast(0.05)
+    /** Drawn logical pixels per layout point — the zoom, in the panel's own coordinates. */
+    private fun factor(img: BufferedImage): Double {
+        val (pw, ph) = pointSize(img)
+        return when (zoom()) {
+            "200%" -> 2.0
+            "100%" -> 1.0
+            // Fit: never enlarge. A 400×300 widget blown up to fill a wide tab looks like a bug report.
+            else -> minOf(
+                1.0,
+                viewport.width.toDouble() / pw,
+                viewport.height.toDouble() / ph,
+            ).coerceAtLeast(0.05)
+        }
     }
 
     override fun getPreferredSize(): Dimension {
         val img = image ?: return Dimension(320, 240)
         val factor = factor(img)
-        return Dimension((img.width * factor).toInt(), (img.height * factor).toInt())
+        val (pw, ph) = pointSize(img)
+        return Dimension((pw * factor).toInt(), (ph * factor).toInt())
     }
 
     override fun getPreferredScrollableViewportSize(): Dimension = preferredSize
@@ -598,11 +856,21 @@ internal class Canvas(
     override fun paintComponent(g: Graphics) {
         val img = image ?: return drawEmptyState(g)
         val (factor, x, y) = geometry() ?: return
-        val w = (img.width * factor).toInt()
-        val h = (img.height * factor).toInt()
+        val (pw, ph) = pointSize(img)
+        val w = (pw * factor).toInt()
+        val h = (ph * factor).toInt()
 
         val g2 = g as Graphics2D
-        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR)
+        // Device pixels per image pixel. At 1 — a capture taken at the density it is drawn at, which
+        // is what [captureScale] asks for — the blit is 1:1 and no filter runs at all. Bicubic is for
+        // the frames either side of a zoom or resize, where a stale density is still on screen;
+        // bilinear over a real downscale is the one that looks like a JPEG.
+        val ratio = factor * deviceScale() / imageScale
+        g2.setRenderingHint(
+            RenderingHints.KEY_INTERPOLATION,
+            if (ratio < 0.99) RenderingHints.VALUE_INTERPOLATION_BICUBIC
+            else RenderingHints.VALUE_INTERPOLATION_BILINEAR,
+        )
         g2.drawImage(img, x, y, w, h, null)
 
         session.highlight?.let { b ->
@@ -637,6 +905,12 @@ internal class Canvas(
 
     private companion object {
         val HIGHLIGHT: Color = Color(0x4A, 0x9E, 0xFF)
+
+        // The app clamps to 0.1..4 anyway; these keep a shrunk "Fit" from asking for a picture too
+        // coarse to read at all, and a 200% zoom on a Retina panel from asking for 4× of a desktop
+        // window — which is a 30 MB frame per capture.
+        const val MIN_CAPTURE = 0.5
+        const val MAX_CAPTURE = 3.0
     }
 }
 
