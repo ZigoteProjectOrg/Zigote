@@ -11,6 +11,14 @@ namespace AdwaitaGallery.Pages;
 ///         answer on disk. Scroll back up and nothing is requested twice; restart the app and the
 ///         API is not called at all.
 ///     </para>
+///     <para>
+///         The page's chrome — every credit chip, the fetch pill, the status toolbar the grid
+///         scrolls under — is <b>Liquid Glass</b> (<see cref="LiquidPane" />), which also makes
+///         this the engine's glass stress page: each pane is a render-pass break plus a
+///         full-scene backdrop copy per frame, glass anywhere disables partial repaint, and a
+///         screenful of tiles keeps a dozen-plus lenses refracting moving pictures while the
+///         feed scrolls.
+///     </para>
 /// </summary>
 public sealed class ImageGridPage : ComposedWidget
 {
@@ -22,6 +30,10 @@ public sealed class ImageGridPage : ComposedWidget
     // A tile is ~200 px wide in this shell; 512 covers a retina one with room to spare and costs
     // 1 MB of GPU each, so a full dozen pages is ~150 MB rather than a gigabyte.
     private const uint TileMaxDim = 512;
+
+    // Room the grid keeps under its last row so the end of the feed can scroll clear of the
+    // floating glass toolbar; mid-feed, tiles pass beneath the glass — that is the point.
+    private const float DockClearance = 64f;
 
     private readonly Signal<string?> _error = new(null);
     private readonly ListView _grid;
@@ -46,6 +58,7 @@ public sealed class ImageGridPage : ComposedWidget
             childAspectRatio:
             0.72 // the sources are portraits, so portrait cells waste the least of each tile
         );
+        _grid.Padding = EdgeInsets.Only(bottom: DockClearance);
     }
 
     protected override void OnMount()
@@ -55,28 +68,34 @@ public sealed class ImageGridPage : ComposedWidget
 
     protected override Widget Build(BuildContext context)
     {
-        return new Column(crossAxisAlignment: CrossAxisAlignment.Stretch) {
-            Children = {
-                new Expanded(
-                    new Padding(
-                        padding: EdgeInsets.Symmetric(horizontal: Spacing.Lg, vertical: Spacing.Md),
-                        child: new Stack {
-                            Children = {
-                                _grid,
-                                new Align(
-                                    alignment: Alignment.BottomCenter,
-                                    child: new Padding(
-                                        padding: EdgeInsets.Only(bottom: Spacing.Lg),
-                                        child: new Watch(Footer)
-                                    )
-                                ),
-                            },
-                        }
-                    )
-                ),
-                new Watch(Status),
-            },
-        };
+        // The status readout is not furniture below the grid any more — it is a glass toolbar
+        // floating over it, with the fetch pill stacking above. The pictures scroll straight
+        // under both and refract through the lens, which is the Liquid Glass arrangement:
+        // content everywhere, the functional layer floating on top.
+        return new Padding(
+            padding: EdgeInsets.Symmetric(horizontal: Spacing.Lg, vertical: Spacing.Md),
+            child: new Stack {
+                Children = {
+                    _grid,
+                    new Align(
+                        alignment: Alignment.BottomCenter,
+                        child: new Padding(
+                            padding: EdgeInsets.Only(bottom: Spacing.Lg),
+                            child: new Column(
+                                spacing: Spacing.Sm,
+                                mainAxisSize: MainAxisSize.Min,
+                                crossAxisAlignment: CrossAxisAlignment.Center
+                            ) {
+                                Children = {
+                                    new Watch(Footer),
+                                    new Watch(Status),
+                                },
+                            }
+                        )
+                    ),
+                },
+            }
+        );
     }
 
     /// <summary>
@@ -167,18 +186,42 @@ public sealed class ImageGridPage : ComposedWidget
     private Widget Footer()
     {
         if (_error.Value is { } message)
-            return new AdwButton(label: $"{message} — Try Again", onPressed: Retry) { Pill = true };
+        {
+            // An interactive pane: the Pressable drives the gel response, so the glass thickens
+            // under the pointer and compresses on the press — Liquid Glass as a button, not just
+            // a backdrop.
+            var pane = new LiquidPane {
+                Elevation = 7f,
+                Child = new Padding(
+                    padding: EdgeInsets.Symmetric(horizontal: Spacing.Lg, vertical: Spacing.Sm),
+                    child: new Label(
+                        text: $"{message} — Try Again",
+                        style: AdwTypography.Caption,
+                        color: Color.White
+                    ) {
+                        MaxLines = 1,
+                        Overflow = TextOverflow.Ellipsis,
+                    }
+                ),
+            };
+            var pill = new Pressable {
+                Child = pane,
+                OnPressed = Retry,
+                FocusRadius = 16f,
+                SemanticsLabel = $"{message} — try again",
+            };
+            pill.OnStateChanged = () =>
+            {
+                pane.Hovered = pill.Hovered;
+                pane.Pressed = pill.Pressed;
+            };
+            return pill;
+        }
 
         if (_loading.Value)
         {
-            return new DecoratedBox {
-                Fill = Color.Rgba(
-                    r: 0,
-                    g: 0,
-                    b: 0,
-                    a: 0.55f
-                ),
-                Radius = AdwMetrics.Pill,
+            return new LiquidPane {
+                Elevation = 7f,
                 Child = new Padding(
                     padding: EdgeInsets.Symmetric(horizontal: Spacing.Md, vertical: Spacing.Xs),
                     child: new Row(
@@ -211,14 +254,34 @@ public sealed class ImageGridPage : ComposedWidget
                 ? $"End of the feed — {_cached} of {count} came straight off the disk"
                 : $"Click a picture to zoom it · {_cached} of {count} came straight off the disk";
 
-        return new Padding(
-            padding: EdgeInsets.Only(
-                left: Spacing.Lg,
-                top: 0f,
-                right: Spacing.Lg,
-                bottom: Spacing.Lg
+        // White on the pane's own scrim in both app themes: what is behind this toolbar is
+        // whatever the feed served, not the page background.
+        return new LiquidPane {
+            Elevation = 7f,
+            Child = new Padding(
+                padding: EdgeInsets.Symmetric(horizontal: Spacing.Lg, vertical: Spacing.Sm),
+                child: new Row(
+                    spacing: Spacing.Sm,
+                    mainAxisSize: MainAxisSize.Min,
+                    crossAxisAlignment: CrossAxisAlignment.Center
+                ) {
+                    Children = {
+                        new Label(
+                            text: $"{count} pictures",
+                            style: AdwTypography.Monospace,
+                            color: Color.White
+                        ),
+                        new Label(
+                            text: caption,
+                            style: AdwTypography.Caption,
+                            color: Color.White.WithAlpha(0.72f)
+                        ) {
+                            MaxLines = 1,
+                            Overflow = TextOverflow.Ellipsis,
+                        },
+                    },
+                }
             ),
-            child: Demo.Bar(Demo.Value($"{count} pictures"), Demo.Caption(caption))
-        );
+        };
     }
 }

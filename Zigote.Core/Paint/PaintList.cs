@@ -526,9 +526,12 @@ public sealed unsafe class PaintList
         CheckColor(color);
         var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.LiquidGlass };
         SetBounds(cmd: ref cmd, r: ApplyOffset(bounds));
-        SetColor(cmd: ref cmd, c: color);
+        SetColor(cmd: ref cmd, c: ScaleAlpha(color));
         cmd.Radius = ClampRadius(radius: radius, bounds: bounds);
-        cmd.BorderWidth = thickness;
+        // The tint alpha only fades the scrim — the lens strength (refraction, frost) rides on
+        // thickness, so it must follow the ambient opacity too or glass inside a fade pops in at
+        // full refraction under a still-fading child.
+        cmd.BorderWidth = thickness * _currentAlpha;
         cmd.BaselineX = glowX; // directional — NOT offset-shifted
         cmd.BaselineY = glowY;
         cmd.FontSize = pinch;

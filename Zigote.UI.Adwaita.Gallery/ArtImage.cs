@@ -180,16 +180,11 @@ internal sealed class ArtCredit(string artist) : ComposedWidget
 {
     protected override Widget Build(BuildContext context)
     {
-        return new DecoratedBox {
-            // Its own contrast rather than the theme's: the chip has to read on a bright sky and on
-            // a black coat, and it does not know which it landed on.
-            Fill = Color.Rgba(
-                r: 0,
-                g: 0,
-                b: 0,
-                a: 0.55f
-            ),
-            Radius = AdwMetrics.Pill,
+        // Liquid Glass rather than the theme, for the reason the old flat chip carried its own
+        // black: it has to read on a bright sky and on a black coat, and it does not know which it
+        // landed on. The over-media pane's scrim answers exactly that — and the lens refracts the
+        // artwork through itself, so the chip belongs to the picture instead of covering it.
+        return new LiquidPane {
             Child = new Padding(
                 padding: EdgeInsets.Symmetric(horizontal: Spacing.Sm, vertical: Spacing.Xxs),
                 child: new Label(
