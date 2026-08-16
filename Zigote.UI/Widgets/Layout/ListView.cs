@@ -58,7 +58,7 @@ public class ListView : Widget
         EdgeInsets? padding = null,
         Axis scrollDirection = Axis.Vertical)
     {
-        _sy = new SmoothScroller(MarkNeedsLayout);
+        _sy = new SmoothScroller(MarkNeedsLayoutClipped);
         if (itemExtent is { } e) ItemHeight = (float)e;
         if (children is not null) SetItems(children);
         if (padding is { } p) _padding = p;

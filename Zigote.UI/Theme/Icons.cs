@@ -1,5 +1,6 @@
 using Zigote.Core;
 using Zigote.Core.Paint;
+using Zigote.UI.Widgets;
 
 namespace Zigote.UI.Theme;
 
@@ -132,7 +133,8 @@ public static class Icons
     ///     pixel size. Material glyphs sit on the baseline within the em square, so the baseline
     ///     is placed to center the glyph vertically (a small offset compensates for design metrics).
     /// </summary>
-    public static void Draw(PaintList paint, string glyph, Rect box, Color color, float size)
+    public static void Draw(PaintList paint, string glyph, Rect box, Color color, float size,
+        BoxShadow? shadow = null)
     {
         float x = box.X + ((box.Width - size) * 0.5f);
         float baseline = box.Y + ((box.Height + size) * 0.5f) - (size * 0.12f);
@@ -142,7 +144,11 @@ public static class Icons
             baselineY: baseline,
             color: color,
             fontSize: size,
-            fontFamily: Family
+            fontFamily: Family,
+            shadowColor: shadow?.Color,
+            shadowOffsetX: shadow?.Offset.X ?? 0f,
+            shadowOffsetY: shadow?.Offset.Y ?? 0f,
+            shadowBlur: shadow?.BlurRadius ?? 0f
         );
     }
 

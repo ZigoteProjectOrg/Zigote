@@ -55,6 +55,36 @@ public class InspectServerTests
     }
 
     [Fact]
+    public void PreviewsCarryTheirAnnotationAndTheirProperties()
+    {
+        Environment.SetEnvironmentVariable(
+            variable: "ZIGOTE_PREVIEW_ASSEMBLY",
+            value: "Zigote.Tests"
+        );
+        try
+        {
+            using var doc = JsonDocument.Parse(InspectServer.PreviewsJson());
+            var card = doc.RootElement.GetProperty("previews").EnumerateArray()
+                .Single(p =>
+                    p.GetProperty("target").GetString() == typeof(PreviewParameterised).FullName
+                );
+
+            Assert.Equal(expected: "Sample card", actual: card.GetProperty("label").GetString());
+            Assert.Equal(expected: 412, actual: card.GetProperty("w").GetDouble());
+            Assert.True(card.GetProperty("annotated").GetBoolean());
+
+            var title = card.GetProperty("params")[0];
+            Assert.Equal(expected: "title", actual: title.GetProperty("name").GetString());
+            Assert.Equal(expected: "string", actual: title.GetProperty("kind").GetString());
+            Assert.Equal(expected: "Card", actual: title.GetProperty("value").GetString());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(variable: "ZIGOTE_PREVIEW_ASSEMBLY", value: null);
+        }
+    }
+
+    [Fact]
     public void SemanticsTreeCarriesRoleLabelAndChildren()
     {
         var root = new SemanticsNode(

@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <OutputType>Exe</OutputType>
+        <OutputType>Library</OutputType>
         <TargetFramework>net10.0</TargetFramework>
         <RootNamespace>Zigote.Modules.UI.CodeEditor</RootNamespace>
     </PropertyGroup>
@@ -11,7 +11,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="FParsec" Version="1.1.1"/>
+        <PackageReference Include="XParsec" Version="1.0.0"/>
         <PackageReference Update="FSharp.Core" Version="10.1.302"/>
     </ItemGroup>
 

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using Xunit;
 using Zigote.Core;
@@ -161,49 +160,8 @@ public class CodeEditorPerfTests
         ); // tokens and entering state are retained across frames
     }
 
-    [Fact]
-    public void SixHundredLineEditor_SteadyScrollPaintFits144HzCpuBudget()
-    {
-        string source = string.Join(
-            separator: '\n',
-            values: Enumerable.Range(start: 0, count: 600).Select(i =>
-                $"public static int Value{i} => {i} * 2; // cached colored row"
-            )
-        );
-        var ed = new CodeEditor(source) {
-            Tokenizer = new BuiltInCodeTokenizer(CodeLanguage.CSharp),
-            SoftWrap = false,
-        };
-        ed.Measure(Constraints.Tight(width: 1200f, height: 800f));
-        ed.Layout(Offset.Zero);
-        var paint = new PaintList();
-
-        // Warm JIT, paint buffers, token spans and the initial visible-row cache.
-        for (int i = 0; i < 20; i++)
-        {
-            paint.Clear();
-            ed.Paint(paint);
-        }
-
-        const int frames = 240;
-        var watch = Stopwatch.StartNew();
-        for (int i = 0; i < frames; i++)
-        {
-            ed.OnScroll(dx: 0f, dy: -0.35f);
-            Ticker.AdvanceAll(1f / 144f);
-            paint.Clear();
-            ed.Paint(paint);
-        }
-
-        watch.Stop();
-
-        double millisecondsPerFrame = watch.Elapsed.TotalMilliseconds / frames;
-        Assert.True(
-            condition: millisecondsPerFrame < 6.9,
-            userMessage:
-            $"CodeEditor CPU paint cost was {millisecondsPerFrame:F3} ms/frame; 144 Hz budget is 6.9 ms."
-        );
-    }
+    // The steady-scroll 144 Hz paint-budget test lives in HighlightingPerfTests, running through
+    // the XParsec-backed Highlighting.CSharp tokenizer (the production path).
 
     // Stateful, call-counting tokenizer: state 1 = "inside a /* … */ block comment".
     private sealed class BlockCommentTokenizer : ILineTokenizer

@@ -19,6 +19,10 @@ public class PaintSnapshotDiffTests
         return list;
     }
 
+    private static bool Covers(Rect outer, Rect inner) =>
+        inner.X >= outer.X && inner.Y >= outer.Y &&
+        inner.Right <= outer.Right && inner.Bottom <= outer.Bottom;
+
     private static PaintDiffResult Diff(PaintList prev, PaintList cur, out Rect[] rects)
     {
         var snap = new PaintSnapshot();
@@ -405,8 +409,12 @@ public class PaintSnapshotDiffTests
         );
     }
 
+    /// <summary>
+    ///     A changed clip scope stays bounded: suffix draws under it render with different
+    ///     visibility, but only within old rect ∪ new rect — both must be reported as damage.
+    /// </summary>
     [Fact]
-    public void Changed_clip_scope_is_unbounded()
+    public void Changed_clip_scope_is_bounded_by_both_rects()
     {
         var a = List(p =>
             {
@@ -464,8 +472,78 @@ public class PaintSnapshotDiffTests
         );
 
         Assert.Equal(
-            expected: PaintDiffResult.Unbounded,
-            actual: Diff(prev: a, cur: b, rects: out _)
+            expected: PaintDiffResult.Bounded,
+            actual: Diff(prev: a, cur: b, rects: out var rects)
+        );
+        Assert.Contains(
+            rects,
+            r => Covers(
+                outer: r,
+                inner: new Rect(
+                    x: 0,
+                    y: 0,
+                    width: 100,
+                    height: 100
+                )
+            )
+        );
+        Assert.Contains(
+            rects,
+            r => Covers(
+                outer: r,
+                inner: new Rect(
+                    x: 0,
+                    y: 0,
+                    width: 200,
+                    height: 200
+                )
+            )
+        );
+    }
+
+    /// <summary>
+    ///     The scroll case the clip-containment rule exists for: content (including text, which has
+    ///     no per-op bounds) shifting under an UNCHANGED ClipStart must stay partial, with damage
+    ///     covered by the clip rect — not degrade to a full repaint.
+    /// </summary>
+    [Fact]
+    public void Scrolled_text_under_unchanged_clip_is_bounded_by_the_clip_rect()
+    {
+        var clip = new Rect(
+            x: 50,
+            y: 50,
+            width: 300,
+            height: 200
+        );
+        PaintList Frame(float scrollY) => List(p =>
+            {
+                p.AddClipStart(clip);
+                for (int line = 0; line < 5; line++)
+                {
+                    p.AddText(
+                        text: $"line {line}",
+                        baselineX: 60,
+                        baselineY: 70 + (line * 20) - scrollY,
+                        color: new Color(
+                            r: 1f,
+                            g: 1f,
+                            b: 1f,
+                            a: 1f
+                        ),
+                        fontSize: 14f
+                    );
+                }
+
+                p.AddClipEnd();
+            }
+        );
+
+        var result = Diff(prev: Frame(0f), cur: Frame(35f), rects: out var rects);
+
+        Assert.Equal(expected: PaintDiffResult.Bounded, actual: result);
+        Assert.All(
+            collection: rects,
+            action: r => Assert.True(Covers(outer: clip, inner: r))
         );
     }
 

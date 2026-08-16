@@ -215,6 +215,11 @@ public partial class App
     private void PaceFrame()
     {
         if (FrameRateLimit < 0) return; // unpaced — see FrameRateLimit
+        // With vsync on and no explicit cap, the present is already the pacer. Sleeping against a
+        // second, wall-clock timebase here beats against the swapchain's and periodically pushes a
+        // frame past its deadline — the pacing inconsistency IS the jank (Chrome's scroll work found
+        // the same: consistency of delivery matters more than raw speed).
+        if (_vsync && FrameRateLimit == 0) return;
         long interval = FrameIntervalTicks;
         long now = _clock.ElapsedTicks;
         if (_paceAnchorTicks == 0) _paceAnchorTicks = now;

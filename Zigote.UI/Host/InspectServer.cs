@@ -38,7 +38,14 @@ namespace Zigote.UI.Host;
 ///         </item>
 ///         <item><c>semantics</c> — the accessibility tree, freshly built.</item>
 ///         <item><c>targets</c> — what <see cref="WidgetPreview" /> could show.</item>
-///         <item><c>preview &lt;Type&gt;</c> — swap the shown widget without restarting.</item>
+///         <item>
+///             <c>previews</c> — the same, with each target's <see cref="PreviewAttribute" /> and the
+///             properties it takes.
+///         </item>
+///         <item>
+///             <c>preview &lt;Type&gt;[?prop=value&amp;…]</c> — swap the shown widget, with its
+///             properties set, without restarting.
+///         </item>
 ///         <item><c>shot [scale]</c> — the current frame as a base64 BMP.</item>
 ///         <item><c>stream [scale] [fps]</c> — frames pushed as they change, length-prefixed binary.</item>
 ///         <item>
@@ -278,6 +285,9 @@ public static class InspectServer
                 return json.Append("]}").ToString();
             }
 
+            case "previews":
+                return PreviewsJson();
+
             case "preview" when setPreview is not null && argument.Length > 0:
                 setPreview(argument);
                 return "{\"ok\":true}";
@@ -336,6 +346,67 @@ public static class InspectServer
             default:
                 return Error($"unknown command '{command}'");
         }
+    }
+
+    /// <summary>
+    ///     The same targets as <c>targets</c>, with what <see cref="PreviewAttribute" /> said about them
+    ///     and the properties each one takes — everything a panel needs to draw a list and a property
+    ///     editor without knowing anything about C#.
+    ///     <para>
+    ///         A second command rather than a richer <c>targets</c>: that one is a list of strings in
+    ///         every consumer that already exists, and breaking them to avoid one command name is a poor
+    ///         trade. A client that gets <c>{"error":…}</c> here is talking to an older app and can fall
+    ///         back to <c>targets</c>.
+    ///     </para>
+    /// </summary>
+    internal static string PreviewsJson()
+    {
+        var json = new StringBuilder("{\"previews\":[");
+        bool first = true;
+        foreach (var target in WidgetPreview.Descriptors())
+        {
+            if (!first) json.Append(',');
+            first = false;
+
+            json.Append("{\"target\":");
+            Quote(json: json, text: target.Target);
+            json.Append(",\"label\":");
+            Quote(json: json, text: target.Label);
+            json.Append(",\"group\":");
+            Quote(json: json, text: target.Group);
+            json.Append(",\"annotated\":").Append(target.Annotated ? "true" : "false");
+            json.Append(",\"w\":").Append(Round(target.Width));
+            json.Append(",\"h\":").Append(Round(target.Height));
+            json.Append(",\"theme\":");
+            Quote(json: json, text: target.Theme);
+
+            json.Append(",\"params\":[");
+            bool firstParam = true;
+            foreach (var parameter in target.Parameters)
+            {
+                if (!firstParam) json.Append(',');
+                firstParam = false;
+
+                json.Append("{\"name\":");
+                Quote(json: json, text: parameter.Name);
+                json.Append(",\"kind\":");
+                Quote(json: json, text: parameter.Kind);
+                json.Append(",\"value\":");
+                Quote(json: json, text: parameter.Value);
+                json.Append(",\"options\":[");
+                for (int i = 0; i < parameter.Options.Count; i++)
+                {
+                    if (i > 0) json.Append(',');
+                    Quote(json: json, text: parameter.Options[i]);
+                }
+
+                json.Append("]}");
+            }
+
+            json.Append("]}");
+        }
+
+        return json.Append("]}").ToString();
     }
 
     /// <summary>

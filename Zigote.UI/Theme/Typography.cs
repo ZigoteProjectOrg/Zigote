@@ -1,5 +1,6 @@
 using Zigote.Core;
 using Zigote.Core.Paint;
+using Zigote.UI.Widgets;
 
 namespace Zigote.UI.Theme;
 
@@ -62,8 +63,17 @@ public readonly record struct TextStyle(
     /// <summary>Extra per-glyph spacing in pixels.</summary>
     public float LetterSpacing { get; init; }
 
+    /// <summary>
+    ///     Optional text shadow (CSS <c>text-shadow</c> semantics: color, offset, blur radius;
+    ///     <see cref="BoxShadow.SpreadRadius" /> is ignored). Null draws no shadow.
+    /// </summary>
+    public BoxShadow? Shadow { get; init; }
+
     /// <summary>This style with a different colour.</summary>
     public TextStyle WithColor(Color color) => this with { Color = color };
+
+    /// <summary>This style with a text shadow (e.g. for text over artwork).</summary>
+    public TextStyle WithShadow(BoxShadow shadow) => this with { Shadow = shadow };
 
     /// <summary>This style with a different weight (e.g. <c>Typography.Body.Bold()</c>).</summary>
     public TextStyle With(FontWeight weight) => this with { Weight = weight };

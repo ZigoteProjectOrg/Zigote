@@ -34,6 +34,7 @@ public sealed class FlexibleBottomSheet : Widget
     private readonly Padding _radiusPad;
 
     private float _bottomInset;
+    private float _density = 1f;
     private BottomSheetStyle.Resolved _res;
     private float _sheetPx;
     private Size _size;
@@ -192,6 +193,7 @@ public sealed class FlexibleBottomSheet : Widget
         var context = BuildContext.Current;
         _res = Style.Resolve(ThemeProvider.Of(context));
         var media = MediaQuery.Of(context);
+        _density = media.DevicePixelRatio;
 
         _card.Fill = _res.Background;
         _card.Radius = _res.CornerRadius;
@@ -256,6 +258,19 @@ public sealed class FlexibleBottomSheet : Widget
 
     public override void Paint(PaintList paint)
     {
+        // Under the scrim, so the dim reads over the blur. Reach scaled by Presence is what
+        // animates it: a blur has no alpha, so it grows in with the entrance instead of fading.
+        if (IsModal && Style.BarrierBlur > 0f && Presence > 0.001f)
+        {
+            BackdropBlur.Paint(
+                paint: paint,
+                bounds: Bounds,
+                reach: Style.BarrierBlur * Presence,
+                cornerRadius: 0f,
+                density: _density
+            );
+        }
+
         if (IsModal && _res.BarrierColor.A > 0f && Presence > 0.001f)
         {
             paint.AddRect(

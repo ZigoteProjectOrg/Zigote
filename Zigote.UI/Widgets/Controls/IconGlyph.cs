@@ -29,6 +29,9 @@ public sealed class IconGlyph : Widget
     /// <summary>Tint colour; <c>null</c> falls back to the theme's primary label colour.</summary>
     public Color? Color { get; set; }
 
+    /// <summary>Optional text shadow behind the glyph (e.g. icons over artwork).</summary>
+    public BoxShadow? Shadow { get; set; }
+
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
@@ -53,7 +56,8 @@ public sealed class IconGlyph : Widget
             glyph: _glyph,
             box: Bounds,
             color: Color ?? _theme.OnSurface,
-            size: SizePx
+            size: SizePx,
+            shadow: Shadow
         );
     }
 }

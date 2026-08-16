@@ -32,6 +32,7 @@ public class Text : Label
             LetterSpacing = s.LetterSpacing;
             if (s.FontFamily is not null) FontFamily = s.FontFamily;
             if (s.Color is { } c) Color = c;
+            Shadow = s.Shadow;
         }
 
         if (textAlign is { } ta) Align = ta;

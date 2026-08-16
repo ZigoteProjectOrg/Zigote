@@ -9,12 +9,18 @@
             <li><b>Colour swatches</b> in the gutter for <code>new Color(0xFF2196F3)</code>,
                 <code>Color.FromHex</code>, <code>Color.Rgb</code> and <code>Color.Rgba</code>, with the
                 platform colour picker on click.</li>
-            <li><b>Preview Zigote Widget</b> (Alt+Shift+P) — runs the widget at the caret on its own
-                under <code>dotnet watch</code>, so saving reloads it.</li>
+            <li><b>Preview from the editor</b> — a ▶ in the gutter next to every widget the running app
+                can show, and <b>Preview Zigote Widget</b> (Alt+Shift+P) for the one at the caret.
+                Both swap a running app in place instead of restarting it.</li>
             <li>A <b>Zigote</b> tool window: the running app's frame — live and interactive (click,
                 drag, scroll and type on the picture), streamed at animation rate — plus its widget
                 tree and accessibility tree, with pickers for project, widget, device size, theme and
                 locale, none of which restart the app.</li>
+            <li><b>Preview properties</b>: a widget's defaulted constructor or factory parameters
+                become controls under the picture, so the same page can be looked at empty, full, or
+                with a title long enough to wrap, without editing it.</li>
+            <li><b>[Preview]</b> — annotate a widget or page and it gets a name, a group, and the
+                device size and theme it is meant to be looked at in.</li>
         </ul>
         Both halves live in the framework (<code>Zigote.UI.Host.WidgetPreview</code> and
         <code>InspectServer</code>) and are driven by environment variables and a loopback socket, so they
@@ -25,6 +31,7 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <editorFactoryListener implementation="dev.zigote.rider.ZigoteColorGutter"/>
+        <editorFactoryListener implementation="dev.zigote.rider.ZigotePreviewGutter"/>
         <toolWindow id="Zigote"
                     anchor="right"
                     factoryClass="dev.zigote.rider.ZigoteToolWindowFactory"/>

@@ -109,28 +109,57 @@ public sealed class PaintSnapshot
 
         // Scope state entering the changed window is shared by construction (the prefix is identical).
         // A window under an active transform or render-texture scope has no reliable screen bounds.
+        // A window under an active CLIP scope has a perfect one: the clip's screen rect — nothing
+        // painted inside it can land outside (clip rects are encoded in screen space; native
+        // intersects nested clips). clips[i] holds the intersection of the first i+1 open rects.
         int transformDepth = 0;
         int rtDepth = 0;
+        int clipDepth = 0;
+        Span<Rect> clips = stackalloc Rect[MaxClipDepth];
         for (int i = 0; i < prefix; i++)
         {
-            switch ((PaintCommandKind)prev[i].Kind)
+            ref readonly var c = ref prev[i];
+            switch ((PaintCommandKind)c.Kind)
             {
                 case PaintCommandKind.TransformPush: transformDepth++; break;
                 case PaintCommandKind.TransformPop: transformDepth--; break;
                 case PaintCommandKind.RenderTextureBegin: rtDepth++; break;
                 case PaintCommandKind.RenderTextureEnd: rtDepth--; break;
+                case PaintCommandKind.ClipStart:
+                {
+                    if (clipDepth >= MaxClipDepth) return PaintDiffResult.Unbounded;
+                    var r = new Rect(
+                        x: c.RectX,
+                        y: c.RectY,
+                        width: c.RectW,
+                        height: c.RectH
+                    );
+                    clips[clipDepth] = clipDepth == 0
+                        ? r
+                        : Rect.Intersect(a: clips[clipDepth - 1], b: r);
+                    clipDepth++;
+                    break;
+                }
+                case PaintCommandKind.ClipEnd:
+                    clipDepth = Math.Max(val1: 0, val2: clipDepth - 1);
+                    break;
             }
         }
 
         if (transformDepth > 0 || rtDepth > 0) return PaintDiffResult.Unbounded;
 
-        // Every command inside either window contributes bounds; a state/structure command in the
-        // window means op indices shifted across scopes — repaint everything rather than guess.
+        // Every command inside either window contributes bounds; a command under an open clip is
+        // covered by the clip rect itself, whatever it is — this is what keeps a scrolled subtree
+        // (text layouts, glyph runs, per-frame offsets) partial instead of degrading to a full
+        // repaint. Both windows start from the same prefix clip stack; pushes inside a window only
+        // write slots at/above its starting depth, so the shared span is safe to reuse.
         return AccumulateWindow(
                    cmds: prev,
                    start: prefix,
                    end: prev.Length - suffix,
                    blobSource: this,
+                   clips: clips,
+                   clipDepth: clipDepth,
                    changed: changed,
                    changedCount: ref changedCount
                ) &&
@@ -139,6 +168,8 @@ public sealed class PaintSnapshot
                    start: prefix,
                    end: cur.Length - suffix,
                    blobSource: current,
+                   clips: clips,
+                   clipDepth: clipDepth,
                    changed: changed,
                    changedCount: ref changedCount
                )
@@ -146,14 +177,83 @@ public sealed class PaintSnapshot
             : PaintDiffResult.Unbounded;
     }
 
+    /// <summary>Deepest tracked clip nesting; deeper degrades to a full repaint (never in practice).</summary>
+    private const int MaxClipDepth = 32;
+
     private static bool AccumulateWindow(
-        ReadOnlySpan<ZgPaintCommand> cmds, int start, int end,
-        object blobSource, Span<Rect> changed, ref int changedCount)
+        ReadOnlySpan<ZgPaintCommand> cmds, int start, int end, object blobSource,
+        Span<Rect> clips, int clipDepth, Span<Rect> changed, ref int changedCount)
     {
+        int transformDepth = 0; // native transforms opened inside this window
         for (int i = start; i < end; i++)
         {
+            ref readonly var cmd = ref cmds[i];
+            switch ((PaintCommandKind)cmd.Kind)
+            {
+                case PaintCommandKind.ClipStart:
+                {
+                    // A clip scope inside the window is fine — old draws are covered via the old
+                    // rect (prev window walk), new draws via the new one (cur window walk). Under
+                    // an open native transform the encoded rect is not screen space — keep the
+                    // (screen-space) outer intersection instead; the real clip only shrinks it.
+                    // The pushed rect is ALWAYS damage: identical suffix draws under a changed
+                    // scope render with different visibility, bounded by old rect ∪ new rect.
+                    if (clipDepth >= clips.Length) return false;
+                    if (transformDepth > 0)
+                    {
+                        if (clipDepth == 0) return false; // no screen-space bound available
+                        clips[clipDepth] = clips[clipDepth - 1];
+                    }
+                    else
+                    {
+                        var r = new Rect(
+                            x: cmd.RectX,
+                            y: cmd.RectY,
+                            width: cmd.RectW,
+                            height: cmd.RectH
+                        );
+                        clips[clipDepth] = clipDepth == 0
+                            ? r
+                            : Rect.Intersect(a: clips[clipDepth - 1], b: r);
+                    }
+
+                    var pushed = clips[clipDepth];
+                    if (pushed.Width > 0f && pushed.Height > 0f)
+                        AddRect(changed: changed, count: ref changedCount, r: pushed);
+                    clipDepth++;
+                    continue;
+                }
+                case PaintCommandKind.ClipEnd:
+                    // Popping a prefix-opened scope mid-window is legitimate (scrolled children +
+                    // the scrollbar after the ClipEnd); below zero the list is malformed.
+                    if (--clipDepth < 0) return false;
+                    continue;
+                case PaintCommandKind.TransformPush:
+                case PaintCommandKind.TransformPop:
+                    // Transformed draws have no per-op screen bounds; under an open clip the
+                    // scissor still bounds them, outside one nothing does.
+                    if (clipDepth == 0) return false;
+                    transformDepth += cmd.Kind == (byte)PaintCommandKind.TransformPush ? 1 : -1;
+                    continue;
+                // Offscreen redirection / whole-target effects escape the clip argument.
+                case PaintCommandKind.RenderTextureBegin:
+                case PaintCommandKind.RenderTextureEnd:
+                case PaintCommandKind.Blur:
+                    return false;
+            }
+
+            if (clipDepth > 0)
+            {
+                // Clipped: the op cannot paint outside the open clips' intersection — no per-op
+                // bounds needed (text layouts and state ops included).
+                var clip = clips[clipDepth - 1];
+                if (clip.Width <= 0f || clip.Height <= 0f) continue; // fully clipped away
+                AddRect(changed: changed, count: ref changedCount, r: clip);
+                continue;
+            }
+
             if (!TryCommandBounds(
-                    cmd: in cmds[i],
+                    cmd: in cmd,
                     blobSource: blobSource,
                     index: i,
                     bounds: out var bounds

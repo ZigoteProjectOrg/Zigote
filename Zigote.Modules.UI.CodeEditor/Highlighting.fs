@@ -3,122 +3,128 @@ namespace Zigote.Modules.UI.CodeEditor
 open System
 open System.Collections.Generic
 open Zigote.UI.TextShaping
-open FParsec
+open XParsec
+open XParsec.Parsers
+open XParsec.CharParsers
 
-// The carried lexer state (FParsec user state):  are we inside an unterminated  /* … */  block?
+// The carried lexer state (XParsec user state):  are we inside an unterminated  /* … */  block?
 type private S = bool
+
+/// A line-scoped XParsec parser over string input.
+type private P<'a> = Parser<'a, char, S, ReadableString>
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Parser primitives — each token parser consumes ≥1 char and FAILS at eof, so the
-// `many` driver in buildLine always terminates (no "succeeded without consuming" trap).
+// tokenize loop in LineHighlighter always makes progress. XParsec's <|> / choice
+// always backtrack, so no `attempt` wrapping is needed.
 // ─────────────────────────────────────────────────────────────────────────────
 module private P =
 
-    let idx: Parser<int, S> = getPosition |>> fun p -> int p.Index
+    /// Bracket a body parser with reader indices → a Token spanning what it consumed.
+    let span (kind: TokenKind) (body: P<unit>) : P<Token> =
+        fun reader ->
+            let s = reader.Index
 
-    /// Bracket a body parser with positions → a Token spanning what it consumed.
-    let span (kind: TokenKind) (body: Parser<unit, S>) : Parser<Token, S> =
-        pipe3 idx body idx (fun s () e -> Token(s, e - s, kind))
+            match body reader with
+            | Ok() -> Ok(Token(s, reader.Index - s, kind))
+            | Error e -> Error e
+
+    /// Input is a single line, so "rest of line" is everything up to eof.
+    let skipToEol: P<unit> = skipManySatisfies (fun _ -> true)
 
     // ── Comments ──────────────────────────────────────────────────────────────
 
-    let lineCommentP: Parser<Token, S> =
-        span TokenKind.Comment (skipString "//" >>. skipRestOfLine false)
+    let lineCommentP: P<Token> =
+        span TokenKind.Comment (stringReturn "//" () >>. skipToEol)
+
+    /// Body of a block comment: consume up to and including «*/» and clear the
+    /// user state, or consume the rest of the line and set it.
+    let private blockBody: P<unit> =
+        (skipManyTill skip (stringReturn "*/" ()) >>. setUserState false)
+        <|> (skipToEol >>. setUserState true)
 
     /// «/*» opening on this line. Sets user state = true iff «*/» is not also on this line.
-    let blockCommentOpenP: Parser<Token, S> =
-        span
-            TokenKind.Comment
-            (skipString "/*"
-             >>. (attempt ((manyCharsTill anyChar (skipString "*/") >>% ()) >>. setUserState false)
-                  <|> (skipRestOfLine false >>. setUserState true)))
+    let blockCommentOpenP: P<Token> =
+        span TokenKind.Comment (stringReturn "/*" () >>. blockBody)
 
     /// Continuation of a block comment opened on a previous line (used only as a line prefix
     /// when the incoming state is "in block"). Clears the flag when it finds the closing «*/».
-    let blockContinuationP: Parser<Token, S> =
-        span
-            TokenKind.Comment
-            (attempt ((manyCharsTill anyChar (skipString "*/") >>% ()) >>. setUserState false)
-             <|> (skipRestOfLine false >>. setUserState true))
+    let blockContinuationP: P<Token> = span TokenKind.Comment blockBody
 
     // ── String / char literals ──────────────────────────────────────────────
 
-    let private quoted (quote: char) : Parser<unit, S> =
-        let escaped = attempt (skipChar '\\' >>. skipAnyChar)
+    let private quoted (quote: char) : P<unit> =
+        let escaped = skipChar '\\' >>. skipAnyChar
         let normal = satisfy (fun c -> c <> quote && c <> '\\') >>% ()
         skipChar quote >>. skipMany (escaped <|> normal) >>. (skipChar quote <|> eof)
 
-    let stringP (quote: char) : Parser<Token, S> = span TokenKind.String (quoted quote)
+    let stringP (quote: char) : P<Token> = span TokenKind.String (quoted quote)
 
     /// C# verbatim string  @"…"  where  ""  is an embedded quote.
-    let verbatimStringP: Parser<Token, S> =
+    let verbatimStringP: P<Token> =
         span
             TokenKind.String
-            (skipString "@\""
-             >>. skipMany (attempt (skipString "\"\"") <|> (satisfy (fun c -> c <> '"') >>% ()))
+            (stringReturn "@\"" ()
+             >>. skipMany (stringReturn "\"\"" () <|> (satisfy (fun c -> c <> '"') >>% ()))
              >>. (skipChar '"' <|> eof))
 
     // ── Numbers ────────────────────────────────────────────────────────────────
 
-    let numberP: Parser<Token, S> =
+    let numberP: P<Token> =
+        let digitOr_ c = Char.IsAsciiDigit c || c = '_'
+        let hexOr_ c = Char.IsAsciiHexDigit c || c = '_'
+        let binOr_ c = c = '0' || c = '1' || c = '_'
+
         let body =
-            attempt (skipString "0x" >>. skipMany1 ((hex <|> pchar '_') >>% ()))
-            <|> attempt (skipString "0b" >>. skipMany1 (anyOf "01_" >>% ()))
-            <|> (skipMany1 ((digit <|> pchar '_') >>% ())
-                 >>. (opt (skipChar '.' >>. skipMany ((digit <|> pchar '_') >>% ())) |>> ignore)
-                 >>. (opt (
-                          anyOf "eE" >>. (opt (anyOf "+-") |>> ignore) >>. skipMany1 (digit >>% ())
-                      )
-                      |>> ignore)
-                 >>. skipMany (anyOf "fFdDmMuUlL" >>% ()))
+            (stringReturn "0x" () >>. skipMany1Satisfies hexOr_)
+            <|> (stringReturn "0b" () >>. skipMany1Satisfies binOr_)
+            <|> (skipMany1Satisfies digitOr_
+                 >>. optional (skipChar '.' >>. skipManySatisfies digitOr_)
+                 >>. optional (
+                     skipAnyOf "eE" >>. optional (skipAnyOf "+-")
+                     >>. skipMany1Satisfies Char.IsAsciiDigit
+                 )
+                 >>. skipManySatisfies "fFdDmMuUlL".Contains)
 
         span TokenKind.Number body
 
     // ── Identifiers / keywords / types ───────────────────────────────────────
 
-    let identP (kw: Set<string>) (ty: Set<string>) : Parser<Token, S> =
+    let private expectedIdent = Message "identifier"
+
+    /// A hand-rolled primitive: scans the word in place and classifies it via
+    /// allocation-free span lookups into the keyword / type sets.
+    let identP (kw: HashSet<string>) (ty: HashSet<string>) : P<Token> =
+        let kwL = kw.GetAlternateLookup<ReadOnlySpan<char>>()
+        let tyL = ty.GetAlternateLookup<ReadOnlySpan<char>>()
         let isStart c = Char.IsLetter c || c = '_' || c = '@'
         let isCont c = Char.IsLetterOrDigit c || c = '_'
 
-        pipe2 idx (many1Satisfy2 isStart isCont) (fun start word ->
-            let kind =
-                if Set.contains word kw then
-                    TokenKind.Keyword
-                elif Set.contains word ty then
-                    TokenKind.Type
-                elif word.Length > 0 && Char.IsUpper word[0] then
-                    TokenKind.Type // PascalCase heuristic
-                else
-                    TokenKind.Default
+        fun reader ->
+            match reader.Peek() with
+            | ValueSome c when isStart c ->
+                let start = reader.Index
+                reader.Skip()
+                skipManySatisfies isCont reader |> ignore
+                let word = reader.Input.AsSpan(start, reader.Index - start)
 
-            Token(start, word.Length, kind))
+                let kind =
+                    if kwL.Contains word then TokenKind.Keyword
+                    elif tyL.Contains word then TokenKind.Type
+                    elif Char.IsUpper word[0] then TokenKind.Type // PascalCase heuristic
+                    else TokenKind.Default
+
+                Ok(Token(start, word.Length, kind))
+            | _ -> fail expectedIdent reader
 
     // ── Operators & punctuation ───────────────────────────────────────────────
 
-    let operatorP: Parser<Token, S> =
-        span TokenKind.Operator (skipMany1 (satisfy (fun c -> "+-*/%=<>!&|^~?".Contains c) >>% ()))
+    let operatorP: P<Token> =
+        span TokenKind.Operator (skipMany1Satisfies "+-*/%=<>!&|^~?".Contains)
 
-    let punctP: Parser<Token, S> = span TokenKind.Punctuation (anyOf "()[]{},:;." >>% ())
+    let punctP: P<Token> = span TokenKind.Punctuation (skipAnyOf "()[]{},:;.")
 
-    let wsP: Parser<Token option, S> = skipMany1 (anyOf " \t" >>% ()) >>% None
-
-    let catchAllP: Parser<Token, S> = span TokenKind.Default skipAnyChar
-
-    /// Build a whole-line parser from a token `choice`. `supportsBlock` prepends a block-comment
-    /// continuation when the incoming user state says we're inside one.
-    let buildLine (supportsBlock: bool) (choices: Parser<Token option, S>) : Parser<Token list, S> =
-        let prefix: Parser<Token list, S> =
-            if supportsBlock then
-                getUserState
-                >>= fun inBlock ->
-                    if inBlock then
-                        blockContinuationP |>> List.singleton
-                    else
-                        preturn ([]: Token list)
-            else
-                preturn ([]: Token list)
-
-        pipe2 prefix ((many choices) .>> eof) (fun pre rest -> pre @ List.choose id rest)
+    let catchAllP: P<Token> = span TokenKind.Default skipAnyChar
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Language grammars
@@ -126,7 +132,7 @@ module private P =
 module private Grammar =
 
     let csKw =
-        Set.ofList
+        HashSet
             [
                 "abstract"
                 "as"
@@ -212,7 +218,7 @@ module private Grammar =
             ]
 
     let csTy =
-        Set.ofList
+        HashSet
             [
                 "bool"
                 "byte"
@@ -251,7 +257,7 @@ module private Grammar =
             ]
 
     let wgslKw =
-        Set.ofList
+        HashSet
             [
                 "alias"
                 "break"
@@ -292,7 +298,7 @@ module private Grammar =
             ]
 
     let wgslTy =
-        Set.ofList
+        HashSet
             [
                 "bool"
                 "i32"
@@ -332,7 +338,7 @@ module private Grammar =
             ]
 
     let zigKw =
-        Set.ofList
+        HashSet
             [
                 "addrspace"
                 "align"
@@ -390,7 +396,7 @@ module private Grammar =
             ]
 
     let zigTy =
-        Set.ofList
+        HashSet
             [
                 "bool"
                 "void"
@@ -425,145 +431,114 @@ module private Grammar =
                 "f128"
             ]
 
-    let jsonKw = Set.ofList [ "true"; "false"; "null" ]
-    let empty: Set<string> = Set.empty
+    let jsonKw = HashSet [ "true"; "false"; "null" ]
+    let empty = HashSet<string>()
 
     // C# — block comments, verbatim + regular strings, char literals.
-    let csLine =
-        P.buildLine
-            true
-            (choice
-                [
-                    P.wsP
-                    attempt P.lineCommentP |>> Some
-                    attempt P.blockCommentOpenP |>> Some
-                    attempt P.verbatimStringP |>> Some
-                    attempt (P.stringP '"') |>> Some
-                    attempt (P.stringP '\'') |>> Some
-                    attempt P.numberP |>> Some
-                    attempt (P.identP csKw csTy) |>> Some
-                    attempt P.operatorP |>> Some
-                    attempt P.punctP |>> Some
-                    P.catchAllP |>> Some
-                ])
+    let csLine: P<Token> =
+        choiceL
+            [
+                P.lineCommentP
+                P.blockCommentOpenP
+                P.verbatimStringP
+                P.stringP '"'
+                P.stringP '\''
+                P.numberP
+                P.identP csKw csTy
+                P.operatorP
+                P.punctP
+                P.catchAllP
+            ]
+            "token"
 
     // WGSL — line comments only (shader code, no string literals worth lexing).
-    let wgslLine =
-        P.buildLine
-            false
-            (choice
-                [
-                    P.wsP
-                    attempt P.lineCommentP |>> Some
-                    attempt P.numberP |>> Some
-                    attempt (P.identP wgslKw wgslTy) |>> Some
-                    attempt P.operatorP |>> Some
-                    attempt P.punctP |>> Some
-                    P.catchAllP |>> Some
-                ])
+    let wgslLine: P<Token> =
+        choiceL
+            [
+                P.lineCommentP
+                P.numberP
+                P.identP wgslKw wgslTy
+                P.operatorP
+                P.punctP
+                P.catchAllP
+            ]
+            "token"
 
     // Zig — line comments, string literals.
-    let zigLine =
-        P.buildLine
-            false
-            (choice
-                [
-                    P.wsP
-                    attempt P.lineCommentP |>> Some
-                    attempt (P.stringP '"') |>> Some
-                    attempt P.numberP |>> Some
-                    attempt (P.identP zigKw zigTy) |>> Some
-                    attempt P.operatorP |>> Some
-                    attempt P.punctP |>> Some
-                    P.catchAllP |>> Some
-                ])
+    let zigLine: P<Token> =
+        choiceL
+            [
+                P.lineCommentP
+                P.stringP '"'
+                P.numberP
+                P.identP zigKw zigTy
+                P.operatorP
+                P.punctP
+                P.catchAllP
+            ]
+            "token"
 
     // JSON — a string immediately followed by «:» is an object key (rendered as a Type).
-    let private jsonStringP: Parser<Token, S> =
-        let strSpan =
-            P.span
-                TokenKind.String
-                (skipChar '"'
-                 >>. skipMany (
-                     attempt (skipChar '\\' >>. skipAnyChar)
-                     <|> (satisfy (fun c -> c <> '"') >>% ())
-                 )
-                 >>. (skipChar '"' <|> eof))
-
-        strSpan
+    let private jsonStringP: P<Token> =
+        P.stringP '"'
         >>= fun tok ->
-            (attempt (skipMany (anyOf " \t" >>% ()) >>. followedBy (skipChar ':'))
+            ((skipManySatisfies (fun c -> c = ' ' || c = '\t') >>. lookAhead (skipChar ':'))
              >>% Token(tok.Start, tok.Length, TokenKind.Type))
             <|> preturn tok
 
-    let jsonLine =
-        P.buildLine
-            false
-            (choice
-                [
-                    P.wsP
-                    attempt jsonStringP |>> Some
-                    attempt P.numberP |>> Some
-                    attempt (P.identP jsonKw empty) |>> Some
-                    attempt P.punctP |>> Some
-                    attempt P.operatorP |>> Some
-                    P.catchAllP |>> Some
-                ])
+    let jsonLine: P<Token> =
+        choiceL
+            [
+                jsonStringP
+                P.numberP
+                P.identP jsonKw empty
+                P.punctP
+                P.operatorP
+                P.catchAllP
+            ]
+            "token"
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ILineTokenizer adapter — bridges an FParsec line parser to the C# widget contract.
+// ILineTokenizer adapter — drives an XParsec token parser over one line, streaming
+// tokens straight into the caller's list (no intermediate token collections).
 // ─────────────────────────────────────────────────────────────────────────────
-type private LineHighlighter(parser: Parser<Token list, S>) =
+type private LineHighlighter(supportsBlock: bool, tokenP: P<Token>) =
     interface ILineTokenizer with
         member _.Tokenize(line: string, state: int, output: List<Token>) =
-            match runParserOnString parser (state = 1) "line" line with
-            | Success(tokens, finalState, _) ->
-                for t in tokens do
-                    output.Add t
+            let reader = Reader.ofString line (state = 1)
 
-                if finalState then 1 else 0
-            | Failure _ -> state // shouldn't happen (catch-all is total); carry state forward
+            if supportsBlock && reader.State then
+                match P.blockContinuationP reader with
+                | Ok t -> output.Add t
+                | Error _ -> ()
+
+            while not reader.AtEnd do
+                skipManySatisfies (fun c -> c = ' ' || c = '\t') reader |> ignore
+
+                if not reader.AtEnd then
+                    match tokenP reader with
+                    | Ok t -> output.Add t
+                    | Error _ -> reader.Skip() // unreachable (catch-all is total); keep making progress
+
+            if reader.State then 1 else 0
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public factory — consumed by C# (the editor) and the F# demo.
 // ─────────────────────────────────────────────────────────────────────────────
+/// Shared tokenizer singletons — initialized with the rest of the file's bindings,
+/// in declaration order (a type cctor here can re-enter the file initializer).
+module private Tokenizers =
+    let csharp: ILineTokenizer = LineHighlighter(true, Grammar.csLine)
+    let wgsl: ILineTokenizer = LineHighlighter(false, Grammar.wgslLine)
+    let zig: ILineTokenizer = LineHighlighter(false, Grammar.zigLine)
+    let json: ILineTokenizer = LineHighlighter(false, Grammar.jsonLine)
+
 [<AbstractClass; Sealed>]
 type Highlighting private () =
-    [<DefaultValue>]
-    static val mutable private csharp: ILineTokenizer
-
-    [<DefaultValue>]
-    static val mutable private wgsl: ILineTokenizer
-
-    [<DefaultValue>]
-    static val mutable private zig: ILineTokenizer
-
-    [<DefaultValue>]
-    static val mutable private json: ILineTokenizer
-
-    static member CSharp =
-        if isNull Highlighting.csharp then
-            Highlighting.csharp <- BuiltInCodeTokenizer(CodeLanguage.CSharp)
-
-        Highlighting.csharp
-
-    static member Wgsl =
-        if isNull Highlighting.wgsl then
-            Highlighting.wgsl <- BuiltInCodeTokenizer(CodeLanguage.Wgsl)
-
-        Highlighting.wgsl
-
-    static member Zig =
-        if isNull Highlighting.zig then
-            Highlighting.zig <- BuiltInCodeTokenizer(CodeLanguage.Zig)
-
-        Highlighting.zig
-
-    static member Json =
-        if isNull Highlighting.json then
-            Highlighting.json <- BuiltInCodeTokenizer(CodeLanguage.Json)
-
-        Highlighting.json
+    static member CSharp = Tokenizers.csharp
+    static member Wgsl = Tokenizers.wgsl
+    static member Zig = Tokenizers.zig
+    static member Json = Tokenizers.json
 
     /// An <c>ILineTokenizer</c> for the given file extension (with or without the leading dot),
     /// or <c>null</c> for plain-text / unknown files (the editor then renders unhighlighted text).

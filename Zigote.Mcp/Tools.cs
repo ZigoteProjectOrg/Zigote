@@ -378,9 +378,10 @@ public static class Tools
         ("preview_targets", new Tool(
             Description:
             "The widget types this app can show on their own via `set_preview` (or `launch`'s " +
-            "preview parameter).",
+            "preview parameter), each with the name and device size its [Preview] attribute gave " +
+            "it and the properties it takes.",
             Schema: Schema(PortProp()),
-            Run: args => Json(Send(port: Port(args), command: "targets"))
+            Run: args => Json(Send(port: Port(args), command: "previews"))
         )),
 
         ("set_preview", new Tool(
@@ -390,7 +391,12 @@ public static class Tools
             Schema: Schema(
                 Req(
                     name: "type",
-                    prop: Prop(type: "string", description: "a type name from preview_targets")
+                    prop: Prop(
+                        type: "string",
+                        description:
+                        "a target name from preview_targets, optionally with its properties set: " +
+                        "'My.App.Card?title=Espresso&sale=true' (values URL-encoded)"
+                    )
                 ),
                 ShotProp(),
                 PortProp()

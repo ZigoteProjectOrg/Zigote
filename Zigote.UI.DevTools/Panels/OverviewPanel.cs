@@ -39,6 +39,7 @@ public sealed class OverviewPanel : IDevPanel
     private readonly DevKeyValue _info = new("Info");
     private readonly DevChartCard _memCard;
     private readonly DevKeyValue _range = new("Range");
+    private readonly DevKeyValue _jank = new("Jank");
     private readonly DevKeyValue _surface = new("Surface");
     private readonly CachedText _tCpu = new();
     private readonly CachedText _tDraws = new();
@@ -51,6 +52,7 @@ public sealed class OverviewPanel : IDevPanel
     private readonly CachedText _tHeap = new();
     private readonly CachedText _tInfo = new();
     private readonly CachedText _tRange = new();
+    private readonly CachedText _tJank = new();
     private readonly CachedText _tSurface = new();
     private readonly CachedText _tUptime = new();
     private readonly CachedText _tVisible = new();
@@ -133,6 +135,7 @@ public sealed class OverviewPanel : IDevPanel
                 _fps,
                 _frame,
                 _range,
+                _jank,
                 new DevSectionHeader("CPU"),
                 _cpuCard,
                 _cpu,
@@ -171,6 +174,24 @@ public sealed class OverviewPanel : IDevPanel
         _frame.Value = _tFrame.Update($"{DebugStats.FrameMs:F2} ms");
         _range.Value = _tRange.Update($"{DebugStats.FpsMin:F0} – {DebugStats.FpsMax:F0} fps");
         _range.ValueColor = theme.Hint;
+
+        // Missed-deadline frames since launch; the parenthesized count is the subset that hit
+        // while something was animating (scroll/fling/transition) — the jank users actually see.
+        // The trailing name is the pipeline stage most often to blame (profiler-bracketed hosts).
+        long total = Math.Max(val1: 1L, val2: DebugStats.TotalFrames);
+        string worst = "";
+        long worstCount = 0;
+        foreach ((string name, long count) in DebugStats.JankCauses)
+        {
+            if (count <= worstCount) continue;
+            worstCount = count;
+            worst = $" — {name}";
+        }
+
+        _jank.Value = _tJank.Update(
+            $"{DebugStats.JankFrames} ({DebugStats.AnimatedJankFrames} animated, {DebugStats.JankFrames * 100.0 / total:F1}%){worst}"
+        );
+        _jank.ValueColor = DebugStats.AnimatedJankFrames > 0 ? Color.Amber : theme.Hint;
 
         _cpu.Value = _tCpu.Update($"{DebugStats.CpuPct:F1}%  ({Environment.ProcessorCount} cores)");
         _ws.Value = _tWs.Update($"{DebugStats.MemMb:0.0} MB");

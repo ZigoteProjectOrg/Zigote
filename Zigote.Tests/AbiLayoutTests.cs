@@ -93,6 +93,25 @@ public class AbiLayoutTests
             actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.BaselineY))
         );
         Assert.Equal(expected: 68, actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.V1)));
+
+        // Text shadow rides in slots Text never uses: rect = color, radius / border width =
+        // offset, img_pixel_w = blur.
+        Assert.Equal(expected: 24, actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.ShadowR)));
+        Assert.Equal(expected: 28, actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.ShadowG)));
+        Assert.Equal(expected: 32, actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.ShadowB)));
+        Assert.Equal(expected: 36, actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.ShadowA)));
+        Assert.Equal(
+            expected: 56,
+            actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.ShadowOffsetX))
+        );
+        Assert.Equal(
+            expected: 60,
+            actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.ShadowOffsetY))
+        );
+        Assert.Equal(
+            expected: 88,
+            actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.ShadowBlur))
+        );
     }
 
     [Fact]

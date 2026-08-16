@@ -19,8 +19,12 @@ import com.intellij.openapi.util.Key
 import com.intellij.openapi.project.guessProjectDir
 import com.intellij.openapi.vfs.VirtualFile
 import java.net.ServerSocket
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 import javax.swing.Timer
+
+/** Drops a listener again. Held by whoever subscribed and called from its `dispose`. */
+typealias Unsubscribe = () -> Unit
 
 /**
  * The one app the panels are looking at: a port, and how it got there.
@@ -50,8 +54,39 @@ class ZigoteSession(private val project: Project?) : Disposable {
     var state: String = IDLE
         private set
 
-    private val listeners = mutableListOf<() -> Unit>()
-    private val highlightListeners = mutableListOf<() -> Unit>()
+    // Copy-on-write and unsubscribable: a tool window can be closed and reopened all day, and a
+    // listener held by a disposed panel is both a leak and a callback into dead Swing components.
+    private val listeners = CopyOnWriteArrayList<() -> Unit>()
+    private val highlightListeners = CopyOnWriteArrayList<() -> Unit>()
+    private val targetListeners = CopyOnWriteArrayList<() -> Unit>()
+
+    /**
+     * What the running app says it can show, and the one copy of it.
+     *
+     * Held here rather than in the panel because it is not the panel's: the editor gutter marks a
+     * declaration as previewable from this list too, and two fetchers would disagree about which
+     * widgets exist for as long as one of them was stale.
+     */
+    @Volatile
+    internal var targets: List<PreviewTarget> = emptyList()
+        private set
+
+    /**
+     * The target last asked for from outside the panel — the editor gutter, or the preview action.
+     * The panel follows it, which is what makes "preview this widget" and the combo the same thing.
+     */
+    @Volatile
+    var requested: String? = null
+        private set
+
+    /**
+     * Bumped by every [show]. The panel follows the *asking*, not the value: asking twice for the
+     * same widget after picking another one in between has to move the combo back, and comparing
+     * names cannot tell that from the request it already applied.
+     */
+    val requestSeq: Int get() = requests.get()
+
+    private val requests = AtomicInteger()
 
     /**
      * Which launch/attach the panels currently belong to. Every callback that can change [port] or
@@ -105,28 +140,92 @@ class ZigoteSession(private val project: Project?) : Disposable {
         private set
 
     /** Separate from [onChanged] because selecting a tree node must not re-fetch the widget list. */
-    fun onHighlight(listener: () -> Unit) {
-        highlightListeners += listener
-    }
+    fun onHighlight(listener: () -> Unit): Unsubscribe = subscribe(highlightListeners, listener)
 
     fun highlight(bounds: FloatArray?) {
         highlight = bounds
-        exec.ui { highlightListeners.toList().forEach { it() } }
+        exec.ui { highlightListeners.forEach { it() } }
     }
 
     /** Called on the EDT whenever the port or the state changes. */
-    fun onChanged(listener: () -> Unit) {
-        listeners += listener
+    fun onChanged(listener: () -> Unit): Unsubscribe = subscribe(listeners, listener)
+
+    /** Called on the EDT whenever [targets] is replaced. */
+    fun onTargets(listener: () -> Unit): Unsubscribe = subscribe(targetListeners, listener)
+
+    private fun subscribe(into: CopyOnWriteArrayList<() -> Unit>, listener: () -> Unit): Unsubscribe {
+        into += listener
+        return { into -= listener }
     }
 
     private fun changed() {
-        exec.ui { listeners.toList().forEach { it() } }
+        exec.ui { listeners.forEach { it() } }
+    }
+
+    /**
+     * Re-read what the app can show. `previews` carries each target's `[Preview]` and the properties
+     * it takes; `targets` is the same list as bare names and is the fallback for an app built before
+     * `previews` existed — requiring both halves to be upgraded together would make every framework
+     * bump a plugin bump.
+     */
+    fun refreshTargets() {
+        if (port == null) {
+            publish(emptyList())
+            return
+        }
+
+        exec.background {
+            // Keyed on the answer carrying the list, not on the absence of an error: a server that
+            // does not know the command may answer anything, and an empty preview list reads exactly
+            // like an app that has none.
+            val rich = runCatching { query("previews") }.getOrNull()?.takeIf { it["previews"] is List<*> }
+            val found = when {
+                rich != null -> Previews.parse(rich)
+                else -> runCatching { query("targets") }.getOrNull()
+                    ?.strings("targets")?.map { PreviewTarget(it) }
+            }
+            if (found == null) LOG.warn("zigote: neither 'previews' nor 'targets' answered")
+            publish(found ?: emptyList())
+        }
+    }
+
+    private fun publish(found: List<PreviewTarget>) {
+        targets = found
+        exec.ui { targetListeners.forEach { it() } }
+    }
+
+    /**
+     * Show one widget, from wherever the developer asked — the editor gutter, the preview action, a
+     * shortcut.
+     *
+     * A running app is swapped in place, which is the whole point: rebuilding a project to look at a
+     * different widget of it costs the better part of a minute, and the socket does it in a frame.
+     * Only with nothing running does this launch, and only then does it need a project.
+     */
+    fun show(type: String, csproj: VirtualFile?) {
+        requested = type
+        requests.incrementAndGet()
+        if (port == null) {
+            csproj?.let { launch(csproj = it, type = type) }
+                ?: LOG.warn("zigote: nothing running and no project to start for $type")
+            return
+        }
+
+        exec.background {
+            runCatching { query("preview $type") }
+                .onFailure { LOG.warn("zigote: could not swap to $type", it) }
+            changed()
+        }
     }
 
     /** Start the app, previewing [type] when given, and wait for its socket. */
     fun launch(csproj: VirtualFile, type: String?) {
         val project = project ?: error("launch needs a project")
         val gen = generation.incrementAndGet()
+        if (type != null) {
+            requested = type
+            requests.incrementAndGet()
+        }
 
         // One previewed app at a time. Without this, Run app pressed twice leaves the first app
         // running invisibly (its window is hidden) and fighting the second for the panels.
@@ -182,12 +281,16 @@ class ZigoteSession(private val project: Project?) : Disposable {
                     "app exited (code ${event.exitCode}) before it was ready — see the run console"
                 else IDLE
                 port = null
+                publish(emptyList())
                 changed()
             }
         })
 
         handler = process
         port = null
+        // Whatever the last app could show is not what this one can; an empty list until it answers
+        // beats a stale one that looks live.
+        publish(emptyList())
         // The port is in the status from the start, not only once connected: if the wait ever fails,
         // that number is what "Attach…" needs, and hunting for it was the first thing to go wrong here.
         state = "starting on port $chosen… (the first build can take a while)"
@@ -219,6 +322,7 @@ class ZigoteSession(private val project: Project?) : Disposable {
         val gen = generation.incrementAndGet()
         port = null
         state = "connecting to port $candidate…"
+        publish(emptyList())
         changed()
         waitForPort(candidate, gen) { true }
     }
@@ -230,6 +334,7 @@ class ZigoteSession(private val project: Project?) : Disposable {
         handler = null
         port = null
         state = IDLE
+        publish(emptyList())
         changed()
     }
 
@@ -244,6 +349,9 @@ class ZigoteSession(private val project: Project?) : Disposable {
                     port = candidate
                     state = "port $candidate"
                     LOG.info("zigote: connected on port $candidate")
+                    // The list before the panels are told there is a port: a panel that reacts to the
+                    // connection by asking for targets itself is the duplicate this owns instead.
+                    refreshTargets()
                     changed()
                     return@background
                 }
@@ -318,8 +426,12 @@ class ZigoteSession(private val project: Project?) : Disposable {
         }.getOrDefault(false)
 
         /** The project owning the file being edited, as the combo's starting selection. */
-        fun csprojFor(project: Project): VirtualFile? {
-            var dir = FileEditorManager.getInstance(project).selectedFiles.firstOrNull()?.parent
+        fun csprojFor(project: Project): VirtualFile? =
+            FileEditorManager.getInstance(project).selectedFiles.firstOrNull()?.let { csprojFor(it) }
+
+        /** The project owning a particular file — what "run the widget in *this* file" needs. */
+        fun csprojFor(file: VirtualFile): VirtualFile? {
+            var dir = file.parent
             while (dir != null) {
                 dir.children.firstOrNull { it.extension.equals("csproj", true) }?.let { return it }
                 dir = dir.parent

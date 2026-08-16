@@ -17,7 +17,8 @@
 # --aot: NativeAOT publish (-p:ZigoteAot=true → PublishAot). ONLY for apps that opt in via
 # build/Zigote.Aot.targets AND do no runtime assembly loading — i.e. the galleries, NOT the editor (it
 # compiles+loads user scripts into a collectible ALC, which NativeAOT cannot do). AOT is host-RID only:
-# ilc has no cross-OS codegen, so publish osx-* from macOS, linux-* from Linux, win-* from Windows.
+# ilc has no cross-OS codegen, so publish osx-* from macOS, linux-* from Linux, win-* from Windows —
+# where "from macOS" can be the VM that --macos-vm drives.
 #
 # --single-file: bundle a JIT publish into ONE executable (a Windows .exe, or a single Linux binary)
 # that self-extracts on first run. Ignored for --aot, which is already one native binary.
@@ -28,10 +29,23 @@
 # there is no -Dtarget for it) a NativeAOT binary that will not start inside a Flatpak runtime or on
 # any LTS distro. Linux RIDs only; podman or docker required.
 #
+# --macos-vm: the same idea for osx-*, and the only way to build them from a non-Mac at all. The
+# native lib links Apple frameworks (Metal, Cocoa, CoreAudio) that zig does not bundle, so a cross
+# build from Linux dies at "'--sysroot' is required when building SDL for non-native macOS targets",
+# and NativeAOT additionally needs Xcode's clang/ld64 to link a Mach-O. So the publish is re-run
+# inside the dockur/macos VM that build/macos-vm.sh manages: sources rsync in, artifacts rsync back,
+# every other flag behaves exactly as it does locally. Set that VM up once, then treat this like
+# --container. Full AOT works there — both osx-x64 (native) and osx-arm64 (same-OS cross-arch, via
+# the SDK's split host/target ILCompiler packs).
+#
 # Cross-compilation (the native lib is built per-RID by build/Zigote.Native.targets):
-#   * From any host: osx-arm64/osx-x64, linux-x64, and win-x64 — Windows cross uses the GNU ABI (Zig
-#     bundles MinGW). MSVC-ABI cross needs the MSVC SDK so it's not attempted; a native Windows host
-#     builds the msvc ABI fine. Per-OS coverage / signing → the CI matrix in .github/workflows/release.yml.
+#   * From any host: linux-x64 and win-x64 — Windows cross uses the GNU ABI (Zig bundles MinGW).
+#     MSVC-ABI cross needs the MSVC SDK so it's not attempted; a native Windows host builds the msvc
+#     ABI fine.
+#   * osx-arm64/osx-x64 need a macOS SDK, which only macOS has: zig bundles a libSystem stub but no
+#     Apple frameworks, and SDL rejects a non-native macOS target outright without --sysroot. From a
+#     Mac they cross-build both ways; from anywhere else, --macos-vm. Per-OS coverage / signing →
+#     the CI matrix in .github/workflows/release.yml.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -41,6 +55,7 @@ PROJECT="$ROOT/Zigote.Editor/Zigote.Editor.csproj"
 NAME=""
 AOT=0
 CONTAINER=0
+MACOS_VM=0
 SINGLE_FILE=0
 
 ARGV=("$@")
@@ -51,12 +66,18 @@ while [ $# -gt 0 ]; do
     --name)      NAME="$2";    shift 2 ;;
     --aot)       AOT=1;        shift ;;
     --container) CONTAINER=1;  shift ;;
+    --macos-vm)  MACOS_VM=1;   shift ;;
     --single-file) SINGLE_FILE=1; shift ;;
-    -h|--help)   sed -n '2,31p' "$0"; exit 0 ;;
+    -h|--help)   sed -n '2,48p' "$0"; exit 0 ;;
     -*)          echo "unknown option: $1" >&2; exit 2 ;;
     *)           RIDS+=("$1"); shift ;;
   esac
 done
+
+# Both re-entries move the build off this machine, in different directions; asking for both is a
+# typo, not a combination that could mean anything.
+[ "$CONTAINER" -eq 1 ] && [ "$MACOS_VM" -eq 1 ] &&
+  { echo "--container and --macos-vm are mutually exclusive." >&2; exit 2; }
 
 # ── containerized re-entry ────────────────────────────────────────────────────────────────────────
 # Everything below this block runs identically inside and outside the container; --container only
@@ -121,6 +142,84 @@ if [ "$CONTAINER" -eq 1 ]; then
     ${ZIG_CPU:+-e "ZIG_CPU=$ZIG_CPU"} \
     ${FONT_SUBSET_TOOL:+-e "FONT_SUBSET_TOOL=$FONT_SUBSET_TOOL"} \
     "$IMAGE" "$ROOT/build/publish.sh" "${INNER[@]}"
+fi
+
+# ── macOS VM re-entry ─────────────────────────────────────────────────────────────────────────────
+# Same contract as --container above: only WHERE the publish runs changes. The transport is rsync over
+# SSH rather than a bind mount, because the guest is a VM with its own filesystem rather than a
+# container sharing the host's.
+if [ "$MACOS_VM" -eq 1 ]; then
+  VM="$ROOT/build/macos-vm.sh"
+  # Bring it up on demand, so a build system needs one command rather than three. Already-up is a
+  # no-op; a VM that has never been installed fails here with the instructions, before any work.
+  "$VM" up || exit 1
+  eval "$("$VM" env)"   # → MACOS_SSH_ARGS, MACOS_SSH_HOST
+
+  APP_ROOT="$(cd "$(dirname "$(dirname "$PROJECT")")" && pwd)"
+  # Mirror both checkouts at the same path RELATIVE TO $HOME as they have here. That is what keeps an
+  # out-of-tree app's ZigoteRoot resolving (Timbre spells it ../../../Projects/Zigote) without the
+  # app's csproj having to know it is being built in a VM — the relative distance between the two
+  # trees is preserved, only the prefix moves.
+  G_HOME="$("$VM" ssh 'printf %s "$HOME"')"
+  g_path() { printf '%s' "$G_HOME/${1#"$HOME"/}"; }
+  # For an in-tree app (the editor, the galleries) both are the same directory — same dedupe as the
+  # mount list above.
+  TREES=("$ROOT")
+  [ "$APP_ROOT" != "$ROOT" ] && TREES+=("$APP_ROOT")
+  for tree in "${TREES[@]}"; do
+    case "$tree" in "$HOME"/*) ;; *)
+      echo "--macos-vm mirrors checkouts relative to \$HOME, and $tree is outside it." >&2; exit 2 ;;
+    esac
+  done
+
+  # -rlptz, not -a: owner/group are meaningless across two machines with unrelated uid maps, and -D
+  # (devices/specials) is nothing a checkout contains — dropping all three also keeps the transfer
+  # within what the guest's rsync implements (Apple ships openrsync, protocol 27).
+  #
+  # obj/ and bin/ are excluded in BOTH directions on purpose. project.assets.json records absolute
+  # NuGet paths, so a Linux obj/ pushed into the guest poisons its restore and a guest obj/ pulled
+  # back poisons the host's. Each side keeps its own — and because they are excluded, --delete leaves
+  # the guest's intermediates (and .zig-cache/, the expensive one) intact between runs.
+  RSYNC=(rsync -rlptz --delete -e "ssh $MACOS_SSH_ARGS"
+         --exclude=.git/ --exclude=obj/ --exclude=bin/ --exclude=artifacts/
+         --exclude=.zig-cache/ --exclude=zig-out/ --exclude=BenchmarkDotNet.Artifacts/)
+  for tree in "${TREES[@]}"; do
+    echo "Syncing $tree → VM:$(g_path "$tree")"
+    "$VM" ssh "mkdir -p $(printf %q "$(g_path "$tree")")" || exit 1
+    "${RSYNC[@]}" "$tree/" "$MACOS_SSH_HOST:$(g_path "$tree")/" || exit 1
+  done
+
+  # Rebuild the forwarded arguments: --macos-vm itself goes (or the re-exec would recurse) and
+  # --project is rewritten to its guest path, since it is the one argument that is a host path.
+  INNER=()
+  skip=0
+  for a in "${ARGV[@]}"; do
+    [ "$skip" -eq 1 ] && { skip=0; continue; }
+    case "$a" in
+      --macos-vm) ;;
+      --project)  INNER+=(--project "$(g_path "$PROJECT")"); skip=1 ;;
+      *)          INNER+=("$a") ;;
+    esac
+  done
+
+  # The same environment the container path forwards, for the same reason: these reach the native
+  # build in the referenced Zigote.Core only as global properties/env, never through the csproj.
+  REMOTE="CONFIG=$(printf %q "$CONFIG")"
+  for v in ENABLE_3D PHYSICS_3D ZIG_OPTIMIZE ZIG_CPU FONT_SUBSET_TOOL; do
+    [ -n "${!v:-}" ] && REMOTE="$REMOTE $v=$(printf %q "${!v}")"
+  done
+  REMOTE="$REMOTE $(printf %q "$(g_path "$ROOT")/build/publish.sh")"
+  for a in "${INNER[@]}"; do REMOTE="$REMOTE $(printf %q "$a")"; done
+
+  echo "macOS VM build ($("$VM" ssh 'printf "%s %s" "$(sw_vers -productVersion)" "$(uname -m)"'))"
+  "$VM" ssh "$REMOTE"; rc=$?
+
+  # Only the zips come back. The unpacked publish directory beside them is the same bytes again, and
+  # dragging a few hundred MB of it over the link per RID buys nothing a test rig needs.
+  mkdir -p "$OUT"
+  rsync -rlptz -e "ssh $MACOS_SSH_ARGS" --include='*.zip' --exclude='*' \
+    "$MACOS_SSH_HOST:$(g_path "$OUT")/" "$OUT/" || rc=1
+  exit $rc
 fi
 
 # Default artifact name from the project filename (Zigote.Editor.csproj → zigote-editor, Signals → signals).

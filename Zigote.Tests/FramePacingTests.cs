@@ -62,4 +62,26 @@ public class FramePacingTests
             App.ComputeFrameIntervalTicks(displayHz: 60f, frameRateLimit: 0)
         );
     }
+
+    /// <summary>
+    ///     Guards the animation-dt snap (<c>App.ComputeAnimationDt</c>): present jitter near a
+    ///     whole number of refresh intervals is flattened so integrators (scroll ease, flings)
+    ///     don't turn time noise into position noise, while genuine hitches pass through raw.
+    /// </summary>
+    [Theory]
+    [InlineData(0.0161f, 1f / 60f)] // jittered-short frame → snapped to one interval
+    [InlineData(0.0172f, 1f / 60f)] // jittered-long frame → snapped
+    [InlineData(0.0334f, 2f / 60f)] // missed one vsync → snapped to exactly two
+    [InlineData(0.0250f, 0.0250f)] // halfway between multiples → raw (a real irregularity)
+    [InlineData(0.1000f, 0.1000f)] // hitch past 3 intervals → raw
+    [InlineData(0.0020f, 0.0020f)] // sub-interval dt (unpaced loop) → raw
+    public void AnimationDt_SnapsJitterOnly(float dt, float expected) => Assert.Equal(
+        expected: expected,
+        actual: App.ComputeAnimationDt(dt: dt, interval: 1f / 60f),
+        precision: 5
+    );
+
+    [Fact]
+    public void AnimationDt_NoInterval_PassesThrough() =>
+        Assert.Equal(expected: 0.016f, actual: App.ComputeAnimationDt(dt: 0.016f, interval: 0f));
 }

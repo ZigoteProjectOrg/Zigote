@@ -30,8 +30,8 @@ public class ScrollView : Widget
     public ScrollView(Widget? child = null)
     {
         Child = child;
-        _sx = new SmoothScroller(MarkNeedsLayout);
-        _sy = new SmoothScroller(MarkNeedsLayout);
+        _sx = new SmoothScroller(MarkNeedsLayoutClipped);
+        _sy = new SmoothScroller(MarkNeedsLayoutClipped);
     }
 
     public Widget? Child { get; set; }

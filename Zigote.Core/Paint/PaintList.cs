@@ -119,6 +119,14 @@ public sealed unsafe class PaintList
 
     // ── Transform stack API ───────────────────────────────────────────────────
 
+    /// <summary>
+    ///     The ambient translation from <see cref="PushTranslate" />, for callers that pack
+    ///     absolute coordinates into <see cref="AddShaderEffect" /> params: the quad's bounds are
+    ///     offset-shifted automatically, but the params are opaque floats this list cannot shift —
+    ///     the caller must fold the offset in itself or the two disagree inside scrolled content.
+    /// </summary>
+    public (float X, float Y) CurrentTranslation => (_offsetX, _offsetY);
+
     /// <summary>Push a translation offset — all subsequent position coordinates are shifted.</summary>
     public void PushTranslate(float dx, float dy)
     {
@@ -305,7 +313,11 @@ public sealed unsafe class PaintList
         FontStyle fontStyle = FontStyle.Normal,
         float letterSpacing = 0f,
         float wordSpacing = 0f,
-        string? fontFamily = null)
+        string? fontFamily = null,
+        Color? shadowColor = null,
+        float shadowOffsetX = 0f,
+        float shadowOffsetY = 0f,
+        float shadowBlur = 0f)
     {
         CheckColor(color);
         CheckFontSize(fontSize);
@@ -313,6 +325,17 @@ public sealed unsafe class PaintList
         byte[] textBytes = EncodeUtf8(text);
         var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.Text };
         SetColor(cmd: ref cmd, c: ScaleAlpha(color));
+        if (shadowColor is { } sc && sc.A > 0)
+        {
+            Color scaled = ScaleAlpha(sc);
+            cmd.ShadowR = scaled.R;
+            cmd.ShadowG = scaled.G;
+            cmd.ShadowB = scaled.B;
+            cmd.ShadowA = scaled.A;
+            cmd.ShadowOffsetX = shadowOffsetX;
+            cmd.ShadowOffsetY = shadowOffsetY;
+            cmd.ShadowBlur = shadowBlur;
+        }
         cmd.BaselineX = baselineX + _offsetX;
         cmd.BaselineY = baselineY + _offsetY;
         cmd.FontSize = fontSize;

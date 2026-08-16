@@ -45,6 +45,8 @@ class PreviewPanelWiringTest {
                 client.use {
                     val command = it.getInputStream().bufferedReader().readLine() ?: return@use
                     val reply = when {
+                        // An app built before `previews` existed — the fallback the panel keeps.
+                        command == "previews" -> """{"error":"unknown command 'previews'"}"""
                         command == "targets" -> TARGETS
                         command == "widgets" || command == "semantics" -> tree ?: TREE
                         command.startsWith("shot") -> SHOT

@@ -233,6 +233,12 @@ internal static class GalleryRegistry
             Title: "Style",
             Entries: [
                 new GalleryEntry(
+                    Title: "Liquid Glass",
+                    Subtitle: "Glass chrome over photos — a control centre and a lock screen",
+                    IconName: MaterialIcons.WaterDrop,
+                    Build: () => new LiquidGlassPage()
+                ),
+                new GalleryEntry(
                     Title: "Style Classes",
                     Subtitle: "The libadwaita style classes on real widgets",
                     IconName: MaterialIcons.Palette,

@@ -32,6 +32,13 @@ public partial class App
     public static readonly bool DebugDamageLog =
         Environment.GetEnvironmentVariable("ZIGOTE_DEBUG_DAMAGE") == "1";
 
+    /// <summary>
+    ///     Per-event scroll tracing to stderr (<c>ZIGOTE_DEBUG_SCROLL=1</c>): raw vs dispatched wheel
+    ///     deltas, orientation, hit target, and the CodeEditor's per-tick eased offsets. Diagnostic only.
+    /// </summary>
+    public static readonly bool DebugScrollLog =
+        Environment.GetEnvironmentVariable("ZIGOTE_DEBUG_SCROLL") == "1";
+
     public bool ShouldQuit => Engine.ShouldQuit;
 
     public float DeltaTime { get; private set; }

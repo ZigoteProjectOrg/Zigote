@@ -1,11 +1,12 @@
 # Zigote for Rider
 
 Things Rider does not know how to do for a framework it has never heard of: show what a colour literal
-looks like, run one widget on its own, and show you the widget tree behind what you are looking at.
+looks like, run one widget on its own — at a phone's size, in either theme, with its inputs as knobs —
+and show you the widget tree behind what you are looking at.
 
 ```sh
 cd tools/rider
-./gradlew buildPlugin      # → build/distributions/zigote-rider-0.1.0.zip
+./gradlew buildPlugin      # → build/distributions/zigote-rider-0.2.0.zip
 ./gradlew runIde           # a sandbox Rider with the plugin loaded
 ./gradlew test             # the parsing, without an IDE
 ```
@@ -41,15 +42,69 @@ The cost is that a `Color` from some other library written the same way also get
 
 ## Starting a preview
 
-1. **View → Tool Windows → Zigote** (right edge), **Preview** tab.
-2. Press **Run app**. With a `.cs` file open it runs that file's project; otherwise it offers the
-   projects in the solution.
-3. When the status reads `port NNNNN`, pick a widget from **Widget:**. Choosing another one swaps the
-   app to it without restarting.
+**From the editor.** Click the ▶ in the gutter next to a widget, or put the caret in one and press
+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>. Either opens the tool window showing that widget.
 
-Or from the editor: caret inside a widget class, <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>.
+The gutter icon appears next to every declaration the **running app** says it can show — the app is
+asked, not guessed at, so there are no icons on classes that only look like widgets. With nothing
+running yet, `[Preview]` is the only thing that earns an icon: an annotation is the author saying so,
+which needs no confirmation.
+
+**From the tool window.** **View → Tool Windows → Zigote** (right edge), **Preview** tab, then **Run
+app** — with a `.cs` file open it runs that file's project, otherwise it offers the projects in the
+solution. When the status reads `port NNNNN`, pick a widget from **Widget:**.
+
+**Choosing a widget never restarts the app.** Not from the combo, not from the gutter, not from the
+shortcut: the socket says `preview <Type>` and the app swaps what it is showing in the next frame.
+Only starting from nothing costs a build. That is the difference between looking at six widgets in a
+minute and looking at one.
 
 Already running it yourself? `ZIGOTE_INSPECT=41337 dotnet run --project …`, then **Attach…** with `41337`.
+
+Device, orientation, theme, zoom and **Hot reload** are remembered per project — the phone you are
+building for is a fact about the work, not about this session of it.
+
+## `[Preview]` and preview properties
+
+Everything a preview can construct is listed whether or not it is annotated — that is the default and
+it costs nothing. `[Preview]` is for the app with two hundred widget types, where the dropdown is the
+problem:
+
+```csharp
+[Preview("Product card", Group = "Shop", Width = 412, Height = 915, Theme = "dark")]
+public sealed class ProductCard(string title = "Espresso", int badge = 0, Tone tone = Tone.Plain)
+    : Widget
+{
+    protected override Widget Build(BuildContext context) => …;
+}
+```
+
+- **Named and first.** Annotated targets sort to the top of the **Widget:** list under the name you
+  gave them, not their fully qualified type name. `Group` files them together and rides in front of
+  the name (`Shop / Product card`) — the first thing dropped when the panel is too narrow for it.
+- **Its own size and theme.** `Width`/`Height` are layout points — the same units `MediaQuery` and
+  the `size` command use. Selecting the widget picks that size in the **Device** combo and that theme
+  in **Theme**, *through* the controls rather than behind them, so the toolbar keeps saying what the
+  app is actually laid out at.
+
+**The properties are the constructor.** Any parameter with a default — on the type's constructor or on
+a static factory — becomes a control under the picture: a text field, a checkbox, a spinner-free number
+field, or a combo for an enum. Change one and the app rebuilds that widget with it, in place, without a
+restart. So one `ProductCard` covers the empty badge, the long title and the sale variant, instead of
+six near-identical methods in a `Previews` class.
+
+A parameter whose type has no control (a `Widget`, a callback, a `Color`) is not a bug: it is left at
+its default and the rest still work. **Reset** puts every property back to what the code declares —
+and, because only values that *differ* from the declared default are ever sent, an edit to a default in
+the source shows up on the next reload rather than being pinned to what it used to be.
+
+None of this is IDE-only. The spec is a query string, so it survives an environment variable and a
+shell:
+
+```sh
+zigote preview 'Shop.ProductCard?title=Flat%20white&badge=3'
+echo 'preview Shop.ProductCard?title=Flat+white' | nc 127.0.0.1 41337
+```
 
 ## The Zigote tool window
 
@@ -57,7 +112,7 @@ Three tabs, all views of one running app.
 
 | Tab | What it shows |
 | --- | --- |
-| **Preview** | The app's frame, drawn in the tab — and **live**: click, drag, scroll and type on the picture and it happens in the app (click the picture first so it has keyboard focus). Pick a project, a widget, a device (and **Landscape** to rotate it), a theme, a locale; `Zoom` is Fit / 100% / 200%. **Live** streams frames at animation rate as they change; off, the picture refreshes after each click instead. The **Locale** combo appears only when the app has a `LocalizationsScope`, and a narrow panel collapses the toolbar to its essentials (see **Compact toolbar**). |
+| **Preview** | The app's frame, drawn in the tab — and **live**: click, drag, scroll and type on the picture and it happens in the app (click the picture first so it has keyboard focus). Pick a project, a widget, a device (and **Landscape** to rotate it), a theme, a locale; the widget's own **properties** appear as controls under the picture when it has any; `Zoom` is Fit / 100% / 200%. **Live** streams frames at animation rate as they change; off, the picture refreshes after each click instead. The **Locale** combo appears only when the app has a `LocalizationsScope`, and a narrow panel collapses the toolbar to its essentials (see **Compact toolbar**). |
 | **Widgets** | The live widget tree. Select a node to outline it on the frame and read its properties; the filter keeps a 300-node tree navigable. |
 | **Semantics** | The accessibility tree the app would hand a screen reader — role, label, actions, size. |
 
@@ -120,14 +175,15 @@ Two things the plugin does to make watch actually usable inside Rider:
   pause; without that, hot reload "does not work" while working perfectly from a terminal.
 - **Restarts keep your setup.** A rude edit (new field, changed constructor) makes watch restart the
   process, which comes back with a new socket and its defaults. The panel reconnects and pushes back
-  the previewed widget, device size, theme and locale it had.
+  the previewed widget *with the properties you set on it*, the device size, the theme and the locale.
 
 **Run app** starts the project owning the file you have open — pressing it again replaces the running
-app rather than racing it, and **Stop** puts it down. **Attach…** points the panels at an app
-you started yourself — `ZIGOTE_INSPECT=41337 dotnet run …`, then give it `41337`. **Preview Zigote Widget**
-(<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>, or the editor context menu) starts it pointed at the
-widget your caret is in. Either way it runs under `dotnet watch`, so saving reloads the widget in
-place — Zigote's existing hot-reload bridge, not something this plugin adds.
+app rather than racing it, and **Stop** puts it down. **Attach…** points the panels at an app you
+started yourself — `ZIGOTE_INSPECT=41337 dotnet run …`, then give it `41337`. The gutter ▶ and
+**Preview Zigote Widget** (<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>, or the editor context menu)
+swap a running app to the widget at the caret and start one only when there is nothing to swap. The
+reload-on-save part is Zigote's own hot-reload bridge, not something this plugin adds — it needs
+**Hot reload** ticked, for the inotify reason above.
 
 ## None of that is in this plugin
 
@@ -137,13 +193,23 @@ and a loopback socket:
 
 ```sh
 ZIGOTE_PREVIEW=My.App.SettingsPage dotnet watch run --project My.App   # show one widget
+ZIGOTE_PREVIEW='My.App.Card?title=Hi&sale=true' dotnet run --project My.App   # …with properties
 ZIGOTE_PREVIEW_LIST=1              dotnet run       --project My.App   # list what there is to show
 ZIGOTE_INSPECT=0                   dotnet run       --project My.App   # → zigote inspect: 127.0.0.1:41337
 zigote preview My.App.SettingsPage                                     # the same, from the CLI
 ```
 
-A preview target is a widget type with a parameterless constructor, or a static parameterless method
-returning a `Widget`.
+`--list` (and `ZIGOTE_PREVIEW_LIST`) prints the name first and everything the annotation and the
+constructor said after it, so it stays greppable and `awk '{print $1}'` still feeds `ZIGOTE_PREVIEW`:
+
+```
+Shop.Cards.ProductCard  "Product card"  [Shop]  412×915  dark  (title=Espresso, badge=0, tone=Plain)
+Shop.Pages.Plain
+```
+
+A preview target is a widget type, or a static method returning a `Widget` — either may take
+parameters, as long as every one of them has a default. Those defaults are what the property editor
+edits.
 
 The socket takes one command per connection and answers with one line of JSON. `ZIGOTE_INSPECT=0` picks
 a free port and prints it; loopback only, and off unless asked for.
@@ -153,7 +219,8 @@ a free port and prints it; loopback only, and off unless asked for.
 | `widgets` | `{"tree":{"id","type","desc","x","y","w","h","children":[…]}}` |
 | `semantics` | `{"tree":{"id","role","label","value","hint","flags","actions","x","y","w","h","children":[…]}}` |
 | `targets` | `{"targets":["My.App.SettingsPage", …]}` |
-| `preview <Type>` | `{"ok":true}` — swaps the shown widget live |
+| `previews` | `{"previews":[{"target","label","group","annotated","w","h","theme","params":[{"name","kind","value","options"}]}]}` — the same list with each target's `[Preview]` and its editable properties; `kind` is `string`/`bool`/`int`/`number`/`enum`, so a client picks a control without knowing any C# type names |
+| `preview <Type>[?prop=value&…]` | `{"ok":true}` — swaps the shown widget live, with its properties set. Values are URL-encoded; one that will not convert falls back to the declared default rather than failing the preview, because half of `412` is `4` |
 | `shot [scale]` | `{"format":"bmp","w","h","scale","data":"<base64>"}` — `w`/`h` are layout points, the picture is that × `scale` pixels |
 | `size WxH` / `size window` | `{"ok":true,"w","h"}` — lay the live tree out at a device size |
 | `theme dark\|light` | `{"ok":true,"w","h"}` |
@@ -185,6 +252,55 @@ LLM agents get the same protocol as typed MCP tools — launch, screenshot, tap,
 [`Zigote.Mcp`](../../docs/mcp-server.md).
 
 ---
+
+## Next to the other previewers
+
+Worth being explicit about, because the design here is a deliberate pick from two families and the
+trade is not free.
+
+| | How the picture is made | Properties | Real data |
+| --- | --- | --- | --- |
+| **Compose `@Preview`** (Android Studio) | rendered in the IDE against a stub Android runtime | `@PreviewParameter` providers, written in code | no — it is not the app |
+| **SwiftUI `#Preview`** (Xcode) | built and rendered by a simulator-backed process | one `#Preview` per variant, written in code | partly |
+| **Storybook** (web) | the component in a browser harness | **controls**, edited live in the panel | no |
+| **Avalonia previewer** | the app's assembly in a preview process, frames to the IDE | no | no |
+| **XAML Hot Reload / Uno Hot Design** | the app itself, running | live property grid | yes |
+| **Zigote** | the app itself, running, frames over a socket | live, from the constructor's defaults | yes |
+
+Gutter icon to preview, an annotation with a device size, and knobs for the inputs: that is the
+Compose/SwiftUI shape of the thing, over a live process rather than a sandbox.
+
+The family this sits in is the second one: **there is no render sandbox**. The previewed widget is
+inside a real process, on a real GPU surface, with the real engine — which is why the frame is the
+frame, why `MediaQuery` and breakpoints are honest, why clicking the picture actually clicks, and why
+the widget tree, the accessibility tree and `stats` are all available at once. The bill for that is
+the one Compose does not pay: a build and a process start before the first picture (a cold checkout
+builds the Zig engine too), and a widget that needs an ancestor its app provides fails here where a
+sandbox would happily draw it — which is why `WidgetPreview.Failure` puts the reason on screen instead
+of dying.
+
+What was taken from the other side: Storybook's **controls** are the model for preview properties —
+the panel edits values rather than the developer writing one more variant function — and the
+declaration site is Compose's and SwiftUI's, an annotation on the thing itself. Using *defaulted
+constructor parameters* as the knobs rather than a separate provider type is the part that is neither:
+it needs no extra class per widget, and the defaults were already written.
+
+Still missing on purpose, with what it would cost:
+
+- **Preview variants** — several `[Preview]`s on one widget (Compose's multi-preview, SwiftUI's
+  traits) needs each variant to have its own identity in the protocol; properties cover most of what
+  variants are used for, so this waits for a case they do not.
+- **A grid of every preview at once.** The socket serves one app laid out one way; a grid means N
+  layouts per frame or N processes.
+- **Clicking the frame to select a widget** — the tree → outline direction works; the reverse needs
+  hit-testing exposed over the socket, which the app already has behind <kbd>Shift</kbd>+<kbd>D</kbd>.
+- **Nested types in the gutter.** A widget declared *inside* another type is `Outer+Inner` to .NET and
+  the gutter's text scan reads it as plain `Inner`, so it never matches the app's list and gets no
+  icon (the combo still has it). Static factories — `Previews.Card()`, the far more common shape —
+  are qualified correctly. Tracking that would mean counting braces through strings and comments,
+  which is a C# parser, which is what the ReSharper backend already is.
+- **Swatches on named colours** and anything else needing C# symbol resolution: that lives in the
+  ReSharper backend, not here.
 
 ## When it does not work
 
@@ -226,8 +342,7 @@ are already running. Close the other ones, or raise `fs.inotify.max_user_instanc
 
 ## Not here yet
 
-- **Swatches on named colours** (`Colors.Blue`, `AdwPalette.Accent`). Those need the palette's values,
-  which means either duplicating them here or resolving symbols in a ReSharper backend — and a name
-  already says what colour it is.
-- **Clicking the frame to select a widget.** The reverse direction (tree → outline) works; going the
-  other way needs hit-testing in the app, which it already has behind <kbd>Shift</kbd>+<kbd>D</kbd>.
+See **Next to the other previewers** above for what is deliberately absent and what it would cost. The
+one worth repeating: **swatches on named colours** (`Colors.Blue`, `AdwPalette.Accent`) need the
+palette's values, which means either duplicating them here or resolving symbols in a ReSharper
+backend — and a name already says what colour it is.

@@ -197,9 +197,9 @@ public sealed class ImageGridPage : ComposedWidget
         var theme = _theme;
         if (_error.Value is { } message)
         {
-            // An interactive pane: the Pressable drives the gel response, so the glass thickens
-            // under the pointer and compresses on the press — Liquid Glass as a button, not just
-            // a backdrop.
+            // An interactive pane: the gel response comes with LiquidPane.Interactive, so the glass
+            // thickens under the pointer and compresses on the press — Liquid Glass as a button,
+            // not just a backdrop.
             var pane = new LiquidPane {
                 Elevation = 7f,
                 Child = new Padding(
@@ -214,18 +214,11 @@ public sealed class ImageGridPage : ComposedWidget
                     }
                 ),
             };
-            var pill = new Pressable {
-                Child = pane,
-                OnPressed = Retry,
-                FocusRadius = 16f,
-                SemanticsLabel = $"{message} — try again",
-            };
-            pill.OnStateChanged = () =>
-            {
-                pane.Hovered = pill.Hovered;
-                pane.Pressed = pill.Pressed;
-            };
-            return pill;
+            return LiquidPane.Interactive(
+                pane: pane,
+                onPressed: Retry,
+                semantics: $"{message} — try again"
+            );
         }
 
         if (_loading.Value)
@@ -270,7 +263,7 @@ public sealed class ImageGridPage : ComposedWidget
         var theme = _theme;
         return new LiquidPane {
             Elevation = 0f,
-            Adapt = 1f,
+            Adapt = 0.6f,
             Child = new Padding(
                 padding: EdgeInsets.Symmetric(horizontal: Spacing.Lg, vertical: Spacing.Xl),
                 child: new Row(

@@ -11,7 +11,7 @@ namespace Zigote.UI.Material;
 /// <summary>
 ///     A multiline, monospace code editor. Syntax highlighting is delegated to an injected
 ///     <see cref="Tokenizer" /> (no LSP, no colour schemes) — the language parsers themselves live
-///     outside <c>Zigote.UI</c>, in the FParsec-based <c>Zigote.Modules.UI.CodeEditor</c> module.
+///     outside <c>Zigote.UI</c>, in the XParsec-based <c>Zigote.Modules.UI.CodeEditor</c> module.
 ///     Renders in the bundled Iosevka face (<see cref="Typography.Code" />, family
 ///     <c>"code"</c>) with a right-aligned line-number gutter, vertical + horizontal scrolling, caret
 ///     /
@@ -121,7 +121,7 @@ public sealed class CodeEditor : Widget, ITextInputClient
 
     /// <summary>
     ///     The syntax highlighter. <c>null</c> renders plain, unhighlighted text. Concrete tokenizers
-    ///     (C#, JSON, WGSL, Zig) are produced by <c>Zigote.Modules.UI.CodeEditor</c>'s FParsec parsers.
+    ///     (C#, JSON, WGSL, Zig) are produced by <c>Zigote.Modules.UI.CodeEditor</c>'s XParsec parsers.
     /// </summary>
     public ILineTokenizer? Tokenizer
     {
@@ -712,6 +712,15 @@ public sealed class CodeEditor : Widget, ITextInputClient
         float k = 1f - MathF.Exp(-dt * ScrollEase); // frame-rate independent ease
         _scrollX += (_targetX - _scrollX) * k;
         _scrollY += (_targetY - _scrollY) * k;
+        if (App.DebugScrollLog)
+        {
+            Console.Error.WriteLine(
+                FormattableString.Invariant(
+                    $"[ce.tick] dt={dt:F4} scroll=({_scrollX:F1},{_scrollY:F1}) target=({_targetX:F1},{_targetY:F1})"
+                )
+            );
+        }
+
         if (MathF.Abs(_targetX - _scrollX) < 0.4f && MathF.Abs(_targetY - _scrollY) < 0.4f)
         {
             _scrollX = _targetX;
@@ -911,15 +920,14 @@ public sealed class CodeEditor : Widget, ITextInputClient
     private CachedLineTokens CacheLineTokens(int line, int entering, int exiting)
     {
         var tokens = _tokenBuffer.ToArray();
-        var colored = new List<ColoredRun>();
+        var runs = new List<TokenRun>();
         string text = _lines[line];
         foreach (var token in tokens)
         {
-            if (token.Kind == TokenKind.Default || token.Length <= 0 ||
-                token.Start >= text.Length) continue;
+            if (token.Length <= 0 || token.Start >= text.Length) continue;
             int length = Math.Min(val1: token.Length, val2: text.Length - token.Start);
-            colored.Add(
-                new ColoredRun(
+            runs.Add(
+                new TokenRun(
                     Token: token,
                     Text: text.Substring(startIndex: token.Start, length: length)
                 )
@@ -930,7 +938,7 @@ public sealed class CodeEditor : Widget, ITextInputClient
             EnteringState: entering,
             ExitingState: exiting,
             Tokens: tokens,
-            ColoredRuns: colored.ToArray()
+            Runs: runs.ToArray()
         );
     }
 
@@ -1117,26 +1125,18 @@ public sealed class CodeEditor : Widget, ITextInputClient
                 continue;
             }
 
-            // Shape the row once as a coherent run. This preserves ligatures across lexical
-            // boundaries and gives default identifiers/whitespace a single cached layout. Colored
-            // tokens are overpainted below; common keywords/operators then reuse tiny shared layouts
-            // instead of creating a native layout for every identifier while scrolling.
-            DrawSegment(
-                paint: paint,
-                s: line[row.Start..row.End],
-                x: TextLeft - _scrollX,
-                baseline: baseline,
-                color: _theme.OnSurface
-            );
-            foreach (var coloredRun in cachedTokens.ColoredRuns ?? [])
+            // Each token draws exactly once at its monospace column — never as an overpaint on top
+            // of a base-color row, which double-blends antialiased glyph edges into bold, fringed
+            // text. Runs are cached by content, so keywords/identifiers reuse shared layouts.
+            foreach (var run in cachedTokens.Runs ?? [])
             {
-                var tok = coloredRun.Token;
+                var tok = run.Token;
                 int tokenEnd = Math.Min(val1: line.Length, val2: tok.Start + tok.Length);
                 int start = Math.Max(val1: row.Start, val2: tok.Start);
                 int end = Math.Min(val1: row.End, val2: tokenEnd);
                 if (end <= start) continue;
                 string slice = start == tok.Start && end == tokenEnd
-                    ? coloredRun.Text
+                    ? run.Text
                     : line[start..end];
                 if (slice.Length == 0) continue;
                 float x = TextLeft - _scrollX + ColToX(row: row, col: start);
@@ -1432,6 +1432,15 @@ public sealed class CodeEditor : Widget, ITextInputClient
         _targetY -= dy * _lineHeight * 3f;
         _targetX -= dx * _charWidth * 6f;
         ClampTargets();
+        if (App.DebugScrollLog)
+        {
+            Console.Error.WriteLine(
+                FormattableString.Invariant(
+                    $"[ce.scroll] d=({dx:F3},{dy:F3}) target=({_targetX:F1},{_targetY:F1}) scroll=({_scrollX:F1},{_scrollY:F1}) rows={_visualRows.Count} lineH={_lineHeight:F1} bounds={Bounds.Height:F0}"
+                )
+            );
+        }
+
         AnimateScroll(); // ease the rendered offset toward the new target
     }
 
@@ -1503,6 +1512,11 @@ public sealed class CodeEditor : Widget, ITextInputClient
     public override void OnTextComposition(string text, int selectionStart, int selectionLength)
     {
         if (ReadOnly) return;
+        // IMEs (IBus on GNOME) echo empty preedit updates whenever the text-input rect moves —
+        // which happens every frame while a focused editor scrolls, since the rect tracks the
+        // caret's on-screen position. An empty→empty update changes nothing and must not
+        // EnsureCaretVisible, or wheel scrolling rubber-bands back to the caret.
+        if (text.Length == 0 && _compositionText.Length == 0) return;
         _compositionText = text;
         _compositionSelectionStart = Math.Clamp(value: selectionStart, min: 0, max: text.Length);
         _compositionSelectionLength = Math.Clamp(
@@ -1791,11 +1805,11 @@ public sealed class CodeEditor : Widget, ITextInputClient
         float Width,
         bool FastGrid);
 
-    private readonly record struct ColoredRun(Token Token, string Text);
+    private readonly record struct TokenRun(Token Token, string Text);
 
     private readonly record struct CachedLineTokens(
         int EnteringState,
         int ExitingState,
         Token[] Tokens,
-        ColoredRun[] ColoredRuns);
+        TokenRun[] Runs);
 }

@@ -51,7 +51,7 @@ redistributed — applications shipping a Zigote.UI build output should keep the
 Resolved by NuGet at build time and not vendored in this repository; licenses are
 declared in their packages:
 
-- [FParsec](https://www.quanttec.com/fparsec/) — BSD-2-Clause (the optional
+- [XParsec](https://github.com/roboz0r/XParsec) — MIT (the optional
   `Zigote.Modules.UI.CodeEditor` F# syntax-highlighting module)
 - [ZstdSharp.Port](https://github.com/oleg-st/ZstdSharp) — MIT (asset compression in
   `Zigote.Runtime`/`Zigote.Editor` game export)

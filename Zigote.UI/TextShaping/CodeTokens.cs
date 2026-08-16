@@ -32,7 +32,7 @@ public readonly struct Token
 ///     A line-oriented tokenizer for the <c>CodeEditor</c> widget. The widget owns no language
 ///     knowledge of its own — it delegates highlighting to an injected <see cref="ILineTokenizer" />.
 ///     Concrete tokenizers (C#, JSON, WGSL, Zig) live outside <c>Zigote.UI</c>; the
-///     <c>Zigote.Modules.UI.CodeEditor</c> F# module implements them with FParsec combinators.
+///     <c>Zigote.Modules.UI.CodeEditor</c> F# module implements them with XParsec combinators.
 ///     <para>
 ///         Multi-line constructs (e.g. <c>/* … */</c> block comments) are threaded through an opaque
 ///         integer state: pass <see cref="StateDefault" /> for the first line, then feed the returned

@@ -5,7 +5,7 @@ using Zigote.UI.TextShaping;
 namespace Zigote.Tests;
 
 /// <summary>
-///     Exercises the F# (<c>Zigote.Modules.UI.CodeEditor</c>) FParsec parsers from C#: the per-line
+///     Exercises the F# (<c>Zigote.Modules.UI.CodeEditor</c>) XParsec parsers from C#: the per-line
 ///     syntax-highlighting tokenizers (the extracted-from-<c>SyntaxHighlighter</c> logic) and the
 ///     standalone JSON-to-AST parser. All CPU-only — no native library, no window.
 /// </summary>

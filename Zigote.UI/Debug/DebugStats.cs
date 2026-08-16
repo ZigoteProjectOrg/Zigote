@@ -35,6 +35,29 @@ public static class DebugStats
     public static ZgEngineStats Engine { get; private set; }
     public static bool EngineOk { get; private set; }
 
+    /// <summary>
+    ///     Frames whose dt overran 1.5× the frame budget (missed at least one vsync deadline) —
+    ///     the jank the user actually perceives. <see cref="AnimatedJankFrames" /> is the subset
+    ///     that landed while something was animating (a scroll ease, a fling, a transition), where
+    ///     a missed deadline is a visible stutter rather than an invisible idle hiccup.
+    /// </summary>
+    public static long JankFrames { get; private set; }
+
+    public static long AnimatedJankFrames { get; private set; }
+
+    /// <summary>Total working (non-idle) frames sampled — the denominator for the jank rates above.</summary>
+    public static long TotalFrames { get; private set; }
+
+    private static readonly Dictionary<string, long> JankCausesDict = new();
+
+    /// <summary>
+    ///     Jank frames attributed to the longest top-level <see cref="Profiler" /> scope of the
+    ///     frame that overran (Chrome's scroll-jank work: fixing jank starts with knowing WHICH
+    ///     stage misses the deadline). Empty unless the host brackets frames with
+    ///     <see cref="Profiler.BeginFrame" />/<see cref="Profiler.EndFrame" /> (the editor does).
+    /// </summary>
+    public static IReadOnlyDictionary<string, long> JankCauses => JankCausesDict;
+
     /// <summary>Paint-command counts from the last frame (set by the frame loop after painting).</summary>
     public static int UiPaintCommands { get; set; }
 
@@ -66,17 +89,55 @@ public static class DebugStats
     }
 
     /// <summary>
+    ///     Blame the just-measured overrun on the longest top-level scope of the completed frame
+    ///     (dt measured at frame start covers exactly the frame whose events sit in
+    ///     <see cref="Profiler.LastFrame" />). Silently a no-op when the host never brackets
+    ///     frames — LastFrame stays empty then.
+    /// </summary>
+    private static void NoteJankCause()
+    {
+        var events = Profiler.LastFrame;
+        long best = 0;
+        int bestId = -1;
+        for (int i = 0; i < events.Count; i++)
+        {
+            var e = events[i];
+            if (e.Depth != 0 || e.DurationTicks <= best) continue;
+            best = e.DurationTicks;
+            bestId = e.NameId;
+        }
+
+        if (bestId < 0) return;
+        string name = Profiler.NameOf(bestId);
+        JankCausesDict[name] = JankCausesDict.GetValueOrDefault(name) + 1;
+    }
+
+    /// <summary>
     ///     Fired at the end of every <see cref="Sample" /> with the frame's dt. External diagnostics
     ///     (e.g. the charts-powered debug panels in <c>Zigote.UI.Charts</c>) subscribe to build their
     ///     own history rings without Zigote.UI referencing them.
     /// </summary>
     public static event Action<float>? Sampled;
 
-    public static void Sample(float dt)
+    public static void Sample(float dt, float frameBudget = 0f, bool animating = false,
+        bool idle = false)
     {
         FrameTimes[FrameWriteIndex % FpsRing] = dt;
         FrameWriteIndex++;
         DebugProfiler.RecordFrame(dt * 1000f);
+
+        // A frame that slept in WaitEvents wakes with a long dt by design — not jank, and not a
+        // "working frame" for the rate's denominator either.
+        if (!idle)
+        {
+            TotalFrames++;
+            if (frameBudget > 0f && dt > 1.5f * frameBudget)
+            {
+                JankFrames++;
+                if (animating) AnimatedJankFrames++;
+                NoteJankCause();
+            }
+        }
 
         _fpsTimer += dt;
         if (_fpsTimer >= 0.25f)

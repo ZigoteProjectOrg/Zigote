@@ -78,6 +78,7 @@ public class Label : Widget
         LineHeight = style.LineHeight;
         FontFamily = style.FontFamily;
         Color = color;
+        Shadow = style.Shadow;
     }
 
     public TextAlign Align { get; set; } = TextAlign.Left;
@@ -85,7 +86,42 @@ public class Label : Widget
     public string Text
     {
         get => _text;
-        set => SetLayout(field: ref _text, value: value);
+        set
+        {
+            if (_text == value) return;
+            if (VolatileText && TrySwapPaintOnly(value)) return;
+            SetLayout(field: ref _text, value: value);
+        }
+    }
+
+    /// <summary>
+    ///     Repaint-only text swaps: a text change repaints the label in the box its last Measure
+    ///     produced instead of requesting an app-wide relayout. MarkNeedsLayout has no dirty-subtree
+    ///     scoping — ANY label's text change re-measures the whole window and turns the frame's
+    ///     damage into a full repaint — which for a once-a-second playback clock meant re-measuring
+    ///     a whole library page and re-rendering the whole frame every tick, the top jank source in
+    ///     exactly that scenario.
+    ///     <para>
+    ///         Opt-in, for labels whose rendered width is visually stable (clocks, counters,
+    ///         percentages): the box only catches up on the next real layout pass, so text whose
+    ///         width genuinely varies would paint over its neighbours. Falls back to a normal
+    ///         relayout automatically before the first Measure and on the wrapped or truncated
+    ///         paths, where paint depends on Measure's decisions.
+    ///     </para>
+    /// </summary>
+    public bool VolatileText { get; set; }
+
+    /// <inheritdoc cref="VolatileText" />
+    private bool TrySwapPaintOnly(string value)
+    {
+        // Only after a real Measure (a fresh label must lay out), and only on the single-line
+        // untruncated path — wrapping and ellipsis are Measure-time decisions.
+        if (_fontSize <= 0f || _multiline || _truncated) return false;
+        _text = value;
+        _drawText = value;
+        // The wrap cache keys on Text; leave it stale so the next real Measure re-evaluates.
+        MarkNeedsPaint();
+        return true;
     }
 
     public LabelStyle Style { get; set; } = LabelStyle.Body;
@@ -95,6 +131,12 @@ public class Label : Widget
     public FontStyle FontStyle { get; set; } = FontStyle.Normal;
     public float? LineHeight { get; set; }
     public float LetterSpacing { get; set; } = 0f;
+
+    /// <summary>
+    ///     Optional text shadow (color + offset + blur, CSS <c>text-shadow</c> semantics).
+    ///     Rendered natively underneath the glyphs; null draws none.
+    /// </summary>
+    public BoxShadow? Shadow { get; set; }
 
     /// <summary>
     ///     Optional font-family name (e.g. an icon or monospace face loaded via the engine).
@@ -417,7 +459,11 @@ public class Label : Widget
                     fontWeight: FontWeight,
                     fontStyle: FontStyle,
                     letterSpacing: LetterSpacing,
-                    fontFamily: FontFamily
+                    fontFamily: FontFamily,
+                    shadowColor: Shadow?.Color,
+                    shadowOffsetX: Shadow?.Offset.X ?? 0f,
+                    shadowOffsetY: Shadow?.Offset.Y ?? 0f,
+                    shadowBlur: Shadow?.BlurRadius ?? 0f
                 );
             }
 
@@ -461,7 +507,11 @@ public class Label : Widget
             fontWeight: FontWeight,
             fontStyle: FontStyle,
             letterSpacing: LetterSpacing,
-            fontFamily: FontFamily
+            fontFamily: FontFamily,
+            shadowColor: Shadow?.Color,
+            shadowOffsetX: Shadow?.Offset.X ?? 0f,
+            shadowOffsetY: Shadow?.Offset.Y ?? 0f,
+            shadowBlur: Shadow?.BlurRadius ?? 0f
         );
 
         if (needsClip) paint.AddClipEnd();

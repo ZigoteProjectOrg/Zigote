@@ -41,7 +41,7 @@ The `-v q --nologo` matters: stdout is the MCP protocol stream, and those flags 
 | `widget_props` | One widget's full property list, by the id `widget_tree` reported. |
 | `tap` / `drag` / `scroll` | Synthetic pointer input through the app's real dispatch pipeline. Coordinates are layout points — the same space `screenshot` reports. |
 | `type_text` / `press_key` | Text commit to the focused widget; physical keys with modifiers (`cmd+shift`). |
-| `preview_targets` / `set_preview` | List the previewable widgets; swap the shown one without restarting. |
+| `preview_targets` / `set_preview` | List the previewable widgets — with the name, device size and theme their `[Preview]` gave them, and the properties each takes; swap the shown one without restarting, optionally setting those properties (`My.App.Card?title=Espresso`). |
 | `resize` | Lay the app out at a device size — `390x844` is a real phone layout, breakpoints and all. Omit the size to go back to the window's. |
 | `set_theme` / `locales` / `set_locale` | Theme and locale switching. |
 | `raw_command` | Escape hatch: one raw protocol line, e.g. `window hide`. |

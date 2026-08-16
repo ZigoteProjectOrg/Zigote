@@ -39,6 +39,15 @@ public sealed record BottomSheetStyle
     /// </summary>
     public Color? BarrierColor { get; init; }
 
+    /// <summary>
+    ///     Gaussian blur of the page behind a modal sheet, in logical pixels; 0 (default) is off.
+    ///     Painted under <see cref="BarrierColor" /> and grows in with the sheet's entrance — a
+    ///     blur has no alpha to fade, so its reach is what animates. Not free: each frame with the
+    ///     sheet up pays a render-pass break and a scene copy, and partial repaint is off for that
+    ///     frame — fine for a modal moment, not for a persistent mini-player.
+    /// </summary>
+    public float BarrierBlur { get; init; }
+
     /// <summary>Show the drag pill at the top of the card (also the sheet's drag surface).</summary>
     public bool ShowDragHandle { get; init; } = true;
 

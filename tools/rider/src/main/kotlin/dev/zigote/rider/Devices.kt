@@ -7,7 +7,13 @@ package dev.zigote.rider
  * 412×915 points, not its 1080×2400 pixels. Getting that wrong would show a phone-shaped desktop
  * layout, which is exactly the mistake a device preview exists to catch.
  */
-internal data class Device(val label: String, val width: Int, val height: Int) {
+internal data class Device(
+    val label: String,
+    val width: Int,
+    val height: Int,
+    /** Added to the list by a `[Preview(Width, Height)]`, and removed again with it. */
+    val fromAnnotation: Boolean = false,
+) {
     override fun toString() = label
 }
 

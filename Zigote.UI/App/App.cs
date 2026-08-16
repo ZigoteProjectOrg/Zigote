@@ -137,6 +137,10 @@ public partial class App : IDisposable
     // ── Viewport FPS controls (for performance testing) ───────────────────────
     private long _paceAnchorTicks;
 
+    // Set when a frame blocks in WaitEvents (idle/hidden); the NEXT frame's dt includes that
+    // wait, so its length says nothing about jank. See the capture at the top of FrameCore.
+    private bool _idledInWait;
+
     // Set true when a ResizeEvent arrives mid-frame so Frame() re-layouts before Paint
     private bool _pendingRelayout;
     private Widget? _rightCapturedWidget;
@@ -885,6 +889,21 @@ public partial class App : IDisposable
     }
 
     /// <summary>
+    ///     Layout request whose visible effect is confined to <paramref name="widget" />'s own
+    ///     region (scrolling: children reposition inside the clipped viewport, no size changes).
+    ///     Runs the same layout pass — measure caching makes the untouched rest of the tree nearly
+    ///     free — but records only the widget's bounds as damage instead of full-clearing the
+    ///     frame, so a scroll/fling frame repaints just the scroller. See
+    ///     <see cref="Widget.MarkNeedsLayoutClipped" />.
+    /// </summary>
+    public void RequestLayoutFor(Widget widget)
+    {
+        _needsLayout = true;
+        _semanticsDirty = true; // scrolled content moves its semantic nodes too
+        MarkPaintFor(widget);
+    }
+
+    /// <summary>
     ///     Thread-safe: request that <paramref name="widget" /> be re-laid-out on the UI thread. For an
     ///     off-thread caller (a timer/async completion setting a signal that a <c>Watch</c>/reactive bind
     ///     reads) — walking the widget's <c>Parent</c> chain off-thread would race the UI thread's tree
@@ -1143,6 +1162,21 @@ public partial class App : IDisposable
         DeltaTime = (float)(now - _lastTicks) / Stopwatch.Frequency;
         _lastTicks = now;
 
+        // dt spans back to the PREVIOUS frame's start, so it includes that frame's idle
+        // WaitEvents block — a long dt after deliberately sleeping is not jank. Capture the flag
+        // before this frame's gates overwrite it; DebugStats uses it to keep the jank counters
+        // honest (they only ever count frames that were actually working).
+        bool idledLastFrame = _idledInWait;
+        _idledInWait = false;
+
+        // Close the previous frame's profiler scopes into Profiler.LastFrame and open this one.
+        // The dt just measured covers exactly the frame EndFrame is closing, which is the pairing
+        // DebugStats.Sample's jank attribution relies on — without this bracketing, JankCauses
+        // stays empty in every app driven by this loop and the overlay can name a jank count but
+        // never a culprit (only the editor's own loop bracketed frames before).
+        Profiler.EndFrame();
+        Profiler.BeginFrame();
+
         if (Root is null)
         {
             Engine.PollEventsInto(
@@ -1181,6 +1215,7 @@ public partial class App : IDisposable
         // rendering at all (see PaintAndPresent).
         if (Hidden)
         {
+            _idledInWait = true;
             using (Profiler.Scope("WaitEvents"))
                 Engine.WaitEvents(HiddenFrameIntervalMs);
         }
@@ -1193,6 +1228,7 @@ public partial class App : IDisposable
                  !WantsContinuousFrame() && !HotReload.HasPendingReload &&
                  !AnySecondaryWindowWantsFrame())
         {
+            _idledInWait = true;
             using (Profiler.Scope("WaitEvents"))
                 // Time out after one frame budget rather than a hardcoded 16 ms, so the idle
                 // wake-up rate follows the monitor (and any app FPS cap) instead of pinning
@@ -1209,28 +1245,19 @@ public partial class App : IDisposable
         FileDialog.Pump();
         var events = _events;
 
-        // Advance vsync-driven tickers. Each playing AnimationController calls
-        // RequestFrameAction inside Tick(), which requests a relayout (see ctor) so animations that
-        // change size/position/rebuilt content are not painted with last frame's stale geometry.
-        Ticker.AdvanceAll(DeltaTime);
-
         // Run the effects a background thread parked (EffectAffinity.Deferred). This is the "host
         // calls it once per frame" half of that contract — without it, Deferred effects are queued
         // and never run, so the affinity silently swallows the work it was chosen to protect.
         // Placed here so it is on the UI thread and BEFORE the measure/layout pass: an effect that
-        // mutates a retained widget lands in this frame rather than the next. Ticker.AdvanceAll runs
-        // first so signals written by an animation tick are picked up by the same drain.
+        // mutates a retained widget lands in this frame rather than the next. (A signal written by
+        // an animation tick — tickers advance after event dispatch below — drains next frame; a
+        // UI-thread tick runs its effects synchronously anyway, so this only affects Deferred.)
         Reactive.DrainDeferred();
 
         // Service the audio engine each frame: ages + reaps fire-and-forget one-shots (UI clicks /
         // positioned pings) so a held oscillator one-shot is silenced after its duration. Cheap no-op
         // until audio is opened (lazy on first sound).
         Engine.AudioUpdate(DeltaTime);
-
-        // Keep rendering while anything is animating (covers controllers whose Tick this frame did
-        // not happen to land a visible change yet, and guarantees the next frame is not skipped). An
-        // animation can drive either layer, so mark both.
-        if (Ticker.AnyActive) _repaint.MarkAll();
 
         if (_initialFramesToPaint > 0)
         {
@@ -1241,7 +1268,12 @@ public partial class App : IDisposable
         // Sample the shared diagnostics stats once per frame (main window only — a second sampler
         // doubles the frame-time accumulation). Runs unconditionally so an always-on FPS badge and the
         // charts' history rings stay live even before any devtools panel is opened.
-        DebugStats.Sample(DeltaTime);
+        DebugStats.Sample(
+            dt: DeltaTime,
+            frameBudget: (float)FrameIntervalTicks / Stopwatch.Frequency,
+            animating: Ticker.AnyActive,
+            idle: idledLastFrame
+        );
 
         // Drive per-frame devtools refresh. While anything wants continuous frames (an open panel or
         // compact stats) force an overlay repaint so live metrics keep advancing — the WaitEvents gate
@@ -1304,14 +1336,38 @@ public partial class App : IDisposable
 
         _pendingRelayout = false;
         bool discrete = false;
-        foreach (var evt in events)
+        using (Profiler.Scope("UI.Dispatch"))
         {
-            DispatchEvent(evt);
-            // Pointer-move floods (mouse or finger) are not "discrete": they must not force a
-            // relayout + full repaint per frame. Touch scrolling repaints via the scroller's
-            // own onChanged, presses via MarkPaintFor.
-            if (evt is not MouseMoveEvent and not TouchMoveEvent) discrete = true;
+            foreach (var evt in events)
+            {
+                DispatchEvent(evt);
+                // Pointer-move floods (mouse or finger) and wheel scrolls are not "discrete": they
+                // must not force a relayout + full repaint per frame. Scrolling (wheel or touch)
+                // repaints via the scroller's own onChanged — bounded to the scroller's region —
+                // and presses via MarkPaintFor.
+                if (evt is not MouseMoveEvent and not TouchMoveEvent and not ScrollEvent)
+                    discrete = true;
+            }
         }
+
+        // Advance vsync-driven tickers AFTER event dispatch: a wheel/drag handled this frame moves
+        // its scroller's offset in this same frame's tick instead of waiting for the next one —
+        // input-to-photon latency drops by a full frame (cf. Chrome's Input Framer: align input
+        // with the frame that presents it). Each playing AnimationController calls
+        // RequestFrameAction inside Tick(), which requests a relayout (see ctor) so animations
+        // that change size/position/rebuilt content are not painted with stale geometry.
+        // Hit-testing above used last frame's presented geometry — what the user actually saw.
+        using (Profiler.Scope("UI.Tick"))
+            Ticker.AdvanceAll(AnimationDt(DeltaTime));
+
+        // A ticker whose Tick lands a visible change marks its own damage (controllers request a
+        // relayout, SmoothScroller's onChanged marks its scroller); trusting those marks is what
+        // lets a scroll/fling frame keep bounded damage instead of full-clearing the window. A
+        // still-active ticker that marked NOTHING gets a conservative full repaint so an
+        // animation that repaints from Paint() without marking never freezes.
+        // ponytail: a non-marking ticker running while something else marked (caret blink) can
+        // stall visually; per-ticker damage tracking if that ever bites.
+        if (Ticker.AnyActive && !_repaint.AnyDirty) _repaint.MarkAll();
 
         // Long-press ripening + fling velocity tracking for an active touch.
         TickTouch(DeltaTime);
@@ -1335,7 +1391,10 @@ public partial class App : IDisposable
         if (_needsLayout || _pendingRelayout || discrete)
         {
             LayoutTree();
-            _repaint.MarkAll();
+            // Layout requested via RequestLayout already carries full damage (it MarkAlls); only
+            // the discrete-event and mid-frame-resize paths need to force it here. Scroll-driven
+            // layout (RequestLayoutFor) keeps its bounded damage — that's the entire point.
+            if (discrete || _pendingRelayout) _repaint.MarkAll();
         }
 
         // Auto-focus the first control inside any overlay pushed this frame, now that it is laid out.
@@ -1362,6 +1421,26 @@ public partial class App : IDisposable
         }
 
         PaceFrame();
+    }
+
+    /// <summary>
+    ///     dt handed to animations (<see cref="Ticker.AdvanceAll" />). Present jitter makes
+    ///     wall-clock dt oscillate around the refresh interval, and integrating that jitter (scroll
+    ///     ease, flings) turns time noise into position noise even when every frame hits its
+    ///     deadline. Snap to the nearest whole number of frame intervals (1–3) when within 20% of
+    ///     one; real hitches and unpaced loops pass through raw. Timers/stats keep the raw
+    ///     <see cref="DeltaTime" /> so measurements stay honest.
+    /// </summary>
+    private float AnimationDt(float dt) =>
+        ComputeAnimationDt(dt: dt, interval: (float)FrameIntervalTicks / Stopwatch.Frequency);
+
+    /// <summary>The snapping arithmetic, split out so it can be exercised without a window.</summary>
+    internal static float ComputeAnimationDt(float dt, float interval)
+    {
+        if (interval <= 0f) return dt;
+        float n = MathF.Round(dt / interval);
+        if (n is < 1f or > 3f) return dt;
+        return MathF.Abs(dt - (n * interval)) < 0.2f * interval ? n * interval : dt;
     }
 
     /// <summary>
@@ -1855,6 +1934,15 @@ public partial class App : IDisposable
                 }
 
                 var target = Engine.RelativeMouseMode ? FocusedWidget : HitTestAll(_mousePos);
+                if (DebugScrollLog)
+                {
+                    Console.Error.WriteLine(
+                        FormattableString.Invariant(
+                            $"[scroll] raw=({s.ScrollX:F3},{s.ScrollY:F3}) dispatched=({dx:F3},{dy:F3}) orient={Engine.GetScrollOrientation()} target={target?.GetType().Name ?? "null"} mouse=({_mousePos.X:F0},{_mousePos.Y:F0})"
+                        )
+                    );
+                }
+
                 target?.OnScroll(dx: dx, dy: dy);
                 break;
             }

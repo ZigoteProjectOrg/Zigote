@@ -91,3 +91,6 @@ secrets.json
 credentials.json
 .netrc
 .npmrc
+
+# Stray debug logs
+*.log

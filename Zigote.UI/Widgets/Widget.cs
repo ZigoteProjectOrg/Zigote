@@ -373,6 +373,24 @@ public abstract class Widget : ITickerProvider
         RequestLayout();
     }
 
+    /// <summary>
+    ///     Relayout whose visible effect cannot escape this widget's bounds — scrolling is the
+    ///     case: children reposition inside a clipped viewport and no size changes. Ancestor flags
+    ///     are still set so the layout walk reaches this subtree, but paint damage stays bounded to
+    ///     this widget's region instead of full-clearing the frame (see
+    ///     <see cref="App.RequestLayoutFor" />).
+    /// </summary>
+    public void MarkNeedsLayoutClipped()
+    {
+        for (var w = this; w is not null; w = w.Parent)
+        {
+            w.NeedsLayout = true;
+            w.NeedsPaint = true;
+        }
+
+        (Owner ?? App.Active)?.RequestLayoutFor(this);
+    }
+
     public virtual void MarkNeedsPaint()
     {
         // Always request a repaint — see MarkNeedsLayout: the NeedsPaint flag isn't reliably reset per

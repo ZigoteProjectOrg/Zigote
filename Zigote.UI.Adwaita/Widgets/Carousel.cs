@@ -49,7 +49,7 @@ public sealed class AdwCarousel : Widget
     public AdwCarousel(IEnumerable<Widget> pages)
     {
         Pages = [.. pages];
-        _scroller = new SmoothScroller(MarkNeedsLayout);
+        _scroller = new SmoothScroller(MarkNeedsLayoutClipped);
     }
 
     public List<Widget> Pages { get; }

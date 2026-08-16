@@ -134,6 +134,16 @@ public unsafe struct ZgPaintCommand
     // Alias for ShaderEffect shader id (bit-reinterpreted from Radius)
     [FieldOffset(56)] public uint ShaderId;
 
+    // Aliases for Text shadow — rides in slots Text never uses (rect = color, radius /
+    // border width = offset, img_pixel_w = blur). Present iff ShadowA > 0.
+    [FieldOffset(24)] public float ShadowR;
+    [FieldOffset(28)] public float ShadowG;
+    [FieldOffset(32)] public float ShadowB;
+    [FieldOffset(36)] public float ShadowA;
+    [FieldOffset(56)] public float ShadowOffsetX;
+    [FieldOffset(60)] public float ShadowOffsetY;
+    [FieldOffset(88)] public float ShadowBlur;
+
     [FieldOffset(72)] public float FontSize;
     [FieldOffset(76)] public float LineHeight;
     [FieldOffset(80)] public float LetterSpacing;
