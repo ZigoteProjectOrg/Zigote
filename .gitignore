@@ -94,3 +94,7 @@ credentials.json
 
 # Stray debug logs
 *.log
+
+# Rust (native/zigote-svg): cargo build output. Cargo.lock IS tracked — the SVG lib ships as a
+# binary, so its dependency versions are pinned like any other vendored native piece.
+native/*/target/

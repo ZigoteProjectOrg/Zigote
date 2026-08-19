@@ -1,4 +1,4 @@
-using Zigote.UI.Net;
+using Zigote.Http;
 
 namespace AdwaitaGallery;
 
@@ -22,9 +22,10 @@ internal enum ArtState
 ///         thousand-tile feed only ever pays for the screenful the reader is looking at.
 ///     </para>
 ///     <para>
-///         <b>Off the frame loop.</b> The fetch (or the disk read that replaces it) queues behind
-///         <see cref="NetworkCache" />'s gate and the decode behind <c>Image</c>'s; the only work
-///         that lands on the UI thread is the texture-handle swap and the animation it kicks off.
+///         <b>Off the frame loop.</b> The fetch (or the disk-cache read that replaces it) queues
+///         behind the shared runner's per-host gate and the decode behind <c>Image</c>'s; the only
+///         work that lands on the UI thread is the texture-handle swap and the animation it kicks
+///         off.
 ///     </para>
 ///     <para>
 ///         The decoded texture lives as long as this widget, not as long as the cell that shows it,
@@ -50,7 +51,6 @@ internal sealed class ArtImage : ComposedWidget
         _piece = piece;
         _maxDim = maxDim;
         _chrome = chrome;
-        WasCached = NetworkCache.IsCached(piece.Url);
 
         _image = new Image {
             AltText = $"Anime artwork by {piece.Artist}",
@@ -63,9 +63,6 @@ internal sealed class ArtImage : ComposedWidget
 
     /// <summary>Set to make the picture a button — the gallery opens the zoomable viewer with it.</summary>
     public Action? OnPressed { get; set; }
-
-    /// <summary>Whether the bytes were already on disk when this was built — the cache readout.</summary>
-    public bool WasCached { get; }
 
     /// <summary>Signal-backed so a page can react — enable a retry, count what failed.</summary>
     public Signal<ArtState> State { get; } = new(ArtState.Loading);
@@ -125,9 +122,13 @@ internal sealed class ArtImage : ComposedWidget
     private void Load()
     {
         // Fire-and-forget by design: LoadAsync never faults, and both outcomes come back through
-        // OnLoaded/OnFailed on the UI thread.
+        // OnLoaded/OnFailed on the UI thread. Unwrap() is the sanctioned bridge from the runner's
+        // result values to the exception LoadAsync's fetch contract wants — Describe below takes
+        // the HttpError back out.
         _image.LoadAsync(
-            fetch: ct => NetworkCache.FetchAsync(url: _piece.Url, ct: ct),
+            fetch: async ct =>
+                (await ArtSource.Http.BytesAsync(HttpRequest.Get(_piece.Url), ct).ConfigureAwait(false))
+                .Unwrap(),
             maxDim: _maxDim
         );
     }
@@ -145,9 +146,10 @@ internal sealed class ArtImage : ComposedWidget
     private static string Describe(Exception error)
     {
         return error switch {
-            HttpRequestException { StatusCode: { } status } => $"Server said {(int)status}",
-            HttpRequestException => "No network",
-            TaskCanceledException => "Timed out",
+            HttpException { Error: HttpError.Status status } => $"Server said {(int)status.Code}",
+            HttpException { Error: HttpError.Timeout } => "Timed out",
+            HttpException { Error: HttpError.Transport } => "No network",
+            HttpException http => http.Error.Message,
             InvalidDataException => "Not an image",
             _ => error.GetType().Name,
         };

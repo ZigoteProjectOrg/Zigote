@@ -7,6 +7,8 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <Compile Include="Ui.fs"/>
+        <Compile Include="NekosPage.fs"/>
         <Compile Include="Main.fs"/>
     </ItemGroup>
 
@@ -22,6 +24,9 @@
         <ProjectReference Include="..\Zigote.UI.Charts\Zigote.UI.Charts.csproj"/>
         <!-- The debug menu (Shift+D). Apps opt in — the F# layer stays DevTools-agnostic. -->
         <ProjectReference Include="..\Zigote.UI.DevTools\Zigote.UI.DevTools.csproj"/>
+        <!-- The Http tab: the library and its F# pipeline surface. -->
+        <ProjectReference Include="..\Zigote.Http\Zigote.Http.csproj"/>
+        <ProjectReference Include="..\Zigote.Http.FSharp\Zigote.Http.FSharp.fsproj"/>
     </ItemGroup>
 
     <!-- NativeAOT publish opt-in (gated behind ZigoteAot; build/publish.sh AOT flag). Plain build/run

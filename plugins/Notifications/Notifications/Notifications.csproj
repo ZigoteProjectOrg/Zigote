@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      Platform plugin Notifications: same build-time platform selection as DeviceInfo — each
+      target framework compiles exactly one Platforms/ folder, all implementations share one
+      class name (NotificationsDriver), and the shared NotificationClient binds to it statically.
+    -->
+    <PropertyGroup>
+        <TargetFrameworks>net10.0;net10.0-android</TargetFrameworks>
+        <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('osx'))">$(TargetFrameworks);net10.0-ios</TargetFrameworks>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <RootNamespace>Notifications</RootNamespace>
+        <SupportedOSPlatformVersion Condition="'$(TargetFramework)' == 'net10.0-android'">26</SupportedOSPlatformVersion>
+        <SupportedOSPlatformVersion Condition="'$(TargetFramework)' == 'net10.0-ios'">15.0</SupportedOSPlatformVersion>
+        <Version>0.1.0</Version>
+        <Description>Desktop and mobile notifications for Zigote: freedesktop D-Bus notifications with action buttons on Linux, notification channels on Android.</Description>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="Notifications.Tests"/>
+    </ItemGroup>
+
+    <!-- The Linux backend speaks D-Bus directly; Android and iOS have OS APIs instead. -->
+    <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+        <PackageReference Include="Tmds.DBus.Protocol" Version="0.94.2"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Compile Remove="Platforms/**/*.cs"/>
+        <Compile Include="Platforms/Desktop/**/*.cs" Condition="'$(TargetFramework)' == 'net10.0'"/>
+        <Compile Include="Platforms/Android/**/*.cs" Condition="'$(TargetFramework)' == 'net10.0-android'"/>
+        <Compile Include="Platforms/iOS/**/*.cs" Condition="'$(TargetFramework)' == 'net10.0-ios'"/>
+    </ItemGroup>
+
+</Project>

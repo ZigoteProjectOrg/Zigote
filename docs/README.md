@@ -12,8 +12,10 @@ retained mode is the one idea everything else follows from.
 | [`architecture.md`](architecture.md) | How the whole solution fits together — layering, the reactive core, threading, diagnostics. |
 | [`migration/`](migration/README.md) | Arriving from Flutter, Compose, SwiftUI or WPF/Avalonia — concepts, per-framework guides, cookbook. |
 | [`assets.md`](assets.md) | Fonts, images, content bundling, and publish-time asset & font tree shaking. |
+| [`svg.md`](svg.md) | `SvgPicture`, the resvg binding behind it, and compiling SVGs ahead of time. |
 | [`preferences-and-persistence.md`](preferences-and-persistence.md) | Reactive persisted settings (`Preference<T>`) and the key-value storage under them. |
 | [`mobile.md`](mobile.md) | iOS / Android: what works, how to run the Gallery on both, what is open. |
+| [`http.md`](http.md) | `Zigote.Http` — requests as values, the middleware stack, the cache, typed clients, the frame-loop queue. |
 | [`plugins.md`](plugins.md) | Platform interop — `PlatformChannel`, the plugin contract, packaging cross-platform and native plugins. |
 
 ## The games stack

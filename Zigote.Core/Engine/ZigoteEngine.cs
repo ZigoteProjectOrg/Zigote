@@ -577,6 +577,30 @@ public sealed unsafe class ZigoteEngine : IDisposable
         );
     }
 
+    /// <summary>
+    ///     The native parent handle of a window, for embedding platform child views (webviews,
+    ///     native controls) over the engine's surface. The child always draws above engine
+    ///     content — the overlay model. <paramref name="windowHandle" /> 0 = the main window.
+    ///     <para>
+    ///         <see cref="NativeParentKind.Wayland" /> is reported for completeness only: a
+    ///         foreign toolkit's view cannot be parented into another client's surface there, so
+    ///         Linux embedding needs the X11 driver (<c>SDL_VIDEO_DRIVER=x11</c>, i.e. XWayland
+    ///         on a Wayland desktop) — set it before the engine initializes.
+    ///     </para>
+    /// </summary>
+    public NativeParent GetNativeParent(ulong windowHandle = 0)
+    {
+        EnsureReady();
+        NativeEngine.WindowNativeParent(
+            handle: _handle,
+            windowHandle: windowHandle,
+            outKind: out uint kind,
+            outPtr1: out ulong p1,
+            outPtr2: out ulong p2
+        );
+        return new NativeParent(Kind: (NativeParentKind)kind, Ptr1: (nint)p1, Ptr2: (nint)p2);
+    }
+
     private RendererCaps QueryRendererCaps()
     {
         NativeEngine.GetRendererCaps(handle: _handle, outCaps: out var caps);

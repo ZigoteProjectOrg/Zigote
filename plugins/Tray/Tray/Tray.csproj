@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      Platform plugin Tray: a status-area icon everywhere one exists. Desktop-only by nature —
+      Windows and macOS come from the engine's TrayIcon wrapper; Linux is a D-Bus service the
+      app has to BE (StatusNotifierItem + com.canonical.dbusmenu), which is exactly why it
+      lives in a plugin and not in the engine's dependency graph.
+    -->
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <RootNamespace>Tray</RootNamespace>
+        <Version>0.1.0</Version>
+        <Description>Status-area (tray) icon for Zigote desktop apps: Shell_NotifyIcon on Windows, NSStatusItem on macOS, StatusNotifierItem + dbusmenu over D-Bus on Linux.</Description>
+    </PropertyGroup>
+
+    <!-- Where the engine lives. Override with -p:ZigoteRoot=<path> or $ZIGOTE_ROOT. -->
+    <PropertyGroup>
+        <ZigoteRoot Condition="'$(ZigoteRoot)' == '' And '$(ZIGOTE_ROOT)' != ''">$(ZIGOTE_ROOT)</ZigoteRoot>
+        <ZigoteRoot Condition="'$(ZigoteRoot)' == ''">$(MSBuildThisFileDirectory)../../..</ZigoteRoot>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- Core for ITrayIcon/TrayMenuItem and the Windows/macOS backends. -->
+        <ProjectReference Include="$(ZigoteRoot)/Zigote.Core/Zigote.Core.csproj"/>
+        <PackageReference Include="Tmds.DBus.Protocol" Version="0.94.2"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="Tray.Tests"/>
+    </ItemGroup>
+
+</Project>

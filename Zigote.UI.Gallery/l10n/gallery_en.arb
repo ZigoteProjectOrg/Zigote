@@ -39,6 +39,8 @@
   "demoAnimateDesc": "The fluent .Animate() API: fades, slides, scales and sequences.",
   "demoDragDropTitle": "Drag & Drop",
   "demoDragDropDesc": "In-app drag targets, OS file drops, clipboard and drag-out.",
+  "demoSvgTitle": "SVG",
+  "demoSvgDesc": "Vector art through resvg: a size-animated tiger, tints, and compiled SVG.",
   "demoVideoTitle": "Video",
   "demoVideoDesc": "An ffmpeg-backed player: scrubbing, speed, volume and fit.",
   "demoLocalizationTitle": "Localization",

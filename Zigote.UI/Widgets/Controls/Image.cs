@@ -3,7 +3,6 @@ using Zigote.Core;
 using Zigote.Core.Engine;
 using Zigote.Core.Paint;
 using Zigote.UI.Host;
-using Zigote.UI.Net;
 using Zigote.UI.Semantics;
 
 namespace Zigote.UI.Widgets.Controls;
@@ -226,8 +225,9 @@ public sealed class Image : Widget, IDisposable
     ///     </para>
     /// </summary>
     /// <param name="fetch">
-    ///     Produces the encoded bytes (file read, archive entry, HTTP body — see
-    ///     <see cref="NetworkCache.FetchAsync" /> for a cached, coalesced, rate-gated HTTP one).
+    ///     Produces the encoded bytes (file read, archive entry, HTTP body — for a cached,
+    ///     deduplicated, rate-gated HTTP one, fetch through a <c>Zigote.Http</c> runner:
+    ///     <c>ct => runner.BytesAsync(HttpRequest.Get(url), ct).Unwrap()</c>).
     /// </param>
     /// <param name="maxDim">Caps the longest edge of the decoded texture; 0 = unbounded.</param>
     public Task LoadAsync(Func<CancellationToken, Task<byte[]>> fetch, uint maxDim = 0)

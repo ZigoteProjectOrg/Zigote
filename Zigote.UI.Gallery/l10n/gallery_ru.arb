@@ -37,6 +37,8 @@
   "demoAnimateDesc": "Текучий API .Animate(): появление, сдвиг, масштаб.",
   "demoDragDropTitle": "Перетаскивание",
   "demoDragDropDesc": "Перетаскивание внутри приложения, файлы из ОС, буфер обмена.",
+  "demoSvgTitle": "SVG",
+  "demoSvgDesc": "Вектор через resvg: тигр с анимацией размера, тонирование и скомпилированный SVG.",
   "demoVideoTitle": "Видео",
   "demoVideoDesc": "Плеер на ffmpeg: перемотка, скорость, громкость и вписывание.",
   "demoLocalizationTitle": "Локализация",

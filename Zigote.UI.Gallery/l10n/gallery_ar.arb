@@ -37,6 +37,8 @@
   "demoAnimateDesc": "واجهة تحريك انسيابية: تلاشٍ وانزلاق وتحجيم.",
   "demoDragDropTitle": "السحب والإفلات",
   "demoDragDropDesc": "سحب داخل التطبيق وملفات النظام والحافظة.",
+  "demoSvgTitle": "SVG",
+  "demoSvgDesc": "رسوم متجهية عبر resvg: نمر بحجم متحرك، وتلوين، وSVG مُصرَّف.",
   "demoVideoTitle": "فيديو",
   "demoVideoDesc": "مشغّل يعتمد على ffmpeg: التمرير والسرعة والصوت والملاءمة.",
   "demoLocalizationTitle": "التوطين",

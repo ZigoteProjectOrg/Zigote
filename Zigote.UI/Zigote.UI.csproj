@@ -10,6 +10,9 @@
     <ItemGroup>
         <ProjectReference Include="..\Zigote.Core\Zigote.Core.csproj"/>
     </ItemGroup>
+    <!-- resvg behind a C ABI (native/zigote-svg), for SvgPicture. Optional: builds only where a
+         Rust toolchain is present. -->
+    <Import Project="..\build\Zigote.Svg.targets"/>
     <!-- Bundled, cross-platform fonts (no system-font dependency). Zigote.UI is their canonical home;
          the native engine loads them from Fonts/ next to the executable. Marked CopyToOutputDirectory so
          they flatten into Fonts/ for UI itself AND propagate to every app that references Zigote.UI

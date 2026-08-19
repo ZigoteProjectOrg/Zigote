@@ -1,0 +1,25 @@
+[package]
+name = "zigote_svg"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+publish = false
+
+[lib]
+# cdylib for the managed side (DllImport "zigote_svg"); rlib so the compile tool below can link it.
+crate-type = ["cdylib", "rlib"]
+
+# `cargo run --release --bin zigote-svgc -- in.svg out.svg` — the build-time compiler. A binary
+# rather than a `zigote` CLI verb because the CLI deliberately references no project that drags a
+# native build into `dotnet tool install`.
+[[bin]]
+name = "zigote-svgc"
+path = "src/main.rs"
+
+[dependencies]
+resvg = "0.45"
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true

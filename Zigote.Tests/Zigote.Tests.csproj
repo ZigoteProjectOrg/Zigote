@@ -53,6 +53,10 @@
         <ProjectReference Include="..\Zigote.Persistence.SQLite\Zigote.Persistence.SQLite.csproj"/>
         <ProjectReference Include="..\Zigote.Preferences\Zigote.Preferences.csproj"/>
         <ProjectReference Include="..\Zigote.Audioplayer\Zigote.Audioplayer.csproj"/>
+        <ProjectReference Include="..\Zigote.Http\Zigote.Http.csproj"/>
+        <!-- [HttpApi] interfaces in this project become generated clients (ZHTTP diagnostics included). -->
+        <ProjectReference Include="..\Zigote.Http.Generators\Zigote.Http.Generators.csproj"
+                          OutputItemType="Analyzer" ReferenceOutputAssembly="false"/>
     </ItemGroup>
     <ItemGroup>
         <Using Include="Zigote.UI.Material"/>

@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <RootNamespace>Zigote.Http.FSharp</RootNamespace>
+        <AssemblyName>Zigote.Http.FSharp</AssemblyName>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <IsPackable>true</IsPackable>
+        <PackageId>Zigote.Http.FSharp</PackageId>
+        <Version>0.1.0</Version>
+        <Authors>Zigote Project</Authors>
+        <Description>The F# surface of Zigote.Http: the same request/error values, exposed as a pipeline of pure transforms with Result-typed outcomes.</Description>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <RepositoryUrl>https://github.com/ZigoteProjectOrg/Zigote</RepositoryUrl>
+        <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    </PropertyGroup>
+
+    <!-- Not a wrapper: the same L1 values, exposed the way Http.fs exposes them. There is no F#
+         type here that the C# side does not already have. -->
+    <ItemGroup>
+        <Compile Include="Http.fs"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Update="FSharp.Core" Version="10.1.302"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Zigote.Http\Zigote.Http.csproj"/>
+    </ItemGroup>
+
+</Project>

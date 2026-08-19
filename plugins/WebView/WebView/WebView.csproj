@@ -1,0 +1,74 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      WebView plugin: the platform's own browser view (WebKitGTK / WebView2 / WKWebView /
+      android.webkit.WebView) embedded as an overlay native view over the engine surface,
+      positioned by a NativeViewHost widget. Same build-time platform selection as every
+      Zigote plugin — one Platforms/ folder per target framework.
+    -->
+    <PropertyGroup>
+        <TargetFrameworks>net10.0;net10.0-android</TargetFrameworks>
+        <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('osx'))">$(TargetFrameworks);net10.0-ios</TargetFrameworks>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <RootNamespace>WebView</RootNamespace>
+        <SupportedOSPlatformVersion Condition="'$(TargetFramework)' == 'net10.0-android'">26</SupportedOSPlatformVersion>
+        <SupportedOSPlatformVersion Condition="'$(TargetFramework)' == 'net10.0-ios'">15.0</SupportedOSPlatformVersion>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <Version>0.1.0</Version>
+        <Description>Embedded web content for Zigote: the platform's browser view as an overlay native view, with a shared controller for navigation, JS evaluation and page events.</Description>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <ZigoteRoot Condition="'$(ZigoteRoot)' == '' And '$(ZIGOTE_ROOT)' != ''">$(ZIGOTE_ROOT)</ZigoteRoot>
+        <ZigoteRoot Condition="'$(ZigoteRoot)' == ''">$(MSBuildThisFileDirectory)../../..</ZigoteRoot>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="$(ZigoteRoot)/Zigote.Core/Zigote.Core.csproj"/>
+        <ProjectReference Include="$(ZigoteRoot)/Zigote.UI/Zigote.UI.csproj"/>
+        <!-- Logging goes through Serilog's static Log, configured once by the host app's
+             AppLog.Bootstrap. Zigote.Logging is net10.0 and reaches the mobile TFMs through
+             .NET's own net10.0 → net10.0-android/ios compatibility, same as Zigote.Core. -->
+        <ProjectReference Include="$(ZigoteRoot)/Zigote.Logging/Zigote.Logging.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+        <!-- The Windows backend. The package ships only a net462 Core assembly (the same one
+             WinForms/WPF apps run on modern .NET through built-in COM interop), so it restores
+             through the .NET Framework compatibility fallback — NU1701 is that fallback's notice,
+             expected here, and the assembly is Windows-only at RUNTIME anyway (TryCreate gates on
+             the HWND parent). The package also delivers WebView2Loader.dll for win-x64/arm64
+             outputs; end users still need the WebView2 Runtime installed (in Windows 11 by default). -->
+        <!-- PrivateAssets build/buildTransitive: the package's MSBuild targets otherwise run in
+             every CONSUMING project too and reference the WinForms/WPF assemblies there, which
+             drags WindowsBase v5 into consumers as an MSB3277 conflict. Compile/runtime assets
+             still flow; the Core assembly reaches consumers through this project's output. -->
+        <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4129.50" NoWarn="NU1701"
+                          PrivateAssets="build;buildTransitive"/>
+    </ItemGroup>
+
+    <!-- The package's targets reference Core + WinForms + Wpf together; only Core is used here,
+         and the Wpf assembly drags WindowsBase v5 into this non-Windows TFM (MSB3277). Drop the
+         two UI-framework assemblies before reference resolution. -->
+    <Target Name="WebView2CoreOnly" BeforeTargets="ResolveAssemblyReferences"
+            Condition="'$(TargetFramework)' == 'net10.0'">
+        <ItemGroup>
+            <Reference Remove="@(Reference)"
+                       Condition="'%(FileName)' == 'Microsoft.Web.WebView2.WinForms' Or '%(FileName)' == 'Microsoft.Web.WebView2.Wpf'"/>
+        </ItemGroup>
+    </Target>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="WebView.Tests"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Compile Remove="Platforms/**/*.cs"/>
+        <Compile Include="Platforms/Desktop/**/*.cs" Condition="'$(TargetFramework)' == 'net10.0'"/>
+        <Compile Include="Platforms/Android/**/*.cs" Condition="'$(TargetFramework)' == 'net10.0-android'"/>
+        <Compile Include="Platforms/iOS/**/*.cs" Condition="'$(TargetFramework)' == 'net10.0-ios'"/>
+    </ItemGroup>
+
+</Project>

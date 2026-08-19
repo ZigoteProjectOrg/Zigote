@@ -27,6 +27,7 @@ open Zigote.UI.DevTools
 open Zigote.UI.Charts
 open Zigote.UI.Charts.Marks
 open Zigote.UI.FSharp
+open Zigote.UI.FSharp.Gallery.Ui
 
 // ── state: signals ───────────────────────────────────────────────────────────
 
@@ -38,6 +39,7 @@ type Tab =
     | Reactive
     | Desk
     | Cube
+    | Http
 
 type TodoItem = { Id: int; Text: string; Done: bool }
 
@@ -541,55 +543,9 @@ type private CubeWidget() =
 // Widgets that are pure output (labels, progress bars) or cheap and stateless are free to live in a
 // `watch` — that is the normal case below.
 
-let private dim = Color(0.62f, 0.66f, 0.72f)
 let private up = Color(0.30f, 0.78f, 0.46f)
 let private down = Color(0.90f, 0.38f, 0.42f)
 let private money (v: float) = "$" + v.ToString("N0")
-
-// Text styles live in one place (a C# app would put them on the theme).
-let private muted = TextStyle(color = dim)
-let private italic = TextStyle(fontStyle = FontStyle.Italic)
-
-let private bold (size: float) =
-    TextStyle(fontSize = size, fontWeight = FontWeight.Bold)
-
-let private heading = bold 15.0
-let private accent = bold 18.0
-let private display = bold 30.0
-let private hero = bold 40.0
-
-let private sized (width: float32) (child: Widget) : Widget = SizedBox(width = width, child = child)
-
-/// A titled card. Its children are laid out with a uniform gap, so a section body is just the list
-/// of widgets — no spacer widgets threaded between them.
-let private section (title: string) (body: Widget seq) : Widget =
-    Card(
-        Padding.All(
-            16f,
-            Column(
-                crossAxisAlignment = CrossAxisAlignment.Start,
-                mainAxisSize = MainAxisSize.Min,
-                spacing = 8f,
-                children = Seq.append [ w (Text(title, heading)) ] body
-            )
-        )
-    )
-
-/// Build-once-per-key widgets: the same instance is handed back on every list rebuild, so per-row
-/// widget state (a checkbox's animation, focus, an in-flight edit) survives a reorder.
-let private retained (cache: Dictionary<'k, Widget>) (key: 'k) (build: unit -> #Widget) : Widget =
-    match cache.TryGetValue key with
-    | true, row -> row
-    | _ ->
-        let row = build () :> Widget
-        cache[key] <- row
-        row
-
-/// A muted caption paragraph (wraps, so demo explanations read cleanly).
-let private note (s: string) : Widget = Text(s, muted, maxLines = 3)
-
-/// A big accent readout — the "proof" line each reactive demo lands on.
-let private readout (v: unit -> string) = watch (fun () -> Text(v (), accent))
 
 let private tabButton (t: Tab) (label: string) =
     watch (fun () ->
@@ -1130,6 +1086,7 @@ let private tabs: (Tab * string * (unit -> Widget list)) list =
         Reactive, "Reactive", reactiveTab
         Desk, "Desk", deskTab
         Cube, "3D", cubeTab
+        Http, "Http", NekosPage.tab
     ]
 
 let private appView () : Widget =

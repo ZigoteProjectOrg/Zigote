@@ -33,6 +33,20 @@ and any local patches.
 Portions of this software are copyright © The FreeType Project (www.freetype.org).
 All rights reserved.
 
+## SVG rasterizer (`native/zigote-svg`, compiled into `libzigote_svg`)
+
+Resolved by cargo at build time and not vendored in this repository (`native/zigote-svg/Cargo.lock`
+pins the versions); license texts ship in the downloaded crates.
+
+| Component | License |
+|---|---|
+| [resvg](https://github.com/linebender/resvg), usvg, svgtypes | MPL-2.0 |
+| [tiny-skia](https://github.com/linebender/tiny-skia) (a port of parts of Skia) | BSD-3-Clause © Google / Yevhenii Reizner |
+| rustybuzz, ttf-parser, fontdb, and the image codecs pulled in for embedded rasters | MIT OR Apache-2.0 |
+
+MPL-2.0 is file-level copyleft: Zigote uses these crates unmodified, so redistributing a build
+requires carrying this notice and pointing at the upstream sources, not opening anything else.
+
 ## Bundled fonts (`Zigote.UI/Fonts/`, copied into the output of every referencing app)
 
 | Font | License | License text |

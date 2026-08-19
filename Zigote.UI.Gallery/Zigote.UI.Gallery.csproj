@@ -27,6 +27,8 @@
         <ProjectReference Include="..\Zigote.UI.Localizations\Zigote.UI.Localizations.csproj"/>
         <ProjectReference Include="..\Zigote.UI.DevTools\Zigote.UI.DevTools.csproj"/>
         <ProjectReference Include="..\Zigote.Videoplayer\Zigote.Videoplayer.csproj"/>
+        <!-- The SVG page's sample fetches go through Zigote.Http (disk cache + heuristic freshness). -->
+        <ProjectReference Include="..\Zigote.Http\Zigote.Http.csproj"/>
         <ProjectReference Include="..\Zigote.Generators\Zigote.Generators.csproj"
                           OutputItemType="Analyzer" ReferenceOutputAssembly="false"/>
     </ItemGroup>

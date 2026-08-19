@@ -1,0 +1,72 @@
+<Project>
+  <!--
+    Builds native/zigote-svg (resvg behind a five-function C ABI) and copies the shared library
+    into the output. Imported by Zigote.UI, the only project that P/Invokes it.
+
+    Unlike the Zig engine, this is optional: a checkout without a Rust toolchain still builds and
+    runs — everything except SvgPicture, which then throws DllNotFoundException on first use. That
+    is deliberate; making `cargo` a hard prerequisite of the whole repo for one widget is a worse
+    trade than a warning.
+  -->
+
+  <PropertyGroup>
+    <SvgCrateDir>$(MSBuildThisFileDirectory)..\native\zigote-svg</SvgCrateDir>
+
+    <!-- Same RID resolution as Zigote.Native.targets: an explicit publish RID wins, else the
+         project's, else the host (plain build). -->
+    <_SvgRid Condition="'$(ZigTargetRid)' != ''">$(ZigTargetRid)</_SvgRid>
+    <_SvgRid Condition="'$(_SvgRid)' == ''">$(RuntimeIdentifier)</_SvgRid>
+
+    <!-- RID → rust target triple. Windows uses the MSVC ABI (rust's default there, and the one a
+         .NET app links against); the gnu ABI the Zig cross-build needs does not apply — this
+         library links nothing but libc. -->
+    <_SvgTriple Condition="'$(_SvgRid)' == 'linux-x64'">x86_64-unknown-linux-gnu</_SvgTriple>
+    <_SvgTriple Condition="'$(_SvgRid)' == 'linux-arm64'">aarch64-unknown-linux-gnu</_SvgTriple>
+    <_SvgTriple Condition="'$(_SvgRid)' == 'osx-x64'">x86_64-apple-darwin</_SvgTriple>
+    <_SvgTriple Condition="'$(_SvgRid)' == 'osx-arm64'">aarch64-apple-darwin</_SvgTriple>
+    <_SvgTriple Condition="'$(_SvgRid)' == 'win-x64'">x86_64-pc-windows-msvc</_SvgTriple>
+    <_SvgTriple Condition="'$(_SvgRid)' == 'android-arm64'">aarch64-linux-android</_SvgTriple>
+    <_SvgTriple Condition="'$(_SvgRid)' == 'android-x64'">x86_64-linux-android</_SvgTriple>
+    <!-- ponytail: no iOS. A cdylib cannot be loaded from an iOS app sandbox, so that target needs
+         the staticlib + __Internal treatment the Zig engine already has (ZigStaticNative). Add it
+         when an iOS app actually needs SVG. -->
+
+    <_SvgCargoTarget Condition="'$(_SvgTriple)' != ''">--target $(_SvgTriple)</_SvgCargoTarget>
+    <_SvgOutDir Condition="'$(_SvgTriple)' != ''">$(SvgCrateDir)\target\$(_SvgTriple)\release</_SvgOutDir>
+    <_SvgOutDir Condition="'$(_SvgTriple)' == ''">$(SvgCrateDir)\target\release</_SvgOutDir>
+
+    <_SvgLibName Condition="$(_SvgRid.StartsWith('win')) Or ('$(_SvgRid)' == '' And '$([MSBuild]::IsOSPlatform(`Windows`))' == 'true')">zigote_svg.dll</_SvgLibName>
+    <_SvgLibName Condition="'$(_SvgLibName)' == '' And ($(_SvgRid.StartsWith('osx')) Or ('$(_SvgRid)' == '' And '$([MSBuild]::IsOSPlatform(`OSX`))' == 'true'))">libzigote_svg.dylib</_SvgLibName>
+    <_SvgLibName Condition="'$(_SvgLibName)' == ''">libzigote_svg.so</_SvgLibName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <SvgCrateSources Include="$(SvgCrateDir)\src\**\*.rs" />
+    <SvgCrateSources Include="$(SvgCrateDir)\Cargo.toml" />
+    <SvgCrateSources Include="$(SvgCrateDir)\Cargo.lock" />
+    <UpToDateCheckInput Include="@(SvgCrateSources)" />
+  </ItemGroup>
+
+  <Target Name="BuildSvgNative" BeforeTargets="BeforeBuild"
+          Inputs="@(SvgCrateSources)" Outputs="$(_SvgOutDir)\$(_SvgLibName)">
+    <Exec Command="cargo --version" ContinueOnError="true" StandardOutputImportance="low"
+          StandardErrorImportance="low">
+      <Output TaskParameter="ExitCode" PropertyName="_SvgCargoMissing" />
+    </Exec>
+    <Warning Condition="'$(_SvgCargoMissing)' != '0'"
+             Text="cargo not found — skipping the SVG native build. SvgPicture will fail at runtime; install Rust (https://rustup.rs) and rebuild." />
+    <Exec Condition="'$(_SvgCargoMissing)' == '0'"
+          Command="cargo build --release $(_SvgCargoTarget)"
+          WorkingDirectory="$(SvgCrateDir)" IgnoreStandardErrorWarningFormat="true" />
+  </Target>
+
+  <ItemGroup>
+    <!-- Condition on Exists: unlike the engine's, this build is allowed to have been skipped. The
+         cost is that the very first build after installing Rust copies nothing (the item list is
+         evaluated at project load, before BuildSvgNative ran) — the next one does. -->
+    <Content Include="$(_SvgOutDir)\$(_SvgLibName)" Condition="Exists('$(_SvgOutDir)\$(_SvgLibName)')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>$(_SvgLibName)</Link>
+    </Content>
+  </ItemGroup>
+</Project>

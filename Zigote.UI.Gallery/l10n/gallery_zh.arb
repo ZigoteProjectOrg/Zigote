@@ -37,6 +37,8 @@
   "demoAnimateDesc": "流式 .Animate() API：淡入、滑动、缩放。",
   "demoDragDropTitle": "拖放",
   "demoDragDropDesc": "应用内拖放、系统文件、剪贴板。",
+  "demoSvgTitle": "SVG",
+  "demoSvgDesc": "基于 resvg 的矢量图：尺寸动画老虎、着色与预编译 SVG。",
   "demoVideoTitle": "视频",
   "demoVideoDesc": "基于 ffmpeg 的播放器：拖动、倍速、音量与适配。",
   "demoLocalizationTitle": "本地化",

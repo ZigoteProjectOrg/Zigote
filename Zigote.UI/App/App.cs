@@ -1179,7 +1179,7 @@ public partial class App : IDisposable
         }
         finally
         {
-            DrainPostedAfterFrame();
+            using (Profiler.Scope("Loop.DrainAfterFrame")) DrainPostedAfterFrame();
         }
     }
 
@@ -1264,7 +1264,7 @@ public partial class App : IDisposable
                 Engine.WaitEvents((int)(FrameIntervalTicks * 1000 / Stopwatch.Frequency));
         }
 
-        Engine.PollEventsInto(_events);
+        using (Profiler.Scope("Loop.PollEvents")) Engine.PollEventsInto(_events);
         // Move events belonging to secondary OS windows out of the main batch and into each
         // window's own buffer — they are dispatched in that window's SecondaryFrame below.
         RouteEventsToSecondaryWindows();
@@ -1285,7 +1285,7 @@ public partial class App : IDisposable
         // Service the audio engine each frame: ages + reaps fire-and-forget one-shots (UI clicks /
         // positioned pings) so a held oscillator one-shot is silenced after its duration. Cheap no-op
         // until audio is opened (lazy on first sound).
-        Engine.AudioUpdate(DeltaTime);
+        using (Profiler.Scope("Loop.Audio")) Engine.AudioUpdate(DeltaTime);
 
         if (_initialFramesToPaint > 0)
         {
@@ -1340,7 +1340,7 @@ public partial class App : IDisposable
         // thread, BEFORE layout — so the Parent-chain walk is race-free and the marked ancestors don't
         // cache-skip re-measuring the affected subtree.
         DrainCrossThreadInvalidations();
-        DrainPosted();
+        using (Profiler.Scope("Loop.DrainPosted")) DrainPosted();
 
         // Bring layout current BEFORE dispatching events so HitTest sees valid Bounds.
         // Layout runs only when structure/size actually changed (MarkNeedsLayout) or the

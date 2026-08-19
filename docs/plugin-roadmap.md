@@ -8,6 +8,12 @@ Already covered — do not build: `shared_preferences` → **Zigote.Preferences*
 **plugins/Camera**, audio/video → **Zigote.Audioplayer / Zigote.Videoplayer**, sqlite →
 **Zigote.Persistence.SQLite**.
 
+**Built** (see `plugins/`): DeviceInfo, PathProvider, UrlLauncher, Permissions, FilePicker,
+Notifications, Tray. Timbre consumes them — its hand-rolled StatusNotifierItem, notification
+transport, XDG paths, url opening and Android SystemDialogs were replaced by the plugins.
+Still open from the tiers below: SecureStorage, Connectivity, Share, Haptics, AppSettings,
+Battery, WebView, Geolocation, Sensors.
+
 ## Tier 1 — almost every app needs these
 
 | Plugin | Flutter equivalent | Notes |
@@ -34,7 +40,7 @@ Already covered — do not build: `shared_preferences` → **Zigote.Preferences*
 
 | Plugin | Flutter equivalent | Notes |
 |---|---|---|
-| `Zigote.Plugins.WebView` | webview_flutter | By far the most expensive item on the list (native view embedding in the compositor). Do not start without a concrete consumer. |
+| ~~`Zigote.Plugins.WebView`~~ | webview_flutter | **Built** (plugins/WebView), built for JS web extensions (maps, payments): a `window.zigote` message bridge both ways, document-start user scripts, a navigation filter, progress/history/failure events and `ClearBrowsingDataAsync`. Overlay native views on Windows/X11/Android/iOS; native Wayland renders the page into an engine texture (damage-driven, SIMD conversion). |
 | `Zigote.Plugins.Geolocation` | geolocator | |
 | `Zigote.Plugins.Sensors` | sensors_plus | Accelerometer/gyro events; games may want it. |
 | `Zigote.Plugins.Tray` | tray_manager | Desktop-only; status icon + menu. |
@@ -42,6 +48,6 @@ Already covered — do not build: `shared_preferences` → **Zigote.Preferences*
 ## Not plugins — framework features
 
 - **skeletonizer** → a shimmer/skeleton widget in Zigote.UI. Pure drawing, no platform code.
-- **flutter_svg** → SVG parsing/rendering in Render2D/UI. Renderer feature.
+- **flutter_svg** → **Built**: `SvgPicture` + `SvgAsset` in Zigote.UI over resvg (`native/zigote-svg`), plus ahead-of-time compiled SVG. See [`svg.md`](svg.md).
 - **animations** → transition patterns in Zigote.UI. Already framework territory.
 - **Clipboard, window management** → core engine surface (NativeWindow), not packages.

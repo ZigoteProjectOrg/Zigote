@@ -1,3 +1,5 @@
+using Zigote.Http;
+
 namespace AdwaitaGallery.Pages;
 
 /// <summary>
@@ -7,9 +9,10 @@ namespace AdwaitaGallery.Pages;
 ///         Three things keep it honest at feed scale. The grid is <b>virtualized</b>, so only the
 ///         visible rows exist; each tile is <b>lazy</b>, so a picture is fetched on the mount that
 ///         scrolling causes; and every fetch — the pictures and the API's own JSON — goes through
-///         the shared network cache, which coalesces duplicates, gates concurrency and files the
-///         answer on disk. Scroll back up and nothing is requested twice; restart the app and the
-///         API is not called at all.
+///         the app's one <see cref="ArtSource.Http">HttpRunner</see>, whose dedup coalesces
+///         duplicates, whose per-host gate bounds the fan-out, and whose disk cache obeys the
+///         origin: the pictures (eight-day <c>max-age</c> + ETag) come off the disk across
+///         restarts, while the random feed listing is honestly refetched once per run.
 ///     </para>
 ///     <para>
 ///         The page's chrome — every credit chip, the fetch pill, the status toolbar the grid
@@ -44,7 +47,6 @@ public sealed class ImageGridPage : ComposedWidget
     // The feed hands back random picks, so pages overlap; a URL already held is dropped rather
     // than shown twice.
     private readonly HashSet<string> _urls = new(StringComparer.Ordinal);
-    private int _cached;
     private int _page;
 
     // Read in Build (registering the page as a theme dependent, so a theme flip rebuilds it and
@@ -128,24 +130,26 @@ public sealed class ImageGridPage : ComposedWidget
 
     private async Task LoadPageAsync(int page)
     {
-        try
-        {
-            var pieces = await ArtSource.FetchPageAsync(page).ConfigureAwait(false);
-            App.Active?.Post(() => Append(page: page, pieces: pieces));
-        }
-        catch (Exception error)
-        {
-            // Every path back to the widgets goes through the UI thread; nothing here touches a
-            // signal from the worker.
-            App.Active?.Post(() =>
+        // The outcome is a value, so there is nothing to catch: one match, and every path back to
+        // the widgets goes through the UI thread — nothing here touches a signal from the worker.
+        var result = await ArtSource.FetchPageAsync(page).ConfigureAwait(false);
+        App.Active?.Post(() =>
+            {
+                if (result.TryGet(out var pieces, out var error))
                 {
-                    _error.Value = error is HttpRequestException or TaskCanceledException
-                        ? "Couldn't reach the feed — check the connection"
-                        : error.Message;
-                    _loading.Value = false;
+                    Append(page: page, pieces: pieces);
+                    return;
                 }
-            );
-        }
+
+                _error.Value = error switch {
+                    HttpError.Transport or HttpError.Timeout =>
+                        "Couldn't reach the feed — check the connection",
+                    HttpError.Status status => $"The feed said {(int)status.Code}",
+                    _ => error.Message,
+                };
+                _loading.Value = false;
+            }
+        );
     }
 
     private void Append(int page, ArtPiece[] pieces)
@@ -155,12 +159,11 @@ public sealed class ImageGridPage : ComposedWidget
         {
             if (!_urls.Add(piece.Url)) continue;
             var art = piece;
-            var tile =
+            _items.Add(
                 new ArtImage(piece: art, maxDim: TileMaxDim) {
                     OnPressed = () => ArtViewer.Show(art),
-                };
-            if (tile.WasCached) _cached++;
-            _items.Add(tile);
+                }
+            );
         }
 
         _loading.Value = false;
@@ -250,12 +253,15 @@ public sealed class ImageGridPage : ComposedWidget
 
     private Widget Status()
     {
+        // The disk readout comes from the runner itself — its OnLog counts every answer, so the
+        // number covers exactly what went through the pipeline, pictures and listings alike.
         int count = _shown.Value;
+        int fromDisk = Volatile.Read(ref ArtSource.CacheHits);
         string caption = count == 0
             ? "Scroll to the bottom to fetch the next page"
             : _page >= ArtSource.MaxPages
-                ? $"End of the feed — {_cached} of {count} came straight off the disk"
-                : $"Click a picture to zoom it · {_cached} of {count} came straight off the disk";
+                ? $"End of the feed — {fromDisk} answers came straight off the disk"
+                : $"Click a picture to zoom it · {fromDisk} answers came straight off the disk";
 
         // Content colour follows the pane's glass family (see LiquidPane.OnGlass): what is behind
         // this toolbar is whatever the feed served, and the pane's adaptive scrim keeps that

@@ -237,13 +237,19 @@ Two rules for the list itself:
 
 ## An image grid from the network
 
-Three pieces, each doing one job: `NetworkCache.FetchAsync` fetches a URL **once** to disk —
-duplicate in-flight requests share one fetch, and a concurrency gate keeps a screenful of tiles from
-stampeding the server. `Image.LoadAsync` decodes off the UI thread behind a per-core gate and
-reports through `OnLoaded`/`OnFailed`, both on the UI thread. `GridView.Rebind` is the append step —
-it re-points the grid at a new item count without losing the scroll position.
+Three pieces, each doing one job: a shared `Zigote.Http` runner fetches the bytes — its dedup layer
+shares one trip among duplicate in-flight requests, `MaxConcurrencyPerHost` keeps a screenful of
+tiles from stampeding the server, and its disk cache obeys the origin's `max-age`/ETag so re-entry
+after a scroll is a disk read. `Image.LoadAsync` decodes off the UI thread behind a per-core gate
+and reports through `OnLoaded`/`OnFailed`, both on the UI thread. `GridView.Rebind` is the append
+step — it re-points the grid at a new item count without losing the scroll position.
 
 ```csharp
+private static readonly HttpRunner Http = new(new HttpRunnerOptions {
+    Cache = new FileCacheStore(FileCacheStore.DefaultDirectory),
+    MaxConcurrencyPerHost = 6,
+});
+
 private readonly ListView _grid;
 private int _count;
 
@@ -256,7 +262,9 @@ public FeedPage()
 private Widget CellFor(int i)
 {
     var image = new Image();
-    _ = image.LoadAsync(ct => NetworkCache.FetchAsync(Feed.UrlOf(i), ct), maxDim: 512);
+    _ = image.LoadAsync(
+        async ct => (await Http.BytesAsync(HttpRequest.Get(Feed.UrlOf(i)), ct)).Unwrap(),
+        maxDim: 512);
     return image;                    // fire-and-forget is safe: the task never faults
 }
 

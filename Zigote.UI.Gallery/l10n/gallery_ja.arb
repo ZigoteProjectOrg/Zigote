@@ -37,6 +37,8 @@
   "demoAnimateDesc": ".Animate() API：フェード、スライド、スケール。",
   "demoDragDropTitle": "ドラッグ＆ドロップ",
   "demoDragDropDesc": "アプリ内 D&D、OS ファイル、クリップボード。",
+  "demoSvgTitle": "SVG",
+  "demoSvgDesc": "resvg によるベクター: サイズが動くトラ、着色、コンパイル済み SVG。",
   "demoVideoTitle": "動画",
   "demoVideoDesc": "ffmpeg ベースのプレーヤー。シーク・速度・音量・フィット。",
   "demoLocalizationTitle": "ローカライズ",

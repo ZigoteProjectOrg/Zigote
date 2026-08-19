@@ -119,6 +119,14 @@ internal static class DemoRegistry
             BuildPage: () => new DragDropPage()
         ),
         new(
+            Id: "svg",
+            Icon: MaterialIcons.Brush,
+            Accent: Colors.Pink,
+            Title: l => l.DemoSvgTitle,
+            Description: l => l.DemoSvgDesc,
+            BuildPage: () => new SvgPage()
+        ),
+        new(
             Id: "video",
             Icon: MaterialIcons.Movie,
             Accent: Colors.DeepOrange,
