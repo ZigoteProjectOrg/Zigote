@@ -22,7 +22,17 @@ public static class DebugStats
     private static float _metricTimer = 1f; // force first-frame sample
     private static float _statTimer = 1f;
 
+    private static long _lastAllocBytes = GC.GetAllocatedBytesForCurrentThread();
+    private static double _allocAccumKb;
+    private static int _allocAccumFrames;
+
     public static float Fps { get; private set; } = 60f;
+
+    /// <summary>UI-thread managed bytes allocated during the last frame (KB).</summary>
+    public static float AllocKbLastFrame { get; private set; }
+
+    /// <summary>UI-thread alloc per frame (KB), averaged over the last ~1 s metric window.</summary>
+    public static float AllocKbPerFrame { get; private set; }
     public static float FpsMin { get; private set; } = 60f;
     public static float FpsMax { get; private set; } = 60f;
     public static float FrameMs { get; private set; }
@@ -126,18 +136,31 @@ public static class DebugStats
         FrameWriteIndex++;
         DebugProfiler.RecordFrame(dt * 1000f);
 
+        // Sample is called once per frame on the UI thread, so this delta is exactly the frame's
+        // UI-thread allocation — the number the zero-alloc hot-path rules are about. Process-wide
+        // MB/s (MemoryPanel) can't isolate the frame loop; this can.
+        long allocNow = GC.GetAllocatedBytesForCurrentThread();
+        AllocKbLastFrame = (allocNow - _lastAllocBytes) / 1024f;
+        _lastAllocBytes = allocNow;
+        _allocAccumKb += AllocKbLastFrame;
+        _allocAccumFrames++;
+
         // A frame that slept in WaitEvents wakes with a long dt by design — not jank, and not a
         // "working frame" for the rate's denominator either.
+        bool jank = false;
         if (!idle)
         {
             TotalFrames++;
             if (frameBudget > 0f && dt > 1.5f * frameBudget)
             {
+                jank = true;
                 JankFrames++;
                 if (animating) AnimatedJankFrames++;
                 NoteJankCause();
             }
         }
+
+        ZigoteEventSource.Log.Frame(frameMs: dt * 1000.0, allocKb: AllocKbLastFrame, jank: jank);
 
         _fpsTimer += dt;
         if (_fpsTimer >= 0.25f)
@@ -176,6 +199,11 @@ public static class DebugStats
             {
                 /* ignore */
             }
+
+            AllocKbPerFrame =
+                _allocAccumFrames > 0 ? (float)(_allocAccumKb / _allocAccumFrames) : 0f;
+            _allocAccumKb = 0;
+            _allocAccumFrames = 0;
 
             GcMb = GC.GetTotalMemory(false) / (1024f * 1024f);
             Gen0Collections = GC.CollectionCount(0);

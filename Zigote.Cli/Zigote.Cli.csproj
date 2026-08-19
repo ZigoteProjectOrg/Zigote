@@ -23,8 +23,14 @@
         <PackageOutputPath>./nupkg</PackageOutputPath>
         <PackageId>Zigote.Cli</PackageId>
         <Version>0.1.0</Version>
-        <Description>Scaffolds Zigote apps and platform heads.</Description>
+        <Description>Scaffolds Zigote apps, plugins and platform heads, and checks the machine with `zigote doctor`.</Description>
     </PropertyGroup>
+
+    <ItemGroup>
+        <!-- The one dependency: declarative verb/option parsing. It is a parsing library only —
+             help text, version, and error rendering come from it, everything else stays here. -->
+        <PackageReference Include="CommandLineParser" Version="2.9.1"/>
+    </ItemGroup>
 
     <!--
       No project references on purpose. The CLI writes text files; it does not build, host or

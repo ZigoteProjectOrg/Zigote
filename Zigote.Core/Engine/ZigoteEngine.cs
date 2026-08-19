@@ -40,6 +40,17 @@ public sealed unsafe class ZigoteEngine : IDisposable
     // heap byte[] (covers virtually every node name / font family; long file paths spill to the heap).
     private const int StackStringMax = 256;
 
+    /// <summary>
+    ///     UTF-8 encode with a trailing NUL in a single allocation, for cold-path FFI strings
+    ///     (init, window titles, file loads). Hot paths stackalloc via <see cref="StackStringMax" />.
+    /// </summary>
+    internal static byte[] Utf8Z(string s)
+    {
+        byte[] bytes = new byte[Encoding.UTF8.GetByteCount(s) + 1]; // zero-init supplies the NUL
+        Encoding.UTF8.GetBytes(chars: s, bytes: bytes);
+        return bytes;
+    }
+
     // ── 2D sprite renderer FFI ───────────────────────────────────────────────────
     /// <summary>
     ///     Floats per sprite instance — pos.xyz, rot, size.xy, uv0.xy, uv1.xy, rgba, corner_radius,
@@ -261,9 +272,9 @@ public sealed unsafe class ZigoteEngine : IDisposable
     {
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
 
-        byte[] titleBytes = [.. Encoding.UTF8.GetBytes(title), 0];
-        byte[]? fpBytes = fontPath is not null ? [.. Encoding.UTF8.GetBytes(fontPath), 0] : null;
-        byte[]? fnBytes = fontName is not null ? [.. Encoding.UTF8.GetBytes(fontName), 0] : null;
+        byte[] titleBytes = Utf8Z(title);
+        byte[]? fpBytes = fontPath is not null ? Utf8Z(fontPath) : null;
+        byte[]? fnBytes = fontName is not null ? Utf8Z(fontName) : null;
 
         _logAction = (level, msg) =>
         {
@@ -538,7 +549,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public NativeWindow CreateWindow(string title, uint width, uint height)
     {
         EnsureReady();
-        byte[] titleBytes = [.. Encoding.UTF8.GetBytes(title), 0];
+        byte[] titleBytes = Utf8Z(title);
         ulong window;
         ZgResult result;
         fixed (byte* tp = titleBytes)
@@ -871,7 +882,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public static ulong LoadTexture(string path, out uint outW, out uint outH)
     {
         var engine = RequireInstance();
-        byte[] pathBytes = [.. Encoding.UTF8.GetBytes(path), 0];
+        byte[] pathBytes = Utf8Z(path);
         fixed (byte* p = pathBytes)
         {
             return NativeEngine.LoadTexture(
@@ -889,7 +900,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public static ulong LoadTextureMask(string path, out uint outW, out uint outH)
     {
         var engine = RequireInstance();
-        byte[] pathBytes = [.. Encoding.UTF8.GetBytes(path), 0];
+        byte[] pathBytes = Utf8Z(path);
         fixed (byte* p = pathBytes)
         {
             return NativeEngine.LoadTextureMask(
@@ -1262,7 +1273,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public uint AudioSoundCreateFile(string path, bool streaming)
     {
         if (_disposed || string.IsNullOrEmpty(path)) return 0;
-        byte[] pathBytes = [.. Encoding.UTF8.GetBytes(path), 0];
+        byte[] pathBytes = Utf8Z(path);
         fixed (byte* p = pathBytes)
         {
             return NativeEngine.AudioSoundCreateFile(
@@ -1570,7 +1581,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
         sampleRate = 0;
         if (_disposed || string.IsNullOrEmpty(path)) return [];
 
-        byte[] pathBytes = [.. Encoding.UTF8.GetBytes(path), 0];
+        byte[] pathBytes = Utf8Z(path);
         nuint buffer;
         uint nativeChannels;
         uint nativeRate;
@@ -1788,7 +1799,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
         out uint outW, out uint outH)
     {
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
-        byte[] pathBytes = [.. Encoding.UTF8.GetBytes(path), 0];
+        byte[] pathBytes = Utf8Z(path);
         fixed (byte* p = pathBytes)
         {
             return NativeEngine.SpritesTextureCreateFile(
@@ -2367,6 +2378,29 @@ public sealed unsafe class ZigoteEngine : IDisposable
     {
         EnsureReady();
         return NativeEngine.RenderTextureCacheKey(handle: _handle, rtHandle: rtHandle);
+    }
+
+    /// <summary>
+    ///     Read a render texture back as tightly-packed RGBA8 (top-down, sRGB-encoded bytes) —
+    ///     the closing end of a GPU image pipeline: paint sources and shader passes into the RT
+    ///     (<see cref="PaintList.PushRenderTexture" />), render the frame, then pull the processed
+    ///     pixels out for encoding or export. Synchronous — it blocks on the GPU copy — so it is a
+    ///     capture-time call, not a per-frame one. <paramref name="rgba" /> must hold
+    ///     width × height × 4 bytes.
+    /// </summary>
+    public bool ReadRenderTexturePixels(ulong rtHandle, Span<byte> rgba)
+    {
+        EnsureReady();
+        if (rtHandle == 0) return false;
+        fixed (byte* ptr = rgba)
+        {
+            return NativeEngine.RenderTextureReadRgba(
+                handle: _handle,
+                rtHandle: rtHandle,
+                outPtr: ptr,
+                outLen: (nuint)rgba.Length
+            );
+        }
     }
 
     // ── Frame lifecycle split API ─────────────────────────────────────────────

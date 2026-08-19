@@ -206,6 +206,14 @@ public sealed class VideoPlayer : IDisposable
     /// <summary>Pixel size of the decoded frame (post-downscale), 0×0 before the first one.</summary>
     public (uint Width, uint Height) FrameSize { get; private set; }
 
+    /// <summary>
+    ///     Frames presented so far. The repaint signal for views: <see cref="TextureHandle" /> is
+    ///     stable across a pipeline (frames are texel overwrites into the same texture), so "did a
+    ///     new frame arrive" must be asked of this counter, never of the handle — a repaint gated
+    ///     on the handle freezes a damage-tracked scene on the first frame.
+    /// </summary>
+    public long FramesPresented { get; private set; }
+
     /// <summary>Height cap requested at <see cref="OpenAsync" />; 0 = native.</summary>
     private int MaxHeight { get; set; }
 
@@ -713,6 +721,7 @@ public sealed class VideoPlayer : IDisposable
         if (newest is null) return false;
 
         Upload(rgba: newest.Value.Buffer, width: pipe.Width, height: pipe.Height);
+        FramesPresented++;
         pipe.ReturnFrame(newest.Value.Buffer);
         return true;
     }

@@ -312,6 +312,28 @@ public partial class App : IDisposable
         // the frame loop is blocked inside SDL — relayout + present a live frame so the UI tracks the
         // window continuously. Subscribed only on the main app; it routes to secondary windows itself.
         Engine.OnLiveResize += LiveResizeTick;
+
+        // Platform plugins start once the engine is up — their Start may talk to it — and before
+        // the first frame, so a widget built on frame one can already invoke their channels. Heads
+        // register plugins before constructing the App; anything registered later starts itself.
+        // A plugin that implements IAppLifecycleObserver is wired into lifecycle delivery for as
+        // long as it runs — Core cannot name the interface, so the app watches the host's events
+        // (subscribed first, so plugins started below and late-registered ones are both seen; the
+        // Running sweep catches any a head started before constructing the App).
+        PluginHost.PluginStarted += OnPluginStartedWireLifecycle;
+        PluginHost.PluginStopped += OnPluginStoppedUnwireLifecycle;
+        foreach (var running in PluginHost.Running) OnPluginStartedWireLifecycle(running);
+        PluginHost.StartAll();
+    }
+
+    private void OnPluginStartedWireLifecycle(IPlatformPlugin plugin)
+    {
+        if (plugin is IAppLifecycleObserver observer) AddLifecycleObserver(observer);
+    }
+
+    private void OnPluginStoppedUnwireLifecycle(IPlatformPlugin plugin)
+    {
+        if (plugin is IAppLifecycleObserver observer) RemoveLifecycleObserver(observer);
     }
 
     // True while the measure/layout pass or the root/overlay paint walk is running. A reactive
@@ -644,6 +666,12 @@ public partial class App : IDisposable
 
         for (int i = _secondaryWindows.Count - 1; i >= 0; i--) _secondaryWindows[i].Close();
         if (Active == this) Active = null;
+        // Plugins stop while the engine still exists (their Stop may talk to it); then the channel
+        // receiver detaches so a late send from a platform thread cannot reach a dead runtime.
+        PluginHost.StopAll();
+        PluginHost.PluginStarted -= OnPluginStartedWireLifecycle;
+        PluginHost.PluginStopped -= OnPluginStoppedUnwireLifecycle;
+        PlatformChannel.Shutdown();
         Engine.Dispose();
         GC.SuppressFinalize(this);
     }

@@ -15,16 +15,15 @@ namespace Zigote.Cli;
 /// </summary>
 public static class Preview
 {
-    public static int Run(Options options, List<string> positional, string project)
+    public static int Run(PreviewVerb options, string project)
     {
         if (options.ListTargets) return List(project);
 
-        string target = positional.Count > 0
-            ? positional[0]
-            : throw new CliError(
-                "preview needs a widget: zigote preview <Namespace.Type>. " +
-                "Run `zigote preview --list` to see what this project offers."
-            );
+        string target = options.Target
+                        ?? throw new CliError(
+                            "preview needs a widget: zigote preview <Namespace.Type>. " +
+                            "Run `zigote preview --list` to see what this project offers."
+                        );
 
         // `dotnet watch` is what makes this a previewer rather than a runner: Zigote's hot-reload
         // bridge re-runs the previewed widget's Build() on every save, in place.

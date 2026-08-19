@@ -14,6 +14,7 @@ retained mode is the one idea everything else follows from.
 | [`assets.md`](assets.md) | Fonts, images, content bundling, and publish-time asset & font tree shaking. |
 | [`preferences-and-persistence.md`](preferences-and-persistence.md) | Reactive persisted settings (`Preference<T>`) and the key-value storage under them. |
 | [`mobile.md`](mobile.md) | iOS / Android: what works, how to run the Gallery on both, what is open. |
+| [`plugins.md`](plugins.md) | Platform interop — `PlatformChannel`, the plugin contract, packaging cross-platform and native plugins. |
 
 ## The games stack
 
@@ -26,6 +27,7 @@ retained mode is the one idea everything else follows from.
 
 | Document | What is in it |
 |---|---|
+| [`profiling.md`](profiling.md) | Profiling and performance — the in-app profiler, the `stats`/`profile` remote tools, the `Zigote-Engine` EventSource for dotTrace/`dotnet-trace`, and the zero-alloc test guards. |
 | [`mcp-server.md`](mcp-server.md) | The MCP server — LLM agents launch, drive and screenshot a running app over the inspect protocol. |
 | [`../tools/rider/README.md`](../tools/rider/README.md) | The Rider plugin — widget preview, trees, colour swatches — and the inspect protocol behind it. |
 | [`../Zigote.UI.DevTools/README.md`](../Zigote.UI.DevTools/README.md) | The in-app DevTools overlay (<kbd>Shift</kbd>+<kbd>D</kbd>). |

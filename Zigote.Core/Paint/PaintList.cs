@@ -572,14 +572,28 @@ public sealed unsafe class PaintList
         Push(cmd: cmd, text: null, pixels: null);
     }
 
+    /// <param name="imageKey">
+    ///     Optional app-owned texture handle (from
+    ///     <see cref="Zigote.Core.Engine.ZigoteEngine.LoadTextureFromRgba" /> or a render texture's
+    ///     cache key) bound to the shader at <c>@group(1)</c> — a LUT, a mask, a second input for
+    ///     an image-processing pass. The shader's WGSL must declare the group; a shader that does
+    ///     declare it is skipped when the key is 0 or unresolvable.
+    /// </param>
     public void AddShaderEffect(Rect bounds, uint shaderId,
         float p0 = 0f, float p1 = 0f, float p2 = 0f, float p3 = 0f,
-        float p4 = 0f, float p5 = 0f, float p6 = 0f, float p7 = 0f)
+        float p4 = 0f, float p5 = 0f, float p6 = 0f, float p7 = 0f,
+        ulong imageKey = 0)
     {
         CheckBounds(bounds);
         var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.ShaderEffect };
         SetBounds(cmd: ref cmd, r: ApplyOffset(bounds));
         cmd.ShaderId = shaderId;
+        if (imageKey != 0)
+        {
+            cmd.CacheKeyLo = (uint)(imageKey & 0xFFFFFFFF);
+            cmd.CacheKeyHi = (uint)((imageKey >> 32) & 0xFFFFFFFF);
+            cmd.HasCacheKey = 1;
+        }
         cmd.ColorR = p0;
         cmd.ColorG = p1;
         cmd.ColorB = p2;

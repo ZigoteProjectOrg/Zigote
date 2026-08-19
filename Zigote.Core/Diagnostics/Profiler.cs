@@ -37,6 +37,7 @@ public static class Profiler
     private static readonly List<Event[]> Captured = [];
 
     private static string _capturePath = "profile_capture.json";
+    private static Action<IReadOnlyList<Event[]>>? _captureDone;
 
     /// <summary>Master switch — when false, scopes are near-free no-ops.</summary>
     public static bool Enabled { get; set; } = true;
@@ -62,6 +63,7 @@ public static class Profiler
     public static ScopeHandle Scope(string name)
     {
         if (!Enabled) return default;
+        if (ZigoteEventSource.Log.ScopesEnabled) ZigoteEventSource.Log.ScopeStart(name);
         int d = _depth;
         _depth = d + 1;
         return new ScopeHandle(nameId: Intern(name), depth: d, start: Stopwatch.GetTimestamp());
@@ -70,6 +72,7 @@ public static class Profiler
     private static void Record(int nameId, int depth, long start, long end)
     {
         _depth = depth; // unwind to this scope's depth (LIFO `using` disposal)
+        if (ZigoteEventSource.Log.ScopesEnabled) ZigoteEventSource.Log.ScopeStop(NameOf(nameId));
         lock (Lock)
         {
             // Guard against a host that never calls EndFrame: drop the runaway accumulation rather
@@ -111,11 +114,15 @@ public static class Profiler
     /// <summary>
     ///     Capture the next <paramref name="frames" /> frames and write a Chrome-Trace JSON file
     ///     (openable in chrome://tracing / Perfetto) when complete.
+    ///     <paramref name="onComplete" /> (if any) receives the captured frames on the UI thread just
+    ///     before they are discarded — copy what you keep.
     /// </summary>
-    public static void Capture(int frames, string outputPath)
+    public static void Capture(int frames, string outputPath,
+        Action<IReadOnlyList<Event[]>>? onComplete = null)
     {
         Captured.Clear();
         _capturePath = outputPath;
+        _captureDone = onComplete;
         _captureFramesLeft = Math.Max(val1: 1, val2: frames);
     }
 
@@ -131,6 +138,17 @@ public static class Profiler
         catch (Exception ex)
         {
             Console.Error.WriteLine($"[Profiler] capture failed: {ex.Message}");
+        }
+
+        var done = _captureDone;
+        _captureDone = null;
+        try
+        {
+            done?.Invoke(Captured);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[Profiler] capture callback failed: {ex.Message}");
         }
 
         Captured.Clear();

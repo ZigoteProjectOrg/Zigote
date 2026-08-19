@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Zigote.Core;
 using Zigote.Core.Diagnostics;
 using Zigote.UI.Charts.Marks;
+using Zigote.UI.Debug;
 using Zigote.UI.DevTools.Diagnostics;
 using Zigote.UI.DevTools.Widgets;
 using Zigote.UI.Host;
@@ -36,10 +37,12 @@ public sealed class PerformancePanel : IDevPanel
     );
 
     private readonly DevKeyValue _stats = new("Avg / min / max");
+    private readonly DevKeyValue _alloc = new("UI alloc / frame");
 
     // Per-readout caches: Refresh runs every frame while the panel is open, so all formatting goes
     // through CachedText (zero-alloc while the rendered text is unchanged).
     private readonly CachedText _tStats = new();
+    private readonly CachedText _tAlloc = new();
     private long _lastScope;
 
     public PerformancePanel()
@@ -86,6 +89,7 @@ public sealed class PerformancePanel : IDevPanel
             Children = {
                 _frameCard,
                 _stats,
+                _alloc,
                 new SizedBox(height: Spacing.Xs),
                 new Button(
                     label: "Capture 120 frames → profile_capture.json",
@@ -108,6 +112,12 @@ public sealed class PerformancePanel : IDevPanel
         (float min, float max, float avg) = DebugProfiler.Stats();
         _stats.Value = _tStats.Update($"{avg:F2} / {min:F2} / {max:F2} ms");
         _stats.ValueColor = max > 1000.0 / 30.0 ? Orange : t.OnSurface;
+
+        // Averaged over ~1 s (Debug/DebugStats metric window). A steady-state retained tree should
+        // sit near zero; a sustained non-zero here is a hot-path allocation regression.
+        float kb = DebugStats.AllocKbPerFrame;
+        _alloc.Value = _tAlloc.Update($"{kb:F2} KB");
+        _alloc.ValueColor = kb > 8f ? Orange : t.OnSurface;
 
         long nowTs = Stopwatch.GetTimestamp();
         if ((nowTs - _lastScope) * 1000.0 / Stopwatch.Frequency < ScopeRefreshMs) return;

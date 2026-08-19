@@ -44,17 +44,16 @@ The `-v q --nologo` matters: stdout is the MCP protocol stream, and those flags 
 | `preview_targets` / `set_preview` | List the previewable widgets — with the name, device size and theme their `[Preview]` gave them, and the properties each takes; swap the shown one without restarting, optionally setting those properties (`My.App.Card?title=Espresso`). |
 | `resize` | Lay the app out at a device size — `390x844` is a real phone layout, breakpoints and all. Omit the size to go back to the window's. |
 | `set_theme` / `locales` / `set_locale` | Theme and locale switching. |
+| `stats` | Frame health in one line: `fps` (with min/max), `frame_ms`, `cpu_pct`, `mem_mb`, `gc_mb`, `alloc_kb_per_frame` (UI-thread alloc, ~1 s average — near zero on a healthy steady-state app), GC collection counts, jank frame counts and the paint-command counts. Drive the app, then ask what it cost. |
+| `profile` | CPU-profile the app: capture N frames (default 120) of engine `Profiler` scopes, write a Chrome-Trace JSON (open in Perfetto / `chrome://tracing`; the path is in the reply) and return the hottest scopes as per-frame average self/total milliseconds. `stats` says whether frames are healthy; this says where the time goes. |
 | `raw_command` | Escape hatch: one raw protocol line, e.g. `window hide`. |
 
 Every mutating tool (`tap`, `tap_widget`, `drag`, `scroll`, `type_text`, `press_key`,
 `set_preview`, `resize`, `set_theme`, `set_locale`) takes `screenshot: true` to return the
 resulting frame in the same call — act and observe in one round trip.
 
-One protocol verb has no typed tool yet: `stats` returns the frame/CPU/memory sample DevTools
-keeps — `fps` (with min/max), `frame_ms`, `cpu_pct`, `mem_mb`, `gc_mb` and the paint-command
-counts — as one JSON object, via `raw_command { command: "stats" }`. Drive the app, then ask what
-it cost. The frame numbers only mean render pace under continuous rendering (`ZIGOTE_CONTINUOUS=1`);
-an idle retained UI presents no frames, which is the point.
+The frame numbers only mean render pace under continuous rendering (`ZIGOTE_CONTINUOUS=1`) or
+while something animates; an idle retained UI presents no frames, which is the point.
 
 A typical agent session:
 

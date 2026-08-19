@@ -459,6 +459,50 @@ public static class Tools
             )
         )),
 
+        ("stats", new Tool(
+            Description:
+            "Frame health of the running app in one line: fps, frame ms, CPU%, memory, GC " +
+            "collections, UI-thread alloc KB/frame (averaged over ~1 s; near zero on a healthy " +
+            "idle/steady-state app), jank frame counts and paint-command counts. Frame times only " +
+            "mean render pace while the app is animating or under ZIGOTE_CONTINUOUS=1.",
+            Schema: Schema(PortProp()),
+            Run: args => Json(Send(port: Port(args), command: "stats"))
+        )),
+
+        ("profile", new Tool(
+            Description:
+            "CPU-profile the running app: captures N frames of engine Profiler scopes, writes a " +
+            "Chrome-Trace JSON (openable in Perfetto / chrome://tracing; path is in the reply) " +
+            "and returns the hottest scopes as per-frame average self/total milliseconds. " +
+            "`stats` says whether frames are healthy; this says where the time goes. Blocks " +
+            "until the frames have been captured (~2 s for the default 120 at 60 fps).",
+            Schema: Schema(
+                Opt(
+                    name: "frames",
+                    prop: Prop(
+                        type: "integer",
+                        description: "frames to capture, 1–600 (default 120 ≈ 2 s at 60 fps)"
+                    )
+                ),
+                PortProp()
+            ),
+            Run: args =>
+            {
+                int frames = Math.Clamp(
+                    value: Int(args: args, name: "frames") ?? 120,
+                    min: 1,
+                    max: 600
+                );
+                return Json(
+                    Send(
+                        port: Port(args),
+                        command: $"profile {frames}",
+                        timeoutSeconds: 10 + frames / 5
+                    )
+                );
+            }
+        )),
+
         ("raw_command", new Tool(
             Description:
             "Escape hatch: send one raw inspect-protocol command line and return the raw reply. " +
@@ -869,9 +913,13 @@ public static class Tools
     private static int Port(JsonObject args) => AppHost.Resolve(Int(args: args, name: "port"));
 
     /// <summary>One command, one reply — with the app's own error surfaced as a tool error.</summary>
-    private static string Send(int port, string command)
+    private static string Send(int port, string command, int? timeoutSeconds = null)
     {
-        string reply = AppHost.Query(port: port, command: command);
+        string reply = AppHost.Query(
+            port: port,
+            command: command,
+            timeoutSeconds: timeoutSeconds
+        );
         if (JsonNode.Parse(reply) is JsonObject o && o["error"]?.GetValue<string>() is { } error)
             throw new ToolError($"the app said: {error}");
         return reply;

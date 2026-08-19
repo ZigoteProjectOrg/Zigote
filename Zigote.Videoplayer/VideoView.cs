@@ -113,9 +113,12 @@ public sealed class VideoView : ComposedWidget
     /// <summary>Advance the player, and repaint only when that produced a new frame.</summary>
     private void Pump()
     {
-        ulong before = Player.TextureHandle;
+        // The frame counter, not the texture handle: the handle changes once per pipeline (later
+        // frames are texel overwrites into the same texture), and a repaint gated on it leaves a
+        // damage-tracked scene frozen on the first frame when nothing else repaints.
+        long before = Player.FramesPresented;
         Player.Tick();
-        if (Player.TextureHandle != before) _surface?.MarkNeedsPaint();
+        if (Player.FramesPresented != before) _surface?.MarkNeedsPaint();
     }
 
     /// <summary>

@@ -1,7 +1,11 @@
+using CommandLine;
+using CommandLine.Text;
+
 namespace Zigote.Cli;
 
 /// <summary>
-///     <c>zigote</c> — scaffolds a Zigote app and the platform heads it ships on.
+///     <c>zigote</c> — scaffolds a Zigote app and the platform heads it ships on, generates
+///     platform plugins, previews widgets, and checks the machine with <c>doctor</c>.
 ///     <para>
 ///         The reason this exists is the Android head. A Zigote app is one shared body of C# plus a
 ///         per-platform head, and the Android head is not a file you write from memory: an
@@ -14,24 +18,36 @@ namespace Zigote.Cli;
 ///     </para>
 ///     <para>
 ///         So the templates here are not a starting point to be edited into shape — they are the
-///         arrangement that is known to work, with the traps already avoided and commented.
+///         arrangement that is known to work, with the traps already avoided and commented. The
+///         command surface itself is declarative (<see cref="Verbs" />): the parser owns help,
+///         version and error text, so the options and their documentation cannot drift apart.
 ///     </para>
 /// </summary>
 public static class Program
 {
     public static int Main(string[] args)
     {
-        if (args.Length == 0 || args[0] is "-h" or "--help" or "help") return Usage(0);
+        using var parser = new Parser(with =>
+            {
+                with.HelpWriter = null; // rendered below, so heading and destination are ours
+                with.AutoHelp = true;
+                with.AutoVersion = true;
+            }
+        );
+        var result = parser.ParseArguments<CreateVerb, AddVerb, PreviewVerb, DoctorVerb>(args);
 
         try
         {
-            return args[0] switch {
-                "create" => Create(args[1..]),
-                "add" => Add(args[1..]),
-                "preview" => RunPreview(args[1..]),
-                "--version" or "-v" => Version(),
-                _ => Fail($"unknown command '{args[0]}'"),
-            };
+            return result.MapResult(
+                parsedFunc1: (CreateVerb verb) => Create(verb),
+                parsedFunc2: (AddVerb verb) => Add(verb),
+                parsedFunc3: (PreviewVerb verb) => Preview.Run(
+                    options: verb,
+                    project: FindAppProject(verb.Directory)
+                ),
+                parsedFunc4: (DoctorVerb verb) => Doctor.Run(verb),
+                notParsedFunc: errors => Render(result: result, errors: errors)
+            );
         }
         catch (CliError e)
         {
@@ -41,62 +57,60 @@ public static class Program
         }
     }
 
-    private static int Version()
+    /// <summary>
+    ///     Help, version, and parse errors, from the same attributes the parser matched against.
+    ///     Requested help goes to stdout and exits 0; a mistake goes to stderr and exits 1.
+    /// </summary>
+    private static int Render(ParserResult<object> result, IEnumerable<Error> errors)
     {
-        Console.WriteLine("zigote 0.1.0");
-        return 0;
-    }
+        var errorList = errors.ToList();
+        if (errorList.IsVersion())
+        {
+            Console.Out.WriteLine(
+                $"zigote {typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "0.0.0"}"
+            );
+            return 0;
+        }
 
-    private static int Fail(string message)
-    {
-        Console.Error.WriteLine($"zigote: {message}");
-        Console.Error.WriteLine();
-        return Usage(1);
-    }
-
-    private static int Usage(int code)
-    {
-        Console.WriteLine(
-            """
-            zigote — scaffold Zigote apps and platform heads
-
-            USAGE
-              zigote create <Name> [options]     create an app (shared sources + desktop head)
-              zigote add android [options]       add an Android head to an existing app
-              zigote preview <Type> [options]    run one widget on its own, reloading on save
-              zigote --version
-
-            OPTIONS
-              --dir <path>          where to work. Default: the current directory.
-              --engine <path>       path to the Zigote checkout the generated projects reference.
-                                    Default: found by walking up from --dir, else $ZIGOTE_ROOT.
-              --id <app.id>         application id for a platform head. Default: dev.zigote.<name>.
-              --force               overwrite files that already exist.
-              --list                preview: print the previewable widgets and exit.
-              --no-watch            preview: do not reload on save.
-
-            EXAMPLES
-              zigote create Metronome
-              cd Metronome && zigote add android --id dev.zigote.Metronome
-              zigote preview --list
-              zigote preview Metronome.SettingsPage
-
-            After `add android`, build with the RID that selects BOTH halves of the build:
-              dotnet build <Name>.Android -p:ZigTargetRid=android-arm64   # device
-              dotnet build <Name>.Android -p:ZigTargetRid=android-x64     # emulator
-            """
+        bool requested = errorList.IsHelp();
+        var help = HelpText.AutoBuild(
+            parserResult: result,
+            onError: h =>
+            {
+                h.Heading = "zigote — scaffold Zigote apps, plugins and platform heads";
+                h.Copyright = "";
+                h.AdditionalNewLineAfterOption = false;
+                return HelpText.DefaultParsingErrorsHandler(parserResult: result, current: h);
+            },
+            onExample: e => e,
+            verbsIndex: true
         );
-        return code;
+        (requested ? Console.Out : Console.Error).WriteLine(help);
+        return requested ? 0 : 1;
     }
 
-    // ── commands ──────────────────────────────────────────────────────────────
+    // ── create ────────────────────────────────────────────────────────────────
 
-    private static int Create(string[] args)
+    private static int Create(CreateVerb verb) =>
+        verb.First switch {
+            "app" => CreateApp(options: verb, name: RequireName(verb: verb, template: "app")),
+            "plugin" => CreatePlugin(options: verb, name: RequireName(verb: verb, template: "plugin")),
+            // Two bare words is a typo'd template, not a name — naming the app after the first
+            // one and silently dropping the second would hide the mistake.
+            _ when verb.Second is not null => throw new CliError(
+                $"unknown template '{verb.First}' — use 'app' or 'plugin'."
+            ),
+            _ => CreateApp(options: verb, name: verb.First),
+        };
+
+    private static string RequireName(CreateVerb verb, string template) =>
+        verb.Second ?? throw new CliError(
+            $"create {template} needs a name: zigote create {template} <Name>"
+        );
+
+    private static int CreateApp(CreateVerb options, string name)
     {
-        var options = Options.Parse(args: args, positional: out var positional);
-        if (positional.Count == 0) throw new CliError("create needs a name: zigote create <Name>");
-
-        string name = Identifier.Validate(positional[0]);
+        name = Identifier.Validate(name);
         string root = Path.Combine(path1: options.Directory, path2: name);
         string engine = options.ResolveEngine(root);
 
@@ -117,12 +131,118 @@ public static class Program
         return 0;
     }
 
-    private static int Add(string[] args)
+    /// <summary>
+    ///     A platform plugin: one shared API over <c>PlatformChannel</c>, per-platform
+    ///     implementations selected at build time by target framework, and an example app that
+    ///     exercises it — the layout docs/plugins.md describes, generated instead of hand-copied.
+    ///     Desktop (Windows/macOS/Linux, the base <c>net10.0</c> build) is always present because
+    ///     every consumer compiles it; android and ios are opted in via --platforms.
+    /// </summary>
+    private static int CreatePlugin(CreateVerb options, string name)
     {
-        var options = Options.Parse(args: args, positional: out var positional);
-        if (positional.Count == 0) throw new CliError("add needs a platform: zigote add android");
-        if (positional[0] != "android")
-            throw new CliError($"unknown platform '{positional[0]}'. Only 'android' exists today.");
+        name = Identifier.Validate(name);
+        (bool android, bool ios) = ParsePlatforms(options.Platforms);
+        string root = Path.Combine(path1: options.Directory, path2: name);
+        string engine = options.ResolveEngine(root);
+
+        var files = new Scaffolder(root: root, force: options.Force);
+        files.Write(
+            relativePath: $"{name}/{name}.csproj",
+            content: Templates.PluginCsproj(name: name, engine: engine, android: android, ios: ios)
+        );
+        files.Write(relativePath: $"{name}/{name}Plugin.cs", content: Templates.PluginShared(name));
+        files.Write(
+            relativePath: $"{name}/Platforms/Desktop/{name}Channels.cs",
+            content: Templates.PluginDesktopChannels(name)
+        );
+        if (android)
+        {
+            files.Write(
+                relativePath: $"{name}/Platforms/Android/{name}Channels.cs",
+                content: Templates.PluginAndroidChannels(name)
+            );
+        }
+
+        if (ios)
+        {
+            files.Write(
+                relativePath: $"{name}/Platforms/iOS/{name}Channels.cs",
+                content: Templates.PluginIosChannels(name)
+            );
+        }
+
+        // The example app is a real app one level deeper, so its engine path needs its own
+        // resolution — measured from example/, where the app project directory sits.
+        string exampleEngine = options.ResolveEngine(Path.Combine(path1: root, path2: "example"));
+        files.Write(
+            relativePath: $"example/{name}Example/{name}Example.csproj",
+            content: Templates.AppCsproj(
+                name: $"{name}Example",
+                engine: exampleEngine,
+                extraReference: $"../../{name}/{name}.csproj"
+            )
+        );
+        files.Write(
+            relativePath: $"example/{name}Example/Program.cs",
+            content: Templates.PluginExampleProgram(name)
+        );
+        files.Write(
+            relativePath: $"example/{name}Example/{name}ExampleApp.cs",
+            content: Templates.PluginExampleShell(name)
+        );
+        files.Write(relativePath: ".gitignore", content: Templates.GitIgnore());
+        files.Write(
+            relativePath: "README.md",
+            content: Templates.PluginReadme(name: name, android: android, ios: ios)
+        );
+
+        files.Report();
+        Console.WriteLine();
+        Console.WriteLine($"  cd {name}/example && dotnet run --project {name}Example");
+        Console.WriteLine($"  dotnet pack {name}/{name}                        # ship it as a NuGet package");
+        return 0;
+    }
+
+    /// <summary>
+    ///     Normalize a --platforms list. Desktop names are accepted and folded into the base
+    ///     build rather than rejected, because "which word means my laptop" should never be the
+    ///     thing that stops a scaffold.
+    /// </summary>
+    private static (bool Android, bool Ios) ParsePlatforms(string? spec)
+    {
+        if (spec is null) return (true, true);
+        bool android = false, ios = false;
+        foreach (string raw in spec.Split(
+                     separator: ',',
+                     options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+                 ))
+        {
+            switch (raw.ToLowerInvariant())
+            {
+                case "android":
+                    android = true;
+                    break;
+                case "ios":
+                    ios = true;
+                    break;
+                case "desktop" or "linux" or "macos" or "windows":
+                    break; // the base net10.0 build — always generated
+                default:
+                    throw new CliError(
+                        $"unknown platform '{raw}'. Use android, ios, desktop (desktop covers windows/macos/linux and is always included)."
+                    );
+            }
+        }
+
+        return (android, ios);
+    }
+
+    // ── add ───────────────────────────────────────────────────────────────────
+
+    private static int Add(AddVerb options)
+    {
+        if (options.Platform != "android")
+            throw new CliError($"unknown platform '{options.Platform}'. Only 'android' exists today.");
 
         string root = options.Directory;
         // The app to attach to is the one shared project in the tree — found rather than asked
@@ -130,7 +250,7 @@ public static class Program
         string app = FindAppProject(root);
         string name = Path.GetFileNameWithoutExtension(app);
         string engine = options.ResolveEngine(root);
-        string appId = options.AppId ?? $"dev.zigote.{name}";
+        string appId = Identifier.ValidateAppId(options.AppId ?? $"dev.zigote.{name}");
 
         var files = new Scaffolder(root: root, force: options.Force);
         files.Write(
@@ -160,23 +280,13 @@ public static class Program
         return 0;
     }
 
-    private static int RunPreview(string[] args)
-    {
-        var options = Options.Parse(args: args, positional: out var positional);
-        return Preview.Run(
-            options: options,
-            positional: positional,
-            project: FindAppProject(options.Directory)
-        );
-    }
-
     // ── helpers ───────────────────────────────────────────────────────────────
 
     /// <summary>
     ///     The shared app project a head should compile. Looks for a single non-head csproj at the
     ///     top of the tree, then one directory down — the layout `create` produces.
     /// </summary>
-    private static string FindAppProject(string root)
+    internal static string FindAppProject(string root)
     {
         var candidates = Directory
             .EnumerateFiles(
@@ -220,6 +330,3 @@ public static class Program
         };
     }
 }
-
-/// <summary>A message meant for the user, not a stack trace.</summary>
-public sealed class CliError(string message) : Exception(message);

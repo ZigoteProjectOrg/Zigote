@@ -227,6 +227,15 @@ public static class InspectServer
             return;
         }
 
+        // `profile` spans many frames, so it cannot be answered inside one UI-thread hop: it starts
+        // a Profiler capture there, then waits here on the socket thread for the flush.
+        if (command == "profile")
+        {
+            writer.Write(ProfileCommand(app: app, argument: argument));
+            writer.Write('\n');
+            return;
+        }
+
         // `shot` and `input` run at the END of a frame, everything else at the top. A shot answered
         // at the top would show the previous frame — and one sent right after an `input` click could
         // drain in the same batch as the click, before it even dispatched, missing the dialog it
@@ -410,6 +419,78 @@ public static class InspectServer
     }
 
     /// <summary>
+    ///     <c>profile [frames] [path]</c> — capture the next N frames (default 120, max 600) of
+    ///     <see cref="Profiler" /> scopes, write the Chrome-Trace JSON to <c>path</c> (default: a
+    ///     file in the temp dir), and answer with the per-scope self/total table averaged per frame
+    ///     — the from-outside version of the devtools Profiler panel's "hottest scopes". Blocks the
+    ///     socket (not the app) until the capture flushes; frames keep turning even when the app is
+    ///     idle, since the loop wakes at its event-wait cadence.
+    /// </summary>
+    private static string ProfileCommand(App app, string argument)
+    {
+        string[] parts = argument.Split(
+            separator: ' ',
+            options: StringSplitOptions.RemoveEmptyEntries
+        );
+        int frames = 120;
+        if (parts.Length > 0 &&
+            (!int.TryParse(s: parts[0], result: out frames) || frames is < 1 or > 600))
+            return Error($"profile wants a frame count in 1..600, got '{argument}'");
+        string path = parts.Length > 1
+            ? parts[1]
+            : Path.Combine(
+                path1: Path.GetTempPath(),
+                path2: $"zigote_profile_{Environment.ProcessId}.json"
+            );
+
+        var done = new TaskCompletionSource<(int Frames, List<DebugProfiler.ScopeAggregate>)>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        app.Post(() => Profiler.Capture(
+                frames: frames,
+                outputPath: path,
+                onComplete: captured =>
+                {
+                    // Merge the frames and aggregate once — per-frame averages come out below.
+                    var merged = new List<Profiler.Event>();
+                    foreach (var f in captured) merged.AddRange(f);
+                    done.TrySetResult((captured.Count, DebugProfiler.Aggregate(merged)));
+                }
+            )
+        );
+
+        // A visible ~60 fps app finishes 120 frames in ~2 s; a hidden window turns at a tenth of
+        // the rate, hence the generous per-frame allowance.
+        if (!done.Task.Wait(TimeSpan.FromSeconds(5 + frames / 5.0)))
+            return Error("capture did not complete — is the app's frame loop running?");
+
+        (int got, var scopes) = done.Task.Result;
+        if (got == 0) return Error("no frames captured");
+
+        var json = new StringBuilder(4096);
+        json.Append("{\"ok\":true,\"frames\":").Append(got).Append(",\"path\":");
+        Quote(json: json, text: path);
+        json.Append(",\"scopes\":[");
+        int shown = Math.Min(val1: scopes.Count, val2: 32);
+        for (int i = 0; i < shown; i++)
+        {
+            var s = scopes[i];
+            if (i > 0) json.Append(',');
+            json.Append("{\"name\":");
+            Quote(json: json, text: s.Name);
+            json.Append(",\"avg_total_ms\":").Append(
+                (s.TotalMs / got).ToString(format: "F3", provider: CultureInfo.InvariantCulture)
+            );
+            json.Append(",\"avg_self_ms\":").Append(
+                (s.SelfMs / got).ToString(format: "F3", provider: CultureInfo.InvariantCulture)
+            );
+            json.Append(",\"calls\":").Append(s.Calls).Append('}');
+        }
+
+        return json.Append("]}").ToString();
+    }
+
+    /// <summary>
     ///     The frame/CPU/memory sample <see cref="DebugStats" /> keeps every frame anyway, as one
     ///     JSON line — the from-outside readout a perf run needs (drive the app over this socket,
     ///     then ask what it cost). Frame times only mean render pace while the loop actually
@@ -420,7 +501,7 @@ public static class InspectServer
     {
         return string.Create(
             provider: CultureInfo.InvariantCulture,
-            $"{{\"fps\":{DebugStats.Fps:0.#},\"fps_min\":{DebugStats.FpsMin:0.#},\"fps_max\":{DebugStats.FpsMax:0.#},\"frame_ms\":{DebugStats.FrameMs:0.###},\"cpu_pct\":{DebugStats.CpuPct:0.#},\"mem_mb\":{DebugStats.MemMb:0.#},\"gc_mb\":{DebugStats.GcMb:0.#},\"ui_paint_commands\":{DebugStats.UiPaintCommands},\"overlay_paint_commands\":{DebugStats.OverlayPaintCommands}}}"
+            $"{{\"fps\":{DebugStats.Fps:0.#},\"fps_min\":{DebugStats.FpsMin:0.#},\"fps_max\":{DebugStats.FpsMax:0.#},\"frame_ms\":{DebugStats.FrameMs:0.###},\"cpu_pct\":{DebugStats.CpuPct:0.#},\"mem_mb\":{DebugStats.MemMb:0.#},\"gc_mb\":{DebugStats.GcMb:0.#},\"alloc_kb_per_frame\":{DebugStats.AllocKbPerFrame:0.##},\"gen0\":{DebugStats.Gen0Collections},\"gen1\":{DebugStats.Gen1Collections},\"gen2\":{DebugStats.Gen2Collections},\"jank_frames\":{DebugStats.JankFrames},\"total_frames\":{DebugStats.TotalFrames},\"ui_paint_commands\":{DebugStats.UiPaintCommands},\"overlay_paint_commands\":{DebugStats.OverlayPaintCommands}}}"
         );
     }
 

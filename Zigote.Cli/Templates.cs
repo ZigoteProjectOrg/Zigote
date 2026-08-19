@@ -16,7 +16,7 @@ namespace Zigote.Cli;
 /// </summary>
 public static class Templates
 {
-    public static string AppCsproj(string name, string engine) =>
+    public static string AppCsproj(string name, string engine, string? extraReference = null) =>
         $"""
          <Project Sdk="Microsoft.NET.Sdk">
 
@@ -33,12 +33,15 @@ public static class Templates
              <!-- Where the engine lives. Override with -p:ZigoteRoot=<path> or $ZIGOTE_ROOT. -->
              <PropertyGroup>
                  <ZigoteRoot Condition="'$(ZigoteRoot)' == '' And '$(ZIGOTE_ROOT)' != ''">$(ZIGOTE_ROOT)</ZigoteRoot>
-                 <ZigoteRoot Condition="'$(ZigoteRoot)' == ''">$(MSBuildThisFileDirectory){engine}</ZigoteRoot>
+                 <ZigoteRoot Condition="'$(ZigoteRoot)' == ''">$(MSBuildThisFileDirectory){Identifier.XmlEscape(engine)}</ZigoteRoot>
              </PropertyGroup>
 
              <ItemGroup>
                  <ProjectReference Include="$(ZigoteRoot)/Zigote.UI/Zigote.UI.csproj"/>
-                 <ProjectReference Include="$(ZigoteRoot)/Zigote.UI.Material/Zigote.UI.Material.csproj"/>
+                 <ProjectReference Include="$(ZigoteRoot)/Zigote.UI.Material/Zigote.UI.Material.csproj"/>{(
+                     extraReference is null
+                         ? ""
+                         : $"\n        <ProjectReference Include=\"{extraReference}\"/>")}
              </ItemGroup>
 
              <!-- Debug-only: the Shift+D widget inspector and perf overlay. A release must not
@@ -229,7 +232,7 @@ public static class Templates
 
              <PropertyGroup>
                  <ZigoteRoot Condition="'$(ZigoteRoot)' == '' And '$(ZIGOTE_ROOT)' != ''">$(ZIGOTE_ROOT)</ZigoteRoot>
-                 <ZigoteRoot Condition="'$(ZigoteRoot)' == ''">$(MSBuildThisFileDirectory){engine}</ZigoteRoot>
+                 <ZigoteRoot Condition="'$(ZigoteRoot)' == ''">$(MSBuildThisFileDirectory){Identifier.XmlEscape(engine)}</ZigoteRoot>
              </PropertyGroup>
 
              <ItemGroup>
@@ -450,4 +453,325 @@ public static class Templates
           }
 
           """;
+
+    // ── plugin ────────────────────────────────────────────────────────────────
+
+    public static string PluginCsproj(string name, string engine, bool android, bool ios)
+    {
+        string tfms = "net10.0"
+                      + (android ? ";net10.0-android" : "")
+                      + (ios ? ";net10.0-ios" : "");
+        // The floors match the engine's own: AAudio needs Android 26, the iOS head targets 15.0.
+        string floors =
+            (android
+                ? "\n        <SupportedOSPlatformVersion Condition=\"'$(TargetFramework)' == 'net10.0-android'\">26</SupportedOSPlatformVersion>"
+                : "")
+            + (ios
+                ? "\n        <SupportedOSPlatformVersion Condition=\"'$(TargetFramework)' == 'net10.0-ios'\">15.0</SupportedOSPlatformVersion>"
+                : "");
+        string platformIncludes =
+            (android
+                ? "\n        <Compile Include=\"Platforms/Android/**/*.cs\" Condition=\"'$(TargetFramework)' == 'net10.0-android'\"/>"
+                : "")
+            + (ios
+                ? "\n        <Compile Include=\"Platforms/iOS/**/*.cs\" Condition=\"'$(TargetFramework)' == 'net10.0-ios'\"/>"
+                : "");
+
+        return $"""
+                <Project Sdk="Microsoft.NET.Sdk">
+
+                    <!--
+                      Platform plugin {name}: one shared API over Zigote's PlatformChannel, with the
+                      per-platform implementation chosen at BUILD time — each target framework compiles
+                      exactly one Platforms/ folder, and NuGet hands every consumer the build matching
+                      its head. There is no runtime platform switch anywhere, and there must not be:
+                      the whole point of the channel is that shared code never knows who answered.
+                    -->
+                    <PropertyGroup>
+                        <TargetFrameworks>{tfms}</TargetFrameworks>
+                        <ImplicitUsings>enable</ImplicitUsings>
+                        <Nullable>enable</Nullable>
+                        <LangVersion>latest</LangVersion>
+                        <RootNamespace>{name}</RootNamespace>{floors}
+                        <!-- `dotnet pack` metadata — the plugin ships as a NuGet package as-is. -->
+                        <Version>0.1.0</Version>
+                        <Description>A Zigote platform plugin.</Description>
+                    </PropertyGroup>
+
+                    <!-- Where the engine lives. Override with -p:ZigoteRoot=<path> or $ZIGOTE_ROOT. -->
+                    <PropertyGroup>
+                        <ZigoteRoot Condition="'$(ZigoteRoot)' == '' And '$(ZIGOTE_ROOT)' != ''">$(ZIGOTE_ROOT)</ZigoteRoot>
+                        <ZigoteRoot Condition="'$(ZigoteRoot)' == ''">$(MSBuildThisFileDirectory){Identifier.XmlEscape(engine)}</ZigoteRoot>
+                    </PropertyGroup>
+
+                    <ItemGroup>
+                        <!-- Plugins talk to the platform through channels, so Core is the only
+                             reference. A plugin that also ships widgets is two packages: this one,
+                             and a UI package built over it — keeping the platform half usable from
+                             apps that do not want the widgets. -->
+                        <ProjectReference Include="$(ZigoteRoot)/Zigote.Core/Zigote.Core.csproj"/>
+                    </ItemGroup>
+
+                    <ItemGroup>
+                        <!-- Exactly one platform implementation per framework: every Platforms/ file
+                             leaves the default glob first, then the right folder returns for the
+                             framework being compiled. All implementations share one class name, which
+                             is what lets the shared {name}Plugin.Start() bind statically. -->
+                        <Compile Remove="Platforms/**/*.cs"/>
+                        <Compile Include="Platforms/Desktop/**/*.cs" Condition="'$(TargetFramework)' == 'net10.0'"/>{platformIncludes}
+                    </ItemGroup>
+
+                </Project>
+
+                """;
+    }
+
+    public static string PluginShared(string name) =>
+        $$"""
+          using Zigote.Core.Platform;
+
+          namespace {{name}};
+
+          /// <summary>
+          ///     {{name}} — a Zigote platform plugin.
+          ///     <para>
+          ///         This file is the plugin's shared face: it compiles identically for every target
+          ///         framework, and the <c>{{name}}Channels</c> class it starts comes from
+          ///         <c>Platforms/</c>, where the csproj selects exactly one implementation per
+          ///         framework. Consumers register the plugin once, in each head, before the App:
+          ///         <c>PluginHost.Register(new {{name}}Plugin());</c>
+          ///     </para>
+          /// </summary>
+          public sealed class {{name}}Plugin : IPlatformPlugin
+          {
+              /// <summary>
+              ///     Channel names are the plugin's wire surface — prefixed with the plugin's identity
+              ///     so two plugins can never collide, and stable once shipped, because a native
+              ///     implementation registers the same string.
+              /// </summary>
+              internal const string VersionChannel = "{{name.ToLowerInvariant()}}/version";
+
+              public string Name => "{{name.ToLowerInvariant()}}";
+
+              public void Start() => {{name}}Channels.Register();
+
+              public void Stop() => {{name}}Channels.Unregister();
+
+              /// <summary>
+              ///     The template's example API: the OS name and version, answered by whichever
+              ///     platform implementation was compiled in. Null when nothing implements it here —
+              ///     callers carry on without it. Replace this (and the handler in each Platforms/
+              ///     file) with the plugin's real surface; for structured payloads use
+              ///     <c>JsonChannel&lt;TArgs, TReply&gt;</c>, and for answers that need a dialog or a
+              ///     permission prompt use <c>PlatformChannel.Request</c> — see docs/plugins.md in the
+              ///     Zigote checkout.
+              /// </summary>
+              public static string? GetPlatformVersion() => PlatformChannel.Invoke(VersionChannel);
+          }
+
+          """;
+
+    public static string PluginDesktopChannels(string name) =>
+        $$"""
+          using System.Runtime.InteropServices;
+          using Zigote.Core.Platform;
+
+          namespace {{name}};
+
+          /// <summary>
+          ///     Desktop implementation — Windows, macOS and Linux, the base <c>net10.0</c> build.
+          ///     Every Platforms/ folder defines a class with this exact name; the csproj compiles one
+          ///     of them per target framework, so the shared plugin binds to the right one with no
+          ///     runtime check. Handlers run on the invoking thread and must not block — work that
+          ///     takes time reports back with <c>PlatformChannel.Send</c> or a request handler.
+          /// </summary>
+          internal static class {{name}}Channels
+          {
+              public static void Register() =>
+                  PlatformChannel.Handle(
+                      channel: {{name}}Plugin.VersionChannel,
+                      handler: _ => RuntimeInformation.OSDescription
+                  );
+
+              public static void Unregister() =>
+                  PlatformChannel.Unhandle({{name}}Plugin.VersionChannel);
+          }
+
+          """;
+
+    public static string PluginAndroidChannels(string name) =>
+        $$"""
+          using Zigote.Core.Platform;
+
+          namespace {{name}};
+
+          /// <summary>
+          ///     Android implementation (<c>net10.0-android</c>). Anything the Android SDK offers is
+          ///     reachable from here — and Kotlin/Java sources can ride along this project as
+          ///     <c>AndroidJavaSource</c> items, registering their own channels natively via
+          ///     <c>zigote_channel_register</c> when the work belongs in Java.
+          /// </summary>
+          internal static class {{name}}Channels
+          {
+              public static void Register() =>
+                  PlatformChannel.Handle(
+                      channel: {{name}}Plugin.VersionChannel,
+                      handler: _ => $"Android {global::Android.OS.Build.VERSION.Release}"
+                  );
+
+              public static void Unregister() =>
+                  PlatformChannel.Unhandle({{name}}Plugin.VersionChannel);
+          }
+
+          """;
+
+    public static string PluginIosChannels(string name) =>
+        $$"""
+          using Zigote.Core.Platform;
+
+          namespace {{name}};
+
+          /// <summary>
+          ///     iOS implementation (<c>net10.0-ios</c>). UIKit and the rest of the platform bindings
+          ///     are reachable from here; Swift/Objective-C libraries arrive as binding projects, and
+          ///     can also register channels natively via <c>zigote_channel_register</c>.
+          /// </summary>
+          internal static class {{name}}Channels
+          {
+              public static void Register() =>
+                  PlatformChannel.Handle(
+                      channel: {{name}}Plugin.VersionChannel,
+                      handler: _ => $"iOS {UIKit.UIDevice.CurrentDevice.SystemVersion}"
+                  );
+
+              public static void Unregister() =>
+                  PlatformChannel.Unhandle({{name}}Plugin.VersionChannel);
+          }
+
+          """;
+
+    public static string PluginExampleProgram(string name) =>
+        $$"""
+          using {{name}};
+          using Zigote.Core.Platform;
+
+          namespace {{name}}Example;
+
+          /// <summary>The desktop entry point.</summary>
+          public static class Program
+          {
+              public static void Main(string[] args)
+              {
+                  // The one line any consumer adds per plugin: registered before the App exists, so
+                  // the plugin starts with the app and its channels are live by the first frame.
+                  PluginHost.Register(new {{name}}Plugin());
+                  new {{name}}ExampleApp().Run();
+              }
+          }
+
+          """;
+
+    public static string PluginExampleShell(string name) =>
+        $$"""
+          using {{name}};
+          using Zigote.Core.Paint;
+          using Zigote.UI.Material;
+          using Zigote.UI.Theme;
+          using Zigote.UI.Widgets;
+          using Zigote.UI.Widgets.Controls;
+          using Zigote.UI.Widgets.Layout;
+
+          namespace {{name}}Example;
+
+          /// <summary>The example app: proves the plugin end to end on every platform it targets.</summary>
+          public sealed class {{name}}ExampleApp : MaterialApp
+          {
+              public {{name}}ExampleApp() : base(
+                  home: new HomePage(),
+                  title: "{{name}} example",
+                  theme: ThemeData.Dark
+              )
+              {
+                  Width = 420;
+                  Height = 720;
+              }
+          }
+
+          internal sealed class HomePage : ComposedWidget
+          {
+              protected override Widget Build(BuildContext context)
+              {
+                  var theme = ThemeProvider.Of(context);
+
+                  return new SafeArea(new Scaffold(
+                      new AppBar(new Text("{{name}}"), centerTitle: true),
+                      new Center(
+                          new Column(
+                              mainAxisAlignment: MainAxisAlignment.Center,
+                              children:
+                              [
+                                  new Text(
+                                      "GetPlatformVersion() says:",
+                                      new TextStyle(color: theme.TextSecondary)
+                                  ),
+                                  new SizedBox(height: 8),
+                                  new Text(
+                                      {{name}}Plugin.GetPlatformVersion() ?? "not implemented here",
+                                      new TextStyle(24, fontWeight: FontWeight.SemiBold)
+                                  )
+                              ]
+                          )
+                      )
+                  ));
+              }
+          }
+
+          """;
+
+    public static string PluginReadme(string name, bool android, bool ios) =>
+        $"""
+         # {name}
+
+         A [Zigote](https://github.com/zigote) platform plugin: desktop (Windows/macOS/Linux){(android ? ", Android" : "")}{(ios ? ", iOS" : "")}.
+
+         ## Try it
+
+         ```
+         cd example && dotnet run --project {name}Example
+         ```
+
+         ## Use it in an app
+
+         Reference the project (or the packed NuGet package) from each head, and register the
+         plugin before constructing the App:
+
+         ```csharp
+         PluginHost.Register(new {name}Plugin());
+         new MyApp().Run();
+         ```
+
+         ```csharp
+         string? version = {name}Plugin.GetPlatformVersion();
+         ```
+
+         ## Layout
+
+         | Path | What it is |
+         |---|---|
+         | `{name}/{name}Plugin.cs` | The shared API and plugin contract — identical on every platform. |
+         | `{name}/Platforms/` | One folder per platform; the csproj compiles exactly one per target framework. |
+         | `example/` | An app wired to the plugin, for developing and demoing it. |
+
+         ## Ship it
+
+         ```
+         dotnet pack {name}
+         ```
+
+         The package multi-targets, so consumers get the implementation matching their head
+         automatically. For the full interop story — typed `JsonChannel`s, awaitable requests,
+         binary payloads, native (C/Zig/Rust) plugins — see `docs/plugins.md` in the Zigote
+         checkout.
+
+         """;
 }

@@ -1,3 +1,4 @@
+using System.Buffers;
 using Zigote.Core;
 using Zigote.Core.Animation;
 using Zigote.Core.Events;
@@ -146,7 +147,23 @@ public abstract class Widget : ITickerProvider
         // a lazy ComposedWidget build) that reconciles THIS widget's live child list mid-iteration —
         // GetChildren() returns the actual List for multi-child containers. Children added by such
         // a reconcile are attached by the reconcile itself, so iterating the snapshot loses nothing.
-        foreach (var child in GetChildren().ToArray()) child.Attach(owner: owner, parent: this);
+        // Pooled rather than ToArray(): attach cascades run per realized row during scroll and per
+        // reconciled subtree, and a fresh array per widget made every structural change O(subtree)
+        // in garbage.
+        if (GetChildren() is not ICollection<Widget> col)
+        {
+            foreach (var child in GetChildren().ToArray())
+                child.Attach(owner: owner, parent: this);
+            return;
+        }
+
+        int n = col.Count;
+        if (n == 0) return;
+        var snapshot = ArrayPool<Widget>.Shared.Rent(n);
+        col.CopyTo(array: snapshot, arrayIndex: 0);
+        for (int i = 0; i < n; i++) snapshot[i].Attach(owner: owner, parent: this);
+        Array.Clear(array: snapshot, index: 0, length: n); // no widget retention via the pool
+        ArrayPool<Widget>.Shared.Return(snapshot);
     }
 
     public virtual void Detach()
@@ -157,10 +174,30 @@ public abstract class Widget : ITickerProvider
         // the shared child (re-parenting it) while the outgoing one is still fading. Cascading the
         // outgoing tree's detach into it would tear it out of the live tree. Sequential
         // detach-then-attach swaps are unaffected: at detach time the child still points here.
-        foreach (var child in GetChildren().ToArray())
+        if (GetChildren() is ICollection<Widget> col)
         {
-            if (ReferenceEquals(objA: child.Parent, objB: this))
-                child.Detach();
+            int n = col.Count;
+            if (n > 0)
+            {
+                var snapshot = ArrayPool<Widget>.Shared.Rent(n);
+                col.CopyTo(array: snapshot, arrayIndex: 0);
+                for (int i = 0; i < n; i++)
+                {
+                    if (ReferenceEquals(objA: snapshot[i].Parent, objB: this))
+                        snapshot[i].Detach();
+                }
+
+                Array.Clear(array: snapshot, index: 0, length: n);
+                ArrayPool<Widget>.Shared.Return(snapshot);
+            }
+        }
+        else
+        {
+            foreach (var child in GetChildren().ToArray())
+            {
+                if (ReferenceEquals(objA: child.Parent, objB: this))
+                    child.Detach();
+            }
         }
 
         // Children first, then self: a teardown body must never observe a half-dead parent.

@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <RootNamespace>CameraExample</RootNamespace>
+        <AssemblyName>cameraexample</AssemblyName>
+    </PropertyGroup>
+
+    <!-- Where the engine lives. Override with -p:ZigoteRoot=<path> or $ZIGOTE_ROOT. -->
+    <PropertyGroup>
+        <ZigoteRoot Condition="'$(ZigoteRoot)' == '' And '$(ZIGOTE_ROOT)' != ''">$(ZIGOTE_ROOT)</ZigoteRoot>
+        <ZigoteRoot Condition="'$(ZigoteRoot)' == ''">$(MSBuildThisFileDirectory)../../../..</ZigoteRoot>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="$(ZigoteRoot)/Zigote.UI/Zigote.UI.csproj"/>
+        <ProjectReference Include="$(ZigoteRoot)/Zigote.UI.Material/Zigote.UI.Material.csproj"/>
+        <ProjectReference Include="../../Camera/Camera.csproj"/>
+    </ItemGroup>
+
+    <!-- Debug-only: the Shift+D widget inspector and perf overlay. A release must not
+         carry the HUD, and the DEBUG-gated Install call compiles out with it. -->
+    <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+        <ProjectReference Include="$(ZigoteRoot)/Zigote.UI.DevTools/Zigote.UI.DevTools.csproj"/>
+    </ItemGroup>
+
+</Project>

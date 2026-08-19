@@ -1,0 +1,57 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      Platform plugin Camera: one shared API over Zigote's PlatformChannel, with the
+      per-platform implementation chosen at BUILD time — each target framework compiles
+      exactly one Platforms/ folder, and NuGet hands every consumer the build matching
+      its head. There is no runtime platform switch anywhere, and there must not be:
+      the whole point of the channel is that shared code never knows who answered.
+    -->
+    <PropertyGroup>
+        <!-- iOS only on a Mac: the workload cannot even restore elsewhere, and an iOS build
+             needs Xcode regardless. Pack on macOS to get all three targets into the nupkg. -->
+        <TargetFrameworks>net10.0;net10.0-android</TargetFrameworks>
+        <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('osx'))">$(TargetFrameworks);net10.0-ios</TargetFrameworks>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <RootNamespace>Camera</RootNamespace>
+        <SupportedOSPlatformVersion Condition="'$(TargetFramework)' == 'net10.0-android'">26</SupportedOSPlatformVersion>
+        <SupportedOSPlatformVersion Condition="'$(TargetFramework)' == 'net10.0-ios'">15.0</SupportedOSPlatformVersion>
+        <!-- The YUV/BGRA→RGBA frame loops read capture buffers through raw pointers. -->
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <!-- `dotnet pack` metadata — the plugin ships as a NuGet package as-is. -->
+        <Version>0.1.0</Version>
+        <Description>Cross-platform camera capture for Zigote: GPU-textured preview, .cube LUT grading in the render pipeline, photo capture, DSLR-style minimal processing.</Description>
+    </PropertyGroup>
+
+    <!-- Where the engine lives. Override with -p:ZigoteRoot=<path> or $ZIGOTE_ROOT. -->
+    <PropertyGroup>
+        <ZigoteRoot Condition="'$(ZigoteRoot)' == '' And '$(ZIGOTE_ROOT)' != ''">$(ZIGOTE_ROOT)</ZigoteRoot>
+        <ZigoteRoot Condition="'$(ZigoteRoot)' == ''">$(MSBuildThisFileDirectory)../../..</ZigoteRoot>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- Core for the engine (textures, shaders, render textures), UI for CameraView and the
+             app-lifecycle wiring — the same single-package shape as Zigote.Videoplayer, because a
+             camera plugin without its preview widget is half a plugin. -->
+        <ProjectReference Include="$(ZigoteRoot)/Zigote.Core/Zigote.Core.csproj"/>
+        <ProjectReference Include="$(ZigoteRoot)/Zigote.UI/Zigote.UI.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="Camera.Tests"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Exactly one platform implementation per framework: every Platforms/ file
+             leaves the default glob first, then the right folder returns for the
+             framework being compiled. All implementations share one class name, which
+             is what lets the shared CameraPlugin.Start() bind statically. -->
+        <Compile Remove="Platforms/**/*.cs"/>
+        <Compile Include="Platforms/Desktop/**/*.cs" Condition="'$(TargetFramework)' == 'net10.0'"/>
+        <Compile Include="Platforms/Android/**/*.cs" Condition="'$(TargetFramework)' == 'net10.0-android'"/>
+        <Compile Include="Platforms/iOS/**/*.cs" Condition="'$(TargetFramework)' == 'net10.0-ios'"/>
+    </ItemGroup>
+
+</Project>

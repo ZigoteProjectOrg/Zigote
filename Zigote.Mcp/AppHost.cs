@@ -37,14 +37,17 @@ public static class AppHost
     ///     Send one command to the app at <paramref name="port" /> and return its one-line JSON
     ///     reply. The server answers and closes, so read-to-end is the whole reply.
     /// </summary>
-    public static string Query(int port, string command)
+    public static string Query(int port, string command, int? timeoutSeconds = null)
     {
         try
         {
             using var client = new TcpClient();
             client.Connect(address: IPAddress.Loopback, port: port);
-            client.ReceiveTimeout = (int)QueryTimeout.TotalMilliseconds;
-            client.SendTimeout = (int)QueryTimeout.TotalMilliseconds;
+            int timeoutMs = timeoutSeconds is { } s
+                ? s * 1000
+                : (int)QueryTimeout.TotalMilliseconds;
+            client.ReceiveTimeout = timeoutMs;
+            client.SendTimeout = timeoutMs;
 
             using var stream = client.GetStream();
             byte[] request = Encoding.UTF8.GetBytes(command + "\n");

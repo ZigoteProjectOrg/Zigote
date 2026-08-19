@@ -1,4 +1,3 @@
-using System.Text;
 using Zigote.Core.Native;
 using Zigote.Core.Paint;
 
@@ -140,7 +139,7 @@ public sealed unsafe class NativeWindow : IDisposable
     public void SetTitle(string title)
     {
         if (_window == 0) return;
-        byte[] titleBytes = [.. Encoding.UTF8.GetBytes(title), 0];
+        byte[] titleBytes = ZigoteEngine.Utf8Z(title);
         fixed (byte* tp = titleBytes)
             NativeEngine.WindowSetTitle(handle: _engine.Handle, windowHandle: _window, title: tp);
     }

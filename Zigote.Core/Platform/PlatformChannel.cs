@@ -8,6 +8,13 @@ using Zigote.Core.Native;
 namespace Zigote.Core.Platform;
 
 /// <summary>
+///     A managed channel implementation over raw bytes: read <paramref name="payload" />, write
+///     the reply into <paramref name="reply" />, return true. Returning false declines the call —
+///     the caller sees the same "nobody implements it" it would for an unregistered channel.
+/// </summary>
+public delegate bool ChannelByteHandler(ReadOnlySpan<byte> payload, IBufferWriter<byte> reply);
+
+/// <summary>
 ///     Named message channels between app code and the platform it is running on.
 ///     <para>
 ///         A Zigote app is one shared body of C# that runs on four platforms whose integration
@@ -29,7 +36,9 @@ namespace Zigote.Core.Platform;
 ///         answer now ("start the service", "what is the audio route?"). <see cref="Send" /> is the
 ///         platform telling the app something happened (a headset button, audio focus lost) — it
 ///         arrives on whatever thread the OS chose, so it is queued and replayed on the app's own
-///         thread by <see cref="Dispatch" />.
+///         thread by <see cref="Dispatch" />. <see cref="Request" /> composes the two for answers
+///         that cannot come synchronously — a permission prompt, a file picker — correlating the
+///         eventual reply back to an awaitable task.
 ///     </para>
 ///     <para>
 ///         A channel may be implemented in C# (<see cref="Handle" />) or in native code
@@ -56,8 +65,41 @@ public static class PlatformChannel
     private static readonly ConcurrentDictionary<string, Func<string, string?>> Handlers =
         new(StringComparer.Ordinal);
 
+    /// <summary>
+    ///     Byte-shaped managed implementations, kept apart from <see cref="Handlers" /> so the
+    ///     common text path stays conversion-free. Each lookup falls back to the other
+    ///     representation, so which shape an implementer chose is invisible to callers.
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, ChannelByteHandler> ByteHandlers =
+        new(StringComparer.Ordinal);
+
     private static readonly ConcurrentDictionary<string, Action<string>> Listeners =
         new(StringComparer.Ordinal);
+
+    /// <summary>
+    ///     Requests waiting for their correlated reply, keyed by token. A token leaves this map
+    ///     exactly once — on reply, cancellation, or shutdown — so a late reply for a token
+    ///     nobody waits on anymore is dropped silently, which is the right thing for a
+    ///     permission dialog answered after the caller gave up.
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, TaskCompletionSource<string?>> Pending =
+        new(StringComparer.Ordinal);
+
+    /// <summary>
+    ///     The reserved channel replies ride home on. One channel for all requests: the token
+    ///     already says which request a reply belongs to, so a per-request channel would only
+    ///     duplicate the correlation that exists anyway.
+    /// </summary>
+    public const string ReplyChannel = "zigote/reply";
+
+    private static long _nextToken;
+
+    /// <summary>
+    ///     Set the first time a native entry point turns out not to exist — a managed-only host
+    ///     (unit tests, tooling) with no engine loaded. From then on the native side is treated
+    ///     as "implements nothing", which is the truth, and the managed half keeps working.
+    /// </summary>
+    private static bool _nativeMissing;
 
     /// <summary>
     ///     Messages from the platform, waiting for the app thread. Unbounded on purpose: the
@@ -80,22 +122,83 @@ public static class PlatformChannel
         Handlers[channel] = handler;
     }
 
+    /// <summary>
+    ///     Implement a channel over raw bytes — image data, audio, anything where a string detour
+    ///     would mean base64. Same registration rules as the text overload; a channel has one
+    ///     managed implementation, in whichever shape suits its payloads.
+    /// </summary>
+    public static void Handle(string channel, ChannelByteHandler handler)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(channel);
+        ArgumentNullException.ThrowIfNull(handler);
+        ByteHandlers[channel] = handler;
+    }
+
     /// <summary>Withdraw a managed implementation. Native code keeps whatever it registered.</summary>
-    public static void Unhandle(string channel) => Handlers.TryRemove(key: channel, value: out _);
+    public static void Unhandle(string channel)
+    {
+        Handlers.TryRemove(key: channel, value: out _);
+        ByteHandlers.TryRemove(key: channel, value: out _);
+    }
 
     /// <summary>
     ///     Subscribe to messages the platform sends on a channel. Handlers run on the app thread
     ///     inside <see cref="Dispatch" />, so they may touch widgets and blocs freely.
+    ///     Subscriptions accumulate — a battery widget and a debug panel may both watch the same
+    ///     channel — so pair every Listen with an <see cref="Unlisten(string, Action{string})" />
+    ///     in the subscriber's own teardown.
     /// </summary>
-    public static void Listen(string channel, Action<string> onMessage)
+    public static IDisposable Listen(string channel, Action<string> onMessage)
     {
         ArgumentException.ThrowIfNullOrEmpty(channel);
         ArgumentNullException.ThrowIfNull(onMessage);
-        Listeners[channel] = onMessage;
+        Listeners.AddOrUpdate(
+            key: channel,
+            addValue: onMessage,
+            updateValueFactory: (_, existing) => existing + onMessage
+        );
         EnsureReceiver();
+        return new Subscription(channel: channel, onMessage: onMessage);
     }
 
-    /// <summary>Stop listening. Queued messages for the channel are discarded as they drain.</summary>
+    /// <summary>
+    ///     An active Listen, as the disposable .NET expects a subscription to be — a widget stores
+    ///     it and disposes on detach instead of re-stating the channel and handler. Idempotent.
+    /// </summary>
+    private sealed class Subscription(string channel, Action<string> onMessage) : IDisposable
+    {
+        private Action<string>? _onMessage = onMessage;
+
+        public void Dispose()
+        {
+            var handler = Interlocked.Exchange(location1: ref _onMessage, value: null);
+            if (handler is not null) Unlisten(channel: channel, onMessage: handler);
+        }
+    }
+
+    /// <summary>Remove one subscriber, leaving any others on the channel in place.</summary>
+    public static void Unlisten(string channel, Action<string> onMessage)
+    {
+        // Compare-and-swap loop: another subscriber may join or leave between the read and the
+        // write, and losing their change would unsubscribe someone who never asked to be.
+        while (Listeners.TryGetValue(key: channel, value: out var existing))
+        {
+            var trimmed = (Action<string>?)Delegate.Remove(source: existing, value: onMessage);
+            if (trimmed is null)
+            {
+                if (Listeners.TryRemove(KeyValuePair.Create(key: channel, value: existing))) return;
+            }
+            else if (Listeners.TryUpdate(key: channel, newValue: trimmed, comparisonValue: existing))
+            {
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Stop listening entirely, all subscribers at once. Queued messages for the channel are
+    ///     discarded as they drain.
+    /// </summary>
     public static void Unlisten(string channel) => Listeners.TryRemove(key: channel, value: out _);
 
     /// <summary>
@@ -104,9 +207,18 @@ public static class PlatformChannel
     /// </summary>
     public static unsafe bool Supports(string channel)
     {
-        if (Handlers.ContainsKey(channel)) return true;
-        byte[] name = Utf8(channel);
-        fixed (byte* n = name) return NativeEngine.ChannelHas(n);
+        if (Handlers.ContainsKey(channel) || ByteHandlers.ContainsKey(channel)) return true;
+        if (_nativeMissing) return false;
+        try
+        {
+            byte[] name = Utf8(channel);
+            fixed (byte* n = name) return NativeEngine.ChannelHas(n);
+        }
+        catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException)
+        {
+            _nativeMissing = true;
+            return false;
+        }
     }
 
     /// <summary>
@@ -129,6 +241,18 @@ public static class PlatformChannel
         // never leaves the runtime.
         if (Handlers.TryGetValue(key: channel, value: out var handler)) return handler(payload);
 
+        // A byte-shaped implementation serves text callers through a UTF-8 round-trip, so which
+        // representation the implementer chose never becomes the caller's problem.
+        if (ByteHandlers.TryGetValue(key: channel, value: out var byteHandler))
+        {
+            var byteReply = new ArrayBufferWriter<byte>(InitialReplyBuffer);
+            return byteHandler(Encoding.UTF8.GetBytes(payload), byteReply)
+                ? Encoding.UTF8.GetString(byteReply.WrittenSpan)
+                : null;
+        }
+
+        if (_nativeMissing) return null;
+
         byte[] name = Utf8(channel);
         byte[] body = Utf8(payload);
         byte[] buffer = ArrayPool<byte>.Shared.Rent(InitialReplyBuffer);
@@ -137,7 +261,9 @@ public static class PlatformChannel
             fixed (byte* n = name)
             fixed (byte* p = body)
             {
-                int written = Call(name: n, payload: p, buffer: buffer);
+                // Length excludes the NUL the C ABI no longer relies on but still appreciates.
+                nuint bodyLen = (nuint)(body.Length - 1);
+                int written = Call(name: n, payload: p, payloadLen: bodyLen, buffer: buffer);
                 // Negative means no native implementation either — nobody handles this channel.
                 if (written < 0) return null;
                 if (written > buffer.Length)
@@ -147,7 +273,7 @@ public static class PlatformChannel
                     // handler, not something to loop over.
                     ArrayPool<byte>.Shared.Return(buffer);
                     buffer = ArrayPool<byte>.Shared.Rent(written);
-                    written = Call(name: n, payload: p, buffer: buffer);
+                    written = Call(name: n, payload: p, payloadLen: bodyLen, buffer: buffer);
                     if (written < 0 || written > buffer.Length) return null;
                 }
 
@@ -156,23 +282,197 @@ public static class PlatformChannel
                     : Encoding.UTF8.GetString(bytes: buffer, index: 0, count: written);
             }
         }
+        catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException)
+        {
+            // Managed-only host: same answer as a platform that implements nothing.
+            _nativeMissing = true;
+            return null;
+        }
         finally
         {
             ArrayPool<byte>.Shared.Return(buffer);
         }
 
-        static int Call(byte* name, byte* payload, byte[] buffer)
+        static int Call(byte* name, byte* payload, nuint payloadLen, byte[] buffer)
         {
             fixed (byte* b = buffer)
             {
                 return NativeEngine.ChannelInvoke(
                     name: name,
                     payload: payload,
+                    payloadLen: payloadLen,
                     reply: b,
                     replyCap: (nuint)buffer.Length
                 );
             }
         }
+    }
+
+    /// <summary>
+    ///     <see cref="Invoke(string, string)" /> over raw bytes: the payload crosses as-is —
+    ///     embedded zeros included — and the reply lands in the caller's
+    ///     <see cref="IBufferWriter{T}" />, so a hot caller can bring a reused
+    ///     <see cref="ArrayBufferWriter{T}" /> and allocate nothing per call.
+    /// </summary>
+    /// <returns>True when something answered; false is the byte-shaped null of the text overload.</returns>
+    public static unsafe bool Invoke(string channel, ReadOnlySpan<byte> payload, IBufferWriter<byte> reply)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(channel);
+        ArgumentNullException.ThrowIfNull(reply);
+
+        if (ByteHandlers.TryGetValue(key: channel, value: out var byteHandler))
+            return byteHandler(payload, reply);
+
+        // A text-shaped implementation serves byte callers the same way byte ones serve text.
+        if (Handlers.TryGetValue(key: channel, value: out var handler))
+        {
+            string? text = handler(Encoding.UTF8.GetString(payload));
+            if (text is null) return false;
+            if (text.Length > 0) reply.Write(Encoding.UTF8.GetBytes(text));
+            return true;
+        }
+
+        if (_nativeMissing) return false;
+
+        byte[] name = Utf8(channel);
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(InitialReplyBuffer);
+        try
+        {
+            fixed (byte* n = name)
+            fixed (byte* p = payload)
+            {
+                int written = Call(name: n, payload: p, payloadLen: (nuint)payload.Length, buffer: buffer);
+                if (written < 0) return false;
+                if (written > buffer.Length)
+                {
+                    ArrayPool<byte>.Shared.Return(buffer);
+                    buffer = ArrayPool<byte>.Shared.Rent(written);
+                    written = Call(name: n, payload: p, payloadLen: (nuint)payload.Length, buffer: buffer);
+                    if (written < 0 || written > buffer.Length) return false;
+                }
+
+                reply.Write(buffer.AsSpan(start: 0, length: written));
+                return true;
+            }
+        }
+        catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException)
+        {
+            _nativeMissing = true;
+            return false;
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+
+        static int Call(byte* name, byte* payload, nuint payloadLen, byte[] buffer)
+        {
+            fixed (byte* b = buffer)
+            {
+                return NativeEngine.ChannelInvoke(
+                    name: name,
+                    payload: payload,
+                    payloadLen: payloadLen,
+                    reply: b,
+                    replyCap: (nuint)buffer.Length
+                );
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Ask the platform to do something whose answer cannot come synchronously — show a
+    ///     permission prompt, open a picker, wait on an activity result. The handler receives the
+    ///     payload prefixed with a correlation token (<c>"token\npayload"</c>, split it with
+    ///     <see cref="ParseRequest" />), returns non-null immediately to acknowledge, and delivers
+    ///     the real answer later via <see cref="Respond" /> — or, from native code, by sending
+    ///     <c>"token\nanswer"</c> on <see cref="ReplyChannel" /> through
+    ///     <c>zigote_channel_send</c>. The task completes on the app thread, inside
+    ///     <see cref="Dispatch" />.
+    /// </summary>
+    /// <returns>
+    ///     The reply payload; null when nothing implements the channel (or the handler returned
+    ///     null, declining the request) — the same "carry on without it" answer
+    ///     <see cref="Invoke" /> gives. Errors travel inside the reply payload, in whatever shape
+    ///     the two ends of the channel agreed on; the transport does not interpret them.
+    /// </returns>
+    /// <remarks>
+    ///     No built-in timeout, deliberately: a permission dialog may sit on screen for minutes.
+    ///     A caller that wants one passes a <see cref="CancellationToken" /> from a
+    ///     <see cref="CancellationTokenSource" /> with a delay.
+    /// </remarks>
+    public static Task<string?> Request(
+        string channel,
+        string payload = "",
+        CancellationToken cancellation = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(channel);
+        if (cancellation.IsCancellationRequested) return Task.FromCanceled<string?>(cancellation);
+
+        // The reply arrives as a Send — from native code that means through the receiver, which
+        // must be installed even if nothing ever called Listen.
+        EnsureReceiver();
+
+        string token = Interlocked.Increment(ref _nextToken).ToString();
+        var tcs = new TaskCompletionSource<string?>();
+        // Registered before the handler runs: a handler that answers inline (Respond during the
+        // Invoke below) must find the entry already waiting.
+        Pending[token] = tcs;
+
+        string? ack;
+        try
+        {
+            ack = Invoke(channel: channel, payload: token + "\n" + payload);
+        }
+        catch
+        {
+            // A handler that throws instead of acking must not leave the token parked forever.
+            Pending.TryRemove(key: token, value: out _);
+            throw;
+        }
+
+        if (ack is null)
+        {
+            Pending.TryRemove(key: token, value: out _);
+            return Task.FromResult<string?>(null);
+        }
+
+        if (cancellation.CanBeCanceled)
+        {
+            var registration = cancellation.Register(() =>
+                {
+                    if (Pending.TryRemove(key: token, value: out var abandoned))
+                        abandoned.TrySetCanceled(cancellation);
+                }
+            );
+            // The registration must not outlive the request, or an app-lifetime token would
+            // accumulate one per request forever.
+            _ = tcs.Task.ContinueWith(
+                continuationAction: static (_, state) =>
+                    ((CancellationTokenRegistration)state!).Dispose(),
+                state: registration,
+                scheduler: TaskScheduler.Default
+            );
+        }
+
+        return tcs.Task;
+    }
+
+    /// <summary>
+    ///     Deliver the answer to a request. The token is the one carried in the request payload;
+    ///     safe from any thread, like every send. A token nobody waits on anymore (the caller
+    ///     cancelled) is dropped silently.
+    /// </summary>
+    public static void Respond(string token, string reply = "") =>
+        Send(channel: ReplyChannel, payload: token + "\n" + reply);
+
+    /// <summary>Split a request envelope into its correlation token and the caller's payload.</summary>
+    public static (string Token, string Payload) ParseRequest(string envelope)
+    {
+        int newline = envelope.IndexOf('\n');
+        return newline < 0
+            ? (envelope, string.Empty)
+            : (envelope[..newline], envelope[(newline + 1)..]);
     }
 
     /// <summary>
@@ -197,6 +497,14 @@ public static class PlatformChannel
         int pending = Inbox.Count;
         while (pending-- > 0 && Inbox.TryDequeue(out var message))
         {
+            if (message.Name == ReplyChannel)
+            {
+                (string token, string reply) = ParseRequest(message.Payload);
+                if (Pending.TryRemove(key: token, value: out var request))
+                    request.TrySetResult(reply);
+                continue;
+            }
+
             if (!Listeners.TryGetValue(key: message.Name, value: out var listener)) continue;
             listener(message.Payload);
         }
@@ -210,8 +518,15 @@ public static class PlatformChannel
     {
         if (!_receiverInstalled) return;
         _receiverInstalled = false;
-        NativeEngine.ChannelSetReceiver(null);
+        if (!_nativeMissing) NativeEngine.ChannelSetReceiver(null);
         Inbox.Clear();
+        // A request whose reply can no longer arrive resolves to "the platform has no answer"
+        // rather than hanging an awaiter across shutdown.
+        foreach (string token in Pending.Keys)
+        {
+            if (Pending.TryRemove(key: token, value: out var request))
+                request.TrySetResult(null);
+        }
     }
 
     /// <summary>
@@ -223,7 +538,17 @@ public static class PlatformChannel
     {
         if (_receiverInstalled) return;
         _receiverInstalled = true;
-        NativeEngine.ChannelSetReceiver(&OnNativeMessage);
+        if (_nativeMissing) return;
+        try
+        {
+            NativeEngine.ChannelSetReceiver(&OnNativeMessage);
+        }
+        catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException)
+        {
+            // Managed-only host: nothing native will ever send, but managed Send/Dispatch —
+            // including request replies — keep working.
+            _nativeMissing = true;
+        }
     }
 
     /// <summary>
@@ -232,13 +557,18 @@ public static class PlatformChannel
     ///     Nothing here may throw, because the exception would unwind into native frames.
     /// </summary>
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    private static unsafe void OnNativeMessage(byte* name, byte* payload)
+    private static unsafe void OnNativeMessage(byte* name, byte* payload, nuint payloadLen)
     {
         try
         {
             string? channel = Marshal.PtrToStringUTF8((IntPtr)name);
             if (string.IsNullOrEmpty(channel)) return;
-            Inbox.Enqueue((channel, Marshal.PtrToStringUTF8((IntPtr)payload) ?? string.Empty));
+            // ponytail: sends decode as UTF-8 — binary platform→app events would need a byte
+            // inbox lane alongside this one; add it when a real event carries pixels, not JSON.
+            string body = payload is null || payloadLen == 0
+                ? string.Empty
+                : Encoding.UTF8.GetString(bytes: payload, byteCount: (int)payloadLen);
+            Inbox.Enqueue((channel, body));
         }
         catch
         {
