@@ -10,6 +10,11 @@ namespace WebView;
 /// </summary>
 internal static partial class GtkNative
 {
+    // Booleans here are C ints, not bytes: GLib's gboolean is a gint and Xlib's Bool is an int, so
+    // every one of them is marshalled as UnmanagedType.Bool (4 bytes). UnmanagedType.I1 happens to
+    // work for returns (the low byte of a 0/1 int) and happens to work for arguments (the JIT
+    // zero-extends), which is exactly the kind of accident that stops being one on a new ABI.
+
     private const string Gtk = "libgtk-3.so.0";
     private const string Gdk = "libgdk-3.so.0";
     private const string GObject = "libgobject-2.0.so.0";
@@ -22,7 +27,7 @@ internal static partial class GtkNative
     // ── GTK ───────────────────────────────────────────────────────────────────
 
     [LibraryImport(Gtk)]
-    [return: MarshalAs(UnmanagedType.I1)]
+    [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool gtk_init_check(nint argc, nint argv);
 
     /// <summary>window_type 0 = GTK_WINDOW_TOPLEVEL, 1 = GTK_WINDOW_POPUP.</summary>
@@ -114,6 +119,19 @@ internal static partial class GtkNative
     [LibraryImport(Gdk)]
     internal static partial uint gdk_unicode_to_keyval(uint wc);
 
+    /// <summary>The cursor the page asked for, so the app can show the hand over a link and the
+    ///     I-beam over text — WebKit sets it on the view's GdkWindow like any GTK widget.</summary>
+    [LibraryImport(Gdk)]
+    internal static partial nint gdk_window_get_cursor(nint window);
+
+    [LibraryImport(Gdk, StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial nint gdk_cursor_new_from_name(nint display, string name);
+
+    /// <summary>Monotonic microseconds — GdkEvent.time is milliseconds of the same clock, and a
+    ///     page that measures gesture velocity reads it as event.timeStamp.</summary>
+    [LibraryImport(GLib)]
+    internal static partial long g_get_monotonic_time();
+
     [LibraryImport(Gtk)]
     internal static partial void gtk_main_do_event(nint evt);
 
@@ -127,7 +145,7 @@ internal static partial class GtkNative
     internal static partial uint g_timeout_add(uint interval, nint function, nint data);
 
     [LibraryImport(GLib)]
-    [return: MarshalAs(UnmanagedType.I1)]
+    [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool g_source_remove(uint tag);
 
     /// <summary>A private main context for WebKit's sources, so the host's own loop (SDL's
@@ -161,11 +179,23 @@ internal static partial class GtkNative
     internal static partial void g_source_unref(nint source);
 
     [LibraryImport(GLib)]
-    [return: MarshalAs(UnmanagedType.I1)]
-    internal static partial bool g_main_context_iteration(nint context, [MarshalAs(UnmanagedType.I1)] bool may_block);
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool g_main_context_iteration(nint context, [MarshalAs(UnmanagedType.Bool)] bool may_block);
 
     [LibraryImport(GLib)]
     internal static partial void g_main_context_wakeup(nint context);
+
+    /// <summary>Claim a context for this thread. Fails if another thread already owns it, which is
+    ///     how the GTK thread checks that nothing else drives GLib's default context.</summary>
+    [LibraryImport(GLib)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool g_main_context_acquire(nint context);
+
+    /// <summary>Run a callback on whichever thread owns <paramref name="context" /> — the hop the
+    ///     UI thread takes to reach the GTK thread. Runs inline when the caller already owns it.</summary>
+    [LibraryImport(GLib)]
+    internal static partial void g_main_context_invoke_full(
+        nint context, int priority, nint function, nint data, nint notify);
 
     [LibraryImport(GLib)]
     internal static partial void g_free(nint mem);
@@ -184,12 +214,59 @@ internal static partial class GtkNative
     [LibraryImport(WebKit)]
     internal static partial nint webkit_web_view_new();
 
+    /// <summary>The process-wide context every view shares unless told otherwise: caches, cookies,
+    ///     favicons, the web-process pool.</summary>
+    [LibraryImport(WebKit)]
+    internal static partial nint webkit_web_context_get_default();
+
+    [LibraryImport(WebKit)]
+    internal static partial nint webkit_web_context_get_website_data_manager(nint context);
+
+    [LibraryImport(WebKit)]
+    internal static partial nint webkit_website_data_manager_get_cookie_manager(nint manager);
+
+    /// <summary>storage: 0 = text (cookies.txt), 1 = sqlite. Without this a browser forgets every
+    ///     login the moment it exits — the cookie jar is memory-only by default.</summary>
+    [LibraryImport(WebKit, StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial void webkit_cookie_manager_set_persistent_storage(
+        nint cookie_manager, string filename, int storage);
+
+    /// <summary>Where favicons are cached. Setting it is what turns the favicon database on at
+    ///     all — tabs have no icons until a directory exists.</summary>
+    [LibraryImport(WebKit, StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial void webkit_web_context_set_favicon_database_directory(
+        nint context, string? directory);
+
+    /// <summary>0 = document viewer, 1 = web browser, 2 = document browser. The default is already
+    ///     the browser model on 2.52; setting it makes that independent of the WebKit version.</summary>
+    [LibraryImport(WebKit)]
+    internal static partial void webkit_web_context_set_cache_model(nint context, int model);
+
     [LibraryImport(WebKit)]
     internal static partial nint webkit_web_view_get_settings(nint web_view);
+
+    /// <summary>Appends the app's name and version to the platform user agent instead of replacing
+    ///     it — what a browser does, and what keeps sites' feature detection working.</summary>
+    [LibraryImport(WebKit, StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial void webkit_settings_set_user_agent_with_application_details(
+        nint settings, string? name, string? version);
 
     /// <summary>policy: 0 = ON_DEMAND, 1 = ALWAYS, 2 = NEVER.</summary>
     [LibraryImport(WebKit)]
     internal static partial void webkit_settings_set_hardware_acceleration_policy(nint settings, int policy);
+
+    /// <summary>WebKit's own easing for wheel/trackpad scrolling. On by default, and wrong for a
+    ///     stream of precise trackpad deltas: the page then keeps sliding ~220 ms after the fingers
+    ///     lift, which reads as the view swimming behind the gesture.</summary>
+    [LibraryImport(WebKit)]
+    internal static partial void webkit_settings_set_enable_smooth_scrolling(nint settings,
+        [MarshalAs(UnmanagedType.Bool)] bool enabled);
+
+    /// <summary>WebGL needs the accelerated compositor; asking for it on the software path is how
+    ///     a page ends up with a black canvas instead of a clean "no WebGL" fallback.</summary>
+    [LibraryImport(WebKit)]
+    internal static partial void webkit_settings_set_enable_webgl(nint settings,
+        [MarshalAs(UnmanagedType.Bool)] bool enabled);
 
     [LibraryImport(WebKit)]
     internal static partial void webkit_web_view_set_zoom_level(nint web_view, double zoom);
@@ -220,15 +297,15 @@ internal static partial class GtkNative
 
     [LibraryImport(WebKit)]
     internal static partial void webkit_settings_set_enable_javascript(nint settings,
-        [MarshalAs(UnmanagedType.I1)] bool enabled);
+        [MarshalAs(UnmanagedType.Bool)] bool enabled);
 
     [LibraryImport(WebKit)]
     internal static partial void webkit_settings_set_enable_developer_extras(nint settings,
-        [MarshalAs(UnmanagedType.I1)] bool enabled);
+        [MarshalAs(UnmanagedType.Bool)] bool enabled);
 
     [LibraryImport(WebKit)]
     internal static partial void webkit_settings_set_media_playback_requires_user_gesture(nint settings,
-        [MarshalAs(UnmanagedType.I1)] bool enabled);
+        [MarshalAs(UnmanagedType.Bool)] bool enabled);
 
     [LibraryImport(WebKit, StringMarshalling = StringMarshalling.Utf8)]
     internal static partial void webkit_settings_set_user_agent(nint settings, string? user_agent);
@@ -237,11 +314,11 @@ internal static partial class GtkNative
     internal static partial double webkit_web_view_get_estimated_load_progress(nint web_view);
 
     [LibraryImport(WebKit)]
-    [return: MarshalAs(UnmanagedType.I1)]
+    [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool webkit_web_view_can_go_back(nint web_view);
 
     [LibraryImport(WebKit)]
-    [return: MarshalAs(UnmanagedType.I1)]
+    [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool webkit_web_view_can_go_forward(nint web_view);
 
     // ── User content: the message bridge and document-start scripts ──────────
@@ -256,7 +333,7 @@ internal static partial class GtkNative
     /// <summary>Turns on <c>window.webkit.messageHandlers.NAME</c> and the manager's
     ///     <c>script-message-received::NAME</c> signal.</summary>
     [LibraryImport(WebKit, StringMarshalling = StringMarshalling.Utf8)]
-    [return: MarshalAs(UnmanagedType.I1)]
+    [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool webkit_user_content_manager_register_script_message_handler(
         nint manager, string name);
 
@@ -304,7 +381,7 @@ internal static partial class GtkNative
         nint manager, uint types, long timespan, nint cancellable, nint callback, nint user_data);
 
     [LibraryImport(WebKit)]
-    [return: MarshalAs(UnmanagedType.I1)]
+    [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool webkit_website_data_manager_clear_finish(
         nint manager, nint result, out nint error);
 
@@ -346,7 +423,7 @@ internal static partial class GtkNative
     internal static partial int XSetInputFocus(nint display, ulong focus, int revert_to, ulong time);
 
     [LibraryImport(X11)]
-    internal static partial int XSync(nint display, [MarshalAs(UnmanagedType.I1)] bool discard);
+    internal static partial int XSync(nint display, [MarshalAs(UnmanagedType.Bool)] bool discard);
 
     /// <summary>Xlib's default handler EXITS the process on any async error — a BadWindow from a
     ///     failed embed must log instead. Returns the previous handler.</summary>

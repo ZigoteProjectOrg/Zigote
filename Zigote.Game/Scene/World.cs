@@ -30,6 +30,11 @@ public sealed class World
     // Reused flattened buffers for the batched physics→node transform sync (one FFI call per frame
     // instead of a position + rotation call pair per body; zero steady-state allocation).
     private readonly List<(SceneNode3D Node, uint BodyId)> _syncBodies = [];
+
+    // Nodes with live physics bodies, indexed at AttachPhysics time (pruned in RemoveNode) so
+    // SyncFromPhysics filters a flat list per frame instead of walking the whole scene graph —
+    // the same index-over-tree fix GameSession applied to its body list.
+    private readonly List<(SceneNode3D Node, RigidBody3D Body)> _physicsBodies = [];
     private ScratchBuffer<uint> _syncIds;
     private ScratchBuffer<float> _syncXforms;
 
@@ -82,6 +87,20 @@ public sealed class World
 
         node.Parent?.RemoveChild(node);
         _roots.Remove(node);
+
+        // Drop the removed subtree's entries from the flat body index (removal is rare; a scan
+        // per removed node is fine).
+        for (int i = _physicsBodies.Count - 1; i >= 0; i--)
+        {
+            for (var n = _physicsBodies[i].Node; n is not null; n = n.Parent)
+            {
+                if (ReferenceEquals(objA: n, objB: node))
+                {
+                    _physicsBodies.RemoveAt(i);
+                    break;
+                }
+            }
+        }
     }
 
     // ── Asset registries ──────────────────────────────────────────────────────
@@ -144,6 +163,20 @@ public sealed class World
         foreach (var root in _roots)
             AttachPhysicsNode(physics: physics, node: root);
         physics.OptimizeBroadPhase();
+
+        // (Re)build the flat body index from scratch — AttachPhysics is the only place bodies are
+        // created, so the index is complete until the next RemoveNode.
+        _physicsBodies.Clear();
+        foreach (var root in _roots)
+            CollectPhysicsBodies(root);
+    }
+
+    private void CollectPhysicsBodies(SceneNode3D node)
+    {
+        if (node.RigidBody is { } rb && rb.BodyId != PhysicsWorld.InvalidBodyId)
+            _physicsBodies.Add((node, rb));
+        foreach (var child in node.Children)
+            CollectPhysicsBodies(child);
     }
 
     private static void AttachPhysicsNode(PhysicsWorld physics, SceneNode3D node)
@@ -176,8 +209,13 @@ public sealed class World
     public void SyncFromPhysics(PhysicsWorld physics)
     {
         _syncBodies.Clear();
-        for (int i = 0; i < _roots.Count; i++)
-            CollectDynamicBodies(_roots[i]);
+        for (int i = 0; i < _physicsBodies.Count; i++)
+        {
+            (var node, var rb) = _physicsBodies[i];
+            if (node.Active && !rb.IsStatic && rb.BodyId != PhysicsWorld.InvalidBodyId)
+                _syncBodies.Add((node, rb.BodyId));
+        }
+
         int count = _syncBodies.Count;
         if (count == 0) return;
 
@@ -198,17 +236,6 @@ public sealed class World
                 w: xforms[b + 6]
             );
         }
-    }
-
-    private void CollectDynamicBodies(SceneNode3D node)
-    {
-        if (node is { Active: true, RigidBody: { } rb }
-            && rb.BodyId != PhysicsWorld.InvalidBodyId
-            && !rb.IsStatic)
-            _syncBodies.Add((node, rb.BodyId));
-
-        for (int i = 0; i < node.Children.Count; i++)
-            CollectDynamicBodies(node.Children[i]);
     }
 
     // ── Queries ──────────────────────────────────────────────────────────────

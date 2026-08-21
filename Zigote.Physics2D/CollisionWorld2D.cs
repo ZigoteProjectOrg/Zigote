@@ -126,6 +126,36 @@ public sealed class CollisionWorld2D(float cellSize = 2f)
     public bool IsOneWay(ColliderHandle handle) =>
         _colliders.TryGetValue(key: handle.Id, value: out var col) && col.OneWayUp;
 
+    /// <summary>
+    ///     Every query-relevant field in ONE lookup — the controller's slide/penetration loops were
+    ///     paying up to five dictionary probes per contact per tick through the single-field getters.
+    /// </summary>
+    public bool TryGetInfo(ColliderHandle handle, out ColliderInfo info)
+    {
+        if (_colliders.TryGetValue(key: handle.Id, value: out var col))
+        {
+            info = new ColliderInfo(
+                Shape: col.Shape,
+                Center: col.Center,
+                HalfExtents: col.HalfExtents,
+                Radius: col.Radius,
+                OneWayUp: col.OneWayUp
+            );
+            return true;
+        }
+
+        info = default;
+        return false;
+    }
+
+    /// <summary>One collider's query-relevant fields, snapshotted by <see cref="TryGetInfo" />.</summary>
+    public readonly record struct ColliderInfo(
+        ColliderShape2D Shape,
+        Vec2 Center,
+        Vec2 HalfExtents,
+        float Radius,
+        bool OneWayUp);
+
     // ── Overlap queries ──────────────────────────────────────────────────────
 
     /// <summary>

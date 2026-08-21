@@ -55,6 +55,9 @@ public sealed class FileCacheStore : IHttpCacheStore
     public async ValueTask<CachedResponse?> GetAsync(string key, CancellationToken ct = default)
     {
         string path = PathFor(key);
+        // A miss is the common case on a cold feed; probing first keeps it from being an
+        // exception per request (the catch below still covers the delete race).
+        if (!File.Exists(path)) return null;
         try
         {
             byte[] bytes = await File.ReadAllBytesAsync(path, ct).ConfigureAwait(false);

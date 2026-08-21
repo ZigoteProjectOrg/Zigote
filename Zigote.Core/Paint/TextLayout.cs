@@ -13,6 +13,13 @@ namespace Zigote.Core.Paint;
 /// </summary>
 public sealed class TextLayout : IDisposable
 {
+    // Handles whose owner was collected without Dispose. The native layout cache is unbounded, so
+    // a dropped layout would leak its entry forever; the finalizer can't call the FFI itself (the
+    // native side is not safe against the render thread), so it parks the handle here and the
+    // engine frees the batch at the next BeginFrame on the UI thread.
+    private static readonly System.Collections.Concurrent.ConcurrentQueue<ulong>
+        PendingReleases = new();
+
     private readonly string _text;
 
     internal TextLayout(ulong handle, string text)
@@ -33,6 +40,23 @@ public sealed class TextLayout : IDisposable
             if (eng != 0) NativeEngine.TextLayoutRelease(eng: eng, layoutHandle: Handle);
             Handle = 0;
         }
+
+        GC.SuppressFinalize(this);
+    }
+
+    ~TextLayout()
+    {
+        if (Handle != 0) PendingReleases.Enqueue(Handle);
+    }
+
+    /// <summary>
+    ///     Free layouts whose owners were finalized without Dispose. Called by
+    ///     <see cref="ZigoteEngine.BeginFrame" /> on the UI thread; a no-op in the steady state.
+    /// </summary>
+    internal static void DrainPendingReleases(ulong eng)
+    {
+        while (PendingReleases.TryDequeue(out ulong handle))
+            NativeEngine.TextLayoutRelease(eng: eng, layoutHandle: handle);
     }
 
     /// <summary>Return the bounding box of the laid-out text.</summary>

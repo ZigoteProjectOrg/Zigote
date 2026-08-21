@@ -17,6 +17,12 @@ public static class PhysicsWireframe
     /// <summary>Segments per full circle for sphere/capsule/cylinder rings.</summary>
     public const int CircleSegments = 24;
 
+    // Local outlines memoised per (shape, half-extents): the overlay draws every body every paint,
+    // and rebuilding a 72-segment sphere's lists per body per frame was steady garbage. Bounded by
+    // a clear-at-cap (distinct collider sizes in a scene are few; the cliff is theoretical).
+    private static readonly Dictionary<(PhysicsShapeType, Vec3), List<(Vec3 A, Vec3 B)>>
+        LocalCache = new();
+
     /// <summary>
     ///     Local-space (shape-centred at the origin) line segments outlining the collision shape.
     /// </summary>
@@ -58,11 +64,34 @@ public static class PhysicsWireframe
     public static List<(Vec3 A, Vec3 B)> WorldEdges(
         PhysicsShapeType shape, Vec3 halfExtents, Vec3 position, Quat rotation)
     {
-        var local = LocalEdges(shape: shape, halfExtents: halfExtents);
-        var world = new List<(Vec3, Vec3)>(local.Count);
-        foreach (var (a, b) in local)
-            world.Add((position + rotation.RotateVec(a), position + rotation.RotateVec(b)));
+        var world = new List<(Vec3 A, Vec3 B)>();
+        WorldEdgesInto(
+            into: world,
+            shape: shape,
+            halfExtents: halfExtents,
+            position: position,
+            rotation: rotation
+        );
         return world;
+    }
+
+    /// <summary>
+    ///     Allocation-free variant for per-paint callers: clears and fills <paramref name="into" />
+    ///     from the memoised local outline.
+    /// </summary>
+    public static void WorldEdgesInto(List<(Vec3 A, Vec3 B)> into,
+        PhysicsShapeType shape, Vec3 halfExtents, Vec3 position, Quat rotation)
+    {
+        if (!LocalCache.TryGetValue(key: (shape, halfExtents), value: out var local))
+        {
+            if (LocalCache.Count >= 256) LocalCache.Clear();
+            LocalCache[(shape, halfExtents)] =
+                local = LocalEdges(shape: shape, halfExtents: halfExtents);
+        }
+
+        into.Clear();
+        foreach (var (a, b) in local)
+            into.Add((position + rotation.RotateVec(a), position + rotation.RotateVec(b)));
     }
 
     private static void AddBox(List<(Vec3, Vec3)> edges, Vec3 h)

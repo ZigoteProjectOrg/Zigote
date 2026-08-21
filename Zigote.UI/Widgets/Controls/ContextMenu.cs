@@ -128,10 +128,9 @@ public sealed class ContextMenu : Widget
     // Submenus are painted and routed by hand (they are not laid out as children), but they must
     // still be attached: an unmounted widget's ticker is muted, so the entrance animation never
     // advanced and the submenu painted at alpha 0 — open but invisible.
-    public override IEnumerable<Widget> GetChildren()
-    {
-        if (_submenu is not null) yield return _submenu;
-    }
+    // ChildOrEmpty, not an iterator: a yield-return enumerable misses Attach/Detach's ICollection
+    // fast path, costing an enumerator + ToArray per lifecycle cascade.
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(_submenu);
 
     /// <summary>Walk up to the root menu (the only one actually pushed as an overlay).</summary>
     private ContextMenu Root()

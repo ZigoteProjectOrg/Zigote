@@ -652,11 +652,16 @@ public sealed unsafe class ZigoteEngine : IDisposable
         _eventPool.Reset();
         EnsureReady();
         uint count = PollEventsNative();
-        IntPtr textBase = PollTextBase();
+        // Fetched lazily: the text-blob base pointer is only meaningful for text/drop events, and
+        // an unconditional fetch was a second P/Invoke on every frame of every app.
+        IntPtr textBase = IntPtr.Zero;
 
         for (uint i = 0; i < count; i++)
         {
             ref readonly var raw = ref _eventBuf[i];
+            if (textBase == IntPtr.Zero && (EventKind)raw.Kind is EventKind.TextInput
+                    or EventKind.TextEditing or EventKind.DropText or EventKind.DropFile)
+                textBase = PollTextBase();
 
             // A secondary window's resize must not clobber the main window's cached size. A display
             // change refreshes the same cache: moving to another monitor can change the HiDPI scale
@@ -763,6 +768,12 @@ public sealed unsafe class ZigoteEngine : IDisposable
     ///     After returning, call <see cref="PollEvents" /> to drain the queue.
     ///     Lets the frame loop sleep instead of spinning when the UI is idle.
     /// </summary>
+    /// <summary>
+    ///     Wake a thread blocked in <see cref="WaitEvents" /> immediately. Thread-safe; callable
+    ///     from worker threads (an async completion posting to the UI thread).
+    /// </summary>
+    public void WakeEventLoop() => NativeEngine.WakeEventLoop(); // stateless — no handle
+
     public void WaitEvents(int timeoutMs = 16)
     {
         EnsureReady();
@@ -1005,6 +1016,96 @@ public sealed unsafe class ZigoteEngine : IDisposable
                 pixelsLen: (nuint)rgba.Length,
                 width: width,
                 height: height
+            );
+        }
+    }
+
+    /// <summary>
+    ///     <see cref="LoadTextureFromRgba" /> for a producer that owns its own pixel layout:
+    ///     <paramref name="stride" /> is its bytes per row (0 = tightly packed) and
+    ///     <paramref name="bgra" /> says the bytes are B,G,R,A rather than R,G,B,A.
+    ///     <para>
+    ///         Both are free. The stride goes straight into the GPU copy, and the channel order into
+    ///         the texture's format, where the sampler resolves it — so a source that is already BGRA
+    ///         with padded rows (every Cairo/GTK surface, most video decoders) uploads with no
+    ///         conversion pass and no repacking. Update it with <see cref="UpdateTextureRows" />,
+    ///         which must be handed the same stride.
+    ///     </para>
+    /// </summary>
+    public static ulong LoadTextureFromPixels(ReadOnlySpan<byte> pixels, uint width, uint height,
+        uint stride, bool bgra)
+    {
+        var engine = RequireInstance();
+        fixed (byte* ptr = pixels)
+        {
+            return NativeEngine.LoadTextureFromPixels(
+                handle: engine._handle,
+                pixelsPtr: ptr,
+                pixelsLen: (nuint)pixels.Length,
+                width: width,
+                height: height,
+                stride: stride,
+                bgra: bgra
+            );
+        }
+    }
+
+    /// <summary>
+    ///     <see cref="UpdateTextureRgbaRows" /> for a texture created by
+    ///     <see cref="LoadTextureFromPixels" />: same rows-only semantics, with the producer's row
+    ///     stride. The stride must match the one the handle was created with — a different layout
+    ///     would land the copy at the wrong offsets, so it is refused rather than guessed at.
+    /// </summary>
+    public static bool UpdateTextureRows(ulong textureHandle, ReadOnlySpan<byte> pixels, uint width,
+        uint height, uint stride, uint y0, uint y1)
+    {
+        var engine = Instance;
+        if (engine is null || textureHandle == 0) return false;
+
+        fixed (byte* ptr = pixels)
+        {
+            return NativeEngine.UpdateTextureRows(
+                handle: engine._handle,
+                imageHandle: textureHandle,
+                pixelsPtr: ptr,
+                pixelsLen: (nuint)pixels.Length,
+                width: width,
+                height: height,
+                stride: stride,
+                y0: y0,
+                y1: y1
+            );
+        }
+    }
+
+    /// <summary>
+    ///     <see cref="UpdateTextureRgba" /> for a caller that knows what changed: <paramref name="rgba" />
+    ///     is still the whole frame, but only rows <c>[y0, y1)</c> are copied and only those rows are
+    ///     written to the GPU texture. An embedded web page blinking a caret then costs a few kilobytes
+    ///     of upload per frame instead of the whole surface.
+    ///     <para>
+    ///         The engine keeps its CPU copy alive between partial updates, so the buffer handed over
+    ///         must have its untouched rows still valid — which is the natural shape for anything that
+    ///         maintains a surface. A full-frame <see cref="UpdateTextureRgba" /> drops the copy again.
+    ///     </para>
+    /// </summary>
+    public static bool UpdateTextureRgbaRows(ulong textureHandle, ReadOnlySpan<byte> rgba, uint width,
+        uint height, uint y0, uint y1)
+    {
+        var engine = Instance;
+        if (engine is null || textureHandle == 0) return false;
+
+        fixed (byte* ptr = rgba)
+        {
+            return NativeEngine.UpdateTextureRgbaRows(
+                handle: engine._handle,
+                imageHandle: textureHandle,
+                pixelsPtr: ptr,
+                pixelsLen: (nuint)rgba.Length,
+                width: width,
+                height: height,
+                y0: y0,
+                y1: y1
             );
         }
     }
@@ -2239,6 +2340,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public void BeginFrame(float deltaTime, uint sceneW = 0, uint sceneH = 0)
     {
         EnsureReady();
+        TextLayout.DrainPendingReleases(_handle); // no-op unless a layout leaked (see TextLayout)
         NativeEngine.BeginFrame(
             handle: _handle,
             sceneW: sceneW,

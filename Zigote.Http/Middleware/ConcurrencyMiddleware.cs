@@ -38,7 +38,13 @@ public static class ConcurrencyMiddleware
                 return await next(spec, ct).ConfigureAwait(false);
             }
 
-            var gate = gates.GetOrAdd(host, _ => new SemaphoreSlim(maxPerHost, maxPerHost));
+            // Static lambda + factory arg: the capturing overload allocates a closure per request
+            // even on the (always) cache-hit path. Same pattern as RetryMiddleware's breakers.
+            var gate = gates.GetOrAdd(
+                key: host,
+                valueFactory: static (_, max) => new SemaphoreSlim(initialCount: max, maxCount: max),
+                factoryArgument: maxPerHost
+            );
             try
             {
                 await gate.WaitAsync(ct).ConfigureAwait(false);

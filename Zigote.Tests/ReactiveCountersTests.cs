@@ -1,6 +1,7 @@
 using Xunit;
 using Zigote.Core;
 using Zigote.Core.State;
+using Zigote.UI.Debug;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 
@@ -139,6 +140,22 @@ public class ReactiveCountersTests
 
     [Fact]
     public void Watch_counts_its_own_rebuilds_for_the_inspector()
+    {
+        // Per-widget counters are opt-in (the inspector enables them when it opens); the gate is
+        // what keeps idle apps from dirtying every widget's cache line for unread data.
+        bool was = WidgetDebug.CountersEnabled;
+        WidgetDebug.CountersEnabled = true;
+        try
+        {
+            RunWatchCounterScenario();
+        }
+        finally
+        {
+            WidgetDebug.CountersEnabled = was;
+        }
+    }
+
+    private static void RunWatchCounterScenario()
     {
         var count = new Signal<int>(0);
         var watch = new Watch(() => new Label($"{count.Value}"));

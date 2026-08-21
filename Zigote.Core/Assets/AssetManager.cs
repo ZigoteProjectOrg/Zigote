@@ -21,6 +21,13 @@ namespace Zigote.Core.Assets;
 /// </summary>
 public sealed class AssetManager
 {
+    // Bounds concurrent LoadOffThread work: loads are blocking disk I/O + decode, and an ungated
+    // Task.Run per asset turns a 500-asset scene open into 500 queued pool items that starve every
+    // other pool user (image fetches, Background workers). Static: it is the disk being protected,
+    // not one manager. ponytail: one global gate; per-volume gates if NVMe vs network mounts matter.
+    private static readonly SemaphoreSlim LoadGate =
+        new(Math.Clamp(value: Environment.ProcessorCount / 2, min: 2, max: 8));
+
     private readonly ConcurrentQueue<Completion> _completed = new();
 
     private readonly Dictionary<(AssetId, Type), AssetEntry> _entries = new();
@@ -220,8 +227,9 @@ public sealed class AssetManager
 
         entry.State = AssetLoadState.Loading;
         Interlocked.Increment(ref _inFlight);
-        Task.Run(() =>
+        Task.Run(async () =>
             {
+                await LoadGate.WaitAsync().ConfigureAwait(false);
                 try
                 {
                     object payload = entry.LoadOffThread(path);
@@ -235,6 +243,7 @@ public sealed class AssetManager
                 }
                 finally
                 {
+                    LoadGate.Release();
                     Interlocked.Decrement(ref _inFlight);
                 }
             }

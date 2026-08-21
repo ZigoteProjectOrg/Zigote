@@ -29,6 +29,9 @@ internal sealed class FileBrowserPreview : Widget
     };
 
     private readonly FileBrowserEntry _entry;
+
+    // "W × H" caption painted every repaint frame; allocate only when the texture size changes.
+    private readonly CachedText _dimText = new(24);
     private ulong _handle;
     private Size _size;
     private uint _texH;
@@ -153,7 +156,7 @@ internal sealed class FileBrowserPreview : Widget
         if (_texW > 0)
         {
             paint.AddText(
-                text: $"{_texW} × {_texH}",
+                text: _dimText.Update($"{_texW} × {_texH}"),
                 baselineX: Bounds.X + pad,
                 baselineY: textY,
                 color: _theme.TextSecondary,

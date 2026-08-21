@@ -10,6 +10,8 @@ namespace Zigote.UI.Material;
 /// </summary>
 public sealed class Badge(Widget? child = null, int count = 0) : Widget
 {
+    // Paint runs per repaint frame; only allocate the count string when the count changed.
+    private readonly CachedText _countText = new(8);
     private Size _childSize;
     private ThemeData _theme = ThemeData.Dark;
 
@@ -42,7 +44,7 @@ public sealed class Badge(Widget? child = null, int count = 0) : Widget
         Child?.Paint(paint);
         if (Count <= 0) return;
 
-        string text = Count > 99 ? "99+" : Count.ToString();
+        string text = Count > 99 ? "99+" : _countText.Update($"{Count}");
         float fs = _theme.FontSizeCaption;
         var textSize = TextMeasure.Measure(text: text, fontSize: fs, weight: FontWeight.Bold);
 

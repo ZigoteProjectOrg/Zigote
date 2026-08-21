@@ -116,7 +116,7 @@ public sealed class Watch : Widget
         if (previous is not null)
         {
             Rebuilds++; // UI thread only, like the rest of Apply
-            RebuildCount++; // a Watch swap is this widget's rebuild — the inspector's R: column
+            if (Debug.WidgetDebug.CountersEnabled) RebuildCount++; // the inspector's R: column
         }
 
         _child = next;

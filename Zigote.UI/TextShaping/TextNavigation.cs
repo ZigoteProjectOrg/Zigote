@@ -9,6 +9,25 @@ namespace Zigote.UI.TextShaping;
 /// </summary>
 public static class TextNavigation
 {
+    // One-entry memo of the last string's grapheme starts, keyed by reference. Every helper below
+    // needed the full ParseCombiningCharacters array (an O(n) parse + fresh int[]), and callers hit
+    // them per caret paint per FRAME (TextField.CaretX from Paint under the caret-blink repaint)
+    // and per arrow key over whole documents — reference-equality covers ~100% of real calls
+    // because editors retain their string until it is edited. [ThreadStatic] like PaintList's
+    // UTF-8 cache: UI-thread-only in production, isolated under parallel test runners.
+    [ThreadStatic] private static string? _startsText;
+    [ThreadStatic] private static int[]? _startsCache;
+
+    private static int[] StartsOf(string text)
+    {
+        if (ReferenceEquals(objA: _startsText, objB: text) && _startsCache is { } cached)
+            return cached;
+        int[] starts = StringInfo.ParseCombiningCharacters(text);
+        _startsText = text;
+        _startsCache = starts;
+        return starts;
+    }
+
     /// <summary>
     ///     Return the nearest valid extended-grapheme boundary at or before <paramref name="index" />.
     ///     Editor positions remain UTF-16 offsets for .NET slicing, but are never allowed inside a
@@ -18,7 +37,7 @@ public static class TextNavigation
     {
         index = Math.Clamp(value: index, min: 0, max: text.Length);
         if (index == 0 || index == text.Length) return index;
-        int[] starts = StringInfo.ParseCombiningCharacters(text);
+        int[] starts = StartsOf(text);
         int found = Array.BinarySearch(array: starts, value: index);
         return found >= 0 ? starts[found] : starts[Math.Max(val1: 0, val2: ~found - 1)];
     }
@@ -28,7 +47,7 @@ public static class TextNavigation
     {
         index = GraphemeBoundaryAtOrBefore(text: text, index: index);
         if (index <= 0) return 0;
-        int[] starts = StringInfo.ParseCombiningCharacters(text);
+        int[] starts = StartsOf(text);
         int found = Array.BinarySearch(array: starts, value: index);
         // found >= 0: index is itself a grapheme start → take the one before it.
         // found <  0: index is between starts (e.g. == text.Length) → ~found is the count of starts
@@ -42,7 +61,7 @@ public static class TextNavigation
     {
         index = GraphemeBoundaryAtOrBefore(text: text, index: index);
         if (index >= text.Length) return text.Length;
-        int[] starts = StringInfo.ParseCombiningCharacters(text);
+        int[] starts = StartsOf(text);
         int found = Array.BinarySearch(array: starts, value: index);
         int next = found >= 0 ? found + 1 : ~found;
         return next < starts.Length ? starts[next] : text.Length;
@@ -51,7 +70,7 @@ public static class TextNavigation
     /// <summary>Enumerate all valid caret offsets, including the trailing text boundary.</summary>
     public static int[] GraphemeBoundaries(string text)
     {
-        int[] starts = StringInfo.ParseCombiningCharacters(text);
+        int[] starts = StartsOf(text);
         int[] result = new int[starts.Length + 1];
         starts.CopyTo(array: result, index: 0);
         result[^1] = text.Length;

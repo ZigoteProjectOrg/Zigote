@@ -385,6 +385,67 @@ public class AssetStreamingTests
         public required string FromPath;
     }
 
+    // ── load-gate fan-out ───────────────────────────────────────────────────────
+
+    [Fact]
+    public void BeginLoad_BoundsConcurrentLoads_AllStillComplete()
+    {
+        // The gate caps blocking LoadOffThread work at Clamp(ProcessorCount/2, 2, 8) — a burst of
+        // Acquires must not become one thread-pool item per asset all doing disk I/O at once.
+        int cap = Math.Clamp(value: Environment.ProcessorCount / 2, min: 2, max: 8);
+        var loader = new ConcurrencyProbeLoader();
+        var m = new AssetManager(id => $"/content/{id}.bin");
+
+        var handles = new AssetHandle<FakeAsset>[cap * 4];
+        for (int i = 0; i < handles.Length; i++)
+            handles[i] = m.Acquire(id: AssetId.New(), loader: loader);
+
+        PumpUntil<FakeAsset>(m: m, done: () => Array.TrueForAll(
+            array: handles,
+            match: h => h.IsLoaded
+        ));
+
+        Assert.All(collection: handles, action: h => Assert.True(h.IsLoaded));
+        Assert.True(
+            condition: loader.MaxConcurrent <= cap,
+            userMessage: $"observed {loader.MaxConcurrent} concurrent loads, cap is {cap}"
+        );
+    }
+
+    private sealed class ConcurrencyProbeLoader : IAssetLoader<FakeAsset>
+    {
+        private int _concurrent;
+        public int MaxConcurrent;
+
+        public object LoadOffThread(AssetId id, string path)
+        {
+            int now = Interlocked.Increment(ref _concurrent);
+            InterlockedMax(location: ref MaxConcurrent, value: now);
+            Thread.Sleep(10); // stand-in for blocking disk I/O so the burst overlaps
+            Interlocked.Decrement(ref _concurrent);
+            return path;
+        }
+
+        public FakeAsset Apply(AssetId id, object payload) =>
+            new() { FromPath = (string)payload };
+
+        public void Unload(AssetId id, FakeAsset value) { }
+
+        private static void InterlockedMax(ref int location, int value)
+        {
+            int seen;
+            do
+            {
+                seen = Volatile.Read(ref location);
+                if (value <= seen) return;
+            } while (Interlocked.CompareExchange(
+                         location1: ref location,
+                         value: value,
+                         comparand: seen
+                     ) != seen);
+        }
+    }
+
     private sealed class FakeLoader : IAssetLoader<FakeAsset>
     {
         public readonly ManualResetEventSlim Gate = new(true); // open = loads run immediately

@@ -1,3 +1,4 @@
+using Zigote.Core.Animation;
 using Zigote.Http;
 
 namespace AdwaitaGallery.Pages;
@@ -49,6 +50,15 @@ public sealed class ImageGridPage : ComposedWidget
     private readonly HashSet<string> _urls = new(StringComparer.Ordinal);
     private int _page;
 
+    // Bench hook (ZIGOTE_IMAGEGRID_BENCH=1): 10 s load settle → 30 s steady scroll through the
+    // grid's real OnScroll path → idle. Phase marks on stderr let an external sampler align its
+    // measurement windows.
+    private static readonly bool Bench =
+        Environment.GetEnvironmentVariable("ZIGOTE_IMAGEGRID_BENCH") == "1";
+    private Ticker? _bench;
+    private float _benchT;
+    private int _benchPhase;
+
     // Read in Build (registering the page as a theme dependent, so a theme flip rebuilds it and
     // the Watches below), then used by the Footer/Status builders — which run under a Watch,
     // where BuildContext.Current is not a reliable place to look the provider up.
@@ -71,6 +81,33 @@ public sealed class ImageGridPage : ComposedWidget
     protected override void OnMount()
     {
         if (_items.Count == 0) RequestNextPage();
+        if (Bench && _bench is null)
+        {
+            BenchMark("load");
+            _bench = CreateTicker(BenchTick);
+            _bench.Start();
+        }
+    }
+
+    protected override void OnUnmount() => _bench = null;
+
+    private static void BenchMark(string phase) =>
+        Console.Error.WriteLine($"BENCH phase={phase} t={DateTimeOffset.Now.ToUnixTimeMilliseconds()}");
+
+    private void BenchTick(float dt)
+    {
+        _benchT += dt;
+        int phase = _benchT switch { < 10f => 0, < 40f => 1, _ => 2 };
+        if (phase != _benchPhase)
+        {
+            _benchPhase = phase;
+            BenchMark(phase == 1 ? "scroll" : "idle");
+            // An active ticker that marks nothing forces a full repaint every frame
+            // (App.Frame's conservative MarkAll) — the idle phase must not carry that cost.
+            if (phase == 2) _bench?.Stop();
+        }
+        // ~600 px/s: a reader working down a feed, slow enough that tiles get to load.
+        if (phase == 1) _grid.OnScroll(dx: 0f, dy: -0.25f);
     }
 
     protected override Widget Build(BuildContext context)

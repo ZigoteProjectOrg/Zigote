@@ -105,4 +105,30 @@ public class HotPathAllocationTests
         AllocGuard.AssertZeroAlloc(() => Frame(root: root, paint: paint, c: c));
         Assert.True(paint.Count > 0);
     }
+
+    // The span overloads exist so RichText's word wrap can measure slices without a substring per
+    // word: a cache hit must agree with the string path AND allocate nothing.
+    [Fact]
+    public void TextMeasure_SpanLookup_MatchesStringPath_And_HitsAreZeroAlloc()
+    {
+        const string text = "some wrapped word";
+        var viaString = Zigote.UI.TextShaping.TextMeasure.Measure(text: text, fontSize: 14f);
+        var viaSpan = Zigote.UI.TextShaping.TextMeasure.Measure(text: text.AsSpan(), fontSize: 14f);
+        Assert.Equal(expected: viaString, actual: viaSpan);
+
+        // Slices of a larger string (the RichText shape) hit the same cache entries.
+        string paragraph = "xx " + text + " yy";
+        var viaSlice = Zigote.UI.TextShaping.TextMeasure.Measure(
+            text: paragraph.AsSpan(start: 3, length: text.Length),
+            fontSize: 14f
+        );
+        Assert.Equal(expected: viaString, actual: viaSlice);
+
+        AllocGuard.AssertZeroAlloc(() =>
+            _ = Zigote.UI.TextShaping.TextMeasure.Width(
+                text: paragraph.AsSpan(start: 3, length: text.Length),
+                fontSize: 14f
+            )
+        );
+    }
 }

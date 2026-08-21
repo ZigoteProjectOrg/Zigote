@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Serilog;
+using Zigote.Core;
 using Zigote.Core.Engine;
 using Zigote.UI.Widgets;
 
@@ -67,13 +68,20 @@ internal interface ITextureWebViewBackend
 
     // Input, in widget-local physical pixels (logical × scale — the page surface's space).
 
-    void PointerDown(float x, float y);
+    /// <summary>button: 1 left, 2 middle, 3 right — the page's own context menu and middle-click
+    ///     behaviours depend on being told which.</summary>
+    void PointerDown(float x, float y, int button);
 
-    void PointerUp(float x, float y);
+    void PointerUp(float x, float y, int button);
 
     void PointerMove(float x, float y);
 
-    void Scroll(float dx, float dy, float x, float y);
+    /// <summary>The pointer entered or left the widget: hover states in the page hang on it.</summary>
+    void PointerCrossing(bool entered, float x, float y);
+
+    /// <summary>Deltas in wheel notches; fractional means a precise device (trackpad), which the
+    ///     backend treats differently. <paramref name="mods" /> carries ctrl (zoom) and shift.</summary>
+    void Scroll(float dx, float dy, float x, float y, Zigote.Core.Events.Modifiers mods);
 
     void Key(char ch, uint scancode, bool down, Zigote.Core.Events.Modifiers mods);
 
@@ -86,6 +94,10 @@ internal interface ITextureWebViewBackend
     /// <summary>Whether the surface widget is mounted. False (a background tab) keeps the page
     ///     running but stops converting and uploading frames nobody is looking at.</summary>
     void SetDisplayed(bool displayed);
+
+    /// <summary>The cursor the page is asking for under the pointer (UI thread). A browser without
+    ///     this shows an arrow over every link and every text field.</summary>
+    event Action<MouseCursor>? CursorChanged;
 }
 
 /// <summary>
@@ -288,6 +300,61 @@ public sealed class WebViewController : IDisposable
     }
 
     /// <summary>
+    ///     Linux/Wayland only, no-op elsewhere, and it must run BEFORE the App exists. Hands the
+    ///     webview its own GTK thread, which is what takes the page's cost off the UI thread
+    ///     entirely — measured at ~7 ms of every frame at 1280×800 and ~11.5 ms at 1080p while
+    ///     scrolling, which is what a stuttering app is made of.
+    ///     <para>
+    ///         The obstacle is that SDL decorates a Wayland window with libdecor, whose default
+    ///         plugin is written in GTK — a second GTK user in the process, on the UI thread, which
+    ///         makes a GTK thread of our own unsafe. This points libdecor at its Cairo plugin
+    ///         instead (same decorations, no GTK), leaving GTK to us. Without that plugin
+    ///         installed nothing changes and the webview stays on the UI thread.
+    ///     </para>
+    /// </summary>
+    public static void EnsureThreadedWebView()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        if (Environment.GetEnvironmentVariable("WAYLAND_DISPLAY") is not { Length: > 0 }) return;
+        if (Environment.GetEnvironmentVariable("LIBDECOR_PLUGIN_DIR") is { Length: > 0 }) return;
+
+        string? cairo = new[]
+            {
+                "/usr/lib64/libdecor", "/usr/lib/libdecor",
+                "/usr/lib/x86_64-linux-gnu/libdecor", "/usr/local/lib/libdecor",
+            }
+            .Where(Directory.Exists)
+            .SelectMany(static d => Directory.EnumerateDirectories(d, "plugins-*"))
+            .Select(static d => Path.Combine(d, "libdecor-cairo.so"))
+            .FirstOrDefault(File.Exists);
+        if (cairo is null)
+        {
+            Log.Debug("libdecor's Cairo plugin is not installed — the webview stays on the UI thread");
+            return;
+        }
+
+        // libdecor picks its plugin out of one directory, so the way to choose one is to offer a
+        // directory holding only it.
+        string dir = Path.Combine(Path.GetTempPath(), "zigote-webview-decor");
+        try
+        {
+            Directory.CreateDirectory(dir);
+            string link = Path.Combine(dir, "libdecor-cairo.so");
+            // Delete-then-link unconditionally: a link left by an older run can point at a plugin
+            // a distro upgrade has moved, and File.Delete is a no-op on a path that is not there.
+            File.Delete(link);
+            File.CreateSymbolicLink(link, cairo);
+        }
+        catch (IOException ex)
+        {
+            Log.Debug(ex, "could not stage libdecor's Cairo plugin — the webview stays on the UI thread");
+            return;
+        }
+
+        SetNativeEnv("LIBDECOR_PLUGIN_DIR", dir);
+    }
+
+    /// <summary>
     ///     Linux only, no-op elsewhere — and OPTIONAL: native Wayland already gets a webview via
     ///     the offscreen texture backend. Call this before constructing the App only to prefer
     ///     the X11 overlay backend instead (a real native child window, at the cost of running
@@ -300,8 +367,11 @@ public sealed class WebViewController : IDisposable
         SetNativeEnv("SDL_VIDEO_DRIVER", "x11");
         SetNativeEnv("GDK_BACKEND", "x11");
         // WebKitGTK's DMABUF renderer is a known blank-page under XWayland (rendering happens,
-        // nothing reaches the X pixmap). Shared-memory rendering is the reliable path here.
-        SetNativeEnv("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        // nothing reaches the X pixmap), so a Wayland session drops to shared-memory transport —
+        // the page still composites on the GPU, only the handoff to the UI process is a copy.
+        // A native X11 session has no such bug and keeps the zero-copy dmabuf path.
+        if (Environment.GetEnvironmentVariable("WAYLAND_DISPLAY") is { Length: > 0 })
+            SetNativeEnv("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
     }
 
     /// <summary>

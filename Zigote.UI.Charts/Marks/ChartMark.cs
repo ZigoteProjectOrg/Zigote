@@ -131,6 +131,9 @@ public abstract class SeriesMark<T> : ChartMark
 {
     private readonly HashSet<string> _seenSeries = [];
     private Dictionary<string, List<ResolvedPoint>>? _groups;
+
+    // Scratch for pruning stale series keys in ResolveData.
+    private List<string>? _staleGroups;
     private Dictionary<(string Series, ChartValue X), double>? _prevValues;
 
     private List<ResolvedPoint>? _resolved;
@@ -208,6 +211,23 @@ public abstract class SeriesMark<T> : ChartMark
         }
 
         if (_seriesOrder.Count == 0) _seriesOrder.Add(string.Empty);
+
+        // Prune series that produced no points this resolve: with churning series names (live
+        // dashboards keyed by request id, log source, …) the cleared-but-retained entries grew the
+        // dictionary without bound. Callers already skip empties, so removal changes nothing.
+        if (_groups.Count > _seenSeries.Count)
+        {
+            _staleGroups ??= [];
+            _staleGroups.Clear();
+            foreach ((string key, var g) in _groups)
+            {
+                if (g.Count == 0)
+                    _staleGroups.Add(key);
+            }
+
+            foreach (string key in _staleGroups) _groups.Remove(key);
+        }
+
         ResolveVersion++;
     }
 

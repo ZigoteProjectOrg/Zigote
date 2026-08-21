@@ -21,6 +21,9 @@ public class ListView : Widget
     private readonly List<int> _evicted = [];
     private readonly List<Widget> _items = [];
     private readonly SmoothScroller _sy;
+
+    // Scratch for GetVisibleChildren — see the comment there.
+    private readonly List<Widget> _visibleScratch = [];
     private readonly Scrollbar _vbar = new();
 
     // Builder mode: rows are materialized on demand into _built and dropped once they leave the
@@ -246,6 +249,25 @@ public class ListView : Widget
         // inside them ever starts, and anything that needs the App — a Draggable, which refuses to
         // begin a drag without an Owner — silently does nothing.
         if (Owner is not null) item.Attach(owner: Owner, parent: this);
+
+        // Append to a valid variable-height table instead of invalidating it: a growing feed would
+        // otherwise re-run HeightOf for every existing row (often a text measure) on each append.
+        if (Variable && !_offsetsDirty && _offsets.Length >= _items.Count)
+        {
+            int n = _items.Count;
+            if (_offsets.Length < n + 1)
+            {
+                Array.Resize(
+                    array: ref _offsets,
+                    newSize: Math.Max(val1: n + 1, val2: _offsets.Length * 2)
+                );
+            }
+
+            _offsets[n] = _offsets[n - 1] + MathF.Max(x: 0f, y: _heightOf!(n - 1));
+            MarkNeedsLayout();
+            return;
+        }
+
         InvalidateExtents();
     }
 
@@ -327,8 +349,10 @@ public class ListView : Widget
             return;
         }
 
+        // ponytail: full O(count) HeightOf sweep on invalidation (resize, SetItems) — an
+        // estimate-and-correct extent model if million-row variable-height lists ever matter.
         int n = Count;
-        if (_offsets.Length != n + 1) _offsets = new float[n + 1];
+        if (_offsets.Length < n + 1) _offsets = new float[n + 1];
         float acc = 0f;
         for (int i = 0; i < n; i++)
         {
@@ -602,8 +626,12 @@ public class ListView : Widget
     /// </summary>
     public override IEnumerable<Widget> GetVisibleChildren()
     {
+        // Reused list, not an iterator: focus traversal and the semantics walk enumerate this, and
+        // a yield-return state machine is a fresh allocation per call. Callers never retain it.
+        _visibleScratch.Clear();
         (int first, int last) = VisibleRange();
         for (int i = first; i <= last && i < Count; i++)
-            yield return ItemAt(i);
+            _visibleScratch.Add(ItemAt(i));
+        return _visibleScratch;
     }
 }

@@ -51,6 +51,21 @@ public sealed class SpatialHash(float cellSize = 4f)
         int minY = CellOf(center.Y - radius), maxY = CellOf(center.Y + radius);
         int minZ = CellOf(center.Z - radius), maxZ = CellOf(center.Z + radius);
 
+        // A big radius over a small world probes more empty cells than there are entities —
+        // World.Nearest(center, 100f) at the 4 m default is ~132k dictionary lookups. Fall back to
+        // scanning the entities directly, same trick as CollisionWorld2D.GatherCandidates.
+        long cellCount = (long)(maxX - minX + 1) * (maxY - minY + 1) * (maxZ - minZ + 1);
+        if (cellCount > _positions.Count)
+        {
+            foreach ((int id, var pos) in _positions)
+            {
+                if ((pos - center).LengthSq() <= r2)
+                    results.Add(id);
+            }
+
+            return results.Count;
+        }
+
         for (int cx = minX; cx <= maxX; cx++)
         for (int cy = minY; cy <= maxY; cy++)
         for (int cz = minZ; cz <= maxZ; cz++)

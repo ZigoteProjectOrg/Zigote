@@ -13,9 +13,11 @@ public static class Program
         AppLog.CaptureFailures();
         try
         {
-            // Nothing to configure: native Wayland renders the page into an engine texture, X11
-            // gets a true overlay. (To force the overlay on a Wayland desktop, call
-            // WebViewController.EnsureEmbeddableVideoDriver() here, before the App exists.)
+            // The one thing worth configuring, and only before the App exists: give the webview
+            // its own GTK thread, so a scrolling page costs the UI thread nothing. (To force the
+            // X11 overlay instead — a GPU-composited page, at the cost of running the whole app
+            // through XWayland — call EnsureEmbeddableVideoDriver() here as well.)
+            WebView.WebViewController.EnsureThreadedWebView();
             new BrowserApp().Run();
         }
         finally

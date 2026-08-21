@@ -58,6 +58,7 @@ internal sealed class WebTextureSurface : Widget
     private Size _size;
     private (float W, float H, float Scale) _pushed;
     private Offset _lastPointer;
+    private MouseCursor? _cursor;
 
     public WebTextureSurface(ITextureWebViewBackend backend) => _backend = backend;
 
@@ -68,6 +69,7 @@ internal sealed class WebTextureSurface : Widget
     protected override void OnMount()
     {
         _backend.FrameArrived += MarkNeedsPaint;
+        _backend.CursorChanged += OnPageCursor;
         _backend.SetDisplayed(true);
     }
 
@@ -79,6 +81,7 @@ internal sealed class WebTextureSurface : Widget
     protected override void OnUnmount()
     {
         _backend.FrameArrived -= MarkNeedsPaint;
+        _backend.CursorChanged -= OnPageCursor;
         _backend.SetDisplayed(false);
     }
 
@@ -125,13 +128,26 @@ internal sealed class WebTextureSurface : Widget
     {
         _lastPointer = point;
         var (x, y) = Local(point);
-        _backend.PointerDown(x, y);
+        _backend.PointerDown(x, y, button: 1);
     }
 
     public override void OnPointerUp(Offset point)
     {
         var (x, y) = Local(point);
-        _backend.PointerUp(x, y);
+        _backend.PointerUp(x, y, button: 1);
+    }
+
+    /// <summary>
+    ///     Right-click belongs to the page: it is how a browser offers "open in new tab", and how a
+    ///     web app offers its own menu. The press and the release both go, because a page that
+    ///     builds its menu on mouseup (or calls preventDefault on mousedown) needs the pair.
+    /// </summary>
+    public override void OnRightClick(Offset point)
+    {
+        _lastPointer = point;
+        var (x, y) = Local(point);
+        _backend.PointerDown(x, y, button: 3);
+        _backend.PointerUp(x, y, button: 3);
     }
 
     public override void OnPointerMove(Offset point)
@@ -141,11 +157,39 @@ internal sealed class WebTextureSurface : Widget
         _backend.PointerMove(x, y);
     }
 
+    public override void OnPointerEnter()
+    {
+        var (x, y) = Local(_lastPointer);
+        _backend.PointerCrossing(entered: true, x, y);
+    }
+
+    /// <summary>Leaving resets the page's hover state — and the cursor, which the page no longer
+    ///     owns once the pointer is somewhere else.</summary>
+    public override void OnPointerExit()
+    {
+        var (x, y) = Local(_lastPointer);
+        _backend.PointerCrossing(entered: false, x, y);
+        _cursor = null;
+    }
+
     public override void OnScroll(float dx, float dy)
     {
         var (x, y) = Local(_lastPointer);
-        _backend.Scroll(dx: dx, dy: dy, x: x, y: y);
+        _backend.Scroll(dx: dx, dy: dy, x: x, y: y,
+            mods: Zigote.UI.Host.App.Active?.CurrentModifiers ?? Modifiers.None);
     }
+
+    /// <summary>Arrow keys, Home/End and PageUp/PageDown scroll the page instead of moving focus
+    ///     around the app — the same deal every scrollable widget makes.
+    ///     <para>
+    ///         Tab and Escape are deliberately NOT taken (that would need <c>IKeyboardTrap</c>, and
+    ///         a webview that swallows Tab needs an agreed way back out of it) — so form-field
+    ///         traversal inside a page still ends at the page's edge.
+    ///     </para>
+    /// </summary>
+    public override bool HandlesDirectionalKeys => true;
+
+    public override MouseCursor? GetCursor(Offset point) => _cursor;
 
     public override void OnKey(char keyChar, uint scancode, bool down, Modifiers mods)
     {
@@ -155,6 +199,14 @@ internal sealed class WebTextureSurface : Widget
     public override void OnTextInput(string text) => _backend.Text(text);
 
     protected override void OnFocusChanged(bool focused) => _backend.SetPageFocus(focused);
+
+    /// <summary>UI thread (posted by the backend): remember what the page asked for and let the
+    ///     app re-query it.</summary>
+    private void OnPageCursor(MouseCursor cursor)
+    {
+        _cursor = cursor;
+        MarkNeedsPaint();
+    }
 
     private (float X, float Y) Local(Offset point)
     {

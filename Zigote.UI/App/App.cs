@@ -97,6 +97,10 @@ public partial class App : IDisposable
 
     private readonly ConcurrentQueue<Action> _posted = new();
 
+    // Lazily-created root Background scope (see the Background property). Nullable so an app that
+    // never touches it pays nothing — the frame loop skips RunFrame and the idle gate skips FrameIdle.
+    private Zigote.Core.Threading.Background? _background;
+
     // Like _posted, but drained at the END of the frame — after event dispatch, layout and paint.
     private readonly ConcurrentQueue<Action>
         _postedAfterFrame = new();
@@ -140,6 +144,10 @@ public partial class App : IDisposable
     // Set when a frame blocks in WaitEvents (idle/hidden); the NEXT frame's dt includes that
     // wait, so its length says nothing about jank. See the capture at the top of FrameCore.
     private bool _idledInWait;
+
+    // True while the UI thread is parked inside Engine.WaitEvents — Post reads it (Volatile) to
+    // decide whether a cross-thread completion should wake the OS wait early.
+    private bool _inWaitEvents;
 
     // Set true when a ResizeEvent arrives mid-frame so Frame() re-layouts before Paint
     private bool _pendingRelayout;
@@ -654,8 +662,20 @@ public partial class App : IDisposable
     /// </summary>
     internal int PaintVersion { get; private set; }
 
+    /// <summary>
+    ///     The app's root <see cref="Zigote.Core.Threading.Background" /> scope — structured
+    ///     background work whose results land on the UI thread. <c>Deliver.WhenIdle</c> results and
+    ///     <c>Slice</c> jobs are drained by the frame loop against a per-frame budget, so a flood of
+    ///     completions fills in over several frames instead of stalling one. Secondary windows share
+    ///     the main app's scope (one UI thread, one drain). Created on first use; child scopes for a
+    ///     screen come from <c>Background.Child</c>.
+    /// </summary>
+    public Zigote.Core.Threading.Background Background =>
+        ParentApp?.Background ?? (_background ??= new Zigote.Core.Threading.Background(Post));
+
     public void Dispose()
     {
+        _background?.Dispose();
         // A secondary window doesn't own the engine — just close its OS window.
         if (ParentApp is not null)
         {
@@ -966,7 +986,12 @@ public partial class App : IDisposable
     {
         ArgumentNullException.ThrowIfNull(action);
         _posted.Enqueue(action);
-        RequestPaint(); // wakes the idle gate; WaitEvents' 16 ms timeout picks it up regardless
+        // No RequestPaint: the idle gate checks _posted.IsEmpty, and the action marks its own
+        // damage — SetTexture calls MarkNeedsLayout, a signal write invalidates its binds.
+        // Marking full-frame damage here defeated partial repaint for every background completion.
+        // If the UI thread is parked in WaitEvents, wake it now instead of riding out the timeout
+        // — an image decode landing mid-idle paints immediately, not one frame-budget later.
+        if (Volatile.Read(ref _inWaitEvents)) Engine.WakeEventLoop();
     }
 
     /// <summary>
@@ -1088,6 +1113,24 @@ public partial class App : IDisposable
                 DebugLog.Error($"App.Post action threw: {ex}");
             }
         }
+    }
+
+    /// <summary>
+    ///     Host idle throttle: block until an OS event arrives, cross-thread work lands
+    ///     (<see cref="Post" /> wakes the wait), or <paramref name="maxMs" /> elapses. For host
+    ///     loops that run at a background cadence — a blind <c>Thread.Sleep</c> there sat on
+    ///     completed background work and on the click refocusing the window for up to the whole
+    ///     interval.
+    /// </summary>
+    public void WaitForWork(int maxMs)
+    {
+        if (maxMs <= 0) return;
+        if (!_posted.IsEmpty || !_crossThreadInvalidations.IsEmpty ||
+            Reactive.HasPendingDeferred || _background is { FrameIdle: false })
+            return;
+        Volatile.Write(ref _inWaitEvents, true);
+        Engine.WaitEvents(maxMs);
+        Volatile.Write(ref _inWaitEvents, false);
     }
 
     public void RequestPaint()
@@ -1244,8 +1287,10 @@ public partial class App : IDisposable
         if (Hidden)
         {
             _idledInWait = true;
+            Volatile.Write(ref _inWaitEvents, true);
             using (Profiler.Scope("WaitEvents"))
                 Engine.WaitEvents(HiddenFrameIntervalMs);
+            Volatile.Write(ref _inWaitEvents, false);
         }
         else if (!_repaint.AnyDirty && !_needsLayout && !ContinuousUpdate &&
                  !ForceContinuousRender &&
@@ -1253,15 +1298,20 @@ public partial class App : IDisposable
                  // A background thread that wrote a signal parked its Deferred effects for the drain
                  // below. Sleeping here would sit on that work until some unrelated event woke us.
                  !Reactive.HasPendingDeferred &&
+                 // Work posted from another thread must not sit behind an OS wait, and a Background
+                 // scope with queued idle results / unfinished slices needs the frame to keep turning.
+                 _posted.IsEmpty && (_background?.FrameIdle ?? true) &&
                  !WantsContinuousFrame() && !HotReload.HasPendingReload &&
                  !AnySecondaryWindowWantsFrame())
         {
             _idledInWait = true;
+            Volatile.Write(ref _inWaitEvents, true);
             using (Profiler.Scope("WaitEvents"))
                 // Time out after one frame budget rather than a hardcoded 16 ms, so the idle
                 // wake-up rate follows the monitor (and any app FPS cap) instead of pinning
                 // everything to ~60 on a 144 Hz panel.
                 Engine.WaitEvents((int)(FrameIntervalTicks * 1000 / Stopwatch.Frequency));
+            Volatile.Write(ref _inWaitEvents, false);
         }
 
         using (Profiler.Scope("Loop.PollEvents")) Engine.PollEventsInto(_events);
@@ -1341,6 +1391,14 @@ public partial class App : IDisposable
         // cache-skip re-measuring the affected subtree.
         DrainCrossThreadInvalidations();
         using (Profiler.Scope("Loop.DrainPosted")) DrainPosted();
+
+        // Deliver Background idle results and advance slices against a per-frame budget, before
+        // layout so anything produced here is laid out and painted on this same frame. This is the
+        // host-side half of Deliver.WhenIdle / Slice — without it they queue forever (previously
+        // only the editor's loop drained its scope).
+        if (_background is { } bg)
+            using (Profiler.Scope("Loop.Background"))
+                bg.RunFrame(TimeSpan.FromMilliseconds(4));
 
         // Bring layout current BEFORE dispatching events so HitTest sees valid Bounds.
         // Layout runs only when structure/size actually changed (MarkNeedsLayout) or the
@@ -1640,11 +1698,10 @@ public partial class App : IDisposable
             }
 
             // The bulk of a continuous editor/game frame: the full 3D scene render (shadow → G-buffer →
-            // SSAO → SSR → bloom → tonemap → TAA → overlay composite) plus the swapchain present. When
-            // these dominate, the cost is the scene, not the open debug panel.
-            using (Profiler.Scope("Render.GPU")) Engine.RenderFrameV2();
-
-            using (Profiler.Scope("Render.Present")) Engine.EndFrame();
+            // SSAO → SSR → bloom → tonemap → TAA → overlay composite) plus the swapchain present.
+            // FrameEnd = render + end-of-frame in one FFI transition (zigote_frame_end delegates to
+            // the same pair the old two calls hit).
+            using (Profiler.Scope("Render.GPU")) Engine.FrameEnd();
 
             // Damage is consumed — clear it so the next frame starts fresh (and only becomes full again
             // if something marks it so). Kept inside the render block so a skipped/early-returned frame

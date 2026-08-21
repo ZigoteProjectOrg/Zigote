@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Frozen;
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Reflection;
@@ -16,11 +17,19 @@ namespace Zigote.UI.Debug;
 /// </summary>
 public static class WidgetDebug
 {
+    /// <summary>
+    ///     Gates the per-widget M/L/P/R counter increments. Off by default: the counters are read
+    ///     only by the inspector, and unconditional increments dirty a cache line on every widget
+    ///     3× per frame for data nobody is looking at. The inspector flips this on when it opens.
+    /// </summary>
+    public static bool CountersEnabled;
+
     /// <summary>Cap on how many elements of a collection are listed / serialized.</summary>
     private const int MaxItems = 200;
 
     /// <summary>Names handled by the fixed header rows or never useful in the dump.</summary>
-    private static readonly HashSet<string> SkipProps = new(StringComparer.Ordinal) {
+    private static readonly FrozenSet<string> SkipProps = FrozenSet.ToFrozenSet(
+        source: new HashSet<string>(StringComparer.Ordinal) {
         "Bounds",
         "Focusable",
         "Focused",
@@ -39,7 +48,9 @@ public static class WidgetDebug
         "NeedsLayout",
         "NeedsPaint",
         "SemanticsId",
-    };
+        },
+        comparer: StringComparer.Ordinal
+    );
 
     // The debug layers walk the whole tree every frame, so the reflection fallback must not
     // re-run GetProperties (a fresh PropertyInfo[] per call) or GetValue value-type props (a box

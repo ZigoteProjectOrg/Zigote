@@ -3,6 +3,7 @@ using System.Text.Json;
 using Zigote.Core.Animation;
 using Xunit;
 using Zigote.Core.Engine;
+using Zigote.Core.Events;
 
 namespace WebView.Tests;
 
@@ -52,8 +53,8 @@ public class OffscreenIntegrationTests
         Assert.True(hasBlue, "no frame ever contained the page background");
 
         // A synthetic click lands in the DOM.
-        backend.PointerDown(200, 150);
-        backend.PointerUp(200, 150);
+        backend.PointerDown(200, 150, button: 1);
+        backend.PointerUp(200, 150, button: 1);
         Assert.True(
             PollUntil(() => Eval(controller, "document.title") == "clicked"),
             "click never reached the page");
@@ -66,10 +67,12 @@ public class OffscreenIntegrationTests
             "page never gained focus");
 
         // A press-drag-release across the headline selects text (motion carries the button mask).
-        backend.PointerDown(5, 15);
-        backend.PointerMove(120, 15);
-        backend.PointerMove(280, 15);
-        backend.PointerUp(280, 15);
+        // Many small moves, the way a pointer actually travels — two jumps of 130 px are a shape
+        // no device produces, and WebKit's selection follows the pointer rather than teleporting
+        // with it.
+        backend.PointerDown(5, 15, button: 1);
+        for (float x = 20; x <= 280; x += 20) backend.PointerMove(x, 15);
+        backend.PointerUp(280, 15, button: 1);
         string? selected = null;
         Assert.True(
             PollUntil(() =>
@@ -81,7 +84,7 @@ public class OffscreenIntegrationTests
         Assert.Contains("select", selected);
 
         // Wheel-down (negative dy in Zigote) scrolls the page DOWN — scrollY grows.
-        backend.Scroll(dx: 0, dy: -3, x: 200, y: 150);
+        backend.Scroll(dx: 0, dy: -3, x: 200, y: 150, mods: Modifiers.None);
         double scrollY = 0;
         Assert.True(
             PollUntil(() =>
@@ -251,7 +254,7 @@ public class OffscreenIntegrationTests
         backend.SetSurfaceSize(logicalWidth: 320, logicalHeight: 200, scale: 1f);
         controller.LoadHtml("<body style='background:#204080;margin:0'>static</body>");
 
-        Assert.True(PollUntil(() => backend.TryCopyFrame(out _, out _, out _, out int v) && v > 0),
+        Assert.True(PollUntil(() => backend.FrameVersion > 0),
             "the page never rendered a frame");
 
         // Let the load fully settle, then watch a second of an untouched page.
@@ -264,24 +267,75 @@ public class OffscreenIntegrationTests
         // A real repaint still gets through.
         Eval(controller, "document.body.style.background = '#ff0000', 1");
         Assert.True(
-            PollUntil(() => backend.TryCopyFrame(out _, out _, out _, out int v) && v > idle),
+            PollUntil(() => backend.FrameVersion > idle),
             "a repainted page produced no new frame");
     }
 
     /// <summary>
-    ///     Damage-driven partial updates are only safe if they are indistinguishable from
-    ///     converting the whole surface. Animate a page for a while — many small damage rects —
-    ///     then reconvert everything and demand the two agree byte for byte. A row-range or
-    ///     stride mistake in the fast path shows up here and nowhere else.
+    ///     Typing puts each character in the page exactly once. Text arrives twice from the widget
+    ///     layer — as a key event and as a text-input event — and synthesizing a keyval from both
+    ///     is how every "a" used to land as "aa"; a chord (ctrl+A) has no text event and must still
+    ///     reach the page as a key.
     /// </summary>
     [Fact]
-    public void PartialUpdates_MatchAFullReconversion_ByteForByte()
+    public void TypingLandsEachCharacterOnceAndChordsStillArrive()
     {
         if (Headless) return;
 
         using var controller = new WebViewController();
         var backend = Attach(controller);
-        // A width whose row is not a multiple of the vector width, to exercise the scalar tail.
+        backend.SetSurfaceSize(logicalWidth: 300, logicalHeight: 120, scale: 1f);
+        controller.LoadHtml(
+            "<body style='margin:0'><input id='i' autofocus style='width:100%'>" +
+            "<script>window.chords = 0;" +
+            "document.addEventListener('keydown', function (e) { if (e.ctrlKey) window.chords++; });" +
+            "</script></body>");
+        Assert.True(PollUntil(() => Eval(controller, "!!document.getElementById('i')") == "true"),
+            "the page never loaded");
+        backend.SetPageFocus(true);
+        Assert.True(PollUntil(() => Eval(controller, "document.hasFocus()") == "true"),
+            "the page never gained focus");
+        Eval(controller, "document.getElementById('i').focus(), 1");
+
+        // How the widget layer delivers one keystroke: the key event, then the text event.
+        foreach (char c in "abc")
+        {
+            backend.Key(ch: c, scancode: 0, down: true, mods: Modifiers.None);
+            backend.Text(c.ToString());
+            backend.Key(ch: c, scancode: 0, down: false, mods: Modifiers.None);
+        }
+
+        string? typed = null;
+        Assert.True(
+            PollUntil(() =>
+            {
+                typed = Eval(controller, "document.getElementById('i').value");
+                return typed == "abc";
+            }),
+            $"typing 'abc' put '{typed}' in the field");
+
+        // A chord carries no text event, so the key event is the only chance the page gets.
+        backend.Key(ch: 'a', scancode: 0, down: true, mods: Modifiers.Ctrl);
+        backend.Key(ch: 'a', scancode: 0, down: false, mods: Modifiers.Ctrl);
+        Assert.True(PollUntil(() => Eval(controller, "window.chords") == "1"),
+            "ctrl+A never reached the page");
+    }
+
+    /// <summary>
+    ///     Damage-driven uploads are only safe if no repainted row is ever left out of one. Animate
+    ///     a page for a while — many small damage rects — then demand that every row whose pixels
+    ///     changed fell inside a band that was handed to the engine, and that the bands stayed
+    ///     narrower than the surface. A row-range mistake shows up here as a stale stripe and
+    ///     nowhere else.
+    /// </summary>
+    [Fact]
+    public void EveryRepaintedRowIsInsideARowBandThatWasUploaded()
+    {
+        if (Headless) return;
+
+        using var controller = new WebViewController();
+        var backend = Attach(controller);
+        // A width whose row is not a multiple of the vector width, and a stride Cairo will pad.
         backend.SetSurfaceSize(logicalWidth: 331, logicalHeight: 207, scale: 1.5f);
         controller.LoadHtml(
             """
@@ -298,36 +352,63 @@ public class OffscreenIntegrationTests
             </body>
             """);
 
-        Assert.True(PollUntil(() => backend.TryCopyFrame(out _, out _, out _, out int v) && v > 3),
-            "the animation never produced frames");
+        Assert.True(PollUntil(() => backend.FrameVersion > 3), "the animation never produced frames");
+
+        // Reset BEFORE the first snapshot, so the recorded union can only ever be a superset of
+        // what changed between the snapshots — the direction that cannot produce a false pass.
+        backend.ResetPumpedRows();
+        Assert.True(backend.TryCopyFrame(out byte[] before, out int w, out int h, out _));
+
         PollUntil(() => false, TimeSpan.FromSeconds(2)); // let a few hundred damage rects go by
 
-        // Freeze the page, settle, then snapshot what the incremental path built...
+        // Freeze and settle, so the surface cannot be ahead of the last upload when it is read.
         Eval(controller, "for (var i = 1; i < 9999; i++) clearInterval(i); 1");
         PollUntil(() => false, TimeSpan.FromSeconds(1));
-        Assert.True(backend.TryCopyFrame(out byte[] incremental, out int w, out int h, out int before));
+        Assert.True(backend.TryCopyFrame(out byte[] after, out int aw, out int ah, out _));
+        var (y0, y1) = backend.PumpedRows;
 
-        // ...and compare it against converting every row from scratch.
+        Assert.Equal((w, h), (aw, ah));
+        for (int y = 0; y < h; y++)
+        {
+            int row = y * w * 4;
+            if (before.AsSpan(row, w * 4).SequenceEqual(after.AsSpan(row, w * 4))) continue;
+            Assert.True(y >= y0 && y < y1,
+                $"row {y} changed but was never uploaded — the uploaded band was [{y0}, {y1}) of {h}");
+        }
+
+        // ...and the bands stayed narrow. Per pump, not unioned: WebKit does repaint the whole
+        // viewport now and then (a relayout, a scrollbar appearing), which is legitimate and would
+        // make any assertion about the union flaky — what must not happen is that being the norm.
+        var (pumps, partial) = backend.PumpCounts;
+        Assert.True(partial > pumps / 2,
+            $"only {partial} of {pumps} uploads were a partial band — damage tracking has degenerated");
+
+        // A forced full redraw is the other half of the contract: everything, on the next pump.
+        backend.ResetPumpedRows();
         backend.ForceFullRedraw();
-        Assert.True(PollUntil(() => backend.TryCopyFrame(out _, out _, out _, out int v) && v > before),
-            "the forced full redraw produced no frame");
-        Assert.True(backend.TryCopyFrame(out byte[] full, out int fw, out int fh, out _));
-
-        Assert.Equal((w, h), (fw, fh));
-        int firstDifference = incremental.AsSpan().CommonPrefixLength(full);
-        Assert.True(firstDifference == full.Length,
-            $"partial updates diverged from a full conversion at byte {firstDifference} " +
-            $"(pixel {firstDifference / 4}, row {firstDifference / 4 / w}) of {full.Length}");
+        Assert.True(PollUntil(() => backend.PumpedRows == (0, h)),
+            $"a forced redraw uploaded {backend.PumpedRows} instead of the whole surface [0, {h})");
     }
 
     /// <summary>
-    ///     The page advances on the ENGINE's frame clock and on nothing else. A backend that keeps
-    ///     a clock of its own (a GLib timeout, a threadpool timer) delivers frames at a phase
-    ///     unrelated to the frame being drawn, which is what scrolling stutter is made of — so
-    ///     "no tick, no frame" is the property to pin, not an implementation detail.
+    ///     Who moves the page forward, which is the whole difference between the two GTK modes:
+    ///     <list type="bullet">
+    ///         <item>
+    ///             <b>Threaded:</b> the page advances on its own thread whether or not the engine
+    ///             is drawing, and the UI thread samples the newest finished frame when it paints.
+    ///             Extra frames are dropped, not queued, so there is no phase to beat against —
+    ///             and the engine's frame budget is untouched, which is the point of the mode.
+    ///         </item>
+    ///         <item>
+    ///             <b>Same-thread:</b> no tick, no frame. There the conversion runs inside the
+    ///             engine's frame, so a clock of its own (a GLib timeout, a threadpool timer)
+    ///             would deliver at a phase unrelated to the frame being drawn — the stutter this
+    ///             mode exists to avoid.
+    ///         </item>
+    ///     </list>
     /// </summary>
     [Fact]
-    public void FramesAdvanceOnlyOnTheFrameClock()
+    public void FramesAdvanceOnTheGtkThreadOrTheFrameClock()
     {
         if (Headless) return;
 
@@ -335,21 +416,25 @@ public class OffscreenIntegrationTests
         var backend = Attach(controller);
         backend.SetSurfaceSize(logicalWidth: 300, logicalHeight: 200, scale: 1f);
         controller.LoadHtml("<body style='background:#204080;margin:0'>clocked</body>");
-        Assert.True(PollUntil(() => backend.TryCopyFrame(out _, out _, out _, out int v) && v > 0),
+        Assert.True(PollUntil(() => backend.FrameVersion > 0),
             "the page never rendered");
 
         // Queue a repaint and then stop ticking entirely. Snapshot AFTER the eval, since
         // evaluating pumps the loop itself.
         Eval(controller, "document.body.style.background = '#20a030', 1");
-        backend.TryCopyFrame(out _, out _, out _, out int ticked);
+        int ticked = backend.FrameVersion;
 
-        Thread.Sleep(500); // NOT ticking — no engine frames, so no page frames either
-        backend.TryCopyFrame(out _, out _, out _, out int unticked);
-        Assert.Equal(ticked, unticked);
+        Thread.Sleep(500); // NOT ticking
+        int unticked = backend.FrameVersion;
+        if (GtkThread.Threaded)
+            Assert.True(unticked > ticked,
+                "the GTK thread must keep the page moving while the engine is idle");
+        else
+            Assert.Equal(ticked, unticked);
 
         // Resume the clock and the page comes with it.
         Eval(controller, "document.body.style.background = '#3050c0', 1");
-        Assert.True(PollUntil(() => backend.TryCopyFrame(out _, out _, out _, out int v) && v > ticked),
+        Assert.True(PollUntil(() => backend.FrameVersion > ticked),
             "the frame clock resumed but the page did not");
     }
 

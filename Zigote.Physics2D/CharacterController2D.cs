@@ -126,10 +126,10 @@ public sealed class CharacterController2D(CollisionWorld2D world, Vec2 halfExten
             // micro-lift back to a clean skin gap instead of killing horizontal motion on a ghost wall.
             float seamLift = float.NegativeInfinity;
             if (startedGrounded && MathF.Abs(n.Y) < cosMax && MathF.Abs(remaining.X) > 1e-6f
-                && world.GetShape(hit.Collider) == ColliderShape2D.Box)
+                && world.TryGetInfo(handle: hit.Collider, info: out var seamInfo)
+                && seamInfo.Shape == ColliderShape2D.Box)
             {
-                float top = world.GetPosition(hit.Collider).Y +
-                            world.GetHalfExtents(hit.Collider).Y;
+                float top = seamInfo.Center.Y + seamInfo.HalfExtents.Y;
                 float bottomAtImpact = Position.Y + (dir.Y * travel) - halfExtents.Y;
                 if (bottomAtImpact >= top - (SkinWidth * 2f))
                 {
@@ -218,11 +218,13 @@ public sealed class CharacterController2D(CollisionWorld2D world, Vec2 halfExten
             for (int i = 0; i < count; i++)
             {
                 var h = _scratch[i];
-                if (world.IsOneWay(h)) continue;
-                var c = world.GetPosition(h);
-                if (world.GetShape(h) == ColliderShape2D.Box)
+                // One lookup for everything the resolve needs (was 4 probes per overlap per pass).
+                if (!world.TryGetInfo(handle: h, info: out var colInfo) || colInfo.OneWayUp)
+                    continue;
+                var c = colInfo.Center;
+                if (colInfo.Shape == ColliderShape2D.Box)
                 {
-                    var ch = world.GetHalfExtents(h);
+                    var ch = colInfo.HalfExtents;
                     float dx = Position.X - c.X;
                     float dy = Position.Y - c.Y;
                     float px = halfExtents.X + ch.X - MathF.Abs(dx);
@@ -235,7 +237,7 @@ public sealed class CharacterController2D(CollisionWorld2D world, Vec2 halfExten
                 }
                 else
                 {
-                    float r = world.GetRadius(h);
+                    float r = colInfo.Radius;
                     var q = new Vec2(
                         x: MathF.Max(
                             x: Position.X - halfExtents.X,

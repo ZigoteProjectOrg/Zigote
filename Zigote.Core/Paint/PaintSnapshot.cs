@@ -82,7 +82,10 @@ public sealed class PaintSnapshot
         var cur = current.CommandSpan;
         var prev = _cmds.AsSpan(start: 0, length: _count);
 
-        // Longest common prefix, comparing blob contents alongside the structs.
+        // Longest common prefix, comparing blob contents alongside the structs. The cursor pack
+        // turns each blob lookup into an O(1) neighbour probe (indices are ascending and the scans
+        // are sequential) instead of a binary search per text command per frame.
+        var cursors = new BlobCursors();
         int min = Math.Min(val1: prev.Length, val2: cur.Length);
         int prefix = 0;
         while (prefix < min && CommandEquals(
@@ -90,7 +93,8 @@ public sealed class PaintSnapshot
                    prevIdx: prefix,
                    cur: cur,
                    curIdx: prefix,
-                   current: current
+                   current: current,
+                   cursors: ref cursors
                )) prefix++;
         if (prefix == prev.Length && prefix == cur.Length) return PaintDiffResult.Identical;
 
@@ -103,7 +107,8 @@ public sealed class PaintSnapshot
                    prevIdx: prev.Length - 1 - suffix,
                    cur: cur,
                    curIdx: cur.Length - 1 - suffix,
-                   current: current
+                   current: current,
+                   cursors: ref cursors
                ))
             suffix++;
 
@@ -401,10 +406,17 @@ public sealed class PaintSnapshot
 
     // ── Command equality ──────────────────────────────────────────────────────
 
+    /// <summary>Blob-list positions carried across the sequential Diff scans — see Lookup hints.</summary>
+    private struct BlobCursors
+    {
+        public int PrevText, CurText, PrevPixel, CurPixel;
+    }
+
     private bool CommandEquals(
         ReadOnlySpan<ZgPaintCommand> prev, int prevIdx,
         ReadOnlySpan<ZgPaintCommand> cur, int curIdx,
-        PaintList current)
+        PaintList current,
+        ref BlobCursors cursors)
     {
         ref readonly var a = ref prev[prevIdx];
         ref readonly var b = ref cur[curIdx];
@@ -421,8 +433,8 @@ public sealed class PaintSnapshot
 
         if (a.TextLen > 0 &&
             !BlobEquals(
-                a: FindTextBlob(source: this, index: prevIdx),
-                b: FindTextBlob(source: current, index: curIdx)
+                a: Lookup(blobs: _textBlobs, index: prevIdx, hint: ref cursors.PrevText),
+                b: current.FindTextBlob(index: curIdx, hint: ref cursors.CurText)
             ))
             return false;
 
@@ -430,8 +442,8 @@ public sealed class PaintSnapshot
         // bytes); keyless payloads (polygon points, raw uploads) compare by content.
         if (a.PixelsLen > 0 && a.HasCacheKey == 0 &&
             !BlobEquals(
-                a: FindPixelBlob(source: this, index: prevIdx),
-                b: FindPixelBlob(source: current, index: curIdx)
+                a: Lookup(blobs: _pixelBlobs, index: prevIdx, hint: ref cursors.PrevPixel),
+                b: current.FindPixelBlob(index: curIdx, hint: ref cursors.CurPixel)
             ))
             return false;
 
@@ -461,6 +473,47 @@ public sealed class PaintSnapshot
             PaintList l => l.FindPixelBlob(index),
             _ => null,
         };
+    }
+
+    /// <summary>
+    ///     <see cref="Lookup(List{ValueTuple{int, byte[]}}?, int)" /> with a position hint: the Diff
+    ///     scans visit commands sequentially, so the wanted entry is the hint or its neighbour
+    ///     almost always — O(1) instead of a binary search per text command.
+    /// </summary>
+    internal static byte[]? Lookup(List<(int Index, byte[] Blob)>? blobs, int index, ref int hint)
+    {
+        if (blobs is null || blobs.Count == 0) return null;
+        int n = blobs.Count;
+        if ((uint)hint >= (uint)n) hint = 0;
+        if (blobs[hint].Index == index) return blobs[hint].Blob;
+        if (hint + 1 < n && blobs[hint + 1].Index == index)
+        {
+            hint++;
+            return blobs[hint].Blob;
+        }
+
+        if (hint > 0 && blobs[hint - 1].Index == index)
+        {
+            hint--;
+            return blobs[hint].Blob;
+        }
+
+        int lo = 0, hi = n - 1;
+        while (lo <= hi)
+        {
+            int mid = (lo + hi) >> 1;
+            int midIndex = blobs[mid].Index;
+            if (midIndex == index)
+            {
+                hint = mid;
+                return blobs[mid].Blob;
+            }
+
+            if (midIndex < index) lo = mid + 1;
+            else hi = mid - 1;
+        }
+
+        return null;
     }
 
     // Indices are ascending (blobs are appended in Push order): binary search.

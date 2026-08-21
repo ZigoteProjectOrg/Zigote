@@ -21,6 +21,9 @@ public sealed class ColorPicker : Widget
     private const int SvResolution = 96; // SV square raster grid (square texture, scaled to fit)
 
     private readonly TextField _hexField;
+
+    // R/G/B/A readout painted every repaint frame during a drag; allocate only on value change.
+    private readonly CachedText _readoutText = new(32);
     private float _a;
 
     // Layout rects (absolute), computed in Layout.
@@ -335,7 +338,8 @@ public sealed class ColorPicker : Widget
         int g = (int)MathF.Round(rgb.G * 255f);
         int b = (int)MathF.Round(rgb.B * 255f);
         int a = (int)MathF.Round(rgb.A * 255f);
-        string text = $"R {r}   G {g}   B {b}   A {a}";
+        // CachedText: Paint runs every repaint frame while dragging — only allocate on change.
+        string text = _readoutText.Update($"R {r}   G {g}   B {b}   A {a}");
         paint.AddText(
             text: text,
             baselineX: Bounds.X,

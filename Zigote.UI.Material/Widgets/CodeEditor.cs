@@ -29,6 +29,12 @@ public sealed class CodeEditor : Widget, ITextInputClient
     // Undo: cap the snapshot history and coalesce same-kind edits made within this window into one step
     // (so undo walks back by word-ish runs, not per keystroke).
     private const int UndoDepth = 256;
+
+    // Memory bound on the undo stack alongside UndoDepth: snapshots are full line arrays, so 256
+    // of them on a 10k-line file retained ~20 MB. Oldest snapshots trim first when the total line
+    // count exceeds this (~10 MB worst case). ponytail: full snapshots; line-range deltas if undo
+    // memory ever matters more.
+    private const int UndoMaxRetainedLines = 131_072;
     private const float UndoCoalesceSeconds = 0.6f;
     private const float Pad = Spacing.Sm;
     private const float GutterPadRight = Spacing.Sm;
@@ -51,6 +57,18 @@ public sealed class CodeEditor : Widget, ITextInputClient
         LayoutCacheCap = 16384; // enough for long source files without cyclic re-shaping
 
     private readonly Dictionary<string, TextLayout> _layouts = new();
+
+    // Scratch for EvictLayouts.
+    private List<string>? _layoutEvictScratch;
+
+    // Soft-wrap memo keyed by line content — see RebuildVisualRows. Ordinal keying means lines
+    // with identical text share one entry, which is exactly right (same text + width ⇒ same rows).
+    private readonly Dictionary<string, CachedWrap> _wrapCache = new(StringComparer.Ordinal);
+
+    private readonly record struct CachedWrap(
+        float WrapWidth,
+        float CharWidth,
+        (int Start, int End, float Width)[] Rows);
 
     // Line-number strings cached by line index (index l always renders "l+1") so the gutter doesn't
     // allocate a string per visible line per frame.
@@ -317,8 +335,13 @@ public sealed class CodeEditor : Widget, ITextInputClient
 
     private void Commit()
     {
-        _lineStates.Clear(); // content changed → the entering-state cache is stale, rebuild lazily
-        _tokenCache.Clear();
+        // The entering-state chain is prefix-dependent, so it rebuilds lazily — but the rebuild
+        // walk now reuses every token-cache entry whose (entering state, line instance) still
+        // match, so a keystroke costs re-tokenizing the edited lines, not the whole file above
+        // the viewport. Entries for shifted/removed indices self-invalidate by reference compare;
+        // bound the stragglers a shrink leaves behind.
+        _lineStates.Clear();
+        if (_tokenCache.Count > (_lines.Count * 2) + 64) _tokenCache.Clear();
         if (Bounds.Width > 0f)
         {
             RebuildVisualRows(
@@ -352,6 +375,15 @@ public sealed class CodeEditor : Widget, ITextInputClient
         {
             _undo.Add(CaptureSnapshot());
             if (_undo.Count > UndoDepth) _undo.RemoveAt(0);
+            // Trim oldest while the stack retains too many total lines (large files).
+            long retained = 0;
+            for (int i = 0; i < _undo.Count; i++) retained += _undo[i].Lines.Length;
+            while (retained > UndoMaxRetainedLines && _undo.Count > 1)
+            {
+                retained -= _undo[0].Lines.Length;
+                _undo.RemoveAt(0);
+            }
+
             _redo.Clear(); // a fresh edit invalidates the redo branch
         }
 
@@ -549,6 +581,9 @@ public sealed class CodeEditor : Widget, ITextInputClient
     {
         _visualRows.Clear();
         float wrapWidth = MathF.Max(x: _charWidth, y: availableWidth);
+        // Soft-wrap results are memoized by line CONTENT (+ wrap inputs): a keystroke re-wraps
+        // the edited lines only, instead of re-measuring every grapheme of the whole document.
+        if (_wrapCache.Count > (_lines.Count * 2) + 64) _wrapCache.Clear();
         for (int lineIndex = 0; lineIndex < _lines.Count; lineIndex++)
         {
             string line = _lines[lineIndex];
@@ -570,6 +605,26 @@ public sealed class CodeEditor : Widget, ITextInputClient
                 continue;
             }
 
+            if (_wrapCache.TryGetValue(key: line, value: out var cachedWrap) &&
+                cachedWrap.WrapWidth == wrapWidth && cachedWrap.CharWidth == _charWidth)
+            {
+                foreach ((int cs, int ce, float cw) in cachedWrap.Rows)
+                {
+                    _visualRows.Add(
+                        new VisualRow(
+                            Line: lineIndex,
+                            Start: cs,
+                            End: ce,
+                            Width: cw,
+                            FastGrid: fastGrid
+                        )
+                    );
+                }
+
+                continue;
+            }
+
+            int wrapRowsStart = _visualRows.Count;
             int[] boundaries = TextNavigation.GraphemeBoundaries(line);
             float[] prefixWidths = new float[boundaries.Length];
             for (int i = 1; i < boundaries.Length; i++)
@@ -615,6 +670,20 @@ public sealed class CodeEditor : Widget, ITextInputClient
                 );
                 startBoundary = accepted;
             }
+
+            // Store this line's freshly computed rows (line-index-free) for the next rebuild.
+            var rows = new (int Start, int End, float Width)[_visualRows.Count - wrapRowsStart];
+            for (int r = 0; r < rows.Length; r++)
+            {
+                var vr = _visualRows[wrapRowsStart + r];
+                rows[r] = (vr.Start, vr.End, vr.Width);
+            }
+
+            _wrapCache[line] = new CachedWrap(
+                WrapWidth: wrapWidth,
+                CharWidth: _charWidth,
+                Rows: rows
+            );
         }
 
         if (_visualRows.Count == 0)
@@ -884,7 +953,8 @@ public sealed class CodeEditor : Widget, ITextInputClient
             int entering = _lineStates[l];
             int exiting;
             if (_tokenCache.TryGetValue(key: l, value: out var cached) &&
-                cached.EnteringState == entering)
+                cached.EnteringState == entering &&
+                ReferenceEquals(objA: cached.SourceText, objB: _lines[l]))
                 exiting = cached.ExitingState;
             else
             {
@@ -907,7 +977,8 @@ public sealed class CodeEditor : Widget, ITextInputClient
     {
         int entering = EnsureLineStates(tokenizer: tokenizer, target: line);
         if (_tokenCache.TryGetValue(key: line, value: out var cached) &&
-            cached.EnteringState == entering)
+            cached.EnteringState == entering &&
+            ReferenceEquals(objA: cached.SourceText, objB: _lines[line]))
             return cached;
 
         _tokenBuffer.Clear();
@@ -937,6 +1008,7 @@ public sealed class CodeEditor : Widget, ITextInputClient
         return new CachedLineTokens(
             EnteringState: entering,
             ExitingState: exiting,
+            SourceText: text,
             Tokens: tokens,
             Runs: runs.ToArray()
         );
@@ -1014,9 +1086,28 @@ public sealed class CodeEditor : Widget, ITextInputClient
             return null;
         }
 
-        if (_layouts.Count >= LayoutCacheCap) ClearLayouts();
+        // Evict a quarter instead of flushing everything: a full clear at the cap re-shaped every
+        // visible line on the frame that crossed the threshold — a one-frame hitch mid-typing.
+        if (_layouts.Count >= LayoutCacheCap) EvictLayouts(LayoutCacheCap / 4);
         _layouts[s] = layout;
         return layout;
+    }
+
+    private void EvictLayouts(int count)
+    {
+        _layoutEvictScratch ??= new List<string>(count);
+        _layoutEvictScratch.Clear();
+        foreach (string key in _layouts.Keys)
+        {
+            _layoutEvictScratch.Add(key);
+            if (_layoutEvictScratch.Count >= count) break;
+        }
+
+        foreach (string key in _layoutEvictScratch)
+        {
+            _layouts[key].Dispose();
+            _layouts.Remove(key);
+        }
     }
 
     private void ClearLayouts()
@@ -1807,9 +1898,14 @@ public sealed class CodeEditor : Widget, ITextInputClient
 
     private readonly record struct TokenRun(Token Token, string Text);
 
+    // SourceText is the line string INSTANCE the entry was tokenized from: line strings are
+    // immutable and replaced on edit, so a reference compare is an exact content-validity check.
+    // That lets an edit keep the whole cache (entries self-invalidate) instead of clearing it —
+    // previously one keystroke at the bottom of a 5000-line file re-tokenized 5000 lines.
     private readonly record struct CachedLineTokens(
         int EnteringState,
         int ExitingState,
+        string SourceText,
         Token[] Tokens,
         TokenRun[] Runs);
 }

@@ -14,6 +14,13 @@ public sealed class ScriptWorld : IDisposable
     // keyed by SceneNode.Id
     private readonly Dictionary<int, List<Component>> _instances = new();
 
+    // Flat update list carrying the node with its components, in attach order. The fixed tick
+    // iterates THIS instead of walking the whole scene tree — a 10k-node level with five scripted
+    // nodes must not pay 10k dictionary probes per 120 Hz tick (same index-over-tree rationale as
+    // GameSession._bodyIds). Appends mid-tick (World.Spawn) are safe under index iteration and run
+    // in the same tick, matching the old walk; removals are deferred to end of tick and rare.
+    private readonly List<(SceneNode Node, List<Component> Comps)> _update = [];
+
     private readonly ScriptRegistry _registry;
     private bool _disposed;
 
@@ -61,7 +68,7 @@ public sealed class ScriptWorld : IDisposable
                     }
                 }
 
-                Register(nodeId: node.Id, instance: instance);
+                Register(node: node, instance: instance);
 
                 instance.CallCreate();
                 if (instance.Enabled) instance.CallEnable();
@@ -89,7 +96,7 @@ public sealed class ScriptWorld : IDisposable
 
         instance.EntityId = (uint)node.Id;
         SyncToComponent(node: node, comp: instance);
-        Register(nodeId: node.Id, instance: instance);
+        Register(node: node, instance: instance);
 
         instance.CallCreate();
         if (instance.Enabled) instance.CallEnable();
@@ -109,6 +116,16 @@ public sealed class ScriptWorld : IDisposable
                 if (comp.Enabled) comp.CallDisable();
                 comp.CallDestroy();
             }
+
+            // Destroys are deferred to end of tick and rare — a linear scan here is fine.
+            for (int i = _update.Count - 1; i >= 0; i--)
+            {
+                if (ReferenceEquals(objA: _update[i].Comps, objB: list))
+                {
+                    _update.RemoveAt(i);
+                    break;
+                }
+            }
         }
 
         for (int i = 0; i < node.Children.Count; i++) DetachSubtree(node.Children[i]);
@@ -125,12 +142,17 @@ public sealed class ScriptWorld : IDisposable
         }
 
         _instances.Clear();
+        _update.Clear();
     }
 
-    private void Register(int nodeId, Component instance)
+    private void Register(SceneNode node, Component instance)
     {
-        if (!_instances.TryGetValue(key: nodeId, value: out var list))
-            _instances[nodeId] = list = [];
+        if (!_instances.TryGetValue(key: node.Id, value: out var list))
+        {
+            _instances[node.Id] = list = [];
+            _update.Add((node, list));
+        }
+
         list.Add(instance);
     }
 
@@ -138,18 +160,16 @@ public sealed class ScriptWorld : IDisposable
 
     public void Update(SceneNode root, float dt)
     {
+        _ = root; // kept for API stability; the walk was replaced by the _update index
         Time._deltaTime = dt;
         Time._elapsed += dt;
-        UpdateNode(node: root, dt: dt);
-    }
 
-    private void UpdateNode(SceneNode node, float dt)
-    {
-        // Index-based iteration: a script may World.Spawn (appends children) or World.AddComponent
-        // (appends to a component list) mid-walk. Appends are safe under indexing; removals never
+        // Index-based iteration: a script may World.Spawn or World.AddComponent mid-tick, which
+        // appends here and runs in this same tick (as the old tree walk did). Removals never
         // happen here — World.Destroy/SetParent are deferred to the end of the tick.
-        if (_instances.TryGetValue(key: node.Id, value: out var list))
+        for (int n = 0; n < _update.Count; n++)
         {
+            (var node, var list) = _update[n];
             for (int i = 0; i < list.Count; i++)
             {
                 var comp = list[i];
@@ -159,8 +179,6 @@ public sealed class ScriptWorld : IDisposable
                 SyncFromComponent(node: node, comp: comp);
             }
         }
-
-        for (int i = 0; i < node.Children.Count; i++) UpdateNode(node: node.Children[i], dt: dt);
     }
 
     // ── Component list query ──────────────────────────────────────────────────

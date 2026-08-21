@@ -27,7 +27,11 @@ public sealed unsafe class PaintList
     // Per-thread so parallel painters never share it. PaintList paints only on its owning UI thread in
     // production (one cache, plain-Dictionary speed), but xUnit runs test collections in parallel and a
     // single shared static Dictionary here corrupts under concurrent AddText → EncodeUtf8.
+    // Two generations (like TextMeasure): at capacity the current generation demotes instead of a
+    // wholesale clear that would re-encode (and re-allocate pinned arrays for) every visible string
+    // on one frame.
     [ThreadStatic] private static Dictionary<string, byte[]>? _utf8Cache;
+    [ThreadStatic] private static Dictionary<string, byte[]>? _utf8Prev;
 
     // ── Alpha-compositing stack ───────────────────────────────────────────────
     private readonly Stack<float> _alphaStack = new();
@@ -47,7 +51,10 @@ public sealed unsafe class PaintList
     // command from the per-frame working set.
 
     // ── Glyph run temporary storage ───────────────────────────────────────────
-    private readonly List<GCHandle> _quadHandles = [];
+    // Pinned-object-heap quad arrays: the command embeds the data address at Add time, and this
+    // list is the managed reference that keeps each array alive until Clear(). No GCHandle —
+    // POH arrays never move, so the address is taken directly (same scheme as EncodeUtf8).
+    private readonly List<ZgGlyphQuad[]> _quadArrays = [];
 
     // ── Validation counters ───────────────────────────────────────────────────
     private int _clipDepth;
@@ -85,6 +92,48 @@ public sealed unsafe class PaintList
 
     internal byte[]? FindTextBlob(int index) =>
         PaintSnapshot.Lookup(blobs: TextBlobs, index: index);
+
+    /// <summary>Hinted variants for PaintSnapshot's sequential Diff scans — see PaintSnapshot.Lookup.</summary>
+    internal byte[]? FindTextBlob(int index, ref int hint) =>
+        PaintSnapshot.Lookup(blobs: TextBlobs, index: index, hint: ref hint);
+
+    /// <inheritdoc cref="FindTextBlob(int, ref int)" />
+    internal byte[]? FindPixelBlob(int index, ref int hint)
+    {
+        var blobs = PixelBlobs;
+        int n = blobs.Count;
+        if (n == 0) return null;
+        if ((uint)hint >= (uint)n) hint = 0;
+        if (blobs[hint].Index == index) return blobs[hint].Blob;
+        if (hint + 1 < n && blobs[hint + 1].Index == index)
+        {
+            hint++;
+            return blobs[hint].Blob;
+        }
+
+        if (hint > 0 && blobs[hint - 1].Index == index)
+        {
+            hint--;
+            return blobs[hint].Blob;
+        }
+
+        int lo = 0, hi = n - 1;
+        while (lo <= hi)
+        {
+            int mid = (lo + hi) >> 1;
+            int midIndex = blobs[mid].Index;
+            if (midIndex == index)
+            {
+                hint = mid;
+                return blobs[mid].Blob;
+            }
+
+            if (midIndex < index) lo = mid + 1;
+            else hi = mid - 1;
+        }
+
+        return null;
+    }
 
     internal byte[]? FindPixelBlob(int index)
     {
@@ -517,7 +566,10 @@ public sealed unsafe class PaintList
         if (points.Length < 3) return;
         CheckColor(color);
 
-        byte[] bytes = new byte[points.Length * 8];
+        // Pinned object heap so submit embeds the address without a per-frame GCHandle pin/free
+        // (see PinAndCall) — charts emit hundreds of polygons per repaint frame. Exact-sized on
+        // purpose: PaintSnapshot uses the array length as the point count when diffing damage.
+        byte[] bytes = GC.AllocateUninitializedArray<byte>(length: points.Length * 8, pinned: true);
         for (int i = 0; i < points.Length; i++)
         {
             float x = points[i].X + _offsetX;
@@ -538,7 +590,7 @@ public sealed unsafe class PaintList
         SetColor(cmd: ref cmd, c: ScaleAlpha(color));
         cmd.ImgPixelW = (uint)points.Length;
         cmd.PixelsLen = (uint)bytes.Length;
-        Push(cmd: cmd, text: null, pixels: bytes);
+        Push(cmd: cmd, text: null, pixels: bytes, pixelsPinned: true);
     }
 
     /// <param name="adapt">
@@ -640,8 +692,11 @@ public sealed unsafe class PaintList
         if (atlasHandle == 0 || quads.IsEmpty) return;
         CheckColor(tint);
 
-        // Copy quads into a pinned managed array so the pointer stays valid past PinAndCall.
-        var quadArr = quads.ToArray();
+        // Copy quads onto the pinned object heap so the pointer stays valid past PinAndCall with
+        // no GCHandle pin/free per run per frame; _quadArrays keeps the array alive until Clear().
+        var quadArr =
+            GC.AllocateUninitializedArray<ZgGlyphQuad>(length: quads.Length, pinned: true);
+        quads.CopyTo(quadArr);
         if (_offsetX != 0f || _offsetY != 0f)
         {
             for (int i = 0; i < quadArr.Length; i++)
@@ -651,8 +706,7 @@ public sealed unsafe class PaintList
             }
         }
 
-        var h = GCHandle.Alloc(value: quadArr, type: GCHandleType.Pinned);
-        _quadHandles.Add(h);
+        _quadArrays.Add(quadArr);
 
         var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.GlyphRun };
         SetColor(cmd: ref cmd, c: ScaleAlpha(tint));
@@ -660,7 +714,7 @@ public sealed unsafe class PaintList
         cmd.CacheKeyHi = (uint)((atlasHandle >> 32) & 0xFFFFFFFF);
         cmd.HasCacheKey = 1;
         cmd.TextLen = (uint)quads.Length;
-        cmd.TextPtr = (byte*)h.AddrOfPinnedObject();
+        fixed (ZgGlyphQuad* p = quadArr) cmd.TextPtr = (byte*)p; // POH: address stable after unfix
         Push(cmd: cmd, text: null, pixels: null);
     }
 
@@ -761,7 +815,7 @@ public sealed unsafe class PaintList
         try
         {
             // Only the sparse blob entries need pointers — glyph-run commands set TextPtr at Add time
-            // (via _quadHandles) and never appear here, so their pointer survives untouched. Text
+            // (via _quadArrays) and never appear here, so their pointer survives untouched. Text
             // blobs always come from the EncodeUtf8 cache, whose arrays never move (pinned object
             // heap) — the address outlives the fixed block, and the list entry keeps the array alive.
             foreach ((int index, byte[] blob) in TextBlobs)
@@ -813,13 +867,15 @@ public sealed unsafe class PaintList
 
     private void FreeQuadHandles()
     {
-        foreach (var h in _quadHandles) h.Free();
-        _quadHandles.Clear();
+        _quadArrays.Clear(); // releases the managed refs; the POH arrays are ordinary garbage now
     }
 
     // ── Internal helpers ──────────────────────────────────────────────────────
 
-    private void Push(ZgPaintCommand cmd, byte[]? text, byte[]? pixels, bool pixelsPinned = false)
+    // `in`: the command is 112 bytes and every Add* site builds it on the stack — passing by
+    // reference halves the per-command memcpy on a path that runs thousands of times per frame.
+    private void Push(in ZgPaintCommand cmd, byte[]? text, byte[]? pixels,
+        bool pixelsPinned = false)
     {
         int index = _commands.Count;
         _commands.Add(cmd);
@@ -830,7 +886,14 @@ public sealed unsafe class PaintList
     private static byte[] EncodeUtf8(string text)
     {
         var cache = _utf8Cache ??= new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        var prev = _utf8Prev ??= new Dictionary<string, byte[]>(StringComparer.Ordinal);
         if (cache.TryGetValue(key: text, value: out byte[]? bytes)) return bytes;
+        if (prev.Remove(key: text, value: out bytes))
+        {
+            cache[text] = bytes; // still-hot entry survives eviction
+            return bytes;
+        }
+
         // Pinned object heap: the array never moves, so submit can embed its address in a command
         // without a per-frame GCHandle pin (see PinAndCall).
         bytes = GC.AllocateUninitializedArray<byte>(
@@ -838,7 +901,13 @@ public sealed unsafe class PaintList
             pinned: true
         );
         Encoding.UTF8.GetBytes(chars: text, bytes: bytes);
-        if (cache.Count >= Utf8CacheMax) cache.Clear();
+        if (cache.Count >= Utf8CacheMax)
+        {
+            prev.Clear();
+            (_utf8Cache, _utf8Prev) = (prev, cache); // demote; fresh generation starts empty
+            cache = _utf8Cache;
+        }
+
         cache[text] = bytes;
         return bytes;
     }

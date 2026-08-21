@@ -26,6 +26,10 @@ namespace Zigote.UI.DevTools.Panels;
 /// </summary>
 public sealed class UiInspectorPanel(DevToolsController controller) : IDevPanel
 {
+    // The M/L/P/R counters are gated off by default (they dirty every widget's cache line per
+    // frame); the first inspector construction turns them on for the session.
+    static UiInspectorPanel() => WidgetDebug.CountersEnabled = true;
+
     private const double RefreshMs = 250.0;
     private const float TreeRowH = 15f;
     private const float TreeViewH = 340f;

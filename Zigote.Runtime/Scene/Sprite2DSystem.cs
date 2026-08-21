@@ -22,7 +22,13 @@ namespace Zigote.Runtime.Scene;
 /// </summary>
 public sealed class Sprite2DSystem : IDisposable
 {
-    private readonly Dictionary<int, float> _animElapsed = new();
+    // Play-mode animation time: one session clock advanced per fixed tick, plus each animated
+    // node's start time recorded when it is first drawn. Replaces a per-node elapsed dictionary
+    // that a full scene-tree walk updated every 120 Hz tick — the walk was O(scene), this is O(1)
+    // per tick and O(1) per drawn sprite. A sprite that spawns mid-play starts its animation at
+    // its first drawn frame (previously: its first tick), which is indistinguishable on screen.
+    private readonly Dictionary<int, float> _animStart = new();
+    private float _animClock;
 
     // Second index on the UNRESOLVED path, so the per-frame lookup never has to canonicalise.
     // Both are cleared together in Clear().
@@ -63,11 +69,15 @@ public sealed class Sprite2DSystem : IDisposable
         _tilesets.Clear();
         _shaders.Clear();
         _materials.Clear();
-        _animElapsed.Clear();
+        ResetPlayState();
     }
 
     /// <summary>Drop play-session animation state (play stop). Caches stay warm for edit mode.</summary>
-    public void ResetPlayState() => _animElapsed.Clear();
+    public void ResetPlayState()
+    {
+        _animStart.Clear();
+        _animClock = 0f;
+    }
 
     /// <summary>Load (and cache) a sprite texture by path; null when missing/undecodable (cached too).</summary>
     public SpriteTexture? GetTexture(string path, SpriteFilter filter = SpriteFilter.Linear,
@@ -122,17 +132,15 @@ public sealed class Sprite2DSystem : IDisposable
         return handle;
     }
 
-    /// <summary>Advance play-mode sprite animations one fixed tick (called from the session's fixed loop).</summary>
+    /// <summary>
+    ///     Advance play-mode sprite animations one fixed tick (called once from the session's fixed
+    ///     loop). The node parameter is unused — kept so the call site reads the same; the clock is
+    ///     session-global and per-sprite phase is anchored at first draw (see the field comment).
+    /// </summary>
     public void AdvanceAnimation(SceneNode node, float dt)
     {
-        if (node is { Kind: NodeKind.Sprite, SpriteFps: > 0f })
-        {
-            _animElapsed[node.Id] =
-                (_animElapsed.TryGetValue(key: node.Id, value: out float t) ? t : 0f) + dt;
-        }
-
-        for (int i = 0; i < node.Children.Count; i++)
-            AdvanceAnimation(node: node.Children[i], dt: dt);
+        _ = node;
+        _animClock += dt;
     }
 
     /// <summary>
@@ -216,9 +224,12 @@ public sealed class Sprite2DSystem : IDisposable
         int cols = Math.Max(val1: 1, val2: node.SpriteCols);
         int rows = Math.Max(val1: 1, val2: node.SpriteRows);
         int frameIndex = Math.Clamp(value: node.SpriteFrame, min: 0, max: (cols * rows) - 1);
-        if (playMode && node.SpriteFps > 0f &&
-            _animElapsed.TryGetValue(key: node.Id, value: out float elapsed))
-            frameIndex = (int)(elapsed * node.SpriteFps) % (cols * rows);
+        if (playMode && node.SpriteFps > 0f)
+        {
+            if (!_animStart.TryGetValue(key: node.Id, value: out float start))
+                _animStart[node.Id] = start = _animClock;
+            frameIndex = (int)((_animClock - start) * node.SpriteFps) % (cols * rows);
+        }
 
         int col = frameIndex % cols;
         int row = frameIndex / cols;
@@ -398,6 +409,22 @@ public sealed class Sprite2DSystem : IDisposable
                 max: short.MaxValue
             );
 
+            // Template hoisted: everything but position and frame is loop-invariant, and this is
+            // the biggest N in the 2D render path (thousands of tiles per frame) — building the
+            // full ~100-byte struct per tile was mostly redundant stores.
+            var draw = new SpriteDraw {
+                Z = world.Position.Z,
+                Rotation = rot,
+                Width = stepX,
+                Height = stepY,
+                PivotX = 0.5f,
+                PivotY = 0.5f,
+                Color = color,
+                SortingLayer = sortLayer,
+                OrderInLayer = order,
+                Texture = tex.Handle,
+                Material = material,
+            };
             for (int ty = y0; ty <= y1; ty++)
             for (int tx = x0; tx <= x1; tx++)
             {
@@ -407,24 +434,10 @@ public sealed class Sprite2DSystem : IDisposable
                 // Cell centre in the node's local 2D space, rotated into world.
                 float lx = (tx + 0.5f) * stepX;
                 float ly = (ty + 0.5f) * stepY;
-                _renderer.Draw(
-                    new SpriteDraw {
-                        X = world.Position.X + (lx * cos) - (ly * sin),
-                        Y = world.Position.Y + (lx * sin) + (ly * cos),
-                        Z = world.Position.Z,
-                        Rotation = rot,
-                        Width = stepX,
-                        Height = stepY,
-                        PivotX = 0.5f,
-                        PivotY = 0.5f,
-                        Frame = ts.Frames[tile],
-                        Color = color,
-                        SortingLayer = sortLayer,
-                        OrderInLayer = order,
-                        Texture = tex.Handle,
-                        Material = material,
-                    }
-                );
+                draw.X = world.Position.X + (lx * cos) - (ly * sin);
+                draw.Y = world.Position.Y + (lx * sin) + (ly * cos);
+                draw.Frame = ts.Frames[tile];
+                _renderer.Draw(draw);
             }
         }
     }

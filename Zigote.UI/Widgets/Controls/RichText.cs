@@ -280,7 +280,7 @@ public class RichText : LeafWidget
 
     internal TextSpan SpanAt(int index) => _spans[index];
 
-    internal float SpanWidth(TextSpan s, string text)
+    internal float SpanWidth(TextSpan s, ReadOnlySpan<char> text)
     {
         return TextMeasure.Width(
             text: text,
@@ -334,7 +334,21 @@ public class RichText : LeafWidget
         FullText = _spans.Count switch {
             0 => "",
             1 => _spans[0].Text,
-            _ => string.Concat(_spans.Select(sp => sp.Text)),
+            // string.Create at the exact final length — the LINQ Select allocated a delegate +
+            // enumerator per relayout and Concat re-sized its builder along the way.
+            _ => string.Create(
+                length: total,
+                state: _spans,
+                action: static (dst, spans) =>
+                {
+                    int at = 0;
+                    foreach (var sp in spans)
+                    {
+                        sp.Text.CopyTo(dst[at..]);
+                        at += sp.Text.Length;
+                    }
+                }
+            ),
         };
 
         // ── Wrap state ──
@@ -465,7 +479,7 @@ public class RichText : LeafWidget
                 {
                     int st = i;
                     while (i < t.Length && t[i] == ' ') i++;
-                    float w = SpanWidth(s: span, text: t[st..i]);
+                    float w = SpanWidth(s: span, text: t.AsSpan(start: st, length: i - st));
                     if (pendSpan == s && pendEnd == st)
                     {
                         pendEnd = i;
@@ -487,7 +501,7 @@ public class RichText : LeafWidget
                 {
                     int st = i;
                     while (i < t.Length && t[i] != ' ' && t[i] != '\n') i++;
-                    float w = SpanWidth(s: span, text: t[st..i]);
+                    float w = SpanWidth(s: span, text: t.AsSpan(start: st, length: i - st));
 
                     if (cursor + pendW + w <= maxWidth || cursor <= 0f)
                     {
@@ -573,7 +587,7 @@ public class RichText : LeafWidget
         while (lo < hi)
         {
             int mid = (lo + hi + 1) / 2;
-            if (SpanWidth(s: span, text: text[..mid]) + ellipsisW <= budget) lo = mid;
+            if (SpanWidth(s: span, text: text.AsSpan(start: 0, length: mid)) + ellipsisW <= budget) lo = mid;
             else hi = mid - 1;
         }
 

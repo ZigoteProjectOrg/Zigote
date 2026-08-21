@@ -117,6 +117,14 @@ public sealed partial class ViewportPanel : Widget
     private Quat _dragStartRot;
     private Vec3 _dragStartScale;
     private int _editVfxSig;
+
+    // Throttles the whole-tree VFX signature scan (see UpdateEditVfx) to 4 Hz.
+    private long _vfxSigNextTicks;
+
+    // Reused per-paint scratch buffers / hoisted delegate — see their use sites.
+    private readonly List<(Vec3 A, Vec3 B)> _wireEdges = [];
+    private readonly List<(ulong key, CpuParticleSimulator sim)> _vfxSimScratch = [];
+    private Func<int, SceneNode?>? _editFindNodeFunc;
     private Ticker? _editVfxTicker;
     private bool _flyForward, _flyBack, _flyLeft, _flyRight, _flyDown, _flyUp;
     private Vec3 _flyPosition;
@@ -399,7 +407,10 @@ public sealed partial class ViewportPanel : Widget
                     cameraWorldPos: GetCameraPosition(),
                     viewportHeightPx: MathF.Max(x: 1f, y: Bounds.Height),
                     dt: camDt,
-                    findNode: id => FindNodeById(node: _state.Scene.Root, id: id)
+                    // Hoisted: a fresh closure per paint otherwise. _state is a field, so the
+                    // cached delegate stays correct across scene loads.
+                    findNode: _editFindNodeFunc ??=
+                        id => FindNodeById(node: _state.Scene.Root, id: id)
                 );
             }
 
@@ -973,15 +984,17 @@ public sealed partial class ViewportPanel : Widget
         {
             foreach (var body in play.ScriptBodies)
             {
+                PhysicsWireframe.WorldEdgesInto(
+                    into: _wireEdges,
+                    shape: body.Shape,
+                    halfExtents: body.HalfExtents,
+                    position: body.Position,
+                    rotation: body.Rotation
+                );
                 StrokeEdges(
                     paint: paint,
                     vp: vp,
-                    edges: PhysicsWireframe.WorldEdges(
-                        shape: body.Shape,
-                        halfExtents: body.HalfExtents,
-                        position: body.Position,
-                        rotation: body.Rotation
-                    ),
+                    edges: _wireEdges,
                     color: scriptColor
                 );
             }
@@ -1023,15 +1036,17 @@ public sealed partial class ViewportPanel : Widget
             // simulated world transform straight back into them, so they already hold what the body
             // uses. Walking parents would double-apply ancestor transforms for parented bodies.
         {
+            PhysicsWireframe.WorldEdgesInto(
+                into: _wireEdges,
+                shape: node.PhysicsShape,
+                halfExtents: node.PhysicsHalfExtents,
+                position: node.Position,
+                rotation: node.Rotation
+            );
             StrokeEdges(
                 paint: paint,
                 vp: vp,
-                edges: PhysicsWireframe.WorldEdges(
-                    shape: node.PhysicsShape,
-                    halfExtents: node.PhysicsHalfExtents,
-                    position: node.Position,
-                    rotation: node.Rotation
-                ),
+                edges: _wireEdges,
                 color: color
             );
         }
@@ -1244,6 +1259,12 @@ public sealed partial class ViewportPanel : Widget
             return;
         }
 
+        // The signature is a whole-tree walk; 4 Hz is plenty for "did an emitter change" and a
+        // ≤250 ms preview-rebuild delay is invisible next to the warm-up itself.
+        long now = System.Diagnostics.Stopwatch.GetTimestamp();
+        if (now < _vfxSigNextTicks) return;
+        _vfxSigNextTicks = now + (System.Diagnostics.Stopwatch.Frequency / 4);
+
         (int sig, bool any) = ComputeVfxSignature(_state.Scene.Root);
         if (!any)
         {
@@ -1300,10 +1321,11 @@ public sealed partial class ViewportPanel : Widget
     {
         int hash = 17;
         bool any = false;
-        Walk(root);
+        Walk(n: root, hash: ref hash, any: ref any);
         return (hash, any);
 
-        void Walk(SceneNode n)
+        // static + ref params: a capturing local function allocated a display class per paint.
+        static void Walk(SceneNode n, ref int hash, ref bool any)
         {
             if (n.Kind == NodeKind.VfxEmitter)
             {
@@ -1319,21 +1341,24 @@ public sealed partial class ViewportPanel : Widget
                 );
             }
 
-            foreach (var c in n.Children) Walk(c);
+            foreach (var c in n.Children) Walk(n: c, hash: ref hash, any: ref any);
         }
     }
 
     // Active particle simulations (play: GameSession's node + script emitters; edit: the edit playback),
-    // keyed by node handle for the native pass.
-    private IEnumerable<(ulong key, CpuParticleSimulator sim)> VfxSimSource()
+    // keyed by node handle for the native pass. Fills a reused list — this runs two-plus times per
+    // paint, and the previous yield-return iterator allocated a state machine per call.
+    private List<(ulong key, CpuParticleSimulator sim)> VfxSimSource()
     {
+        _vfxSimScratch.Clear();
         if (_state.IsPlaying && _state.ActivePlay is { } play)
         {
-            foreach (var e in play.AllVfxSimulators) yield return e;
-            yield break;
+            foreach (var e in play.AllVfxSimulators) _vfxSimScratch.Add(e);
+            return _vfxSimScratch;
         }
 
-        foreach (var (node, sim) in _editVfx.Emitters) yield return (node.Handle, sim);
+        foreach (var (node, sim) in _editVfx.Emitters) _vfxSimScratch.Add((node.Handle, sim));
+        return _vfxSimScratch;
     }
 
     private IReadOnlyList<(SceneNode node, VfxGpuEmitter gpu)> VfxGpuSource()

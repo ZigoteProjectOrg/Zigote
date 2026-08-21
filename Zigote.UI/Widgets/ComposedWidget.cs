@@ -69,7 +69,7 @@ public abstract class ComposedWidget : Widget
         // starts the subscription feeding this build would run after the build that needed it.
         EnsureMounted();
         if (!NeedsBuild) return;
-        RebuildCount++;
+        if (Debug.WidgetDebug.CountersEnabled) RebuildCount++;
 
         // Build first, swap after — widgets that retain their root (every Adw* control that keeps a
         // Pressable field) would otherwise be torn down and re-attached on every property change,
@@ -110,7 +110,7 @@ public abstract class ComposedWidget : Widget
 
     public override Size Measure(Constraints c)
     {
-        MeasureCount++;
+        if (Debug.WidgetDebug.CountersEnabled) MeasureCount++;
         EnsureBuilt();
         int gen = BuildContext.Current.Generation;
         if (!NeedsLayout && c == LastConstraints && _measuredGen == gen) return MeasuredSize;
@@ -124,7 +124,7 @@ public abstract class ComposedWidget : Widget
 
     public override void Layout(Offset origin)
     {
-        LayoutCount++;
+        if (Debug.WidgetDebug.CountersEnabled) LayoutCount++;
         Bounds = new Rect(
             x: origin.X,
             y: origin.Y,
@@ -136,7 +136,7 @@ public abstract class ComposedWidget : Widget
 
     public override void Paint(PaintList paint)
     {
-        PaintCount++;
+        if (Debug.WidgetDebug.CountersEnabled) PaintCount++;
         _child?.Paint(paint);
     }
 

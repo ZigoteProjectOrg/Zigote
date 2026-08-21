@@ -37,7 +37,7 @@ internal sealed class NavigatorBody : Widget
 
     public override Size Measure(Constraints c)
     {
-        MeasureCount++;
+        if (Debug.WidgetDebug.CountersEnabled) MeasureCount++;
         _size = c.Constrain(new Size(width: c.MaxWidth, height: c.MaxHeight));
         var tight = Constraints.Tight(width: _size.Width, height: _size.Height);
 
@@ -58,7 +58,7 @@ internal sealed class NavigatorBody : Widget
 
     public override void Layout(Offset origin)
     {
-        LayoutCount++;
+        if (Debug.WidgetDebug.CountersEnabled) LayoutCount++;
         Bounds = new Rect(
             x: origin.X,
             y: origin.Y,
@@ -79,7 +79,7 @@ internal sealed class NavigatorBody : Widget
 
     public override void Paint(PaintList paint)
     {
-        PaintCount++;
+        if (Debug.WidgetDebug.CountersEnabled) PaintCount++;
         var routes = Routes;
         if (routes.Count == 0) return;
 

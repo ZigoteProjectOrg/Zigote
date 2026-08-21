@@ -200,19 +200,30 @@ public sealed class CpuParticleSimulator
         var items = Pool.Items;
         var modules = Asset.UpdateModules;
 
-        int i = 0;
-        while (i < Pool.Count)
+        // Module-major: one (devirtualizable) call per module over the whole live span, instead of
+        // a virtual call per particle per module. Modules only touch their own particle, so the
+        // per-particle result is identical to the old particle-major order.
+        var live = items.AsSpan(start: 0, length: Pool.Count);
+        for (int m = 0; m < modules.Count; m++)
+            modules[m].ApplyRange(particles: live, ctx: in ctx);
+
+        // Integrate first, compact second: fusing KillAt into the integration loop copied an
+        // 84-byte struct backwards into the loop's own read stream (a store-forward hazard), and
+        // kept the loop from ever being a straight-line span pass. A killed particle's swap-in is
+        // already integrated, so the split is behaviour-identical.
+        for (int i = 0; i < live.Length; i++)
         {
-            ref var p = ref items[i];
-
-            for (int m = 0; m < modules.Count; m++) modules[m].Apply(p: ref p, ctx: in ctx);
-
+            ref var p = ref live[i];
             p.Position += p.Velocity * dt;
             p.Rotation += p.AngularVelocity * dt;
             p.Age += dt;
+        }
 
-            if (p.Age >= p.Lifetime) Pool.KillAt(i);
-            else i++;
+        int n = 0;
+        while (n < Pool.Count)
+        {
+            if (items[n].Age >= items[n].Lifetime) Pool.KillAt(n);
+            else n++;
         }
     }
 

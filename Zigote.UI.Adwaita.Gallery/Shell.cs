@@ -59,6 +59,10 @@ internal sealed class Shell : ComposedWidget
         };
         _selected.Changed += index => _switcher.Child = Page(index);
         _searchOn.Changed += on => _searchReveal.Child = on ? SearchField() : SizedBox.Shrink();
+
+        // Bench/automation hook: open a page by title at startup (ZIGOTE_GALLERY_PAGE="Image Grid").
+        if (Environment.GetEnvironmentVariable("ZIGOTE_GALLERY_PAGE") is { Length: > 0 } startPage)
+            Open(startPage);
     }
 
     private GalleryEntry Current => GalleryRegistry.Entries[_selected.Value];

@@ -1,3 +1,5 @@
+using System.Collections.Frozen;
+
 namespace Zigote.Core.Events;
 
 /// <summary>
@@ -155,8 +157,8 @@ public enum KeyCode : uint
 /// </summary>
 public static class KeyNames
 {
-    private static readonly Dictionary<string, KeyCode> Aliases =
-        new(StringComparer.OrdinalIgnoreCase) {
+    private static readonly FrozenDictionary<string, KeyCode> Aliases = FrozenDictionary.ToFrozenDictionary(
+        source: new Dictionary<string, KeyCode>(StringComparer.OrdinalIgnoreCase) {
             ["esc"] = KeyCode.Escape,
             ["escape"] = KeyCode.Escape,
             ["enter"] = KeyCode.Enter,
@@ -211,7 +213,9 @@ public static class KeyNames
             ["pause"] = KeyCode.Pause,
             ["printscreen"] = KeyCode.PrintScreen,
             ["menu"] = KeyCode.Menu,
-        };
+        },
+        comparer: StringComparer.OrdinalIgnoreCase
+    );
 
     /// <summary>Parse a single key token (letter, digit, F-key, or alias). Returns false if unrecognised.</summary>
     public static bool TryParse(string token, out KeyCode key)

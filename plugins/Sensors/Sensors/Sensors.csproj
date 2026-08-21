@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      Platform plugin Sensors: same build-time platform selection as DeviceInfo —
+      each target framework compiles exactly one Platforms/ folder, all implementations
+      share one class name (SensorsDriver), and the shared code binds to it statically.
+      No channels, no lifecycle, no engine dependency.
+    -->
+    <PropertyGroup>
+        <TargetFrameworks>net10.0;net10.0-android</TargetFrameworks>
+        <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('osx'))">$(TargetFrameworks);net10.0-ios</TargetFrameworks>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <RootNamespace>Sensors</RootNamespace>
+        <SupportedOSPlatformVersion Condition="'$(TargetFramework)' == 'net10.0-android'">26</SupportedOSPlatformVersion>
+        <SupportedOSPlatformVersion Condition="'$(TargetFramework)' == 'net10.0-ios'">15.0</SupportedOSPlatformVersion>
+        <Version>0.1.0</Version>
+        <Description>Accelerometer, gyroscope and magnetometer streams for Zigote apps on Android and iOS.</Description>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="Sensors.Tests"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Compile Remove="Platforms/**/*.cs"/>
+        <Compile Include="Platforms/Desktop/**/*.cs" Condition="'$(TargetFramework)' == 'net10.0'"/>
+        <Compile Include="Platforms/Android/**/*.cs" Condition="'$(TargetFramework)' == 'net10.0-android'"/>
+        <Compile Include="Platforms/iOS/**/*.cs" Condition="'$(TargetFramework)' == 'net10.0-ios'"/>
+    </ItemGroup>
+
+</Project>

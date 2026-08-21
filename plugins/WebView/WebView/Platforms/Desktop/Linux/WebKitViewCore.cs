@@ -20,10 +20,19 @@ internal sealed unsafe class WebKitViewCore : IDisposable
     ///     silently survive a "clear everything".</summary>
     private const uint AllWebsiteData = 0xFFFF;
 
+    /// <summary>WebKitHardwareAccelerationPolicy, webkit2gtk-4.1: ON_DEMAND 0, ALWAYS 1, NEVER 2.
+    ///     Named because webkitgtk-6.0 renumbers them (ALWAYS 0, NEVER 1) — a port that keeps the
+    ///     literals would silently rasterize on the CPU.</summary>
+    private const int AccelerationAlways = 1;
+
+    private const int AccelerationNever = 2;
+
     private readonly WebViewController _owner;
     private readonly Action<Action> _post;
     private GCHandle _self;
     private nint _userContent;
+    private bool _accelerated;
+    private static bool _configured;
 
     public WebKitViewCore(WebViewController owner, Action<Action> post)
     {
@@ -35,9 +44,60 @@ internal sealed unsafe class WebKitViewCore : IDisposable
     /// <summary>The WebKitWebView*, valid on the GTK thread after <see cref="CreateView" />.</summary>
     public nint View { get; private set; }
 
-    /// <summary>GTK thread: create the view inside <paramref name="container" /> (a GtkWindow).</summary>
-    public void CreateView(nint container)
+    /// <summary>
+    ///     Process-wide WebKit setup, once, on the GTK thread before the first view exists.
+    ///     <para>
+    ///         The extra reference is not a leak, it is the fix for one: GObject finalizes the
+    ///         default context at process exit, from a C++ static destructor running on the process
+    ///         main thread — and <c>WebsiteDataStore</c>'s destructor asserts it is on WebKit's main
+    ///         thread, which is the GTK thread when we own one. That abort (verified in the core
+    ///         dump: <c>~WebsiteDataStore</c> → <c>WTFCrashWithInfo</c>) is avoided by keeping the
+    ///         context alive past exit, which costs nothing: the process is going away with it.
+    ///     </para>
+    ///     <para>
+    ///         The rest is what separates a browser from a webview: a cookie jar and a favicon
+    ///         database that survive a restart, both under the app's own data directory.
+    ///     </para>
+    /// </summary>
+    private static void ConfigureProcessWide()
     {
+        if (_configured) return;
+        _configured = true;
+
+        nint context = webkit_web_context_get_default();
+        g_object_ref(context);
+        webkit_web_context_set_cache_model(context, 1 /* WEBKIT_CACHE_MODEL_WEB_BROWSER */);
+
+        string profile = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "zigote-webview");
+        try
+        {
+            Directory.CreateDirectory(profile);
+            webkit_web_context_set_favicon_database_directory(context, Path.Combine(profile, "icons"));
+            nint cookies = webkit_website_data_manager_get_cookie_manager(
+                webkit_web_context_get_website_data_manager(context));
+            if (cookies != 0)
+                webkit_cookie_manager_set_persistent_storage(cookies,
+                    Path.Combine(profile, "cookies.sqlite"), 1 /* SQLITE */);
+            Log.Debug("WebKit profile at {Profile} (persistent cookies, favicon database)", profile);
+        }
+        catch (IOException ex)
+        {
+            Log.Debug(ex, "no writable profile directory — cookies and favicons stay in memory");
+        }
+    }
+
+    /// <summary>GTK thread: create the view inside <paramref name="container" /> (a GtkWindow).</summary>
+    /// <param name="accelerated">
+    ///     Whether this embedding can give WebKit a GL surface. True for a real GdkWindow (the X11
+    ///     overlay), false for a <c>GtkOffscreenWindow</c> — GDK cannot create a GL context for one,
+    ///     and WebKit's compositor <c>g_error</c>s (aborts the process) when it asks and is refused.
+    /// </param>
+    public void CreateView(nint container, bool accelerated)
+    {
+        _accelerated = accelerated;
+        ConfigureProcessWide();
         // The content manager must exist before the view: WebKit takes it at construction and
         // there is no setter. It carries the message handler and every user script.
         _userContent = webkit_user_content_manager_new();
@@ -62,6 +122,12 @@ internal sealed unsafe class WebKitViewCore : IDisposable
             (nint)(delegate* unmanaged[Cdecl]<nint, nint, nint, void>)&OnTitleNotify, data, 0, 0);
         g_signal_connect_data(View, "notify::uri",
             (nint)(delegate* unmanaged[Cdecl]<nint, nint, nint, void>)&OnUriNotify, data, 0, 0);
+        // WebKit's own context menu is a GTK menu in a popup window: offscreen it has nowhere to
+        // appear, and in overlay mode it would sit outside the app's own chrome. Suppressed here —
+        // right-click still reaches the page, so a web app's own menu works, and a browser shell
+        // draws its own. Returning TRUE is what prevents the default.
+        g_signal_connect_data(View, "context-menu",
+            (nint)(delegate* unmanaged[Cdecl]<nint, nint, nint, nint, nint, int>)&OnContextMenu, data, 0, 0);
         g_signal_connect_data(View, "notify::estimated-load-progress",
             (nint)(delegate* unmanaged[Cdecl]<nint, nint, nint, void>)&OnProgressNotify, data, 0, 0);
 
@@ -74,15 +140,32 @@ internal sealed unsafe class WebKitViewCore : IDisposable
     {
         var settings = _owner.Settings;
         nint s = webkit_web_view_get_settings(View);
-        // NEVER accelerate: the GL compositing path renders into a surface neither a reparented
-        // X window nor an offscreen window ever presents — page loads, stays white. The Cairo
-        // software path paints straight into the widget and survives both embeddings.
-        webkit_settings_set_hardware_acceleration_policy(s, 2);
+        // ALWAYS where the embedding has a real GdkWindow to hang a GL context on, and this is
+        // what a browser is made of: WebGL, GPU-decoded video, composited CSS transforms and
+        // filters all need WebKit's accelerated compositor. NEVER on the offscreen texture path,
+        // where GDK has no GL context to give and WebKit aborts the process rather than fall back.
+        bool accelerate = _accelerated && settings.HardwareAcceleration;
+        webkit_settings_set_hardware_acceleration_policy(s, accelerate ? AccelerationAlways : AccelerationNever);
+        webkit_settings_set_enable_webgl(s, accelerate);
         webkit_settings_set_enable_javascript(s, settings.JavaScriptEnabled);
         webkit_settings_set_enable_developer_extras(s, settings.DevToolsEnabled);
         webkit_settings_set_media_playback_requires_user_gesture(s, !settings.AllowAutoplay);
-        if (settings.UserAgent is { Length: > 0 } agent) webkit_settings_set_user_agent(s, agent);
+        if (settings.UserAgent is { Length: > 0 } agent)
+        {
+            webkit_settings_set_user_agent(s, agent);
+        }
+        else
+        {
+            // Appended to the platform UA rather than replacing it: a site's feature detection
+            // still sees a WebKit browser, and its logs still see which app is embedding it.
+            var app = System.Reflection.Assembly.GetEntryAssembly()?.GetName();
+            webkit_settings_set_user_agent_with_application_details(s,
+                app?.Name ?? "Zigote", app?.Version?.ToString(3));
+        }
     }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+    private static int OnContextMenu(nint view, nint menu, nint evt, nint hitTest, nint data) => 1;
 
     /// <summary>Injected at document-start of every page from now on. Safe before
     ///     <see cref="CreateView" /> only through the owner, which replays its list on attach.</summary>

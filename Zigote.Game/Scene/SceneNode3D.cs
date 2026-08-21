@@ -18,12 +18,26 @@ public sealed class SceneNode3D(string name, Node3DKind kind = Node3DKind.Empty)
     private Vec3 _pScale;
     private bool _pushed;
 
+    // Set by the LocalTransform setter (and reparenting); lets UpdateWorldTransform skip the
+    // quat/combine math for every node that didn't move under an unmoved parent.
+    private bool _localDirty = true;
+    private Transform3D _local = Transform3D.Identity;
+
     public string Name { get; set; } = name;
     public Node3DKind Kind { get; set; } = kind;
     public SceneNode3D? Parent { get; private set; }
     public bool Active { get; set; } = true;
 
-    public Transform3D LocalTransform { get; set; } = Transform3D.Identity;
+    public Transform3D LocalTransform
+    {
+        get => _local;
+        set
+        {
+            _local = value;
+            _localDirty = true;
+        }
+    }
+
     public Transform3D WorldTransform { get; private set; } = Transform3D.Identity;
 
     // Convenience accessors that forward to LocalTransform.
@@ -78,12 +92,17 @@ public sealed class SceneNode3D(string name, Node3DKind kind = Node3DKind.Empty)
     {
         child.Parent?.RemoveChild(child);
         child.Parent = this;
+        child._localDirty = true; // new parent → its world transform must recompute
         _children.Add(child);
     }
 
     public void RemoveChild(SceneNode3D child)
     {
-        if (_children.Remove(child)) child.Parent = null;
+        if (_children.Remove(child))
+        {
+            child.Parent = null;
+            child._localDirty = true;
+        }
     }
 
     public IEnumerable<SceneNode3D> Descendants()
@@ -97,14 +116,24 @@ public sealed class SceneNode3D(string name, Node3DKind kind = Node3DKind.Empty)
 
     // ── Transform propagation ─────────────────────────────────────────────────
 
-    public void UpdateWorldTransform()
+    public void UpdateWorldTransform() => UpdateWorldTransform(parentChanged: false);
+
+    private void UpdateWorldTransform(bool parentChanged)
     {
-        WorldTransform = Parent is null
-            ? LocalTransform
-            : Transform3D.Combine(parent: Parent.WorldTransform, child: LocalTransform);
+        // Dirty-gated like Sync() below: the walk still visits every node (cheap pointer chase),
+        // but the quat combine only runs for nodes whose local transform changed or whose parent's
+        // world transform just did.
+        bool changed = _localDirty || parentChanged;
+        if (changed)
+        {
+            WorldTransform = Parent is null
+                ? _local
+                : Transform3D.Combine(parent: Parent.WorldTransform, child: _local);
+            _localDirty = false;
+        }
 
         foreach (var child in _children)
-            child.UpdateWorldTransform();
+            child.UpdateWorldTransform(parentChanged: changed);
     }
 
     public Mat4 WorldMatrix() => WorldTransform.ToMat4();

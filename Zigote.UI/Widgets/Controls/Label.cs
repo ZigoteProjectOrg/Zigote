@@ -31,6 +31,10 @@ public class Label : Widget
     // Word-wrapped lines for the multi-line path, cached by (text, width, font inputs, line cap) so a
     // re-measure with unchanged inputs allocates nothing (the paint/measure hot path stays zero-GC).
     private readonly List<string> _lines = [];
+
+    // Reused line builder for EnsureWrapped: appending words is O(words) total instead of the
+    // O(words²) copying that `cur = cur + " " + word` costs on every paragraph re-wrap.
+    private readonly System.Text.StringBuilder _wrapSb = new();
     private string _drawText = "";
 
     // Resolved at Measure time and reused by Paint so the two passes never disagree.
@@ -49,6 +53,7 @@ public class Label : Widget
     private string? _wrapText;
     private FontWeight _wrapWeight = FontWeight.Normal;
     private float _wrapWidth = -1f;
+    private float _wrapWidest = -1f;
 
     public Label(string text) => _text = text;
 
@@ -199,23 +204,33 @@ public class Label : Widget
             if (_lines.Count > 1)
             {
                 _multiline = true;
-                float widest = 0f;
-                foreach (string line in _lines)
+                // Memoized alongside the wrap cache: the widest line depends only on the wrap
+                // inputs, and this ran per layout pass for every multiline label even on a
+                // wrap-cache hit.
+                if (_wrapWidest < 0f)
                 {
-                    widest = MathF.Max(
-                        x: widest,
-                        y: TextMeasure.Width(
-                            text: line,
-                            fontSize: _fontSize,
-                            weight: FontWeight,
-                            style: FontStyle,
-                            fontFamily: FontFamily,
-                            letterSpacing: LetterSpacing
-                        )
-                    );
+                    float widest = 0f;
+                    foreach (string line in _lines)
+                    {
+                        widest = MathF.Max(
+                            x: widest,
+                            y: TextMeasure.Width(
+                                text: line,
+                                fontSize: _fontSize,
+                                weight: FontWeight,
+                                style: FontStyle,
+                                fontFamily: FontFamily,
+                                letterSpacing: LetterSpacing
+                            )
+                        );
+                    }
+
+                    _wrapWidest = widest;
                 }
 
-                _size = c.Constrain(new Size(width: widest, height: _lines.Count * _fontSize * lh));
+                _size = c.Constrain(
+                    new Size(width: _wrapWidest, height: _lines.Count * _fontSize * lh)
+                );
                 return _size;
             }
         }
@@ -268,6 +283,8 @@ public class Label : Widget
             return;
         _wrapText = Text;
         _wrapWidth = maxWidth;
+        _wrapWidest = -1f; // widest-line memo follows the wrap cache
+
         _wrapFs = _fontSize;
         _wrapWeight = FontWeight;
         _wrapStyle = FontStyle;
@@ -296,7 +313,7 @@ public class Label : Widget
                 continue;
             }
 
-            string cur = string.Empty;
+            var cur = _wrapSb.Clear();
             float curW = 0f;
             foreach (string word in hardLine.Split(' '))
             {
@@ -310,25 +327,25 @@ public class Label : Widget
                 );
                 if (cur.Length == 0)
                 {
-                    cur = word;
+                    cur.Append(word);
                     curW = wordW;
                     continue;
                 }
 
                 if (curW + spaceW + wordW <= maxWidth)
                 {
-                    cur = cur + " " + word;
+                    cur.Append(' ').Append(word);
                     curW += spaceW + wordW;
                 }
                 else
                 {
-                    _lines.Add(cur);
-                    cur = word;
+                    _lines.Add(cur.ToString());
+                    cur.Clear().Append(word);
                     curW = wordW;
                 }
             }
 
-            _lines.Add(cur);
+            _lines.Add(cur.ToString());
         }
 
         if (MaxLines is { } ml && ml > 0 && _lines.Count > ml)

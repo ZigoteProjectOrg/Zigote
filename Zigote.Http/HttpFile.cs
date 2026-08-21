@@ -26,7 +26,10 @@ namespace Zigote.Http;
 public sealed class HttpFile : Stream
 {
     private readonly int _blockSize;
-    private readonly Dictionary<long, byte[]> _blocks = [];
+
+    // The node rides in the value so an LRU promotion is O(1) — LinkedList.Remove(value) is a
+    // linear scan and ran on every cache HIT (same scheme as MemoryCacheStore).
+    private readonly Dictionary<long, (byte[] Bytes, LinkedListNode<long> Node)> _blocks = [];
     private readonly int _maxBlocks;
     private readonly LinkedList<long> _lru = new();
     private readonly HttpRunner _runner;
@@ -244,11 +247,11 @@ public sealed class HttpFile : Stream
 
     private async ValueTask<byte[]> BlockAsync(long block, CancellationToken ct)
     {
-        if (_blocks.TryGetValue(block, out byte[]? cached))
+        if (_blocks.TryGetValue(key: block, value: out var cached))
         {
-            _lru.Remove(block);
-            _lru.AddFirst(block);
-            return cached;
+            _lru.Remove(cached.Node); // node overload: O(1), not a value scan
+            _lru.AddFirst(cached.Node);
+            return cached.Bytes;
         }
 
         long start = block * _blockSize;
@@ -269,8 +272,7 @@ public sealed class HttpFile : Stream
                 $"Range request answered {(int)response.Status}: the resource changed while it was open.");
 
         byte[] bytes = response.Body.ToArray();
-        _blocks[block] = bytes;
-        _lru.AddFirst(block);
+        _blocks[block] = (bytes, _lru.AddFirst(block));
         while (_lru.Count > _maxBlocks && _lru.Last is { } last)
         {
             _blocks.Remove(last.Value);

@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+
 namespace Zigote.Ecs.Scene;
 
 /// <summary>
@@ -118,13 +120,20 @@ public sealed class EcsSceneBridge : IDisposable
         if (_nodeToEntity.TryGetValue(key: root.Id, value: out var e))
         {
             var t = ToTransform(root);
-            if (!_lastPushed.TryGetValue(key: root.Id, value: out var last)
+            // One hashed lookup for gate-read + gate-write instead of TryGetValue + indexer —
+            // this runs for every node every render frame.
+            ref var last = ref CollectionsMarshal.GetValueRefOrAddDefault(
+                dictionary: _lastPushed,
+                key: root.Id,
+                exists: out bool existed
+            );
+            if (!existed
                 || last.Position != t.Position
                 || last.Rotation != t.Rotation
                 || last.Scale != t.Scale)
             {
                 World.Set(e: e, c: t);
-                _lastPushed[root.Id] = t;
+                last = t;
             }
         }
 
@@ -141,7 +150,12 @@ public sealed class EcsSceneBridge : IDisposable
             root.Position = t.Position;
             root.Rotation = t.Rotation;
             root.Scale = t.Scale;
-            _lastPushed[root.Id] = t; // node now mirrors the entity — keeps the push gate accurate
+            // Node now mirrors the entity — keeps the push gate accurate.
+            CollectionsMarshal.GetValueRefOrAddDefault(
+                dictionary: _lastPushed,
+                key: root.Id,
+                exists: out _
+            ) = t;
         }
 
         var children = root.Children;

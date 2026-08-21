@@ -26,6 +26,17 @@ public abstract class VfxUpdateModule
 {
     public abstract VfxModuleKind Kind { get; }
     public abstract void Apply(ref Particle p, in VfxUpdateContext ctx);
+
+    /// <summary>
+    ///     Apply to a whole live span — one virtual call per module per step instead of one per
+    ///     particle per module (~5M indirect calls/s at 10k particles × 4 modules × 120 Hz). A
+    ///     sealed override's inner Apply devirtualizes and inlines; this base fallback keeps
+    ///     third-party modules working unchanged.
+    /// </summary>
+    public virtual void ApplyRange(Span<Particle> particles, in VfxUpdateContext ctx)
+    {
+        for (int i = 0; i < particles.Length; i++) Apply(p: ref particles[i], ctx: in ctx);
+    }
 }
 
 public sealed class GravityModule(Vec3 gravity) : VfxUpdateModule
@@ -35,6 +46,12 @@ public sealed class GravityModule(Vec3 gravity) : VfxUpdateModule
 
     public override void Apply(ref Particle p, in VfxUpdateContext ctx) =>
         p.Velocity += Gravity * ctx.Dt;
+
+    public override void ApplyRange(Span<Particle> particles, in VfxUpdateContext ctx)
+    {
+        var step = Gravity * ctx.Dt;
+        for (int i = 0; i < particles.Length; i++) particles[i].Velocity += step;
+    }
 }
 
 public sealed class DragModule(float drag) : VfxUpdateModule
@@ -46,6 +63,12 @@ public sealed class DragModule(float drag) : VfxUpdateModule
 
     public override void Apply(ref Particle p, in VfxUpdateContext ctx) =>
         p.Velocity *= MathF.Max(x: 0f, y: 1f - (Drag * ctx.Dt));
+
+    public override void ApplyRange(Span<Particle> particles, in VfxUpdateContext ctx)
+    {
+        float keep = MathF.Max(x: 0f, y: 1f - (Drag * ctx.Dt));
+        for (int i = 0; i < particles.Length; i++) particles[i].Velocity *= keep;
+    }
 }
 
 public sealed class TurbulenceModule(float strength, float frequency) : VfxUpdateModule

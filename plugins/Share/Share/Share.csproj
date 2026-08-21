@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      Platform plugin Share: same build-time platform selection as UrlLauncher — each target
+      framework compiles exactly one Platforms/ folder, all implementations share one class
+      name (ShareDriver), and the shared code binds to it statically.
+    -->
+    <PropertyGroup>
+        <TargetFrameworks>net10.0;net10.0-android</TargetFrameworks>
+        <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('osx'))">$(TargetFrameworks);net10.0-ios</TargetFrameworks>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <RootNamespace>Share</RootNamespace>
+        <SupportedOSPlatformVersion Condition="'$(TargetFramework)' == 'net10.0-android'">26</SupportedOSPlatformVersion>
+        <SupportedOSPlatformVersion Condition="'$(TargetFramework)' == 'net10.0-ios'">15.0</SupportedOSPlatformVersion>
+        <Version>0.1.0</Version>
+        <Description>Hand text, links and files to the platform's share sheet: the share_plus slot for Zigote apps on Android, iOS and desktop.</Description>
+    </PropertyGroup>
+
+    <!-- Where the engine lives (desktop clipboard fallback only). Override with -p:ZigoteRoot=<path> or $ZIGOTE_ROOT. -->
+    <PropertyGroup>
+        <ZigoteRoot Condition="'$(ZigoteRoot)' == '' And '$(ZIGOTE_ROOT)' != ''">$(ZIGOTE_ROOT)</ZigoteRoot>
+        <ZigoteRoot Condition="'$(ZigoteRoot)' == ''">$(MSBuildThisFileDirectory)../../..</ZigoteRoot>
+    </PropertyGroup>
+
+    <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+        <ProjectReference Include="$(ZigoteRoot)/Zigote.Core/Zigote.Core.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="Share.Tests"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Compile Remove="Platforms/**/*.cs"/>
+        <Compile Include="Platforms/Desktop/**/*.cs" Condition="'$(TargetFramework)' == 'net10.0'"/>
+        <Compile Include="Platforms/Android/**/*.cs" Condition="'$(TargetFramework)' == 'net10.0-android'"/>
+        <Compile Include="Platforms/iOS/**/*.cs" Condition="'$(TargetFramework)' == 'net10.0-ios'"/>
+    </ItemGroup>
+
+</Project>

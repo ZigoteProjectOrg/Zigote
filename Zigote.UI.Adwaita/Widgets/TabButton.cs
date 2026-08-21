@@ -37,6 +37,9 @@ public sealed class AdwTabButton : ComposedWidget
     /// <summary>The rounded-square outline with the tab count centred in it.</summary>
     private sealed class CountGlyph(int count) : Widget
     {
+        // Past two digits the number stops fitting the 20px box; GNOME shows ∞ rather than
+        // letting the glyph shrink into illegibility or the button grow.
+        private readonly string _text = count > 99 ? "∞" : count.ToString();
         private ThemeData _theme = ThemeData.Dark;
 
         public override Size Measure(Constraints c)
@@ -67,11 +70,9 @@ public sealed class AdwTabButton : ComposedWidget
                 width: 1.6f
             );
 
-            // Past two digits the number stops fitting the 20px box; GNOME shows ∞ rather than
-            // letting the glyph shrink into illegibility or the button grow.
             // `tabbutton label { font-weight: 800; font-size: 10.5px }` — the count is part of the
             // icon, so the stylesheet pins it in pixels rather than letting the type ramp move it.
-            string text = count > 99 ? "∞" : count.ToString();
+            string text = _text; // formatted once — count is fixed per glyph instance
             const float fs = 10.5f;
             float w = TextMeasure.Width(text: text, fontSize: fs);
             paint.AddText(

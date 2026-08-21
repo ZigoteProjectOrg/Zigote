@@ -235,7 +235,11 @@ public partial class App
         {
             long remaining = _paceAnchorTicks - _clock.ElapsedTicks;
             if (remaining <= 0) break;
-            if (remaining > 2 * oneMs) Thread.Sleep(1);
+            if (remaining > 2 * oneMs)
+                // One bulk sleep to ~2 ms before the deadline instead of repeated Sleep(1) wakeups
+                // (a 144 Hz cap on an idle-ish frame is ~5 wakeups saved), then the short spin below
+                // absorbs sleep overshoot. Energy: fewer timer interrupts, same landing accuracy.
+                Thread.Sleep((int)Math.Max(val1: 1, val2: remaining / oneMs - 2));
             else Thread.SpinWait(64);
         }
     }

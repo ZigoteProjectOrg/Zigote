@@ -288,13 +288,14 @@ internal sealed class DropdownPopup : Widget, IDismissableOverlay
         _rowH = TouchMetrics.Pick(ControlMetrics.MenuRowHeight);
 
         float fs = _theme.FontSizeBody;
-        float widest = _labels.Aggregate(
-            seed: 0f,
-            func: (current, l) => MathF.Max(
-                x: current,
+        float widest = 0f;
+        foreach (string l in _labels)
+        {
+            widest = MathF.Max(
+                x: widest,
                 y: TextMeasure.Width(text: l, fontSize: fs, fontFamily: _fontFamily)
-            )
-        );
+            );
+        }
         _popupW = MathF.Max(
             x: _minWidth,
             y: MathF.Max(x: _anchor.Width, y: widest + CheckW + Spacing.Md)

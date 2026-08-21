@@ -85,15 +85,16 @@ public sealed class Background : IDisposable
     private static readonly ConcurrentDictionary<Type, bool>
         MutablePayloads = new();
 
-    private static readonly HashSet<Type> MutableGenerics = [
-        typeof(List<>),
-        typeof(Dictionary<,>),
-        typeof(HashSet<>),
-        typeof(Queue<>),
-        typeof(Stack<>),
-        typeof(SortedList<,>),
-        typeof(SortedDictionary<,>),
-    ];
+    private static readonly System.Collections.Frozen.FrozenSet<Type> MutableGenerics =
+        System.Collections.Frozen.FrozenSet.ToFrozenSet([
+            typeof(List<>),
+            typeof(Dictionary<,>),
+            typeof(HashSet<>),
+            typeof(Queue<>),
+            typeof(Stack<>),
+            typeof(SortedList<,>),
+            typeof(SortedDictionary<,>),
+        ]);
 
     private readonly List<Background> _children = [];
 

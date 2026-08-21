@@ -22,7 +22,10 @@ public partial class App
     // draggable titlebar area. This is what lets real controls live in the titlebar band:
     // buttons/fields stay clickable, and the gaps between them move the window.
 
-    private static readonly Dictionary<Type, bool> InteractiveTypeCache = new();
+    // Concurrent: the SDL hit-test callback that reads/writes this runs per pointer motion on
+    // whatever thread the platform chose — a plain Dictionary can be torn by a concurrent write.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, bool>
+        InteractiveTypeCache = new();
     private static bool _dragProviderInstalled;
 
     /// <summary>

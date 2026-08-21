@@ -29,7 +29,14 @@ public abstract class InheritedWidget : Widget
     public abstract bool UpdateShouldNotify(InheritedWidget oldWidget);
 
     /// <summary>Register <paramref name="w" /> to be rebuilt when this widget's data changes.</summary>
-    internal void AddDependent(Widget w) => _dependents.AddOrUpdate(key: w, value: null);
+    internal void AddDependent(Widget w)
+    {
+        // Read-first: CWT reads are lock-free while AddOrUpdate takes the container lock, and
+        // after the first build every dependent is already registered — this runs on every
+        // ThemeProvider.Of (172 call sites, several per widget build).
+        if (!_dependents.TryGetValue(key: w, value: out _))
+            _dependents.AddOrUpdate(key: w, value: null);
+    }
 
     /// <summary>
     ///     Rebuild every still-live dependent. Collected/detached dependents are simply absent from the

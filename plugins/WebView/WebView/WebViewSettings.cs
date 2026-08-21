@@ -20,6 +20,16 @@ public sealed record WebViewSettings
     ///     Android). A development switch — it is a debugging port on someone else's machine.</summary>
     public bool DevToolsEnabled { get; init; }
 
+    /// <summary>
+    ///     Let WebKit composite the page on the GPU — WebGL, GPU-decoded video, composited CSS
+    ///     transforms and filters. On by default, and honoured wherever the embedding can hand
+    ///     WebKit a GL surface: the Linux X11 overlay, Windows, Android and iOS. The Linux
+    ///     <i>Wayland</i> texture path ignores it and stays on the software rasterizer — an
+    ///     offscreen GDK window has no GL context to give, so there is nothing to accelerate into.
+    ///     Turn it off to work around a broken GL driver.
+    /// </summary>
+    public bool HardwareAcceleration { get; init; } = true;
+
     /// <summary>Let the page start audio/video without a user gesture. Off matches every
     ///     mobile browser and is what an embedded map or checkout wants.</summary>
     public bool AllowAutoplay { get; init; }

@@ -519,7 +519,15 @@ while (!app.ShouldQuit)
                      !app.ForceContinuousRender;
     long targetTicks = throttled ? backgroundTicks : app.FrameIntervalTicks;
     long remaining = targetTicks - (clock.ElapsedTicks - frameStart);
-    if (remaining > 0) Thread.Sleep((int)(remaining * 1000 / Stopwatch.Frequency));
+    if (remaining > 0)
+    {
+        int ms = (int)(remaining * 1000 / Stopwatch.Frequency);
+        // Background cadence waits on the event loop, not a blind sleep: a completed asset load
+        // (App.Post wakes the wait) or the click refocusing the window ends it immediately
+        // instead of after up to the whole background interval.
+        if (throttled) app.WaitForWork(ms);
+        else if (ms > 0) Thread.Sleep(ms);
+    }
 }
 
 CloseSession();

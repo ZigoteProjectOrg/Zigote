@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      One app that exercises every desktop-buildable plugin in this folder. The pages call the
+      same API a real app would and print whatever comes back — including "unavailable", which
+      on a laptop is the honest answer for half of them.
+    -->
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <RootNamespace>PluginsDemo</RootNamespace>
+        <AssemblyName>pluginsdemo</AssemblyName>
+    </PropertyGroup>
+
+    <!-- Where the engine lives. Override with -p:ZigoteRoot=<path> or $ZIGOTE_ROOT. -->
+    <PropertyGroup>
+        <ZigoteRoot Condition="'$(ZigoteRoot)' == '' And '$(ZIGOTE_ROOT)' != ''">$(ZIGOTE_ROOT)</ZigoteRoot>
+        <ZigoteRoot Condition="'$(ZigoteRoot)' == ''">$(MSBuildThisFileDirectory)../../..</ZigoteRoot>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="$(ZigoteRoot)/Zigote.UI/Zigote.UI.csproj"/>
+        <ProjectReference Include="$(ZigoteRoot)/Zigote.UI.Adwaita/Zigote.UI.Adwaita.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="../../AppLinks/AppLinks/AppLinks.csproj"/>
+        <ProjectReference Include="../../AppSettings/AppSettings/AppSettings.csproj"/>
+        <ProjectReference Include="../../Battery/Battery/Battery.csproj"/>
+        <ProjectReference Include="../../Biometrics/Biometrics/Biometrics.csproj"/>
+        <ProjectReference Include="../../Connectivity/Connectivity/Connectivity.csproj"/>
+        <ProjectReference Include="../../DeviceInfo/DeviceInfo/DeviceInfo.csproj"/>
+        <ProjectReference Include="../../FilePicker/FilePicker/FilePicker.csproj"/>
+        <ProjectReference Include="../../Geolocation/Geolocation/Geolocation.csproj"/>
+        <ProjectReference Include="../../Haptics/Haptics/Haptics.csproj"/>
+        <ProjectReference Include="../../Notifications/Notifications/Notifications.csproj"/>
+        <ProjectReference Include="../../PathProvider/PathProvider/PathProvider.csproj"/>
+        <ProjectReference Include="../../Permissions/Permissions/Permissions.csproj"/>
+        <ProjectReference Include="../../Push/Push/Push.csproj"/>
+        <ProjectReference Include="../../SecureStorage/SecureStorage/SecureStorage.csproj"/>
+        <ProjectReference Include="../../Sensors/Sensors/Sensors.csproj"/>
+        <ProjectReference Include="../../Share/Share/Share.csproj"/>
+        <ProjectReference Include="../../UrlLauncher/UrlLauncher/UrlLauncher.csproj"/>
+    </ItemGroup>
+
+</Project>

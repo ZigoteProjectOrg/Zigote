@@ -22,6 +22,26 @@ internal static class ChildReconciler
     public static void Reconcile(List<Widget> current, IReadOnlyList<Widget> incoming,
         Widget parent)
     {
+        // Fast path: identical list (the overwhelmingly common retained-instance rebuild — every
+        // Build() that returns the same children in the same order). Reference-compare pairwise and
+        // allocate nothing. Attach still runs below for a parent that just became live, so only
+        // take the shortcut when nothing needs attaching either.
+        if (current.Count == incoming.Count)
+        {
+            bool same = true;
+            for (int i = 0; i < current.Count; i++)
+            {
+                if (!ReferenceEquals(objA: current[i], objB: incoming[i]) ||
+                    current[i].Owner is null != parent.Owner is null)
+                {
+                    same = false;
+                    break;
+                }
+            }
+
+            if (same) return;
+        }
+
         // Index existing keyed children for O(1) reuse lookup.
         Dictionary<(Type, Key), Widget>? byKey = null;
         foreach (var w in current)

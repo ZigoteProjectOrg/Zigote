@@ -89,6 +89,14 @@ public sealed class GameSession : IWorldSessionHooks
     // modes show the same look.
     private readonly PhysicalCameraDriver _physDriver = new();
 
+    // Camera node cached across frames (validated by parent-chain walk, invalidated on
+    // spawn/destroy) — FindCamera is a full-tree scan and ran every render frame.
+    private SceneNode? _cachedCamera;
+
+    // Hoisted findNode delegate for _physDriver.Apply — a fresh closure per frame otherwise.
+    private Func<int, SceneNode?>? _findNodeFunc;
+    private SceneNode? _findRoot;
+
     // JoltPhysics world and per-node body ID map
     private readonly PhysicsWorld _physics = new();
 
@@ -305,12 +313,14 @@ public sealed class GameSession : IWorldSessionHooks
         RegisterBodies(subtreeRoot); // UsePhysics nodes in the spawned subtree get live Jolt bodies
         InitAudioSources(subtreeRoot);
         _vfx.Add(subtreeRoot);
+        _cachedCamera = null; // the spawn may contain a camera that should now win the scan
     }
 
     void IWorldSessionHooks.OnDestroying(SceneNode subtreeRoot)
     {
         ReleaseNodeResources(subtreeRoot);
         _vfx.Remove(subtreeRoot);
+        _cachedCamera = null;
     }
 
     /// <summary>Record a key transition. Hosts call this from their key handler.</summary>
@@ -491,11 +501,11 @@ public sealed class GameSession : IWorldSessionHooks
 
     public void Update(SceneNode root, float dt)
     {
-        // Found once and passed down. FindCamera walks the tree until it hits a Camera node, and this
-        // ran twice per render frame — here and inside PublishRenderView — for an answer that cannot
-        // change between the two calls. On a large scene with the camera late in the tree that is a
-        // full traversal per frame spent re-deriving what was just derived.
-        var cam = FindCamera(root);
+        // Found once and passed down, from a cross-frame cache. FindCamera walks the tree until it
+        // hits a Camera node, and this ran twice per render frame — here and inside
+        // PublishRenderView; now the scan only re-runs after a spawn/destroy or camera reparent.
+        var cam = FindCameraCached(root);
+        _findRoot = root; // for the hoisted findNode delegate below
 
         // 0. Publish the camera once per render frame so scripts can do view-dependent work (frustum
         //    culling / LOD). One-frame-stale transform + last paint's viewport size — invisible for culling.
@@ -691,7 +701,8 @@ public sealed class GameSession : IWorldSessionHooks
             cameraWorldPos: world.Position,
             viewportHeightPx: RenderView.ViewportHeight,
             dt: dt,
-            findNode: id => FindNodeById(node: root, id: id)
+            findNode: _findNodeFunc ??= id =>
+                _findRoot is { } r ? FindNodeById(node: r, id: id) : null
         );
         if (grade is { } g)
         {
@@ -818,6 +829,27 @@ public sealed class GameSession : IWorldSessionHooks
             cam.Position = cam.Position + (move.Normalize() * (CameraSpeed * dt));
 
         cam.Rotation = Quat.FromEuler(pitch: _camPitch, yaw: _camYaw, roll: 0f);
+    }
+
+    /// <summary>
+    ///     <see cref="FindCamera" /> with a cross-frame cache: the hit is validated by walking its
+    ///     parent chain up to <paramref name="root" /> (O(depth), a handful of reference reads), so
+    ///     a reparented/destroyed camera can never be returned stale. Spawn/destroy invalidate it
+    ///     outright because a spawn may introduce an earlier-in-tree camera that should win.
+    /// </summary>
+    private SceneNode? FindCameraCached(SceneNode root)
+    {
+        var cached = _cachedCamera;
+        if (cached is not null)
+        {
+            for (var n = cached; n is not null; n = n.Parent)
+            {
+                if (ReferenceEquals(objA: n, objB: root))
+                    return cached;
+            }
+        }
+
+        return _cachedCamera = FindCamera(root);
     }
 
     private static SceneNode? FindCamera(SceneNode node)
