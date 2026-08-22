@@ -117,6 +117,42 @@ try
             sz: 1f
         );
 
+        // Many-object scale mode (ZIGOTE_SMOKE_OBJECTS=<n>): n additional spheres on a grid, so the
+        // 3D path can be measured at a realistic object count. The default scene is ONE sphere,
+        // which makes per-draw costs (the model-uniform pack, the draw loop) invisible — the same
+        // gap the 2D benchmark filled for the paint path.
+        if (int.TryParse(
+                s: Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_OBJECTS"),
+                result: out int objectCount
+            ) && objectCount > 0)
+        {
+            int side = (int)Math.Ceiling(Math.Sqrt(objectCount));
+            for (int i = 0; i < objectCount; i++)
+            {
+                ulong n = e.SceneAddChildNode(parentHandle: 0, name: $"o{i}", kind: 1);
+                e.SceneSetMeshPrimitive(nodeHandle: n, primType: 2);
+                e.SceneSetMeshColor(
+                    nodeHandle: n,
+                    r: (i % 7) / 7f,
+                    g: (i % 5) / 5f,
+                    b: (i % 3) / 3f
+                );
+                float gx = ((i % side) - (side / 2f)) * 0.6f;
+                float gy = ((i / side) - (side / 2f)) * 0.6f;
+                e.SceneUpdateNode(
+                    nodeHandle: n,
+                    x: gx, y: gy, z: -2f,
+                    qx: 0f, qy: 0f, qz: 0f, qw: 1f,
+                    sx: 0.2f, sy: 0.2f, sz: 0.2f
+                );
+            }
+
+            // Without this the timing is a vsync floor and nothing else — 1 sphere and 1000
+            // spheres both land near the display's refresh. Same trap as the 2D benchmark.
+            e.SetVsync(false);
+            Console.WriteLine($"[smoke] scene scale: +{objectCount} spheres (vsync off)");
+        }
+
         // Optional spot-shadow scene (ZIGOTE_SMOKE_SPOT=1): a wide ground slab + a downward spot light
         // overhead, so the sphere casts a perspective spot shadow onto the ground. Exercises the spot
         // cone falloff + per-light perspective shadow map. Replaces the directional sun for a clear read.
