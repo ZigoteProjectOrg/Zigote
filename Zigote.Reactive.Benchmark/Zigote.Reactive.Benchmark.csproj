@@ -15,7 +15,7 @@
         </PackageReference>
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0"/>
         <!-- Benchmark-only: the head-to-head baseline in Comparison.cs. Never referenced by shipped code. -->
-        <PackageReference Include="SignalsDotnet" Version="2.3.1"/>
+        <PackageReference Include="SignalsDotnet" Version="3.3.1" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\Zigote.Core\Zigote.Core.csproj"/>
