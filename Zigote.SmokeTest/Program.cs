@@ -1261,6 +1261,89 @@ try
         );
     }
 
+    // Wide 2D paint-command golden (ZIGOTE_SMOKE_ALLCMDS=<path>). The main ZIGOTE_SHOT scene draws
+    // three rects, a border and a transform — 5 of the 20 ZgPaintCommand kinds. Everything else
+    // (shadow, liquid glass, shader effect, bezier, polygon, glyph run, text layout, blur, opacity
+    // layers, clips, render-texture regions) crossed the paint ABI with no image gate at all, so a
+    // change to the wire format could break one of them silently. This exercises every kind that
+    // can be drawn without external assets, in one deterministic frame.
+    string? allCmdsShot = Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_ALLCMDS");
+    if (!scene && !string.IsNullOrEmpty(allCmdsShot))
+    {
+        var p2 = new PaintList();
+        p2.AddRect(bounds: new Rect(x: 0, y: 0, width: w, height: h), color: ThemeData.Dark.Background);
+
+        // RECT (square + rounded) and BORDER
+        p2.AddRect(new Rect(x: 10, y: 10, width: 80, height: 60), new Color(r: 0.9f, g: 0.2f, b: 0.2f));
+        p2.AddRect(new Rect(x: 100, y: 10, width: 80, height: 60), new Color(r: 0.2f, g: 0.8f, b: 0.3f), radius: 14f);
+        p2.AddBorder(new Rect(x: 190, y: 10, width: 80, height: 60), new Color(r: 0.3f, g: 0.55f, b: 1f), radius: 10f, width: 4f);
+
+        // SHADOW
+        p2.AddShadow(
+            bounds: new Rect(x: 280, y: 10, width: 80, height: 60),
+            color: new Color(r: 0f, g: 0f, b: 0f, a: 0.7f),
+            borderRadius: 12f,
+            blurRadius: 10f,
+            spread: 2f
+        );
+
+        // TEXT
+        p2.AddText(
+            text: "Zigote all-commands",
+            baselineX: 20f,
+            baselineY: 110f,
+            color: new Color(r: 0.95f, g: 0.95f, b: 0.95f),
+            fontSize: 18f
+        );
+
+        // BEZIER
+        p2.AddBezier(
+            x0: 20f, y0: 140f, x1: 90f, y1: 190f,
+            x2: 160f, y2: 110f, x3: 230f, y3: 160f,
+            color: new Color(r: 1f, g: 0.75f, b: 0.1f), width: 3f
+        );
+
+        // POLYGON
+        Span<Offset> tri =
+        [
+            new Offset(x: 260f, y: 160f), new Offset(x: 320f, y: 120f),
+            new Offset(x: 350f, y: 175f), new Offset(x: 290f, y: 185f),
+        ];
+        p2.AddPolygon(points: tri, color: new Color(r: 0.85f, g: 0.35f, b: 0.9f));
+
+        // CLIP_START / CLIP_END around a rect that overhangs the clip
+        p2.AddClipStart(new Rect(x: 20, y: 200, width: 100, height: 60), radius: 12f);
+        p2.AddRect(new Rect(x: 0, y: 190, width: 200, height: 100), new Color(r: 0.2f, g: 0.6f, b: 0.9f));
+        p2.AddClipEnd();
+
+        // PUSH_OPACITY / POP_OPACITY
+        p2.AddPushOpacity(bounds: new Rect(x: 140, y: 200, width: 100, height: 60), alpha: 0.45f);
+        p2.AddRect(new Rect(x: 140, y: 200, width: 100, height: 60), new Color(r: 1f, g: 1f, b: 1f));
+        p2.AddPopOpacity();
+
+        // TRANSFORM_PUSH / TRANSFORM_POP
+        p2.PushTransform(
+            Matrix2D.Translation(dx: 300f, dy: 230f)
+            * Matrix2D.Rotation(0.4f)
+            * Matrix2D.Scale(sx: 0.9f, sy: 0.9f)
+        );
+        p2.AddRect(new Rect(x: 0, y: 0, width: 70, height: 40), new Color(r: 0.95f, g: 0.6f, b: 0.2f));
+        p2.PopTransform();
+
+        // LIQUID_GLASS over the content drawn so far
+        p2.AddLiquidGlass(
+            bounds: new Rect(x: 20, y: 300, width: 140, height: 70),
+            color: new Color(r: 1f, g: 1f, b: 1f, a: 0.18f),
+            radius: 18f, thickness: 8f, glowX: 0.3f, glowY: 0.3f, pinch: 0.4f
+        );
+
+        app.Engine.SubmitPaintCommands(p2);
+        bool okAll = app.Engine.CaptureUiBmp(path: allCmdsShot, width: w, height: h);
+        Console.WriteLine(
+            $"[smoke] allcmds-capture {(okAll ? "ok" : "FAILED")} cmds={p2.Count} -> {allCmdsShot}"
+        );
+    }
+
     // 2D paint-throughput benchmark (ZIGOTE_SMOKE_PAINT=<rects>). Builds a synthetic paint list of
     // N rounded rects + text runs ONCE, then submits and renders it repeatedly, reporting the median
     // frame time. This measures the native 2D path end to end — the ZgPaintCommand marshal,
