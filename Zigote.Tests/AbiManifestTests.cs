@@ -51,9 +51,9 @@ public class AbiManifestTests
 
     private static Type? FindMirror(string zigName)
     {
-        // ZgGlyphRunQuad is mirrored as ZgGlyphQuad; everything else matches by name.
+        // ZgGlyphRunQuad is mirrored as ZgGlyphRunQuad; everything else matches by name.
         string[] candidates = zigName == "ZgGlyphRunQuad"
-            ? ["ZgGlyphQuad", zigName]
+            ? ["ZgGlyphRunQuad", zigName]
             : [zigName];
         var asm = typeof(Zigote.Core.Native.ZgPaintCommand).Assembly;
         foreach (string name in candidates)

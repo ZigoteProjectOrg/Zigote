@@ -23,7 +23,7 @@ public class AbiLayoutTests
         // UTF-8 payload lives out of band in the engine poll buffer (see ZgEvent), not inline.
         Assert.Equal(expected: 44, actual: Marshal.SizeOf<ZgEvent>());
         Assert.Equal(expected: 20, actual: Marshal.SizeOf<ZgAbiInfo>());
-        Assert.Equal(expected: 32, actual: Marshal.SizeOf<ZgGlyphQuad>());
+        Assert.Equal(expected: 32, actual: Marshal.SizeOf<ZgGlyphRunQuad>());
         Assert.Equal(
             expected: 280,
             actual: Marshal.SizeOf<ZgRenderSettings3D>()

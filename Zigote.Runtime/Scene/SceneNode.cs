@@ -1213,7 +1213,7 @@ public sealed class SceneNode : IEcsSceneNode
     ///     instead of decoding them one at a time on the calling thread. Use this for bulk loads
     ///     (model import, scene load) where many materials have textures.
     /// </summary>
-    public void SyncToNativeBatched()
+    public unsafe void SyncToNativeBatched()
     {
         if (ZigoteEngine.Instance == null)
         {
@@ -1260,12 +1260,14 @@ public sealed class SceneNode : IEcsSceneNode
                     allocated.Add(emissivePtr);
                 }
 
+                // The generated struct types these as byte* (the Zig [*c]const u8); the
+                // Marshal.StringToCoTaskMemUTF8 allocations above are nint. Same 8 bytes.
                 items[i] = new ZgTextureLoadItem {
                     NodeHandle = n.Handle,
-                    BaseColorPath = basePtr,
-                    MrPath = mrPtr,
-                    NormalPath = normalPtr,
-                    EmissivePath = emissivePtr,
+                    BaseColorPath = (byte*)basePtr,
+                    MrPath = (byte*)mrPtr,
+                    NormalPath = (byte*)normalPtr,
+                    EmissivePath = (byte*)emissivePtr,
                 };
             }
 

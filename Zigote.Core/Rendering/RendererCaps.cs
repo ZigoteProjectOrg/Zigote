@@ -97,8 +97,8 @@ public readonly record struct RendererCaps(
         return new RendererCaps(
             ActiveBackend: (RenderBackend)c.ActiveBackend,
             Upscalers: (UpscalerKinds)c.Upscalers,
-            RayTracing: c.RayTracing != 0,
-            RayTracingFromRender: c.RayTracingFromRender != 0
+            RayTracing: c.Raytracing != 0,
+            RayTracingFromRender: c.RaytracingFromRender != 0
         );
     }
 }

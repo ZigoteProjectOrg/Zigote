@@ -54,7 +54,7 @@ public sealed unsafe class PaintList
     // Pinned-object-heap quad arrays: the command embeds the data address at Add time, and this
     // list is the managed reference that keeps each array alive until Clear(). No GCHandle —
     // POH arrays never move, so the address is taken directly (same scheme as EncodeUtf8).
-    private readonly List<ZgGlyphQuad[]> _quadArrays = [];
+    private readonly List<ZgGlyphRunQuad[]> _quadArrays = [];
 
     // ── Validation counters ───────────────────────────────────────────────────
     private int _clipDepth;
@@ -697,7 +697,7 @@ public sealed unsafe class PaintList
     ///     Each quad contains screen coordinates and atlas UVs.
     ///     <paramref name="tint" /> is multiplied with the atlas alpha to produce the final pixel color.
     /// </summary>
-    public void AddGlyphRun(ulong atlasHandle, ReadOnlySpan<ZgGlyphQuad> quads, Color tint)
+    public void AddGlyphRun(ulong atlasHandle, ReadOnlySpan<ZgGlyphRunQuad> quads, Color tint)
     {
         if (atlasHandle == 0 || quads.IsEmpty) return;
         CheckColor(tint);
@@ -705,7 +705,7 @@ public sealed unsafe class PaintList
         // Copy quads onto the pinned object heap so the pointer stays valid past PinAndCall with
         // no GCHandle pin/free per run per frame; _quadArrays keeps the array alive until Clear().
         var quadArr =
-            GC.AllocateUninitializedArray<ZgGlyphQuad>(length: quads.Length, pinned: true);
+            GC.AllocateUninitializedArray<ZgGlyphRunQuad>(length: quads.Length, pinned: true);
         quads.CopyTo(quadArr);
         if (_offsetX != 0f || _offsetY != 0f)
         {
@@ -724,7 +724,7 @@ public sealed unsafe class PaintList
         cmd.CacheKeyHi = (uint)((atlasHandle >> 32) & 0xFFFFFFFF);
         cmd.HasCacheKey = 1;
         cmd.TextLen = (uint)quads.Length;
-        fixed (ZgGlyphQuad* p = quadArr) cmd.TextPtr = (byte*)p; // POH: address stable after unfix
+        fixed (ZgGlyphRunQuad* p = quadArr) cmd.TextPtr = (byte*)p; // POH: address stable after unfix
         Push(cmd: cmd, text: null, pixels: null);
     }
 

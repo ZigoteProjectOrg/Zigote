@@ -147,6 +147,118 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
         }
     }
 
+    private static int SizeOfCsType(string t) => t switch
+    {
+        "byte" => 1, "sbyte" => 1,
+        "ushort" => 2, "short" => 2,
+        "uint" => 4, "int" => 4, "float" => 4,
+        "ulong" => 8, "long" => 8, "double" => 8, "byte*" => 8,
+        _ => 4,
+    };
+
+    private class ZigStructField
+    {
+        public string Name = string.Empty;
+        public string Type = string.Empty;
+        public int ArrayLength; // 0 = not an array
+    }
+
+    private class ZigStruct
+    {
+        public string Name = string.Empty;
+        public List<ZigStructField> Fields = new List<ZigStructField>();
+    }
+
+    /// <summary>
+    ///     Maps a Zig field type to its C# equivalent. Deliberately a closed set: every type that
+    ///     actually crosses the ABI today. An unknown type returns null and the whole struct is
+    ///     skipped rather than emitted wrong — a silently mistyped field is the failure this
+    ///     generator exists to prevent.
+    /// </summary>
+    private static string? MapZigFieldType(string zigType, out int arrayLength)
+    {
+        arrayLength = 0;
+        string t = zigType.Trim();
+
+        if (t.StartsWith("[*c]", StringComparison.Ordinal) || t.StartsWith("[*]", StringComparison.Ordinal))
+            return "byte*"; // every pointer field the ABI has is a byte pointer
+
+        if (t.StartsWith("[", StringComparison.Ordinal))
+        {
+            int close = t.IndexOf(']');
+            if (close > 1 && int.TryParse(t.Substring(startIndex: 1, length: close - 1), out int len))
+            {
+                string elem = t.Substring(close + 1).Trim();
+                if (elem == "u8")
+                {
+                    arrayLength = len;
+                    return "byte";
+                }
+            }
+
+            return null;
+        }
+
+        return t switch
+        {
+            "u8" => "byte", "u16" => "ushort", "u32" => "uint", "u64" => "ulong",
+            "i8" => "sbyte", "i16" => "short", "i32" => "int", "i64" => "long",
+            "f32" => "float", "f64" => "double", "bool" => "byte",
+            _ => null,
+        };
+    }
+
+    /// <summary>Parses <c>pub const Name = extern struct { field: type, ... };</c>.</summary>
+    private static IEnumerable<ZigStruct> ParseZigStructs(string text)
+    {
+        const string decl = "pub const ";
+        int at = 0;
+        while (true)
+        {
+            int found = text.IndexOf(value: decl, startIndex: at, comparisonType: StringComparison.Ordinal);
+            if (found < 0) yield break;
+
+            at = found + decl.Length;
+            if (found != 0 && text[found - 1] != '\n') continue;
+
+            int marker = text.IndexOf(value: " = extern struct {", startIndex: at, comparisonType: StringComparison.Ordinal);
+            int lineEnd = text.IndexOf(value: '\n', startIndex: at);
+            if (marker < 0 || (lineEnd >= 0 && marker > lineEnd)) continue;
+
+            string name = text.Substring(startIndex: at, length: marker - at).Trim();
+            int open = marker + " = extern struct ".Length;
+            int close = text.IndexOf(value: "\n};", startIndex: open);
+            if (close < 0) continue;
+
+            var st = new ZigStruct { Name = name };
+            bool ok = true;
+            foreach (string rawLine in text.Substring(startIndex: open + 1, length: close - open - 1).Split('\n'))
+            {
+                string line = rawLine.Trim();
+                int comment = line.IndexOf("//", StringComparison.Ordinal);
+                if (comment >= 0) line = line.Substring(startIndex: 0, length: comment).Trim();
+                if (line.Length == 0 || !line.EndsWith(",", StringComparison.Ordinal)) continue;
+
+                line = line.TrimEnd(',');
+                int colon = line.IndexOf(':');
+                if (colon < 0) continue;
+
+                string fieldName = line.Substring(startIndex: 0, length: colon).Trim();
+                string fieldType = line.Substring(colon + 1).Trim();
+                // Drop a default value: `pad: [2]u8 = .{0} ** 2`.
+                int eq = fieldType.IndexOf('=');
+                if (eq >= 0) fieldType = fieldType.Substring(startIndex: 0, length: eq).Trim();
+
+                string? mapped = MapZigFieldType(zigType: fieldType, arrayLength: out int arrayLen);
+                if (mapped is null) { ok = false; break; }
+
+                st.Fields.Add(new ZigStructField { Name = fieldName, Type = mapped, ArrayLength = arrayLen });
+            }
+
+            if (ok && st.Fields.Count > 0) yield return st;
+        }
+    }
+
     private static string? GenerateBindings(IEnumerable<(string Path, string Text)> files)
     {
         // Concatenate exports across files, first-wins dedup by entry point (an entry point must be
@@ -158,6 +270,19 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
         {
             if (seen.Add(fn.EntryPoint))
                 functions.Add(fn);
+        }
+
+        var structs = new List<ZigStruct>();
+        var seenStructs = new HashSet<string>(StringComparer.Ordinal);
+        foreach ((string path, string text) in files)
+        {
+            if (!path.EndsWith("/abi.zig", StringComparison.Ordinal)) continue;
+
+            foreach (var st in ParseZigStructs(text))
+            {
+                if (seenStructs.Add(st.Name))
+                    structs.Add(st);
+            }
         }
 
         // Enums come from src/abi.zig ONLY — that file is the wire contract. Implementation files
@@ -199,6 +324,47 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
             sb.AppendLine("{");
             foreach (var member in e.Members)
                 sb.AppendLine($"    {member.Key} = {member.Value},");
+
+            sb.AppendLine("}");
+            sb.AppendLine();
+        }
+
+        // Wire structs, generated from the Zig declaration. Each is `partial`: the canonical
+        // fields and their offsets come from here, and ZgStructs.cs adds only the ALIAS fields —
+        // the C# names for slots the Zig side deliberately reuses per command kind (a paint
+        // command's `radius` is also an image's u0 and a shader id). Offsets are computed the same
+        // way Zig lays the struct out, and AbiManifestTests checks the result against what the
+        // compiler actually produced.
+        foreach (var st in structs)
+        {
+            int offset = 0, maxAlign = 1;
+            var placed = new List<(string Name, string Type, int Offset, int ArrayLength)>();
+            foreach (var f in st.Fields)
+            {
+                int size = SizeOfCsType(f.Type);
+                int align = size;
+                int count = f.ArrayLength == 0 ? 1 : f.ArrayLength;
+                if (f.ArrayLength > 0) align = 1; // byte arrays
+                if (align > maxAlign) maxAlign = align;
+                if (offset % align != 0) offset += align - offset % align;
+                placed.Add((f.Name, f.Type, offset, f.ArrayLength));
+                offset += size * count;
+            }
+
+            if (offset % maxAlign != 0) offset += maxAlign - offset % maxAlign;
+
+            sb.AppendLine($"/// <summary>Generated from Zig <c>{st.Name}</c>. Aliases live in ZgStructs.cs.</summary>");
+            sb.AppendLine($"[StructLayout(LayoutKind.Explicit, Size = {offset})]");
+            sb.AppendLine($"public unsafe partial struct {st.Name}");
+            sb.AppendLine("{");
+            foreach (var f in placed)
+            {
+                string csName = SnakeToPascal(f.Name);
+                if (f.ArrayLength > 0)
+                    sb.AppendLine($"    [FieldOffset({f.Offset})] public fixed {f.Type} {csName}[{f.ArrayLength}];");
+                else
+                    sb.AppendLine($"    [FieldOffset({f.Offset})] public {f.Type} {csName};");
+            }
 
             sb.AppendLine("}");
             sb.AppendLine();
