@@ -1247,6 +1247,91 @@ try
         );
     }
 
+    // 2D paint-throughput benchmark (ZIGOTE_SMOKE_PAINT=<rects>). Builds a synthetic paint list of
+    // N rounded rects + text runs ONCE, then submits and renders it repeatedly, reporting the median
+    // frame time. This measures the native 2D path end to end — the ZgPaintCommand marshal,
+    // fillPaintList's translation, CPU tessellation, the vertex uploads and the draw — which is
+    // exactly the path docs/v2-design.md §3 makes claims about and which nothing here could measure.
+    // The paint list is rebuilt each frame (as a real app's would be) so tessellation is not
+    // accidentally amortised.
+    string? paintBench = Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_PAINT");
+    if (!scene && !string.IsNullOrEmpty(paintBench))
+    {
+        int rects = int.TryParse(s: paintBench, result: out int n) && n > 0 ? n : 2000;
+        int benchFrames = int.TryParse(
+            s: Environment.GetEnvironmentVariable("ZIGOTE_SMOKE_PAINT_FRAMES"),
+            result: out int bf
+        ) && bf > 0
+            ? bf
+            : 120;
+
+        var benchPaint = new PaintList();
+        var samples = new List<double>(benchFrames);
+        var swBench = new System.Diagnostics.Stopwatch();
+
+        // Without this the measurement is a vsync floor and nothing else: 500 rects and 8000 rects
+        // both came out at 6.99 ms/frame, because the present blocks. Uncapped, the number is the
+        // work.
+        app.Engine.SetVsync(false);
+
+        var buildSamples = new List<double>(benchFrames);
+        var submitSamples = new List<double>(benchFrames);
+        var swBuild = new System.Diagnostics.Stopwatch();
+        for (int frame = 0; frame < benchFrames; frame++)
+        {
+            swBench.Restart();
+            swBuild.Restart();
+            benchPaint.Clear();
+            benchPaint.AddRect(
+                bounds: new Rect(x: 0, y: 0, width: w, height: h),
+                color: ThemeData.Dark.Background
+            );
+            for (int i = 0; i < rects; i++)
+            {
+                // Deterministic spread; a little per-frame motion so nothing can be cached away.
+                float fx = (i * 37 % (int)(w - 40)) + (frame % 3);
+                float fy = (i * 71 % (int)(h - 40));
+                benchPaint.AddRect(
+                    bounds: new Rect(x: fx, y: fy, width: 24f, height: 18f),
+                    color: new Color(
+                        r: (i & 7) / 7f,
+                        g: (i >> 3 & 7) / 7f,
+                        b: (i >> 6 & 7) / 7f
+                    ),
+                    radius: (i % 5) * 2f
+                );
+            }
+
+            swBuild.Stop();
+            app.Engine.BeginFrame(1f / 60f);
+            // Split the two native halves: SubmitPaintCommands is the ZgPaintCommand marshal plus
+            // fillPaintList's translation into the internal command union (design doc P7);
+            // FrameEnd is tessellation, vertex upload, draw and present.
+            var swSubmit = System.Diagnostics.Stopwatch.StartNew();
+            app.Engine.SubmitPaintCommands(benchPaint);
+            swSubmit.Stop();
+            app.Engine.FrameEnd();
+            swBench.Stop();
+            samples.Add(swBench.Elapsed.TotalMilliseconds);
+            buildSamples.Add(swBuild.Elapsed.TotalMilliseconds);
+            submitSamples.Add(swSubmit.Elapsed.TotalMilliseconds);
+        }
+
+        samples.Sort();
+        buildSamples.Sort();
+        submitSamples.Sort();
+        double median = samples[samples.Count / 2];
+        double p95 = samples[(int)(samples.Count * 0.95)];
+        double buildMedian = buildSamples[buildSamples.Count / 2];
+        double submitMedian = submitSamples[submitSamples.Count / 2];
+        double usPerCommand = median * 1000.0 / benchPaint.Count;
+        Console.WriteLine(
+            FormattableString.Invariant(
+                $"[smoke] paint bench: {rects} rects x {benchFrames} frames — median {median:F3} ms/frame (C# build {buildMedian:F3} | native submit/transcode {submitMedian:F3} | native render {median - buildMedian - submitMedian:F3}), {benchPaint.Count} commands ({usPerCommand:F2} us/cmd)"
+            )
+        );
+    }
+
     // 2D golden-image capture (ZIGOTE_SHOT in non-scene mode): submit a deterministic paint list —
     // exercising the common CMD_RECT / CMD_BORDER commands through the ZgPaintCommand FFI struct — and
     // dump the offscreen 2D render to a BMP. This is the 2D counterpart of the 3D ZIGOTE_SHOT path and
