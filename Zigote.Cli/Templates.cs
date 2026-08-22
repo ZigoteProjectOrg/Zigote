@@ -183,9 +183,14 @@ public static class Templates
 
          ```
          zigote add android
+         zigote device run                                          # deploy + hot reload
          dotnet build {name}.Android -p:ZigTargetRid=android-arm64   # device
          dotnet build {name}.Android -p:ZigTargetRid=android-x64     # emulator
          ```
+
+         `zigote device run` reads the attached device's ABI and picks the RID for you, then keeps
+         the app running while you edit: saving a `Build()` re-runs it in place instead of
+         reinstalling. `zigote device logs` is that app's logcat and nothing else.
 
          The RID is not optional. It selects the managed runtime identifier *and* the engine's
          native cross-compile, and `zig-out` holds only one `libzigote.so` at a time — so building
@@ -248,6 +253,10 @@ public static class Templates
                  <Using Remove="Android.OS"/>
                  <Using Remove="Android.Runtime"/>
              </ItemGroup>
+
+             <!-- The on-device hot-reload switch `zigote device run` passes (-p:ZigoteHotReload=true).
+                  Imported rather than restated so the head cannot drift from the engine's own heads. -->
+             <Import Project="$(ZigoteRoot)/build/Zigote.Android.targets"/>
 
              <ItemGroup>
                  <ProjectReference Include="$(ZigoteRoot)/Zigote.UI/Zigote.UI.csproj"/>

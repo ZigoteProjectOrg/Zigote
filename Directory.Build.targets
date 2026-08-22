@@ -19,4 +19,11 @@
     -->
     <Import Project="$(MSBuildThisFileDirectory)build/Zigote.Assets.targets"/>
     <Import Project="$(MSBuildThisFileDirectory)build/Zigote.Shake.targets"/>
+    <!--
+      The Android hot-reload switch (-p:ZigoteHotReload=true). Inert everywhere else: the properties
+      it sets are read only by the Android SDK, so importing it repo-wide costs a desktop build
+      nothing and saves every head from restating it. Scaffolded heads outside this tree import the
+      same file through $(ZigoteRoot) — see Templates.AndroidCsproj.
+    -->
+    <Import Project="$(MSBuildThisFileDirectory)build/Zigote.Android.targets"/>
 </Project>

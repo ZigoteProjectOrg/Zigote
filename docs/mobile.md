@@ -40,6 +40,52 @@ host-GPU Vulkan ICD**: emulator 36+ launched with `ANDROID_EMU_VK_ICD=moltenvk �
 Apple Silicon — the default software Vulkan dies under real 3D load. The plain widget Gallery does
 not need this.
 
+## The loop on a real device
+
+`zigote device` is the day-to-day loop, and it exists because three things have to agree before an
+edit reaches a phone — the RID (which selects the managed target *and* cross-compiles the engine),
+the head's hot-reload switch, and which adb every step talks to. Getting one wrong produces an app
+that installs and dies, so the command reads them off the device instead:
+
+```sh
+zigote device            # what is attached
+zigote device run        # deploy to it, then reload edits into the running app
+zigote device logs       # this app's logcat and nothing else
+```
+
+`run` reads the device's ABI (`ro.product.cpu.abi`), picks the matching RID, builds the head with
+`-p:ZigoteHotReload=true`, and hands the whole thing to `dotnet watch`. From there the Android
+workload does the rest: it passes the app a startup hook and a websocket endpoint, `adb reverse`s
+the port, and the delta applier in the app receives each metadata update. Zigote's own bridge picks
+it up — `ZigoteHotReloadHandler` flags the frame, `App.Frame` re-runs every `Build()` in the tree,
+and widget instances (and the state in their fields) survive. **Saving is what triggers it**: in
+Rider use **Tools → Run on Device (Zigote)**, which runs the same command and saves your edits for
+you a moment after you stop typing — Rider otherwise only saves on window deactivation, which never
+happens while you edit and watch the phone.
+
+> **Reload needs .NET SDK 10.0.300 or newer.** Deploy, run and logs work on any 10.0 SDK; the delta
+> channel does not. The Android workload has its half (`Microsoft.Android.Sdk.HotReload.targets`),
+> but the variables that drive it are written by `dotnet watch`, and that landed later
+> ([dotnet/sdk#52581](https://github.com/dotnet/sdk/pull/52581)). On an older SDK a watch session
+> still builds, deploys and runs — it just never sends a delta, and nothing says so. `zigote device
+> run` checks the SDK and says so, then deploys without the watcher. `global.json` rolls forward to
+> the latest feature band, so installing a newer SDK is the whole fix.
+
+What hot reload cannot do on a device it also cannot do on desktop: constructors, field initialisers
+and `OnMount` run once per mount, and a rude edit (a new field, a changed signature) is refused by
+the runtime. Those need a redeploy, which is why the switch also turns on Fast Deployment — the
+fallback costs seconds instead of a fresh apk.
+
+The switch is opt-in for one reason: Mono ignores every delta unless
+`DOTNET_MODIFIABLE_ASSEMBLIES` is set, and the Android SDK writes it only for an **interpreted**
+debug build. An interpreted frame loop does not hold 60 fps on a phone, so a plain
+`dotnet run`/`--no-reload` stays JIT and stays fast, and you opt into the slower frames only while
+you are reshaping UI. `--release` implies `--no-reload`.
+
+For a debugger rather than a reload, `zigote device run --debug` forwards the Mono soft-debugger
+port (10000 by default, `--debug-port` to change it) and starts the app suspended on it, so a
+debugger can attach before any app code has run.
+
 Two export gotchas that look like bugs and are not: simulator RIDs must go through `dotnet build`
 (`publish` is device-only), and Android Release builds need `RunAOTCompilation=false`.
 

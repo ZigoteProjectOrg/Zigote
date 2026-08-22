@@ -160,6 +160,48 @@ public sealed class PreviewVerb : CommonVerb
 }
 
 [Verb(
+    "device",
+    HelpText = "Run the app on an attached Android device or emulator, reloading edits into it live."
+)]
+public sealed class DeviceVerb : CommonVerb
+{
+    [Value(
+        index: 0,
+        MetaName = "action",
+        HelpText = "list (default) — attached devices; run — deploy and hot-reload; logs — this app's logcat."
+    )]
+    public string Action { get; set; } = "list";
+
+    [Option("serial", MetaValue = "id", HelpText = "Which device, when more than one is attached.")]
+    public string? Serial { get; set; }
+
+    [Option(
+        "no-reload",
+        HelpText = "Plain deploy-and-run. Faster frames (JIT, not the interpreter hot reload needs), " +
+                   "at the cost of a redeploy per edit."
+    )]
+    public bool NoReload { get; set; }
+
+    [Option("release", HelpText = "Release configuration. Implies --no-reload.")]
+    public bool Release { get; set; }
+
+    [Option(
+        "debug",
+        HelpText = "Start the app suspended and forward the Mono soft-debugger port, so a debugger " +
+                   "can attach before any app code runs."
+    )]
+    public bool Debug { get; set; }
+
+    [Option(
+        "debug-port",
+        Default = 10000,
+        MetaValue = "port",
+        HelpText = "Port for --debug, on both the host and the device."
+    )]
+    public int DebugPort { get; set; }
+}
+
+[Verb(
     "doctor",
     HelpText = "Check this machine for everything Zigote development needs, and say how to fix what is missing."
 )]

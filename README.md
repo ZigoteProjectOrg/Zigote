@@ -186,7 +186,7 @@ emitted paint commands, no window required.
 | **Windowing** | Multiple OS windows, overlays, drag & drop (in-app and OS files), one `AppMenu` model → native `NSMenu` on macOS and an in-window menu bar elsewhere |
 | **Theming** | `ThemeData` for appearance-dependent colour; `Spacing`, `Typography`, `Radii`, `Elevation` token scales for the rest |
 | **Focus & a11y** | Tab / arrow / Esc traversal with modal traps, and a platform-neutral semantics tree |
-| **Hot reload** | Edit a `Build()` under `dotnet watch` and the running UI updates — instances and fields survive |
+| **Hot reload** | Edit a `Build()` under `dotnet watch` and the running UI updates — instances and fields survive, on the desktop and on an attached Android device (`zigote device run`) |
 
 The form controls live one package up, in **[`Zigote.UI.Material`](Zigote.UI.Material/README.md)**,
 and the kernel deliberately does not duplicate them: `TextField` (single- and multi-line with full
@@ -340,7 +340,7 @@ worth reading first.
 | `Zigote.Core` | Reactive primitives, background work, native FFI (`[LibraryImport]` into `libzigote`), scene graph, assets, diagnostics. |
 | `Zigote.Engine` | The native Zig + wgpu backend — wgpu, SDL3, HarfBuzz + FreeType, Jolt, flecs, miniaudio, Assimp, behind a C ABI (git submodule). |
 | `Zigote.Generators` | Roslyn source generators (FFI bindings, DSL codegen). |
-| `Zigote.Cli` | `zigote create` / `zigote add android` — scaffolds an app and its platform heads; `zigote preview` runs one widget on its own. |
+| `Zigote.Cli` | `zigote create` / `zigote add android` — scaffolds an app and its platform heads; `zigote preview` runs one widget on its own; `zigote device run` deploys to an attached phone and reloads edits into it. |
 | `Zigote.Mcp` | MCP server over stdio — an LLM agent launches, drives and screenshots a running app through the inspect protocol. See [`docs/mcp-server.md`](docs/mcp-server.md). |
 
 </details>

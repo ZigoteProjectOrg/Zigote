@@ -19,9 +19,8 @@
         <Nullable>enable</Nullable>
         <ApplicationTitle>Zigote Gallery</ApplicationTitle>
         <ApplicationId>com.zigote.gallery</ApplicationId>
-        <!-- arm64 only for bring-up: it is what the emulator image and the pinned wgpu-native
-             Android archive cover. -->
-        <RuntimeIdentifiers>android-arm64</RuntimeIdentifiers>
+        <!-- Both ABIs the engine cross-builds for: arm64 phones and the x86_64 emulator image. -->
+        <RuntimeIdentifiers>android-arm64;android-x64</RuntimeIdentifiers>
         <AndroidPackageFormat>apk</AndroidPackageFormat>
         <!-- Ship the managed assemblies INSIDE the apk. Debug builds otherwise use Fast
              Deployment, which pushes them to the device out-of-band — so an apk installed by
@@ -52,6 +51,12 @@
         <ProjectReference Include="..\Zigote.UI.Charts\Zigote.UI.Charts.csproj"/>
         <ProjectReference Include="..\Zigote.UI.Localizations\Zigote.UI.Localizations.csproj"/>
         <ProjectReference Include="..\Zigote.UI.DevTools\Zigote.UI.DevTools.csproj"/>
+        <!-- The Gallery's own pages need these: VideoPage → Zigote.Videoplayer, SvgPage's sample
+             fetches → Zigote.Http. The heads compile the desktop Gallery's sources verbatim, so a
+             reference the desktop project gains is one this head has to gain with it — the symptom
+             otherwise is CS0234 on a page nobody here edited. -->
+        <ProjectReference Include="..\Zigote.Videoplayer\Zigote.Videoplayer.csproj"/>
+        <ProjectReference Include="..\Zigote.Http\Zigote.Http.csproj"/>
         <ProjectReference Include="..\Zigote.Generators\Zigote.Generators.csproj"
                           OutputItemType="Analyzer" ReferenceOutputAssembly="false"/>
     </ItemGroup>
@@ -73,10 +78,23 @@
         </AndroidJavaSource>
     </ItemGroup>
 
+    <!--
+      The ABI folder the engine lands in, derived from the RID the native build used — the same
+      mapping `zigote add android` generates, and for the same reason: zig-out holds exactly ONE
+      libzigote.so, for whichever target was built last, and the ABI folder is only a label. Hardcode
+      it and an x86_64 engine ships filed under arm64-v8a, which installs happily and dies the moment
+      the loader touches it. RuntimeIdentifier follows ZigTargetRid so the managed half agrees.
+    -->
+    <PropertyGroup>
+        <GalleryAndroidAbi Condition="'$(ZigTargetRid)' == 'android-x64'">x86_64</GalleryAndroidAbi>
+        <GalleryAndroidAbi Condition="'$(GalleryAndroidAbi)' == ''">arm64-v8a</GalleryAndroidAbi>
+        <RuntimeIdentifier Condition="'$(ZigTargetRid)' != ''">$(ZigTargetRid)</RuntimeIdentifier>
+    </PropertyGroup>
+
     <ItemGroup>
         <!-- The engine, cross-built by Zigote.Native.targets, placed in the APK's ABI folder. -->
         <AndroidNativeLibrary Include="..\Zigote.Engine\zig-out\lib\libzigote.so">
-            <Abi>arm64-v8a</Abi>
+            <Abi>$(GalleryAndroidAbi)</Abi>
         </AndroidNativeLibrary>
     </ItemGroup>
 

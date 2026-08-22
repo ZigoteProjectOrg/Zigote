@@ -190,24 +190,11 @@ public static class Doctor
     /// </summary>
     private static Check CheckJdk()
     {
-        (string Home, int Major)? best = null;
         (string Home, int Major)? fallback = null;
-
-        foreach (string home in JdkCandidates().Distinct())
-        {
-            if (!IsFullJdk(home)) continue;
-            int major = ReadJavaMajor(home);
-            if (major == 21)
-            {
-                best = (home, major);
-                break;
-            }
-
-            fallback ??= (home, major);
-        }
+        string? best = FindJdk21(out fallback);
 
         if (best is { } jdk)
-            return new Check(Status: Status.Ok, Title: $"JDK 21 ({jdk.Home})");
+            return new Check(Status: Status.Ok, Title: $"JDK 21 ({jdk})");
 
         string install = OperatingSystem.IsWindows()
             ? "winget install Microsoft.OpenJDK.21"
@@ -227,12 +214,36 @@ public static class Doctor
             );
     }
 
+    /// <summary>
+    ///     The JDK 21 home .NET for Android needs, or null. Shared with <c>zigote device</c>, which
+    ///     hands it to the build as <c>JavaSdkDirectory</c> — a JDK that only `doctor` can find is a
+    ///     JDK the build still fails without.
+    /// </summary>
+    internal static string? FindJdk21() => FindJdk21(out _);
+
+    private static string? FindJdk21(out (string Home, int Major)? fallback)
+    {
+        fallback = null;
+        foreach (string home in JdkCandidates().Distinct())
+        {
+            if (!IsFullJdk(home)) continue;
+            int major = ReadJavaMajor(home);
+            if (major == 21) return home;
+            fallback ??= (home, major);
+        }
+
+        return null;
+    }
+
     private static IEnumerable<string> JdkCandidates()
     {
         if (Environment.GetEnvironmentVariable("JAVA_HOME") is { Length: > 0 } javaHome)
             yield return Path.GetFullPath(javaHome);
 
         foreach (string root in (string[]) [
+                     // JetBrains installs JDKs here (Toolbox, and Rider's own "Download JDK"), which on a
+                     // machine whose distro ships only a headless package is the one full JDK present.
+                     Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".jdks"),
                      "/usr/lib/jvm",
                      "/Library/Java/JavaVirtualMachines",
                      Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Microsoft"),

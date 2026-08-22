@@ -19,6 +19,9 @@
             <li><b>Preview properties</b>: a widget's defaulted constructor or factory parameters
                 become controls under the picture, so the same page can be looked at empty, full, or
                 with a title long enough to wrap, without editing it.</li>
+            <li><b>Run on Device</b> — deploy to the attached phone or emulator and keep editing:
+                saving a <code>Build()</code> re-runs it in the running app instead of reinstalling.
+                Same thing <code>zigote device run</code> does from a terminal.</li>
             <li><b>[Preview]</b> — annotate a widget or page and it gets a name, a group, and the
                 device size and theme it is meant to be looked at in.</li>
         </ul>
@@ -38,6 +41,12 @@
     </extensions>
 
     <actions>
+        <action id="Zigote.RunOnDevice"
+                class="dev.zigote.rider.DeviceRunAction"
+                text="Run on Device (Zigote)"
+                description="Deploy this app to an attached Android device and hot-reload edits into it">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
         <action id="Zigote.PreviewWidget"
                 class="dev.zigote.rider.PreviewWidgetAction"
                 text="Preview Zigote Widget"

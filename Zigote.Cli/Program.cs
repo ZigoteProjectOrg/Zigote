@@ -34,7 +34,7 @@ public static class Program
                 with.AutoVersion = true;
             }
         );
-        var result = parser.ParseArguments<CreateVerb, AddVerb, PreviewVerb, DoctorVerb>(args);
+        var result = parser.ParseArguments<CreateVerb, AddVerb, PreviewVerb, DeviceVerb, DoctorVerb>(args);
 
         try
         {
@@ -45,7 +45,8 @@ public static class Program
                     options: verb,
                     project: FindAppProject(verb.Directory)
                 ),
-                parsedFunc4: (DoctorVerb verb) => Doctor.Run(verb),
+                parsedFunc4: (DeviceVerb verb) => Device.Run(verb),
+                parsedFunc5: (DoctorVerb verb) => Doctor.Run(verb),
                 notParsedFunc: errors => Render(result: result, errors: errors)
             );
         }
@@ -268,6 +269,7 @@ public static class Program
 
         files.Report();
         Console.WriteLine();
+        Console.WriteLine("  zigote device run                                          # deploy + hot reload");
         Console.WriteLine(
             $"  dotnet build {name}.Android -p:ZigTargetRid=android-arm64   # device"
         );

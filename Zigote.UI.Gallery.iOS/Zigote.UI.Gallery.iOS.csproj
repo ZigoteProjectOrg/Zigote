@@ -34,6 +34,12 @@
         <ProjectReference Include="..\Zigote.UI.Charts\Zigote.UI.Charts.csproj"/>
         <ProjectReference Include="..\Zigote.UI.Localizations\Zigote.UI.Localizations.csproj"/>
         <ProjectReference Include="..\Zigote.UI.DevTools\Zigote.UI.DevTools.csproj"/>
+        <!-- The Gallery's own pages need these: VideoPage → Zigote.Videoplayer, SvgPage's sample
+             fetches → Zigote.Http. The heads compile the desktop Gallery's sources verbatim, so a
+             reference the desktop project gains is one this head has to gain with it — the symptom
+             otherwise is CS0234 on a page nobody here edited. -->
+        <ProjectReference Include="..\Zigote.Videoplayer\Zigote.Videoplayer.csproj"/>
+        <ProjectReference Include="..\Zigote.Http\Zigote.Http.csproj"/>
         <ProjectReference Include="..\Zigote.Generators\Zigote.Generators.csproj"
                           OutputItemType="Analyzer" ReferenceOutputAssembly="false"/>
     </ItemGroup>

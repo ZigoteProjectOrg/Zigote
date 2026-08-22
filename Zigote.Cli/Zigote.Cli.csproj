@@ -23,8 +23,16 @@
         <PackageOutputPath>./nupkg</PackageOutputPath>
         <PackageId>Zigote.Cli</PackageId>
         <Version>0.1.0</Version>
-        <Description>Scaffolds Zigote apps, plugins and platform heads, and checks the machine with `zigote doctor`.</Description>
+        <Description>Scaffolds Zigote apps, plugins and platform heads, runs them on a device with `zigote device`, and checks the machine with `zigote doctor`.</Description>
     </PropertyGroup>
+
+    <ItemGroup>
+        <!-- Zigote.Tests covers the two pieces of `device` with rules in them: reading adb's device
+             list, and mapping a device ABI to the RID the whole build hangs off. -->
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+            <_Parameter1>Zigote.Tests</_Parameter1>
+        </AssemblyAttribute>
+    </ItemGroup>
 
     <ItemGroup>
         <!-- The one dependency: declarative verb/option parsing. It is a parsing library only —

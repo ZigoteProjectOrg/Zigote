@@ -1,0 +1,31 @@
+<Project>
+  <!--
+    On-device hot reload, opt-in.
+
+    .NET 10's Android SDK carries the whole delta path already (Microsoft.Android.Sdk.HotReload.targets):
+    dotnet-watch hands the app DOTNET_STARTUP_HOOKS + a websocket endpoint through
+    @(RuntimeEnvironmentVariable), the SDK writes them into the app's __environment__.txt and runs
+    `adb reverse` for the port. What it will NOT do on its own is set DOTNET_MODIFIABLE_ASSEMBLIES —
+    _GenerateEnvironmentFiles writes that one only for a debug-symbols + interpreter build. Without it
+    Mono ignores every delta that arrives, which looks exactly like hot reload being unsupported.
+
+    So the switch below is the whole feature: -p:ZigoteHotReload=true turns the head into a build the
+    runtime will accept updates for. It is opt-in because the interpreter is the cost — an interpreted
+    frame loop does not hold 60 fps on a phone — so a normal `dotnet run` stays JIT and stays fast.
+    `zigote device run` passes it; nothing else does.
+  -->
+  <PropertyGroup Condition="'$(ZigoteHotReload)' == 'true'">
+    <AndroidUseInterpreter>true</AndroidUseInterpreter>
+    <AndroidIncludeDebugSymbols>true</AndroidIncludeDebugSymbols>
+    <!--
+      Fast Deployment: changed assemblies go over adb instead of into a fresh apk. It is what makes
+      the FALLBACK cheap — a rude edit (new field, changed signature) that hot reload has to refuse
+      costs a redeploy, and that redeploy is seconds rather than a full package + install.
+      The heads set EmbedAssembliesIntoApk=true for hand-installed apks (`adb install` of a package
+      whose assemblies live out-of-band aborts at startup with "No assemblies found"); this overrides
+      it, which is safe here because a hot-reload session always deploys through the SDK's Run target.
+      Directory.Build.targets is imported after the project body, so this override wins.
+    -->
+    <EmbedAssembliesIntoApk>false</EmbedAssembliesIntoApk>
+  </PropertyGroup>
+</Project>
