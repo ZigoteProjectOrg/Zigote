@@ -196,7 +196,10 @@ public static class LutEffect
             shaderId: ShaderId,
             p0: lut.Size,
             p1: Math.Clamp(value: strength, min: 0f, max: 1f),
-            imageKey: texture
+            imageKey: texture,
+            // A grade is a filter: an app that puts its own passes either side of this one must
+            // see them compose, rather than each reading the same ungraded frame.
+            chainsBackdrop: true
         );
     }
 

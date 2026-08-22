@@ -1,0 +1,15 @@
+<Project>
+    <!-- The repo-wide targets still apply; this file only exists to add the switch below. -->
+    <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.targets', '$(MSBuildThisFileDirectory)../'))"/>
+
+    <!--
+      Every plugin here multi-targets net10.0 plus the phone frameworks, so a machine without the
+      android/ios workloads cannot even restore them — which also blocks the desktop-only demo app
+      that references all 19. Set ZigoteMobileTargets=false (a -p: flag or an environment variable)
+      to build just the desktop leg; the Platforms/ selection in each csproj already keys off
+      $(TargetFramework), so nothing else needs to know.
+    -->
+    <PropertyGroup Condition="'$(ZigoteMobileTargets)' == 'false'">
+        <TargetFrameworks Condition="'$(TargetFrameworks)' != ''">net10.0</TargetFrameworks>
+    </PropertyGroup>
+</Project>

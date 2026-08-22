@@ -32,6 +32,7 @@ internal sealed class CameraPage : ComposedWidget
     private readonly CameraController _camera = new();
     private readonly CameraLut _teal = CameraLut.Parse(TealAndOrange());
     private readonly Text _status = new("starting…");
+    private readonly Text _exposure = new("");
     private CameraView? _view;
     private CameraDeviceInfo[] _devices = [];
     private int _deviceIndex;
@@ -41,6 +42,10 @@ internal sealed class CameraPage : ComposedWidget
         // Errors can land on a capture thread; widget mutation belongs on the UI thread.
         Own(_camera.State.Observe(() => OnUi(() => _status.Text = Describe())));
         Own(_camera.Error.Observe(() => OnUi(() => _status.Text = Describe())));
+        // What the sensor actually did, frame by frame — the only way to read the exposure while
+        // the device is metering it, and how you see a manual value being clamped.
+        Own(_camera.Metadata.Observe(() => OnUi(() => _exposure.Text = DescribeExposure())));
+        Own(_camera.Capabilities.Observe(() => OnUi(() => _exposure.Text = DescribeExposure())));
         _ = StartAsync();
     }
 
@@ -82,12 +87,15 @@ internal sealed class CameraPage : ComposedWidget
                         child: new Column(children:
                             [
                                 _status,
+                                _exposure,
                                 new SizedBox(height: 8),
                                 new Row(
                                     mainAxisAlignment: MainAxisAlignment.Center,
                                     children:
                                     [
                                         new OutlinedButton(new Text("LUT"), ToggleLut),
+                                        new SizedBox(width: 8),
+                                        new OutlinedButton(new Text("Manual"), ToggleManual),
                                         new SizedBox(width: 8),
                                         new FilledButton(new Text("Shoot"), () => _ = ShootAsync()),
                                         new SizedBox(width: 8),
@@ -100,6 +108,43 @@ internal sealed class CameraPage : ComposedWidget
                 ]
             )
         ));
+    }
+
+    /// <summary>
+    ///     Hand the exposure back and forth. Manual picks the middle of what this lens reports —
+    ///     the point is the round trip, not the values — and Auto is a single reset, because
+    ///     "give it back to the camera" is a thing photographers do constantly.
+    /// </summary>
+    private void ToggleManual()
+    {
+        var caps = _camera.Capabilities.Value;
+        if (!caps.Iso.Supported || !caps.Shutter.Supported)
+        {
+            _status.Text = "this camera has no manual exposure";
+            return;
+        }
+
+        if (_camera.Controls.Mode is not ExposureMode.Auto)
+        {
+            _camera.Controls.ResetToAuto();
+            return;
+        }
+
+        _camera.Controls.Iso.Value = (caps.Iso.Min + caps.Iso.Max) / 2;
+        _camera.Controls.ShutterNs.Value = caps.Shutter.Clamp(4_000_000); // 1/250
+    }
+
+    /// <summary>The viewfinder readout: what was asked for, and what the sensor actually gave.</summary>
+    private string DescribeExposure()
+    {
+        var caps = _camera.Capabilities.Value;
+        if (!caps.AnyManual) return "no manual controls on this camera";
+
+        var meta = _camera.Metadata.Value;
+        string actual = meta is null
+            ? "…"
+            : $"ISO {meta.Iso} · {meta.ShutterLabel}{(meta.AeConverged ? "" : " (metering)")}";
+        return $"{_camera.Controls.Mode} · {actual}";
     }
 
     private void ToggleLut()

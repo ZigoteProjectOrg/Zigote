@@ -5,6 +5,12 @@ using Zigote.Core.State;
 
 namespace Camera;
 
+/// <summary>
+///     A captured frame as raw pixels, tightly packed RGBA. What a caller wants when it intends
+///     to encode the picture itself.
+/// </summary>
+public readonly record struct CapturedPixels(byte[] Rgba, int Width, int Height);
+
 /// <summary>Which way a camera looks. Desktop webcams report <see cref="External" />.</summary>
 public enum CameraFacing
 {
@@ -31,14 +37,82 @@ public enum CameraState
 
     /// <summary>The device could not be opened or the stream died — see <see cref="CameraController.Error" />.</summary>
     Failed,
+
+    /// <summary>
+    ///     The system took the camera away — a call, an alarm, Split View, another app. Distinct
+    ///     from <see cref="Failed" /> because it is expected, temporary, and resolves on its own:
+    ///     a UI should freeze the last frame and say why, not raise an error the user must dismiss
+    ///     while they are still trying to take a photograph.
+    /// </summary>
+    Interrupted,
+}
+
+/// <summary>
+///     How hot the device is. The camera, the GPU and the display together are the hottest thing
+///     a phone does, and a mid-range one throttles within minutes; an app that ignores this gets
+///     a preview that quietly drops to 15 fps with no explanation.
+/// </summary>
+public enum ThermalState
+{
+    Nominal,
+    Warm,
+    Hot,
+    Critical,
+}
+
+/// <summary>
+///     How much the device can afford. Preview resolution and how many stills may be in flight
+///     come off this — a 50 MP RAW is ~100 MB, and two in flight on a 3 GB phone is a kill.
+/// </summary>
+public enum DeviceTier
+{
+    /// <summary>Low-RAM device: 720p preview, one still at a time.</summary>
+    Low,
+
+    /// <summary>The common case: 1080p preview, two stills.</summary>
+    Mid,
+
+    /// <summary>Plenty of headroom.</summary>
+    High,
 }
 
 /// <summary>
 ///     A running platform capture, whichever API is underneath. It writes frames into the
 ///     <see cref="FrameMailbox" /> it was given and stops when disposed. Disposal must be safe
 ///     from the app thread at any moment, including before the first frame.
+///     <para>
+///         The manual-control members default to "this platform offers none", so a driver that
+///         cannot do manual capture — desktop v4l2/avfoundation/dshow — implements nothing and
+///         still reports the truth to the UI above it.
+///     </para>
 /// </summary>
-internal interface ICameraSession : IDisposable;
+internal interface ICameraSession : IDisposable
+{
+    /// <summary>What this lens can do. Probed at open; constant for the session's lifetime.</summary>
+    CameraCapabilities Capabilities => CameraCapabilities.None;
+
+    /// <summary>
+    ///     Capture a sensor-data still as a DNG. Only called when
+    ///     <see cref="CameraCapabilities.Raw" /> is true, so a driver without a raw path does not
+    ///     implement this at all.
+    /// </summary>
+    Task<RawPhoto> CaptureRawAsync() =>
+        Task.FromException<RawPhoto>(new NotSupportedException("This camera cannot capture RAW."));
+
+    /// <summary>
+    ///     Apply every control at once. Called on the app thread whenever any control changes,
+    ///     coalesced, and once when the session opens. Must not block: a driver that needs to
+    ///     talk to a camera HAL does it on its own thread.
+    /// </summary>
+    void Apply(in ControlState controls) { }
+
+    /// <summary>
+    ///     What the sensor did for the most recent frame, or null before the first result. Read
+    ///     from the app thread each tick; the driver writes it from the capture thread, so it is
+    ///     published as a whole record rather than mutated in place.
+    /// </summary>
+    CaptureMetadata? Metadata => null;
+}
 
 /// <summary>
 ///     The single-frame handoff between a capture thread and the app thread: latest frame wins,
@@ -128,10 +202,18 @@ internal sealed class FrameMailbox
 /// </example>
 public sealed class CameraController : IDisposable
 {
+    /// <summary>Frames between thermal polls. ~2s at 60fps; the state moves far slower than that.</summary>
+    private const int ThermalPollFrames = 120;
+
     private readonly Signal<string?> _error = new(null);
     private readonly Signal<CameraState> _state = new(CameraState.Idle);
+    private readonly Signal<CameraCapabilities> _capabilities = new(CameraCapabilities.None);
+    private readonly Signal<CaptureMetadata?> _metadata = new(null);
+    private readonly Signal<ThermalState> _thermal = new(ThermalState.Nominal);
+    private readonly Signal<string?> _interruption = new(null);
     private readonly FrameMailbox _frames = new();
     private readonly IDisposable _lifecycle;
+    private readonly IDisposable _controlWatch;
 
     private ICameraSession? _session;
     private PhotoRequest? _photo;
@@ -141,11 +223,16 @@ public sealed class CameraController : IDisposable
     private int _maxHeight;
     private bool _minimalProcessing;
     private bool _resumeOnForeground;
+    private bool _clamping;
+    private int _thermalTick;
     private bool _disposed;
 
     public CameraController()
     {
         _lifecycle = CameraPlugin.OnLifecycle(OnLifecycleChanged);
+        // One coalesced subscription over every control: a capture request is rebuilt whole
+        // anyway, so fourteen separate handlers would be fourteen ways to rebuild it twice.
+        _controlWatch = ReactiveExtensions.ObserveAny(PushControls, Controls.All);
     }
 
     /// <summary>Where the session is. A whole camera UI can bind to just this.</summary>
@@ -153,6 +240,56 @@ public sealed class CameraController : IDisposable
 
     /// <summary>Why the last start or stream failed, or null. Cleared by the next start.</summary>
     public IReadableSignal<string?> Error => _error;
+
+    /// <summary>
+    ///     The manual controls — ISO, shutter, white balance, focus, locks and metering regions.
+    ///     Set them any time: they are remembered across sessions and re-applied (clamped to what
+    ///     the new lens can do) when one opens, so switching cameras does not silently drop the
+    ///     photographer's settings.
+    /// </summary>
+    public CameraControls Controls { get; } = new();
+
+    /// <summary>
+    ///     What the running lens can actually do. <see cref="CameraCapabilities.None" /> while
+    ///     idle. Build the UI from this — a dial for a control this reports as unsupported has
+    ///     nothing to drive.
+    /// </summary>
+    public IReadableSignal<CameraCapabilities> Capabilities => _capabilities;
+
+    /// <summary>
+    ///     What the sensor did for the last presented frame, or null before the first one.
+    ///     Updated in <see cref="Tick" />, so a readout bound to it repaints with the preview.
+    /// </summary>
+    public IReadableSignal<CaptureMetadata?> Metadata => _metadata;
+
+    /// <summary>
+    ///     How hot the device is, polled by the platform. Bind the preview's cost to it — an app
+    ///     that keeps every overlay running into a thermal throttle just gets throttled harder.
+    /// </summary>
+    public IReadableSignal<ThermalState> Thermal => _thermal;
+
+    /// <summary>Why the camera was taken away, while <see cref="CameraState.Interrupted" />.</summary>
+    public IReadableSignal<string?> InterruptionReason => _interruption;
+
+    /// <summary>
+    ///     What this device can afford. Read once at startup — RAM does not change, and neither
+    ///     should the preview size halfway through a session.
+    /// </summary>
+    public static DeviceTier Tier { get; } = CameraDriver.DeviceTier();
+
+    /// <summary>The preview height this tier can carry. The default for <see cref="StartAsync" />.</summary>
+    public static int TierPreviewHeight => Tier switch {
+        DeviceTier.Low => 720,
+        DeviceTier.Mid => 1080,
+        _ => 1440,
+    };
+
+    /// <summary>How many stills may be in flight at once. The burst depth, and the memory cap.</summary>
+    public static int TierStillBudget => Tier switch {
+        DeviceTier.Low => 1,
+        DeviceTier.Mid => 2,
+        _ => 3,
+    };
 
     /// <summary>
     ///     The current preview frame's GPU texture, or 0 before the first frame. Owned by the
@@ -221,8 +358,29 @@ public sealed class CameraController : IDisposable
                 maxHeight: _maxHeight,
                 minimalProcessing: minimalProcessing,
                 frames: _frames,
-                onError: Fail
+                onError: Fail,
+                onInterrupted: Interrupt
             );
+
+            // The new lens may offer less than the old one: pull the carried-over dials inside
+            // what it can do before the first request, so nothing is silently ignored.
+            // A driver that cannot do manual capture (desktop) still has to be able to drive the
+            // UI that will: ZIGOTE_CAMERA_FAKE_CAPS reports a tier-A phone's ranges so the dials,
+            // the tab-as-mode logic and the readout can be built and tested without a handset.
+            // Nothing is applied — Metadata stays whatever the driver really said.
+            _capabilities.Value = FakeCapabilities() ?? _session.Capabilities;
+
+            // One line per session, at info: on a device this is the only way to find out what
+            // the lens actually offered and what budget the app is running under, and it is the
+            // first thing anyone debugging a camera report will ask for.
+            var caps = _capabilities.Value;
+            Console.WriteLine(
+                $"[camera] tier={Tier} thermal={CameraDriver.Thermal()} " +
+                $"preview<={TierPreviewHeight} stills<={TierStillBudget} " +
+                $"iso={caps.Iso.Min}-{caps.Iso.Max} raw={caps.Raw} mf={caps.ManualFocus} " +
+                $"regions={caps.Regions} kelvin={caps.Kelvin.Min}-{caps.Kelvin.Max}"
+            );
+            PushControls(); // clamps to the new lens, then applies
         }
         catch (Exception ex)
         {
@@ -251,6 +409,15 @@ public sealed class CameraController : IDisposable
     {
         if (_disposed) return;
 
+        // Thermal is polled here rather than subscribed: it changes over tens of seconds, the
+        // platform calls are cheap, and a poll has nothing to unregister when the camera stops.
+        if (++_thermalTick >= ThermalPollFrames)
+        {
+            _thermalTick = 0;
+            var reading = CameraDriver.Thermal();
+            if (reading != _thermal.Value) _thermal.Value = reading;
+        }
+
         // A photo pass emitted last frame has been rendered by now (the render-texture prepass
         // runs inside the frame that carried the commands) — close the pipeline: read back,
         // encode off-thread, release the target.
@@ -265,6 +432,10 @@ public sealed class CameraController : IDisposable
 
         Upload(rgba: frame, width: w, height: h);
         FramesPresented++;
+
+        // The readout belongs to the frame on screen, so it updates here rather than whenever a
+        // capture result happens to land.
+        if (_session?.Metadata is { } metadata) _metadata.Value = metadata;
 
         // Keep the presented frame for TakePhotoAsync; recycle the one it replaces.
         if (_lastFrame is not null) _frames.Return(_lastFrame);
@@ -289,7 +460,11 @@ public sealed class CameraController : IDisposable
     // ponytail: the photo is the preview-stream frame (≤ maxHeight tall; pass maxHeight: 0 for
     // the device's native size). A separate sensor-resolution still path (camera2 STILL_CAPTURE /
     // AVCapturePhotoOutput) is the upgrade if full-size stills start to matter.
-    public Task<byte[]> TakePhotoAsync(int quality = 90, CameraLut? lut = null, float lutStrength = 1f)
+    public Task<byte[]> TakePhotoAsync(
+        int quality = 90,
+        CameraLut? lut = null,
+        float lutStrength = 1f,
+        Action<PaintList, Rect>? grade = null)
     {
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
         if (_lastFrame is null)
@@ -297,7 +472,8 @@ public sealed class CameraController : IDisposable
         quality = Math.Clamp(value: quality, min: 1, max: 100);
         (int w, int h) = _lastFrameSize;
 
-        if (lut is null || lutStrength <= 0f)
+        bool graded = grade is not null || (lut is not null && lutStrength > 0f);
+        if (!graded)
         {
             // Copied now, on the app thread: the encoder runs later, and by then the buffer may
             // have been recycled into the capture loop.
@@ -315,6 +491,7 @@ public sealed class CameraController : IDisposable
         _photo = new PhotoRequest {
             Tcs = new TaskCompletionSource<byte[]>(),
             Lut = lut,
+            Grade = grade,
             Strength = lutStrength,
             Quality = quality,
             Width = w,
@@ -347,9 +524,68 @@ public sealed class CameraController : IDisposable
             pixels: null,
             cacheKey: TextureHandle
         );
-        LutEffect.Paint(paint: paint, bounds: full, lut: photo.Lut, strength: photo.Strength);
+        // An app that owns a richer pipeline supplies it; otherwise the LUT is the whole grade.
+        // Either way the still runs the same passes the preview just showed, which is the only
+        // reason the file can be trusted to match the viewfinder.
+        if (photo.Grade is { } emit) emit(paint, full);
+        else if (photo.Lut is { } lut) LutEffect.Paint(paint: paint, bounds: full, lut: lut, strength: photo.Strength);
         paint.PopRenderTexture();
         photo.Emitted = true;
+    }
+
+    /// <summary>
+    ///     Capture the current frame through <paramref name="grade" /> and hand back the finished
+    ///     <em>pixels</em>, so the caller can encode them once into whatever format it wants. The
+    ///     alternative — take a JPEG, decode it, re-encode it — throws away a generation of
+    ///     quality for a format preference, which is exactly backwards for a photographer.
+    /// </summary>
+    /// <remarks>Same painter requirement as <see cref="TakePhotoAsync" />.</remarks>
+    public Task<CapturedPixels> TakePixelsAsync(CameraLut? lut = null, float lutStrength = 1f,
+        Action<PaintList, Rect>? grade = null)
+    {
+        ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
+        if (_lastFrame is null) throw new InvalidOperationException("No camera frame to capture yet.");
+        if (_photo is not null) throw new InvalidOperationException("A photo capture is already in flight.");
+
+        (int w, int h) = _lastFrameSize;
+        var engine = ZigoteEngine.Instance
+                     ?? throw new InvalidOperationException("GPU photo capture needs a running engine.");
+
+        ulong rt = engine.CreateRenderTexture(width: (uint)w, height: (uint)h);
+        if (rt == 0) throw new InvalidOperationException("Could not create the photo render texture.");
+
+        var tcs = new TaskCompletionSource<CapturedPixels>();
+        _photo = new PhotoRequest {
+            Tcs = new TaskCompletionSource<byte[]>(),
+            PixelsTcs = tcs,
+            Lut = lut,
+            Grade = grade,
+            Strength = lutStrength,
+            Quality = 100,
+            Width = w,
+            Height = h,
+            Rt = rt,
+        };
+        return tcs.Task;
+    }
+
+    /// <summary>
+    ///     Capture a DNG straight off the sensor. Unlike <see cref="TakePhotoAsync" /> this does
+    ///     not go through the preview stream or the GPU at all: it is a separate, full-resolution
+    ///     capture, and the grade has nothing to do with it — a raw file is raw, and the Look is
+    ///     something a developer applies later.
+    /// </summary>
+    /// <exception cref="NotSupportedException">This lens has no raw path — check
+    ///     <see cref="Capabilities" /> first, and do not offer the option when it says no.</exception>
+    public Task<RawPhoto> TakeRawAsync()
+    {
+        ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
+        var session = _session
+                      ?? throw new InvalidOperationException("The camera is not running.");
+        if (!_capabilities.Value.Raw)
+            throw new NotSupportedException("This camera cannot capture RAW.");
+
+        return session.CaptureRawAsync();
     }
 
     /// <summary>A GPU photo pass is waiting for a painter — <see cref="CameraView" /> repaints on this.</summary>
@@ -360,6 +596,7 @@ public sealed class CameraController : IDisposable
         if (_disposed) return;
         _disposed = true;
         _lifecycle.Dispose();
+        _controlWatch.Dispose();
         StopSession();
         CancelPhoto();
         if (_lastFrame is not null) _frames.Return(_lastFrame);
@@ -396,6 +633,10 @@ public sealed class CameraController : IDisposable
         // stopping: whoever wins disposes, the other sees null.
         var session = Interlocked.Exchange(location1: ref _session, value: null);
         session?.Dispose();
+        // An idle camera can do nothing, and reports nothing: leaving the last lens's
+        // capabilities up would let a UI keep drawing dials that drive a dead session.
+        _capabilities.Value = CameraCapabilities.None;
+        _metadata.Value = null;
         // Drain a frame published between the capture stop and now, so a stale picture is not
         // presented as the first frame of the next session.
         if (_frames.TryTake(buffer: out byte[] frame, width: out _, height: out _))
@@ -432,11 +673,118 @@ public sealed class CameraController : IDisposable
     }
 
     /// <summary>Capture threads report errors here; signals are thread-safe, so no marshalling.</summary>
+    /// <summary>
+    ///     Hand the current controls to the running session. Cheap and idempotent: a driver
+    ///     rebuilds its request from a whole snapshot, so calling this more often than needed
+    ///     costs a comparison, not a capture.
+    /// </summary>
+    /// <summary>
+    ///     Tier-A capabilities for UI development, behind an environment variable so it can never
+    ///     be mistaken for what a real camera reported. Values are a typical flagship's.
+    /// </summary>
+    private static CameraCapabilities? FakeCapabilities() =>
+        Environment.GetEnvironmentVariable("ZIGOTE_CAMERA_FAKE_CAPS") switch {
+            "1" or "A" => new CameraCapabilities(
+                Iso: new IsoRange(Min: 50, Max: 6400),
+                Shutter: new ShutterRange(MinNs: 60_000, MaxNs: 500_000_000),
+                EvStep: 1f / 3f,
+                EvRange: (-9, 9),
+                Kelvin: (WhiteBalance.MinKelvin, WhiteBalance.MaxKelvin),
+                Tint: true,
+                MinFocusDiopters: 10f,
+                ManualFocus: true,
+                OisToggle: true,
+                Regions: true,
+                Raw: true
+            ),
+            // Tier B: manual exposure, no RAW, no manual focus or white balance.
+            "B" => new CameraCapabilities(
+                Iso: new IsoRange(Min: 100, Max: 3200),
+                Shutter: new ShutterRange(MinNs: 100_000, MaxNs: 250_000_000),
+                EvStep: 1f / 3f,
+                EvRange: (-6, 6),
+                Kelvin: (0, 0),
+                Tint: false,
+                MinFocusDiopters: 0f,
+                ManualFocus: false,
+                OisToggle: false,
+                Regions: true,
+                Raw: false
+            ),
+            // Tier C: a budget device — auto and EV, nothing else.
+            "C" => CameraCapabilities.None with { EvStep = 1f / 3f, EvRange = (-6, 6) },
+            _ => null,
+        };
+
+    private void PushControls()
+    {
+        if (_disposed || _clamping) return;
+
+        // Clamp on the way in, not just inside the driver. If the signal kept a value the sensor
+        // will never honour, every readout bound to it would report a lie — "ISO 999999" over a
+        // frame shot at 6400. The guard is for the re-entrancy this causes: writing the clamped
+        // values back re-enters through the same coalesced subscription.
+        _clamping = true;
+        try
+        {
+            Controls.ClampTo(_capabilities.Value);
+        }
+        finally
+        {
+            _clamping = false;
+        }
+
+        _session?.Apply(Controls.Snapshot());
+    }
+
     private void Fail(string message)
     {
         StopSession();
         _error.Value = message;
         _state.Value = CameraState.Failed;
+    }
+
+    /// <summary>
+    ///     The system took the camera. Distinct from a failure: the session is released (the HAL
+    ///     demands it) but the intent to be running is kept, so <see cref="Resume" /> puts it back
+    ///     without the app having to remember what it was doing.
+    /// </summary>
+    internal void Interrupt(string reason)
+    {
+        if (_disposed) return;
+        StopSession();
+        _interruption.Value = reason;
+        _resumeOnForeground = true;
+        _state.Value = CameraState.Interrupted;
+    }
+
+    /// <summary>
+    ///     Reopen after an interruption or an idle teardown, with the same device, size and
+    ///     controls. The controls survive because they live on the controller, not the session.
+    /// </summary>
+    public void Resume()
+    {
+        if (_disposed || _session is not null) return;
+        _interruption.Value = null;
+        _ = StartAsync(
+            deviceId: _deviceId,
+            maxHeight: _maxHeight,
+            minimalProcessing: _minimalProcessing
+        );
+    }
+
+    /// <summary>
+    ///     Release the camera but remember that it should be running — for an app going idle. The
+    ///     camera is the most expensive thing on the device; holding it open behind a still
+    ///     viewfinder nobody is watching is pure battery.
+    /// </summary>
+    public void Idle()
+    {
+        if (_disposed || _session is null) return;
+        StopSession();
+        _resumeOnForeground = true;
+        _interruption.Value = "paused to save power";
+        _state.Value = CameraState.Interrupted;
     }
 
     private static void CompletePhoto(PhotoRequest photo)
@@ -448,7 +796,19 @@ public sealed class CameraController : IDisposable
         engine?.DestroyRenderTexture(photo.Rt);
         if (!ok)
         {
-            photo.Tcs.TrySetException(new InvalidOperationException("Photo readback failed."));
+            var failure = new InvalidOperationException("Photo readback failed.");
+            photo.Tcs.TrySetException(failure);
+            photo.PixelsTcs?.TrySetException(failure);
+            return;
+        }
+
+        if (photo.PixelsTcs is { } pixels)
+        {
+            pixels.TrySetResult(new CapturedPixels(
+                Rgba: rgba,
+                Width: photo.Width,
+                Height: photo.Height
+            ));
             return;
         }
 
@@ -485,7 +845,17 @@ public sealed class CameraController : IDisposable
     private sealed class PhotoRequest
     {
         public required TaskCompletionSource<byte[]> Tcs { get; init; }
-        public required CameraLut Lut { get; init; }
+
+        /// <summary>
+        ///     Set when the caller wants the graded pixels rather than an encoded file. It then
+        ///     encodes once, into whatever format it likes — rather than us encoding a JPEG the
+        ///     caller has to decode and re-encode, which would cost a generation for nothing.
+        /// </summary>
+        public TaskCompletionSource<CapturedPixels>? PixelsTcs { get; init; }
+        public required CameraLut? Lut { get; init; }
+
+        /// <summary>An app-supplied grade emitted over the frame, in place of the plain LUT pass.</summary>
+        public Action<PaintList, Rect>? Grade { get; init; }
         public required float Strength { get; init; }
         public required int Quality { get; init; }
         public required int Width { get; init; }

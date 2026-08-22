@@ -30,6 +30,37 @@ internal static partial class CameraDriver
     {
     }
 
+    /// <summary>
+    ///     Desktops have the headroom, and no thermal API worth reading for a webcam preview.
+    ///     Reported honestly rather than guessed at.
+    /// </summary>
+    public static DeviceTier DeviceTier() => Camera.DeviceTier.High;
+
+    public static ThermalState Thermal() => ThermalState.Nominal;
+
+    /// <summary>
+    ///     Desktop has no media database to insert into: the pictures folder IS the library, and
+    ///     every desktop indexer watches it.
+    /// </summary>
+    public static async Task<string> PublishPhotoAsync(byte[] bytes, string fileName, string album)
+    {
+        string dir = Path.Combine(
+            path1: Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
+            path2: album
+        );
+        Directory.CreateDirectory(dir);
+
+        string target = Path.Combine(path1: dir, path2: fileName);
+        for (int n = 1; File.Exists(target); n++)
+            target = Path.Combine(
+                path1: dir,
+                path2: $"{Path.GetFileNameWithoutExtension(fileName)}-{n}{Path.GetExtension(fileName)}"
+            );
+
+        await File.WriteAllBytesAsync(path: target, bytes: bytes).ConfigureAwait(false);
+        return target;
+    }
+
     public static Task<CameraDeviceInfo[]> GetDevicesAsync()
     {
         if (OperatingSystem.IsLinux()) return Task.FromResult(LinuxDevices());
@@ -52,15 +83,57 @@ internal static partial class CameraDriver
         int maxHeight,
         bool minimalProcessing,
         FrameMailbox frames,
-        Action<string> onError) =>
+        Action<string> onError,
+        // Desktop capture is never interrupted by the system the way a phone's is: nothing else
+        // claims a webcam mid-session, so this is accepted for uniformity and never called.
+        Action<string>? onInterrupted = null) =>
         new FfmpegSession(deviceId: deviceId, maxHeight: maxHeight, frames: frames, onError: onError);
 
-    /// <summary>One more ffmpeg invocation: raw RGBA in on stdin, a single JPEG out on stdout.</summary>
-    public static async Task<byte[]> EncodeJpegAsync(byte[] rgba, int width, int height, int quality)
+    /// <summary>
+    ///     Which formats this ffmpeg build can write. Probed once and cached: the answer depends
+    ///     on how the binary was compiled, and guessing would mean silently writing a JPEG when
+    ///     the photographer asked for something else.
+    /// </summary>
+    public static bool SupportsFormat(StillFormat format) => format switch {
+        StillFormat.Jpeg or StillFormat.Png => true, // built into every ffmpeg
+        StillFormat.JpegXl => HasJpegXl.Value,
+        _ => false,
+    };
+
+    private static readonly Lazy<bool> HasJpegXl = new(() =>
+        {
+            try
+            {
+                var psi = Silent(FfmpegPath);
+                psi.ArgumentList.Add("-hide_banner");
+                psi.ArgumentList.Add("-encoders");
+                using var proc = Process.Start(psi);
+                if (proc is null) return false;
+                string output = proc.StandardOutput.ReadToEnd();
+                proc.WaitForExit();
+                return output.Contains(value: "libjxl", comparisonType: StringComparison.Ordinal);
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+    );
+
+    public static Task<byte[]> EncodeJpegAsync(byte[] rgba, int width, int height, int quality) =>
+        EncodeAsync(rgba: rgba, width: width, height: height, format: StillFormat.Jpeg, quality: quality);
+
+    /// <summary>One more ffmpeg invocation: raw RGBA in on stdin, one encoded still out on stdout.</summary>
+    public static async Task<byte[]> EncodeAsync(
+        byte[] rgba,
+        int width,
+        int height,
+        StillFormat format,
+        int quality)
     {
         var psi = Silent(FfmpegPath);
         psi.RedirectStandardInput = true;
-        foreach (string a in JpegArgs(width: width, height: height, quality: quality))
+        foreach (string a in EncodeArgs(width: width, height: height, format: format, quality: quality))
             psi.ArgumentList.Add(a);
 
         using var proc = Process.Start(psi)
@@ -118,7 +191,49 @@ internal static partial class CameraDriver
         return args;
     }
 
-    internal static IEnumerable<string> JpegArgs(int width, int height, int quality)
+    internal static IEnumerable<string> JpegArgs(int width, int height, int quality) =>
+        EncodeArgs(width: width, height: height, format: StillFormat.Jpeg, quality: quality);
+
+    /// <summary>
+    ///     Raw RGBA on stdin, one still on stdout. The output codec and its quality knob are the
+    ///     only thing that varies — every format takes the same frame in.
+    /// </summary>
+    internal static IEnumerable<string> EncodeArgs(int width, int height, StillFormat format, int quality)
+    {
+        if (format is StillFormat.Png or StillFormat.JpegXl)
+        {
+            var args = new List<string> {
+                "-hide_banner", "-loglevel", "error",
+                "-f", "rawvideo", "-pix_fmt", "rgba",
+                "-s", $"{width}x{height}",
+                "-i", "pipe:0",
+                "-frames:v", "1",
+            };
+
+            if (format == StillFormat.Png)
+            {
+                // PNG is the lossless option, so quality means compression effort, not fidelity.
+                args.AddRange(["-c:v", "png", "-pix_fmt", "rgb24", "-f", "image2", "pipe:1"]);
+            }
+            else
+            {
+                // libjxl's distance is 0 (mathematically lossless) to 15; 1.0 is "visually
+                // lossless". Map the familiar 1–100 onto the useful part of that range.
+                double distance = quality >= 100 ? 0.0 : Math.Clamp(value: (100 - quality) / 12.0, min: 0.1, max: 6.0);
+                args.AddRange([
+                    "-c:v", "libjxl",
+                    "-distance", distance.ToString("0.##", CultureInfo.InvariantCulture),
+                    "-f", "image2", "pipe:1",
+                ]);
+            }
+
+            return args;
+        }
+
+        return MjpegArgs(width: width, height: height, quality: quality);
+    }
+
+    private static IEnumerable<string> MjpegArgs(int width, int height, int quality)
     {
         // mjpeg qscale runs 2 (best) to 31 (worst); map the familiar 1–100 onto it.
         int q = 2 + (int)Math.Round((100 - quality) * 29 / 99.0);
@@ -138,8 +253,20 @@ internal static partial class CameraDriver
         OperatingSystem.IsMacOS() ? "avfoundation" :
         OperatingSystem.IsWindows() ? "dshow" : "v4l2";
 
+    /// <summary>
+    ///     A synthetic camera: any device id of the form <c>lavfi:&lt;filtergraph&gt;</c> is fed to
+    ///     ffmpeg's own source generator instead of a capture device — <c>lavfi:testsrc2=size=
+    ///     1280x720:rate=30</c> is a moving colour chart. It exists because the desktop build is
+    ///     how the preview, the LUT pass and the photo path get developed, and a CI machine or a
+    ///     desktop without a webcam would otherwise have nothing to point the pipeline at.
+    /// </summary>
+    internal const string SyntheticPrefix = "lavfi:";
+
     private static IEnumerable<string> InputArgs(string deviceId)
     {
+        if (deviceId.StartsWith(value: SyntheticPrefix, comparisonType: StringComparison.Ordinal))
+            return ["-f", "lavfi", "-i", deviceId[SyntheticPrefix.Length..]];
+
         var args = new List<string> {
             "-f",
             InputFormat(),
@@ -184,6 +311,15 @@ internal static partial class CameraDriver
                 Facing: CameraFacing.External
             )));
         }
+
+        // ZIGOTE_CAMERA_SYNTHETIC=1 appends a generated device, so a machine with no webcam can
+        // still run and test everything above the driver.
+        if (Environment.GetEnvironmentVariable("ZIGOTE_CAMERA_SYNTHETIC") == "1")
+            devices.Add((int.MaxValue, new CameraDeviceInfo(
+                Id: SyntheticPrefix + "testsrc2=size=1280x720:rate=30",
+                Name: "Synthetic test source",
+                Facing: CameraFacing.External
+            )));
 
         return devices.OrderBy(d => d.Node).Select(d => d.Info).ToArray();
 

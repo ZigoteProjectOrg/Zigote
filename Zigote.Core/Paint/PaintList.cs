@@ -631,13 +631,23 @@ public sealed unsafe class PaintList
     ///     an image-processing pass. The shader's WGSL must declare the group; a shader that does
     ///     declare it is skipped when the key is 0 or unresolvable.
     /// </param>
+    /// <param name="chainsBackdrop">
+    ///     This effect is a <em>filter</em> in a chain and must see the previous effect's output.
+    ///     Off by default, which is what a lens wants: Liquid Glass and stacked backdrop blurs
+    ///     deliberately read the same scene, and refreshing the capture costs a full-frame copy
+    ///     plus a render-pass break per effect. Turn it on for a multi-pass image pipeline, where
+    ///     sharing one capture would collapse every pass into whichever ran last.
+    /// </param>
     public void AddShaderEffect(Rect bounds, uint shaderId,
         float p0 = 0f, float p1 = 0f, float p2 = 0f, float p3 = 0f,
         float p4 = 0f, float p5 = 0f, float p6 = 0f, float p7 = 0f,
-        ulong imageKey = 0)
+        ulong imageKey = 0, bool chainsBackdrop = false)
     {
         CheckBounds(bounds);
-        var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.ShaderEffect };
+        var cmd = new ZgPaintCommand {
+            Kind = (byte)PaintCommandKind.ShaderEffect,
+            ChainsBackdrop = (byte)(chainsBackdrop ? 1 : 0),
+        };
         SetBounds(cmd: ref cmd, r: ApplyOffset(bounds));
         cmd.ShaderId = shaderId;
         if (imageKey != 0)

@@ -107,7 +107,11 @@ public unsafe struct ZgPaintCommand
     [FieldOffset(2)] public ushort FontWeight; // 100–900
     [FieldOffset(4)] public byte HasCacheKey;
 
-    // [5..7] padding (align pointers to 8 bytes)
+    /// <summary>ShaderEffect only: refresh the backdrop capture first, so chained filters see
+    /// the previous pass's output instead of sharing its input.</summary>
+    [FieldOffset(5)] public byte ChainsBackdrop;
+
+    // [6..7] padding (align pointers to 8 bytes)
     [FieldOffset(8)] public byte* TextPtr;
     [FieldOffset(16)] public byte* PixelsPtr;
 
