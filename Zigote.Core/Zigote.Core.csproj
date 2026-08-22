@@ -16,6 +16,9 @@
         <!-- desktop_shims_stub.zig is excluded: it re-exports the macOS-only menu/drag entry points as
          no-ops for other platforms, and those already have hand-written bindings in NativeMenu.cs
          (same partial class) — generating them again would duplicate the declarations. -->
+        <!-- The wire contract: the generator reads the enums the exports return out of abi.zig
+             and emits them, rather than having them hand-mirrored on this side. -->
+        <AdditionalFiles Include="..\Zigote.Engine\src\abi.zig"/>
         <AdditionalFiles Include="..\Zigote.Engine\src\ffi\*.zig"
                          Exclude="..\Zigote.Engine\src\ffi\desktop_shims_stub.zig"/>
     </ItemGroup>

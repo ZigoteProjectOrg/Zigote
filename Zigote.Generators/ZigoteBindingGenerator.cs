@@ -38,7 +38,9 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
             .Where(static file =>
                 {
                     string p = file.Path.Replace(oldChar: '\\', newChar: '/');
-                    return p.EndsWith(".zig") && p.Contains("/ffi/");
+                    // src/ffi/*.zig carries the exports; src/abi.zig carries the enums those
+                    // exports return, which must be generated rather than hand-mirrored.
+                    return p.EndsWith(".zig") && (p.Contains("/ffi/") || p.EndsWith("/abi.zig"));
                 }
             )
             .Select(static (file, cancellationToken) =>
@@ -69,6 +71,82 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
         );
     }
 
+    private class ZigEnum
+    {
+        public string Name = string.Empty;
+        public string BackingType = "int";
+        public List<KeyValuePair<string, string>> Members = new List<KeyValuePair<string, string>>();
+    }
+
+    /// <summary>
+    ///     Parses <c>pub const Name = enum(i32) { a = 0, b = -1, ... };</c> out of a Zig source.
+    ///     Only explicitly-valued members are emitted, which is every enum that crosses the ABI —
+    ///     an implicit value would make the wire encoding depend on declaration order.
+    /// </summary>
+    private static IEnumerable<ZigEnum> ParseZigEnums(string text)
+    {
+        const string decl = "pub const ";
+        int at = 0;
+        while (true)
+        {
+            int found = text.IndexOf(value: decl, startIndex: at, comparisonType: StringComparison.Ordinal);
+            if (found < 0) yield break;
+
+            at = found + decl.Length;
+            if (found != 0 && text[found - 1] != '\n') continue; // must start a line
+
+            int eq = text.IndexOf(value: " = enum(", startIndex: at, comparisonType: StringComparison.Ordinal);
+            int lineEnd = text.IndexOf(value: '\n', startIndex: at);
+            if (eq < 0 || (lineEnd >= 0 && eq > lineEnd)) continue;
+
+            string name = text.Substring(startIndex: at, length: eq - at).Trim();
+            int backingStart = eq + " = enum(".Length;
+            int backingEnd = text.IndexOf(value: ')', startIndex: backingStart);
+            if (backingEnd < 0) continue;
+
+            string zigBacking = text.Substring(startIndex: backingStart, length: backingEnd - backingStart).Trim();
+            string backing = zigBacking switch
+            {
+                "i32" => "int", "u32" => "uint", "i16" => "short", "u16" => "ushort",
+                "i8" => "sbyte", "u8" => "byte", "i64" => "long", "u64" => "ulong",
+                _ => "int",
+            };
+
+            int open = text.IndexOf(value: '{', startIndex: backingEnd);
+            if (open < 0) continue;
+
+            // Stop at the first `}` at the start of a line — the enum's own closing brace. Member
+            // functions inside the enum are skipped by the "must contain =" test below.
+            int close = text.IndexOf(value: "\n};", startIndex: open);
+            if (close < 0) continue;
+
+            var members = new List<KeyValuePair<string, string>>();
+            foreach (string rawLine in text.Substring(startIndex: open + 1, length: close - open - 1)
+                         .Split('\n'))
+            {
+                string line = rawLine.Trim();
+                if (line.Length == 0 || line.StartsWith("//", StringComparison.Ordinal)) continue;
+                if (!line.EndsWith(",", StringComparison.Ordinal)) continue;
+
+                int assign = line.IndexOf('=');
+                if (assign < 0) continue;
+                // `0 => .sine,` is a switch arm inside a member function, not a member.
+                if (line.Contains("=>")) continue;
+
+                string memberName = line.Substring(startIndex: 0, length: assign).Trim();
+                string value = line.Substring(startIndex: assign + 1).TrimEnd(',').Trim();
+                if (memberName.Length == 0 || memberName.Contains(" ")) continue;
+
+                members.Add(new KeyValuePair<string, string>(key: SnakeToPascal(memberName), value: value));
+            }
+
+            if (members.Count > 0)
+            {
+                yield return new ZigEnum { Name = name, BackingType = backing, Members = members };
+            }
+        }
+    }
+
     private static string? GenerateBindings(IEnumerable<(string Path, string Text)> files)
     {
         // Concatenate exports across files, first-wins dedup by entry point (an entry point must be
@@ -80,6 +158,22 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
         {
             if (seen.Add(fn.EntryPoint))
                 functions.Add(fn);
+        }
+
+        // Enums come from src/abi.zig ONLY — that file is the wire contract. Implementation files
+        // carry enums that never cross the ABI (audio waveform kinds and the like), and those have
+        // member functions whose `switch` arms are not enum members.
+        var enums = new List<ZigEnum>();
+        var seenEnums = new HashSet<string>(StringComparer.Ordinal);
+        foreach ((string path, string text) in files)
+        {
+            if (!path.EndsWith("/abi.zig", StringComparison.Ordinal)) continue;
+
+            foreach (var en in ParseZigEnums(text))
+            {
+                if (seenEnums.Add(en.Name))
+                    enums.Add(en);
+            }
         }
 
         if (functions.Count == 0) return null;
@@ -95,6 +189,21 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine("namespace Zigote.Core.Native;");
         sb.AppendLine();
+
+        // Enums the exports return or take. Generated from the Zig declaration so the values
+        // cannot drift from the contract the way a hand-copied mirror can.
+        foreach (var e in enums)
+        {
+            sb.AppendLine($"/// <summary>Generated from Zig <c>{e.Name}</c>.</summary>");
+            sb.AppendLine($"public enum {e.Name} : {e.BackingType}");
+            sb.AppendLine("{");
+            foreach (var member in e.Members)
+                sb.AppendLine($"    {member.Key} = {member.Value},");
+
+            sb.AppendLine("}");
+            sb.AppendLine();
+        }
+
         sb.AppendLine(
             "#pragma warning disable SYSLIB1054 // Use LibraryImportAttribute instead of DllImportAttribute"
         );

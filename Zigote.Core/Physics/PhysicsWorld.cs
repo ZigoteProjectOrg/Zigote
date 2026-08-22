@@ -28,7 +28,7 @@ public sealed class PhysicsWorld : IDisposable
         _disposed = true;
         if (_initialized)
         {
-            NativeEngine.PhysicsShutdown(_engineHandle);
+            NativeEngine.PhysicsShutdown();
             _initialized = false;
         }
     }
@@ -46,7 +46,6 @@ public sealed class PhysicsWorld : IDisposable
 
         _engineHandle = engineHandle;
         var result = NativeEngine.PhysicsInit(
-            handle: _engineHandle,
             maxBodies: maxBodies,
             numThreads: numThreads
         );
@@ -64,7 +63,6 @@ public sealed class PhysicsWorld : IDisposable
     {
         EnsureReady();
         NativeEngine.PhysicsStep(
-            handle: _engineHandle,
             deltaTime: deltaTime,
             collisionSteps: collisionSteps
         );
@@ -75,7 +73,6 @@ public sealed class PhysicsWorld : IDisposable
     {
         EnsureReady();
         NativeEngine.PhysicsSetGravity(
-            handle: _engineHandle,
             x: gravity.X,
             y: gravity.Y,
             z: gravity.Z
@@ -89,7 +86,7 @@ public sealed class PhysicsWorld : IDisposable
     public void OptimizeBroadPhase()
     {
         EnsureReady();
-        NativeEngine.PhysicsOptimizeBroadphase(_engineHandle);
+        NativeEngine.PhysicsOptimizeBroadphase();
     }
 
     // ── Body lifecycle ────────────────────────────────────────────────────────
@@ -103,7 +100,6 @@ public sealed class PhysicsWorld : IDisposable
     {
         EnsureReady();
         return NativeEngine.PhysicsCreateBody(
-            handle: _engineHandle,
             shapeType: (byte)settings.ShapeType,
             hx: settings.HalfExtents.X,
             hy: settings.HalfExtents.Y,
@@ -137,7 +133,7 @@ public sealed class PhysicsWorld : IDisposable
     {
         EnsureReady();
         if (bodyId == InvalidBodyId) return;
-        NativeEngine.PhysicsDestroyBody(handle: _engineHandle, bodyId: bodyId);
+        NativeEngine.PhysicsDestroyBody(bodyId: bodyId);
     }
 
     /// <summary>Add a body to the active simulation.</summary>
@@ -145,7 +141,7 @@ public sealed class PhysicsWorld : IDisposable
     {
         EnsureReady();
         if (bodyId == InvalidBodyId) return;
-        NativeEngine.PhysicsAddBody(handle: _engineHandle, bodyId: bodyId);
+        NativeEngine.PhysicsAddBody(bodyId: bodyId);
     }
 
     /// <summary>Remove a body from the simulation without destroying it.</summary>
@@ -153,7 +149,7 @@ public sealed class PhysicsWorld : IDisposable
     {
         EnsureReady();
         if (bodyId == InvalidBodyId) return;
-        NativeEngine.PhysicsRemoveBody(handle: _engineHandle, bodyId: bodyId);
+        NativeEngine.PhysicsRemoveBody(bodyId: bodyId);
     }
 
     // ── Transform ─────────────────────────────────────────────────────────────
@@ -163,7 +159,6 @@ public sealed class PhysicsWorld : IDisposable
     {
         EnsureReady();
         NativeEngine.PhysicsGetBodyPosition(
-            handle: _engineHandle,
             bodyId: bodyId,
             outX: out float x,
             outY: out float y,
@@ -177,7 +172,6 @@ public sealed class PhysicsWorld : IDisposable
     {
         EnsureReady();
         NativeEngine.PhysicsGetBodyRotation(
-            handle: _engineHandle,
             bodyId: bodyId,
             outRx: out float rx,
             outRy: out float ry,
@@ -210,7 +204,6 @@ public sealed class PhysicsWorld : IDisposable
             fixed (float* xformsPtr = outXforms)
             {
                 NativeEngine.PhysicsGetBodyTransforms(
-                    handle: _engineHandle,
                     ids: idsPtr,
                     count: (uint)ids.Length,
                     outXforms: xformsPtr
@@ -225,7 +218,6 @@ public sealed class PhysicsWorld : IDisposable
         EnsureReady();
         if (bodyId == InvalidBodyId) return;
         NativeEngine.PhysicsSetBodyPosition(
-            handle: _engineHandle,
             bodyId: bodyId,
             x: position.X,
             y: position.Y,
@@ -241,7 +233,6 @@ public sealed class PhysicsWorld : IDisposable
         EnsureReady();
         if (bodyId == InvalidBodyId) return;
         NativeEngine.PhysicsSetLinearVelocity(
-            handle: _engineHandle,
             bodyId: bodyId,
             x: velocity.X,
             y: velocity.Y,
@@ -255,7 +246,6 @@ public sealed class PhysicsWorld : IDisposable
         EnsureReady();
         if (bodyId == InvalidBodyId) return;
         NativeEngine.PhysicsSetAngularVelocity(
-            handle: _engineHandle,
             bodyId: bodyId,
             x: velocity.X,
             y: velocity.Y,
@@ -269,7 +259,6 @@ public sealed class PhysicsWorld : IDisposable
         EnsureReady();
         if (bodyId == InvalidBodyId) return;
         NativeEngine.PhysicsAddForce(
-            handle: _engineHandle,
             bodyId: bodyId,
             x: force.X,
             y: force.Y,
@@ -283,7 +272,6 @@ public sealed class PhysicsWorld : IDisposable
         EnsureReady();
         if (bodyId == InvalidBodyId) return;
         NativeEngine.PhysicsAddImpulse(
-            handle: _engineHandle,
             bodyId: bodyId,
             x: impulse.X,
             y: impulse.Y,
@@ -297,7 +285,6 @@ public sealed class PhysicsWorld : IDisposable
         EnsureReady();
         if (bodyId == InvalidBodyId) return;
         NativeEngine.PhysicsAddTorque(
-            handle: _engineHandle,
             bodyId: bodyId,
             x: torque.X,
             y: torque.Y,
@@ -311,7 +298,6 @@ public sealed class PhysicsWorld : IDisposable
         EnsureReady();
         if (bodyId == InvalidBodyId) return;
         NativeEngine.PhysicsAddForceAtPoint(
-            handle: _engineHandle,
             bodyId: bodyId,
             fx: force.X,
             fy: force.Y,
@@ -328,7 +314,6 @@ public sealed class PhysicsWorld : IDisposable
         EnsureReady();
         if (bodyId == InvalidBodyId) return Vec3.Zero;
         NativeEngine.PhysicsGetLinearVelocity(
-            handle: _engineHandle,
             bodyId: bodyId,
             outX: out float x,
             outY: out float y,
@@ -343,7 +328,6 @@ public sealed class PhysicsWorld : IDisposable
         EnsureReady();
         if (bodyId == InvalidBodyId) return Vec3.Zero;
         NativeEngine.PhysicsGetAngularVelocity(
-            handle: _engineHandle,
             bodyId: bodyId,
             outX: out float x,
             outY: out float y,
@@ -358,7 +342,6 @@ public sealed class PhysicsWorld : IDisposable
         EnsureReady();
         if (bodyId == InvalidBodyId) return Quat.Identity;
         NativeEngine.PhysicsGetBodyRotationQuat(
-            handle: _engineHandle,
             bodyId: bodyId,
             outX: out float x,
             outY: out float y,
@@ -379,7 +362,6 @@ public sealed class PhysicsWorld : IDisposable
         EnsureReady();
         if (bodyId == InvalidBodyId) return;
         NativeEngine.PhysicsSetBodyRotationQuat(
-            handle: _engineHandle,
             bodyId: bodyId,
             qx: rotation.X,
             qy: rotation.Y,
@@ -404,7 +386,6 @@ public sealed class PhysicsWorld : IDisposable
         distance = maxDistance;
 
         uint result = NativeEngine.PhysicsRaycastClosest(
-            handle: _engineHandle,
             ox: origin.X,
             oy: origin.Y,
             oz: origin.Z,

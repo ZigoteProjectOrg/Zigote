@@ -49,7 +49,7 @@ public sealed unsafe class NativeWindow : IDisposable
     public void Dispose()
     {
         if (_window == 0) return;
-        NativeEngine.WindowDestroy(handle: _engine.Handle, windowHandle: _window);
+        NativeEngine.WindowDestroy(windowHandle: _window);
         _window = 0;
     }
 
@@ -58,14 +58,13 @@ public sealed unsafe class NativeWindow : IDisposable
     {
         if (_window == 0) return;
         NativeEngine.WindowPixelSize(
-            handle: _engine.Handle,
             windowHandle: _window,
             outW: out uint w,
             outH: out uint h
         );
         PixelWidth = w;
         PixelHeight = h;
-        Scale = NativeEngine.WindowScale(handle: _engine.Handle, windowHandle: _window);
+        Scale = NativeEngine.WindowScale(windowHandle: _window);
         if (Scale <= 0f) Scale = 1f;
     }
 
@@ -75,7 +74,6 @@ public sealed unsafe class NativeWindow : IDisposable
         if (_window == 0) return;
         _submitCb ??= (ptr, count) =>
             NativeEngine.WindowSubmitPaint(
-                handle: _engine.Handle,
                 windowHandle: _window,
                 commands: ptr,
                 count: count
@@ -89,7 +87,6 @@ public sealed unsafe class NativeWindow : IDisposable
         if (_window == 0) return;
         _submitOverlayCb ??= (ptr, count) =>
             NativeEngine.WindowSubmitOverlay(
-                handle: _engine.Handle,
                 windowHandle: _window,
                 commands: ptr,
                 count: count
@@ -101,14 +98,14 @@ public sealed unsafe class NativeWindow : IDisposable
     public void Render()
     {
         if (_window == 0) return;
-        NativeEngine.WindowRender(handle: _engine.Handle, windowHandle: _window, scale: Scale);
+        NativeEngine.WindowRender(windowHandle: _window, scale: Scale);
     }
 
     /// <summary>Raise the window above others and give it input focus.</summary>
     public void Raise()
     {
         if (_window == 0) return;
-        NativeEngine.WindowRaise(handle: _engine.Handle, windowHandle: _window);
+        NativeEngine.WindowRaise(windowHandle: _window);
     }
 
     /// <summary>Screen position of the window's top-left corner (logical desktop coordinates).</summary>
@@ -116,7 +113,6 @@ public sealed unsafe class NativeWindow : IDisposable
     {
         if (_window == 0) return (0, 0);
         NativeEngine.WindowPosition(
-            handle: _engine.Handle,
             windowHandle: _window,
             outX: out int x,
             outY: out int y
@@ -129,7 +125,6 @@ public sealed unsafe class NativeWindow : IDisposable
     {
         if (_window == 0) return;
         NativeEngine.WindowSetPosition(
-            handle: _engine.Handle,
             windowHandle: _window,
             x: x,
             y: y
@@ -141,21 +136,21 @@ public sealed unsafe class NativeWindow : IDisposable
         if (_window == 0) return;
         byte[] titleBytes = ZigoteEngine.Utf8Z(title);
         fixed (byte* tp = titleBytes)
-            NativeEngine.WindowSetTitle(handle: _engine.Handle, windowHandle: _window, title: tp);
+            NativeEngine.WindowSetTitle(windowHandle: _window, title: tp);
     }
 
     /// <summary>Enable SDL3 text-input mode for this window (text-field focus).</summary>
     public void StartTextInput()
     {
         if (_window == 0) return;
-        NativeEngine.WindowStartTextInput(handle: _engine.Handle, windowHandle: _window);
+        NativeEngine.WindowStartTextInput(windowHandle: _window);
     }
 
     /// <summary>Disable SDL3 text-input mode for this window.</summary>
     public void StopTextInput()
     {
         if (_window == 0) return;
-        NativeEngine.WindowStopTextInput(handle: _engine.Handle, windowHandle: _window);
+        NativeEngine.WindowStopTextInput(windowHandle: _window);
     }
 
     /// <summary>Position the platform IME candidate window next to the active caret.</summary>
@@ -163,7 +158,6 @@ public sealed unsafe class NativeWindow : IDisposable
     {
         if (_window == 0) return;
         NativeEngine.WindowSetTextInputArea(
-            handle: _engine.Handle,
             windowHandle: _window,
             x: (int)MathF.Round(area.X),
             y: (int)MathF.Round(area.Y),

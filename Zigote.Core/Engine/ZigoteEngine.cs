@@ -247,7 +247,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     {
         if (!_initialized || _disposed) return false;
         if (enabled && !AllowRelativeMouseMode) return false;
-        if (!NativeEngine.SetRelativeMouseMode(handle: _handle, enabled: enabled)) return false;
+        if (!NativeEngine.SetRelativeMouseMode(enabled: enabled)) return false;
         RelativeMouseMode = enabled;
         return true;
     }
@@ -309,11 +309,11 @@ public sealed unsafe class ZigoteEngine : IDisposable
         ValidateAbi();
         _caps = QueryRendererCaps();
         RefreshSize();
-        MainWindowId = NativeEngine.MainWindowId(_handle);
+        MainWindowId = NativeEngine.MainWindowId();
 
         // Register the live-resize render callback: the native SDL event-watch invokes it from inside
         // the OS modal window-resize loop so the UI keeps laying out + presenting during the drag.
-        NativeEngine.SetResizeRenderCallback(handle: _handle, cb: &LiveResizeThunk);
+        NativeEngine.SetResizeRenderCallback(cb: &LiveResizeThunk);
     }
 
     /// <summary>
@@ -328,7 +328,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
 
         const int max = 16; // gpu_select.max_gpus
         var raw = stackalloc ZgGpuInfo[max];
-        int count = (int)NativeEngine.EnumerateGpus(handle: _handle, outGpus: raw, max: max);
+        int count = (int)NativeEngine.EnumerateGpus(outGpus: raw, max: max);
 
         var list = new List<GpuInfo>(count);
         for (int i = 0; i < count; i++)
@@ -356,7 +356,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public GpuInfo? ActiveGpu()
     {
         if (!_initialized || _disposed) return null;
-        int index = NativeEngine.GetActiveGpu(_handle);
+        int index = NativeEngine.GetActiveGpu();
         var gpus = EnumerateGpus();
         return index >= 0 && index < gpus.Count ? gpus[index] : null;
     }
@@ -369,7 +369,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public (int X, int Y) MainWindowPosition()
     {
         EnsureReady();
-        NativeEngine.MainWindowPosition(handle: _handle, outX: out int x, outY: out int y);
+        NativeEngine.MainWindowPosition(outX: out int x, outY: out int y);
         return (x, y);
     }
 
@@ -381,7 +381,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public void MainWindowSetVisible(bool visible)
     {
         if (!_disposed)
-            NativeEngine.MainWindowSetVisible(handle: _handle, visible: visible ? 1u : 0u);
+            NativeEngine.MainWindowSetVisible(visible: visible ? 1u : 0u);
     }
 
     /// <summary>
@@ -502,7 +502,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public SystemTheme GetSystemTheme()
     {
         EnsureReady();
-        return (SystemTheme)NativeEngine.GetSystemTheme(_handle);
+        return (SystemTheme)NativeEngine.GetSystemTheme();
     }
 
     /// <summary>
@@ -513,7 +513,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public ScrollOrientation GetScrollOrientation()
     {
         EnsureReady();
-        return (ScrollOrientation)NativeEngine.GetScrollOrientation(_handle);
+        return (ScrollOrientation)NativeEngine.GetScrollOrientation();
     }
 
     /// <summary>
@@ -525,7 +525,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     {
         EnsureReady();
         Span<float> insets = stackalloc float[4];
-        fixed (float* p = insets) NativeEngine.GetSafeArea(handle: _handle, insets: p);
+        fixed (float* p = insets) NativeEngine.GetSafeArea(insets: p);
 
         return (insets[0], insets[1], insets[2], insets[3]);
     }
@@ -538,7 +538,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public void ResetTextCaches()
     {
         EnsureReady();
-        NativeEngine.TextResetCaches(_handle);
+        NativeEngine.TextResetCaches();
     }
 
     /// <summary>
@@ -555,7 +555,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (byte* tp = titleBytes)
         {
             result = NativeEngine.WindowCreate(
-                handle: _handle,
                 width: width,
                 height: height,
                 title: tp,
@@ -573,7 +572,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
         return new NativeWindow(
             engine: this,
             window: window,
-            id: NativeEngine.WindowId(handle: _handle, windowHandle: window)
+            id: NativeEngine.WindowId(windowHandle: window)
         );
     }
 
@@ -592,7 +591,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
     {
         EnsureReady();
         NativeEngine.WindowNativeParent(
-            handle: _handle,
             windowHandle: windowHandle,
             outKind: out uint kind,
             outPtr1: out ulong p1,
@@ -603,7 +601,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
 
     private RendererCaps QueryRendererCaps()
     {
-        NativeEngine.GetRendererCaps(handle: _handle, outCaps: out var caps);
+        NativeEngine.GetRendererCaps(outCaps: out var caps);
         return RendererCaps.From(caps);
     }
 
@@ -746,7 +744,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (byte* fp = familyBytes)
         {
             result = NativeEngine.MeasureText(
-                handle: _handle,
                 text: p,
                 textLen: (uint)textLen,
                 fontSize: fontSize,
@@ -837,16 +834,15 @@ public sealed unsafe class ZigoteEngine : IDisposable
     }
 
     /// <summary>Enable SDL3 text-input so TEXT_INPUT events are generated. Call on text-field focus.</summary>
-    public void StartTextInput() => NativeEngine.StartTextInput(_handle);
+    public void StartTextInput() => NativeEngine.StartTextInput();
 
     /// <summary>Disable SDL3 text-input. Call when no text field is focused.</summary>
-    public void StopTextInput() => NativeEngine.StopTextInput(_handle);
+    public void StopTextInput() => NativeEngine.StopTextInput();
 
     /// <summary>Position the platform IME candidate window next to the active caret.</summary>
     public void SetTextInputArea(Rect area, int cursor = 0)
     {
         NativeEngine.SetTextInputArea(
-            handle: _handle,
             x: (int)MathF.Round(area.X),
             y: (int)MathF.Round(area.Y),
             w: Math.Max(val1: 1, val2: (int)MathF.Round(area.Width)),
@@ -859,7 +855,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public void Shutdown()
     {
         if (!_initialized) return;
-        NativeEngine.Shutdown(_handle);
+        NativeEngine.Shutdown();
         _handle = 0;
         _initialized = false;
     }
@@ -880,7 +876,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
         // when the engine may already be gone. There is nothing left to leak at that point.
         var engine = Instance;
         if (textureHandle == 0 || engine is null || engine._disposed) return;
-        NativeEngine.ReleaseTexture(handle: engine._handle, imageHandle: textureHandle);
+        NativeEngine.ReleaseTexture(imageHandle: textureHandle);
     }
 
     /// <summary>
@@ -898,7 +894,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         if (engine is null || engine._disposed) return;
 
         NativeEngine.ImageStats(
-            handle: engine._handle,
             outCount: out uint c,
             outCpuBytes: out ulong cpu,
             outGpuBytes: out ulong gpu
@@ -921,7 +916,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (byte* p = pathBytes)
         {
             return NativeEngine.LoadTexture(
-                handle: engine._handle,
                 pathC: p,
                 outW: out outW,
                 outH: out outH
@@ -939,7 +933,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (byte* p = pathBytes)
         {
             return NativeEngine.LoadTextureMask(
-                handle: engine._handle,
                 pathC: p,
                 outW: out outW,
                 outH: out outH
@@ -956,7 +949,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (byte* ptr = data)
         {
             return NativeEngine.LoadTextureFromMemory(
-                handle: engine._handle,
                 dataPtr: ptr,
                 dataLen: (nuint)data.Length,
                 outW: out outW,
@@ -977,7 +969,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (byte* ptr = rgba)
         {
             return NativeEngine.LoadTextureFromRgba(
-                handle: engine._handle,
                 pixelsPtr: ptr,
                 pixelsLen: (nuint)rgba.Length,
                 width: width,
@@ -1010,7 +1001,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (byte* ptr = rgba)
         {
             return NativeEngine.UpdateTextureRgba(
-                handle: engine._handle,
                 imageHandle: textureHandle,
                 pixelsPtr: ptr,
                 pixelsLen: (nuint)rgba.Length,
@@ -1039,7 +1029,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (byte* ptr = pixels)
         {
             return NativeEngine.LoadTextureFromPixels(
-                handle: engine._handle,
                 pixelsPtr: ptr,
                 pixelsLen: (nuint)pixels.Length,
                 width: width,
@@ -1065,7 +1054,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (byte* ptr = pixels)
         {
             return NativeEngine.UpdateTextureRows(
-                handle: engine._handle,
                 imageHandle: textureHandle,
                 pixelsPtr: ptr,
                 pixelsLen: (nuint)pixels.Length,
@@ -1098,7 +1086,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (byte* ptr = rgba)
         {
             return NativeEngine.UpdateTextureRgbaRows(
-                handle: engine._handle,
                 imageHandle: textureHandle,
                 pixelsPtr: ptr,
                 pixelsLen: (nuint)rgba.Length,
@@ -1123,7 +1110,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (byte* ptr = data)
         {
             return NativeEngine.LoadTextureFromMemoryScaled(
-                handle: engine._handle,
                 dataPtr: ptr,
                 dataLen: (nuint)data.Length,
                 maxDim: maxDim,
@@ -1138,7 +1124,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public void SceneClear()
     {
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
-        NativeEngine.SceneClear(_handle);
+        NativeEngine.SceneClear();
     }
 
     public ulong SceneAddChildNode(ulong parentHandle, string name, byte kind)
@@ -1154,7 +1140,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (byte* namePtr = buf)
         {
             return NativeEngine.SceneAddChildNode(
-                handle: _handle,
                 parentHandle: parentHandle,
                 namePtr: namePtr,
                 kind: kind
@@ -1173,7 +1158,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (byte* ptr = data)
         {
             NativeEngine.SceneSetMeshBlob(
-                handle: _handle,
                 nodeHandle: nodeHandle,
                 dataPtr: ptr,
                 dataLen: (nuint)data.Length
@@ -1222,7 +1206,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
         if (nodeHandle == 0) return;
         NativeEngine.SceneSetMeshPrimitive(
-            handle: _handle,
             nodeHandle: nodeHandle,
             primType: primType
         );
@@ -1238,7 +1221,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
         if (nodeHandle == 0) return;
         NativeEngine.SceneSetNodeVisible(
-            handle: _handle,
             nodeHandle: nodeHandle,
             visible: visible ? 1u : 0u
         );
@@ -1248,18 +1230,17 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public void RenderSetFrustumCull(bool enabled)
     {
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
-        NativeEngine.RenderSetFrustumCull(handle: _handle, enabled: enabled ? 1u : 0u);
+        NativeEngine.RenderSetFrustumCull(enabled: enabled ? 1u : 0u);
     }
 
     // ── Game controllers (SDL gamepad, up to 8 player slots) ─────────────────────
 
     /// <summary>Number of connected controllers (0-8); slots are packed from 0. Hotplug-aware.</summary>
-    public int GamepadCount() => _disposed ? 0 : (int)NativeEngine.InputGamepadCount(_handle);
+    public int GamepadCount() => _disposed ? 0 : (int)NativeEngine.InputGamepadCount();
 
     /// <summary>True when the game controller in slot <paramref name="pad" /> is connected.</summary>
     public bool GamepadConnected(int pad = 0) => !_disposed &&
                                                  NativeEngine.InputGamepadConnected(
-                                                     handle: _handle,
                                                      pad: (byte)pad
                                                  ) != 0;
 
@@ -1269,12 +1250,11 @@ public sealed unsafe class ZigoteEngine : IDisposable
     /// </summary>
     public float GamepadAxis(int pad, int axis) => _disposed
         ? 0f
-        : NativeEngine.InputGamepadAxis(handle: _handle, pad: (byte)pad, axis: (byte)axis);
+        : NativeEngine.InputGamepadAxis(pad: (byte)pad, axis: (byte)axis);
 
     /// <summary>True while a controller button is held. See <c>GamepadButton</c> order.</summary>
     public bool GamepadButton(int pad, int button) => !_disposed &&
                                                       NativeEngine.InputGamepadButton(
-                                                          handle: _handle,
                                                           pad: (byte)pad,
                                                           button: (byte)button
                                                       ) != 0;
@@ -1291,7 +1271,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         if (!_disposed)
         {
             NativeEngine.AudioBeep(
-                handle: _handle,
                 freq: frequencyHz,
                 duration: durationSeconds,
                 volume: volume,
@@ -1309,7 +1288,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         if (!_disposed)
         {
             NativeEngine.AudioVoice(
-                handle: _handle,
                 channel: (uint)Math.Max(val1: 0, val2: channel),
                 freq: frequencyHz,
                 volume: volume,
@@ -1321,7 +1299,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     /// <summary>Silence every voice (one-shots, sustained channels, and all handle sources).</summary>
     public void AudioStopAll()
     {
-        if (!_disposed) NativeEngine.AudioStopAll(_handle);
+        if (!_disposed) NativeEngine.AudioStopAll();
     }
 
     // ── Spatial / surround audio (miniaudio engine) ──────────────────────────────
@@ -1329,7 +1307,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     /// <summary>Age + reap fire-and-forget one-shots. Call once per frame from the host loop.</summary>
     public void AudioUpdate(float dt)
     {
-        if (!_disposed) NativeEngine.AudioUpdate(handle: _handle, dt: dt);
+        if (!_disposed) NativeEngine.AudioUpdate(dt: dt);
     }
 
     /// <summary>Set the spatial listener pose; every spatialised sound is panned + attenuated against it.</summary>
@@ -1337,7 +1315,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
     {
         if (_disposed) return;
         NativeEngine.AudioSetListener(
-            handle: _handle,
             px: position.X,
             py: position.Y,
             pz: position.Z,
@@ -1353,7 +1330,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     /// <summary>Master output volume [0,4]; 1 = unity.</summary>
     public void AudioSetMasterVolume(float volume)
     {
-        if (!_disposed) NativeEngine.AudioSetMasterVolume(handle: _handle, volume: volume);
+        if (!_disposed) NativeEngine.AudioSetMasterVolume(volume: volume);
     }
 
     /// <summary>Positioned procedural one-shot (spatialised + attenuated). Waveform code 0..4.</summary>
@@ -1362,7 +1339,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
     {
         if (_disposed) return;
         NativeEngine.AudioBeep3D(
-            handle: _handle,
             px: position.X,
             py: position.Y,
             pz: position.Z,
@@ -1385,7 +1361,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         return _disposed
             ? 0u
             : NativeEngine.AudioSoundCreateTone(
-                handle: _handle,
                 freq: frequencyHz,
                 waveform: (byte)waveform
             );
@@ -1402,7 +1377,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (byte* p = pathBytes)
         {
             return NativeEngine.AudioSoundCreateFile(
-                handle: _handle,
                 pathC: p,
                 streaming: streaming ? 1u : 0u
             );
@@ -1418,7 +1392,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     ///         transport calls apply.
     ///     </para>
     /// </summary>
-    public uint AudioStreamCreate() => _disposed ? 0u : NativeEngine.AudioStreamCreate(_handle);
+    public uint AudioStreamCreate() => _disposed ? 0u : NativeEngine.AudioStreamCreate();
 
     /// <summary>
     ///     Hand encoded bytes to a stream source. Returns how many were accepted — a short count
@@ -1431,7 +1405,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (byte* p = bytes)
         {
             return (int)NativeEngine.AudioStreamPush(
-                handle: _handle,
                 id: id,
                 data: p,
                 len: (uint)bytes.Length
@@ -1445,14 +1418,14 @@ public sealed unsafe class ZigoteEngine : IDisposable
     /// </summary>
     public void AudioStreamFinish(uint id)
     {
-        if (!_disposed) NativeEngine.AudioStreamFinish(handle: _handle, id: id);
+        if (!_disposed) NativeEngine.AudioStreamFinish(id: id);
     }
 
     public AudioStreamState AudioStreamStatus(uint id)
     {
         return _disposed
             ? AudioStreamState.Unsupported
-            : (AudioStreamState)NativeEngine.AudioStreamState(handle: _handle, id: id);
+            : (AudioStreamState)NativeEngine.AudioStreamState(id: id);
     }
 
     /// <summary>
@@ -1460,43 +1433,43 @@ public sealed unsafe class ZigoteEngine : IDisposable
     ///     and what tells a player it is safe to start.
     /// </summary>
     public float AudioStreamBuffered(uint id) =>
-        _disposed ? 0f : NativeEngine.AudioStreamBuffered(handle: _handle, id: id);
+        _disposed ? 0f : NativeEngine.AudioStreamBuffered(id: id);
 
     public void AudioSoundPlay(uint id)
     {
-        if (!_disposed) NativeEngine.AudioSoundPlay(handle: _handle, id: id);
+        if (!_disposed) NativeEngine.AudioSoundPlay(id: id);
     }
 
     public void AudioSoundStop(uint id)
     {
-        if (!_disposed) NativeEngine.AudioSoundStop(handle: _handle, id: id);
+        if (!_disposed) NativeEngine.AudioSoundStop(id: id);
     }
 
     public void AudioSoundDestroy(uint id)
     {
-        if (!_disposed) NativeEngine.AudioSoundDestroy(handle: _handle, id: id);
+        if (!_disposed) NativeEngine.AudioSoundDestroy(id: id);
     }
 
     public void AudioSoundSetVolume(uint id, float volume)
     {
-        if (!_disposed) NativeEngine.AudioSoundSetVolume(handle: _handle, id: id, volume: volume);
+        if (!_disposed) NativeEngine.AudioSoundSetVolume(id: id, volume: volume);
     }
 
     public void AudioSoundSetPitch(uint id, float pitch)
     {
-        if (!_disposed) NativeEngine.AudioSoundSetPitch(handle: _handle, id: id, pitch: pitch);
+        if (!_disposed) NativeEngine.AudioSoundSetPitch(id: id, pitch: pitch);
     }
 
     public void AudioSoundSetLooping(uint id, bool looping)
     {
         if (!_disposed)
-            NativeEngine.AudioSoundSetLooping(handle: _handle, id: id, looping: looping ? 1u : 0u);
+            NativeEngine.AudioSoundSetLooping(id: id, looping: looping ? 1u : 0u);
     }
 
     public void AudioSoundSetSpatial(uint id, bool enabled)
     {
         if (!_disposed)
-            NativeEngine.AudioSoundSetSpatial(handle: _handle, id: id, enabled: enabled ? 1u : 0u);
+            NativeEngine.AudioSoundSetSpatial(id: id, enabled: enabled ? 1u : 0u);
     }
 
     public void AudioSoundSetPosition(uint id, Vec3 position)
@@ -1504,7 +1477,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         if (!_disposed)
         {
             NativeEngine.AudioSoundSetPosition(
-                handle: _handle,
                 id: id,
                 x: position.X,
                 y: position.Y,
@@ -1518,7 +1490,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         if (!_disposed)
         {
             NativeEngine.AudioSoundSetVelocity(
-                handle: _handle,
                 id: id,
                 x: velocity.X,
                 y: velocity.Y,
@@ -1533,7 +1504,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         if (!_disposed)
         {
             NativeEngine.AudioSoundSetAttenuation(
-                handle: _handle,
                 id: id,
                 minDist: minDistance,
                 maxDist: maxDistance,
@@ -1543,36 +1513,36 @@ public sealed unsafe class ZigoteEngine : IDisposable
     }
 
     public bool AudioSoundIsPlaying(uint id) =>
-        !_disposed && NativeEngine.AudioSoundIsPlaying(handle: _handle, id: id) != 0;
+        !_disposed && NativeEngine.AudioSoundIsPlaying(id: id) != 0;
 
     /// <summary>
     ///     Create a mixer bus (miniaudio sound group). Returns a bus id (0 = failure). Buses live
     ///     until the engine's audio state is torn down — there is deliberately no per-bus destroy.
     /// </summary>
-    public uint AudioGroupCreate() => _disposed ? 0u : NativeEngine.AudioGroupCreate(_handle);
+    public uint AudioGroupCreate() => _disposed ? 0u : NativeEngine.AudioGroupCreate();
 
     public void AudioGroupSetVolume(uint groupId, float volume)
     {
         if (!_disposed)
-            NativeEngine.AudioGroupSetVolume(handle: _handle, groupId: groupId, volume: volume);
+            NativeEngine.AudioGroupSetVolume(groupId: groupId, volume: volume);
     }
 
     public void AudioGroupSetPitch(uint groupId, float pitch)
     {
         if (!_disposed)
-            NativeEngine.AudioGroupSetPitch(handle: _handle, groupId: groupId, pitch: pitch);
+            NativeEngine.AudioGroupSetPitch(groupId: groupId, pitch: pitch);
     }
 
     /// <summary>Route a sound through a bus (bus 0 = back to the master output).</summary>
     public void AudioSoundSetGroup(uint id, uint groupId)
     {
-        if (!_disposed) NativeEngine.AudioSoundSetGroup(handle: _handle, id: id, groupId: groupId);
+        if (!_disposed) NativeEngine.AudioSoundSetGroup(id: id, groupId: groupId);
     }
 
     // ── Device rate (high-resolution playback) ────────────────────────────────────
 
     /// <summary>The output device's current sample rate in Hz; 0 when there is no audio device.</summary>
-    public int AudioOutputRate() => _disposed ? 0 : (int)NativeEngine.AudioOutputRate(_handle);
+    public int AudioOutputRate() => _disposed ? 0 : (int)NativeEngine.AudioOutputRate();
 
     /// <summary>
     ///     Reopen the audio device at <paramref name="sampleRateHz" /> (0 = the device's preferred
@@ -1593,7 +1563,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         return _disposed
             ? 0
             : (int)NativeEngine.AudioReopen(
-                handle: _handle,
                 sampleRate: (uint)Math.Max(val1: 0, val2: sampleRateHz)
             );
     }
@@ -1603,23 +1572,23 @@ public sealed unsafe class ZigoteEngine : IDisposable
     /// <summary>Seek a sound to an absolute position in seconds.</summary>
     public void AudioSoundSeek(uint id, float seconds)
     {
-        if (!_disposed) NativeEngine.AudioSoundSeek(handle: _handle, id: id, seconds: seconds);
+        if (!_disposed) NativeEngine.AudioSoundSeek(id: id, seconds: seconds);
     }
 
     /// <summary>Playback cursor in seconds; -1 when the source cannot report one.</summary>
     public float AudioSoundCursor(uint id) =>
-        _disposed ? -1f : NativeEngine.AudioSoundCursor(handle: _handle, id: id);
+        _disposed ? -1f : NativeEngine.AudioSoundCursor(id: id);
 
     /// <summary>Total length in seconds; -1 when unknown (procedural tones, unseekable streams).</summary>
     public float AudioSoundDuration(uint id) =>
-        _disposed ? -1f : NativeEngine.AudioSoundDuration(handle: _handle, id: id);
+        _disposed ? -1f : NativeEngine.AudioSoundDuration(id: id);
 
     /// <summary>
     ///     The source decoded past its last frame — the auto-advance signal for a playlist. Unlike
     ///     <c>!AudioSoundIsPlaying</c> this stays false for a sound that was merely paused.
     /// </summary>
     public bool AudioSoundAtEnd(uint id) =>
-        !_disposed && NativeEngine.AudioSoundAtEnd(handle: _handle, id: id) != 0;
+        !_disposed && NativeEngine.AudioSoundAtEnd(id: id) != 0;
 
     /// <summary>
     ///     Start a sound at an exact point on the audio clock, <paramref name="secondsFromNow" />
@@ -1631,7 +1600,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         if (!_disposed)
         {
             NativeEngine.AudioSoundScheduleStart(
-                handle: _handle,
                 id: id,
                 secondsFromNow: secondsFromNow
             );
@@ -1648,7 +1616,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public uint AudioEqCreate(int bandCount) => _disposed
         ? 0u
         : NativeEngine.AudioEqCreate(
-            handle: _handle,
             bandCount: (uint)Math.Max(val1: 1, val2: bandCount)
         );
 
@@ -1663,7 +1630,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         if (!_disposed)
         {
             NativeEngine.AudioEqSetBand(
-                handle: _handle,
                 eqId: eqId,
                 index: (uint)index,
                 kind: (byte)kind,
@@ -1678,18 +1644,18 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public void AudioEqSetEnabled(uint eqId, bool enabled)
     {
         if (!_disposed)
-            NativeEngine.AudioEqSetEnabled(handle: _handle, eqId: eqId, enabled: enabled ? 1u : 0u);
+            NativeEngine.AudioEqSetEnabled(eqId: eqId, enabled: enabled ? 1u : 0u);
     }
 
     public void AudioEqDestroy(uint eqId)
     {
-        if (!_disposed) NativeEngine.AudioEqDestroy(handle: _handle, eqId: eqId);
+        if (!_disposed) NativeEngine.AudioEqDestroy(eqId: eqId);
     }
 
     /// <summary>Route a sound through an equalizer chain (chain 0 = dry).</summary>
     public void AudioSoundSetEq(uint id, uint eqId)
     {
-        if (!_disposed) NativeEngine.AudioSoundSetEq(handle: _handle, id: id, eqId: eqId);
+        if (!_disposed) NativeEngine.AudioSoundSetEq(id: id, eqId: eqId);
     }
 
     // ── Offline decoding ──────────────────────────────────────────────────────────
@@ -1714,7 +1680,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (byte* p = pathBytes)
         {
             buffer = NativeEngine.AudioDecodeFile(
-                handle: _handle,
                 pathC: p,
                 outChannels: out nativeChannels,
                 outSampleRate: out nativeRate,
@@ -1738,7 +1703,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
         }
         finally
         {
-            NativeEngine.AudioDecodeFree(handle: _handle, frames: buffer);
+            NativeEngine.AudioDecodeFree(frames: buffer);
         }
     }
 
@@ -1749,7 +1714,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
         if (nodeHandle == 0) return;
         NativeEngine.SceneSetLightProperties(
-            handle: _handle,
             nodeHandle: nodeHandle,
             kind: kind,
             r: r,
@@ -1768,7 +1732,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
         if (nodeHandle == 0) return;
         NativeEngine.SceneSetMeshColor(
-            handle: _handle,
             nodeHandle: nodeHandle,
             r: r,
             g: g,
@@ -1795,7 +1758,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         if (count == 0)
         {
             NativeEngine.SceneSetMeshInstances(
-                handle: _handle,
                 nodeHandle: nodeHandle,
                 matrices: null,
                 count: 0
@@ -1806,7 +1768,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (float* ptr = matrices)
         {
             NativeEngine.SceneSetMeshInstances(
-                handle: _handle,
                 nodeHandle: nodeHandle,
                 matrices: ptr,
                 count: count
@@ -1826,14 +1787,13 @@ public sealed unsafe class ZigoteEngine : IDisposable
         if (nodeHandle == 0) return;
         if (count == 0)
         {
-            NativeEngine.ParticlesClear(handle: _handle, nodeHandle: nodeHandle);
+            NativeEngine.ParticlesClear(nodeHandle: nodeHandle);
             return;
         }
 
         fixed (float* ptr = data)
         {
             NativeEngine.ParticlesUpload(
-                handle: _handle,
                 nodeHandle: nodeHandle,
                 data: ptr,
                 count: count,
@@ -1846,14 +1806,14 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public void ParticlesClear(ulong nodeHandle)
     {
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
-        if (nodeHandle != 0) NativeEngine.ParticlesClear(handle: _handle, nodeHandle: nodeHandle);
+        if (nodeHandle != 0) NativeEngine.ParticlesClear(nodeHandle: nodeHandle);
     }
 
     /// <summary>Drop all uploaded particle batches (play stop).</summary>
     public void ParticlesClearAll()
     {
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
-        NativeEngine.ParticlesClearAll(_handle);
+        NativeEngine.ParticlesClearAll();
     }
 
     /// <summary>
@@ -1872,7 +1832,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (float* ptr = paramsData)
         {
             NativeEngine.ParticlesComputeEmit(
-                handle: _handle,
                 nodeHandle: nodeHandle,
                 paramValues: ptr,
                 paramCount: (uint)paramsData.Length,
@@ -1887,7 +1846,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     {
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
         if (nodeHandle != 0)
-            NativeEngine.ParticlesComputeClear(handle: _handle, nodeHandle: nodeHandle);
+            NativeEngine.ParticlesComputeClear(nodeHandle: nodeHandle);
     }
 
     // Immediate-mode frame model (see wgpu_sprites.zig): SpritesBegin once per frame with the
@@ -1908,7 +1867,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (byte* ptr = rgba)
         {
             return NativeEngine.SpritesTextureCreate(
-                handle: _handle,
                 pixels: ptr,
                 width: width,
                 height: height,
@@ -1928,7 +1886,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (byte* p = pathBytes)
         {
             return NativeEngine.SpritesTextureCreateFile(
-                handle: _handle,
                 pathC: p,
                 filter: filter,
                 srgb: srgb,
@@ -1942,7 +1899,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public void SpritesTextureDestroy(uint texture)
     {
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
-        if (texture != 0) NativeEngine.SpritesTextureDestroy(handle: _handle, texture: texture);
+        if (texture != 0) NativeEngine.SpritesTextureDestroy(texture: texture);
     }
 
     /// <summary>
@@ -1957,7 +1914,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
                    bytes)
         {
             return NativeEngine.SpritesShaderCreate(
-                handle: _handle,
                 wgslPtr: p,
                 wgslLen: (uint)bytes.Length
             );
@@ -1978,7 +1934,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (float* o = overlayViewProj)
         {
             NativeEngine.SpritesBegin(
-                handle: _handle,
                 sceneVp: s,
                 overlayVp: o,
                 viewportW: viewportW,
@@ -2000,7 +1955,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (float* ip = instances)
         {
             NativeEngine.SpritesDraw(
-                handle: _handle,
                 texture: texture,
                 texture2: texture2,
                 shader: shader,
@@ -2019,7 +1973,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
         if (nodeHandle == 0) return;
         NativeEngine.SceneSetMeshRoughness(
-            handle: _handle,
             nodeHandle: nodeHandle,
             metallic: metallic,
             roughness: roughness
@@ -2036,7 +1989,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
         if (nodeHandle == 0) return;
         NativeEngine.SceneSetCameraParams(
-            handle: _handle,
             nodeHandle: nodeHandle,
             fovyDegrees: fovyDegrees,
             near: near,
@@ -2054,7 +2006,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
         if (nodeHandle == 0) return;
         NativeEngine.SceneSetMeshSurface(
-            handle: _handle,
             nodeHandle: nodeHandle,
             clearcoat: clearcoat,
             clearcoatRoughness: clearcoatRoughness,
@@ -2068,7 +2019,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
         if (nodeHandle == 0) return;
         NativeEngine.SceneSetMeshEmissive(
-            handle: _handle,
             nodeHandle: nodeHandle,
             r: r,
             g: g,
@@ -2087,7 +2037,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (byte* p = imageData)
         {
             NativeEngine.SetEnvironmentHdri(
-                handle: _handle,
                 dataPtr: p,
                 dataLen: (nuint)imageData.Length
             );
@@ -2098,7 +2047,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public void SetEnvironmentProcedural()
     {
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
-        NativeEngine.SetEnvironmentProcedural(_handle);
+        NativeEngine.SetEnvironmentProcedural();
     }
 
     /// <summary>
@@ -2109,7 +2058,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
     {
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
         NativeEngine.SetReflectionProbe(
-            handle: _handle,
             cx: center.X,
             cy: center.Y,
             cz: center.Z,
@@ -2124,7 +2072,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
     {
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
         NativeEngine.SetReflectionProbe(
-            handle: _handle,
             cx: 0,
             cy: 0,
             cz: 0,
@@ -2138,7 +2085,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public ZgEngineStats GetEngineStats()
     {
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
-        NativeEngine.DebugGetEngineStats(handle: _handle, outStats: out var stats);
+        NativeEngine.DebugGetEngineStats(outStats: out var stats);
         return stats;
     }
 
@@ -2146,7 +2093,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     {
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
         if (nodeHandle == 0) return;
-        NativeEngine.SceneSetMeshEffect(handle: _handle, nodeHandle: nodeHandle, effect: effect);
+        NativeEngine.SceneSetMeshEffect(nodeHandle: nodeHandle, effect: effect);
     }
 
     /// <summary>
@@ -2158,7 +2105,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
         if (nodeHandle == 0) return;
         NativeEngine.SceneSetMeshAlphaMode(
-            handle: _handle,
             nodeHandle: nodeHandle,
             mode: mode,
             cutoff: cutoff
@@ -2171,7 +2117,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
         if (nodeHandle == 0) return;
         NativeEngine.SceneSetMeshDoubleSided(
-            handle: _handle,
             nodeHandle: nodeHandle,
             doubleSided: doubleSided ? 1u : 0u
         );
@@ -2187,7 +2132,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
         if (nodeHandle == 0) return;
         NativeEngine.SceneSetMeshVolume(
-            handle: _handle,
             nodeHandle: nodeHandle,
             ior: ior,
             transmission: transmission
@@ -2203,7 +2147,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
         if (nodeHandle == 0) return;
         NativeEngine.SceneSetMeshOcclusionStrength(
-            handle: _handle,
             nodeHandle: nodeHandle,
             strength: strength
         );
@@ -2213,7 +2156,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     {
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
         if (nodeHandle == 0) return;
-        NativeEngine.SceneSetMeshTextureFile(handle: _handle, nodeHandle: nodeHandle, pathC: pathC);
+        NativeEngine.SceneSetMeshTextureFile(nodeHandle: nodeHandle, pathC: pathC);
     }
 
     /// <summary>Set a mesh node's base-colour texture from a file path (convenience string helper).</summary>
@@ -2227,7 +2170,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
         buf[bytes.Length] = 0;
         fixed (byte* p =
                    buf)
-            NativeEngine.SceneSetMeshTextureFile(handle: _handle, nodeHandle: nodeHandle, pathC: p);
+            NativeEngine.SceneSetMeshTextureFile(nodeHandle: nodeHandle, pathC: p);
     }
 
     public void SceneSetMeshMrTextureFile(ulong nodeHandle, byte* pathC)
@@ -2235,7 +2178,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
         if (nodeHandle == 0) return;
         NativeEngine.SceneSetMeshMrTextureFile(
-            handle: _handle,
             nodeHandle: nodeHandle,
             pathC: pathC
         );
@@ -2247,7 +2189,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
         if (nodeHandle == 0) return;
         NativeEngine.SceneSetMeshNormalTextureFile(
-            handle: _handle,
             nodeHandle: nodeHandle,
             pathC: pathC
         );
@@ -2259,7 +2200,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
         if (nodeHandle == 0) return;
         NativeEngine.SceneSetMeshEmissiveTextureFile(
-            handle: _handle,
             nodeHandle: nodeHandle,
             pathC: pathC
         );
@@ -2268,7 +2208,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public void SceneRemoveNode(ulong nodeHandle)
     {
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
-        NativeEngine.SceneRemoveNode(handle: _handle, nodeHandle: nodeHandle);
+        NativeEngine.SceneRemoveNode(nodeHandle: nodeHandle);
     }
 
     /// <summary>
@@ -2284,7 +2224,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (ZgTextureLoadItem* ptr = items)
         {
             NativeEngine.SceneLoadTexturesBatch(
-                handle: _handle,
                 itemsPtr: ptr,
                 count: (uint)items.Length
             );
@@ -2299,7 +2238,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
     {
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
         NativeEngine.SceneUpdateNode(
-            handle: _handle,
             nodeHandle: nodeHandle,
             x: x,
             y: y,
@@ -2318,14 +2256,13 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public void SceneSetSelectedNode(ulong nodeHandle)
     {
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
-        NativeEngine.SceneSetSelectedNode(handle: _handle, nodeHandle: nodeHandle);
+        NativeEngine.SceneSetSelectedNode(nodeHandle: nodeHandle);
     }
 
     public ulong Render3D(uint width, uint height)
     {
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
         return NativeEngine.Render3D(
-            handle: _handle,
             width: ClampDim(width),
             height: ClampDim(height)
         );
@@ -2342,7 +2279,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         EnsureReady();
         TextLayout.DrainPendingReleases(_handle); // no-op unless a layout leaked (see TextLayout)
         NativeEngine.BeginFrame(
-            handle: _handle,
             sceneW: sceneW,
             sceneH: sceneH,
             scale: Scale,
@@ -2358,7 +2294,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     {
         EnsureReady();
         _submitPaintCb ??= (ptr, count) =>
-            NativeEngine.SubmitPaintCommands(handle: _handle, commands: ptr, count: count);
+            NativeEngine.SubmitPaintCommands(commands: ptr, count: count);
         paint.PinAndCall(_submitPaintCb);
     }
 
@@ -2370,7 +2306,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         EnsureReady();
         _submitOverlayCb ??=
             (ptr, count) => NativeEngine.SubmitOverlayCommands(
-                handle: _handle,
                 commands: ptr,
                 count: count
             );
@@ -2395,7 +2330,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (byte* p = buf)
         {
             return NativeEngine.CaptureUiBmp(
-                handle: _handle,
                 pathPtr: p,
                 pathLen: (nuint)len,
                 width: ClampDim(width),
@@ -2419,7 +2353,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
         EnsureReady();
         if (rects.IsEmpty)
         {
-            NativeEngine.SubmitFrameDamage(handle: _handle, rects: null, count: 0);
+            NativeEngine.SubmitFrameDamage(rects: null, count: 0);
             return;
         }
 
@@ -2428,7 +2362,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
                    rects)
         {
             NativeEngine.SubmitFrameDamage(
-                handle: _handle,
                 rects: (float*)ptr,
                 count: (uint)rects.Length
             );
@@ -2442,7 +2375,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public void RenderFrameV2()
     {
         EnsureReady();
-        var result = NativeEngine.RenderFrameV2(_handle);
+        var result = NativeEngine.RenderFrameV2();
         if (result != ZgResult.Ok)
             throw new InvalidOperationException("zigote_render_frame_v2 failed.");
     }
@@ -2451,7 +2384,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public void EndFrame()
     {
         EnsureReady();
-        NativeEngine.EndFrame(_handle);
+        NativeEngine.EndFrame();
     }
 
     // ── Render texture API ────────────────────────────────────────────────────
@@ -2471,7 +2404,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
     {
         EnsureReady();
         return NativeEngine.RenderTextureCreate(
-            handle: _handle,
             width: ClampDim(width),
             height: ClampDim(height)
         );
@@ -2482,7 +2414,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     {
         EnsureReady();
         if (rtHandle == 0) return;
-        NativeEngine.RenderTextureDestroy(handle: _handle, rtHandle: rtHandle);
+        NativeEngine.RenderTextureDestroy(rtHandle: rtHandle);
     }
 
     /// <summary>
@@ -2492,7 +2424,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public void SetVsync(bool enabled)
     {
         EnsureReady();
-        NativeEngine.SetVsync(handle: _handle, enabled: (byte)(enabled ? 1 : 0));
+        NativeEngine.SetVsync(enabled: (byte)(enabled ? 1 : 0));
     }
 
     /// <summary>
@@ -2503,7 +2435,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public ulong GetRenderTextureCacheKey(ulong rtHandle)
     {
         EnsureReady();
-        return NativeEngine.RenderTextureCacheKey(handle: _handle, rtHandle: rtHandle);
+        return NativeEngine.RenderTextureCacheKey(rtHandle: rtHandle);
     }
 
     /// <summary>
@@ -2521,7 +2453,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (byte* ptr = rgba)
         {
             return NativeEngine.RenderTextureReadRgba(
-                handle: _handle,
                 rtHandle: rtHandle,
                 outPtr: ptr,
                 outLen: (nuint)rgba.Length
@@ -2540,7 +2471,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
     {
         EnsureReady();
         NativeEngine.FrameBegin(
-            handle: _handle,
             sceneW: sceneW,
             sceneH: sceneH,
             scale: Scale,
@@ -2555,7 +2485,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public void FrameEnd()
     {
         EnsureReady();
-        var result = NativeEngine.FrameEnd(_handle);
+        var result = NativeEngine.FrameEnd();
         if (result != ZgResult.Ok)
             throw new InvalidOperationException("zigote_frame_end failed.");
     }
@@ -2565,7 +2495,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
     {
         EnsureReady();
         NativeEngine.SetRenderSettings(
-            handle: _handle,
             enableGlass: settings.EnableGlassEffects ? (byte)1 : (byte)0,
             enableDebug: settings.EnableDebugOverlays ? (byte)1 : (byte)0
         );
@@ -2575,7 +2504,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public ZgRenderSettings3D GetRenderSettings3D()
     {
         EnsureReady();
-        NativeEngine.GetRenderSettings3D(handle: _handle, outSettings: out var s);
+        NativeEngine.GetRenderSettings3D(outSettings: out var s);
         return s;
     }
 
@@ -2583,7 +2512,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public void SetRenderSettings3D(ZgRenderSettings3D settings)
     {
         EnsureReady();
-        NativeEngine.SetRenderSettings3D(handle: _handle, settings: settings);
+        NativeEngine.SetRenderSettings3D(settings: settings);
     }
 
     /// <summary>
@@ -2598,7 +2527,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (byte* ptr = bytes)
         {
             return NativeEngine.RegisterShader(
-                handle: engine._handle,
                 id: id,
                 wgslPtr: ptr,
                 wgslLen: (nuint)bytes.Length
@@ -2636,7 +2564,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (byte* fp = familyBytes)
         {
             layoutHandle = NativeEngine.TextLayoutCreate(
-                handle: _handle,
                 textPtr: p,
                 textLen: (nuint)bytes.Length,
                 fontFamilyPtr: fp,
@@ -2681,7 +2608,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (byte* namePtr = nameBuf)
         fixed (byte* pathPtr = pathBuf)
         {
-            return NativeEngine.LoadFont(handle: _handle, namePtr: namePtr, pathPtr: pathPtr) ==
+            return NativeEngine.LoadFont(namePtr: namePtr, pathPtr: pathPtr) ==
                    ZgResult.Ok;
         }
     }
@@ -2701,7 +2628,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
         Encoding.UTF8.GetBytes(chars: name, bytes: nameBuf);
         nameBuf[nameLen] = 0;
         fixed (byte* namePtr = nameBuf)
-            return NativeEngine.AddEmojiFont(handle: _handle, namePtr: namePtr) == ZgResult.Ok;
+            return NativeEngine.AddEmojiFont(namePtr: namePtr) == ZgResult.Ok;
     }
 
     /// <summary>
@@ -2726,7 +2653,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
         Encoding.UTF8.GetBytes(chars: name, bytes: nameBuf);
         nameBuf[nameLen] = 0;
         fixed (byte* namePtr = nameBuf)
-            return NativeEngine.AddFallbackFont(handle: _handle, namePtr: namePtr) == ZgResult.Ok;
+            return NativeEngine.AddFallbackFont(namePtr: namePtr) == ZgResult.Ok;
     }
 
     // ── Glyph atlas upload ────────────────────────────────────────────────────
@@ -2744,7 +2671,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (byte* p = pixels)
         {
             return NativeEngine.UploadGlyphAtlas(
-                handle: _handle,
                 pixelsPtr: p,
                 pixelsLen: (nuint)pixels.Length,
                 width: width,
@@ -2760,7 +2686,6 @@ public sealed unsafe class ZigoteEngine : IDisposable
         fixed (ZgEvent* ptr = _eventBuf)
         {
             return NativeEngine.PollEvents(
-                handle: _handle,
                 buf: ptr,
                 capacity: (uint)_eventBuf.Length
             );
@@ -2772,15 +2697,15 @@ public sealed unsafe class ZigoteEngine : IDisposable
     /// (so iterator callers can hold it across
     /// <c>yield</c>
     /// ). Must be read before the next poll.
-    private nint PollTextBase() => (nint)NativeEngine.PollTextPtr(_handle);
+    private nint PollTextBase() => (nint)NativeEngine.PollTextPtr();
 
     private void RefreshSize()
     {
-        NativeEngine.GetSize(handle: _handle, outW: out uint w, outH: out uint h);
+        NativeEngine.GetSize(outW: out uint w, outH: out uint h);
         PixelWidth = w;
         PixelHeight = h;
-        Scale = NativeEngine.GetScale(_handle);
-        DisplayRefreshHz = NativeEngine.GetRefreshHz(handle: _handle, windowId: 0);
+        Scale = NativeEngine.GetScale();
+        DisplayRefreshHz = NativeEngine.GetRefreshHz(windowId: 0);
     }
 
     private static void ValidateAbi()
