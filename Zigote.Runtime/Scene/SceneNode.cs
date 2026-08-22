@@ -932,6 +932,16 @@ public sealed class SceneNode : IEcsSceneNode
     /// </summary>
     public void SyncToNative(List<SceneNode>? texBatch = null)
     {
+        // One batch for the whole subtree: the per-property dirty gates below decide WHAT changed,
+        // and everything that did goes over in a single zigote_scene_apply instead of three to six
+        // P/Invokes per node. See SceneStream.
+        var stream = new SceneStream();
+        SyncToNative(texBatch, stream);
+        stream.Flush();
+    }
+
+    private void SyncToNative(List<SceneNode>? texBatch, SceneStream stream)
+    {
         if (Handle == 0 && ZigoteEngine.Instance != null)
         {
             ulong parentHandle = Parent?.Handle ?? 0;
@@ -960,18 +970,11 @@ public sealed class SceneNode : IEcsSceneNode
             if (first || !_pPos.ApproxEquals(Position) || _pRot != Rotation ||
                 !_pScaleEff.ApproxEquals(s))
             {
-                engine.SceneUpdateNode(
-                    nodeHandle: Handle,
-                    x: Position.X,
-                    y: Position.Y,
-                    z: Position.Z,
-                    qx: Rotation.X,
-                    qy: Rotation.Y,
-                    qz: Rotation.Z,
-                    qw: Rotation.W,
-                    sx: s.X,
-                    sy: s.Y,
-                    sz: s.Z
+                stream.Transform(
+                    node: Handle,
+                    x: Position.X, y: Position.Y, z: Position.Z,
+                    qx: Rotation.X, qy: Rotation.Y, qz: Rotation.Z, qw: Rotation.W,
+                    sx: s.X, sy: s.Y, sz: s.Z
                 );
                 _pPos = Position;
                 _pRot = Rotation;
@@ -990,17 +993,15 @@ public sealed class SceneNode : IEcsSceneNode
                     _pLightCastShadows != LightCastShadows)
                 {
                     const float deg2Rad = MathF.PI / 180f;
-                    engine.SceneSetLightProperties(
-                        nodeHandle: Handle,
-                        kind: (byte)LightKind,
-                        r: eff.X,
-                        g: eff.Y,
-                        b: eff.Z,
+                    stream.Light(
+                        node: Handle,
+                        kind: (uint)LightKind,
+                        castShadows: LightCastShadows,
+                        r: eff.X, g: eff.Y, b: eff.Z,
                         intensity: LightIntensity,
                         range: LightRange,
                         innerAngle: SpotInnerAngleDeg * deg2Rad,
-                        outerAngle: SpotOuterAngleDeg * deg2Rad,
-                        castShadows: LightCastShadows
+                        outerAngle: SpotOuterAngleDeg * deg2Rad
                     );
                     _pLightKind = LightKind;
                     _pLightColorEff = eff;
@@ -1018,12 +1019,7 @@ public sealed class SceneNode : IEcsSceneNode
                 if (first || _pCameraFovDeg != fovDeg || _pCameraNear != CameraNear ||
                     _pCameraFar != CameraFar)
                 {
-                    engine.SceneSetCameraParams(
-                        nodeHandle: Handle,
-                        fovyDegrees: fovDeg,
-                        near: CameraNear,
-                        far: CameraFar
-                    );
+                    stream.Camera(node: Handle, fovyDegrees: fovDeg, near: CameraNear, far: CameraFar);
                     _pCameraFovDeg = fovDeg;
                     _pCameraNear = CameraNear;
                     _pCameraFar = CameraFar;
@@ -1032,101 +1028,51 @@ public sealed class SceneNode : IEcsSceneNode
 
             if (Kind == NodeKind.Mesh)
             {
-                bool colorPushed = false;
-                if (first || _pColor != MeshColor)
-                {
-                    engine.SceneSetMeshColor(
-                        nodeHandle: Handle,
-                        r: MeshColor.X,
-                        g: MeshColor.Y,
-                        b: MeshColor.Z
-                    );
-                    _pColor = MeshColor;
-                    colorPushed = true;
-                }
-
-                if (first || _pMetallic != MeshMetallic || _pRoughness != MeshRoughness)
-                {
-                    engine.SceneSetMeshRoughness(
-                        nodeHandle: Handle,
-                        metallic: MeshMetallic,
-                        roughness: MeshRoughness
-                    );
-                    _pMetallic = MeshMetallic;
-                    _pRoughness = MeshRoughness;
-                }
-
-                if (first || _pClearcoat != MeshClearcoat ||
+                // One material record instead of eight separately-gated setters. The old sequence
+                // also had an ordering hazard worth losing: SceneSetMeshColor reset native base
+                // alpha to 1, so alpha mode had to be re-pushed whenever colour was — a coupling
+                // between two "independent" setters that only a comment kept correct. A single
+                // record carries the whole factor set, so there is no order to get wrong.
+                if (first ||
+                    _pColor != MeshColor ||
+                    _pMetallic != MeshMetallic || _pRoughness != MeshRoughness ||
+                    _pClearcoat != MeshClearcoat ||
                     _pClearcoatRoughness != MeshClearcoatRoughness ||
-                    _pSpecular != MeshSpecular)
+                    _pSpecular != MeshSpecular ||
+                    _pIor != MeshIor || _pTransmission != MeshTransmission ||
+                    _pDoubleSided != MeshDoubleSided ||
+                    _pOcclusionStrength != MeshOcclusionStrength ||
+                    _pEmissive != MeshEmissive ||
+                    _pEffect != MeshEffect ||
+                    _pAlphaMode != MeshAlphaMode || _pAlphaCutoff != MeshAlphaCutoff)
                 {
-                    engine.SceneSetMeshSurface(
-                        nodeHandle: Handle,
+                    stream.Material(
+                        node: Handle,
+                        colorR: MeshColor.X, colorG: MeshColor.Y, colorB: MeshColor.Z,
+                        metallic: MeshMetallic, roughness: MeshRoughness,
                         clearcoat: MeshClearcoat,
                         clearcoatRoughness: MeshClearcoatRoughness,
-                        specular: MeshSpecular
+                        specular: MeshSpecular,
+                        emissiveR: MeshEmissive.X, emissiveG: MeshEmissive.Y, emissiveB: MeshEmissive.Z,
+                        ior: MeshIor, transmission: MeshTransmission,
+                        occlusionStrength: MeshOcclusionStrength,
+                        alphaCutoff: MeshAlphaCutoff,
+                        effect: (uint)MeshEffect,
+                        alphaMode: MeshAlphaMode,
+                        doubleSided: MeshDoubleSided
                     );
+                    _pColor = MeshColor;
+                    _pMetallic = MeshMetallic;
+                    _pRoughness = MeshRoughness;
                     _pClearcoat = MeshClearcoat;
                     _pClearcoatRoughness = MeshClearcoatRoughness;
                     _pSpecular = MeshSpecular;
-                }
-
-                if (first || _pIor != MeshIor || _pTransmission != MeshTransmission)
-                {
-                    engine.SceneSetMeshVolume(
-                        nodeHandle: Handle,
-                        ior: MeshIor,
-                        transmission: MeshTransmission
-                    );
                     _pIor = MeshIor;
                     _pTransmission = MeshTransmission;
-                }
-
-                if (first || _pDoubleSided != MeshDoubleSided)
-                {
-                    engine.SceneSetMeshDoubleSided(
-                        nodeHandle: Handle,
-                        doubleSided: MeshDoubleSided
-                    );
                     _pDoubleSided = MeshDoubleSided;
-                }
-
-                if (first || _pOcclusionStrength != MeshOcclusionStrength)
-                {
-                    engine.SceneSetMeshOcclusionStrength(
-                        nodeHandle: Handle,
-                        strength: MeshOcclusionStrength
-                    );
                     _pOcclusionStrength = MeshOcclusionStrength;
-                }
-
-                if (first || _pEmissive != MeshEmissive)
-                {
-                    engine.SceneSetMeshEmissive(
-                        nodeHandle: Handle,
-                        r: MeshEmissive.X,
-                        g: MeshEmissive.Y,
-                        b: MeshEmissive.Z
-                    );
                     _pEmissive = MeshEmissive;
-                }
-
-                if (first || _pEffect != MeshEffect)
-                {
-                    engine.SceneSetMeshEffect(nodeHandle: Handle, effect: (uint)MeshEffect);
                     _pEffect = MeshEffect;
-                }
-
-                // SceneSetMeshColor resets native base alpha to 1, so alpha mode must be re-applied
-                // whenever colour was pushed — otherwise a transparent material loses its tint.
-                if (first || colorPushed || _pAlphaMode != MeshAlphaMode ||
-                    _pAlphaCutoff != MeshAlphaCutoff)
-                {
-                    engine.SceneSetMeshAlphaMode(
-                        nodeHandle: Handle,
-                        mode: MeshAlphaMode,
-                        cutoff: MeshAlphaCutoff
-                    );
                     _pAlphaMode = MeshAlphaMode;
                     _pAlphaCutoff = MeshAlphaCutoff;
                 }
@@ -1145,7 +1091,7 @@ public sealed class SceneNode : IEcsSceneNode
             _nativePushed = true;
         }
 
-        foreach (var child in Children) child.SyncToNative(texBatch);
+        foreach (var child in Children) child.SyncToNative(texBatch, stream);
     }
 
     /// <summary>

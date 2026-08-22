@@ -2390,6 +2390,23 @@ public sealed unsafe class ZigoteEngine : IDisposable
         NativeEngine.EndFrame();
     }
 
+    /// <summary>
+    ///     Apply a batch of scene changes from a flat command stream (see
+    ///     <c>Zigote.Engine/src/abi.zig</c>, "Scene command stream"). One call replaces the
+    ///     per-node setters and their three-to-six P/Invoke transitions per node on a rebuild.
+    ///     A malformed batch is rejected whole rather than applied part-way.
+    /// </summary>
+    public ZgStatus SceneApply(ReadOnlySpan<byte> stream)
+    {
+        EnsureReady();
+        if (stream.IsEmpty) return ZgStatus.Ok;
+
+        fixed (byte* p = stream)
+        {
+            return NativeEngine.SceneApply(stream: p, len: (nuint)stream.Length);
+        }
+    }
+
     // ── Render texture API ────────────────────────────────────────────────────
 
     /// <summary>

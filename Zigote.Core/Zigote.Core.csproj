@@ -27,6 +27,11 @@
         <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
             <_Parameter1>Zigote.ECS</_Parameter1>
         </AssemblyAttribute>
+        <!-- Zigote.Runtime builds the scene command stream (SceneStream) from the generated wire
+             structs and hands it to zigote_scene_apply. -->
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+            <_Parameter1>Zigote.Runtime</_Parameter1>
+        </AssemblyAttribute>
         <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
             <_Parameter1>Zigote.Tests</_Parameter1>
         </AssemblyAttribute>

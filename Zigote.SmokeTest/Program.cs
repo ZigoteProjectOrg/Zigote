@@ -1,3 +1,4 @@
+using Zigote.Core.Native;
 using System.Diagnostics;
 using System.Globalization;
 using Zigote.Core;
@@ -78,17 +79,30 @@ try
         // A mid-roughness red dielectric sphere (kind 1 mesh, primType 2) at the origin.
         ulong ball = e.SceneAddChildNode(parentHandle: 0, name: "ball", kind: 1);
         e.SceneSetMeshPrimitive(nodeHandle: ball, primType: 2);
-        e.SceneSetMeshColor(
-            nodeHandle: ball,
-            r: 0.80f,
-            g: 0.18f,
-            b: 0.16f
-        );
-        e.SceneSetMeshRoughness(
-            nodeHandle: ball,
-            metallic: 0.0f,
-            roughness: 0.40f
-        ); // metallic=0, roughness=0.4
+        // Pushed through the SCENE COMMAND STREAM rather than the per-property setters, so the
+        // golden-image gate covers zigote_scene_apply's decoder: same values, so the capture must
+        // come out byte-identical to the one taken before the stream existed.
+        {
+            var mat = new ZgSceneMaterial
+            {
+                Node = ball,
+                ColorR = 0.80f, ColorG = 0.18f, ColorB = 0.16f,
+                Metallic = 0.0f, Roughness = 0.40f,
+                // The remaining factors are the engine's Material defaults (see
+                // engine/resources/material.zig) — the two setters this replaces left them alone,
+                // so restating them keeps the capture comparable.
+                Clearcoat = 0f, ClearcoatRoughness = 0f, Specular = 1.0f,
+                EmissiveR = 0f, EmissiveG = 0f, EmissiveB = 0f,
+                Ior = 1.5f, Transmission = 0f, OcclusionStrength = 0f,
+                AlphaCutoff = 0.5f, Effect = 0, AlphaMode = 0, DoubleSided = 0,
+            };
+            int size = System.Runtime.CompilerServices.Unsafe.SizeOf<ZgSceneMaterial>();
+            mat.Header = new ZgSceneOpHeader { Kind = (uint)ZgSceneOp.Material, Size = (uint)size };
+            Span<byte> buf = stackalloc byte[size];
+            System.Runtime.InteropServices.MemoryMarshal.Write(destination: buf, value: in mat);
+            var st = e.SceneApply(buf);
+            Console.WriteLine($"[smoke] scene_apply(material) -> {st}");
+        }
         e.SceneUpdateNode(
             nodeHandle: ball,
             x: 0f,

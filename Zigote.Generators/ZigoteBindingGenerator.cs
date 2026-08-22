@@ -180,6 +180,10 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
         arrayLength = 0;
         string t = zigType.Trim();
 
+        // A nested wire struct — the scene ops all begin with a ZgSceneOpHeader. Passed through by
+        // name; its size and alignment come from the struct already parsed above it in abi.zig.
+        if (t.StartsWith("Zg", StringComparison.Ordinal) && t.All(c => char.IsLetterOrDigit(c))) return t;
+
         if (t.StartsWith("[*c]", StringComparison.Ordinal) || t.StartsWith("[*]", StringComparison.Ordinal))
             return "byte*"; // every pointer field the ABI has is a byte pointer
 
@@ -335,14 +339,16 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
         // command's `radius` is also an image's u0 and a shader id). Offsets are computed the same
         // way Zig lays the struct out, and AbiManifestTests checks the result against what the
         // compiler actually produced.
+        var nestedSizes = new Dictionary<string, int>(StringComparer.Ordinal);
+        var nestedAligns = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var st in structs)
         {
             int offset = 0, maxAlign = 1;
             var placed = new List<(string Name, string Type, int Offset, int ArrayLength)>();
             foreach (var f in st.Fields)
             {
-                int size = SizeOfCsType(f.Type);
-                int align = size;
+                int size = nestedSizes.TryGetValue(f.Type, out int ns) ? ns : SizeOfCsType(f.Type);
+                int align = nestedAligns.TryGetValue(f.Type, out int na) ? na : size;
                 int count = f.ArrayLength == 0 ? 1 : f.ArrayLength;
                 if (f.ArrayLength > 0) align = 1; // byte arrays
                 if (align > maxAlign) maxAlign = align;
@@ -352,6 +358,8 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
             }
 
             if (offset % maxAlign != 0) offset += maxAlign - offset % maxAlign;
+            nestedSizes[st.Name] = offset;
+            nestedAligns[st.Name] = maxAlign;
 
             sb.AppendLine($"/// <summary>Generated from Zig <c>{st.Name}</c>. Aliases live in ZgStructs.cs.</summary>");
             sb.AppendLine($"[StructLayout(LayoutKind.Explicit, Size = {offset})]");
