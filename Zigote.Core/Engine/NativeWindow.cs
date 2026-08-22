@@ -77,8 +77,8 @@ public sealed unsafe class NativeWindow : IDisposable
         _submitCb ??= (ptr, count) =>
             _ = NativeEngine.SubmitPaintCommands(
                 window: _window,
-                commands: ptr,
-                count: count
+                stream: ptr,
+                len: count
             );
         paint.PinAndCall(_submitCb);
     }
@@ -90,8 +90,8 @@ public sealed unsafe class NativeWindow : IDisposable
         _submitOverlayCb ??= (ptr, count) =>
             _ = NativeEngine.SubmitOverlayCommands(
                 window: _window,
-                commands: ptr,
-                count: count
+                stream: ptr,
+                len: count
             );
         paint.PinAndCall(_submitOverlayCb);
     }

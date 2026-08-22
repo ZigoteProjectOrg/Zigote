@@ -2,6 +2,8 @@
 name = "zigote_svg"
 version = "0.1.0"
 edition = "2021"
+# Kept in step with rust-toolchain.toml; cargo refuses to build with an older compiler.
+rust-version = "1.97.1"
 license = "MPL-2.0"
 publish = false
 

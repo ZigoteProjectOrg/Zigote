@@ -1,3 +1,4 @@
+using PaintCommandKind = Zigote.Core.Native.ZgPaintOp;
 using Xunit;
 using Zigote.Core;
 using Zigote.Core.Native;
@@ -96,7 +97,7 @@ public class Transform2DTests
 
         Assert.Equal(expected: 2, actual: paint.Count);
         var push = paint.DebugCommands[0];
-        Assert.Equal(expected: (byte)PaintCommandKind.TransformPush, actual: push.Kind);
+        Assert.Equal(expected: PaintCommandKind.TransformPush, actual: push.Kind);
         Assert.Equal(expected: 1f, actual: push.RectX); // a
         Assert.Equal(expected: 2f, actual: push.RectY); // b
         Assert.Equal(expected: 3f, actual: push.RectW); // c
@@ -104,7 +105,7 @@ public class Transform2DTests
         Assert.Equal(expected: 5f, actual: push.Radius); // tx
         Assert.Equal(expected: 6f, actual: push.BorderWidth); // ty
         Assert.Equal(
-            expected: (byte)PaintCommandKind.TransformPop,
+            expected: PaintCommandKind.TransformPop,
             actual: paint.DebugCommands[1].Kind
         );
 
@@ -236,7 +237,7 @@ public class Transform2DTests
 
         // Pure translation is applied CPU-side: exactly one rect, no transform commands.
         Assert.Equal(expected: 1, actual: paint.Count);
-        Assert.Equal(expected: (byte)PaintCommandKind.Rect, actual: paint.DebugCommands[0].Kind);
+        Assert.Equal(expected: PaintCommandKind.Rect, actual: paint.DebugCommands[0].Kind);
         Assert.Equal(expected: 30f, actual: paint.DebugCommands[0].RectX);
     }
 
@@ -249,12 +250,12 @@ public class Transform2DTests
 
         Assert.Equal(expected: 3, actual: paint.Count);
         Assert.Equal(
-            expected: (byte)PaintCommandKind.TransformPush,
+            expected: PaintCommandKind.TransformPush,
             actual: paint.DebugCommands[0].Kind
         );
-        Assert.Equal(expected: (byte)PaintCommandKind.Rect, actual: paint.DebugCommands[1].Kind);
+        Assert.Equal(expected: PaintCommandKind.Rect, actual: paint.DebugCommands[1].Kind);
         Assert.Equal(
-            expected: (byte)PaintCommandKind.TransformPop,
+            expected: PaintCommandKind.TransformPop,
             actual: paint.DebugCommands[2].Kind
         );
         paint.Validate();

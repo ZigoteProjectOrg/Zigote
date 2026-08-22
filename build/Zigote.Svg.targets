@@ -3,10 +3,14 @@
     Builds native/zigote-svg (resvg behind a five-function C ABI) and copies the shared library
     into the output. Imported by Zigote.UI, the only project that P/Invokes it.
 
-    Unlike the Zig engine, this is optional: a checkout without a Rust toolchain still builds and
-    runs — everything except SvgPicture, which then throws DllNotFoundException on first use. That
-    is deliberate; making `cargo` a hard prerequisite of the whole repo for one widget is a worse
-    trade than a warning.
+    Rust is REQUIRED, like Zig. It used to be optional — a checkout without cargo still built, and
+    SvgPicture threw DllNotFoundException on first use instead. That traded a hard prerequisite for
+    a warning nobody reads: the four SvgAssetTests simply failed on every machine without Rust, and
+    the failure looked like a broken test rather than a missing toolchain.
+
+    The toolchain version is pinned in native/zigote-svg/rust-toolchain.toml, the way the engine
+    pins Zig in Zigote.Engine/.zigversion. rustup honours that file automatically; a
+    distro-packaged cargo does not, so the version is checked here too and mismatches warn.
   -->
 
   <PropertyGroup>
@@ -50,23 +54,36 @@
   <Target Name="BuildSvgNative" BeforeTargets="BeforeBuild"
           Inputs="@(SvgCrateSources)" Outputs="$(_SvgOutDir)\$(_SvgLibName)">
     <Exec Command="cargo --version" ContinueOnError="true" StandardOutputImportance="low"
-          StandardErrorImportance="low">
+          StandardErrorImportance="low" ConsoleToMSBuild="true">
       <Output TaskParameter="ExitCode" PropertyName="_SvgCargoMissing" />
+      <Output TaskParameter="ConsoleOutput" PropertyName="_SvgCargoVersion" />
     </Exec>
-    <Warning Condition="'$(_SvgCargoMissing)' != '0'"
-             Text="cargo not found — skipping the SVG native build. SvgPicture will fail at runtime; install Rust (https://rustup.rs) and rebuild." />
-    <Exec Condition="'$(_SvgCargoMissing)' == '0'"
-          Command="cargo build --release $(_SvgCargoTarget)"
+    <Error Condition="'$(_SvgCargoMissing)' != '0'"
+           Text="cargo not found. Rust is required to build Zigote (it builds native/zigote-svg, the SVG renderer behind SvgPicture). Install it from https://rustup.rs — rustup will pick up the pinned toolchain in native/zigote-svg/rust-toolchain.toml automatically." />
+
+    <!-- Advisory: rustup already selects the pinned toolchain from rust-toolchain.toml. This only
+         catches a distro cargo, which ignores that file. -->
+    <PropertyGroup>
+      <_SvgPinnedRust>$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(SvgCrateDir)/rust-toolchain.toml')), 'channel\s*=\s*"([^"]+)"').Groups[1].Value)</_SvgPinnedRust>
+    </PropertyGroup>
+    <Warning Condition="'$(_SvgPinnedRust)' != '' And '$(_SvgCargoVersion)' != '' And !$(_SvgCargoVersion.Contains('$(_SvgPinnedRust)'))"
+             Text="cargo is '$(_SvgCargoVersion.Trim())' but native/zigote-svg/rust-toolchain.toml pins $(_SvgPinnedRust). Install rustup (https://rustup.rs) to get the pinned toolchain selected automatically." />
+
+    <Exec Command="cargo build --release $(_SvgCargoTarget)"
           WorkingDirectory="$(SvgCrateDir)" IgnoreStandardErrorWarningFormat="true" />
   </Target>
 
-  <ItemGroup>
-    <!-- Condition on Exists: unlike the engine's, this build is allowed to have been skipped. The
-         cost is that the very first build after installing Rust copies nothing (the item list is
-         evaluated at project load, before BuildSvgNative ran) — the next one does. -->
-    <Content Include="$(_SvgOutDir)\$(_SvgLibName)" Condition="Exists('$(_SvgOutDir)\$(_SvgLibName)')">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>$(_SvgLibName)</Link>
-    </Content>
-  </ItemGroup>
+  <!-- Added AFTER BuildSvgNative rather than at project load. As a plain ItemGroup this was
+       evaluated before the crate had been built, so the first build on a fresh machine produced the
+       library and copied nothing, and only the second build worked — which read exactly like the
+       build being broken. -->
+  <Target Name="CollectSvgNative" AfterTargets="BuildSvgNative" BeforeTargets="AssignTargetPaths">
+    <ItemGroup>
+      <Content Include="$(_SvgOutDir)\$(_SvgLibName)" Condition="Exists('$(_SvgOutDir)\$(_SvgLibName)')">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <Link>$(_SvgLibName)</Link>
+      </Content>
+    </ItemGroup>
+  </Target>
+
 </Project>

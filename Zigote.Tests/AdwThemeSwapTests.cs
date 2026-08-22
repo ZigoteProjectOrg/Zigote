@@ -1,3 +1,4 @@
+using PaintCommandKind = Zigote.Core.Native.ZgPaintOp;
 using Xunit;
 using Zigote.Core;
 using Zigote.Core.Native;
@@ -34,7 +35,7 @@ public class AdwThemeSwapTests
         provider.Paint(paint);
         return [
             .. paint.DebugCommands
-                .Where(c => c.Kind == (byte)PaintCommandKind.Rect)
+                .Where(c => c.Kind == PaintCommandKind.Rect)
                 .Select(c => new Color(
                         r: c.ColorR,
                         g: c.ColorG,

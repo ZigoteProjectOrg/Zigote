@@ -2296,7 +2296,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
         // window: 0 = the main window. The lambda must return void, so the status is discarded
         // here; a submit failure is already logged natively and surfaces as a blank frame.
         _submitPaintCb ??= (ptr, count) =>
-            _ = NativeEngine.SubmitPaintCommands(window: 0, commands: ptr, count: count);
+            _ = NativeEngine.SubmitPaintCommands(window: 0, stream: ptr, len: count);
         paint.PinAndCall(_submitPaintCb);
     }
 
@@ -2309,8 +2309,8 @@ public sealed unsafe class ZigoteEngine : IDisposable
         _submitOverlayCb ??=
             (ptr, count) => _ = NativeEngine.SubmitOverlayCommands(
                 window: 0,
-                commands: ptr,
-                count: count
+                stream: ptr,
+                len: count
             );
         overlay.PinAndCall(_submitOverlayCb);
     }

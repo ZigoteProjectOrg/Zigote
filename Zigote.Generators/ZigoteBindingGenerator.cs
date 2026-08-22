@@ -193,10 +193,12 @@ public class ZigoteBindingGenerator : IIncrementalGenerator
             if (close > 1 && int.TryParse(t.Substring(startIndex: 1, length: close - 1), out int len))
             {
                 string elem = t.Substring(close + 1).Trim();
-                if (elem == "u8")
+                // Fixed-size arrays become C# `fixed` buffers, which only accept blittable
+                // primitives — u8 and f32 are the two the wire contract uses.
+                if (elem == "u8" || elem == "f32")
                 {
                     arrayLength = len;
-                    return "byte";
+                    return elem == "u8" ? "byte" : "float";
                 }
             }
 

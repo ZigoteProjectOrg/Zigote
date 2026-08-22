@@ -1,3 +1,4 @@
+using PaintCommandKind = Zigote.Core.Native.ZgPaintOp;
 using Xunit;
 using Xunit.Sdk;
 using Zigote.Core;

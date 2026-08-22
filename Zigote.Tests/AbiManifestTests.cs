@@ -55,7 +55,7 @@ public class AbiManifestTests
         string[] candidates = zigName == "ZgGlyphRunQuad"
             ? ["ZgGlyphRunQuad", zigName]
             : [zigName];
-        var asm = typeof(Zigote.Core.Native.ZgPaintCommand).Assembly;
+        var asm = typeof(Zigote.Core.Native.ZgEvent).Assembly;
         foreach (string name in candidates)
         {
             var t = asm.GetType("Zigote.Core.Native." + name);

@@ -1,3 +1,4 @@
+using PaintCommandKind = Zigote.Core.Native.ZgPaintOp;
 using System.Text;
 using Xunit;
 using Zigote.Core;
@@ -18,9 +19,6 @@ namespace Zigote.Tests;
 )] // static Ticker.Active is shared; AdvanceAll in one class ticks another class's widgets
 public class CodeEditorPerfTests
 {
-    private static (float, float, float, float) Col(ZgPaintCommand c) =>
-        (c.ColorR, c.ColorG, c.ColorB, c.ColorA);
-
     [Fact]
     public void ScrolledPaint_CachesLineStates_SoSecondFrameSkipsReplay()
     {
@@ -122,8 +120,8 @@ public class CodeEditorPerfTests
 
         Assert.Equal(expected: [0, 0, 1, 1, 0], actual: tok.StatesSeen);
         var colors = paint.DebugCommands
-            .Where(c => c.Kind == (byte)PaintCommandKind.Text)
-            .Select(Col)
+            .Where(c => c.Kind == PaintCommandKind.Text)
+            .Select(c => (c.ColorR, c.ColorG, c.ColorB, c.ColorA))
             .Distinct()
             .ToArray();
         Assert.True(

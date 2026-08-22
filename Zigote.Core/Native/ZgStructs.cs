@@ -3,33 +3,8 @@ using System.Text;
 
 namespace Zigote.Core.Native;
 
-/// <summary>
-///     Discriminant values for <see cref="ZgPaintCommand.Kind" />.
-///     Must match the CMD_* constants in src/ffi/root.zig.
-/// </summary>
-public enum PaintCommandKind : byte
-{
-    Rect = 0,
-    Border = 1,
-    Text = 2,
-    Image = 3,
-    ClipStart = 4,
-    ClipEnd = 5,
-    PushOpacity = 6,
-    PopOpacity = 7,
-    Shadow = 8,
-    LiquidGlass = 9,
-    ShaderEffect = 10,
-    TextLayout = 11,
-    GlyphRun = 12,
-    RenderTextureBegin = 13,
-    RenderTextureEnd = 14,
-    Blur = 15,
-    Bezier = 16,
-    Polygon = 17,
-    TransformPush = 18,
-    TransformPop = 19,
-}
+// PaintCommandKind is superseded by the generated ZgPaintOp enum (from abi.zig).
+
 
 /// <summary>
 ///     Discriminant values for <see cref="ZgEvent.Kind" />.
@@ -91,46 +66,8 @@ public enum ModifierKeys : byte
     Cmd = 8, // ⌘ on macOS, Super/Win elsewhere — the platform "command" modifier (MOD_GUI)
 }
 
-/// <summary>
-///     Flat C-ABI paint command. Layout is explicit to match the Zig extern struct
-///     ZgPaintCommand in src/ffi/root.zig. Total size: 112 bytes on 64-bit.
-///     Fields are ordered large→small (8-byte pointers first, then 4-byte scalars, then the small
-///     ints) so the struct packs with a single 3-byte hole instead of the ~11 padding bytes the old
-///     natural order forced — 120→112 B on every command a frame streams. Offsets are pinned by
-///     <c>AbiLayoutTests</c> here and by comptime <c>@offsetOf</c> asserts on the Zig side.
-/// </summary>
-public unsafe partial struct ZgPaintCommand
-{
-
-    /// <summary>ShaderEffect only: refresh the backdrop capture first, so chained filters see
-    /// the previous pass's output instead of sharing its input.</summary>
-
-    // [6..7] padding (align pointers to 8 bytes)
-
-
-
-    // Aliases for Image UVs
-    [FieldOffset(56)] public float U0;
-    [FieldOffset(60)] public float V0;
-    [FieldOffset(64)] public float U1;
-    [FieldOffset(68)] public float V1;
-
-    // Alias for ShaderEffect shader id (bit-reinterpreted from Radius)
-    [FieldOffset(56)] public uint ShaderId;
-
-    // Aliases for Text shadow — rides in slots Text never uses (rect = color, radius /
-    // border width = offset, img_pixel_w = blur). Present iff ShadowA > 0.
-    [FieldOffset(24)] public float ShadowR;
-    [FieldOffset(28)] public float ShadowG;
-    [FieldOffset(32)] public float ShadowB;
-    [FieldOffset(36)] public float ShadowA;
-    [FieldOffset(56)] public float ShadowOffsetX;
-    [FieldOffset(60)] public float ShadowOffsetY;
-    [FieldOffset(88)] public float ShadowBlur;
-
-
-
-}
+// ZgPaintCommand — the flat 112-byte struct every command kind shared — is gone. Commands now
+// cross as a tagged stream of per-kind records; see Zigote.Engine/src/abi.zig and PaintList.
 
 /// <summary>
 ///     Flat C-ABI input event. Layout is explicit to match ZgEvent in src/ffi/root.zig.

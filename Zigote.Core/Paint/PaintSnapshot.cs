@@ -51,17 +51,22 @@ public sealed class PaintSnapshot
     private readonly List<(int Index, byte[] Blob)> _pixelBlobs = [];
     private readonly List<(int Index, byte[] Blob)> _textBlobs = [];
 
-    private ZgPaintCommand[] _cmds = [];
-    private int _count;
+    // The previous frame's raw record stream plus its record offsets — the same shape PaintList
+    // holds. It was a ZgPaintCommand[] when every command was the same fixed size.
+    private byte[] _bytes = [];
+    private int _length;
+    private readonly List<int> _offsets = [];
 
     /// <summary>Record <paramref name="list" /> as the reference for the next <see cref="Diff" />.</summary>
     public void Capture(PaintList list)
     {
-        var src = list.CommandSpan;
-        if (_cmds.Length < src.Length)
-            _cmds = new ZgPaintCommand[Math.Max(val1: src.Length, val2: _cmds.Length * 2)];
-        src.CopyTo(_cmds);
-        _count = src.Length;
+        var src = list.StreamSpan;
+        if (_bytes.Length < src.Length)
+            _bytes = new byte[Math.Max(val1: src.Length, val2: _bytes.Length * 2)];
+        src.CopyTo(_bytes);
+        _length = src.Length;
+        _offsets.Clear();
+        for (int i = 0; i < list.RecordCount; i++) _offsets.Add(list.RecordOffset(i));
 
         _textBlobs.Clear();
         foreach ((int index, byte[] blob) in list.TextBlobs) _textBlobs.Add((index, blob));
@@ -79,35 +84,31 @@ public sealed class PaintSnapshot
     public PaintDiffResult Diff(PaintList current, Span<Rect> changed, out int changedCount)
     {
         changedCount = 0;
-        var cur = current.CommandSpan;
-        var prev = _cmds.AsSpan(start: 0, length: _count);
+        int curCount = current.RecordCount;
+        int prevCount = _offsets.Count;
 
         // Longest common prefix, comparing blob contents alongside the structs. The cursor pack
         // turns each blob lookup into an O(1) neighbour probe (indices are ascending and the scans
         // are sequential) instead of a binary search per text command per frame.
         var cursors = new BlobCursors();
-        int min = Math.Min(val1: prev.Length, val2: cur.Length);
+        int min = Math.Min(val1: prevCount, val2: curCount);
         int prefix = 0;
         while (prefix < min && CommandEquals(
-                   prev: prev,
                    prevIdx: prefix,
-                   cur: cur,
-                   curIdx: prefix,
                    current: current,
+                   curIdx: prefix,
                    cursors: ref cursors
                )) prefix++;
-        if (prefix == prev.Length && prefix == cur.Length) return PaintDiffResult.Identical;
+        if (prefix == prevCount && prefix == curCount) return PaintDiffResult.Identical;
 
         // Longest common suffix that does not overlap the prefix.
         int maxSuffix = min - prefix;
         int suffix = 0;
         while (suffix < maxSuffix &&
                CommandEquals(
-                   prev: prev,
-                   prevIdx: prev.Length - 1 - suffix,
-                   cur: cur,
-                   curIdx: cur.Length - 1 - suffix,
+                   prevIdx: prevCount - 1 - suffix,
                    current: current,
+                   curIdx: curCount - 1 - suffix,
                    cursors: ref cursors
                ))
             suffix++;
@@ -123,29 +124,24 @@ public sealed class PaintSnapshot
         Span<Rect> clips = stackalloc Rect[MaxClipDepth];
         for (int i = 0; i < prefix; i++)
         {
-            ref readonly var c = ref prev[i];
-            switch ((PaintCommandKind)c.Kind)
+            var c = PrevRecord(i);
+            switch ((ZgPaintOp)MemoryMarshal.Read<ZgPaintOpHeader>(c).Kind)
             {
-                case PaintCommandKind.TransformPush: transformDepth++; break;
-                case PaintCommandKind.TransformPop: transformDepth--; break;
-                case PaintCommandKind.RenderTextureBegin: rtDepth++; break;
-                case PaintCommandKind.RenderTextureEnd: rtDepth--; break;
-                case PaintCommandKind.ClipStart:
+                case ZgPaintOp.TransformPush: transformDepth++; break;
+                case ZgPaintOp.TransformPop: transformDepth--; break;
+                case ZgPaintOp.RenderTextureBegin: rtDepth++; break;
+                case ZgPaintOp.RenderTextureEnd: rtDepth--; break;
+                case ZgPaintOp.ClipStart:
                 {
                     if (clipDepth >= MaxClipDepth) return PaintDiffResult.Unbounded;
-                    var r = new Rect(
-                        x: c.RectX,
-                        y: c.RectY,
-                        width: c.RectW,
-                        height: c.RectH
-                    );
+                    var r = ToRect(MemoryMarshal.Read<ZgPaintClipStart>(c).Bounds);
                     clips[clipDepth] = clipDepth == 0
                         ? r
                         : Rect.Intersect(a: clips[clipDepth - 1], b: r);
                     clipDepth++;
                     break;
                 }
-                case PaintCommandKind.ClipEnd:
+                case ZgPaintOp.ClipEnd:
                     clipDepth = Math.Max(val1: 0, val2: clipDepth - 1);
                     break;
             }
@@ -159,9 +155,10 @@ public sealed class PaintSnapshot
         // repaint. Both windows start from the same prefix clip stack; pushes inside a window only
         // write slots at/above its starting depth, so the shared span is safe to reuse.
         return AccumulateWindow(
-                   cmds: prev,
+                   snapshot: this,
+                   live: null,
                    start: prefix,
-                   end: prev.Length - suffix,
+                   end: prevCount - suffix,
                    blobSource: this,
                    clips: clips,
                    clipDepth: clipDepth,
@@ -169,9 +166,10 @@ public sealed class PaintSnapshot
                    changedCount: ref changedCount
                ) &&
                AccumulateWindow(
-                   cmds: cur,
+                   snapshot: null,
+                   live: current,
                    start: prefix,
-                   end: cur.Length - suffix,
+                   end: curCount - suffix,
                    blobSource: current,
                    clips: clips,
                    clipDepth: clipDepth,
@@ -185,17 +183,25 @@ public sealed class PaintSnapshot
     /// <summary>Deepest tracked clip nesting; deeper degrades to a full repaint (never in practice).</summary>
     private const int MaxClipDepth = 32;
 
+    /// <summary>
+    ///     Walk one side of the changed window. The side is selected by <paramref name="snapshot" />
+    ///     being non-null rather than by a delegate: a lambda here captured its source and cost a
+    ///     closure + delegate allocation per frame, which
+    ///     FrameHotPathAllocationTests.PaintSnapshotCaptureAndDiff_SteadyState_AllocatesZero
+    ///     correctly rejected.
+    /// </summary>
     private static bool AccumulateWindow(
-        ReadOnlySpan<ZgPaintCommand> cmds, int start, int end, object blobSource,
+        PaintSnapshot? snapshot, PaintList? live, int start, int end, object blobSource,
         Span<Rect> clips, int clipDepth, Span<Rect> changed, ref int changedCount)
     {
         int transformDepth = 0; // native transforms opened inside this window
         for (int i = start; i < end; i++)
         {
-            ref readonly var cmd = ref cmds[i];
-            switch ((PaintCommandKind)cmd.Kind)
+            var rec = snapshot is not null ? snapshot.PrevRecord(i) : live!.Record(i);
+            var kind = (ZgPaintOp)MemoryMarshal.Read<ZgPaintOpHeader>(rec).Kind;
+            switch (kind)
             {
-                case PaintCommandKind.ClipStart:
+                case ZgPaintOp.ClipStart:
                 {
                     // A clip scope inside the window is fine — old draws are covered via the old
                     // rect (prev window walk), new draws via the new one (cur window walk). Under
@@ -211,12 +217,7 @@ public sealed class PaintSnapshot
                     }
                     else
                     {
-                        var r = new Rect(
-                            x: cmd.RectX,
-                            y: cmd.RectY,
-                            width: cmd.RectW,
-                            height: cmd.RectH
-                        );
+                        var r = ToRect(MemoryMarshal.Read<ZgPaintClipStart>(rec).Bounds);
                         clips[clipDepth] = clipDepth == 0
                             ? r
                             : Rect.Intersect(a: clips[clipDepth - 1], b: r);
@@ -228,22 +229,22 @@ public sealed class PaintSnapshot
                     clipDepth++;
                     continue;
                 }
-                case PaintCommandKind.ClipEnd:
+                case ZgPaintOp.ClipEnd:
                     // Popping a prefix-opened scope mid-window is legitimate (scrolled children +
                     // the scrollbar after the ClipEnd); below zero the list is malformed.
                     if (--clipDepth < 0) return false;
                     continue;
-                case PaintCommandKind.TransformPush:
-                case PaintCommandKind.TransformPop:
+                case ZgPaintOp.TransformPush:
+                case ZgPaintOp.TransformPop:
                     // Transformed draws have no per-op screen bounds; under an open clip the
                     // scissor still bounds them, outside one nothing does.
                     if (clipDepth == 0) return false;
-                    transformDepth += cmd.Kind == (byte)PaintCommandKind.TransformPush ? 1 : -1;
+                    transformDepth += kind == ZgPaintOp.TransformPush ? 1 : -1;
                     continue;
                 // Offscreen redirection / whole-target effects escape the clip argument.
-                case PaintCommandKind.RenderTextureBegin:
-                case PaintCommandKind.RenderTextureEnd:
-                case PaintCommandKind.Blur:
+                case ZgPaintOp.RenderTextureBegin:
+                case ZgPaintOp.RenderTextureEnd:
+                case ZgPaintOp.Blur:
                     return false;
             }
 
@@ -257,8 +258,9 @@ public sealed class PaintSnapshot
                 continue;
             }
 
-            if (!TryCommandBounds(
-                    cmd: in cmd,
+            if (!TryRecordBounds(
+                    rec: rec,
+                    kind: kind,
                     blobSource: blobSource,
                     index: i,
                     bounds: out var bounds
@@ -289,84 +291,86 @@ public sealed class PaintSnapshot
     }
 
     /// <summary>
-    ///     Conservative screen bounds of one draw command. False = not boundable from the command
-    ///     (state ops, layout-handle text) — the caller degrades to a full repaint.
+    ///     Conservative screen bounds of one draw record. False = not boundable (state ops,
+    ///     layout-handle text) — the caller degrades to a full repaint, which is always safe.
     /// </summary>
-    private static bool TryCommandBounds(in ZgPaintCommand cmd, object blobSource, int index,
-        out Rect bounds)
+    private static bool TryRecordBounds(ReadOnlySpan<byte> rec, ZgPaintOp kind, object blobSource,
+        int index, out Rect bounds)
     {
         bounds = Rect.Zero;
-        switch ((PaintCommandKind)cmd.Kind)
+        switch (kind)
         {
-            case PaintCommandKind.Rect:
-            case PaintCommandKind.Border:
-            case PaintCommandKind.Image:
-            case PaintCommandKind.LiquidGlass:
-            case PaintCommandKind.ShaderEffect:
-                bounds = new Rect(
-                        x: cmd.RectX,
-                        y: cmd.RectY,
-                        width: cmd.RectW,
-                        height: cmd.RectH
-                    )
-                    .Inflate(cmd.BorderWidth + 2f);
-                return true;
-
-            case PaintCommandKind.Shadow:
-                // BorderWidth carries the blur radius, BaselineX the (directional) spread.
-                bounds = new Rect(
-                        x: cmd.RectX,
-                        y: cmd.RectY,
-                        width: cmd.RectW,
-                        height: cmd.RectH
-                    )
-                    .Inflate(cmd.BorderWidth + MathF.Abs(cmd.BaselineX) + 8f);
-                return true;
-
-            case PaintCommandKind.Text:
+            case ZgPaintOp.Rect:
             {
-                // Text commands carry only the baseline; over-estimate from byte length. UTF-8
-                // bytes ≥ glyphs and FontSize ≥ any real advance, so the box only ever over-covers.
-                float w = (cmd.TextLen * (cmd.FontSize + MathF.Abs(cmd.LetterSpacing))) + 8f;
-                float h = cmd.FontSize * 3f;
+                var op = MemoryMarshal.Read<ZgPaintRect>(rec);
+                bounds = ToRect(op.Bounds).Inflate(2f);
+                return true;
+            }
+            case ZgPaintOp.Border:
+            {
+                var op = MemoryMarshal.Read<ZgPaintBorder>(rec);
+                bounds = ToRect(op.Bounds).Inflate(op.Width + 2f);
+                return true;
+            }
+            case ZgPaintOp.Image:
+            {
+                var op = MemoryMarshal.Read<ZgPaintImage>(rec);
+                bounds = ToRect(op.Bounds).Inflate(2f);
+                return true;
+            }
+            case ZgPaintOp.LiquidGlass:
+            {
+                var op = MemoryMarshal.Read<ZgPaintLiquidGlass>(rec);
+                bounds = ToRect(op.Bounds).Inflate(op.Thickness + 2f);
+                return true;
+            }
+            case ZgPaintOp.ShaderEffect:
+            {
+                var op = MemoryMarshal.Read<ZgPaintShaderEffect>(rec);
+                bounds = ToRect(op.Bounds).Inflate(2f);
+                return true;
+            }
+            case ZgPaintOp.Shadow:
+            {
+                var op = MemoryMarshal.Read<ZgPaintShadow>(rec);
+                bounds = ToRect(op.Bounds).Inflate(op.BlurRadius + MathF.Abs(op.Spread) + 8f);
+                return true;
+            }
+            case ZgPaintOp.Text:
+            {
+                // Only the baseline is carried; over-estimate from byte length. UTF-8 bytes >=
+                // glyphs and FontSize >= any real advance, so the box only ever over-covers. The
+                // shadow variant is its own record and is inflated by its blur and offset.
+                var op = MemoryMarshal.Read<ZgPaintText>(rec);
+                float w = (op.TextLen * (op.FontSize + MathF.Abs(op.LetterSpacing))) + 8f;
+                float h = op.FontSize * 3f;
                 bounds = new Rect(
-                    x: cmd.BaselineX - 4f,
-                    y: cmd.BaselineY - (cmd.FontSize * 2f),
+                    x: op.BaselineX - 4f,
+                    y: op.BaselineY - (op.FontSize * 2f),
                     width: w,
                     height: h
                 );
+                if (op.IsShadow != 0)
+                {
+                    bounds = bounds
+                        .Inflate(op.ShadowBlur + 2f)
+                        .Inflate(MathF.Abs(op.ShadowDx) + MathF.Abs(op.ShadowDy));
+                }
+
                 return true;
             }
-
-            case PaintCommandKind.Bezier:
+            case ZgPaintOp.Bezier:
             {
-                // Control points are packed into the rect/radius/baseline slots; width in FontSize.
-                float minX = MathF.Min(
-                    x: MathF.Min(x: cmd.RectX, y: cmd.RectW),
-                    y: MathF.Min(x: cmd.Radius, y: cmd.BaselineX)
-                );
-                float maxX = MathF.Max(
-                    x: MathF.Max(x: cmd.RectX, y: cmd.RectW),
-                    y: MathF.Max(x: cmd.Radius, y: cmd.BaselineX)
-                );
-                float minY = MathF.Min(
-                    x: MathF.Min(x: cmd.RectY, y: cmd.RectH),
-                    y: MathF.Min(x: cmd.BorderWidth, y: cmd.BaselineY)
-                );
-                float maxY = MathF.Max(
-                    x: MathF.Max(x: cmd.RectY, y: cmd.RectH),
-                    y: MathF.Max(x: cmd.BorderWidth, y: cmd.BaselineY)
-                );
-                bounds = new Rect(
-                    x: minX,
-                    y: minY,
-                    width: maxX - minX,
-                    height: maxY - minY
-                ).Inflate(cmd.FontSize + 2f);
+                var op = MemoryMarshal.Read<ZgPaintBezier>(rec);
+                float minX = MathF.Min(x: MathF.Min(x: op.X0, y: op.X1), y: MathF.Min(x: op.X2, y: op.X3));
+                float maxX = MathF.Max(x: MathF.Max(x: op.X0, y: op.X1), y: MathF.Max(x: op.X2, y: op.X3));
+                float minY = MathF.Min(x: MathF.Min(x: op.Y0, y: op.Y1), y: MathF.Min(x: op.Y2, y: op.Y3));
+                float maxY = MathF.Max(x: MathF.Max(x: op.Y0, y: op.Y1), y: MathF.Max(x: op.Y2, y: op.Y3));
+                bounds = new Rect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+                    .Inflate(op.Width + 2f);
                 return true;
             }
-
-            case PaintCommandKind.Polygon:
+            case ZgPaintOp.Polygon:
             {
                 byte[]? blob = FindPixelBlob(source: blobSource, index: index);
                 if (blob is null || blob.Length < 16) return false;
@@ -384,25 +388,23 @@ public sealed class PaintSnapshot
                     maxY = MathF.Max(x: maxY, y: y);
                 }
 
-                bounds = new Rect(
-                    x: minX,
-                    y: minY,
-                    width: maxX - minX,
-                    height: maxY - minY
-                ).Inflate(2f);
+                bounds = new Rect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+                    .Inflate(2f);
                 return true;
             }
 
-            // Layout-handle text: extent lives behind the native handle, not in the command.
-            case PaintCommandKind.TextLayout:
-            case PaintCommandKind.GlyphRun:
+            // Layout-handle text: extent lives behind the native handle, not in the record.
+            case ZgPaintOp.TextLayout:
+            case ZgPaintOp.GlyphRun:
             // Whole-target effect.
-            case PaintCommandKind.Blur:
+            case ZgPaintOp.Blur:
             // Scope/state commands inside the changed window: op structure changed.
             default:
                 return false;
         }
     }
+
+    private static Rect ToRect(ZgXywh v) => new(x: v.X, y: v.Y, width: v.W, height: v.H);
 
     // ── Command equality ──────────────────────────────────────────────────────
 
@@ -412,40 +414,62 @@ public sealed class PaintSnapshot
         public int PrevText, CurText, PrevPixel, CurPixel;
     }
 
-    private bool CommandEquals(
-        ReadOnlySpan<ZgPaintCommand> prev, int prevIdx,
-        ReadOnlySpan<ZgPaintCommand> cur, int curIdx,
-        PaintList current,
-        ref BlobCursors cursors)
+    private bool CommandEquals(int prevIdx, PaintList current, int curIdx, ref BlobCursors cursors)
     {
-        ref readonly var a = ref prev[prevIdx];
-        ref readonly var b = ref cur[curIdx];
+        var ab = PrevRecord(prevIdx);
+        var bb = current.Record(curIdx);
+        if (ab.Length != bb.Length) return false;
 
-        var ab = MemoryMarshal.AsBytes(
-            MemoryMarshal.CreateReadOnlySpan(reference: in a, length: 1)
-        );
-        var bb = MemoryMarshal.AsBytes(
-            MemoryMarshal.CreateReadOnlySpan(reference: in b, length: 1)
-        );
-        // Skip bytes [8..24): TextPtr/PixelsPtr are process addresses, not content — re-encoded
-        // blobs get fresh arrays for identical text, and pointers are compared by content below.
-        if (!ab[..8].SequenceEqual(bb[..8]) || !ab[24..].SequenceEqual(bb[24..])) return false;
+        var kind = (ZgPaintOp)MemoryMarshal.Read<ZgPaintOpHeader>(ab).Kind;
+        if (kind != current.RecordKind(curIdx)) return false;
 
-        if (a.TextLen > 0 &&
+        // Pointer fields hold process addresses, not content: a re-encoded blob gets a fresh array
+        // for identical text. Compare everything else byte-for-byte and the blobs by content.
+        int textPtr = PaintList.TextPtrFieldOffset(kind);
+        int pixPtr = PaintList.PixelsPtrFieldOffset(kind);
+        if (!RecordBytesEqual(a: ab, b: bb, skipA: textPtr, skipB: pixPtr)) return false;
+
+        if (textPtr >= 0 &&
             !BlobEquals(
                 a: Lookup(blobs: _textBlobs, index: prevIdx, hint: ref cursors.PrevText),
                 b: current.FindTextBlob(index: curIdx, hint: ref cursors.CurText)
             ))
             return false;
 
-        // Pixel payloads with a cache key are identified by it (already compared in the struct
+        // Pixel payloads with a cache key are identified by it (already compared in the record
         // bytes); keyless payloads (polygon points, raw uploads) compare by content.
-        if (a.PixelsLen > 0 && a.HasCacheKey == 0 &&
+        if (pixPtr >= 0 &&
             !BlobEquals(
                 a: Lookup(blobs: _pixelBlobs, index: prevIdx, hint: ref cursors.PrevPixel),
                 b: current.FindPixelBlob(index: curIdx, hint: ref cursors.CurPixel)
             ))
             return false;
+
+        return true;
+    }
+
+    /// <summary>The previous frame's record <paramref name="i" />.</summary>
+    private ReadOnlySpan<byte> PrevRecord(int i)
+    {
+        int start = _offsets[i];
+        int end = i + 1 < _offsets.Count ? _offsets[i + 1] : _length;
+        return _bytes.AsSpan(start: start, length: end - start);
+    }
+
+    /// <summary>
+    ///     Byte-compare two records, skipping up to two 8-byte pointer fields. A negative offset
+    ///     means "this record kind has no such field".
+    /// </summary>
+    private static bool RecordBytesEqual(ReadOnlySpan<byte> a, ReadOnlySpan<byte> b, int skipA,
+        int skipB)
+    {
+        for (int i = 0; i < a.Length; i++)
+        {
+            bool skipped = (skipA >= 0 && i >= skipA && i < skipA + 8) ||
+                           (skipB >= 0 && i >= skipB && i < skipB + 8);
+            if (skipped) continue;
+            if (a[i] != b[i]) return false;
+        }
 
         return true;
     }

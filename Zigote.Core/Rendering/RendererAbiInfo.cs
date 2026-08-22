@@ -27,14 +27,17 @@ public static class RendererAbiInfo
             );
         }
 
-        uint paintCmdSize = (uint)sizeof(ZgPaintCommand);
+        // The flat ZgPaintCommand is gone; commands cross as a tagged stream whose framing is the
+        // header. Checking the header keeps the guard meaningful — a disagreement about it would
+        // desynchronise every record on the stream.
+        uint paintCmdSize = (uint)sizeof(ZgPaintOpHeader);
         uint eventSize = (uint)sizeof(ZgEvent);
         uint handleSize = (uint)sizeof(nuint);
 
-        if (info.PaintCommandSize != paintCmdSize)
+        if (info.PaintOpHeaderSize != paintCmdSize)
         {
             throw new InvalidOperationException(
-                $"ABI mismatch: ZgPaintCommand is {paintCmdSize} bytes in C# but {info.PaintCommandSize} in native."
+                $"ABI mismatch: ZgPaintOpHeader is {paintCmdSize} bytes in C# but {info.PaintOpHeaderSize} in native."
             );
         }
 

@@ -1,3 +1,4 @@
+using PaintCommandKind = Zigote.Core.Native.ZgPaintOp;
 using Xunit;
 using Zigote.Core;
 using Zigote.Core.Native;
@@ -29,7 +30,7 @@ public class ClipRRectTests
         paint.AddClipEnd();
 
         var cmd = paint.DebugCommands[0];
-        Assert.Equal(expected: (byte)PaintCommandKind.ClipStart, actual: cmd.Kind);
+        Assert.Equal(expected: PaintCommandKind.ClipStart, actual: cmd.Kind);
         Assert.Equal(expected: 12f, actual: cmd.Radius);
     }
 
@@ -93,12 +94,12 @@ public class ClipRRectTests
         clip.Paint(paint);
 
         Assert.Equal(
-            expected: (byte)PaintCommandKind.ClipStart,
+            expected: PaintCommandKind.ClipStart,
             actual: paint.DebugCommands[0].Kind
         );
         Assert.Equal(expected: 16f, actual: paint.DebugCommands[0].Radius);
         Assert.Equal(
-            expected: (byte)PaintCommandKind.ClipEnd,
+            expected: PaintCommandKind.ClipEnd,
             actual: paint.DebugCommands[^1].Kind
         );
     }

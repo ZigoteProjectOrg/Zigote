@@ -1,3 +1,4 @@
+using PaintCommandKind = Zigote.Core.Native.ZgPaintOp;
 using System.Linq;
 using Xunit;
 using Zigote.Core;
@@ -88,10 +89,10 @@ public class SkeletonTests
     {
         var still = Render(new Skeleton(width: 100f) { Animated = false });
         var command = Assert.Single(still.DebugCommands);
-        Assert.Equal(expected: (byte)PaintCommandKind.Rect, actual: command.Kind);
+        Assert.Equal(expected: PaintCommandKind.Rect, actual: command.Kind);
 
         var sweep = Render(new Skeleton(width: 100f));
-        Assert.Contains(sweep.DebugCommands, c => c.Kind == (byte)PaintCommandKind.ClipStart);
-        Assert.Contains(sweep.DebugCommands, c => c.Kind == (byte)PaintCommandKind.ClipEnd);
+        Assert.Contains(sweep.DebugCommands, c => c.Kind == PaintCommandKind.ClipStart);
+        Assert.Contains(sweep.DebugCommands, c => c.Kind == PaintCommandKind.ClipEnd);
     }
 }

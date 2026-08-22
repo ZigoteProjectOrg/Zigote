@@ -1,0 +1,14 @@
+# The Rust toolchain this crate is built with, pinned the same way the engine pins Zig in
+# Zigote.Engine/.zigversion.
+#
+# rustup reads this file automatically and will install/select the named toolchain, so a checkout
+# builds the same compiler everywhere without anyone remembering to switch. A distro-packaged cargo
+# (no rustup) ignores it, which is why build/Zigote.Svg.targets ALSO checks the version and warns —
+# see the note there.
+#
+# Bumping it is a deliberate act: resvg pulls a large dependency tree, and a compiler change is the
+# usual reason a build that worked yesterday stops.
+[toolchain]
+channel = "1.97.1"
+profile = "minimal"
+components = ["rustfmt", "clippy"]

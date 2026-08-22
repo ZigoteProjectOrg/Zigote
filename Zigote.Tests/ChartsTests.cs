@@ -1,3 +1,4 @@
+using PaintCommandKind = Zigote.Core.Native.ZgPaintOp;
 using Xunit;
 using Zigote.Core;
 using Zigote.Core.Native;
@@ -893,7 +894,7 @@ public class ChartsTests
         // A text command for the annotation label is present.
         Assert.Contains(
             collection: paint.DebugCommands,
-            filter: c => c.Kind == (byte)PaintCommandKind.Text
+            filter: c => c.Kind == PaintCommandKind.Text
         );
     }
 
@@ -1385,7 +1386,7 @@ public class ChartsTests
         int c = 0;
         foreach (var cmd in paint.DebugCommands)
         {
-            if (cmd.Kind == (byte)kind)
+            if (cmd.Kind == kind)
                 c++;
         }
 
@@ -1559,7 +1560,7 @@ public class ChartsTests
             float top = float.MaxValue;
             foreach (var cmd in paint.DebugCommands)
             {
-                if (cmd.Kind == (byte)PaintCommandKind.Rect)
+                if (cmd.Kind == PaintCommandKind.Rect)
                     top = MathF.Min(x: top, y: cmd.RectY);
             }
 

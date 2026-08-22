@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using Zigote.Core.Native;
@@ -38,7 +40,16 @@ public sealed unsafe class PaintList
 
     // ── Clip stack (C# shadow for culling) ───────────────────────────────────
     private readonly Stack<Rect> _clipStack = new();
-    private readonly List<ZgPaintCommand> _commands = [];
+    // The frame's commands as a TAGGED BYTE STREAM: each record is a ZgPaintOpHeader followed by
+    // a struct that names its own fields. This replaced a List<ZgPaintCommand> of one flat 112-byte
+    // struct shared by all 20 kinds, in which `radius` was also an image u0 and a shader id, and a
+    // text shadow's colour lived in the rectangle fields. See Zigote.Engine/src/abi.zig.
+    //
+    // `_offsets` keeps ordinal indexing over the variable-size records, which is what lets
+    // PaintSnapshot address the Nth command and what keeps the blob lists keyed by index.
+    private byte[] _buffer = new byte[16 * 1024];
+    private int _length;
+    private readonly List<int> _offsets = [];
     private readonly Stack<(float X, float Y)> _offsetStack = new();
 
     // Reused across frames so submitting a frame allocates no List for the pin handles.
@@ -68,15 +79,56 @@ public sealed unsafe class PaintList
     // ── Affine transform stack (native-applied; C# tracks only depth) ────────
     private int _transformDepth;
 
-    public int Count => _commands.Count;
+    public int Count => _offsets.Count;
 
     /// <summary>Read-only view of the accumulated commands, for tests and diagnostics.</summary>
-    public IReadOnlyList<ZgPaintCommand> DebugCommands => _commands;
+    /// <summary>Record count, for tests and diagnostics.</summary>
+    public int DebugCommandCount => _offsets.Count;
+
+    /// <summary>
+    ///     Decoded view of every record — tests and diagnostics only. Allocates; never on a paint
+    ///     path. See <see cref="PaintCommandView" /> for why this is a projection rather than the
+    ///     wire shape.
+    /// </summary>
+    public IReadOnlyList<PaintCommandView> DebugCommands
+    {
+        get
+        {
+            var list = new List<PaintCommandView>(_offsets.Count);
+            for (int i = 0; i < _offsets.Count; i++)
+                list.Add(PaintCommandView.Decode(rec: Record(i), kind: RecordKind(i)));
+            return list;
+        }
+    }
 
     // ── PaintSnapshot access (frame-to-frame diff for partial repaint) ────────
 
-    internal ReadOnlySpan<ZgPaintCommand> CommandSpan =>
-        CollectionsMarshal.AsSpan(_commands);
+    /// <summary>Number of records in this frame.</summary>
+    public int RecordCount => _offsets.Count;
+
+    /// <summary>The raw bytes of record <paramref name="i" />, header included.</summary>
+    public ReadOnlySpan<byte> Record(int i)
+    {
+        int start = _offsets[i];
+        int end = i + 1 < _offsets.Count ? _offsets[i + 1] : _length;
+        return _buffer.AsSpan(start: start, length: end - start);
+    }
+
+    /// <summary>Byte offset of record <paramref name="i" /> within <see cref="StreamSpan" />.</summary>
+    internal int RecordOffset(int i) => _offsets[i];
+
+    public ZgPaintOp RecordKind(int i) =>
+        (ZgPaintOp)MemoryMarshal.Read<ZgPaintOpHeader>(_buffer.AsSpan(_offsets[i])).Kind;
+
+    /// <summary>
+    ///     Decode record <paramref name="i" /> as <typeparamref name="T" />. For tests and
+    ///     diagnostics: check <see cref="RecordKind" /> first, since a wrong T reads neighbouring
+    ///     bytes as fields.
+    /// </summary>
+    public T Read<T>(int i) where T : unmanaged => MemoryMarshal.Read<T>(Record(i));
+
+    /// <summary>The whole stream, for submit.</summary>
+    internal ReadOnlySpan<byte> StreamSpan => _buffer.AsSpan(start: 0, length: _length);
 
     internal List<(int Index, byte[] Blob)> TextBlobs { get; } = [];
 
@@ -222,27 +274,19 @@ public sealed unsafe class PaintList
                 Matrix2D.Translation(dx: -_offsetX, dy: -_offsetY);
         }
 
-        var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.TransformPush };
+        // The 2x3 affine is six named fields now, not six borrowed float slots.
         // 2×3 affine rides existing float slots — a/b/c/d in the rect fields, tx/ty in
         // radius/border_width; the native CMD_TRANSFORM_PUSH case reads them back in this order.
-        cmd.RectX = m.A;
-        cmd.RectY = m.B;
-        cmd.RectW = m.C;
-        cmd.RectH = m.D;
-        cmd.Radius = m.Tx;
-        cmd.BorderWidth = m.Ty;
-        Push(cmd: cmd, text: null, pixels: null);
+        Write(ZgPaintOp.TransformPush, new ZgPaintTransformPush {
+            A = m.A, B = m.B, C = m.C, D = m.D, Tx = m.Tx, Ty = m.Ty,
+        });
     }
 
     /// <summary>Restore the transform that was active before the matching <see cref="PushTransform" />.</summary>
     public void PopTransform()
     {
         _transformDepth = Math.Max(val1: 0, val2: _transformDepth - 1);
-        Push(
-            cmd: new ZgPaintCommand { Kind = (byte)PaintCommandKind.TransformPop },
-            text: null,
-            pixels: null
-        );
+        Write(ZgPaintOp.TransformPop, new ZgPaintBare());
     }
 
     // ── Alpha stack ───────────────────────────────────────────────────────────
@@ -259,7 +303,8 @@ public sealed unsafe class PaintList
 
     public void Clear()
     {
-        _commands.Clear();
+        _length = 0;
+        _offsets.Clear();
         TextBlobs.Clear();
         PixelBlobs.Clear();
         _alphaStack.Clear();
@@ -332,23 +377,23 @@ public sealed unsafe class PaintList
     {
         CheckBounds(bounds);
         CheckColor(color);
-        var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.Rect };
-        SetBounds(cmd: ref cmd, r: ApplyOffset(bounds));
-        SetColor(cmd: ref cmd, c: ScaleAlpha(color));
-        cmd.Radius = ClampRadius(radius: radius, bounds: bounds);
-        Push(cmd: cmd, text: null, pixels: null);
+        Write(ZgPaintOp.Rect, new ZgPaintRect {
+            Bounds = Xywh(ApplyOffset(bounds)),
+            Color = Rgba(ScaleAlpha(color)),
+            Radius = ClampRadius(radius: radius, bounds: bounds),
+        });
     }
 
     public void AddBorder(Rect bounds, Color color, float radius = 0f, float width = 1f)
     {
         CheckBounds(bounds);
         CheckColor(color);
-        var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.Border };
-        SetBounds(cmd: ref cmd, r: ApplyOffset(bounds));
-        SetColor(cmd: ref cmd, c: ScaleAlpha(color));
-        cmd.Radius = ClampRadius(radius: radius, bounds: bounds);
-        cmd.BorderWidth = width;
-        Push(cmd: cmd, text: null, pixels: null);
+        Write(ZgPaintOp.Border, new ZgPaintBorder {
+            Bounds = Xywh(ApplyOffset(bounds)),
+            Color = Rgba(ScaleAlpha(color)),
+            Radius = ClampRadius(radius: radius, bounds: bounds),
+            Width = width,
+        });
     }
 
     public void AddText(
@@ -372,48 +417,43 @@ public sealed unsafe class PaintList
         CheckFontSize(fontSize);
         fontFamily = FontFaces.Resolve(weight: fontWeight, requested: fontFamily);
         byte[] textBytes = EncodeUtf8(text);
-        var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.Text };
-        SetColor(cmd: ref cmd, c: ScaleAlpha(color));
+        // Text never carries image pixels, so the optional font-family name (UTF-8) rides the
+        // pixels blob list. A null/empty family leaves the default UI face in effect.
+        byte[]? fontBytes = string.IsNullOrEmpty(fontFamily) ? null : EncodeUtf8(fontFamily);
+
+        var run = new ZgPaintText {
+            TextLen = (uint)textBytes.Length,
+            FamilyLen = (uint)(fontBytes?.Length ?? 0),
+            Color = Rgba(ScaleAlpha(color)),
+            BaselineX = baselineX + _offsetX,
+            BaselineY = baselineY + _offsetY,
+            FontSize = fontSize,
+            // The C# API takes a line-height FACTOR (1.2 = 120%); the native renderer steps
+            // embedded newlines by an ABSOLUTE pixel distance. Convert here, at the single choke
+            // point — passing the factor through stacked every '\n' line ~1px below the previous.
+            LineHeight = lineHeight > 0f ? lineHeight * fontSize : 0f,
+            LetterSpacing = letterSpacing,
+            WordSpacing = wordSpacing,
+            FontWeight = (uint)fontWeight,
+            FontStyle = (uint)fontStyle,
+        };
+
+        // The drop shadow is a SECOND record, written first so it lands underneath. It used to be
+        // the same command carrying the shadow's colour in the RECTANGLE fields and its blur
+        // bitcast through img_pixel_w, which is why native had to infer "has a shadow" from a
+        // positive rect height.
         if (shadowColor is { } sc && sc.A > 0)
         {
-            Color scaled = ScaleAlpha(sc);
-            cmd.ShadowR = scaled.R;
-            cmd.ShadowG = scaled.G;
-            cmd.ShadowB = scaled.B;
-            cmd.ShadowA = scaled.A;
-            cmd.ShadowOffsetX = shadowOffsetX;
-            cmd.ShadowOffsetY = shadowOffsetY;
-            cmd.ShadowBlur = shadowBlur;
-        }
-        cmd.BaselineX = baselineX + _offsetX;
-        cmd.BaselineY = baselineY + _offsetY;
-        cmd.FontSize = fontSize;
-        // The C# API takes a line-height FACTOR (1.2 = 120%); the native renderer steps embedded
-        // newlines by an ABSOLUTE pixel distance. Convert here, at the single choke point —
-        // passing the factor straight through stacked every '\n' line ~1px below the previous one.
-        cmd.LineHeight = lineHeight > 0f ? lineHeight * fontSize : 0f;
-        cmd.FontWeight = (ushort)fontWeight;
-        cmd.FontStyle = (byte)fontStyle;
-        cmd.LetterSpacing = letterSpacing;
-        cmd.WordSpacing = wordSpacing;
-        cmd.TextLen = (uint)textBytes.Length;
-
-        // Text never carries image pixels, so the pixels side-channel carries the optional
-        // font-family name (UTF-8). The native side reads it as the face to shape with; a
-        // null/empty family leaves the default UI font in effect.
-        byte[]? fontBytes = null;
-        if (!string.IsNullOrEmpty(fontFamily))
-        {
-            fontBytes = EncodeUtf8(fontFamily);
-            cmd.PixelsLen = (uint)fontBytes.Length;
+            var shadow = run;
+            shadow.Color = Rgba(ScaleAlpha(sc));
+            shadow.IsShadow = 1;
+            shadow.ShadowBlur = shadowBlur;
+            shadow.ShadowDx = shadowOffsetX;
+            shadow.ShadowDy = shadowOffsetY;
+            Write(ZgPaintOp.Text, shadow, text: textBytes, pixels: fontBytes, pixelsPinned: true);
         }
 
-        Push(
-            cmd: cmd,
-            text: textBytes,
-            pixels: fontBytes,
-            pixelsPinned: true
-        );
+        Write(ZgPaintOp.Text, run, text: textBytes, pixels: fontBytes, pixelsPinned: true);
     }
 
     public void AddImage(Rect bounds, int pixelWidth, int pixelHeight, byte[]? pixels,
@@ -421,24 +461,20 @@ public sealed unsafe class PaintList
         float u0 = 0f, float v0 = 0f, float u1 = 1f, float v1 = 1f, Color? tint = null)
     {
         CheckBounds(bounds);
-        var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.Image };
-        SetBounds(cmd: ref cmd, r: ApplyOffset(bounds));
-        SetColor(cmd: ref cmd, c: ScaleAlpha(tint ?? Color.White));
-        cmd.ImgPixelW = (uint)pixelWidth;
-        cmd.ImgPixelH = (uint)pixelHeight;
-        cmd.U0 = u0;
-        cmd.V0 = v0;
-        cmd.U1 = u1;
-        cmd.V1 = v1;
-        cmd.PixelsLen = (uint)(pixels?.Length ?? 0);
-        if (cacheKey.HasValue)
-        {
-            cmd.HasCacheKey = 1;
-            cmd.CacheKeyLo = (uint)(cacheKey.Value & 0xFFFFFFFF);
-            cmd.CacheKeyHi = (uint)((cacheKey.Value >> 32) & 0xFFFFFFFF);
-        }
-
-        Push(cmd: cmd, text: null, pixels: pixels);
+        Write(
+            ZgPaintOp.Image,
+            new ZgPaintImage {
+                Bounds = Xywh(ApplyOffset(bounds)),
+                Tint = Rgba(ScaleAlpha(tint ?? Color.White)),
+                PixelW = (uint)pixelWidth,
+                PixelH = (uint)pixelHeight,
+                PixelsLen = (uint)(pixels?.Length ?? 0),
+                HasCacheKey = cacheKey.HasValue ? 1u : 0u,
+                CacheKey = cacheKey ?? 0,
+                U0 = u0, V0 = v0, U1 = u1, V1 = v1,
+            },
+            pixels: pixels
+        );
     }
 
     /// <param name="radius">
@@ -459,49 +495,33 @@ public sealed unsafe class PaintList
         _clipDepth++;
 
         // Zig always receives the raw (un-pre-intersected) bounds; it runs its own intersection.
-        var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.ClipStart };
-        SetBounds(cmd: ref cmd, r: screenBounds);
-        cmd.Radius = ClampRadius(radius: radius, bounds: bounds);
-        Push(cmd: cmd, text: null, pixels: null);
+        Write(ZgPaintOp.ClipStart, new ZgPaintClipStart {
+            Bounds = Xywh(screenBounds),
+            Radius = ClampRadius(radius: radius, bounds: bounds),
+        });
     }
 
     public void AddClipEnd()
     {
         if (_clipStack.Count > 0) _clipStack.Pop();
         _clipDepth = Math.Max(val1: 0, val2: _clipDepth - 1);
-        Push(
-            cmd: new ZgPaintCommand { Kind = (byte)PaintCommandKind.ClipEnd },
-            text: null,
-            pixels: null
-        );
+        Write(ZgPaintOp.ClipEnd, new ZgPaintBare());
     }
 
     public void AddPushOpacity(Rect bounds, float alpha)
     {
         CheckBounds(bounds);
         _opacityDepth++;
-        var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.PushOpacity };
-        SetBounds(cmd: ref cmd, r: ApplyOffset(bounds));
-        SetColor(
-            cmd: ref cmd,
-            c: new Color(
-                r: 0,
-                g: 0,
-                b: 0,
-                a: alpha
-            )
-        );
-        Push(cmd: cmd, text: null, pixels: null);
+        Write(ZgPaintOp.PushOpacity, new ZgPaintPushOpacity {
+            Bounds = Xywh(ApplyOffset(bounds)),
+            Alpha = alpha,
+        });
     }
 
     public void AddPopOpacity()
     {
         _opacityDepth = Math.Max(val1: 0, val2: _opacityDepth - 1);
-        Push(
-            cmd: new ZgPaintCommand { Kind = (byte)PaintCommandKind.PopOpacity },
-            text: null,
-            pixels: null
-        );
+        Write(ZgPaintOp.PopOpacity, new ZgPaintBare());
     }
 
     public void AddShadow(Rect bounds, Color color, float borderRadius, float blurRadius,
@@ -509,13 +529,13 @@ public sealed unsafe class PaintList
     {
         CheckBounds(bounds);
         CheckColor(color);
-        var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.Shadow };
-        SetBounds(cmd: ref cmd, r: ApplyOffset(bounds));
-        SetColor(cmd: ref cmd, c: color);
-        cmd.Radius = ClampRadius(radius: borderRadius, bounds: bounds);
-        cmd.BorderWidth = blurRadius;
-        cmd.BaselineX = spread; // directional — NOT offset-shifted
-        Push(cmd: cmd, text: null, pixels: null);
+        Write(ZgPaintOp.Shadow, new ZgPaintShadow {
+            Bounds = Xywh(ApplyOffset(bounds)),
+            Color = Rgba(color),
+            Radius = ClampRadius(radius: borderRadius, bounds: bounds),
+            BlurRadius = blurRadius,
+            Spread = spread, // directional — NOT offset-shifted
+        });
     }
 
     /// <summary>
@@ -537,21 +557,18 @@ public sealed unsafe class PaintList
             float.IsNaN(x2) || float.IsNaN(y2) || float.IsNaN(x3) || float.IsNaN(y3))
             throw new ArgumentException("NaN in bezier control point");
 
-        var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.Bezier };
+        // Every control point carries the translation offset; a Bezier has no Rect.
         // Four control points are packed into the rect / radius / baseline float slots; the native
         // CMD_BEZIER case reads them back in the same order. Translation offset is applied to every
         // point (a Bézier has no Rect, so SetBounds doesn't apply).
-        cmd.RectX = x0 + _offsetX;
-        cmd.RectY = y0 + _offsetY;
-        cmd.RectW = x1 + _offsetX;
-        cmd.RectH = y1 + _offsetY;
-        cmd.Radius = x2 + _offsetX;
-        cmd.BorderWidth = y2 + _offsetY;
-        cmd.BaselineX = x3 + _offsetX;
-        cmd.BaselineY = y3 + _offsetY;
-        SetColor(cmd: ref cmd, c: ScaleAlpha(color));
-        cmd.FontSize = MathF.Max(x: width, y: 0f);
-        Push(cmd: cmd, text: null, pixels: null);
+        Write(ZgPaintOp.Bezier, new ZgPaintBezier {
+            X0 = x0 + _offsetX, Y0 = y0 + _offsetY,
+            X1 = x1 + _offsetX, Y1 = y1 + _offsetY,
+            X2 = x2 + _offsetX, Y2 = y2 + _offsetY,
+            X3 = x3 + _offsetX, Y3 = y3 + _offsetY,
+            Color = Rgba(ScaleAlpha(color)),
+            Width = MathF.Max(x: width, y: 0f),
+        });
     }
 
     /// <summary>
@@ -586,11 +603,12 @@ public sealed unsafe class PaintList
             );
         }
 
-        var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.Polygon };
-        SetColor(cmd: ref cmd, c: ScaleAlpha(color));
-        cmd.ImgPixelW = (uint)points.Length;
-        cmd.PixelsLen = (uint)bytes.Length;
-        Push(cmd: cmd, text: null, pixels: bytes, pixelsPinned: true);
+        Write(
+            ZgPaintOp.Polygon,
+            new ZgPaintPolygon { PointsLen = (uint)bytes.Length, Color = Rgba(ScaleAlpha(color)) },
+            pixels: bytes,
+            pixelsPinned: true
+        );
     }
 
     /// <param name="adapt">
@@ -606,22 +624,23 @@ public sealed unsafe class PaintList
     {
         CheckBounds(bounds);
         CheckColor(color);
-        var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.LiquidGlass };
-        SetBounds(cmd: ref cmd, r: ApplyOffset(bounds));
-        SetColor(cmd: ref cmd, c: ScaleAlpha(color));
-        cmd.Radius = ClampRadius(radius: radius, bounds: bounds);
+        var glass = new ZgPaintLiquidGlass {
+            Bounds = Xywh(ApplyOffset(bounds)),
+            Color = Rgba(ScaleAlpha(color)),
+            Radius = ClampRadius(radius: radius, bounds: bounds),
+        };
         // The tint alpha only fades the scrim — the lens strength (refraction, frost) rides on
         // thickness, so it must follow the ambient opacity too or glass inside a fade pops in at
         // full refraction under a still-fading child.
-        cmd.BorderWidth = thickness * _currentAlpha;
-        cmd.BaselineX = glowX; // directional — NOT offset-shifted
-        cmd.BaselineY = glowY;
-        cmd.FontSize = pinch;
+        glass.Thickness = thickness * _currentAlpha;
+        glass.GlowX = glowX; // directional — NOT offset-shifted
+        glass.GlowY = glowY;
+        glass.Pinch = pinch;
         // Glass carries no text metrics, so LineHeight is free to be the adaptive-luminance knob.
         // Scaled by the ambient opacity for the same reason as thickness: the backdrop tone shift
         // must fade with the pane, or glass inside a fade pops in already scrimmed.
-        cmd.LineHeight = Math.Clamp(value: adapt, min: -1f, max: 1f) * _currentAlpha;
-        Push(cmd: cmd, text: null, pixels: null);
+        glass.Adapt = Math.Clamp(value: adapt, min: -1f, max: 1f) * _currentAlpha;
+        Write(ZgPaintOp.LiquidGlass, glass);
     }
 
     /// <param name="imageKey">
@@ -644,27 +663,24 @@ public sealed unsafe class PaintList
         ulong imageKey = 0, bool chainsBackdrop = false)
     {
         CheckBounds(bounds);
-        var cmd = new ZgPaintCommand {
-            Kind = (byte)PaintCommandKind.ShaderEffect,
-            ChainsBackdrop = (byte)(chainsBackdrop ? 1 : 0),
+        // The eight params are a real array now; they used to occupy the colour, border-width,
+        // baseline and font-size slots, and the shader id was a float reinterpreted via @bitCast.
+        var fx = new ZgPaintShaderEffect {
+            Bounds = Xywh(ApplyOffset(bounds)),
+            ShaderId = shaderId,
+            ChainsBackdrop = chainsBackdrop ? 1u : 0u,
+            HasCacheKey = imageKey != 0 ? 1u : 0u,
+            CacheKey = imageKey,
         };
-        SetBounds(cmd: ref cmd, r: ApplyOffset(bounds));
-        cmd.ShaderId = shaderId;
-        if (imageKey != 0)
-        {
-            cmd.CacheKeyLo = (uint)(imageKey & 0xFFFFFFFF);
-            cmd.CacheKeyHi = (uint)((imageKey >> 32) & 0xFFFFFFFF);
-            cmd.HasCacheKey = 1;
-        }
-        cmd.ColorR = p0;
-        cmd.ColorG = p1;
-        cmd.ColorB = p2;
-        cmd.ColorA = p3;
-        cmd.BorderWidth = p4;
-        cmd.BaselineX = p5;
-        cmd.BaselineY = p6;
-        cmd.FontSize = p7;
-        Push(cmd: cmd, text: null, pixels: null);
+        fx.Params[0] = p0;
+        fx.Params[1] = p1;
+        fx.Params[2] = p2;
+        fx.Params[3] = p3;
+        fx.Params[4] = p4;
+        fx.Params[5] = p5;
+        fx.Params[6] = p6;
+        fx.Params[7] = p7;
+        Write(ZgPaintOp.ShaderEffect, fx);
     }
 
     // ── Text layout handle draw command ───────────────────────────────────────
@@ -678,14 +694,12 @@ public sealed unsafe class PaintList
     {
         if (handle == 0) return;
         CheckColor(color);
-        var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.TextLayout };
-        SetColor(cmd: ref cmd, c: ScaleAlpha(color));
-        cmd.BaselineX = x + _offsetX;
-        cmd.BaselineY = y + _offsetY;
-        cmd.CacheKeyLo = (uint)(handle & 0xFFFFFFFF);
-        cmd.CacheKeyHi = (uint)((handle >> 32) & 0xFFFFFFFF);
-        cmd.HasCacheKey = 1;
-        Push(cmd: cmd, text: null, pixels: null);
+        Write(ZgPaintOp.TextLayout, new ZgPaintTextLayout {
+            Layout = handle,
+            Color = Rgba(ScaleAlpha(color)),
+            DrawX = x + _offsetX,
+            DrawY = y + _offsetY,
+        });
     }
 
     // ── Glyph run draw command ────────────────────────────────────────────────
@@ -718,14 +732,14 @@ public sealed unsafe class PaintList
 
         _quadArrays.Add(quadArr);
 
-        var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.GlyphRun };
-        SetColor(cmd: ref cmd, c: ScaleAlpha(tint));
-        cmd.CacheKeyLo = (uint)(atlasHandle & 0xFFFFFFFF);
-        cmd.CacheKeyHi = (uint)((atlasHandle >> 32) & 0xFFFFFFFF);
-        cmd.HasCacheKey = 1;
-        cmd.TextLen = (uint)quads.Length;
-        fixed (ZgGlyphRunQuad* p = quadArr) cmd.TextPtr = (byte*)p; // POH: address stable after unfix
-        Push(cmd: cmd, text: null, pixels: null);
+        var run = new ZgPaintGlyphRun {
+            Atlas = atlasHandle,
+            Color = Rgba(ScaleAlpha(tint)),
+            QuadCount = (uint)quads.Length,
+        };
+        // POH: the address stays valid after the fixed block, and _quadArrays keeps it alive.
+        fixed (ZgGlyphRunQuad* q = quadArr) run.QuadsPtr = (byte*)q;
+        Write(ZgPaintOp.GlyphRun, run);
     }
 
     // ── Render texture API ────────────────────────────────────────────────────
@@ -739,22 +753,14 @@ public sealed unsafe class PaintList
     public void PushRenderTexture(ulong rtHandle)
     {
         _rtDepth++;
-        var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.RenderTextureBegin };
-        cmd.HasCacheKey = 1;
-        cmd.CacheKeyLo = (uint)(rtHandle & 0xFFFFFFFF);
-        cmd.CacheKeyHi = (uint)((rtHandle >> 32) & 0xFFFFFFFF);
-        Push(cmd: cmd, text: null, pixels: null);
+        Write(ZgPaintOp.RenderTextureBegin, new ZgPaintRenderTextureBegin { RtHandle = rtHandle });
     }
 
     /// <summary>Restore the target list to the state before the matching <see cref="PushRenderTexture" />.</summary>
     public void PopRenderTexture()
     {
         _rtDepth = Math.Max(val1: 0, val2: _rtDepth - 1);
-        Push(
-            cmd: new ZgPaintCommand { Kind = (byte)PaintCommandKind.RenderTextureEnd },
-            text: null,
-            pixels: null
-        );
+        Write(ZgPaintOp.RenderTextureEnd, new ZgPaintBare());
     }
 
     /// <summary>
@@ -765,12 +771,7 @@ public sealed unsafe class PaintList
     /// </summary>
     public void AddBlur(ulong srcRtHandle, float sigma)
     {
-        var cmd = new ZgPaintCommand { Kind = (byte)PaintCommandKind.Blur };
-        cmd.Radius = sigma;
-        cmd.HasCacheKey = 1;
-        cmd.CacheKeyLo = (uint)(srcRtHandle & 0xFFFFFFFF);
-        cmd.CacheKeyHi = (uint)((srcRtHandle >> 32) & 0xFFFFFFFF);
-        Push(cmd: cmd, text: null, pixels: null);
+        Write(ZgPaintOp.Blur, new ZgPaintBlur { SrcHandle = srcRtHandle, Sigma = sigma });
     }
 
     // ── Validation ────────────────────────────────────────────────────────────
@@ -819,7 +820,6 @@ public sealed unsafe class PaintList
     /// </summary>
     internal void PinAndCall(PinCallback callback)
     {
-        var cmds = CollectionsMarshal.AsSpan(_commands);
         var handles = _pinHandles;
         handles.Clear();
         try
@@ -831,7 +831,7 @@ public sealed unsafe class PaintList
             foreach ((int index, byte[] blob) in TextBlobs)
             {
                 fixed (byte* p = blob)
-                    cmds[index].TextPtr = p;
+                    PatchPointer(index, TextPtrOffset(RecordKind(index)), p);
             }
 
             foreach ((int index, byte[] blob, bool pinned) in PixelBlobs)
@@ -839,17 +839,17 @@ public sealed unsafe class PaintList
                 if (pinned)
                 {
                     fixed (byte* p = blob)
-                        cmds[index].PixelsPtr = p;
+                        PatchPointer(index, PixelsPtrOffset(RecordKind(index)), p);
                 }
                 else
                 {
                     var h = GCHandle.Alloc(value: blob, type: GCHandleType.Pinned);
                     handles.Add(h);
-                    cmds[index].PixelsPtr = (byte*)h.AddrOfPinnedObject();
+                    PatchPointer(index, PixelsPtrOffset(RecordKind(index)), (byte*)h.AddrOfPinnedObject());
                 }
             }
 
-            fixed (ZgPaintCommand* ptr = cmds) callback(commands: ptr, count: (uint)cmds.Length);
+            fixed (byte* ptr = _buffer) callback(stream: ptr, length: (nuint)_length);
         }
         finally
         {
@@ -866,8 +866,19 @@ public sealed unsafe class PaintList
     /// </summary>
     public void AppendFrom(PaintList other)
     {
-        int offset = _commands.Count;
-        _commands.AddRange(other._commands);
+        int offset = _offsets.Count;
+        // Records are position-independent, so appending is a byte copy plus re-based offsets.
+        if (_length + other._length > _buffer.Length)
+        {
+            int grown = Math.Max(val1: _buffer.Length, val2: 1);
+            while (grown < _length + other._length) grown *= 2;
+            Array.Resize(array: ref _buffer, newSize: grown);
+        }
+
+        other._buffer.AsSpan(start: 0, length: other._length)
+            .CopyTo(_buffer.AsSpan(_length));
+        foreach (int o in other._offsets) _offsets.Add(o + _length);
+        _length += other._length;
         // Offsetting preserves the ascending order FindTextBlob/FindPixelBlob binary-search over.
         foreach ((int index, byte[] blob) in other.TextBlobs)
             TextBlobs.Add((index + offset, blob));
@@ -884,13 +895,71 @@ public sealed unsafe class PaintList
 
     // `in`: the command is 112 bytes and every Add* site builds it on the stack — passing by
     // reference halves the per-command memcpy on a path that runs thousands of times per frame.
-    private void Push(in ZgPaintCommand cmd, byte[]? text, byte[]? pixels,
-        bool pixelsPinned = false)
+    /// <summary>
+    ///     Append one record, stamping its header from the struct's own size, and register any
+    ///     blobs it references. Returns the record's ordinal index.
+    /// </summary>
+    private int Write<T>(ZgPaintOp kind, in T record, byte[]? text = null, byte[]? pixels = null,
+        bool pixelsPinned = false) where T : unmanaged
     {
-        int index = _commands.Count;
-        _commands.Add(cmd);
+        int size = Unsafe.SizeOf<T>();
+        // The native decoder walks the stream by adding `size`, and rejects the whole frame's paint
+        // if a record is not a multiple of 8. The Zig side asserts the same at comptime.
+        Debug.Assert(size % 8 == 0, $"paint op {kind} is {size} bytes, not a multiple of 8");
+
+        if (_length + size > _buffer.Length)
+        {
+            int grown = _buffer.Length;
+            while (grown < _length + size) grown *= 2;
+            Array.Resize(array: ref _buffer, newSize: grown);
+        }
+
+        int index = _offsets.Count;
+        _offsets.Add(_length);
+        var span = _buffer.AsSpan(start: _length, length: size);
+        MemoryMarshal.Write(destination: span, value: in record);
+        var header = new ZgPaintOpHeader { Kind = (uint)kind, Size = (uint)size };
+        MemoryMarshal.Write(destination: span, value: in header); // header is at offset 0
+        _length += size;
+
         if (text is not null) TextBlobs.Add((index, text));
         if (pixels is not null) PixelBlobs.Add((index, pixels, pixelsPinned));
+        return index;
+    }
+
+    /// <summary>
+    ///     Byte offset, within a record of this kind, of the pointer field the TEXT blob list feeds.
+    ///     Pointers are patched at submit rather than stored at Add, because a non-POH blob is only
+    ///     pinned for the duration of the call.
+    /// </summary>
+    internal static int TextPtrFieldOffset(ZgPaintOp kind) => TextPtrOffset(kind);
+
+    internal static int PixelsPtrFieldOffset(ZgPaintOp kind) => PixelsPtrOffset(kind);
+
+    private static int TextPtrOffset(ZgPaintOp kind) => kind switch
+    {
+        ZgPaintOp.Text => (int)Marshal.OffsetOf<ZgPaintText>(nameof(ZgPaintText.TextPtr)),
+        ZgPaintOp.GlyphRun => (int)Marshal.OffsetOf<ZgPaintGlyphRun>(nameof(ZgPaintGlyphRun.QuadsPtr)),
+        _ => -1,
+    };
+
+    /// <summary>As <see cref="TextPtrOffset" />, for the PIXELS blob list.</summary>
+    private static int PixelsPtrOffset(ZgPaintOp kind) => kind switch
+    {
+        ZgPaintOp.Image => (int)Marshal.OffsetOf<ZgPaintImage>(nameof(ZgPaintImage.PixelsPtr)),
+        ZgPaintOp.Polygon => (int)Marshal.OffsetOf<ZgPaintPolygon>(nameof(ZgPaintPolygon.PointsPtr)),
+        // A text run's optional font-family name rides the pixels list.
+        ZgPaintOp.Text => (int)Marshal.OffsetOf<ZgPaintText>(nameof(ZgPaintText.FamilyPtr)),
+        _ => -1,
+    };
+
+    private void PatchPointer(int recordIndex, int fieldOffset, byte* value)
+    {
+        if (fieldOffset < 0) return;
+        MemoryMarshal.Write(
+            destination: _buffer.AsSpan(start: _offsets[recordIndex] + fieldOffset, length: sizeof(nint)),
+            value: in Unsafe.AsRef<nint>(&value)
+        );
     }
 
     private static byte[] EncodeUtf8(string text)
@@ -922,21 +991,10 @@ public sealed unsafe class PaintList
         return bytes;
     }
 
-    private static void SetBounds(ref ZgPaintCommand cmd, Rect r)
-    {
-        cmd.RectX = r.X;
-        cmd.RectY = r.Y;
-        cmd.RectW = r.Width;
-        cmd.RectH = r.Height;
-    }
+    private static ZgXywh Xywh(Rect r) =>
+        new() { X = r.X, Y = r.Y, W = r.Width, H = r.Height };
 
-    private static void SetColor(ref ZgPaintCommand cmd, Color c)
-    {
-        cmd.ColorR = c.R;
-        cmd.ColorG = c.G;
-        cmd.ColorB = c.B;
-        cmd.ColorA = c.A;
-    }
+    private static ZgRgba Rgba(Color c) => new() { R = c.R, G = c.G, B = c.B, A = c.A };
 
-    internal delegate void PinCallback(ZgPaintCommand* commands, uint count);
+    internal delegate void PinCallback(byte* stream, nuint length);
 }

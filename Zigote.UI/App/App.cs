@@ -1544,10 +1544,9 @@ public partial class App : IDisposable
         _lastPaintExplosionLogMs = now;
 
         Span<int> counts = stackalloc int[32];
-        var commands = list.DebugCommands;
-        for (int i = 0; i < commands.Count; i++)
+        for (int i = 0; i < list.RecordCount; i++)
         {
-            byte kind = commands[i].Kind;
+            int kind = (int)list.RecordKind(i);
             if (kind < counts.Length) counts[kind]++;
         }
 
@@ -1557,7 +1556,7 @@ public partial class App : IDisposable
         for (int k = 0; k < counts.Length; k++)
         {
             if (counts[k] == 0) continue;
-            sb.Append(' ').Append((PaintCommandKind)k).Append('=')
+            sb.Append(' ').Append((ZgPaintOp)k).Append('=')
                 .Append(counts[k]);
         }
 

@@ -13,12 +13,16 @@ namespace Zigote.Tests;
 /// </summary>
 public class AbiLayoutTests
 {
+    // The tests that pinned ZgPaintCommand's 112-byte layout and its overlapping aliases are gone
+    // with the struct: commands cross as a tagged stream of per-kind records now, and
+    // AbiManifestTests checks every wire type against the layout the Zig compiler actually
+    // produced — a stronger guarantee than the hand-copied literals these used.
+
     private static int Offset<T>(string field) => (int)Marshal.OffsetOf<T>(field);
 
     [Fact]
     public void StructSizes_MatchZigContract()
     {
-        Assert.Equal(expected: 112, actual: Marshal.SizeOf<ZgPaintCommand>());
         // 44 bytes: 32-byte header + text_off/text_len + window_id. The text_input/text_editing
         // UTF-8 payload lives out of band in the engine poll buffer (see ZgEvent), not inline.
         Assert.Equal(expected: 44, actual: Marshal.SizeOf<ZgEvent>());
@@ -40,96 +44,6 @@ public class AbiLayoutTests
         Assert.Equal(expected: 132, actual: Offset<ZgGpuInfo>(nameof(ZgGpuInfo.DeviceType)));
         Assert.Equal(expected: 136, actual: Offset<ZgGpuInfo>(nameof(ZgGpuInfo.VendorId)));
         Assert.Equal(expected: 140, actual: Offset<ZgGpuInfo>(nameof(ZgGpuInfo.DeviceId)));
-    }
-
-    [Fact]
-    public void PaintCommand_CoreFieldOffsets()
-    {
-        Assert.Equal(expected: 0, actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.Kind)));
-        Assert.Equal(expected: 1, actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.FontStyle)));
-        Assert.Equal(
-            expected: 2,
-            actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.FontWeight))
-        );
-        Assert.Equal(
-            expected: 4,
-            actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.HasCacheKey))
-        );
-        Assert.Equal(expected: 24, actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.RectX)));
-        Assert.Equal(expected: 40, actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.ColorR)));
-        Assert.Equal(expected: 72, actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.FontSize)));
-        Assert.Equal(
-            expected: 76,
-            actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.LineHeight))
-        );
-        Assert.Equal(expected: 104, actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.TextLen)));
-        Assert.Equal(
-            expected: 108,
-            actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.PixelsLen))
-        );
-    }
-
-    [Fact]
-    public void PaintCommand_OverlappingAliases_ShareExactOffsets()
-    {
-        // Radius / U0 / ShaderId are three views of the same 4 bytes at offset 56.
-        Assert.Equal(expected: 56, actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.Radius)));
-        Assert.Equal(expected: 56, actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.U0)));
-        Assert.Equal(expected: 56, actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.ShaderId)));
-
-        // BorderWidth / V0 at 60; BaselineX / U1 at 64; BaselineY / V1 at 68.
-        Assert.Equal(
-            expected: 60,
-            actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.BorderWidth))
-        );
-        Assert.Equal(expected: 60, actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.V0)));
-        Assert.Equal(
-            expected: 64,
-            actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.BaselineX))
-        );
-        Assert.Equal(expected: 64, actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.U1)));
-        Assert.Equal(
-            expected: 68,
-            actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.BaselineY))
-        );
-        Assert.Equal(expected: 68, actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.V1)));
-
-        // Text shadow rides in slots Text never uses: rect = color, radius / border width =
-        // offset, img_pixel_w = blur.
-        Assert.Equal(expected: 24, actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.ShadowR)));
-        Assert.Equal(expected: 28, actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.ShadowG)));
-        Assert.Equal(expected: 32, actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.ShadowB)));
-        Assert.Equal(expected: 36, actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.ShadowA)));
-        Assert.Equal(
-            expected: 56,
-            actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.ShadowOffsetX))
-        );
-        Assert.Equal(
-            expected: 60,
-            actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.ShadowOffsetY))
-        );
-        Assert.Equal(
-            expected: 88,
-            actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.ShadowBlur))
-        );
-    }
-
-    [Fact]
-    public void PaintCommand_PointerFields_Are8ByteAligned()
-    {
-        Assert.Equal(expected: 8, actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.TextPtr)));
-        Assert.Equal(
-            expected: 16,
-            actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.PixelsPtr))
-        );
-        Assert.Equal(
-            expected: 96,
-            actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.CacheKeyLo))
-        );
-        Assert.Equal(
-            expected: 100,
-            actual: Offset<ZgPaintCommand>(nameof(ZgPaintCommand.CacheKeyHi))
-        );
     }
 
     [Fact]
@@ -157,7 +71,7 @@ public class AbiLayoutTests
     public void AbiInfo_FieldOffsets()
     {
         Assert.Equal(expected: 0, actual: Offset<ZgAbiInfo>(nameof(ZgAbiInfo.AbiVersion)));
-        Assert.Equal(expected: 4, actual: Offset<ZgAbiInfo>(nameof(ZgAbiInfo.PaintCommandSize)));
+        Assert.Equal(expected: 4, actual: Offset<ZgAbiInfo>(nameof(ZgAbiInfo.PaintOpHeaderSize)));
         Assert.Equal(expected: 8, actual: Offset<ZgAbiInfo>(nameof(ZgAbiInfo.EventSize)));
         Assert.Equal(expected: 12, actual: Offset<ZgAbiInfo>(nameof(ZgAbiInfo.HandleSize)));
         Assert.Equal(

@@ -1,3 +1,4 @@
+using PaintCommandKind = Zigote.Core.Native.ZgPaintOp;
 using Xunit;
 using Zigote.Core;
 using Zigote.Core.Events;
@@ -368,7 +369,7 @@ public class TextEditingTests
         var paint = new PaintList();
         ml.Paint(paint);
         int textCommands =
-            paint.DebugCommands.Count(cmd => cmd.Kind == (byte)PaintCommandKind.Text);
+            paint.DebugCommands.Count(cmd => cmd.Kind == PaintCommandKind.Text);
         Assert.True(
             condition: textCommands >= 3,
             userMessage: $"expected one draw per visible line, got {textCommands}"
@@ -384,7 +385,7 @@ public class TextEditingTests
         var paint = new PaintList();
         editor.Paint(paint);
 
-        int textCommands = paint.DebugCommands.Count(c => c.Kind == (byte)PaintCommandKind.Text);
+        int textCommands = paint.DebugCommands.Count(c => c.Kind == PaintCommandKind.Text);
         Assert.True(
             condition: textCommands >= 3,
             userMessage: $"expected wrapped row draws plus gutter, got {textCommands}"

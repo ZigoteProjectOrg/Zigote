@@ -47,3 +47,4 @@ current.
 | [`notes/devtools-widget-tree.md`](notes/devtools-widget-tree.md) | The design behind the DevTools widget-tree inspector: virtualised rows, rainbow guidelines, live selected-info. |
 | [`notes/mobile-port.md`](notes/mobile-port.md) | The iOS/Android bring-up journal — walls hit and how each fell. |
 | [`notes/mobile-port-android.md`](notes/mobile-port-android.md) | The Android implementation plan in full detail: libc recipe, SDL patch, the .NET head. |
+| [`notes/cli-roadmap.md`](notes/cli-roadmap.md) | The `zigote` CLI design: shipping an SDK instead of a checkout path, one `run` verb, `build`, and what is deliberately not built. |
