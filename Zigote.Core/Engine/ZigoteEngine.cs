@@ -2293,8 +2293,10 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public void SubmitPaintCommands(PaintList paint)
     {
         EnsureReady();
+        // window: 0 = the main window. The lambda must return void, so the status is discarded
+        // here; a submit failure is already logged natively and surfaces as a blank frame.
         _submitPaintCb ??= (ptr, count) =>
-            NativeEngine.SubmitPaintCommands(commands: ptr, count: count);
+            _ = NativeEngine.SubmitPaintCommands(window: 0, commands: ptr, count: count);
         paint.PinAndCall(_submitPaintCb);
     }
 
@@ -2305,7 +2307,8 @@ public sealed unsafe class ZigoteEngine : IDisposable
     {
         EnsureReady();
         _submitOverlayCb ??=
-            (ptr, count) => NativeEngine.SubmitOverlayCommands(
+            (ptr, count) => _ = NativeEngine.SubmitOverlayCommands(
+                window: 0,
                 commands: ptr,
                 count: count
             );
@@ -2471,6 +2474,7 @@ public sealed unsafe class ZigoteEngine : IDisposable
     {
         EnsureReady();
         NativeEngine.FrameBegin(
+            window: 0,
             sceneW: sceneW,
             sceneH: sceneH,
             scale: Scale,
@@ -2485,8 +2489,8 @@ public sealed unsafe class ZigoteEngine : IDisposable
     public void FrameEnd()
     {
         EnsureReady();
-        var result = NativeEngine.FrameEnd();
-        if (result != ZgResult.Ok)
+        var result = NativeEngine.FrameEnd(window: 0);
+        if (result != ZgStatus.Ok)
             throw new InvalidOperationException("zigote_frame_end failed.");
     }
 

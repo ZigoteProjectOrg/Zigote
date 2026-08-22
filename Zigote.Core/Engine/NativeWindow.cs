@@ -72,9 +72,11 @@ public sealed unsafe class NativeWindow : IDisposable
     public void SubmitPaint(PaintList paint)
     {
         if (_window == 0) return;
+        // Secondary windows go through the SAME frame API as the main window now, selected by
+        // the window handle — they used to have their own submit/render trio.
         _submitCb ??= (ptr, count) =>
-            NativeEngine.WindowSubmitPaint(
-                windowHandle: _window,
+            _ = NativeEngine.SubmitPaintCommands(
+                window: _window,
                 commands: ptr,
                 count: count
             );
@@ -86,8 +88,8 @@ public sealed unsafe class NativeWindow : IDisposable
     {
         if (_window == 0) return;
         _submitOverlayCb ??= (ptr, count) =>
-            NativeEngine.WindowSubmitOverlay(
-                windowHandle: _window,
+            _ = NativeEngine.SubmitOverlayCommands(
+                window: _window,
                 commands: ptr,
                 count: count
             );
@@ -98,7 +100,15 @@ public sealed unsafe class NativeWindow : IDisposable
     public void Render()
     {
         if (_window == 0) return;
-        NativeEngine.WindowRender(windowHandle: _window, scale: Scale);
+        // FrameBegin carries the scale this window rasterises at; FrameEnd draws and presents.
+        NativeEngine.FrameBegin(
+            window: _window,
+            sceneW: 0,
+            sceneH: 0,
+            scale: Scale,
+            deltaTime: 0f
+        );
+        NativeEngine.FrameEnd(window: _window);
     }
 
     /// <summary>Raise the window above others and give it input focus.</summary>

@@ -12,7 +12,11 @@ public static class RendererAbiInfo
     ///     Throws <see cref="InvalidOperationException" /> on any mismatch.
     ///     Called automatically from <see cref="Engine.ZigoteEngine.Initialize" />.
     /// </summary>
-    public const uint ExpectedAbiVersion = 9;
+    // V2 restarts the numbering at 100. Version 9 was the last of the pre-V2 ABI: since then the
+    // engine handle left every signature, every fallible export returns ZgStatus, node/window
+    // handles became generational, and the secondary-window frame trio folded into the main frame
+    // API. None of that is a version-9 host can talk to. See Zigote.Engine/docs/v2-design.md.
+    public const uint ExpectedAbiVersion = 100;
 
     public static unsafe void Validate(ZgAbiInfo info)
     {
