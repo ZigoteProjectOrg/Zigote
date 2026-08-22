@@ -37,6 +37,7 @@ public static class Doctor
         var dotnetSdk = Task.Run(CheckDotnetSdk);
         var workloads = Task.Run(CheckWorkloads);
         var zig = Task.Run(CheckZig);
+        var rust = Task.Run(CheckRust);
 
         string? engineRoot = CommonVerb.FindEngineRoot(start: options.Directory, explicitPath: options.Engine);
 
@@ -45,6 +46,7 @@ public static class Doctor
             CheckCheckout(engineRoot),
             CheckNativeEngine(engineRoot),
             zig.Result,
+            rust.Result,
         };
         checks.AddRange(workloads.Result);
         checks.Add(CheckJdk());
@@ -136,6 +138,70 @@ public static class Doctor
                 Title: "Zig toolchain: not on PATH (only needed to rebuild the engine by hand; dotnet build drives it otherwise)"
             )
             : new Check(Status: Status.Ok, Title: $"Zig toolchain ({version})");
+    }
+
+    /// <summary>
+    ///     Rust builds native/zigote-svg (resvg behind a five-function C ABI), which SvgPicture
+    ///     P/Invokes. Unlike Zig it is a FAIL rather than an Info: `dotnet build` errors without it,
+    ///     because a missing cargo used to be a warning nobody read and the four SvgAssetTests then
+    ///     failed on every machine without Rust, looking like broken tests rather than a missing
+    ///     toolchain.
+    /// </summary>
+    private static Check CheckRust()
+    {
+        string? version = Capture(file: "cargo", arguments: ["--version"])?.Trim();
+        if (version is null)
+        {
+            return new Check(
+                Status: Status.Fail,
+                Title: "Rust toolchain: not on PATH",
+                Fix: "Install it from https://rustup.rs — rustup picks up the pinned toolchain in "
+                     + "native/zigote-svg/rust-toolchain.toml automatically."
+            );
+        }
+
+        string? pinned = PinnedRustVersion();
+        if (pinned is not null && !version.Contains(value: pinned, comparisonType: StringComparison.Ordinal))
+        {
+            return new Check(
+                Status: Status.Info,
+                Title: $"Rust toolchain ({version}) — pinned is {pinned}",
+                Fix: "rustup honours native/zigote-svg/rust-toolchain.toml; a distro-packaged cargo "
+                     + "ignores it. Install rustup to build with the pinned compiler."
+            );
+        }
+
+        return new Check(Status: Status.Ok, Title: $"Rust toolchain ({version})");
+    }
+
+    /// <summary>The channel from native/zigote-svg/rust-toolchain.toml, or null.</summary>
+    private static string? PinnedRustVersion()
+    {
+        foreach (string dir in new[] { AppContext.BaseDirectory, Directory.GetCurrentDirectory() })
+        {
+            for (var d = new DirectoryInfo(dir); d is not null; d = d.Parent)
+            {
+                string candidate = Path.Combine(
+                    path1: d.FullName,
+                    path2: "native",
+                    path3: "zigote-svg",
+                    path4: "rust-toolchain.toml"
+                );
+                if (!File.Exists(candidate)) continue;
+
+                foreach (string line in File.ReadAllLines(candidate))
+                {
+                    string t = line.Trim();
+                    if (!t.StartsWith("channel", StringComparison.Ordinal)) continue;
+
+                    int q = t.IndexOf('"');
+                    int q2 = q >= 0 ? t.IndexOf(value: '"', startIndex: q + 1) : -1;
+                    if (q >= 0 && q2 > q) return t.Substring(startIndex: q + 1, length: q2 - q - 1);
+                }
+            }
+        }
+
+        return null;
     }
 
     private static List<Check> CheckWorkloads()

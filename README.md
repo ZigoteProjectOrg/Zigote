@@ -10,6 +10,7 @@ underneath, no XAML.
 
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
 [![Zig 0.16](https://img.shields.io/badge/Zig-0.16.0-F7A41D)](https://ziglang.org/)
+[![Rust 1.97](https://img.shields.io/badge/Rust-1.97.1-CE422B)](https://www.rust-lang.org/)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20Windows-informational)](#platforms)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -46,7 +47,12 @@ See [Games, 3D and the editor](#games-3d-and-the-editor).
 ## Quick start
 
 **You need:** the [.NET 10 SDK](https://dotnet.microsoft.com/) (`global.json` pins 10.0.110),
-[Zig 0.16.0](https://ziglang.org/download/) on `PATH`, and `git`.
+[Zig 0.16.0](https://ziglang.org/download/) on `PATH` (pinned in `Zigote.Engine/.zigversion`),
+[Rust](https://rustup.rs) (pinned in `native/zigote-svg/rust-toolchain.toml` — rustup selects it
+automatically), and `git`.
+
+`dotnet build` drives both native builds itself; you do not run `zig` or `cargo` by hand. Run
+`zigote doctor` if a build complains about a toolchain.
 
 ```sh
 git clone --recurse-submodules https://github.com/ZigoteProjectOrg/Zigote.git
