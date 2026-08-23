@@ -285,7 +285,12 @@
     </PropertyGroup>
   </Target>
 
+  <!-- Packing the MANAGED packages must not drag in a native cross-compile: the whole point of
+       shipping Zigote.Engine.runtime.<rid> packages is that a consumer (and a managed pack on CI)
+       needs no Zig toolchain. build/pack.sh sets this for the managed half; the runtime package
+       project leaves it off, because building the lib is the one thing it does. -->
   <Target Name="BuildZigEngine" BeforeTargets="BeforeBuild"
+          Condition="'$(ZigoteManagedPack)' != 'true'"
           Inputs="@(ZigSourceFiles)" Outputs="$(ZigOutDir)\$(ZigNativeLib)">
     <Message Importance="high" Text="Zigote native: zig build $(ZigBuildStep) -Doptimize=$(ZigOptimize) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigCpuArg) $(ZigStripArg) $(ZigSysrootArg)" />
     <Exec Command="zig build $(ZigBuildStep) -Doptimize=$(ZigOptimize) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigCpuArg) $(ZigStripArg) $(ZigSysrootArg)"
@@ -304,11 +309,17 @@
     <!-- No Exists() guard: these are produced by BuildZigEngine (which runs BeforeBuild), so the file
          is present by the time MSBuild copies content. An Exists() check is evaluated at project load
          — before the build — and would drop the lib on a fresh/target-switched build. -->
-    <Content Include="$(ZigOutDir)\$(ZigNativeLib)" Condition="'$(ZigStaticNative)' != 'true'">
+    <!-- Pack=false throughout: inside a package the native lib arrives from
+         Zigote.Engine.runtime.<rid> under runtimes/<rid>/native/, which is the layout the .NET
+         host actually probes. Packing it as content would ship the BUILD machine's architecture to
+         every consumer — an artifact that restores everywhere and loads on one machine. -->
+    <Content Include="$(ZigOutDir)\$(ZigNativeLib)"
+             Condition="'$(ZigStaticNative)' != 'true' And '$(ZigoteNativeContent)' != 'false'" Pack="false">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>$(ZigNativeLib)</Link>
     </Content>
-    <Content Include="$(ZigOutBin)\wgpu_native.dll" Condition="'$(ZigTargetOS)' == 'windows'">
+    <Content Include="$(ZigOutBin)\wgpu_native.dll"
+             Condition="'$(ZigTargetOS)' == 'windows' And '$(ZigoteNativeContent)' != 'false'" Pack="false">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>wgpu_native.dll</Link>
     </Content>

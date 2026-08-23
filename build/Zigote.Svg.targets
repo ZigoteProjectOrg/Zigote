@@ -79,7 +79,11 @@
        build being broken. -->
   <Target Name="CollectSvgNative" AfterTargets="BuildSvgNative" BeforeTargets="AssignTargetPaths">
     <ItemGroup>
-      <Content Include="$(_SvgOutDir)\$(_SvgLibName)" Condition="Exists('$(_SvgOutDir)\$(_SvgLibName)')">
+      <!-- Pack=false: @(Content) is packed into contentFiles by default, and this is a native
+           library built for the machine doing the packing — shipping it inside Zigote.UI would hand
+           every consumer one host's binary. It travels in Zigote.Engine.runtime.<rid> instead,
+           beside libzigote, where the RID is part of the identity. -->
+      <Content Include="$(_SvgOutDir)\$(_SvgLibName)" Condition="Exists('$(_SvgOutDir)\$(_SvgLibName)') And '$(ZigoteNativeContent)' != 'false'" Pack="false">
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         <Link>$(_SvgLibName)</Link>
       </Content>

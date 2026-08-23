@@ -1,0 +1,33 @@
+<Project>
+  <!--
+    Shipped inside Zigote.Engine.runtime.ios-arm64 — the DEVICE package, and the reason it needs a
+    targets file at all.
+
+    An iOS device build cannot load a dylib from the app sandbox: AMFI rejects it as an invalid code
+    signature. So the engine ships as static archives and is linked INTO the app binary, and
+    ForceLoad is not optional — every zigote_* export is reached through runtime DllImport
+    resolution, so the linker sees no reference to any of them and would drop the whole archive,
+    producing an app that builds cleanly and dies at the first P/Invoke.
+
+    The simulator package needs none of this: it keeps the dylib, which the .NET host resolves out
+    of runtimes/<rid>/native/ like any other native asset.
+  -->
+  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'ios-arm64'">
+    <NativeReference Include="$(MSBuildThisFileDirectory)..\runtimes\ios-arm64\native\libzigote.a">
+      <Kind>Static</Kind>
+      <IsCxx>True</IsCxx>
+      <ForceLoad>True</ForceLoad>
+      <Frameworks>UIKit Metal QuartzCore Foundation CoreGraphics CoreVideo CoreMotion GameController CoreAudio AudioToolbox AVFoundation</Frameworks>
+      <WeakFrameworks>CoreHaptics</WeakFrameworks>
+      <LinkerFlags>-liconv -Wl,-export_dynamic</LinkerFlags>
+    </NativeReference>
+    <!-- The dependency archives a static archive does not absorb (SDL, wgpu, freetype, …). Pulled
+         normally: the engine's objects reference them, so the linker keeps what it needs. -->
+    <_ZigoteDepArchive Include="$(MSBuildThisFileDirectory)..\runtimes\ios-arm64\native\*.a"
+                       Exclude="$(MSBuildThisFileDirectory)..\runtimes\ios-arm64\native\libzigote.a"/>
+    <NativeReference Include="@(_ZigoteDepArchive)">
+      <Kind>Static</Kind>
+      <IsCxx>True</IsCxx>
+    </NativeReference>
+  </ItemGroup>
+</Project>

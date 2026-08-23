@@ -23,7 +23,10 @@ public static class RendererAbiInfo
         if (info.AbiVersion != ExpectedAbiVersion)
         {
             throw new InvalidOperationException(
-                $"ABI version mismatch: C# expects version {ExpectedAbiVersion}, native reports {info.AbiVersion}. Rebuild libzigote."
+                $"ABI version mismatch: the managed Zigote expects engine ABI {ExpectedAbiVersion}, "
+                + $"the loaded libzigote reports {info.AbiVersion}. The two halves ship as one "
+                + "version: check that Zigote.Engine.runtime.<rid> and the Zigote.* packages are the "
+                + "same $(ZigoteSdkVersion) (in a checkout: rebuild the engine)."
             );
         }
 

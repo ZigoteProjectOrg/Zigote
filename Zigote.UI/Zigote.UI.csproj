@@ -70,4 +70,26 @@
         <EmbeddedResource Include="Fonts\Noto_Emoji\OFL.txt" LogicalName="Zigote.UI.Fonts.NotoEmoji.OFL"/>
         <EmbeddedResource Include="Fonts\MaterialIcons\LICENSE.txt" LogicalName="Zigote.UI.Fonts.MaterialIcons.LICENSE"/>
     </ItemGroup>
+    <!-- The AOT gate travels with the package. In a checkout an app imports build/Zigote.Aot.targets
+         itself; an app built from the SDK has no checkout to import from, and without the rooting
+         that file does, an AOT publish strips the reflection metadata the widget inspector and the
+         titlebar hit-test depend on — a build that succeeds and an app whose window controls stop
+         reacting. Inert unless -p:ZigoteAot=true. -->
+    <ItemGroup Condition="'$(IsPackable)' == 'true'">
+        <None Include="..\build\Zigote.Aot.targets" Pack="true" PackagePath="build\Zigote.UI.targets"/>
+    </ItemGroup>
+
+    <!-- In a PackageReference world the same fonts have to reach a consumer's output too, and
+         @(Content)+CopyToOutputDirectory only flows through a ProjectReference. contentFiles with
+         copyToOutput is the package-shaped equivalent — %(Link) is already the flattened Fonts/
+         name each file must land under, so the two paths cannot drift. Without this an app
+         restored from NuGet starts and dies: the engine cannot initialize with no fonts. -->
+    <ItemGroup Condition="'$(IsPackable)' == 'true'">
+        <Content Update="Fonts\**">
+            <Pack>true</Pack>
+            <PackagePath>contentFiles\any\any\%(Link)</PackagePath>
+            <PackageCopyToOutput>true</PackageCopyToOutput>
+        </Content>
+    </ItemGroup>
+
 </Project>

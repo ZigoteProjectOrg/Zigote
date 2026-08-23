@@ -1,0 +1,11 @@
+<Project>
+  <!--
+    Auto-imported by any project referencing Zigote.iOS.Support. The fonts land under Fonts/ inside
+    the bundle, which is where App.cs probes for them (AppContext.BaseDirectory is the bundle root
+    on iOS) — the same layout the desktop output has, so nothing above this line has to know which
+    platform it is on.
+  -->
+  <ItemGroup Condition="'$(ZigoteIosSupport)' != 'false'">
+    <BundleResource Include="$(MSBuildThisFileDirectory)..\fonts\*.ttf" Link="Fonts\%(Filename)%(Extension)"/>
+  </ItemGroup>
+</Project>

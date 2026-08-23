@@ -1,0 +1,23 @@
+<Project>
+  <!--
+    Auto-imported by any project that references Zigote.Android.Support. Everything here used to sit
+    in the scaffolded head's csproj, pointing at a checkout; it is the same content, sourced from the
+    package instead, so an app that restores its SDK builds for a phone with no engine sources on the
+    machine at all.
+  -->
+
+  <!-- The hot-reload switch (-p:ZigoteHotReload=true), verbatim from the engine's own build, so a
+       scaffolded head cannot drift from it. -->
+  <Import Project="$(MSBuildThisFileDirectory)Zigote.Android.HotReload.targets"/>
+
+  <ItemGroup Condition="'$(ZigoteAndroidSupport)' != 'false'">
+    <!-- SDL's Java half, vendored at the tag whose native version SDLActivity checks at startup,
+         plus the activity that points SDL at libzigote.so and zigote_android_main. All of SDL's
+         JNI-registered classes must reach the dex or the first JNI lookup throws. -->
+    <AndroidJavaSource Include="$(MSBuildThisFileDirectory)..\java\**\*.java">
+      <Bind>false</Bind>
+    </AndroidJavaSource>
+    <!-- Fonts as APK assets. Without them the engine cannot initialize at all. -->
+    <AndroidAsset Include="$(MSBuildThisFileDirectory)..\fonts\*.ttf" Link="Fonts\%(Filename)%(Extension)"/>
+  </ItemGroup>
+</Project>

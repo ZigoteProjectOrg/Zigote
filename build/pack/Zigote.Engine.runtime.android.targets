@@ -1,0 +1,26 @@
+<Project>
+  <!--
+    Shipped inside every Zigote.Engine.runtime.android-* package, as build/<id>.targets, so an
+    Android head that merely references the package gets the engine into the APK under the right
+    ABI folder. Doing this by hand is the classic Android failure: an arm64 .so filed under
+    x86_64 installs cleanly and dies at the first dlopen, on a device, never on the emulator that
+    built it.
+
+    The ABI is derived from the package's own RID, which cannot disagree with the binary beside it.
+  -->
+  <PropertyGroup>
+    <_ZigoteRuntimeRid>$(MSBuildThisFileName.Replace('Zigote.Engine.runtime.',''))</_ZigoteRuntimeRid>
+    <_ZigoteRuntimeAbi Condition="'$(_ZigoteRuntimeRid)' == 'android-arm64'">arm64-v8a</_ZigoteRuntimeAbi>
+    <_ZigoteRuntimeAbi Condition="'$(_ZigoteRuntimeRid)' == 'android-x64'">x86_64</_ZigoteRuntimeAbi>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(_ZigoteRuntimeAbi)' != ''">
+    <AndroidNativeLibrary Include="$(MSBuildThisFileDirectory)..\runtimes\$(_ZigoteRuntimeRid)\native\libzigote.so">
+      <Abi>$(_ZigoteRuntimeAbi)</Abi>
+    </AndroidNativeLibrary>
+    <AndroidNativeLibrary Include="$(MSBuildThisFileDirectory)..\runtimes\$(_ZigoteRuntimeRid)\native\libzigote_svg.so"
+                          Condition="Exists('$(MSBuildThisFileDirectory)..\runtimes\$(_ZigoteRuntimeRid)\native\libzigote_svg.so')">
+      <Abi>$(_ZigoteRuntimeAbi)</Abi>
+    </AndroidNativeLibrary>
+  </ItemGroup>
+</Project>

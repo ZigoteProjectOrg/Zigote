@@ -8,4 +8,7 @@
         <LangVersion Condition="'$(MSBuildProjectExtension)' == '.csproj'">14.0</LangVersion>
         <LangVersion Condition="'$(MSBuildProjectExtension)' == '.fsproj'">10.0</LangVersion>
     </PropertyGroup>
+
+    <!-- Package identity and one version for everything that ships (build/pack.sh). -->
+    <Import Project="$(MSBuildThisFileDirectory)build/Zigote.Pack.props"/>
 </Project>

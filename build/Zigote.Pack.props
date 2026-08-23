@@ -1,0 +1,63 @@
+<Project>
+  <!--
+    Package metadata for everything this repo ships to NuGet.
+
+    The point of packing at all is the answer to "what is my app built against". Before this, an app
+    referenced whatever checkout happened to sit next door — including someone's half-finished
+    branch — and CI had to reproduce a directory layout instead of restoring a version. So every
+    package here carries ONE version, $(ZigoteVersion), and that string is what `zigote create`
+    writes into a generated project.
+
+    Nothing is packable by default: this repo is mostly apps, galleries, tests and benchmarks, and a
+    package for any of those is noise. build/pack.sh names the projects that ship and asks
+    for IsPackable=true on them. Opting in from a csproj works the same way.
+  -->
+  <PropertyGroup>
+    <!-- One version for the whole SDK, CLI included (Zigote.Cli reads it via $(ZigoteVersion) too),
+         so the version the CLI prints and the packages a generated app restores cannot disagree.
+         The base number lives in build/version.txt — one file to edit for a release, and one file
+         for CI to read; $(ZigoteVersionSuffix) adds a prerelease tag (0.2.0-rc.1) without touching
+         it. Override the whole thing with -p:ZigoteVersion=… for a one-off build. -->
+    <ZigoteVersionBase Condition="'$(ZigoteVersionBase)' == ''">$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)version.txt').Trim())</ZigoteVersionBase>
+    <ZigoteVersion Condition="'$(ZigoteVersion)' == '' And '$(ZigoteVersionSuffix)' != ''">$(ZigoteVersionBase)-$(ZigoteVersionSuffix)</ZigoteVersion>
+    <ZigoteVersion Condition="'$(ZigoteVersion)' == ''">$(ZigoteVersionBase)</ZigoteVersion>
+    <Version>$(ZigoteVersion)</Version>
+
+    <!--
+      Provenance, on every assembly and every package.
+
+      A published SDK has to answer "which sources is this, exactly" long after the branch moved on:
+      the commit id goes into InformationalVersion and the .nuspec, SourceLink puts the repository
+      and commit into the PDB so a debugger can fetch the matching sources, and a deterministic
+      build makes the same inputs produce byte-identical outputs — which is what makes a checksum
+      worth publishing at all. Set SourceRevisionId (CI does this from the checkout) to stamp it.
+    -->
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(ContinuousIntegrationBuild)' == '' And '$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <RepositoryType>git</RepositoryType>
+
+    <IsPackable Condition="'$(IsPackable)' == ''">false</IsPackable>
+    <!-- Whether the native libs are copied into the output as @(Content). Off while packing the
+         managed half (nothing to copy — the native build is skipped), and off in the runtime package
+         project, where the SAME files are the package payload: a Content item marked Pack=false puts
+         its path on NuGet's exclusion list, which then silently drops the payload and packs an empty
+         nupkg (NU5017). -->
+    <ZigoteNativeContent Condition="'$(ZigoteNativeContent)' == '' And '$(ZigoteManagedPack)' == 'true'">false</ZigoteNativeContent>
+    <PackageOutputPath Condition="'$(PackageOutputPath)' == ''">$(MSBuildThisFileDirectory)..\artifacts\packages</PackageOutputPath>
+
+    <Authors>Zigote</Authors>
+    <Company>Zigote</Company>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/zigote</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/zigote</RepositoryUrl>
+    <PackageTags>zigote;ui;gamedev;cross-platform</PackageTags>
+    <!-- Symbols in a separate .snupkg: a stack trace from someone else's machine is worth more than
+         the download it costs, and embedding them would double every package. -->
+    <IncludeSymbols Condition="'$(IsPackable)' == 'true'">true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <!-- The repo is one product; a per-project description would be nine copies of this sentence. -->
+    <Description Condition="'$(Description)' == ''">Zigote — a C# UI and game framework over a Zig/wgpu engine.</Description>
+  </PropertyGroup>
+</Project>

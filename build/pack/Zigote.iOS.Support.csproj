@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      What an iOS bundle cannot inherit: the fonts.
+
+      On desktop the fonts reach an app as Content flowing through the project graph, and in a
+      package as contentFiles copied to the output. The iOS resource pipeline does neither — a
+      bundle takes @(BundleResource) and nothing else — so an app restored from NuGet would build,
+      install, and die on the first frame with no fonts to open. The .targets in this package adds
+      them, which is the whole configuration an iOS head needs from it.
+    -->
+    <PropertyGroup>
+        <TargetFramework>netstandard2.0</TargetFramework>
+        <IncludeBuildOutput>false</IncludeBuildOutput>
+        <IncludeSymbols>false</IncludeSymbols>
+        <NoWarn>$(NoWarn);NU5128</NoWarn>
+        <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+        <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
+
+        <PackageId>Zigote.iOS.Support</PackageId>
+        <Description>The bundled fonts, as iOS bundle resources, for a Zigote iOS head.</Description>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="Zigote.iOS.Support.targets" Pack="true" PackagePath="build/Zigote.iOS.Support.targets"/>
+        <None Include="..\..\Zigote.UI\Fonts\Inter\static\Inter_18pt-Regular.ttf" Pack="true" PackagePath="fonts/Inter-Regular.ttf"/>
+        <None Include="..\..\Zigote.UI\Fonts\Inter\static\Inter_18pt-Medium.ttf" Pack="true" PackagePath="fonts/Inter-Medium.ttf"/>
+        <None Include="..\..\Zigote.UI\Fonts\Inter\static\Inter_18pt-SemiBold.ttf" Pack="true" PackagePath="fonts/Inter-SemiBold.ttf"/>
+        <None Include="..\..\Zigote.UI\Fonts\Inter\static\Inter_18pt-Bold.ttf" Pack="true" PackagePath="fonts/Inter-Bold.ttf"/>
+        <None Include="..\..\Zigote.UI\Fonts\MaterialIcons\MaterialIcons-Regular.ttf" Pack="true" PackagePath="fonts/MaterialIcons-Regular.ttf"/>
+        <None Include="..\..\Zigote.UI\Fonts\Noto_Emoji\static\NotoEmoji-Regular.ttf" Pack="true" PackagePath="fonts/NotoEmoji-Regular.ttf"/>
+    </ItemGroup>
+
+</Project>

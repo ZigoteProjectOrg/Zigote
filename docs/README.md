@@ -9,6 +9,7 @@ retained mode is the one idea everything else follows from.
 | Document | What is in it |
 |---|---|
 | [`../Zigote.UI/README.md`](../Zigote.UI/README.md) | The widget framework in depth: frame phases, widget kinds, invalidation, theming, focus. |
+| [`sdk.md`](sdk.md) | The SDK as packages — one version string for the managed and native halves, which RID an app builds for, and building against a checkout instead. |
 | [`architecture.md`](architecture.md) | How the whole solution fits together — layering, the reactive core, threading, diagnostics. |
 | [`migration/`](migration/README.md) | Arriving from Flutter, Compose, SwiftUI or WPF/Avalonia — concepts, per-framework guides, cookbook. |
 | [`assets.md`](assets.md) | Fonts, images, content bundling, and publish-time asset & font tree shaking. |

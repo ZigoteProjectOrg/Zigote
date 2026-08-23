@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      Everything an Android head needs from the engine that is not an assembly and not the native
+      lib: SDL's vendored Java half, the bundled fonts as APK assets, and the hot-reload switch.
+
+      These are the parts a scaffolded head used to reach into a CHECKOUT for — Java sources at
+      $(ZigoteRoot)/mobile/android/JavaSources, fonts at $(ZigoteRoot)/Zigote.UI/Fonts. An app that
+      restores its SDK has no $(ZigoteRoot), so they ship here instead, wired by the .targets the
+      package brings with it. Referencing the package is the whole configuration.
+
+      RID-independent on purpose: the Java and the fonts are the same for every ABI, and only the
+      engine binary differs (Zigote.Engine.runtime.android-*).
+    -->
+    <PropertyGroup>
+        <TargetFramework>netstandard2.0</TargetFramework>
+        <IncludeBuildOutput>false</IncludeBuildOutput>
+        <IncludeSymbols>false</IncludeSymbols>
+        <NoWarn>$(NoWarn);NU5128</NoWarn>
+        <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+        <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
+
+        <PackageId>Zigote.Android.Support</PackageId>
+        <Description>SDL's Java sources, the bundled fonts and the hot-reload switch for a Zigote Android head.</Description>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="Zigote.Android.Support.targets" Pack="true" PackagePath="build/Zigote.Android.Support.targets"/>
+        <None Include="..\Zigote.Android.targets" Pack="true" PackagePath="build/Zigote.Android.HotReload.targets"/>
+        <None Include="..\..\mobile\android\JavaSources\**\*.java" Pack="true" PackagePath="java/"/>
+        <!-- The six faces the engine cannot start without: it opens them through FreeType by path,
+             and an APK asset has no path, so the head stages them out on first run. -->
+        <None Include="..\..\Zigote.UI\Fonts\Inter\static\Inter_18pt-Regular.ttf" Pack="true" PackagePath="fonts/Inter-Regular.ttf"/>
+        <None Include="..\..\Zigote.UI\Fonts\Inter\static\Inter_18pt-Medium.ttf" Pack="true" PackagePath="fonts/Inter-Medium.ttf"/>
+        <None Include="..\..\Zigote.UI\Fonts\Inter\static\Inter_18pt-SemiBold.ttf" Pack="true" PackagePath="fonts/Inter-SemiBold.ttf"/>
+        <None Include="..\..\Zigote.UI\Fonts\Inter\static\Inter_18pt-Bold.ttf" Pack="true" PackagePath="fonts/Inter-Bold.ttf"/>
+        <None Include="..\..\Zigote.UI\Fonts\MaterialIcons\MaterialIcons-Regular.ttf" Pack="true" PackagePath="fonts/MaterialIcons-Regular.ttf"/>
+        <None Include="..\..\Zigote.UI\Fonts\Noto_Emoji\static\NotoEmoji-Regular.ttf" Pack="true" PackagePath="fonts/NotoEmoji-Regular.ttf"/>
+    </ItemGroup>
+
+</Project>

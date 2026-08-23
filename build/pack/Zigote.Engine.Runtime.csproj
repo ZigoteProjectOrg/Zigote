@@ -1,0 +1,103 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      One native engine, one RID, one package: `Zigote.Engine.runtime.<rid>`.
+
+      This is what makes "install Zigote and make an app" possible. The engine is a Zig/wgpu native
+      library, and until it shipped as a package every consumer needed a Zig toolchain, an NDK and
+      an Android sysroot to build a phone app — for a binary that changes only when the engine does.
+      The package carries the built lib at the layout the .NET host probes (runtimes/<rid>/native/),
+      so restoring it is the whole story on desktop, and an Android head gets it through the
+      .targets below.
+
+      Built one RID at a time, deliberately: `zig build` writes exactly ONE libzigote per target into
+      zig-out, so packing several at once would be a race with itself. build/pack.sh loops.
+
+        dotnet pack build/pack/Zigote.Engine.Runtime.csproj -c Release -p:ZigTargetRid=android-arm64
+    -->
+    <PropertyGroup>
+        <TargetFramework>netstandard2.0</TargetFramework>
+        <!-- No code here at all — the package is the native lib plus (on Android) a targets file. -->
+        <IncludeBuildOutput>false</IncludeBuildOutput>
+        <!-- No assembly here means no symbols; leaving the repo-wide snupkg on asks NuGet to pack a
+             symbol package with nothing in it, and it fails the whole pack with NU5017. -->
+        <IncludeSymbols>false</IncludeSymbols>
+        <NoWarn>$(NoWarn);NU5128</NoWarn>
+        <IsPackable>true</IsPackable>
+        <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+        <!-- The native libs are this package's payload, not build output to copy. See the property's
+             comment in build/Zigote.Pack.props for why copying them too breaks the pack. -->
+        <ZigoteNativeContent>false</ZigoteNativeContent>
+
+        <PackageId>Zigote.Engine.runtime.$(ZigTargetRid)</PackageId>
+        <Description>The Zigote native engine (libzigote) for $(ZigTargetRid).</Description>
+    </PropertyGroup>
+
+    <Target Name="RequireRid" BeforeTargets="BeforeBuild" Condition="'$(DesignTimeBuild)' != 'true'">
+        <Error Condition="'$(ZigTargetRid)' == ''"
+               Text="Pass -p:ZigTargetRid=&lt;rid&gt; — this project packs one RID's engine, and the RID is its identity."/>
+    </Target>
+
+    <!-- Builds libzigote for $(ZigTargetRid) and resolves $(ZigOutDir)/$(ZigNativeLib). -->
+    <Import Project="..\Zigote.Native.targets"/>
+    <!-- And zigote_svg (resvg behind a C ABI), the other native half Zigote.UI P/Invokes. One RID's
+         native side is one package: an app that restores the engine for its RID and then dies in
+         DllNotFoundException on the first SvgPicture has learned nothing useful. -->
+    <Import Project="..\Zigote.Svg.targets"/>
+
+    <!--
+      Collected in a target rather than a plain ItemGroup: these files do not exist when the project
+      is evaluated (BuildZigEngine and cargo produce them during this very build), and the SDK's
+      build has already consumed @(None) by then — a static item lands in neither place, which packs
+      as a nupkg with nothing in it (NU5017). Hooking _GetPackageFiles runs after both.
+    -->
+    <Target Name="CollectNativeForPackage" BeforeTargets="_GetPackageFiles">
+        <Error Condition="!Exists('$(ZigOutDir)/$(ZigNativeLib)')"
+               Text="No $(ZigNativeLib) for $(ZigTargetRid) — the native build produced nothing to pack."/>
+        <!--
+          A manifest beside the binary: which SDK version and which commit produced this engine, and
+          the SHA-256 of every native file in the package. Published so a consumer can answer "is
+          this the artifact that was released" without trusting the filename, and so a support
+          question about a mystery crash can start from an exact build rather than a version guess.
+        -->
+        <GetFileHash Files="$(ZigOutDir)/$(ZigNativeLib)" Algorithm="SHA256">
+            <Output TaskParameter="Items" ItemName="_ZigoteHashed"/>
+        </GetFileHash>
+        <GetFileHash Files="$(_SvgOutDir)/$(_SvgLibName)" Algorithm="SHA256"
+                     Condition="Exists('$(_SvgOutDir)/$(_SvgLibName)')">
+            <Output TaskParameter="Items" ItemName="_ZigoteHashed"/>
+        </GetFileHash>
+        <PropertyGroup>
+            <_ZigoteManifest>$(IntermediateOutputPath)zigote-engine.json</_ZigoteManifest>
+        </PropertyGroup>
+        <WriteLinesToFile File="$(_ZigoteManifest)" Overwrite="true" WriteOnlyWhenDifferent="false"
+                          Lines="{ ;&quot;version&quot;: &quot;$(ZigoteVersion)&quot;, ;&quot;rid&quot;: &quot;$(ZigTargetRid)&quot;, ;&quot;commit&quot;: &quot;$(SourceRevisionId)&quot;, ;&quot;optimize&quot;: &quot;$(ZigOptimize)&quot;, ;&quot;files&quot;: { ;@(_ZigoteHashed->'&quot;%(Filename)%(Extension)&quot;: &quot;sha256:%(FileHash)&quot;', ', ');} ;}"/>
+
+        <ItemGroup>
+            <None Include="$(_ZigoteManifest)" Pack="true"
+                  PackagePath="runtimes/$(ZigTargetRid)/native/zigote-engine.json"/>
+            <None Include="$(ZigOutDir)/$(ZigNativeLib)" Pack="true"
+                  PackagePath="runtimes/$(ZigTargetRid)/native/"/>
+            <!-- wgpu ships as its own DLL on Windows only; elsewhere it is linked into libzigote. -->
+            <None Include="$(ZigOutBin)/wgpu_native.dll" Pack="true" Condition="'$(ZigTargetOS)' == 'windows'"
+                  PackagePath="runtimes/$(ZigTargetRid)/native/"/>
+            <None Include="$(_SvgOutDir)/$(_SvgLibName)" Pack="true"
+                  Condition="Exists('$(_SvgOutDir)/$(_SvgLibName)')"
+                  PackagePath="runtimes/$(ZigTargetRid)/native/"/>
+            <!-- The .NET host probes runtimes/<rid>/native/ on its own; an Android APK does not — the
+                 lib has to be declared as an @(AndroidNativeLibrary) with the ABI folder it belongs
+                 in, which is exactly the mistake that ships an arm64 engine filed under x86_64. -->
+            <None Include="Zigote.Engine.runtime.android.targets" Pack="true"
+                  Condition="'$(ZigTargetOS)' == 'android'"
+                  PackagePath="build/$(PackageId).targets"/>
+            <!-- iOS DEVICE: static archives linked into the app binary, not a loadable library.
+                 Every archive zig produced travels, since the engine's objects reference them. -->
+            <None Include="$(ZigOutLib)/*.a" Pack="true" Condition="'$(ZigStaticNative)' == 'true'"
+                  PackagePath="runtimes/$(ZigTargetRid)/native/"/>
+            <None Include="Zigote.Engine.runtime.ios.targets" Pack="true"
+                  Condition="'$(ZigTargetOS)' == 'ios'"
+                  PackagePath="build/$(PackageId).targets"/>
+        </ItemGroup>
+    </Target>
+
+</Project>
