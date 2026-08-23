@@ -49,9 +49,29 @@ that installs and dies, so the command reads them off the device instead:
 
 ```sh
 zigote device            # what is attached
-zigote device run        # deploy to it, then reload edits into the running app
-zigote device logs       # this app's logcat and nothing else
+zigote run               # deploy to it, then reload edits into the running app
+zigote logs              # this app's logcat and nothing else
 ```
+
+`zigote run` with no device attached runs on this machine instead, and `--device` picks between
+them by serial, model name, or the word `desktop`. (`zigote device run` / `device logs` still work
+as aliases.)
+
+On macOS, `zigote device list` also enumerates **booted iOS simulators** (`simctl`), and
+`zigote run --device "iPhone 15"` builds the iOS head and launches it there — the SDK selects a
+simulator through `_DeviceName=:v2:udid=…`, a property no error message ever names.
+
+## Shipping
+
+```sh
+zigote build apk --keystore release.keystore --key-alias upload   # or aab
+zigote build ipa --team <TEAMID>                                  # macOS + Xcode
+```
+
+`build` derives the Android `versionName`/`versionCode` and the iOS
+`CFBundleShortVersionString` from the app csproj's single `<Version>`, regenerates every launcher
+density from one `icon.png`, and — when a release is unsigned — names the missing keystore property
+and the `keytool` line that creates it rather than failing inside `apksigner`.
 
 `run` reads the device's ABI (`ro.product.cpu.abi`), picks the matching RID, builds the head with
 `-p:ZigoteHotReload=true`, and hands the whole thing to `dotnet watch`. From there the Android
@@ -82,7 +102,7 @@ debug build. An interpreted frame loop does not hold 60 fps on a phone, so a pla
 `dotnet run`/`--no-reload` stays JIT and stays fast, and you opt into the slower frames only while
 you are reshaping UI. `--release` implies `--no-reload`.
 
-For a debugger rather than a reload, `zigote device run --debug` forwards the Mono soft-debugger
+For a debugger rather than a reload, `zigote run --debug` forwards the Mono soft-debugger
 port (10000 by default, `--debug-port` to change it) and starts the app suspended on it, so a
 debugger can attach before any app code has run.
 

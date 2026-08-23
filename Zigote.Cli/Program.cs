@@ -34,19 +34,26 @@ public static class Program
                 with.AutoVersion = true;
             }
         );
-        var result = parser.ParseArguments<CreateVerb, AddVerb, PreviewVerb, DeviceVerb, DoctorVerb>(args);
+        var result = parser.ParseArguments<
+            RunVerb, BuildVerb, TestVerb, LogsVerb, CreateVerb, AddVerb, PreviewVerb, DeviceVerb,
+            DoctorVerb
+        >(args);
 
         try
         {
             return result.MapResult(
-                parsedFunc1: (CreateVerb verb) => Create(verb),
-                parsedFunc2: (AddVerb verb) => Add(verb),
-                parsedFunc3: (PreviewVerb verb) => Preview.Run(
+                parsedFunc1: (RunVerb verb) => Run.Execute(verb),
+                parsedFunc2: (BuildVerb verb) => Build.Run(verb),
+                parsedFunc3: (TestVerb verb) => Test.Run(verb),
+                parsedFunc4: (LogsVerb verb) => Logs(verb),
+                parsedFunc5: (CreateVerb verb) => Create(verb),
+                parsedFunc6: (AddVerb verb) => Add(verb),
+                parsedFunc7: (PreviewVerb verb) => Preview.Run(
                     options: verb,
-                    project: FindAppProject(verb.Directory)
+                    project: Projects.App(verb.Directory)
                 ),
-                parsedFunc4: (DeviceVerb verb) => Device.Run(verb),
-                parsedFunc5: (DoctorVerb verb) => Doctor.Run(verb),
+                parsedFunc8: (DeviceVerb verb) => Device.Run(verb),
+                parsedFunc9: (DoctorVerb verb) => Doctor.Run(verb),
                 notParsedFunc: errors => Render(result: result, errors: errors)
             );
         }
@@ -78,7 +85,7 @@ public static class Program
             parserResult: result,
             onError: h =>
             {
-                h.Heading = "zigote — scaffold Zigote apps, plugins and platform heads";
+                h.Heading = "zigote — create, run, test and ship Zigote apps";
                 h.Copyright = "";
                 h.AdditionalNewLineAfterOption = false;
                 return HelpText.DefaultParsingErrorsHandler(parserResult: result, current: h);
@@ -113,12 +120,12 @@ public static class Program
     {
         name = Identifier.Validate(name);
         string root = Path.Combine(path1: options.Directory, path2: name);
-        string engine = options.ResolveEngine(root);
+        string? engine = options.ResolveEngine(root);
 
         var files = new Scaffolder(root: root, force: options.Force);
         files.Write(
             relativePath: $"{name}/{name}.csproj",
-            content: Templates.AppCsproj(name: name, engine: engine)
+            content: Templates.AppCsproj(name: name, engine: engine, version: options.Version)
         );
         files.Write(relativePath: $"{name}/Program.cs", content: Templates.AppProgram(name));
         files.Write(relativePath: $"{name}/{name}App.cs", content: Templates.AppShell(name));
@@ -127,7 +134,7 @@ public static class Program
 
         files.Report();
         Console.WriteLine();
-        Console.WriteLine($"  cd {name} && dotnet run --project {name}");
+        Console.WriteLine($"  cd {name} && zigote run");
         Console.WriteLine($"  zigote add android                    (from inside {name}/)");
         return 0;
     }
@@ -144,12 +151,18 @@ public static class Program
         name = Identifier.Validate(name);
         (bool android, bool ios) = ParsePlatforms(options.Platforms);
         string root = Path.Combine(path1: options.Directory, path2: name);
-        string engine = options.ResolveEngine(root);
+        string? engine = options.ResolveEngine(root);
 
         var files = new Scaffolder(root: root, force: options.Force);
         files.Write(
             relativePath: $"{name}/{name}.csproj",
-            content: Templates.PluginCsproj(name: name, engine: engine, android: android, ios: ios)
+            content: Templates.PluginCsproj(
+                name: name,
+                engine: engine,
+                version: options.Version,
+                android: android,
+                ios: ios
+            )
         );
         files.Write(relativePath: $"{name}/{name}Plugin.cs", content: Templates.PluginShared(name));
         files.Write(
@@ -174,12 +187,13 @@ public static class Program
 
         // The example app is a real app one level deeper, so its engine path needs its own
         // resolution — measured from example/, where the app project directory sits.
-        string exampleEngine = options.ResolveEngine(Path.Combine(path1: root, path2: "example"));
+        string? exampleEngine = options.ResolveEngine(Path.Combine(path1: root, path2: "example"));
         files.Write(
             relativePath: $"example/{name}Example/{name}Example.csproj",
             content: Templates.AppCsproj(
                 name: $"{name}Example",
                 engine: exampleEngine,
+                version: options.Version,
                 extraReference: $"../../{name}/{name}.csproj"
             )
         );
@@ -199,7 +213,7 @@ public static class Program
 
         files.Report();
         Console.WriteLine();
-        Console.WriteLine($"  cd {name}/example && dotnet run --project {name}Example");
+        Console.WriteLine($"  cd {name}/example && zigote run");
         Console.WriteLine($"  dotnet pack {name}/{name}                        # ship it as a NuGet package");
         return 0;
     }
@@ -242,21 +256,33 @@ public static class Program
 
     private static int Add(AddVerb options)
     {
-        if (options.Platform != "android")
-            throw new CliError($"unknown platform '{options.Platform}'. Only 'android' exists today.");
+        string platform = options.Platform.ToLowerInvariant();
+        return platform switch {
+            "android" => AddAndroid(options),
+            "ios" => AddIos(options),
+            _ => throw new CliError($"unknown platform '{options.Platform}'. Use android or ios."),
+        };
+    }
 
+    private static int AddAndroid(AddVerb options)
+    {
         string root = options.Directory;
         // The app to attach to is the one shared project in the tree — found rather than asked
         // for, because getting it wrong silently produces a head that compiles nothing.
-        string app = FindAppProject(root);
+        string app = Projects.App(root);
         string name = Path.GetFileNameWithoutExtension(app);
-        string engine = options.ResolveEngine(root);
+        string? engine = options.ResolveEngine(root);
         string appId = Identifier.ValidateAppId(options.AppId ?? $"dev.zigote.{name}");
 
         var files = new Scaffolder(root: root, force: options.Force);
         files.Write(
             relativePath: $"{name}.Android/{name}.Android.csproj",
-            content: Templates.AndroidCsproj(name: name, appId: appId, engine: engine)
+            content: Templates.AndroidCsproj(
+                name: name,
+                appId: appId,
+                engine: engine,
+                version: options.Version
+            )
         );
         files.Write(
             relativePath: $"{name}.Android/Properties/AndroidManifest.xml",
@@ -269,7 +295,7 @@ public static class Program
 
         files.Report();
         Console.WriteLine();
-        Console.WriteLine("  zigote device run                                          # deploy + hot reload");
+        Console.WriteLine("  zigote run                                                 # deploy + hot reload");
         Console.WriteLine(
             $"  dotnet build {name}.Android -p:ZigTargetRid=android-arm64   # device"
         );
@@ -282,53 +308,55 @@ public static class Program
         return 0;
     }
 
-    // ── helpers ───────────────────────────────────────────────────────────────
-
     /// <summary>
-    ///     The shared app project a head should compile. Looks for a single non-head csproj at the
-    ///     top of the tree, then one directory down — the layout `create` produces.
+    ///     The iOS head. Two files rather than Android's three — iOS keeps the app's own
+    ///     <c>Program.Main</c> as the entry point, so there is no platform class to write, only the
+    ///     project and the plist whose keys have to match what SDL and UIKit expect.
     /// </summary>
-    internal static string FindAppProject(string root)
+    private static int AddIos(AddVerb options)
     {
-        var candidates = Directory
-            .EnumerateFiles(
-                path: root,
-                searchPattern: "*.csproj",
-                searchOption: SearchOption.TopDirectoryOnly
-            )
-            .Concat(
-                Directory
-                    .EnumerateDirectories(root)
-                    .Where(d => !Path.GetFileName(d).StartsWith('.'))
-                    .SelectMany(d => Directory.EnumerateFiles(
-                            path: d,
-                            searchPattern: "*.csproj",
-                            searchOption: SearchOption.TopDirectoryOnly
-                        )
-                    )
-            )
-            .Where(p => !Path.GetFileNameWithoutExtension(p).EndsWith(
-                    value: ".Android",
-                    comparisonType: StringComparison.Ordinal
-                )
-            )
-            .Where(p => !Path.GetFileNameWithoutExtension(p).EndsWith(
-                    value: ".iOS",
-                    comparisonType: StringComparison.Ordinal
-                )
-            )
-            .ToList();
+        string root = options.Directory;
+        string app = Projects.App(root);
+        string name = Path.GetFileNameWithoutExtension(app);
+        string? engine = options.ResolveEngine(root);
+        string appId = Identifier.ValidateAppId(options.AppId ?? $"dev.zigote.{name}");
 
-        return candidates.Count switch {
-            0 => throw new CliError(
-                $"no app project found under '{root}'. Run this from inside the app, or pass --dir."
-            ),
-            1 => candidates[0],
-            _ => throw new CliError(
-                "more than one app project here, so which one the head belongs to is ambiguous: " +
-                string.Join(separator: ", ", values: candidates.Select(Path.GetFileName)) +
-                ". Run from inside one of them."
-            ),
-        };
+        var files = new Scaffolder(root: root, force: options.Force);
+        files.Write(
+            relativePath: $"{name}.iOS/{name}.iOS.csproj",
+            content: Templates.IosCsproj(
+                name: name,
+                appId: appId,
+                engine: engine,
+                version: options.Version
+            )
+        );
+        files.Write(
+            relativePath: $"{name}.iOS/Info.plist",
+            content: Templates.IosPlist(name: name, appId: appId)
+        );
+
+        files.Report();
+        Console.WriteLine();
+        Console.WriteLine("  zigote device list                                           # simulators too");
+        Console.WriteLine("  zigote run --device \"iPhone 15\"                             # a booted simulator");
+        Console.WriteLine($"  zigote build ipa --team <TEAMID>                             # a signed device build");
+        Console.WriteLine();
+        Console.WriteLine("iOS needs macOS with Xcode. A device build links the engine INTO the app");
+        Console.WriteLine("binary (iOS rejects a loose dylib); the simulator keeps the dylib.");
+        return 0;
+    }
+
+    // ── logs ──────────────────────────────────────────────────────────────────
+
+    private static int Logs(LogsVerb options)
+    {
+        string adb = Device.RequireAdb();
+        // Same matcher as `run`, so `--device pixel` means the same thing in both.
+        var device = Run.Resolve(spec: options.DeviceSpec, ready: Device.ReadyDevices(adb))
+                     ?? throw new CliError(
+                         "no device to read logs from. Plug one in, or run `zigote device list`."
+                     );
+        return Device.Logs(device: device, directory: options.Directory, adb: adb);
     }
 }

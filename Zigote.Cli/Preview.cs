@@ -19,22 +19,30 @@ public static class Preview
     {
         if (options.ListTargets) return List(project);
 
-        string target = options.Target
-                        ?? throw new CliError(
-                            "preview needs a widget: zigote preview <Namespace.Type>. " +
-                            "Run `zigote preview --list` to see what this project offers."
-                        );
+        return Launch(
+            project: project,
+            target: options.Target
+                    ?? throw new CliError(
+                        "preview needs a widget: zigote run --widget <Namespace.Type>. " +
+                        "Run `zigote preview --list` to see what this project offers."
+                    ),
+            noWatch: options.NoWatch
+        );
+    }
 
+    /// <summary>Start one widget. Shared with <c>zigote run --widget</c>, which is the same thing.</summary>
+    internal static int Launch(string project, string target, bool noWatch)
+    {
         // `dotnet watch` is what makes this a previewer rather than a runner: Zigote's hot-reload
         // bridge re-runs the previewed widget's Build() on every save, in place.
         var start = Dotnet(
             project: project,
-            verb: options.NoWatch ? ["run"] : ["watch", "run", "--non-interactive"]
+            verb: noWatch ? ["run"] : ["watch", "run", "--non-interactive"]
         );
         start.Environment["ZIGOTE_PREVIEW"] = target;
 
         Console.WriteLine(
-            $"  previewing {target}{(options.NoWatch ? "" : "  (edit and save to reload)")}"
+            $"  previewing {target}{(noWatch ? "" : "  (edit and save to reload)")}"
         );
         return Wait(start);
     }
@@ -48,22 +56,8 @@ public static class Preview
         return Wait(start);
     }
 
-    private static ProcessStartInfo Dotnet(string project, string[] verb)
-    {
-        var start = new ProcessStartInfo("dotnet") { UseShellExecute = false };
-        foreach (string a in verb) start.ArgumentList.Add(a);
-        start.ArgumentList.Add("--project");
-        start.ArgumentList.Add(project);
-        return start;
-    }
+    private static ProcessStartInfo Dotnet(string project, string[] verb) =>
+        Shell.Command(file: "dotnet", arguments: [.. verb, "--project", project]);
 
-    private static int Wait(ProcessStartInfo start)
-    {
-        using var process = Process.Start(start)
-                            ?? throw new CliError(
-                                "could not start dotnet — is the .NET SDK on PATH?"
-                            );
-        process.WaitForExit();
-        return process.ExitCode;
-    }
+    private static int Wait(ProcessStartInfo start) => Shell.Wait(start);
 }

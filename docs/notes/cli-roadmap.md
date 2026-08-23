@@ -2,6 +2,12 @@
 
 *Written 2026-08-22, against `Zigote.Cli` at `create` / `add` / `preview` / `device` / `doctor`.*
 
+*Status 2026-08-23: all eight items are implemented — see the per-item notes below. The verbs are
+now `run` / `build` / `test` / `logs` / `create` / `add` / `preview` / `device` / `doctor`, the SDK
+ships as packages, and `zigote add ios` writes the iOS head. What is not verified: everything iOS
+(this machine is Linux — the head mirrors the working Gallery head but has never been built), and
+the mobile engine packages, which need an NDK and a Mac respectively to produce.*
+
 The tool today does one thing very well: it writes the Android head, the part nobody can type
 from memory. That was the right first thing. It is not the thing a newcomer measures us on.
 
@@ -18,7 +24,7 @@ work should happen.
 
 ## The two structural items
 
-### 1. Ship an SDK, not a checkout path
+### 1. Ship an SDK, not a checkout path — *landed 2026-08-23*
 
 `CommonVerb.ResolveEngine` walks up from the target directory looking for
 `Zigote.UI/Zigote.UI.csproj`, falls back to `$ZIGOTE_ROOT`, and writes a *relative* path into the
@@ -47,7 +53,18 @@ check becomes engine-developer-only, which is a good measure of whether this lan
 This is the largest item and it gates the rest. "Better than Flutter" is not reachable while the
 on-ramp is `git clone`.
 
-### 2. One `run`
+*What landed:* `build/pack.sh` packs the managed closure (no Zig or NDK needed:
+`-p:ZigoteManagedPack=true`), one `Zigote.Engine.runtime.<rid>` per RID carrying `libzigote` +
+`zigote_svg` at `runtimes/<rid>/native/`, and the two support packages that carry what a mobile head
+cannot inherit — `Zigote.Android.Support` (SDL's Java, fonts as assets, the hot-reload switch) and
+`Zigote.iOS.Support` (fonts as bundle resources). `create` emits `PackageReference`s driven by one
+`$(ZigoteSdkVersion)`; `--engine` and standing inside a checkout give the old `ProjectReference`
+shape. Fonts travel as `contentFiles`. `doctor`'s Zig/Rust checks now run only inside a checkout.
+Versioning, provenance and signing are in [docs/sdk.md](../sdk.md): one `build/version.txt`, commit
+stamping, per-package `SHA256SUMS`, an engine manifest with a SHA-256 per native file (which
+`doctor` verifies), and `--sign` / `--push` for a release.
+
+### 2. One `run` — *landed 2026-08-23*
 
 ```
 zigote run                 # the only attached device, else desktop
@@ -70,13 +87,20 @@ remember Flutter for: `r` reload, `R` restart, `q` quit, `d` detach, printed onc
 hot-reload machinery already exists behind `zigote device run` and `dotnet watch`; this is a
 front-end, not a new capability.
 
+*What landed:* `zigote run` and `zigote logs` (Run.cs), over the unchanged `Device.Launch` and
+`Preview` paths; `--device` matches a serial, a model substring, or `desktop`; one candidate is
+silent, none means desktop, several prompt (and error naming `--device` when stdin is redirected);
+`device run`/`device logs` stay as aliases. Still open: the interactive `r`/`R`/`q`/`d` keys —
+`dotnet watch --non-interactive` owns the terminal today — and simulators in `device list`, which
+waits on iOS (#4).
+
 **Device selection rule.** Exactly one candidate → use it silently. More than one → print the
 numbered list and ask, unless `--device` was given. Zero mobile devices → desktop. Never guess
 between two.
 
 ## The gaps that follow
 
-### 3. `zigote build` — the shippable artifact
+### 3. `zigote build` — the shippable artifact — *landed 2026-08-23*
 
 There is no verb that produces something you can hand to a store or a user. Today that is
 `dotnet publish` with the right RID, the right configuration, the right signing properties, and no
@@ -99,7 +123,14 @@ with three things Flutter makes people reach for packages to get:
 - **signing that says what is missing.** Unsigned release build → name the keystore property that
   is absent and the `keytool` line that creates it, in `doctor`'s voice.
 
-### 4. iOS, at parity with Android
+*What landed:* all three, plus `ipa`/`exe`/`app`/`appimage`. The icon rasteriser is `Png.cs` — a
+PNG decoder, box-filter resizer and encoder in one file, because the CLI takes no project reference
+(that would drag the native engine into `dotnet tool install`) and an image library is a dependency
+every user of the tool would carry for a resize that happens twice per project. Still open: desktop
+icon embedding (Windows `.ico`, macOS `.icns`) and the AppImage wrap itself, which `build` currently
+hands off to `build/publish.sh`.
+
+### 4. iOS, at parity with Android — *landed 2026-08-23, unverified*
 
 `Templates.cs` already carries iOS plugin channels, and `add` refuses everything but android.
 `zigote add ios` writing the head, `device list` enumerating simulators via `simctl`, and
@@ -108,7 +139,14 @@ Android head taught us the shape; the iOS one is a smaller version of the same l
 `AppDelegate`, the SDL glue, an `Info.plist` whose keys have to match the plugins in use, and a
 RID that couples managed to native).
 
-### 5. `doctor --fix`
+*What landed:* `zigote add ios` writes the head and the plist (no `AppDelegate` after all — iOS
+keeps the app's own `Program.Main`, and SDL owns `UIApplicationMain` underneath it); `device list`
+enumerates booted simulators through `simctl`; `zigote run` builds and launches on one;
+`zigote build ipa` signs with a team id. The head mirrors the Gallery's working iOS head, including
+the device static-link and the `install_name_tool` dedupe. **None of it has been run** — the machine
+this was written on is Linux.
+
+### 5. `doctor --fix` — *landed 2026-08-23*
 
 `doctor` already knows the cure for every finding — it prints it in the fix column. Running it is
 a strictly smaller diff than the current design's ambition, and it is where we beat `flutter
@@ -121,7 +159,10 @@ zigote doctor --fix   # install the workload, accept the licences, fetch the JDK
 Each check declares an optional fix command alongside the string it already declares. Prompt once
 with the list, then run them in order. Never fix silently, never fix without `--fix`.
 
-### 6. `--json` everywhere
+*What landed:* exactly that. Only the SDK workloads declare a command today — "install a JDK 21" is
+not something to hand a script — and a check with no command is never offered.
+
+### 6. `--json` everywhere — *landed 2026-08-23*
 
 `tools/rider` parses human stdout today, which means every phrasing change in this tool is a
 potential IDE-plugin bug. `flutter --machine` exists for exactly this reason. `device list`,
@@ -129,7 +170,10 @@ potential IDE-plugin bug. `flutter --machine` exists for exactly this reason. `d
 object per line. Cheap, and it is the precondition for VS Code / Rider integration that does more
 than shell out.
 
-### 7. `zigote test` — goldens
+*What landed:* `doctor --json` and `device list --json`. `preview --list` already prints one target
+per line, which is the shape a menu wants; `run`'s progress events are still human-only.
+
+### 7. `zigote test` — goldens — *landed 2026-08-23*
 
 `Zigote.SmokeTest` already renders golden images. `flutter test --update-goldens` is a headline
 feature of the framework it is copied from, and ours is currently a project you have to know
@@ -137,13 +181,20 @@ exists. Expose it: `zigote test [--update-goldens]`, running the app's own widge
 diffing images with the failure written out as a three-panel PNG (expected / actual / diff).
 Building nothing new — surfacing what is built.
 
-### 8. `zigote run --inspect`
+*What landed:* the runner, the `ZIGOTE_UPDATE_GOLDENS=1` contract, and the three-panel writer
+(expected | actual | difference in magenta over a dimmed copy). The convention a harness has to
+follow is one line: write `<name>.actual.png` beside the expected `<name>.png` when they differ.
+
+### 8. `zigote run --inspect` — *landed 2026-08-23*
 
 `Zigote.UI.DevTools` is an in-app overlay on <kbd>Shift</kbd>+<kbd>D</kbd>; the inspect protocol
 behind `tools/rider` and the MCP server already streams the widget tree out of a running app.
 Nothing in the CLI launches either. `--inspect` starting the app with the protocol enabled and
 printing the URL is the Flutter-DevTools / Compose-preview parity item, and it is a flag, not a
 feature.
+
+*What landed:* the flag, setting `ZIGOTE_INSPECT=0` (the OS picks the port, the app announces it) —
+desktop only, since the device path would need the port reversed over adb as well.
 
 ## Non-goals
 

@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using System.Text.RegularExpressions;
 
 namespace Zigote.Cli;
 
@@ -24,12 +24,26 @@ public static class Doctor
         Fail,
     }
 
-    private readonly record struct Check(Status Status, string Title, string? Fix = null);
+    /// <summary>
+    ///     One finding. <paramref name="Fix" /> is the human sentence; <paramref name="FixCommand" />
+    ///     is that same cure as something this tool can run under <c>--fix</c>. Most checks have
+    ///     only the sentence — "install a JDK" is not a command anyone should hand to a script —
+    ///     and a check with no command is simply never offered.
+    /// </summary>
+    private readonly record struct Check(
+        Status Status,
+        string Title,
+        string? Fix = null,
+        string[]? FixCommand = null
+    );
 
     public static int Run(DoctorVerb options)
     {
-        Console.WriteLine("Checking the Zigote development environment…");
-        Console.WriteLine();
+        if (!options.Json)
+        {
+            Console.WriteLine("Checking the Zigote development environment…");
+            Console.WriteLine();
+        }
 
         // The three process-based probes dominate the wall clock (dotnet workload list alone
         // takes seconds), and none depends on another — so they run while the file-system checks
@@ -40,30 +54,121 @@ public static class Doctor
         var rust = Task.Run(CheckRust);
 
         string? engineRoot = CommonVerb.FindEngineRoot(start: options.Directory, explicitPath: options.Engine);
+        // Zig and Rust build the engine's native halves, and an app that restores
+        // Zigote.Engine.runtime.<rid> never builds them — that is the whole point of shipping the
+        // SDK as packages. So they are checked where they are needed (inside a checkout) and
+        // mentioned, not demanded, everywhere else.
+        bool engineDeveloper = engineRoot is not null;
 
         var checks = new List<Check> {
             dotnetSdk.Result,
             CheckCheckout(engineRoot),
-            CheckNativeEngine(engineRoot),
-            zig.Result,
-            rust.Result,
         };
+        if (engineDeveloper)
+        {
+            checks.Add(CheckNativeEngine(engineRoot));
+            checks.Add(zig.Result);
+            checks.Add(rust.Result);
+        }
+        else
+        {
+            checks.Add(new Check(
+                Status: Status.Info,
+                Title: "Native toolchains: not needed — the engine arrives as a package (Zigote.Engine.runtime.<rid>)"
+            ));
+        }
+
+        checks.Add(CheckSdkVersions(options.Directory));
+        checks.Add(CheckEngineIntegrity(options.Directory));
         checks.AddRange(workloads.Result);
         checks.Add(CheckJdk());
         checks.Add(CheckAndroidSdk());
         checks.Add(CheckIos());
 
+        int failed = checks.Count(c => c.Status == Status.Fail);
+        if (options.Json)
+        {
+            foreach (var check in checks) Console.WriteLine(AsJson(check));
+            return failed == 0 ? 0 : 1;
+        }
+
         foreach (var check in checks) Print(check);
 
-        int failed = checks.Count(c => c.Status == Status.Fail);
         Console.WriteLine();
         Console.WriteLine(
             failed == 0
                 ? "• No issues found."
                 : $"• {failed} issue{(failed == 1 ? "" : "s")} found — fixes are listed above."
         );
-        return failed == 0 ? 0 : 1;
+        return options.Fix ? ApplyFixes(checks) : failed == 0 ? 0 : 1;
     }
+
+    /// <summary>
+    ///     <c>--fix</c>: run the cures this tool already knows, after showing them.
+    ///     <para>
+    ///         The command famous for telling people to accept Android licences instead of accepting
+    ///         them is the bar here. Two rules keep it honest: never without <c>--fix</c>, and never
+    ///         without printing the exact commands first — these install SDK workloads, which is not
+    ///         a thing to do behind someone's back.
+    ///     </para>
+    /// </summary>
+    private static int ApplyFixes(List<Check> checks)
+    {
+        var fixable = checks.Where(c => c.FixCommand is { Length: > 0 }).ToList();
+        var manual = checks.Where(c => c.Status == Status.Fail && c.FixCommand is null).ToList();
+        if (fixable.Count == 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine(
+                manual.Count == 0
+                    ? "--fix: nothing to do."
+                    : "--fix: nothing here can be fixed automatically — the cures above need you."
+            );
+            return manual.Count == 0 ? 0 : 1;
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("--fix will run:");
+        foreach (var check in fixable)
+            Console.WriteLine($"  {string.Join(separator: ' ', values: check.FixCommand!)}");
+        Console.Write("Go ahead? [y/N] ");
+        string? answer = Console.IsInputRedirected ? "n" : Console.ReadLine();
+        if (!string.Equals(a: answer?.Trim(), b: "y", comparisonType: StringComparison.OrdinalIgnoreCase))
+        {
+            Console.WriteLine("Nothing run.");
+            return 1;
+        }
+
+        foreach (var check in fixable)
+        {
+            string[] command = check.FixCommand!;
+            Console.WriteLine();
+            Console.WriteLine($"  → {string.Join(separator: ' ', values: command)}");
+            if (Shell.Wait(Shell.Command(file: command[0], arguments: command.Skip(1))) != 0)
+            {
+                Console.Error.WriteLine("    failed — run it yourself to see why.");
+                return 1;
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("Fixed what could be fixed. Run `zigote doctor` again to confirm.");
+        return manual.Count == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    ///     One finding as one line of JSON — the shape `tools/rider` should read instead of parsing
+    ///     prose, so a rewording here stops being an IDE-plugin bug.
+    /// </summary>
+    private static string AsJson(Check check) =>
+        System.Text.Json.JsonSerializer.Serialize(
+            new {
+                status = check.Status.ToString().ToLowerInvariant(),
+                title = check.Title,
+                fix = check.Fix,
+                fixCommand = check.FixCommand,
+            }
+        );
 
     private static void Print(Check check)
     {
@@ -86,7 +191,7 @@ public static class Doctor
 
     private static Check CheckDotnetSdk()
     {
-        string? version = Capture(file: "dotnet", arguments: ["--version"]);
+        string? version = Probe(file: "dotnet", arguments: ["--version"]);
         return version is null
             ? new Check(
                 Status: Status.Fail,
@@ -96,14 +201,154 @@ public static class Doctor
             : new Check(Status: Status.Ok, Title: $".NET SDK ({version})");
     }
 
+    /// <summary>
+    ///     Having a checkout is a MODE, not a requirement. An app built against the packages needs
+    ///     none, and reporting its absence as a failure is how a healthy machine got told it was
+    ///     broken. It stays listed because which mode you are in explains everything below it.
+    /// </summary>
     private static Check CheckCheckout(string? engineRoot) =>
         engineRoot is null
             ? new Check(
-                Status: Status.Fail,
-                Title: "Zigote checkout: not found",
-                Fix: "Clone it next to your projects, set $ZIGOTE_ROOT, or pass --engine <path>."
+                Status: Status.Info,
+                Title: "Zigote SDK: packages (no checkout here — apps reference Zigote.UI by version)"
             )
             : new Check(Status: Status.Ok, Title: $"Zigote checkout ({engineRoot})");
+
+    /// <summary>
+    ///     Which SDK the project here is built against, and whether its packages agree with each
+    ///     other. Disagreement is the one version bug that survives a clean build: managed and
+    ///     native halves ship as one version, so a Zigote.Engine.runtime package a release behind
+    ///     restores happily and then throws an ABI mismatch at the first frame — far from the csproj
+    ///     line that caused it.
+    /// </summary>
+    private static Check CheckSdkVersions(string directory)
+    {
+        var versions = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (string project in ProjectFiles(directory))
+        {
+            string text;
+            try
+            {
+                text = File.ReadAllText(project);
+            }
+            catch (IOException)
+            {
+                continue;
+            }
+
+            foreach (Match match in Regex.Matches(
+                         input: text,
+                         pattern: """<PackageReference\s+Include="Zigote[^"]*"\s+Version="([^"]+)"""
+                     ))
+            {
+                string version = match.Groups[1].Value;
+                // The property indirection is the healthy case — one string for every package.
+                if (!version.Contains('$')) versions.Add(version);
+            }
+
+            foreach (Match match in Regex.Matches(
+                         input: text,
+                         pattern: @"<ZigoteSdkVersion[^>]*>([^<$]+)</ZigoteSdkVersion>"
+                     ))
+                versions.Add(match.Groups[1].Value.Trim());
+        }
+
+        return versions.Count switch {
+            0 => new Check(Status: Status.Info, Title: "Zigote SDK version: no app project here to read"),
+            1 => new Check(Status: Status.Ok, Title: $"Zigote SDK {versions.Min} (this project)"),
+            _ => new Check(
+                Status: Status.Fail,
+                Title: "Zigote packages disagree on a version: " + string.Join(", ", versions),
+                Fix: "The managed packages and Zigote.Engine.runtime.<rid> must match, or the app "
+                     + "throws an ABI mismatch at startup. Set them all from <ZigoteSdkVersion>."
+            ),
+        };
+    }
+
+    /// <summary>
+    ///     The engine binary this app will actually load, checked against the manifest that shipped
+    ///     with it (<c>zigote-engine.json</c>: version, commit, and a SHA-256 per file).
+    ///     <para>
+    ///         Worth a check because the failure it catches is otherwise unreadable. A native lib
+    ///         that was replaced by hand, half-copied by a cancelled build, or restored from a
+    ///         partially-written cache produces a crash inside the engine with no hint that the file
+    ///         is not the released one — and "which build is this?" is the first question any
+    ///         support conversation has to answer.
+    ///     </para>
+    /// </summary>
+    private static Check CheckEngineIntegrity(string directory)
+    {
+        string? manifest = Directory.Exists(directory)
+            ? Directory
+                .EnumerateFiles(
+                    path: directory,
+                    searchPattern: "zigote-engine.json",
+                    searchOption: SearchOption.AllDirectories
+                )
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .FirstOrDefault()
+            : null;
+        if (manifest is null)
+        {
+            return new Check(
+                Status: Status.Info,
+                Title: "Engine build: nothing built here yet (run `zigote run` once)"
+            );
+        }
+
+        string json = File.ReadAllText(manifest);
+        string version = Field(json: json, name: "version") ?? "unknown";
+        string? sha = Field(json: json, name: "commit");
+        string commit = sha is { Length: >= 7 } ? sha[..7] : "unknown";
+        var mismatched = new List<string>();
+        foreach (Match file in Regex.Matches(
+                     input: json,
+                     pattern: "\"([^\"]+)\\.(so|dylib|dll|a)\":\\s*\"sha256:([0-9A-Fa-f]+)\""
+                 ))
+        {
+            string name = file.Groups[1].Value + "." + file.Groups[2].Value;
+            string path = Path.Combine(path1: Path.GetDirectoryName(manifest)!, path2: name);
+            if (!File.Exists(path))
+            {
+                mismatched.Add($"{name} (missing)");
+                continue;
+            }
+
+            using var stream = File.OpenRead(path);
+            string actual = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream));
+            if (!actual.Equals(value: file.Groups[3].Value, comparisonType: StringComparison.OrdinalIgnoreCase))
+                mismatched.Add(name);
+        }
+
+        return mismatched.Count == 0
+            ? new Check(Status: Status.Ok, Title: $"Engine {version} ({commit}) — checksums match")
+            : new Check(
+                Status: Status.Fail,
+                Title: $"Engine {version} ({commit}): " + string.Join(", ", mismatched) +
+                       " does not match the published checksum",
+                Fix: "Delete bin/ and obj/ and rebuild. If it persists the restored package is "
+                     + "damaged — clear it from ~/.nuget/packages and restore again."
+            );
+    }
+
+    /// <summary>One string field out of the engine manifest — small enough not to want a parser.</summary>
+    private static string? Field(string json, string name)
+    {
+        var match = Regex.Match(input: json, pattern: "\"" + name + "\"\\s*:\\s*\"([^\"]*)\"");
+        return match.Success ? match.Groups[1].Value : null;
+    }
+
+    /// <summary>The csproj files at the top of the tree and one level down — the layout `create` writes.</summary>
+    private static IEnumerable<string> ProjectFiles(string directory)
+    {
+        if (!Directory.Exists(directory)) yield break;
+        foreach (string project in Directory.EnumerateFiles(directory, "*.csproj")) yield return project;
+        foreach (string child in Directory.EnumerateDirectories(directory))
+        {
+            if (Path.GetFileName(child).StartsWith('.')) continue;
+            foreach (string project in Directory.EnumerateFiles(child, "*.csproj")) yield return project;
+        }
+    }
 
     /// <summary>
     ///     A missing engine binary is a Warn, not a Fail: the very first `dotnet build` of any
@@ -131,7 +376,7 @@ public static class Doctor
 
     private static Check CheckZig()
     {
-        string? version = Capture(file: "zig", arguments: ["version"]);
+        string? version = Probe(file: "zig", arguments: ["version"]);
         return version is null
             ? new Check(
                 Status: Status.Info,
@@ -149,7 +394,7 @@ public static class Doctor
     /// </summary>
     private static Check CheckRust()
     {
-        string? version = Capture(file: "cargo", arguments: ["--version"])?.Trim();
+        string? version = Probe(file: "cargo", arguments: ["--version"])?.Trim();
         if (version is null)
         {
             return new Check(
@@ -206,7 +451,7 @@ public static class Doctor
 
     private static List<Check> CheckWorkloads()
     {
-        string? list = Capture(file: "dotnet", arguments: ["workload", "list"]);
+        string? list = Probe(file: "dotnet", arguments: ["workload", "list"]);
         var checks = new List<Check>();
         if (list is null)
         {
@@ -226,7 +471,8 @@ public static class Doctor
                 : new Check(
                     Status: Status.Fail,
                     Title: "Android workload: not installed",
-                    Fix: "dotnet workload install android"
+                    Fix: "dotnet workload install android",
+                    FixCommand: ["dotnet", "workload", "install", "android"]
                 )
         );
 
@@ -239,7 +485,8 @@ public static class Doctor
                     : new Check(
                         Status: Status.Fail,
                         Title: "iOS workload: not installed",
-                        Fix: "dotnet workload install ios"
+                        Fix: "dotnet workload install ios",
+                        FixCommand: ["dotnet", "workload", "install", "ios"]
                     )
             );
         }
@@ -391,7 +638,7 @@ public static class Doctor
             );
         }
 
-        return Capture(file: "xcode-select", arguments: ["-p"]) is { } path
+        return Probe(file: "xcode-select", arguments: ["-p"]) is { } path
             ? new Check(Status: Status.Ok, Title: $"Xcode ({path})")
             : new Check(
                 Status: Status.Fail,
@@ -401,35 +648,13 @@ public static class Doctor
     }
 
     /// <summary>
-    ///     Trimmed stdout of a tool, or null when it is absent, fails, or hangs. The timeout is
-    ///     what keeps a wedged tool from wedging the doctor — a diagnostic that hangs is worse
-    ///     than the problems it diagnoses.
+    ///     What every check here asks: a tool's trimmed output, or null when it is missing or said
+    ///     nothing useful. Doctor treats "failed" and "absent" the same on purpose — both mean the
+    ///     machine cannot do the thing, and the fix line, not the distinction, is what helps.
     /// </summary>
-    private static string? Capture(string file, string[] arguments)
-    {
-        try
-        {
-            var start = new ProcessStartInfo(file) {
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            };
-            foreach (string a in arguments) start.ArgumentList.Add(a);
-
-            using var process = Process.Start(start);
-            if (process is null) return null;
-            string output = process.StandardOutput.ReadToEnd();
-            if (!process.WaitForExit(30_000))
-            {
-                process.Kill(entireProcessTree: true);
-                return null;
-            }
-
-            return process.ExitCode == 0 && output.Length > 0 ? output.Trim() : null;
-        }
-        catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException)
-        {
-            return null; // not installed, not on PATH
-        }
-    }
+    private static string? Probe(string file, string[] arguments) =>
+        Shell.Capture(file: file, arguments: arguments, requireSuccess: true)?.Trim()
+            is { Length: > 0 } output
+            ? output
+            : null;
 }

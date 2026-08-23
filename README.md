@@ -61,12 +61,19 @@ dotnet build Zigote.sln          # builds the native engine, then the whole solu
 ```
 
 Then start an app of your own — `zigote create` writes the project, the entry point and the
-`.gitignore`, wired to this checkout:
+`.gitignore`:
 
 ```sh
-dotnet run --project Zigote.Cli -- create MyApp
-cd MyApp && dotnet run --project MyApp
+dotnet tool install -g Zigote.Cli
+zigote create MyApp
+cd MyApp && zigote run          # the attached device if there is one, else this machine
 ```
+
+No clone required for that: a generated app references the SDK by **version**
+(`PackageReference Include="Zigote.UI" Version="$(ZigoteSdkVersion)"`), and the native engine
+arrives as `Zigote.Engine.runtime.<rid>` — so a phone build needs no Zig toolchain and no NDK. See
+[docs/sdk.md](docs/sdk.md) for the versioning and compatibility rules, and pass `--engine <path>`
+(or scaffold inside a checkout) to build against engine *sources* instead.
 
 Or run something that already exists:
 
@@ -192,7 +199,7 @@ emitted paint commands, no window required.
 | **Windowing** | Multiple OS windows, overlays, drag & drop (in-app and OS files), one `AppMenu` model → native `NSMenu` on macOS and an in-window menu bar elsewhere |
 | **Theming** | `ThemeData` for appearance-dependent colour; `Spacing`, `Typography`, `Radii`, `Elevation` token scales for the rest |
 | **Focus & a11y** | Tab / arrow / Esc traversal with modal traps, and a platform-neutral semantics tree |
-| **Hot reload** | Edit a `Build()` under `dotnet watch` and the running UI updates — instances and fields survive, on the desktop and on an attached Android device (`zigote device run`) |
+| **Hot reload** | Edit a `Build()` under `dotnet watch` and the running UI updates — instances and fields survive, on the desktop and on an attached Android device (`zigote run`) |
 
 The form controls live one package up, in **[`Zigote.UI.Material`](Zigote.UI.Material/README.md)**,
 and the kernel deliberately does not duplicate them: `TextField` (single- and multi-line with full
@@ -346,7 +353,7 @@ worth reading first.
 | `Zigote.Core` | Reactive primitives, background work, native FFI (`[LibraryImport]` into `libzigote`), scene graph, assets, diagnostics. |
 | `Zigote.Engine` | The native Zig + wgpu backend — wgpu, SDL3, HarfBuzz + FreeType, Jolt, flecs, miniaudio, Assimp, behind a C ABI (git submodule). |
 | `Zigote.Generators` | Roslyn source generators (FFI bindings, DSL codegen). |
-| `Zigote.Cli` | `zigote create` / `zigote add android` — scaffolds an app and its platform heads; `zigote preview` runs one widget on its own; `zigote device run` deploys to an attached phone and reloads edits into it. |
+| `Zigote.Cli` | The whole loop: `zigote create` / `zigote add android|ios` scaffolds an app and its heads; `zigote run` runs it (attached phone or simulator if there is one, else this machine, `--widget` for a single widget, `--inspect` for the devtools protocol) and reloads edits into it; `zigote build apk|aab|ipa|exe|app|appimage` produces the shippable artifact with icons, one version and signing; `zigote test --update-goldens`, `zigote logs`, `zigote doctor --fix`. |
 | `Zigote.Mcp` | MCP server over stdio — an LLM agent launches, drives and screenshots a running app through the inspect protocol. See [`docs/mcp-server.md`](docs/mcp-server.md). |
 
 </details>

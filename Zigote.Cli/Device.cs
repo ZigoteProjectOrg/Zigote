@@ -23,11 +23,29 @@ public static class Device
 {
     public static int Run(DeviceVerb options)
     {
-        string adb = FindAdb();
+        // adb is optional for `list`: a Mac with only simulators booted has no reason to have the
+        // Android SDK installed, and failing there would hide the devices it does have.
+        string? adb = options.Action == "list" ? TryFindAdb() : FindAdb();
         return options.Action switch {
-            "list" => List(adb),
-            "run" => Launch(options: options, adb: adb),
-            "logs" => Logs(options: options, adb: adb),
+            "list" => List(adb: adb, json: options.Json),
+            // `device run` / `device logs` are what `zigote run` / `zigote logs` do now; kept as
+            // aliases for one release so muscle memory and the Rider plugin keep working.
+            "run" => Launch(
+                device: Select(adb: adb!, serial: options.Serial),
+                options: new LaunchSpec(
+                    Directory: options.Directory,
+                    Release: options.Release,
+                    NoReload: options.NoReload,
+                    Debug: options.Debug,
+                    DebugPort: options.DebugPort
+                ),
+                adb: adb!
+            ),
+            "logs" => Logs(
+                device: Select(adb: adb!, serial: options.Serial),
+                directory: options.Directory,
+                adb: adb!
+            ),
             _ => throw new CliError(
                 $"unknown action '{options.Action}'. Use: list, run, logs."
             ),
@@ -36,21 +54,61 @@ public static class Device
 
     // ── devices ───────────────────────────────────────────────────────────────
 
-    /// <summary>One attached device, as <c>adb devices -l</c> reports it.</summary>
-    internal readonly record struct Attached(string Serial, string State, string Model)
+    /// <summary>Which toolchain a device is reached through — they share nothing but the picker.</summary>
+    internal enum Kind
+    {
+        Android,
+        IosSimulator,
+    }
+
+    /// <summary>One device, as <c>adb devices -l</c> or <c>simctl</c> reports it.</summary>
+    internal readonly record struct Attached(
+        string Serial,
+        string State,
+        string Model,
+        Kind Kind = Kind.Android
+    )
     {
         public bool Ready => State == "device";
 
         public override string ToString() =>
-            Ready ? $"{Serial}  {Model}" : $"{Serial}  {Model} ({State})";
+            (Ready ? $"{Serial}  {Model}" : $"{Serial}  {Model} ({State})") +
+            (Kind == Kind.IosSimulator ? "  (simulator)" : "");
     }
 
-    private static int List(string adb)
+    private static int List(string? adb, bool json)
     {
-        var devices = Parse(Capture(file: adb, arguments: ["devices", "-l"]));
+        var devices = adb is null ? [] : Parse(Shell.Capture(file: adb, arguments: ["devices", "-l"]));
+        // Simulators are devices too — and on a Mac they are usually the only ones. Listing them
+        // here is what makes `zigote run` with no arguments able to mean "the booted simulator".
+        devices.AddRange(Ios.Simulators());
+        if (json)
+        {
+            // One object per line, so a caller can read them as they arrive and a rewording of the
+            // human output stops being an IDE-plugin bug.
+            foreach (var device in devices)
+            {
+                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(
+                        new {
+                            id = device.Serial,
+                            name = device.Model,
+                            state = device.State,
+                            ready = device.Ready,
+                            kind = device.Kind == Kind.IosSimulator ? "ios-simulator" : "android",
+                        }
+                    )
+                );
+            }
+
+            return devices.Count == 0 ? 1 : 0;
+        }
+
         if (devices.Count == 0)
         {
-            Console.WriteLine("No devices. Plug one in with USB debugging on, or start an emulator.");
+            Console.WriteLine(
+                "No devices. Plug one in with USB debugging on, start an emulator, or boot a simulator."
+            );
+            Console.WriteLine("`zigote run` with none attached runs on this machine.");
             return 1;
         }
 
@@ -90,9 +148,9 @@ public static class Device
     ///     devices and no choice is an error rather than a guess — deploying to the wrong phone is
     ///     silent, and the fix (naming one) is a word.
     /// </summary>
-    private static Attached Select(string adb, string? serial)
+    internal static Attached Select(string adb, string? serial)
     {
-        var devices = Parse(Capture(file: adb, arguments: ["devices", "-l"]));
+        var devices = Parse(Shell.Capture(file: adb, arguments: ["devices", "-l"]));
         var ready = devices.Where(d => d.Ready).ToList();
 
         if (serial is not null)
@@ -139,12 +197,24 @@ public static class Device
 
     // ── run ───────────────────────────────────────────────────────────────────
 
-    private static int Launch(DeviceVerb options, string adb)
+    /// <summary>What a launch needs, independent of which verb asked for it.</summary>
+    internal readonly record struct LaunchSpec(
+        string Directory,
+        bool Release,
+        bool NoReload,
+        bool Debug,
+        int DebugPort
+    );
+
+    internal static int Launch(Attached device, LaunchSpec options, string adb)
     {
-        var device = Select(adb: adb, serial: options.Serial);
-        string head = HeadProject(options.Directory);
+        string head = Projects.RequireHead(
+            root: options.Directory,
+            suffix: ".Android",
+            create: "`zigote add android` writes one."
+        );
         string rid = Rid(
-            Capture(file: adb, arguments: ["-s", device.Serial, "shell", "getprop", "ro.product.cpu.abi"])
+            Shell.Capture(file: adb, arguments: ["-s", device.Serial, "shell", "getprop", "ro.product.cpu.abi"])
         );
 
         bool sdkCanReload = SupportsDeviceHotReload(out string sdk);
@@ -211,7 +281,7 @@ public static class Device
         }
         else
         {
-            Console.WriteLine("  hot reload off: edits need another `zigote device run`.");
+            Console.WriteLine("  hot reload off: edits need another `zigote run`.");
         }
         if (options.Debug)
         {
@@ -220,13 +290,10 @@ public static class Device
             );
         }
 
-        Console.WriteLine($"  logs: zigote device logs --serial {device.Serial}");
+        Console.WriteLine($"  logs: zigote logs --device {device.Serial}");
         Console.WriteLine();
 
-        using var process = Process.Start(start)
-                            ?? throw new CliError("could not start dotnet — is the .NET SDK on PATH?");
-        process.WaitForExit();
-        return process.ExitCode;
+        return Shell.Wait(start);
     }
 
     /// <summary>
@@ -244,7 +311,7 @@ public static class Device
 
     private static bool SupportsDeviceHotReload(out string version)
     {
-        version = Capture(file: "dotnet", arguments: ["--version"])?.Trim() ?? "";
+        version = Shell.Capture(file: "dotnet", arguments: ["--version"])?.Trim() ?? "";
         // Compare the release band only (major.minor.feature); the patch digits are not ordered
         // usefully across bands, and "10.0.111 < 10.0.300" is the whole question.
         static int Band(string v)
@@ -281,11 +348,15 @@ public static class Device
     ///     the app emits — managed stdout, the engine's own writes (which root.zig drains onto
     ///     logcat), and the Java-side stack trace of a crash — with no tag list to keep in sync.
     /// </summary>
-    private static int Logs(DeviceVerb options, string adb)
+    internal static int Logs(Attached device, string directory, string adb)
     {
-        var device = Select(adb: adb, serial: options.Serial);
-        string appId = ApplicationId(HeadProject(options.Directory));
-        string? pid = Capture(
+        string appId = ApplicationId(Projects.RequireHead(
+                root: directory,
+                suffix: ".Android",
+                create: "`zigote add android` writes one."
+            )
+        );
+        string? pid = Shell.Capture(
             file: adb,
             arguments: ["-s", device.Serial, "shell", "pidof", "-s", appId]
         )?.Trim();
@@ -308,41 +379,10 @@ public static class Device
                 start.ArgumentList.Add(a);
         }
 
-        using var process = Process.Start(start)
-                            ?? throw new CliError($"could not start adb ({adb}).");
-        process.WaitForExit();
-        return process.ExitCode;
+        return Shell.Wait(start);
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
-
-    /// <summary>
-    ///     The Android head to deploy: the single <c>*.Android</c> project in the tree. Found rather
-    ///     than asked for, to match every other verb — the app is the directory you are standing in.
-    /// </summary>
-    private static string HeadProject(string root)
-    {
-        var heads = Directory
-            .EnumerateFiles(path: root, searchPattern: "*.csproj", searchOption: SearchOption.AllDirectories)
-            .Where(p => !p.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
-            .Where(p => !p.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
-            .Where(p => Path.GetFileNameWithoutExtension(p)
-                .EndsWith(value: ".Android", comparisonType: StringComparison.Ordinal)
-            )
-            .ToList();
-
-        return heads.Count switch {
-            1 => heads[0],
-            0 => throw new CliError(
-                $"no Android head under '{root}'. Run `zigote add android` from inside the app first."
-            ),
-            _ => throw new CliError(
-                "more than one Android head here: " +
-                string.Join(separator: ", ", values: heads.Select(Path.GetFileName)) +
-                ". Run from inside one of them, or pass --dir."
-            ),
-        };
-    }
 
     /// <summary>The head's application id, read from the csproj — it is the package name on device.</summary>
     private static string ApplicationId(string head)
@@ -360,6 +400,24 @@ public static class Device
     ///     adb, from PATH or the standard SDK location. The SDK path matters more than it looks:
     ///     installing the Android SDK does not put platform-tools on PATH on any of the three hosts.
     /// </summary>
+    internal static List<Attached> ReadyDevices(string adb) =>
+        Parse(Shell.Capture(file: adb, arguments: ["devices", "-l"])).Where(d => d.Ready).ToList();
+
+    /// <summary>adb if this machine has one, null if it does not — `run` falls back to desktop.</summary>
+    internal static string? TryFindAdb()
+    {
+        try
+        {
+            return FindAdb();
+        }
+        catch (CliError)
+        {
+            return null;
+        }
+    }
+
+    internal static string RequireAdb() => FindAdb();
+
     private static string FindAdb()
     {
         string exe = OperatingSystem.IsWindows() ? "adb.exe" : "adb";
@@ -388,26 +446,5 @@ public static class Device
             "adb not found. Install the Android SDK platform-tools, or set ANDROID_HOME. " +
             "`zigote doctor` checks the rest of the toolchain too."
         );
-    }
-
-    /// <summary>stdout of a short-lived tool, or null if it could not be run.</summary>
-    private static string? Capture(string file, string[] arguments)
-    {
-        try
-        {
-            var start = new ProcessStartInfo(file) {
-                RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false,
-            };
-            foreach (string a in arguments) start.ArgumentList.Add(a);
-            using var process = Process.Start(start);
-            if (process is null) return null;
-            string output = process.StandardOutput.ReadToEnd();
-            process.WaitForExit();
-            return output;
-        }
-        catch (Exception)
-        {
-            return null;
-        }
     }
 }

@@ -128,3 +128,30 @@ public sealed class Scaffolder
             Console.WriteLine($"  exists   {f}  (use --force to overwrite)");
     }
 }
+
+/// <summary>
+///     What this tool scaffolds against: its own version, which is also the version of every
+///     package it writes into a generated project. The two ship together, so an app created by
+///     <c>zigote 0.2.0</c> restores Zigote 0.2.0 — the string that answers "what is my app built
+///     against", which a checkout path never could.
+/// </summary>
+public static class Sdk
+{
+    public static string Version { get; } =
+        typeof(Sdk).Assembly.GetName().Version?.ToString(3) ?? "0.1.0";
+
+    /// <summary>
+    ///     A NuGet version the generated csproj can carry: digits and dots, optionally a
+    ///     prerelease/build suffix. Anything else is rejected here, where the message can name the
+    ///     argument, rather than by NuGet three steps later.
+    /// </summary>
+    public static string ValidateVersion(string version) =>
+        System.Text.RegularExpressions.Regex.IsMatch(
+            input: version,
+            pattern: @"^\d+\.\d+(\.\d+){0,2}([-+][0-9A-Za-z.-]+)?$"
+        )
+            ? version
+            : throw new CliError(
+                $"'{version}' is not a version. Use e.g. 0.1.0, or 0.2.0-preview.1."
+            );
+}

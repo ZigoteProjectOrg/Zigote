@@ -18,12 +18,15 @@
         <RootNamespace>Zigote.Cli</RootNamespace>
         <AssemblyName>zigote</AssemblyName>
 
+        <IsPackable>true</IsPackable>
         <PackAsTool>true</PackAsTool>
         <ToolCommandName>zigote</ToolCommandName>
         <PackageOutputPath>./nupkg</PackageOutputPath>
         <PackageId>Zigote.Cli</PackageId>
-        <Version>0.1.0</Version>
-        <Description>Scaffolds Zigote apps, plugins and platform heads, runs them on a device with `zigote device`, and checks the machine with `zigote doctor`.</Description>
+        <!-- The SDK version this CLI scaffolds against: `create` writes it into the generated
+             PackageReferences, so the tool and the packages it points at ship as one thing. -->
+        <Version>$(ZigoteVersion)</Version>
+        <Description>Scaffolds Zigote apps, plugins and platform heads, runs them with `zigote run` (desktop, device, or a single widget), and checks the machine with `zigote doctor`.</Description>
     </PropertyGroup>
 
     <ItemGroup>

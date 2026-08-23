@@ -53,3 +53,38 @@ public class DeviceCliTests
     public void Rid_RefusesAnAbiTheEngineHasNoLibFor() =>
         Assert.Throws<CliError>(() => Device.Rid("armeabi-v7a"));
 }
+
+/// <summary>
+///     The one decision <c>zigote run</c> makes: where to run. Exactly one candidate is silent,
+///     zero means desktop, a name matches loosely, and anything ambiguous is refused rather than
+///     guessed — deploying to the wrong phone is a silent failure.
+/// </summary>
+public class RunTargetTests
+{
+    private static List<Device.Attached> Ready(params string[] serials) =>
+        serials.Select(s => new Device.Attached(Serial: s, State: "device", Model: $"{s}-model"))
+            .ToList();
+
+    [Fact]
+    public void NoDevices_MeansDesktop() => Assert.Null(Run.Resolve(spec: null, ready: []));
+
+    [Fact]
+    public void DesktopKeyword_WinsOverAnAttachedDevice() =>
+        Assert.Null(Run.Resolve(spec: "Desktop", ready: Ready("emulator-5554")));
+
+    [Fact]
+    public void OneDevice_IsChosenSilently() =>
+        Assert.Equal("emulator-5554", Run.Resolve(spec: null, ready: Ready("emulator-5554"))?.Serial);
+
+    [Fact]
+    public void ANameMatchesModelOrSerialLoosely() =>
+        Assert.Equal("pixel8", Run.Resolve(spec: "PIXEL", ready: Ready("pixel8", "emulator-5554"))?.Serial);
+
+    [Fact]
+    public void AnUnmatchedNameIsAnError_NotASilentFallbackToDesktop() =>
+        Assert.Throws<CliError>(() => Run.Resolve(spec: "nokia", ready: Ready("pixel8")));
+
+    [Fact]
+    public void AnAmbiguousNameIsRefused() =>
+        Assert.Throws<CliError>(() => Run.Resolve(spec: "pixel", ready: Ready("pixel8", "pixel9")));
+}
