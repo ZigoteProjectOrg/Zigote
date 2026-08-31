@@ -31,6 +31,7 @@ new AdwaitaApp(new Shell(), title: "My App").Run();
 - [Feedback: toasts, banners, dialogs](#feedback-toasts-banners-dialogs)
 - [A complete app](#a-complete-app)
 - [Style, type and metrics](#style-type-and-metrics)
+- [Liquid Glass](#liquid-glass)
 - [Differences from libadwaita](#differences-from-libadwaita)
 
 ---
@@ -274,6 +275,38 @@ sealed class CounterPage : ComposedWidget
 | `AdwStyle`       | State → colour resolution: `ButtonFill`, `ButtonForeground`, the five row ladders, `TroughFill`, `SliderKnob`, the disabled/dim opacities, and the ~100 ms fill transitions every button-like control fades with.                                                          |
 | `AdwButtonStyle` | `Regular`, `Suggested`, `Destructive`, `Flat`, `Opaque` — plus `Pill`, `Circular` and `Compact` as shape flags on `AdwButton`.                                                                                                                                             |
 | `AdwPalette`     | The tokens with no `ThemeData` slot, plus `Fill(theme, percent)` / `Mix` for one-off `color-mix` values.                                                                                                                                                                   |
+
+## Liquid Glass
+
+Adwaita in structure, Apple in material. GNOME decides where things go; the chrome that *floats over content* — a
+player bar, a toolbar riding a picture, a lock-screen card — is made of `LiquidPane`, the engine's refractive glass,
+instead of another flat fill. The rules, in the order they matter:
+
+- **Glass is the navigation layer, never the content layer.** The list scrolling underneath a pane stays opaque, so
+  there is something to refract.
+- **Glass never stacks on glass.** A pane's children are drawn flat; a glass button on a glass bar reads as a smudge.
+- **Two variants, and the dial between them.** `LiquidPane.Regular` for chrome over a surface the theme knows,
+  `LiquidPane.Clear` for chrome over media, and `Tinted` (0 = clear, 1 = regular) to blend a pane between them live —
+  a slider can drive it without rebuilding anything.
+- **One capture per cluster.** Every pane inside a `LiquidGroup` lays its lens down before any pane's content, so a
+  toolbar of three panes is one backdrop copy and one render-pass break, not three.
+- **Content takes its colour from the glass** — `LiquidPane.OnGlass(theme)` / `OnGlassMuted` — and interactive glass
+  is a gel: `LiquidPane.Interactive(pane, onPressed)` wires hover and press into the lens.
+
+```csharp
+var toolbar = new LiquidGroup(
+    new Row(spacing: 12f) {
+        Children = {
+            LiquidPane.Interactive(pane: menu, onPressed: OpenMenu, semantics: "Menu"),
+            new Expanded(LiquidPane.Interactive(pane: search, onPressed: Search, semantics: "Search")),
+        },
+    }
+);
+```
+
+Not free: each run of lenses costs a scene copy and a render-pass break, and a lens never repaints a patch of itself
+— anything changing under one redraws the whole lens. An app that uses it should offer a preference that turns it off.
+The gallery's *Liquid Glass* page is the material study.
 
 ## Differences from libadwaita
 

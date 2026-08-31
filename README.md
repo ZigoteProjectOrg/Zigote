@@ -190,7 +190,7 @@ emitted paint commands, no window required.
 
 | Area | What is in it |
 | --- | --- |
-| **Layout** | `Column`, `Row`, `Stack`, `Wrap`, `Expanded`, `Padding`, `Align`, `SizedBox`, `ScrollView`, virtualized `ListView`/`GridView`, `InteractiveViewer` (pan / pinch-zoom) |
+| **Layout** | `Column`, `Row`, `Stack`, `Wrap`, `Expanded`, `Padding`, `Align`, `SizedBox`, `ScrollView` (+ `ScrollsWith` for chrome floating over one), virtualized `ListView`/`GridView`, `InteractiveViewer` (pan / pinch-zoom) |
 | **Controls** | `Label`, `Button`, `Card`, `Dialog`, `Snackbar`, `Tooltip`, `ContextMenu`, `Popover`, `RichText`, `SelectableText`, `Pressable` |
 | **Text & input** | Engine-backed shaping and measurement, selection, undo, and the IME seam (`ITextInputClient`). The editable `TextField` itself ships in `Zigote.UI.Material` — see below. |
 | **Liquid Glass** | `LiquidGlass` surfaces over media — the shader anchors the backdrop per pixel, the theme picks the glass family — plus `LiquidGlassLayer`, blend groups and `GlassGlow` |

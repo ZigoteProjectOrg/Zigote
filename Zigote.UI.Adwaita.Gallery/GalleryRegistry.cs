@@ -234,7 +234,7 @@ internal static class GalleryRegistry
             Entries: [
                 new GalleryEntry(
                     Title: "Liquid Glass",
-                    Subtitle: "Glass chrome over photos — a control centre and a lock screen",
+                    Subtitle: "A toolbar over content, a control centre and a lock screen",
                     IconName: MaterialIcons.WaterDrop,
                     Build: () => new LiquidGlassPage()
                 ),

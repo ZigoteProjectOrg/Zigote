@@ -4,15 +4,17 @@ using Zigote.UI.Material;
 namespace AdwaitaGallery.Pages;
 
 /// <summary>
-///     Liquid Glass — the material study. Two phone scenes, a control centre and a lock screen,
-///     built entirely from <see cref="LiquidPane" /> floating over a photograph: the design
-///     system's split in one page — Adwaita decides where things go, glass is what the floating
-///     layer is made of.
+///     Liquid Glass — the material study. Three scenes built from <see cref="LiquidPane" />: a
+///     toolbar floating over an article, with the slider that blends its panes from clear to
+///     tinted; then a control centre and a lock screen over photographs. The design system's
+///     split in one page — Adwaita decides where things go, glass is what the floating layer is
+///     made of.
 ///     <para>
-///         Everything glass here is a real lens over the real picture — each pane is a
-///         render-pass break and a full-scene backdrop copy, so this page is also an honest
-///         showing of what a screenful of glass costs. The flat fills <i>inside</i> the panes
-///         (the toggle dots, the app badges) follow the other rule: glass never stacks on glass.
+///         Everything glass here is a real lens over the real picture. Each scene's panes sit in
+///         one <see cref="LiquidGroup" />, so a screenful of glass costs one backdrop copy and one
+///         render-pass break rather than one per pane — and this page is still an honest showing
+///         of what that costs. The flat fills <i>inside</i> the panes (the toggle dots, the app
+///         badges) follow the other rule: glass never stacks on glass.
 ///     </para>
 /// </summary>
 public sealed class LiquidGlassPage : ComposedWidget
@@ -20,6 +22,20 @@ public sealed class LiquidGlassPage : ComposedWidget
     private const float PhoneW = 320f;
     private const float PhoneH = 640f;
     private const float PhoneRadius = 30f;
+
+    // The article card and the toolbar riding it — a hero card, so rounder than a boxed list,
+    // and a fixed-height viewport so its content has somewhere to scroll under the glass.
+    private const float ArticleRadius = 24f;
+    private const float ArticlePadding = 20f;
+    private const float ArticleHeight = 480f;
+
+    // The picture fills the card at rest, so the toolbar starts out over it and its bottom edge
+    // sweeps up through the lens on the first scroll, the headline right behind — shorter than
+    // the card less its padding and neither could ever reach the toolbar's band.
+    private const float ArticleImageHeight = ArticleHeight - ArticlePadding;
+    private const float ToolbarHeight = 56f;
+    private const float BodySize = 15f;
+    private const float BodyLineHeight = 1.45f;
 
     // The scenes pin the glass family dark (see Phone), so their ink is fixed too — asking the
     // gallery theme would answer for the page around the phone, not the wallpaper inside it.
@@ -38,6 +54,10 @@ public sealed class LiquidGlassPage : ComposedWidget
     private readonly Signal<bool> _wifi = new(true);
     private readonly Signal<bool> _bluetooth = new(true);
 
+    // Where the toolbar's slider left the material: 0 is clear, 1 is tinted. On the page for the
+    // same reason as the toggles; the panes take it live, so a drag never rebuilds anything.
+    private float _tinted = 0.5f;
+
     private ThemeData _theme = ThemeData.Dark;
 
     protected override Widget Build(BuildContext context)
@@ -47,15 +67,23 @@ public sealed class LiquidGlassPage : ComposedWidget
             title: "Liquid Glass",
             description:
             "Glass is the material of the floating layer: chrome over content, never content "
-            + "itself. Two scenes, every surface a live lens over the picture behind it.",
+            + "itself. Three scenes, every surface a live lens over what is behind it.",
             iconName: MaterialIcons.WaterDrop
         ) {
             Children = {
                 Demo.Titled(
+                    title: "Clear to tinted",
+                    description:
+                    "A toolbar floating over an article that scrolls under it. The card is content "
+                    + "and stays flat; the toolbar is the navigation layer, so it is glass. The "
+                    + "slider takes its panes from a clear lens to an opaque tint.",
+                    child: Article()
+                ),
+                Demo.Titled(
                     title: "Control centre",
                     description:
-                    "Toggles, a player, sliders and utilities — each tile its own pane. "
-                    + $"Backdrop art by {ArtSource.Showcase[1].Artist} (nekos.best).",
+                    "Toggles, a player, sliders and utilities — each tile its own pane, all of them "
+                    + $"one capture. Backdrop art by {ArtSource.Showcase[1].Artist} (nekos.best).",
                     child: Phone(art: ArtSource.Showcase[1], scene: ControlCentre())
                 ),
                 Demo.Titled(
@@ -70,23 +98,230 @@ public sealed class LiquidGlassPage : ComposedWidget
         };
     }
 
+    // ── Scene 1: a toolbar over an article ────────────────────────────────────
+
+    /// <summary>
+    ///     The reference scene: a card that is a scroll viewport — a full-bleed picture, a
+    ///     headline and the copy — with a menu button and a search field floating over its foot,
+    ///     and under it the slider that moves both panes from clear to tinted. The content scrolls
+    ///     <i>under</i> the toolbar, which is the point: drag the picture's edge under the lens and
+    ///     the rim bends it, park the headline under it and clear shows the letters through while
+    ///     tinted covers them. A lens with nothing under it shows nothing.
+    /// </summary>
+    private Widget Article()
+    {
+        var theme = _theme;
+        var palette = AdwPalette.For(theme);
+        var art = ArtSource.Showcase[2];
+        Color ink = LiquidPane.OnGlass(theme);
+
+        // The tinted end is a full scrim in the glass family's own tone — Apple's tint, which
+        // "increases opacity": white under ink in the light theme, near-black under white in the
+        // dark one. The theme's own haze (the Regular variant) sits well short of that, so the
+        // slider would otherwise run from clear to slightly-less-clear.
+        Color tinted = (theme.IsDark ? Color.Rgb(r: 28, g: 28, b: 32) : Color.White)
+            .WithAlpha(0.9f);
+
+        // The thin rim — the reference capsules bend the picture in a hairline at their edge —
+        // and only the scrim moves with the slider. The pane objects are kept in the closure so
+        // the slider writes the material straight into them — no Watch, no rebuild, the gel
+        // state survives every drag.
+        var menu = new LiquidPane {
+            Elevation = 4f,
+            Tint = tinted,
+            Tinted = _tinted,
+            Child = SizedBox.Square(
+                size: ToolbarHeight,
+                child: new Center {
+                    Child = new IconGlyph(glyph: MaterialIcons.Menu, size: 24f, color: ink),
+                }
+            ),
+        };
+        var search = new LiquidPane {
+            Elevation = 4f,
+            Tint = tinted,
+            Tinted = _tinted,
+            Child = new SizedBox(
+                height: ToolbarHeight,
+                child: new Padding(
+                    padding: EdgeInsets.Symmetric(horizontal: 20f, vertical: 0f),
+                    child: new Row(spacing: 10f, crossAxisAlignment: CrossAxisAlignment.Center) {
+                        Children = {
+                            new IconGlyph(glyph: MaterialIcons.Search, size: 22f, color: ink),
+                            new Label(
+                                text: "Search",
+                                style: new TextStyle(Size: 17f),
+                                color: LiquidPane.OnGlassMuted(theme)
+                            ),
+                        },
+                    }
+                )
+            ),
+        };
+
+        var body = new TextStyle(Size: BodySize, LineHeight: BodyLineHeight);
+        var content = new SingleChildScrollView {
+            Child = new Column(
+                crossAxisAlignment: CrossAxisAlignment.Stretch,
+                mainAxisSize: MainAxisSize.Min
+            ) {
+                Children = {
+                    // Full bleed: the card's clip rounds its top corners, so no radius of its own.
+                    new SizedBox(
+                        height: ArticleImageHeight,
+                        child: Backdrop(art: art, radius: 0f, maxDecode: 1024)
+                    ),
+                    new Padding(
+                        padding: EdgeInsets.All(ArticlePadding),
+                        child: new Column(
+                            crossAxisAlignment: CrossAxisAlignment.Stretch,
+                            mainAxisSize: MainAxisSize.Min
+                        ) {
+                            Children = {
+                                new Label(
+                                    text: "Ink and Light",
+                                    style: AdwTypography.Title1,
+                                    color: palette.CardFg
+                                ),
+                                new SizedBox(height: 10f),
+                                new Label(
+                                    text:
+                                    $"Drawn by {art.Artist}, served by nekos.best. The toolbar "
+                                    + "floating over this card is chrome, so it is glass; the "
+                                    + "card is content, so it stays flat — and that flatness is "
+                                    + "what the lens has to refract.",
+                                    style: body,
+                                    color: palette.CardFg
+                                ),
+                                new SizedBox(height: 12f),
+                                new Label(
+                                    text:
+                                    "Scroll the picture's edge under the toolbar and watch the "
+                                    + "rim bend it. Park the headline under it: clear shows the "
+                                    + "letters through the lens, tinted covers them and keeps "
+                                    + "the controls readable over anything.",
+                                    style: body,
+                                    color: palette.CardFg
+                                ),
+                                new SizedBox(height: 12f),
+                                new Label(
+                                    text:
+                                    "Every lens here is a live capture of what is behind it, "
+                                    + "and the two panes share one — the toolbar is a group, so "
+                                    + "the frame copies the scene once for both.",
+                                    style: body,
+                                    color: palette.CardFg
+                                ),
+                                // The last line must be able to clear the toolbar.
+                                new SizedBox(height: ToolbarHeight + ArticlePadding),
+                            },
+                        }
+                    ),
+                },
+            },
+        };
+
+        var card = new DecoratedBox {
+            Fill = palette.CardBg,
+            Radius = ArticleRadius,
+            BorderColor = palette.CardShade,
+            BorderWidth = 1f,
+            Child = new ClipRRect(
+                radius: ArticleRadius,
+                child: new SizedBox(
+                    height: ArticleHeight,
+                    child: new Stack {
+                        Children = {
+                            content,
+                            new Positioned(
+                                left: ArticlePadding,
+                                right: ArticlePadding,
+                                bottom: ArticlePadding,
+                                // One group for the toolbar: both lenses go down first, one
+                                // capture. The scroll viewport is under the glass, not inside
+                                // the group — a lens never repaints a patch of itself, so
+                                // scrolling recaptures the toolbar's region each frame, and
+                                // that is the honest cost of chrome over moving content. The
+                                // toolbar is beside the viewport, not in it, so a wheel over
+                                // the glass has to be handed to the article on purpose.
+                                child: new ScrollsWith(
+                                    target: content,
+                                    child: new LiquidGroup(
+                                        new Row(spacing: 12f) {
+                                            Children = {
+                                                LiquidPane.Interactive(
+                                                    pane: menu,
+                                                    onPressed: () => { },
+                                                    semantics: "Menu"
+                                                ),
+                                                new Expanded(
+                                                    LiquidPane.Interactive(
+                                                        pane: search,
+                                                        onPressed: () => { },
+                                                        semantics: "Search"
+                                                    )
+                                                ),
+                                            },
+                                        }
+                                    )
+                                )
+                            ),
+                        },
+                    }
+                )
+            ),
+        };
+
+        return new Column(
+            spacing: Spacing.Lg,
+            crossAxisAlignment: CrossAxisAlignment.Stretch,
+            mainAxisSize: MainAxisSize.Min
+        ) {
+            Children = {
+                card,
+                Demo.Stage(
+                    new Row(spacing: Spacing.Md, crossAxisAlignment: CrossAxisAlignment.Center) {
+                        Children = {
+                            new IconGlyph(
+                                glyph: MaterialIcons.FilterNone,
+                                size: 22f,
+                                color: theme.TextSecondary
+                            ),
+                            new Expanded(
+                                new AdwSlider(
+                                    value: _tinted,
+                                    onChanged: v =>
+                                    {
+                                        _tinted = v;
+                                        menu.Tinted = v;
+                                        search.Tinted = v;
+                                    }
+                                ) { SemanticsLabel = "Clear to tinted" }
+                            ),
+                            // The nearest this font has to Apple's square.filled.on.square: the
+                            // same stacked squares as FilterNone, with the front one filled.
+                            new IconGlyph(
+                                glyph: MaterialIcons.AutoAwesomeMotion,
+                                size: 22f,
+                                color: theme.TextSecondary
+                            ),
+                        },
+                    },
+                    padding: Spacing.Md
+                ),
+                Demo.Caption(
+                    "Clear is more transparent; tinted increases opacity, adding contrast to "
+                    + "content and controls."
+                ),
+            },
+        };
+    }
+
     // ── The phone frame ───────────────────────────────────────────────────────
 
     /// <summary>A fixed phone canvas: the photo cover-cropped to fill it, the scene on top.</summary>
     private Widget Phone(ArtPiece art, Widget scene)
     {
-        var backdrop = new AsyncImage(
-            // Null on failure is AsyncImage's contract for "give up quietly" — OrElse collapses
-            // every HttpError into it, which is right for a decorative backdrop.
-            loader: async ct =>
-                (await ArtSource.Http.BytesAsync(HttpRequest.Get(art.Url), ct).ConfigureAwait(false))
-                .OrElse(null!)
-        ) {
-            Fit = ImageFit.Cover,
-            MaxDecodeSize = (int)(PhoneH * 1.2f),
-            Radius = PhoneRadius,
-        };
-
         return new Center {
             Child = new DecoratedBox {
                 Radius = PhoneRadius,
@@ -102,10 +337,15 @@ public sealed class LiquidGlassPage : ComposedWidget
                         // ink whatever the gallery theme is — the light theme's heavier scrim
                         // is tuned for chrome over flat surfaces, and over a picture it reads
                         // as a grey slab. iOS does the same on the lock screen.
+                        // One group per scene: a screenful of panes, one backdrop capture.
                         child: new Stack {
                             Children = {
-                                backdrop,
-                                new ThemeProvider(data: ThemeData.Dark, child: scene),
+                                Backdrop(
+                                    art: art,
+                                    radius: PhoneRadius,
+                                    maxDecode: (int)(PhoneH * 1.2f)
+                                ),
+                                new ThemeProvider(data: ThemeData.Dark, child: new LiquidGroup(scene)),
                             },
                         }
                     )
@@ -114,7 +354,25 @@ public sealed class LiquidGlassPage : ComposedWidget
         };
     }
 
-    // ── Scene 1: control centre ───────────────────────────────────────────────
+    /// <summary>
+    ///     A picture cover-cropped to whatever holds it. Null on failure is AsyncImage's contract
+    ///     for "give up quietly" — OrElse collapses every HttpError into it, which is right for a
+    ///     decorative backdrop.
+    /// </summary>
+    private static Widget Backdrop(ArtPiece art, float radius, int maxDecode)
+    {
+        return new AsyncImage(
+            loader: async ct =>
+                (await ArtSource.Http.BytesAsync(HttpRequest.Get(art.Url), ct).ConfigureAwait(false))
+                .OrElse(null!)
+        ) {
+            Fit = ImageFit.Cover,
+            MaxDecodeSize = maxDecode,
+            Radius = radius,
+        };
+    }
+
+    // ── Scene 2: control centre ───────────────────────────────────────────────
 
     private Widget ControlCentre()
     {
@@ -145,8 +403,14 @@ public sealed class LiquidGlassPage : ComposedWidget
                                     Children = {
                                         new Row(spacing: 14f) {
                                             Children = {
-                                                GlassCircle(MaterialIcons.ScreenLockRotation),
-                                                GlassCircle(MaterialIcons.NotificationsNone),
+                                                GlassCircle(
+                                                    icon: MaterialIcons.ScreenLockRotation,
+                                                    label: "Rotation lock"
+                                                ),
+                                                GlassCircle(
+                                                    icon: MaterialIcons.NotificationsNone,
+                                                    label: "Notifications"
+                                                ),
                                             },
                                         },
                                         FocusPill(),
@@ -166,16 +430,16 @@ public sealed class LiquidGlassPage : ComposedWidget
                         },
                     },
                     UtilityRow(
-                        MaterialIcons.FlashlightOn,
-                        MaterialIcons.Timer,
-                        MaterialIcons.Calculate,
-                        MaterialIcons.PhotoCamera
+                        (MaterialIcons.FlashlightOn, "Flashlight"),
+                        (MaterialIcons.Timer, "Timer"),
+                        (MaterialIcons.Calculate, "Calculator"),
+                        (MaterialIcons.PhotoCamera, "Camera")
                     ),
                     UtilityRow(
-                        MaterialIcons.NightlightRound,
-                        MaterialIcons.MobileScreenShare,
-                        MaterialIcons.StickyNote2,
-                        MaterialIcons.ZoomIn
+                        (MaterialIcons.NightlightRound, "Dark mode"),
+                        (MaterialIcons.MobileScreenShare, "Screen mirroring"),
+                        (MaterialIcons.StickyNote2, "Notes"),
+                        (MaterialIcons.ZoomIn, "Magnifier")
                     ),
                 },
             }
@@ -193,14 +457,26 @@ public sealed class LiquidGlassPage : ComposedWidget
                         Children = {
                             new Row(spacing: 12f, mainAxisSize: MainAxisSize.Min) {
                                 Children = {
-                                    ToggleDot(icon: MaterialIcons.Flight, on: _airplane),
-                                    ToggleDot(icon: MaterialIcons.WifiTethering, on: _hotspot),
+                                    ToggleDot(
+                                        icon: MaterialIcons.Flight,
+                                        label: "Airplane mode",
+                                        on: _airplane
+                                    ),
+                                    ToggleDot(
+                                        icon: MaterialIcons.WifiTethering,
+                                        label: "Hotspot",
+                                        on: _hotspot
+                                    ),
                                 },
                             },
                             new Row(spacing: 12f, mainAxisSize: MainAxisSize.Min) {
                                 Children = {
-                                    ToggleDot(icon: MaterialIcons.Wifi, on: _wifi),
-                                    ToggleDot(icon: MaterialIcons.Bluetooth, on: _bluetooth),
+                                    ToggleDot(icon: MaterialIcons.Wifi, label: "Wi-Fi", on: _wifi),
+                                    ToggleDot(
+                                        icon: MaterialIcons.Bluetooth,
+                                        label: "Bluetooth",
+                                        on: _bluetooth
+                                    ),
                                 },
                             },
                         },
@@ -212,7 +488,7 @@ public sealed class LiquidGlassPage : ComposedWidget
         );
     }
 
-    private Widget ToggleDot(string icon, Signal<bool> on)
+    private Widget ToggleDot(string icon, string label, Signal<bool> on)
     {
         var theme = _theme;
         return new Watch(() =>
@@ -221,7 +497,7 @@ public sealed class LiquidGlassPage : ComposedWidget
                 return new Pressable {
                     OnPressed = () => on.Value = !on.Value,
                     FocusRadius = 24f,
-                    SemanticsLabel = $"{(active ? "Disable" : "Enable")} {icon}",
+                    SemanticsLabel = $"{(active ? "Disable" : "Enable")} {label}",
                     Child = new DecoratedBox {
                         Fill = active ? theme.Accent : Color.White.WithAlpha(0.24f),
                         Radius = 24f,
@@ -347,7 +623,8 @@ public sealed class LiquidGlassPage : ComposedWidget
 
     /// <summary>
     ///     A vertical slider capsule: a clear pane with a flat white fill riding its bottom — the
-    ///     clip is what rounds the fill into the capsule's own corners.
+    ///     clip is what rounds the fill into the capsule's own corners. The lens itself is already
+    ///     that shape, so the group drawing it outside the clip changes nothing.
     /// </summary>
     private Widget Capsule(string icon, float fill, Color iconColor)
     {
@@ -382,15 +659,16 @@ public sealed class LiquidGlassPage : ComposedWidget
         );
     }
 
-    private Widget UtilityRow(params string[] icons)
+    private Widget UtilityRow(params (string Icon, string Label)[] buttons)
     {
         var row = new Row(mainAxisAlignment: MainAxisAlignment.SpaceBetween);
-        foreach (string icon in icons) row.Children.Add(GlassCircle(icon: icon, size: 56f));
+        foreach ((string icon, string label) in buttons)
+            row.Children.Add(GlassCircle(icon: icon, label: label, size: 56f));
         return row;
     }
 
     /// <summary>A round clear pane as a button, with the gel response wired in.</summary>
-    private Widget GlassCircle(string icon, float size = 52f)
+    private Widget GlassCircle(string icon, string label, float size = 52f)
     {
         var pane = LiquidPane.Clear(
             child: SizedBox.Square(
@@ -404,7 +682,7 @@ public sealed class LiquidGlassPage : ComposedWidget
                 }
             )
         );
-        return LiquidPane.Interactive(pane: pane, onPressed: () => { }, semantics: icon);
+        return LiquidPane.Interactive(pane: pane, onPressed: () => { }, semantics: label);
     }
 
     /// <summary>
@@ -429,7 +707,7 @@ public sealed class LiquidGlassPage : ComposedWidget
         };
     }
 
-    // ── Scene 2: lock screen ──────────────────────────────────────────────────
+    // ── Scene 3: lock screen ──────────────────────────────────────────────────
 
     private Widget LockScreen()
     {
@@ -481,8 +759,16 @@ public sealed class LiquidGlassPage : ComposedWidget
                         padding: EdgeInsets.Symmetric(horizontal: 14f, vertical: 0f),
                         child: new Row(mainAxisAlignment: MainAxisAlignment.SpaceBetween) {
                             Children = {
-                                GlassCircle(icon: MaterialIcons.FlashlightOn, size: 58f),
-                                GlassCircle(icon: MaterialIcons.PhotoCamera, size: 58f),
+                                GlassCircle(
+                                    icon: MaterialIcons.FlashlightOn,
+                                    label: "Flashlight",
+                                    size: 58f
+                                ),
+                                GlassCircle(
+                                    icon: MaterialIcons.PhotoCamera,
+                                    label: "Camera",
+                                    size: 58f
+                                ),
                             },
                         }
                     ),
