@@ -114,6 +114,7 @@ public class AdwButton : ComposedWidget
     private AdwButtonContent? _defaultContent;
     private bool _enabled = true;
     private string? _iconName;
+    private BoxShadow? _iconShadow;
     private string _label;
     private bool _pill;
     private AdwButtonStyle _style = AdwButtonStyle.Regular;
@@ -149,6 +150,13 @@ public class AdwButton : ComposedWidget
     {
         get => _iconName;
         set => SetBuild(field: ref _iconName, value: value);
+    }
+
+    /// <summary>Shadow behind <see cref="IconName" />, for icon buttons sitting over artwork.</summary>
+    public BoxShadow? IconShadow
+    {
+        get => _iconShadow;
+        set => SetBuild(field: ref _iconShadow, value: value);
     }
 
     /// <summary>Optional widget child shown instead of the label + icon.</summary>
@@ -240,7 +248,7 @@ public class AdwButton : ComposedWidget
         // .circular is icon-only in Adwaita, so the label is dropped from the content (it survives
         // as the accessible name) rather than allowed to size the square.
         _defaultContent = Content is null
-            ? new AdwButtonContent(iconName: IconName, label: Circular ? "" : Label)
+            ? new AdwButtonContent(iconName: IconName, label: Circular ? "" : Label) { IconShadow = IconShadow }
             : null;
         var content = Content ?? _defaultContent!;
 
