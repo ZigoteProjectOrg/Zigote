@@ -127,6 +127,29 @@ public class LiquidGroupTests
         }
     }
 
+    /// <summary>
+    ///     The group is invisible glue: a miss inside its bounds falls through to whatever is
+    ///     stacked beneath. A group whose child blankets a window — bars in Positioned corners
+    ///     of a full-size Stack — used to answer <c>this</c> for every off-bar point, eating the
+    ///     clicks (and, with them, the wheel) over the very content its bars float above.
+    /// </summary>
+    [Fact]
+    public void GroupPassesMissesThrough()
+    {
+        var group = new LiquidGroup(
+            new SizedBox(
+                width: 200f,
+                height: 100f,
+                child: new Stack {
+                    Children = { new Positioned(left: 0f, top: 0f, child: Pane()) },
+                }
+            )
+        );
+        Ops(group);
+        Assert.NotNull(group.HitTest(new Offset(x: 5f, y: 5f)));
+        Assert.Null(group.HitTest(new Offset(x: 150f, y: 90f)));
+    }
+
     [Fact]
     public void PaneMeasuredOutsideItsGroupLeavesIt()
     {

@@ -492,13 +492,19 @@ public sealed class LiquidPane : Widget
             max: 1f
         );
 
-        // The anchor follows the CONTENT, not the tint. What sits on this pane is OnGlass: white in
-        // the dark theme, near-black in the light one — so over an arbitrary backdrop the shader
-        // must pull toward whichever tone gives that ink contrast: dark under white content, light
-        // under dark content. Deriving the sign from the tint's own luminance (the obvious
-        // heuristic, and the first version of this) inverted exactly when it mattered most:
-        // dark-mode glass is a *milky* tint, whose high luminance anchored the backdrop light —
-        // lifting a bright album cover toward white directly underneath white text.
+        // The anchor follows the CONTENT, not the page. With no Tint the content is the theme's
+        // OnGlass ink, so the theme decides: dark under white content, light under dark content.
+        // Deriving that default from the haze's own luminance (the obvious heuristic, and the
+        // first version of this) inverted exactly when it mattered most: dark-mode glass is a
+        // *milky* tint, whose high luminance anchored the backdrop light — lifting a bright album
+        // cover toward white directly underneath white text. An explicit Tint is different: it
+        // declares a family the theme knows nothing about, and its content was chosen against it
+        // (white on dark or accent glass, ink on light) — so there, and only there, the tint's own
+        // luminance is the truth. Matters most at the clear end of the dial, where the scrim has
+        // faded and the pull is all that keeps a forced family's ink readable.
+        bool lightContent = Tint is { } family
+            ? (family.R * 0.299f) + (family.G * 0.587f) + (family.B * 0.114f) < 0.5f
+            : _theme.IsDark;
         paint.AddLiquidGlass(
             bounds: Bounds,
             color: colour.WithAlpha(scrim),
@@ -507,7 +513,7 @@ public sealed class LiquidPane : Widget
             glowX: _theme.GlassGlowX,
             glowY: _theme.GlassGlowY,
             pinch: pinch,
-            adapt: _theme.IsDark ? -adapt : adapt
+            adapt: lightContent ? -adapt : adapt
         );
 
         // No drawn border. The rim light IS the shader's directional specular and fresnel; a flat

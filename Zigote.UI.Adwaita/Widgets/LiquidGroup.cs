@@ -37,6 +37,17 @@ public sealed class LiquidGroup : InheritedWidget
     // Nothing inherited but the scope itself: no dependents to notify.
     public override bool UpdateShouldNotify(InheritedWidget oldWidget) => false;
 
+    // The group is invisible glue, and a miss inside it falls through to whatever is stacked
+    // beneath — the same cure as Watch.HitTest. A group whose child blankets a window (two bars
+    // in Positioned corners of a full-size Stack) otherwise answers `this` for every off-bar
+    // point, eating the clicks — and, with them, the wheel — over the very content its bars
+    // float above.
+    public override Widget? HitTest(Offset point)
+    {
+        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
+        return Child?.HitTest(point);
+    }
+
     public override void Paint(PaintList paint)
     {
         // Shadows first, then lenses: a shadow is an ordinary draw, and one landing between two

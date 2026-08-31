@@ -306,7 +306,10 @@ var toolbar = new LiquidGroup(
 
 Not free: each run of lenses costs a scene copy and a render-pass break, and a lens never repaints a patch of itself
 — anything changing under one redraws the whole lens. An app that uses it should offer a preference that turns it off.
-The gallery's *Liquid Glass* page is the material study.
+The gallery's *Liquid Glass* page is the material study: a toolbar over an article with a lab that dials every
+property of the glass live (clear↔tinted, float, rim, family, shape — and a switch to the flat Adwaita chrome), an app
+window whose header bar and view switcher are GNOME's structure in this material, and a control centre and lock screen
+over photographs where every tile latches, drags or folds.
 
 ## Differences from libadwaita
 
