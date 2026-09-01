@@ -31,6 +31,7 @@ new AdwaitaApp(new Shell(), title: "My App").Run();
 - [Feedback: toasts, banners, dialogs](#feedback-toasts-banners-dialogs)
 - [A complete app](#a-complete-app)
 - [Style, type and metrics](#style-type-and-metrics)
+- [Motion](#motion)
 - [Liquid Glass](#liquid-glass)
 - [Differences from libadwaita](#differences-from-libadwaita)
 
@@ -275,6 +276,44 @@ sealed class CounterPage : ComposedWidget
 | `AdwStyle`       | State → colour resolution: `ButtonFill`, `ButtonForeground`, the five row ladders, `TroughFill`, `SliderKnob`, the disabled/dim opacities, and the ~100 ms fill transitions every button-like control fades with.                                                          |
 | `AdwButtonStyle` | `Regular`, `Suggested`, `Destructive`, `Flat`, `Opaque` — plus `Pill`, `Circular` and `Compact` as shape flags on `AdwButton`.                                                                                                                                             |
 | `AdwPalette`     | The tokens with no `ThemeData` slot, plus `Fill(theme, percent)` / `Mix` for one-off `color-mix` values.                                                                                                                                                                   |
+| `AdwMotion`      | The four springs the kit animates with — `Control`, `Overlay`, `Reveal`, `Value`. Retune the whole library's feel in one place, the way `AdwMetrics` retunes its shape.                                                                                                    |
+
+## Motion
+
+Adwaita motion is **interruptible by default**. Nearly every animation here is one the user can change their mind
+about halfway through — a switch flipped twice, a sidebar folded while it is still unfolding, a sheet flicked, caught
+and flicked again. A duration-and-curve animation restarts from a standstill each time that happens, which is what
+makes a double-tapped switch look broken; a spring keeps the speed it already had and bends toward the new target.
+
+So the kit's widgets set a `MotionSpec` rather than a duration:
+
+| Token | Response · damping | Used by |
+|---|---|---|
+| `AdwMotion.Control` | 0.24 s · 0.9 | `AdwSwitch`'s knob, `AdwExpanderRow`'s chevron — small things that flip |
+| `AdwMotion.Overlay` | 0.30 s · 0.95 | `AdwDialog`, `AdwPopover`, `AdwToast` — things that appear over the content |
+| `AdwMotion.Reveal` | 0.36 s · 1.0 | `AdwBanner`, `AdwExpanderRow`'s body, `AdwOverlaySplitView`, `AdwNavigationView` — surfaces that change size or slide. Critically damped: the thing that would overshoot is a layout edge |
+| `AdwMotion.Value` | 0.45 s · 1.0 | `AdwProgressBar` — a value settling, so it reads as the number moving rather than the widget animating |
+
+Four consequences worth knowing:
+
+- **`AdwToggleGroup`'s selection slides between segments** instead of jumping — one surface with a
+  moving marker, the way libadwaita 1.7 draws it. It reads the laid-out segment bounds rather than
+  assuming equal widths, so the marker grows and shrinks as it crosses, and the hairlines it passes
+  fade out. `AdwInlineViewSwitcher` keeps its group across page changes so the slide is visible
+  there too.
+
+- **`AdwProgressBar` eases to each new `Value`** instead of jumping. A download that reports every few hundred
+  milliseconds now reads as one continuous fill. It stops itself the moment it arrives, so an idle bar costs nothing.
+- **`AdwBottomSheet` hands the finger's velocity to the settle.** The flick speed no longer only *chooses* which
+  detent to snap to — it carries into the motion, so a thrown sheet keeps moving at the speed it was thrown.
+- **`AdwStatusPage` fades up on first appearance** (`Animated`, default on). It plays once per mount, never on a
+  rebuild.
+
+Colour is the exception: hover and press fills still cross-fade on a ~100 ms curve (`AdwStyle`), because a colour has
+no velocity to preserve. Timings that are not springs live in `Durations` (`Fast`/`Standard`/`Slow`).
+
+Everything here honours `AnimationController.ReduceMotion`, which jumps transitions to their end state — except
+spinners and indeterminate progress bars, which keep moving, because a frozen spinner reads as a hung app.
 
 ## Liquid Glass
 

@@ -85,7 +85,7 @@ public sealed class Chip : ComposedWidget
     protected override void OnMount()
     {
         // Crossfades the fill/border/text between the neutral and accent states on selection.
-        _sel = new AnimationController(durationSeconds: Motion.Fast, vsync: this) {
+        _sel = new AnimationController(durationSeconds: Durations.Fast, vsync: this) {
             Curve = Curves.EaseOut,
         };
         _sel.OnTick += () =>

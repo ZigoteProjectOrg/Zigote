@@ -65,8 +65,9 @@ public sealed class Skeleton : Widget
     public Color? HighlightColor { get; set; }
 
     /// <summary>
-    ///     Turn the sweep off and leave a static block. Set this when the user has asked for
-    ///     reduced motion, or for a screenshot test that cannot have a moving pixel in it.
+    ///     Turn the sweep off and leave a static block — for a screenshot test that cannot have a
+    ///     moving pixel in it, or wherever a placeholder should sit still. A whole app switches at
+    ///     once through <see cref="AnimationController.ReduceMotion" />.
     /// </summary>
     public bool Animated
     {

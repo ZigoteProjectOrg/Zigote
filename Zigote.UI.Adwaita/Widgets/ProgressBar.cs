@@ -6,10 +6,18 @@ namespace Zigote.UI.Adwaita;
 /// <summary>
 ///     AdwProgressBar — the GNOME progress bar: a 4px fully-rounded <see cref="ThemeData.Fill2" />
 ///     trough with an accent fill. Set <see cref="Indeterminate" /> for a sliding 30% segment.
+///     <para>
+///         A determinate bar eases to each new <see cref="Value" /> rather than jumping to it, so a
+///         download reporting every few hundred milliseconds reads as one continuous fill. The
+///         motion is a spring (<see cref="AdwMotion.Value" />), which matters because progress
+///         updates land while the last one is still settling — and it stops itself the moment it
+///         arrives, so an idle bar costs nothing.
+///     </para>
 /// </summary>
 public sealed class AdwProgressBar : Widget
 {
     private readonly AnimationController _anim;
+    private readonly AnimatedFloat _fill;
     private bool _indeterminate;
     private Size _size;
     private ThemeData _theme = ThemeData.Dark;
@@ -24,6 +32,11 @@ public sealed class AdwProgressBar : Widget
         // AttachTicker is what actually starts it.
         _anim = new AnimationController(1.25f);
         _anim.OnTick += MarkNeedsPaint;
+        _fill = new AnimatedFloat(
+            spec: AdwMotion.Value with { Epsilon = 0.0005f },
+            onChanged: MarkNeedsPaint,
+            value: _value
+        );
     }
 
     /// <summary>Progress in [0, 1].</summary>
@@ -35,6 +48,10 @@ public sealed class AdwProgressBar : Widget
             float v = Math.Clamp(value: value, min: 0f, max: 1f);
             if (v == _value) return;
             _value = v;
+            // Before mount there is no ticker to start — the motion waits, and OnMount picks it up.
+            // Starting one here would join the static running list and hold the frame loop awake
+            // for a bar that may never be attached (see the ctor).
+            _fill.To(v);
             MarkNeedsPaint();
         }
     }
@@ -59,6 +76,10 @@ public sealed class AdwProgressBar : Widget
     {
         // Rebind the ticker Detach disposed, so an indeterminate bar keeps sliding after re-attach.
         _anim.AttachTicker(this);
+
+        // Same rebind for the fill: CreateTicker's handle is mount-scoped, and a value set while
+        // unmounted left the motion mid-flight with nothing to advance it.
+        _fill.AttachTicker(this);
     }
 
 
@@ -71,7 +92,8 @@ public sealed class AdwProgressBar : Widget
     public override int DebugStateHash() => HashCode.Combine(
         value1: _value,
         value2: _indeterminate,
-        value3: _anim.Progress.GetHashCode()
+        value3: _anim.Progress.GetHashCode(),
+        value4: _fill.Value.GetHashCode()
     );
 
     public override Size Measure(Constraints c)
@@ -101,7 +123,8 @@ public sealed class AdwProgressBar : Widget
 
         if (!Indeterminate)
         {
-            float fillW = Value * Bounds.Width;
+            // The eased value, not the target: Value is where the bar is going, _fill is where it is.
+            float fillW = Math.Clamp(value: _fill.Value, min: 0f, max: 1f) * Bounds.Width;
             if (fillW > 0f)
             {
                 paint.AddRect(

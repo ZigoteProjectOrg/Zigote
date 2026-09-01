@@ -48,7 +48,7 @@ public sealed class TreeView<T> : Widget where T : notnull
         _onSelect = onSelect;
         _collapsed = new HashSet<T>(comparer ?? EqualityComparer<T>.Default);
         Comparer = comparer ?? EqualityComparer<T>.Default;
-        _expand = new AnimationController(durationSeconds: Motion.Standard, vsync: this) {
+        _expand = new AnimationController(durationSeconds: Durations.Standard, vsync: this) {
             Curve = Curves.EaseOut,
         };
         _expand.OnTick += MarkNeedsPaint;

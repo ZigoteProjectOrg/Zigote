@@ -48,4 +48,5 @@ current.
 | [`notes/devtools-widget-tree.md`](notes/devtools-widget-tree.md) | The design behind the DevTools widget-tree inspector: virtualised rows, rainbow guidelines, live selected-info. |
 | [`notes/mobile-port.md`](notes/mobile-port.md) | The iOS/Android bring-up journal — walls hit and how each fell. |
 | [`notes/mobile-port-android.md`](notes/mobile-port-android.md) | The Android implementation plan in full detail: libc recipe, SDL patch, the .NET head. |
+| [`notes/animation-system.md`](notes/animation-system.md) | One animation core for UI, 2D and 3D: the `Motion` primitive that makes every animation interruptible, curve combinators, pose blending for clips, and the feature catalogue with what stays unbuilt. |
 | [`notes/cli-roadmap.md`](notes/cli-roadmap.md) | The `zigote` CLI design: shipping an SDK instead of a checkout path, one `run` verb, `build`, and what is deliberately not built. |

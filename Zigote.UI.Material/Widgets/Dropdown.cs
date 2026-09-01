@@ -253,7 +253,7 @@ internal sealed class DropdownPopup : Widget, IDismissableOverlay
         _minWidth = minWidth;
         _fontFamily = fontFamily;
         _onPick = onPick;
-        _enter = new AnimationController(durationSeconds: Motion.Standard, vsync: this) {
+        _enter = new AnimationController(durationSeconds: Durations.Standard, vsync: this) {
             Curve = Curves.EaseOut,
         };
         _enter.OnTick += MarkNeedsLayout;

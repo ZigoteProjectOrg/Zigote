@@ -39,6 +39,7 @@ public class AdwDialog : Widget, IDismissableOverlay
         // Reverse plays the same motion out; the overlay pops when the reverse completes.
         _anim = new AnimationController(durationSeconds: 0.15f, vsync: this) {
             Curve = Curves.EaseOut,
+            Spec = AdwMotion.Overlay,
         };
         _anim.OnTick += MarkNeedsPaint;
         _anim.OnDismissed += FinishClose;

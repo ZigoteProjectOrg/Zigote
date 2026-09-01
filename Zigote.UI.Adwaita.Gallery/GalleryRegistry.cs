@@ -262,6 +262,12 @@ internal static class GalleryRegistry
                     IconName: MaterialIcons.Animation,
                     Build: () => new AnimationsPage()
                 ),
+                new GalleryEntry(
+                    Title: "Motion",
+                    Subtitle: "Composable presets, staggered lists and interruptible springs",
+                    IconName: MaterialIcons.AutoAwesome,
+                    Build: () => new MotionPage()
+                ),
             ]
         ),
         new(

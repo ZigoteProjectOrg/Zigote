@@ -58,6 +58,7 @@ public sealed class AdwNavigationView : ComposedWidget
         _pages.AddRange(pages);
         _slide = new AnimationController(durationSeconds: 0.25f, vsync: this) {
             Curve = Curves.EaseOut,
+            Spec = AdwMotion.Reveal, // a back gesture that turns into a push mid-slide
         };
         _slide.OnTick += OnSlideTick;
         _slide.OnCompleted += EndTransition;

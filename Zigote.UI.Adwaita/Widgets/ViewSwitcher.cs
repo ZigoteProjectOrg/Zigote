@@ -148,6 +148,8 @@ public sealed class AdwViewSwitcherBar : ComposedWidget
 public sealed class AdwInlineViewSwitcher : ComposedWidget
 {
     private readonly AdwViewStack _stack;
+    private AdwToggleGroup? _group;
+    private int _pagesStamp;
     private bool _round;
 
     public AdwInlineViewSwitcher(AdwViewStack stack) => _stack = stack;
@@ -166,19 +168,49 @@ public sealed class AdwInlineViewSwitcher : ComposedWidget
         return new Watch(() =>
             {
                 string visible = _stack.Visible.Value;
-                int active = _stack.Pages.FindIndex(p => p.Name == visible);
-                return new AdwToggleGroup(
-                    toggles: [
-                        .. _stack.Pages.Select(p => new AdwToggle(
-                                Label: p.Title,
-                                IconName: p.IconName
-                            )
-                        ),
-                    ],
-                    active: Math.Max(val1: active, val2: 0),
-                    onActive: i => _stack.VisibleName = _stack.Pages[i].Name
-                ) { Round = _round };
+                int active = Math.Max(
+                    val1: _stack.Pages.FindIndex(p => p.Name == visible),
+                    val2: 0
+                );
+
+                // Keep the group across page changes and just move its selection: a fresh one per
+                // change would snap its pill to the new segment, which is the whole thing the
+                // sliding selection exists to avoid. Only a change to the PAGES rebuilds it.
+                int stamp = PagesStamp();
+                if (_group is null || _pagesStamp != stamp)
+                {
+                    _pagesStamp = stamp;
+                    _group = new AdwToggleGroup(
+                        toggles: [
+                            .. _stack.Pages.Select(p => new AdwToggle(
+                                    Label: p.Title,
+                                    IconName: p.IconName
+                                )
+                            ),
+                        ],
+                        active: active,
+                        onActive: i => _stack.VisibleName = _stack.Pages[i].Name
+                    );
+                }
+
+                _group.Round = _round;
+                _group.Active = active;
+                return _group;
             }
         );
+    }
+
+    /// <summary>What the group was built from — a change here means new segments, not a new selection.</summary>
+    private int PagesStamp()
+    {
+        var hash = new HashCode();
+        hash.Add(_stack.Pages.Count);
+        foreach (var page in _stack.Pages)
+        {
+            hash.Add(page.Title);
+            hash.Add(page.IconName);
+        }
+
+        return hash.ToHashCode();
     }
 }

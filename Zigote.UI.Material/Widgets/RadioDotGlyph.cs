@@ -4,7 +4,7 @@ namespace Zigote.UI.Material;
 ///     The filled centre dot of a selected radio button. The entrance/exit animation and all the
 ///     plumbing live in <see cref="ToggleGlyph" />; this is only the geometry.
 /// </summary>
-public sealed class RadioDotGlyph() : ToggleGlyph(Motion.Fast)
+public sealed class RadioDotGlyph() : ToggleGlyph(Durations.Fast)
 {
     protected override void PaintGlyph(PaintList paint, float t)
     {

@@ -36,7 +36,7 @@ public class Dialog : Widget, IDismissableOverlay
         };
         _app = app ?? App.Active ??
             throw new InvalidOperationException("No active UiApp found.");
-        _enter = new AnimationController(durationSeconds: Motion.Standard, vsync: this) {
+        _enter = new AnimationController(durationSeconds: Durations.Standard, vsync: this) {
             Curve = Curves.EaseOut,
         };
         _enter.OnTick += MarkNeedsLayout;

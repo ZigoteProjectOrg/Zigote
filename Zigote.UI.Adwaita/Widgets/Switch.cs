@@ -23,8 +23,11 @@ public sealed class AdwSwitch : Widget
     {
         _value = value;
         OnChanged = onChanged;
-        _anim = new AnimationController(durationSeconds: Motion.Fast, vsync: this) {
+        // A switch is the control most often flipped twice in a row: the spring carries the knob's
+        // speed through the second tap instead of stopping it dead and starting again.
+        _anim = new AnimationController(durationSeconds: Durations.Fast, vsync: this) {
             Curve = Curves.EaseOut,
+            Spec = AdwMotion.Control,
         };
         _anim.OnTick += MarkNeedsPaint;
         // Jump to the initial position without animating.

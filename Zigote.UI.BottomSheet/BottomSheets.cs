@@ -53,7 +53,7 @@ public static class BottomSheets
     /// <param name="isExpand">False makes the sheet hug its content instead of filling its extent.</param>
     /// <param name="isSafeArea">Inset the content by the bottom safe area (home indicator).</param>
     /// <param name="style">Appearance tokens; null resolves them from the theme.</param>
-    /// <param name="duration">Slide in/out duration in seconds. Default <see cref="Motion.Standard" />.</param>
+    /// <param name="duration">Slide in/out duration in seconds. Default <see cref="Durations.Standard" />.</param>
     public static Task<T?> ShowFlexible<T>(
         BuildContext context,
         FlexibleBottomSheetBuilder builder,
@@ -209,7 +209,7 @@ public static class BottomSheets
                 IsDismissible = isDismissible,
                 IsSafeArea = isSafeArea,
             },
-            duration: duration ?? Motion.Standard
+            duration: duration ?? Durations.Standard
         );
         return Navigator.Of(context).Push(route);
     }

@@ -15,7 +15,7 @@ namespace Zigote.UI.Material;
 public class TabBar : Widget
 {
     private readonly List<TabCell> _cells = [];
-    private readonly AnimationController _slide;
+    private readonly AnimatedFloat _underline;
     private float _maxScrollX;
 
     /// <summary>How far the strip is scrolled when the tabs are wider than the space they get.</summary>
@@ -26,9 +26,7 @@ public class TabBar : Widget
 
     private IReadOnlyList<string> _tabs = [];
     private ThemeData _theme = ThemeData.Dark;
-    private float _underFrom;
     private bool _underInit;
-    private float _underTo;
 
     /// <summary>
     ///     Named-argument constructor:
@@ -45,10 +43,12 @@ public class TabBar : Widget
         OnChanged = onChanged;
         _theme = ThemeData.Dark; // refreshed from the ambient ThemeProvider in Measure
         Tabs = tabs.ConvertAll(t => t.Label); // setter builds the cells
-        _slide = new AnimationController(durationSeconds: Motion.Standard, vsync: this) {
-            Curve = Curves.EaseOut,
-        };
-        _slide.OnTick += MarkNeedsPaint;
+        // Spring: swiping through tabs retargets the underline while it is still travelling.
+        _underline = new AnimatedFloat(
+            spec: MotionSpec.Spring(response: Durations.Standard, damping: 1f),
+            onChanged: MarkNeedsPaint,
+            value: initialIndex
+        );
     }
 
     public IReadOnlyList<string> Tabs
@@ -96,7 +96,7 @@ public class TabBar : Widget
 
     // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
     // re-attach rebinds instead of leaking one per attach cascade.
-    protected override void OnMount() => _slide.AttachTicker(this);
+    protected override void OnMount() => _underline.AttachTicker(this);
 
 
     private void RebuildCells()
@@ -233,19 +233,14 @@ public class TabBar : Widget
     {
         if (SelectedIndex < 0 || SelectedIndex >= _cells.Count) return;
 
-        // Retarget the slide whenever the selection changed since the last paint.
+        // The underline follows the selection; the first paint places it without a slide.
         if (!_underInit)
         {
             _underInit = true;
-            _underFrom = _underTo = SelectedIndex;
+            _underline.SnapTo(SelectedIndex);
         }
-        else if (Math.Abs(_underTo - SelectedIndex) > 0.001f)
-        {
-            _underFrom = UnderPos();
-            _underTo = SelectedIndex;
-            _slide.Dismiss();
-            _slide.Forward();
-        }
+        else
+            _underline.To(SelectedIndex);
 
         float pos = UnderPos();
         int lo = (int)MathF.Floor(pos);
@@ -269,8 +264,7 @@ public class TabBar : Widget
         );
     }
 
-    private float UnderPos() =>
-        _underInit ? _underFrom + ((_underTo - _underFrom) * _slide.Value) : SelectedIndex;
+    private float UnderPos() => _underInit ? _underline.Value : SelectedIndex;
 
     private void PaintSelectedFocusRing(PaintList paint)
     {
@@ -429,7 +423,7 @@ public class TabView : Widget
 
     public TabView()
     {
-        _fade = new AnimationController(durationSeconds: Motion.Standard, vsync: this) {
+        _fade = new AnimationController(durationSeconds: Durations.Standard, vsync: this) {
             Curve = Curves.EaseOut,
         };
         _fade.OnTick += MarkNeedsPaint;
