@@ -85,7 +85,12 @@ public class Positioned : Widget
     public override Widget? HitTest(Offset point)
     {
         if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
-        return Child.HitTest(point) ?? this;
+        // Placement, not a surface: a point the child misses belongs to whatever the stack has
+        // underneath, exactly as it would without the Positioned. Claiming it is how a floating
+        // bar — a capsule clamped narrower than the band it is positioned in — ends up eating
+        // every click and every wheel notch on the content it floats above. Anything that means
+        // to block the layer beneath says so with a hittable child, as a scrim does.
+        return Child.HitTest(point);
     }
 
     public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Child);

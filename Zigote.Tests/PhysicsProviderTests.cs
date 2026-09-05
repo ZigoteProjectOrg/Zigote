@@ -155,3 +155,43 @@ public class PhysicsProviderTests
         }
     }
 }
+
+/// <summary>
+///     The Jolt worker-thread count derived from the body budget. The invariant that matters: a
+///     small world must not get a wide barrier — <c>-1</c> (Jolt's own auto, every core but one) is
+///     what this replaced, and it barriered sixteen threads for a scene with forty crates, twice
+///     per rendered frame at the 120 Hz fixed step.
+/// </summary>
+public class PhysicsWorkerCountTests
+{
+    private static int Cores => Math.Max(val1: 1, val2: Environment.ProcessorCount - 1);
+
+    [Theory]
+    [InlineData(0u)]
+    [InlineData(1u)]
+    [InlineData(255u)]
+    public void SmallWorlds_GetOneWorker(uint bodies) =>
+        Assert.Equal(expected: 1, actual: PhysicsWorld.WorkerCount(bodies));
+
+    [Fact]
+    public void TheDefaultBudget_ScalesWithBodies() => Assert.Equal(
+        expected: Math.Min(val1: 4, val2: Cores),
+        actual: PhysicsWorld.WorkerCount(1024) // the Initialize default
+    );
+
+    [Fact]
+    public void HugeWorlds_LeaveTheFrameThreadACore() =>
+        Assert.Equal(expected: Cores, actual: PhysicsWorld.WorkerCount(uint.MaxValue));
+
+    [Fact]
+    public void TheCountNeverShrinksAsBodiesGrow()
+    {
+        int previous = 0;
+        for (uint bodies = 0; bodies < 8192; bodies += 97)
+        {
+            int n = PhysicsWorld.WorkerCount(bodies);
+            Assert.True(condition: n >= previous, userMessage: $"{bodies} bodies dropped to {n}");
+            previous = n;
+        }
+    }
+}

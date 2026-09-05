@@ -88,6 +88,11 @@ public sealed class TurbulenceModule(float strength, float frequency) : VfxUpdat
         float fz = MathF.Sin((p.Position.X * Frequency) + (t * 0.7f) + phase);
         p.Velocity += new Vec3(x: fx, y: fy, z: fz) * (Strength * ctx.Dt);
     }
+
+    public override void ApplyRange(Span<Particle> particles, in VfxUpdateContext ctx)
+    {
+        for (int i = 0; i < particles.Length; i++) Apply(p: ref particles[i], ctx: in ctx);
+    }
 }
 
 public sealed class VortexModule(Vec3 axis, float strength) : VfxUpdateModule
@@ -101,6 +106,11 @@ public sealed class VortexModule(Vec3 axis, float strength) : VfxUpdateModule
         // Tangential push around the axis through the (emitter-local) origin.
         p.Velocity += Axis.Cross(p.Position) * (Strength * ctx.Dt);
     }
+
+    public override void ApplyRange(Span<Particle> particles, in VfxUpdateContext ctx)
+    {
+        for (int i = 0; i < particles.Length; i++) Apply(p: ref particles[i], ctx: in ctx);
+    }
 }
 
 public sealed class ColorOverLifeModule(ColorRamp ramp) : VfxUpdateModule
@@ -110,6 +120,11 @@ public sealed class ColorOverLifeModule(ColorRamp ramp) : VfxUpdateModule
 
     public override void Apply(ref Particle p, in VfxUpdateContext ctx) =>
         p.Color = Ramp.Evaluate(p.NormalizedAge);
+
+    public override void ApplyRange(Span<Particle> particles, in VfxUpdateContext ctx)
+    {
+        for (int i = 0; i < particles.Length; i++) Apply(p: ref particles[i], ctx: in ctx);
+    }
 }
 
 public sealed class SizeOverLifeModule(FloatCurve curve) : VfxUpdateModule
@@ -119,6 +134,11 @@ public sealed class SizeOverLifeModule(FloatCurve curve) : VfxUpdateModule
 
     public override void Apply(ref Particle p, in VfxUpdateContext ctx) =>
         p.Size = p.StartSize * Curve.Evaluate(p.NormalizedAge);
+
+    public override void ApplyRange(Span<Particle> particles, in VfxUpdateContext ctx)
+    {
+        for (int i = 0; i < particles.Length; i++) Apply(p: ref particles[i], ctx: in ctx);
+    }
 }
 
 public sealed class AlphaOverLifeModule(FloatCurve curve) : VfxUpdateModule
@@ -128,4 +148,9 @@ public sealed class AlphaOverLifeModule(FloatCurve curve) : VfxUpdateModule
 
     public override void Apply(ref Particle p, in VfxUpdateContext ctx) =>
         p.Color = p.Color.WithAlpha(Curve.Evaluate(p.NormalizedAge));
+
+    public override void ApplyRange(Span<Particle> particles, in VfxUpdateContext ctx)
+    {
+        for (int i = 0; i < particles.Length; i++) Apply(p: ref particles[i], ctx: in ctx);
+    }
 }
