@@ -139,6 +139,39 @@ public class AdwaitaApp : ZigoteApp
     }
 
     /// <summary>
+    ///     Open a desktop-shell surface — a panel, dock or launcher the compositor places by
+    ///     <paramref name="layer" /> (wlr-layer-shell). Same theme following as
+    ///     <see cref="OpenWindow" />, no window chrome: the content is the whole surface. On a
+    ///     desktop without layer-shell it is a plain window (<see cref="App.NativeWindow" />'s
+    ///     <c>IsLayer</c> is false), so a shell can be developed on GNOME. Returns null before
+    ///     <see cref="ZigoteApp.Run" /> has started.
+    /// </summary>
+    public App? OpenLayer(Widget content, LayerOptions layer, uint width = 0, uint height = 0, string? title = null, ulong outputId = 0)
+    {
+        if (App is not { } app) return null;
+        var win = app.CreateLayer(title: title ?? Title, layer: layer, width: width, height: height, outputId: outputId);
+        var scope = new ThemeProvider(Theme) { Child = content };
+        win.CsdCornerRadius = 0f;
+        win.Theme = Theme;
+        win.Root = scope;
+        _windows.Add((win, scope));
+        return win;
+    }
+
+    /// <summary>A lock-screen surface on an output, themed like the rest; see <see cref="App.CreateLockSurface" />.</summary>
+    public App? OpenLockSurface(Widget content, ulong outputId, string title = "lock")
+    {
+        if (App is not { } app) return null;
+        var win = app.CreateLockSurface(title: title, outputId: outputId);
+        var scope = new ThemeProvider(Theme) { Child = content };
+        win.CsdCornerRadius = 0f;
+        win.Theme = Theme;
+        win.Root = scope;
+        _windows.Add((win, scope));
+        return win;
+    }
+
+    /// <summary>
     ///     Push the live theme into every open secondary window (the base class syncs the main one)
     ///     and drop the ones that have closed themselves.
     /// </summary>

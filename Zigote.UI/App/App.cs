@@ -169,12 +169,16 @@ public partial class App : IDisposable
     private float _tooltipTimer;
     private bool _vsync = true;
 
-    private App(App parent, string title, uint width, uint height)
+    private App(App parent, string title, uint width, uint height, LayerOptions? layer = null, ulong outputId = 0, bool lockSurface = false)
     {
         ParentApp = parent;
         Title = title;
         Engine = parent.Engine;
-        NativeWindow = Engine.CreateWindow(title: title, width: width, height: height);
+        NativeWindow = lockSurface
+            ? Engine.CreateLockWindow(outputId, title) ?? throw new InvalidOperationException("lock surface unavailable")
+            : layer is { } l
+                ? Engine.CreateLayerWindow(title: title, width: width, height: height, layer: l, outputId: outputId)
+                : Engine.CreateWindow(title: title, width: width, height: height);
         Theme = parent.Theme;
         _lastTicks = _clock.ElapsedTicks;
         // Secondary windows do not sample DebugStats or host a devtools panel — the devtools package
@@ -389,6 +393,13 @@ public partial class App : IDisposable
     ///     main window when none does. Native file dialogs parent here so a dialog opened from
     ///     e.g. the Settings window sheets onto that window, not the main one.
     /// </summary>
+    /// <summary>
+    ///     When non-zero, keyboard and text events that SDL delivers to the main window are
+    ///     re-routed to this window id. A shell built on layer surfaces sets it to the window it
+    ///     has keyboard-focused, because SDL never routes keyboard to custom-role surfaces itself.
+    /// </summary>
+    public uint KeyboardRedirectWindowId { get; set; }
+
     public uint FocusedWindowId
     {
         get
@@ -805,6 +816,37 @@ public partial class App : IDisposable
         // above the headerbar its content already carries.
         win.SuppressChromeStrip = SuppressChromeStrip;
         if (ChromeStyle != WindowChromeStyle.System) win.ApplyWindowChrome(ChromeStyle);
+        return win;
+    }
+
+    /// <summary>
+    ///     Open a desktop-shell surface (panel, dock, launcher…) placed by the compositor per
+    ///     <paramref name="layer" /> — see <see cref="ZigoteEngine.CreateLayerWindow" />. It has no
+    ///     titlebar and no chrome strip: the content is the whole surface. Width/height 0 stretch
+    ///     between the anchors on that axis.
+    /// </summary>
+    public App CreateLayer(string title, LayerOptions layer, uint width = 0, uint height = 0, ulong outputId = 0)
+    {
+        if (ParentApp is not null)
+            return ParentApp.CreateLayer(title: title, layer: layer, width: width, height: height, outputId: outputId);
+        var win = new App(parent: this, title: title, width: width, height: height, layer: layer, outputId: outputId);
+        _secondaryWindows.Add(win);
+        win.SuppressChromeStrip = true;
+        win.TitleBarDragHeight = 0f;
+        return win;
+    }
+
+    /// <summary>
+    ///     A lock-screen window on an output (ext-session-lock): shown only while the session is
+    ///     locked, sized by the compositor. Throws if the session is not locked.
+    /// </summary>
+    public App CreateLockSurface(string title, ulong outputId)
+    {
+        if (ParentApp is not null) return ParentApp.CreateLockSurface(title: title, outputId: outputId);
+        var win = new App(parent: this, title: title, width: 1, height: 1, layer: null, outputId: outputId, lockSurface: true);
+        _secondaryWindows.Add(win);
+        win.SuppressChromeStrip = true;
+        win.TitleBarDragHeight = 0f;
         return win;
     }
 
@@ -1284,7 +1326,8 @@ public partial class App : IDisposable
         // loop drops to a background cadence unconditionally. It keeps turning — an app hides its
         // window precisely because it still has work to do — but at a tenth of the rate and with no
         // rendering at all (see PaintAndPresent).
-        if (Hidden)
+        // …unless secondary windows are up (a shell hides its main window and lives in its panels).
+        if (Hidden && _secondaryWindows.Count == 0)
         {
             _idledInWait = true;
             Volatile.Write(ref _inWaitEvents, true);

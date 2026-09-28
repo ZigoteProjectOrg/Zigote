@@ -28,6 +28,13 @@ public sealed unsafe class NativeWindow : IDisposable
     /// <summary>SDL window id — matches <see cref="Events.InputEvent.WindowId" /> for routing.</summary>
     public uint Id { get; }
 
+    /// <summary>
+    ///     True when the compositor gave this window a layer-shell role (see
+    ///     <see cref="ZigoteEngine.CreateLayerWindow" />); false for a toplevel, including the
+    ///     fallback a layer request gets on desktops without layer-shell.
+    /// </summary>
+    public bool IsLayer { get; init; }
+
     /// <summary>False after the window is disposed (or the engine shut down underneath it).</summary>
     public bool IsAlive => _window != 0;
 
@@ -45,6 +52,44 @@ public sealed unsafe class NativeWindow : IDisposable
 
     /// <summary>Window height in logical pixels.</summary>
     public float LogicalHeight => Scale > 0 ? PixelHeight / Scale : PixelHeight;
+
+    /// <summary>
+    ///     Resize a layer-shell window (<see cref="IsLayer" />): the compositor answers with a
+    ///     configure that arrives as a normal resize event. 0 on an axis keeps it stretched between
+    ///     its anchors. No-op on a toplevel.
+    /// </summary>
+    public void SetLayerSize(uint width, uint height)
+    {
+        if (_window == 0 || !IsLayer) return;
+        NativeEngine.WindowLayerSetSize(windowHandle: _window, width: width, height: height);
+    }
+
+    /// <summary>Margins from a layer window's anchored edges, logical pixels. No-op on a toplevel.</summary>
+    public void SetLayerMargin(int top, int right, int bottom, int left)
+    {
+        if (_window == 0 || !IsLayer) return;
+        NativeEngine.WindowLayerSetMargin(windowHandle: _window, top: top, right: right, bottom: bottom, left: left);
+    }
+
+    /// <summary>
+    ///     Limit where a layer-shell window takes pointer input: only inside these logical-pixel
+    ///     rectangles; elsewhere clicks fall through to what is below. Empty restores the whole
+    ///     surface. No-op on a toplevel.
+    /// </summary>
+    public void SetLayerInputRects(ReadOnlySpan<(int X, int Y, int W, int H)> rects)
+    {
+        if (_window == 0 || !IsLayer) return;
+        Span<int> flat = rects.Length <= 64 ? stackalloc int[rects.Length * 4] : new int[rects.Length * 4];
+        for (int i = 0; i < rects.Length; i++)
+        {
+            flat[i * 4] = rects[i].X;
+            flat[i * 4 + 1] = rects[i].Y;
+            flat[i * 4 + 2] = rects[i].W;
+            flat[i * 4 + 3] = rects[i].H;
+        }
+        fixed (int* p = flat)
+            NativeEngine.WindowLayerSetInputRects(windowHandle: _window, rects: p, count: (uint)rects.Length);
+    }
 
     public void Dispose()
     {

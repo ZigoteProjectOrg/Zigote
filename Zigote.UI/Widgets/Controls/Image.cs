@@ -56,33 +56,60 @@ public sealed class Image : Widget, IDisposable
     ///     An empty image — nothing is painted until a texture arrives (see <see cref="LoadAsync" />
     ///     ).
     /// </summary>
+    // The source the texture came from, kept so an unmounted image can drop its texture and
+    // come back from it on remount. Null for images loaded through LoadAsync or an engine handle,
+    // which keep their texture across unmounts as before.
+    private string? _sourcePath;
+    private byte[]? _sourceBytes;
+    private uint _sourceMaxDim;
+
     public Image() { }
 
-    /// <summary>
-    ///     Load and decode <paramref name="path" /> synchronously. Blocks the calling thread for the
-    ///     decode; prefer <see cref="LoadAsync" /> for anything larger than an icon.
-    ///     <paramref name="maxDim" /> (0 = unbounded) caps the longest edge of the decoded texture.
-    /// </summary>
     public Image(string path, uint maxDim = 0)
     {
-        if (maxDim == 0)
-        {
-            _textureHandle = ZigoteEngine.LoadTexture(
-                path: Path.GetFullPath(path),
-                outW: out _texWidth,
-                outH: out _texHeight
-            );
-            return;
-        }
+        _sourcePath = Path.GetFullPath(path);
+        _sourceMaxDim = maxDim;
+        LoadFromSource();
+    }
 
-        // No scaled file entry point on the engine: read here and go through the memory path,
-        // which does the downsample during decode.
-        _textureHandle = ZigoteEngine.LoadTextureFromMemoryScaled(
-            data: File.ReadAllBytes(Path.GetFullPath(path)),
-            maxDim: maxDim,
-            outW: out _texWidth,
-            outH: out _texHeight
-        );
+    private void LoadFromSource()
+    {
+        if (_sourcePath is { } path)
+        {
+            if (_sourceMaxDim == 0)
+            {
+                _textureHandle = ZigoteEngine.LoadTexture(path: path, outW: out _texWidth, outH: out _texHeight);
+                return;
+            }
+            // No scaled file entry point on the engine: read here and go through the memory path,
+            // which does the downsample during decode.
+            _textureHandle = ZigoteEngine.LoadTextureFromMemoryScaled(
+                data: File.ReadAllBytes(path), maxDim: _sourceMaxDim, outW: out _texWidth, outH: out _texHeight);
+        }
+        else if (_sourceBytes is { } bytes)
+        {
+            _textureHandle = _sourceMaxDim == 0
+                ? ZigoteEngine.LoadTextureFromMemory(data: bytes, outW: out _texWidth, outH: out _texHeight)
+                : ZigoteEngine.LoadTextureFromMemoryScaled(data: bytes, maxDim: _sourceMaxDim, outW: out _texWidth, outH: out _texHeight);
+        }
+    }
+
+    /// <summary>
+    ///     A texture is GPU memory plus a CPU copy; an image that left the tree (a rebuilt Watch,
+    ///     a closed window) would otherwise hold it until someone remembered to Dispose it — the
+    ///     leak a long-running shell finds first. Released here when the source is known, and
+    ///     reloaded from it on the next mount.
+    /// </summary>
+    protected override void OnUnmount()
+    {
+        if (_borrowed || (_sourcePath is null && _sourceBytes is null)) return;
+        _loadCts?.Cancel();
+        ClearTexture();
+    }
+
+    protected override void OnMount()
+    {
+        if (_textureHandle == 0 && !_disposed && (_sourcePath is not null || _sourceBytes is not null)) LoadFromSource();
     }
 
     private Image(ulong handle, uint width, uint height)
@@ -91,6 +118,14 @@ public sealed class Image : Widget, IDisposable
         _texWidth = width;
         _texHeight = height;
     }
+
+    /// <summary>
+    ///     Wrap an already-uploaded engine texture (e.g. the compositor backdrop). The caller owns
+    ///     the handle and its lifetime — this Image does not release it on unmount or dispose.
+    /// </summary>
+    public static Image FromTextureHandle(ulong handle, uint width, uint height) => new(handle, width, height) { _borrowed = true };
+
+    private bool _borrowed;
 
     /// <summary>
     ///     Accessible description of the image. <c>null</c> (the default) marks the image as decorative,
@@ -135,6 +170,7 @@ public sealed class Image : Widget, IDisposable
     /// </summary>
     public void Dispose()
     {
+        if (_borrowed) { _textureHandle = 0; return; }
         _disposed = true;
         _loadCts?.Cancel();
         _loadCts?.Dispose();
@@ -173,16 +209,9 @@ public sealed class Image : Widget, IDisposable
 
     public static Image FromBytes(ReadOnlySpan<byte> data, uint maxDim = 0)
     {
-        uint w, h;
-        ulong handle = maxDim == 0
-            ? ZigoteEngine.LoadTextureFromMemory(data: data, outW: out w, outH: out h)
-            : ZigoteEngine.LoadTextureFromMemoryScaled(
-                data: data,
-                maxDim: maxDim,
-                outW: out w,
-                outH: out h
-            );
-        return new Image(handle: handle, width: w, height: h);
+        var image = new Image { _sourceBytes = data.ToArray(), _sourceMaxDim = maxDim };
+        image.LoadFromSource();
+        return image;
     }
 
     /// <summary>

@@ -577,6 +577,182 @@ public sealed unsafe class ZigoteEngine : IDisposable
     }
 
     /// <summary>
+    ///     Open a desktop-shell window: a wlr-layer-shell surface the compositor places by
+    ///     <see cref="LayerOptions.Anchor" /> instead of as a toplevel. A 0 width or height stretches
+    ///     between the anchors on that axis. Where the compositor has no layer-shell (GNOME, X11,
+    ///     other OSes) this opens an ordinary window of the same size and
+    ///     <see cref="NativeWindow.IsLayer" /> is false — a shell can be developed anywhere.
+    /// </summary>
+    public NativeWindow CreateLayerWindow(string title, uint width, uint height, LayerOptions layer, ulong outputId = 0)
+    {
+        EnsureReady();
+        byte[] titleBytes = Utf8Z(title);
+        ulong window;
+        uint isLayer;
+        ZgResult result;
+        fixed (byte* tp = titleBytes)
+        {
+            result = NativeEngine.WindowCreateLayerOn(
+                width,
+                height,
+                tp,
+                (uint)layer.Layer,
+                (uint)layer.Anchor,
+                layer.ExclusiveZone,
+                (uint)layer.Keyboard,
+                outputId,
+                out window,
+                out isLayer
+            );
+        }
+
+        if (result != ZgResult.Ok || window == 0)
+        {
+            throw new InvalidOperationException(
+                "zigote_window_create_layer failed. Check stderr for details."
+            );
+        }
+
+        return new NativeWindow(
+            engine: this,
+            window: window,
+            id: NativeEngine.WindowId(windowHandle: window)
+        ) { IsLayer = isLayer != 0 };
+    }
+
+    // ── Virtual keyboard (zwp_virtual_keyboard_v1) ──
+
+    /// <summary>Create a virtual keyboard on the seat, for an on-screen keyboard. False where unsupported.</summary>
+    public bool VirtualKeyboardStart()
+    {
+        EnsureReady();
+        return NativeEngine.VkbdStart() == ZgStatus.Ok;
+    }
+
+    /// <summary>Press or release an evdev keycode (KEY_A = 30) on the virtual keyboard.</summary>
+    public void VirtualKeyboardKey(uint keycode, bool pressed) => NativeEngine.VkbdKey(keycode, pressed ? 1u : 0u);
+
+    /// <summary>Set the virtual keyboard's modifier state (xkb masks: Shift 1, Ctrl 4, Alt 8, Super 64).</summary>
+    public void VirtualKeyboardModifiers(uint depressed, uint latched = 0, uint locked = 0, uint group = 0) =>
+        NativeEngine.VkbdModifiers(depressed, latched, locked, group);
+
+    // ── Session lock (ext-session-lock-v1) ──
+
+    /// <summary>Lock the session; the compositor blanks every output until <see cref="SessionUnlock" />.</summary>
+    public bool SessionLock()
+    {
+        EnsureReady();
+        return NativeEngine.SessionLock() == ZgStatus.Ok;
+    }
+
+    /// <summary>0 none, 1 pending, 2 locked, 3 finished (refused).</summary>
+    public uint SessionLockState() => NativeEngine.SessionLockState();
+
+    /// <summary>A lock-screen window on an output, sized by the compositor. Null if it could not be made.</summary>
+    public NativeWindow? CreateLockWindow(ulong outputId, string title)
+    {
+        EnsureReady();
+        byte[] titleBytes = Utf8Z(title);
+        ulong window;
+        ZgResult result;
+        fixed (byte* tp = titleBytes) result = NativeEngine.WindowCreateLockSurface(outputId, tp, out window);
+        if (result != ZgResult.Ok || window == 0) return null;
+        return new NativeWindow(engine: this, window: window, id: NativeEngine.WindowId(windowHandle: window)) { IsLayer = false };
+    }
+
+    public bool SessionUnlock() => NativeEngine.SessionUnlock() == ZgStatus.Ok;
+
+    // ── Outputs and workspaces: a desktop shell's view of the desktop ──
+
+    /// <summary>Start tracking outputs and workspaces; false where the platform has neither.</summary>
+    public bool DesktopStart()
+    {
+        EnsureReady();
+        return NativeEngine.DesktopStart() == ZgStatus.Ok;
+    }
+
+    public uint OutputsGeneration() => NativeEngine.OutputsGeneration();
+
+    public List<OutputInfo> OutputsList()
+    {
+        var list = new List<OutputInfo>();
+        uint n = NativeEngine.OutputsCount();
+        Span<byte> name = stackalloc byte[64];
+        for (uint i = 0; i < n; i++)
+        {
+            ulong id; uint len, w, h; float scale; ZgStatus st;
+            fixed (byte* np = name) st = NativeEngine.OutputGet(i, out id, np, 64, out len, out w, out h, out scale);
+            if (st != ZgStatus.Ok) break;
+            list.Add(new OutputInfo(id, System.Text.Encoding.UTF8.GetString(name[..(int)len]), w, h, scale));
+        }
+        return list;
+    }
+
+    public uint WorkspacesGeneration() => NativeEngine.WorkspacesGeneration();
+
+    public List<WorkspaceInfo> WorkspacesList()
+    {
+        var list = new List<WorkspaceInfo>();
+        uint n = NativeEngine.WorkspacesCount();
+        Span<byte> name = stackalloc byte[64];
+        for (uint i = 0; i < n; i++)
+        {
+            ulong id; uint len, state, caps; ZgStatus st;
+            fixed (byte* np = name) st = NativeEngine.WorkspaceGet(i, out id, np, 64, out len, out state, out caps);
+            if (st != ZgStatus.Ok) break;
+            list.Add(new WorkspaceInfo(id, System.Text.Encoding.UTF8.GetString(name[..(int)len]), (WorkspaceState)state, (caps & 1) != 0));
+        }
+        return list;
+    }
+
+    public bool WorkspaceActivate(ulong id) => NativeEngine.WorkspaceActivate(id) == ZgStatus.Ok;
+
+    // ── Foreign toplevels: a desktop shell's view of the compositor's windows ──
+
+    /// <summary>
+    ///     Start tracking every toplevel the compositor manages (wlr-foreign-toplevel-management).
+    ///     False where the platform or compositor does not offer it — a shell then simply has no
+    ///     running-app indicators.
+    /// </summary>
+    public bool ToplevelsStart()
+    {
+        EnsureReady();
+        return NativeEngine.ToplevelsStart() == ZgStatus.Ok;
+    }
+
+    /// <summary>Changes whenever a toplevel appears, changes or closes; compare before re-reading.</summary>
+    public uint ToplevelsGeneration() => NativeEngine.ToplevelsGeneration();
+
+    /// <summary>Snapshot of the compositor's toplevels. Call on the main thread.</summary>
+    public List<ToplevelInfo> ToplevelsList()
+    {
+        var list = new List<ToplevelInfo>();
+        uint n = NativeEngine.ToplevelsCount();
+        Span<byte> title = stackalloc byte[256];
+        Span<byte> appId = stackalloc byte[256];
+        for (uint i = 0; i < n; i++)
+        {
+            ulong id;
+            uint state, tl, al;
+            ZgStatus st;
+            fixed (byte* tp = title)
+            fixed (byte* ap = appId)
+                st = NativeEngine.ToplevelGet(i, out id, out state, tp, 256, out tl, ap, 256, out al);
+            if (st != ZgStatus.Ok) break;
+            list.Add(new ToplevelInfo(
+                Id: id,
+                AppId: System.Text.Encoding.UTF8.GetString(appId[..(int)al]),
+                Title: System.Text.Encoding.UTF8.GetString(title[..(int)tl]),
+                State: (ToplevelState)state));
+        }
+        return list;
+    }
+
+    /// <summary>Ask the compositor to act on a toplevel.</summary>
+    public bool ToplevelAction(ulong id, ToplevelAction action) =>
+        NativeEngine.ToplevelAction(id, (uint)action) == ZgStatus.Ok;
+
+    /// <summary>
     ///     The native parent handle of a window, for embedding platform child views (webviews,
     ///     native controls) over the engine's surface. The child always draws above engine
     ///     content — the overlay model. <paramref name="windowHandle" /> 0 = the main window.

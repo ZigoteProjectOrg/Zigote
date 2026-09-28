@@ -73,6 +73,25 @@ public sealed class SvgPicture : Widget, IDisposable
 
     public override bool ExcludeSemantics => AltText is null;
 
+    /// <summary>The raster is rebuilt at the next paint; an unmounted picture holds no texture.</summary>
+
+    protected override void OnUnmount()
+
+    {
+
+        if (_textureHandle == 0) return;
+
+        ZigoteEngine.ReleaseTexture(_textureHandle);
+
+        _textureHandle = 0;
+
+        _texWidth = 0;
+
+        _texHeight = 0;
+
+    }
+
+
     public void Dispose()
     {
         if (_disposed) return;

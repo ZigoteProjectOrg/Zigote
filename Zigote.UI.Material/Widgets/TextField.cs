@@ -1107,6 +1107,15 @@ public class TextField : Widget, ITextInputClient
 
     // ── Keyboard input ────────────────────────────────────────────────────────
 
+    /// <summary>
+    ///     Compose text from key events instead of waiting for platform text-input (SDL_TextInput /
+    ///     an IME). A desktop shell on Wayland has no IME running, and SDL routes text through the
+    ///     compositor's text-input protocol, so no text arrives — the field must build it from keys,
+    ///     as GTK does. Off by default (normal platforms deliver both a key and a text event, and
+    ///     composing here would double every character); a shell turns it on.
+    /// </summary>
+    public static bool ComposeFromKeys { get; set; }
+
     public override void OnKey(char keyChar, uint scancode, bool down, Modifiers mods)
     {
         if (!down) return;
@@ -1268,7 +1277,15 @@ public class TextField : Widget, ITextInputClient
         }
 
         if (!Multiline) UpdateScroll();
+
+        // No IME (a shell on Wayland): the printable character never arrives as a text event, so
+        // compose it here. Skipped for control scancodes handled above, and for Ctrl/⌘ chords.
+        if (ComposeFromKeys && !cmd && keyChar >= 32 && keyChar != 127 && !IsHandledNavScancode(scancode))
+            OnTextInput(keyChar.ToString());
     }
+
+    private static bool IsHandledNavScancode(uint sc) =>
+        sc is 42 or 76 or 80 or 79 or 82 or 81 or 74 or 77 or 40 or 88; // backspace,delete,arrows,home,end,enter
 
     private void InsertNewline()
     {

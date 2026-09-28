@@ -38,7 +38,7 @@ public abstract class InputEvent
     ///     secondary OS windows route events to the right widget tree by comparing against
     ///     <c>ZigoteEngine.MainWindowId</c> / <c>NativeWindow.Id</c>.
     /// </summary>
-    public uint WindowId { get; internal set; }
+    public uint WindowId { get; set; }
 }
 
 public sealed class MouseMoveEvent : InputEvent

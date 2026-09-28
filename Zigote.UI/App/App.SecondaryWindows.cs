@@ -22,6 +22,15 @@ public partial class App
         for (int read = 0; read < _events.Count; read++)
         {
             var evt = _events[read];
+            // SDL keeps keyboard focus on the main toplevel and never routes it to custom-role
+            // (layer) surfaces; a shell that lives in layer surfaces redirects its keyboard to the
+            // window it has focused (its launcher, a menu). Only keyboard-shaped events, only from
+            // the main window, only when a redirect is set.
+            if (KeyboardRedirectWindowId != 0 && (evt.WindowId == 0 || evt.WindowId == mainId)
+                && evt is KeyEvent or TextInputEvent or TextCompositionEvent)
+            {
+                evt.WindowId = KeyboardRedirectWindowId;
+            }
             App? target = null;
             if (evt.WindowId != 0 && evt.WindowId != mainId)
             {
@@ -55,11 +64,23 @@ public partial class App
         return false;
     }
 
+    private App[]? _pumpScratch;
+
     private void PumpSecondaryWindows()
     {
-        // Reverse: a window may Close() itself out of the list mid-frame (✕ handling).
-        for (int i = _secondaryWindows.Count - 1; i >= 0; i--)
-            _secondaryWindows[i].SecondaryFrame(DeltaTime);
+        // A window's frame can close windows other than itself — a launcher result closes the
+        // launcher AND its scrim — so iterate a snapshot, not the live list, and skip any that
+        // closed mid-pump. (Reverse iteration only ever handled a window closing *itself*.)
+        int n = _secondaryWindows.Count;
+        if (n == 0) return;
+        if (_pumpScratch is null || _pumpScratch.Length < n) _pumpScratch = new App[n];
+        _secondaryWindows.CopyTo(0, _pumpScratch, 0, n);
+        for (int i = 0; i < n; i++)
+        {
+            var w = _pumpScratch[i];
+            _pumpScratch[i] = null!;
+            if (w.NativeWindow is { IsAlive: true }) w.SecondaryFrame(DeltaTime);
+        }
     }
 
     /// <summary>
@@ -84,6 +105,7 @@ public partial class App
         Active = this;
         try
         {
+            DrainPosted(); // secondary windows queue focus requests and background completions here too
             if (WantsContinuousFrame()) _repaint.MarkOverlay();
             FrameTick?.Invoke(DeltaTime);
 
