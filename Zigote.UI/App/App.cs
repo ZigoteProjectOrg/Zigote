@@ -1441,7 +1441,7 @@ public partial class App : IDisposable
         // only the editor's loop drained its scope).
         if (_background is { } bg)
             using (Profiler.Scope("Loop.Background"))
-                bg.RunFrame(TimeSpan.FromMilliseconds(4));
+                bg.RunFrame(BackgroundBudget());
 
         // Bring layout current BEFORE dispatching events so HitTest sees valid Bounds.
         // Layout runs only when structure/size actually changed (MarkNeedsLayout) or the
@@ -1550,6 +1550,25 @@ public partial class App : IDisposable
         }
 
         PaceFrame();
+    }
+
+    /// <summary>The share of this frame still unspent, capped, for <see cref="Background.RunFrame" />.</summary>
+    /// <remarks>
+    ///     The cap used to be a flat 4 ms, which is 24% of a 60 Hz frame but 58% of a 144 Hz one — so on
+    ///     a fast panel a full background slice on a frame that also lays out is the thing that drops it.
+    ///     Take what is left of the frame's own budget instead, and never more than 4 ms even on a slow
+    ///     panel (a 30 Hz frame does not want 33 ms of thumbnail decoding in one go).
+    ///     <para>
+    ///         An already-over-budget frame yields zero, which is not starvation:
+    ///         <see cref="Background.RunFrame" /> runs one unit per queue before it consults the
+    ///         deadline, so the queues still advance — one item per frame instead of a burst.
+    ///     </para>
+    /// </remarks>
+    private TimeSpan BackgroundBudget()
+    {
+        long spent = _clock.ElapsedTicks - _lastTicks;
+        double leftMs = (FrameIntervalTicks - spent) * 1000.0 / Stopwatch.Frequency;
+        return TimeSpan.FromMilliseconds(Math.Clamp(value: leftMs, min: 0d, max: MaxBackgroundBudgetMs));
     }
 
     /// <summary>

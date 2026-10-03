@@ -1,3 +1,5 @@
+using Zigote.Core.Animation;
+
 namespace Zigote.UI.Adwaita;
 
 /// <summary>
@@ -5,9 +7,22 @@ namespace Zigote.UI.Adwaita;
 ///     description and an optional child (typically a pill suggested-action button). Used for
 ///     empty states, errors, and welcome screens. <see cref="Compact" /> shrinks it for
 ///     embedding inside cards and sidebars.
+///     <para>
+///         The content fades up into place the first time it appears (<see cref="Animated" />).
+///         A status page arrives as the answer to "there is nothing here" — an entrance keeps that
+///         from reading as a rendering glitch. It plays once per mount, never on a rebuild, and
+///         nothing about the layout depends on it: the slot is the settled size throughout.
+///     </para>
 /// </summary>
 public sealed class AdwStatusPage : ComposedWidget
 {
+    // Retained, not rebuilt: a fresh Animate on every property change would re-mount and replay
+    // the entrance (see ComposedWidget.EnsureBuilt on why roots are kept).
+    private readonly Animate _entrance = new Animate()
+        .Fade(duration: 260.ms, curve: Curves.EaseOutCubic)
+        .Move(begin: new Offset(x: 0f, y: 10f), end: Offset.Zero);
+
+    private bool _animated = true;
     private Widget? _child;
     private bool _compact;
     private string? _description;
@@ -22,6 +37,13 @@ public sealed class AdwStatusPage : ComposedWidget
     {
         get => _iconName;
         set => this.Set(field: ref _iconName, value: value);
+    }
+
+    /// <summary>Fade the content up on first appearance. Off for a page that must not move.</summary>
+    public bool Animated
+    {
+        get => _animated;
+        set => this.Set(field: ref _animated, value: value);
     }
 
     public string Title
@@ -99,6 +121,15 @@ public sealed class AdwStatusPage : ComposedWidget
 
         if (Child is not null) col.Children.Add(Child);
 
+        Widget content = col;
+        if (Animated)
+        {
+            // Feed the retained Animate rather than wrapping a new one, so a title change updates
+            // the content without restarting the entrance.
+            _entrance.Child = col;
+            content = _entrance;
+        }
+
         // AdwClamp top-aligns; use its ConstrainedBox core directly so the content is
         // vertically centered too, like the GNOME status page.
         return new Center {
@@ -115,7 +146,7 @@ public sealed class AdwStatusPage : ComposedWidget
                         horizontal: AdwMetrics.PageMarginX,
                         vertical: Compact ? Spacing.Xxl : 36f
                     ),
-                    child: col
+                    child: content
                 )
             ),
         };

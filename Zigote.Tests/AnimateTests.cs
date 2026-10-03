@@ -29,6 +29,77 @@ public class AnimateTests
     private static Widget Box() => new DecoratedBox { Fill = new Color(r: 1f, g: 0f, b: 0f) };
 
     [Fact]
+    public void Rotate_Pushes_A_Transform_And_Unwinds_To_Square()
+    {
+        // Mid-rotation the child has to go through the native transform stack; at the end of the
+        // timeline the rotation is zero again and the cheap translate path takes over.
+        var a = Box().Animate().Rotate(begin: -0.25f, end: 0f);
+        var mid = Paint(a, Constraints.Tight(width: 20, height: 20));
+        Assert.Contains(mid.DebugCommands, c => (PaintCommandKind)c.Kind == PaintCommandKind.TransformPush);
+
+        a.Controller.Complete();
+        var end = Paint(a, Constraints.Tight(width: 20, height: 20));
+        Assert.DoesNotContain(
+            end.DebugCommands,
+            c => (PaintCommandKind)c.Kind == PaintCommandKind.TransformPush
+        );
+    }
+
+    [Fact]
+    public void Rotated_HitTest_Follows_The_Painted_Position()
+    {
+        // A quarter turn puts the child's top-left corner where its bottom-left was; a point that
+        // misses the unrotated box has to hit the rotated one and vice versa.
+        var a = Box().Animate().Rotate(begin: 0.25f, end: 0f);
+        a.Measure(Constraints.Tight(width: 40, height: 10));
+        a.Layout(Offset.Zero);
+
+        Assert.NotNull(a.HitTest(new Offset(x: 20f, y: 20f)));
+        Assert.Null(a.HitTest(new Offset(x: 38f, y: 5f)));
+    }
+
+    [Fact]
+    public void Stagger_Delays_Each_Child_By_One_Step()
+    {
+        List<Widget> rows = [Box(), Box(), Box()];
+        var staggered = rows.Stagger(step: 100.ms);
+
+        for (int i = 0; i < staggered.Count; i++)
+        {
+            var a = Assert.IsType<Animate>(staggered[i]);
+            a.Measure(Constraints.Tight(width: 20, height: 20)); // resolves the timeline
+            // Each child's timeline ends one step later than the one before it.
+            Assert.Equal(
+                expected: (i * 0.1f) + (float)Animate.DefaultDuration.TotalSeconds,
+                actual: a.Controller.Duration,
+                precision: 3
+            );
+        }
+    }
+
+    [Fact]
+    public void Loop_Presets_Ask_The_Controller_To_Repeat()
+    {
+        var pulse = Box().Pulse(duration: 400.ms);
+        Assert.True(pulse.Loop);
+        Assert.True(pulse.LoopReverse);
+
+        var spin = Box().Spin(duration: 1.seconds);
+        Assert.True(spin.Loop);
+        Assert.False(spin.LoopReverse); // a spinner wraps, it does not ping-pong
+    }
+
+    [Fact]
+    public void Presets_Chain_Onto_One_Timeline_Instead_Of_Nesting()
+    {
+        // .PopIn().Wobble() must build a single Animate — nesting would double the paint work and
+        // give the two halves separate controllers.
+        var a = Box().PopIn().Wobble(delay: 300.ms);
+        Assert.IsType<Animate>(a);
+        Assert.IsNotType<Animate>(a.Child);
+    }
+
+    [Fact]
     public void Headline_Example_Fade500_Scale_Delay500_Totals_1s()
     {
         // Text("Hello").Animate().Fade(500.ms).Scale(delay: 500.ms): scale inherits the 500 ms

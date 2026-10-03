@@ -38,7 +38,11 @@ public sealed class PhysicsWorld : IDisposable
     /// </summary>
     /// <param name="engineHandle">Opaque engine handle from <see cref="Engine.ZigoteEngine.Handle" />.</param>
     /// <param name="maxBodies">Maximum simultaneous rigid bodies (default 1024).</param>
-    /// <param name="numThreads">Job-system worker threads (-1 = auto-detect).</param>
+    /// <param name="numThreads">
+    ///     Job-system worker threads. <c>-1</c> (the default) derives a count from
+    ///     <paramref name="maxBodies" /> — see <see cref="WorkerCount" />. <c>0</c> runs the solver
+    ///     entirely on the calling thread. A positive value is passed to Jolt as given.
+    /// </param>
     public void Initialize(ulong engineHandle, uint maxBodies = 1024, int numThreads = -1)
     {
         ObjectDisposedException.ThrowIf(condition: _disposed, instance: this);
@@ -47,12 +51,37 @@ public sealed class PhysicsWorld : IDisposable
         _engineHandle = engineHandle;
         var result = NativeEngine.PhysicsInit(
             maxBodies: maxBodies,
-            numThreads: numThreads
+            numThreads: numThreads < 0 ? WorkerCount(maxBodies) : numThreads
         );
         if (result != ZgResult.Ok)
             throw new InvalidOperationException("zigote_physics_init failed.");
 
         _initialized = true;
+    }
+
+    /// <summary>
+    ///     How many Jolt worker threads a world of <paramref name="maxBodies" /> bodies gets.
+    /// </summary>
+    /// <remarks>
+    ///     Jolt splits the broad phase, narrow phase and solver into jobs and barriers them back
+    ///     together on every collision step. Handing it <c>-1</c> — which is
+    ///     <c>hardware_concurrency - 1</c> inside <c>JobSystemThreadPool</c> — means a 16-thread
+    ///     barrier round trip for a scene with forty crates, twice per rendered frame at the 120 Hz
+    ///     fixed step. Below a few hundred bodies the barriers cost more than the split saves.
+    ///     <para>
+    ///         One core is left to the frame thread, which is also a Jolt worker while it is inside
+    ///         <see cref="Step" /> — the calling thread participates on top of this count.
+    ///     </para>
+    ///     <para>
+    ///         ponytail: bodies-per-worker is a heuristic, not a measurement. Retune against
+    ///         <c>ZIGOTE_SMOKE_OBJECTS</c> if a real scene profiles badly, or pass an explicit count.
+    ///     </para>
+    /// </remarks>
+    internal static int WorkerCount(uint maxBodies)
+    {
+        const uint bodiesPerWorker = 256;
+        int cores = Math.Max(val1: 1, val2: Environment.ProcessorCount - 1);
+        return Math.Clamp(value: (int)(maxBodies / bodiesPerWorker), min: 1, max: cores);
     }
 
     // ── Simulation ────────────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ public sealed class AdwButtonContent : ComposedWidget
 {
     private Color? _color;
     private string? _iconName;
+    private BoxShadow? _iconShadow;
     private string _label;
 
     public AdwButtonContent(string? iconName = null, string label = "")
@@ -32,6 +33,13 @@ public sealed class AdwButtonContent : ComposedWidget
     {
         get => _label;
         set => this.Set(field: ref _label, value: value);
+    }
+
+    /// <summary>Shadow behind the icon, for buttons sitting over artwork.</summary>
+    public BoxShadow? IconShadow
+    {
+        get => _iconShadow;
+        set => this.Set(field: ref _iconShadow, value: value);
     }
 
     /// <summary>
@@ -54,7 +62,7 @@ public sealed class AdwButtonContent : ComposedWidget
         if (IconName is not null)
         {
             row.Children.Add(
-                new IconGlyph(glyph: IconName, size: AdwMetrics.IconSize, color: _color)
+                new IconGlyph(glyph: IconName, size: AdwMetrics.IconSize, color: _color) { Shadow = _iconShadow }
             );
         }
 

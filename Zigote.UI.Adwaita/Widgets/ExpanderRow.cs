@@ -191,7 +191,7 @@ public sealed class AdwExpanderRow : ComposedWidget
         private bool _first = true;
         private float _fromAngle, _toAngle;
 
-        public SpinChevron() : base(durationSeconds: 0.2f, curve: Curves.EaseOut)
+        public SpinChevron() : base(curve: Curves.EaseOut, spec: AdwMotion.Control)
         {
             _glyph = new IconGlyph(glyph: Icons.ChevronDown, size: AdwMetrics.IconSize);
             _spin = new Transform(translation: Offset.Zero, child: _glyph);
@@ -264,8 +264,8 @@ public sealed class AdwExpanderRow : ComposedWidget
         private float _to;
 
         public RevealBox(Widget child, bool shown) : base(
-            durationSeconds: 0.25f,
-            curve: Curves.EaseOut
+            curve: Curves.EaseOut,
+            spec: AdwMotion.Reveal
         )
         {
             _child = child;

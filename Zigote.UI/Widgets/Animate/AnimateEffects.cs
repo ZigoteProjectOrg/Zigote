@@ -5,7 +5,7 @@ namespace Zigote.UI.Widgets;
 
 /// <summary>
 ///     The mutable per-frame accumulator an <see cref="Animate" /> builds by folding every active
-///     effect. Alpha/Scale multiply (so stacked fades/scales compose); translation sums.
+///     effect. Alpha/Scale multiply (so stacked fades/scales compose); translation and rotation sum.
 /// </summary>
 internal struct AnimateFrame
 {
@@ -14,11 +14,15 @@ internal struct AnimateFrame
     public float Tx;
     public float Ty;
 
+    /// <summary>Radians, clockwise on screen (y-down), about the child's centre.</summary>
+    public float Rotation;
+
     public static AnimateFrame Identity => new() {
         Alpha = 1f,
         Scale = 1f,
         Tx = 0f,
         Ty = 0f,
+        Rotation = 0f,
     };
 }
 
@@ -133,6 +137,44 @@ public sealed class ShakeEffect : AnimateEffect
         float wave = MathF.Sin(phase) * damp;
         frame.Tx += Amount.X * wave;
         frame.Ty += Amount.Y * wave;
+    }
+}
+
+/// <summary>
+///     Rotates about the child's centre. Measured in turns, so 1 is a full revolution and 0.25 a
+///     quarter turn clockwise; the neutral value is 0 and the default is −0.1→0 (a small
+///     counter-clockwise wind-up that unwinds into place).
+/// </summary>
+public sealed class RotateEffect : AnimateEffect
+{
+    public float? Begin { get; init; }
+    public float? End { get; init; }
+
+    internal override void Apply(ref AnimateFrame frame, float raw, float eased, Size natural)
+    {
+        float begin = Begin ?? (End is null ? -0.1f : 0f);
+        float end = End ?? 0f;
+        frame.Rotation += Lerp(a: begin, b: end, t: eased) * MathF.Tau;
+    }
+}
+
+/// <summary>
+///     Oscillating rotation — <see cref="ShakeEffect" />'s rotational twin, for the "no" head-shake
+///     an invalid field wants. Runs <see cref="Hz" /> cycles per second and damps to rest, so it
+///     always ends square no matter where the timeline is cut.
+/// </summary>
+public sealed class WiggleEffect : AnimateEffect
+{
+    public float Hz { get; init; } = 6f;
+
+    /// <summary>Peak rotation in turns (0.02 ≈ 7°).</summary>
+    public float Amount { get; init; } = 0.02f;
+
+    internal override void Apply(ref AnimateFrame frame, float raw, float eased, Size natural)
+    {
+        float durS = MathF.Max(x: 0.0001f, y: EndS - BeginS);
+        float phase = raw * durS * Hz * MathF.Tau;
+        frame.Rotation += Amount * MathF.Tau * MathF.Sin(phase) * (1f - raw);
     }
 }
 

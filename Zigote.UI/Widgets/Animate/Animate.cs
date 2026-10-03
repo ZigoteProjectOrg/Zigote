@@ -27,10 +27,11 @@ namespace Zigote.UI.Widgets;
 ///     <para>
 ///         Backed by the paint pipeline's real capabilities: <see cref="FadeEffect" /> (alpha),
 ///         <see cref="MoveEffect" />/<see cref="SlideEffect" />/<see cref="ShakeEffect" />
-///         (translation)
-///         are pure paint; <see cref="ScaleEffect" /> scales via layout (re-measures the child and
-///         centres it, so the surrounding slot stays stable). Rotation/blur/colour-matrix effects are
-///         intentionally absent — the renderer has no such primitives.
+///         (translation) are pure paint; <see cref="RotateEffect" />/<see cref="WiggleEffect" />
+///         push a 2×3 affine onto the native transform stack, the same path the <c>Transform</c>
+///         widget takes; <see cref="ScaleEffect" /> scales via layout (re-measures the child and
+///         centres it, so the surrounding slot stays stable). Blur and colour-matrix effects are
+///         still absent — the renderer has no such primitives.
 ///     </para>
 /// </summary>
 public sealed class Animate : Widget
@@ -43,6 +44,7 @@ public sealed class Animate : Widget
     private Size _natural;
     private bool _played;
     private int _resolvedCount = -1;
+    private float _rotation;
     private float _scale = 1f;
     private float? _target;
 
@@ -71,10 +73,37 @@ public sealed class Animate : Widget
     /// <summary>Curve used by the first effect (and any effect that omits its own).</summary>
     public static Func<float, float> DefaultCurve { get; set; } = Curves.EaseOut;
 
-    public Widget? Child { get; set; }
+    /// <summary>
+    ///     The animated child. Assigning a new one attaches it and drops the old (the retained-root
+    ///     contract): a widget that keeps one <see cref="Animate" /> across rebuilds and feeds it
+    ///     fresh content — rather than building a fresh <see cref="Animate" /> each time, which
+    ///     re-mounts and replays the entrance — swaps through here.
+    /// </summary>
+    public Widget? Child
+    {
+        get;
+        set
+        {
+            if (ReferenceEquals(objA: field, objB: value)) return;
+            var previous = field;
+            field = value;
+            SwapChild(previous: previous, next: value);
+            MarkNeedsLayout();
+        }
+    }
 
     /// <summary>Play the timeline once when first mounted. Ignored when <see cref="Target" /> is set.</summary>
     public bool AutoPlay { get; set; } = true;
+
+    /// <summary>
+    ///     Run the timeline over and over instead of once — an ambient pulse, a breathing hint, a
+    ///     spinner built out of effects. Ignored when <see cref="Target" /> is set, and skipped
+    ///     entirely under <see cref="AnimationController.ReduceMotion" />.
+    /// </summary>
+    public bool Loop { get; set; }
+
+    /// <summary>Ping-pong the loop (0→1→0) instead of restarting from 0 each cycle.</summary>
+    public bool LoopReverse { get; set; }
 
     /// <summary>Fires once when a forward play reaches the end.</summary>
     public Action<AnimationController>? OnComplete { get; set; }
@@ -218,6 +247,38 @@ public sealed class Animate : Widget
         );
     }
 
+    /// <summary>
+    ///     Rotate about the centre, in turns (0.25 = a quarter turn clockwise). Defaults to
+    ///     −0.1→0 — a small wind-up that unwinds into place.
+    /// </summary>
+    public Animate Rotate(TimeSpan? duration = null, TimeSpan? delay = null,
+        Func<float, float>? curve = null, float? begin = null, float? end = null)
+    {
+        return Effect(
+            new RotateEffect {
+                Duration = duration,
+                Delay = delay,
+                Curve = curve,
+                Begin = begin,
+                End = end,
+            }
+        );
+    }
+
+    /// <summary>Oscillating rotation (the rotational shake).</summary>
+    public Animate Wiggle(TimeSpan? duration = null, TimeSpan? delay = null,
+        float hz = 6f, float amount = 0.02f)
+    {
+        return Effect(
+            new WiggleEffect {
+                Duration = duration,
+                Delay = delay,
+                Hz = hz,
+                Amount = amount,
+            }
+        );
+    }
+
     /// <summary>Reset the timing baseline so subsequent effects start where the previous one ended.</summary>
     public Animate Then(TimeSpan? delay = null, TimeSpan? duration = null,
         Func<float, float>? curve = null)
@@ -271,6 +332,17 @@ public sealed class Animate : Widget
             _mounted = true;
             if (_explicitTarget)
                 DriveToTarget(t: _target ?? 0f, animate: false); // snap to initial state
+            else if (Loop)
+            {
+                _played = true;
+                // A decorative loop is exactly what someone asking for reduced motion wants gone;
+                // leaving it at progress 0 parks every effect on its neutral value.
+                if (!AnimationController.ReduceMotion)
+                {
+                    Controller.Repeat(reverse: LoopReverse);
+                    OnPlay?.Invoke(Controller);
+                }
+            }
             else if (AutoPlay && !_played)
             {
                 _played = true;
@@ -361,6 +433,7 @@ public sealed class Animate : Widget
         _scale = MathF.Max(x: 0f, y: f.Scale);
         _tx = f.Tx;
         _ty = f.Ty;
+        _rotation = f.Rotation;
     }
 
     private void DriveToTarget(float t, bool animate)
@@ -428,16 +501,49 @@ public sealed class Animate : Widget
 
         bool fade = _alpha < 0.999f;
         bool move = _tx != 0f || _ty != 0f;
+        bool spin = MathF.Abs(_rotation) > 1e-4f;
         if (fade) paint.PushAlpha(_alpha);
-        if (move) paint.PushTranslate(dx: _tx, dy: _ty);
-        Child.Paint(paint);
-        if (move) paint.PopTranslate();
+
+        // Pure translation stays on the CPU-side offset stack (no paint command); a rotation has to
+        // go through the native transform stack, and folds the translation in so the two compose.
+        if (spin)
+        {
+            paint.PushTransform(BuildMatrix());
+            Child.Paint(paint);
+            paint.PopTransform();
+        }
+        else
+        {
+            if (move) paint.PushTranslate(dx: _tx, dy: _ty);
+            Child.Paint(paint);
+            if (move) paint.PopTranslate();
+        }
+
         if (fade) paint.PopAlpha();
+    }
+
+    // T(translate + pivot) ∘ R(θ) ∘ T(−pivot), pivoting on the slot's centre — the same convention
+    // as the Transform widget, so a rotated Animate and a rotated Transform agree.
+    private Matrix2D BuildMatrix()
+    {
+        float px = Bounds.X + (_natural.Width * 0.5f);
+        float py = Bounds.Y + (_natural.Height * 0.5f);
+        return Matrix2D.Translation(dx: _tx + px, dy: _ty + py) *
+               Matrix2D.Rotation(_rotation) *
+               Matrix2D.Translation(dx: -px, dy: -py);
     }
 
     public override Widget? HitTest(Offset point)
     {
         if (_alpha <= 0.01f || Child is null) return null;
+        if (MathF.Abs(_rotation) > 1e-4f)
+        {
+            // Follow the visual position: map the pointer back through the inverse transform.
+            return BuildMatrix().TryInvert(out var inverse)
+                ? Child.HitTest(inverse.Apply(point))
+                : null;
+        }
+
         var p = _tx != 0f || _ty != 0f ? new Offset(x: point.X - _tx, y: point.Y - _ty) : point;
         return Child.HitTest(p);
     }

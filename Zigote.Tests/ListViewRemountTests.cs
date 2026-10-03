@@ -36,6 +36,9 @@ public class ListViewRemountTests
                 bindingAttr: BindingFlags.Instance | BindingFlags.NonPublic
             )!
             .SetValue(obj: app, value: new RepaintTracker());
+        typeof(App)
+            .GetField("_overlays", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(app, new List<Widget>());
         return app;
     }
 

@@ -23,6 +23,7 @@ public sealed class AdwBanner : ComposedWidget
         OnButtonClicked = onButtonClicked;
         _anim = new AnimationController(durationSeconds: 0.25f, vsync: this) {
             Curve = Curves.EaseOut,
+            Spec = AdwMotion.Reveal, // revealed and re-hidden while still moving: keep the speed
         };
         _anim.OnTick += MarkNeedsLayout;
         // Jump to the initial position without animating.

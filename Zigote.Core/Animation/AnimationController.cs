@@ -16,6 +16,7 @@ public enum AnimationStatus
 public sealed class AnimationController
 {
     private float _direction = 1f;
+    private Motion _motion;
     private bool _repeats;
     private bool _reverseRepeat;
     private Ticker? _ticker;
@@ -47,13 +48,65 @@ public sealed class AnimationController
     /// </summary>
     public static float MaxFrameDelta { get; set; } = 0.1f;
 
+    /// <summary>
+    ///     Global multiplier on every animation's dt. 1 is real time; 0.2 is the slow-motion a
+    ///     DevTools slider binds to when someone is trying to see what a transition actually does.
+    /// </summary>
+    public static float TimeScale { get; set; } = 1f;
+
+    /// <summary>
+    ///     Honour the platform's "reduce motion" preference: <see cref="Forward" /> and
+    ///     <see cref="Reverse" /> jump straight to their end state, still firing the
+    ///     completed/dismissed edges so anything waiting on them proceeds. Set it once at startup
+    ///     from the OS setting; widgets need no special case.
+    ///     <para>
+    ///         <see cref="Repeat" /> is deliberately exempt. A spinner or an indeterminate progress
+    ///         bar is the only sign the app is still working, and freezing it reads as a hang.
+    ///         Decorative loops opt out at their own level — <c>Animate.Loop</c> does.
+    ///     </para>
+    /// </summary>
+    public static bool ReduceMotion { get; set; }
+
     public float Duration { get; set; }
     public float Progress { get; private set; }
     public AnimationStatus Status { get; private set; } = AnimationStatus.Idle;
     public Func<float, float> Curve { get; set; } = Curves.EaseInOut;
 
-    /// <summary>Current eased value in [0, 1].</summary>
-    public float Value => Curve(Progress);
+    /// <summary>
+    ///     Rate multiplier for this controller alone. <c>AnimationPlayer</c> and
+    ///     <c>SpriteAnimator</c> always had one; this is the widget side of the same knob.
+    /// </summary>
+    public float Speed { get; set; } = 1f;
+
+    /// <summary>
+    ///     Set a spring (or decay) spec to drive the progress physically instead of by
+    ///     <see cref="Duration" /> and <see cref="Curve" />. The difference shows the moment an
+    ///     animation is interrupted: a duration restarts from a standstill, a spring bends toward
+    ///     the new target carrying the velocity it already had.
+    ///     <para>
+    ///         Null (the default) keeps the plain duration behaviour every existing caller has. A
+    ///         bouncy spring overshoots, so <see cref="Progress" /> may leave [0,1] unless
+    ///         <see cref="ClampProgress" /> is on.
+    ///     </para>
+    /// </summary>
+    public MotionSpec? Spec { get; set; }
+
+    /// <summary>Hold <see cref="Progress" /> inside [0,1], suppressing a bouncy spring's overshoot.</summary>
+    public bool ClampProgress { get; set; } = true;
+
+    /// <summary>
+    ///     Progress units per second, signed. Non-zero only under a <see cref="Spec" />; it is what
+    ///     a gesture hands over when it lets go, and what survives a retarget. Settable so a drag
+    ///     can hand its release velocity to the spring that takes over.
+    /// </summary>
+    public float Velocity
+    {
+        get => _motion.Velocity;
+        set => _motion.Velocity = value;
+    }
+
+    /// <summary>Current eased value in [0, 1] (a spring may overshoot — see <see cref="Spec" />).</summary>
+    public float Value => Spec is { Kind: not MotionKind.Duration } ? Progress : Curve(Progress);
 
     /// <summary>
     ///     (Re)bind the driving ticker from <paramref name="vsync" />. A widget owning this controller
@@ -79,7 +132,15 @@ public sealed class AnimationController
         _repeats = false;
         _direction = 1f;
         if (Progress >= 1f) Progress = 0f;
+        if (ReduceMotion)
+        {
+            Complete();
+            OnCompleted?.Invoke();
+            return;
+        }
+
         Status = AnimationStatus.Forward;
+        AimMotion();
         _ticker?.Start();
     }
 
@@ -89,7 +150,15 @@ public sealed class AnimationController
         _repeats = false;
         _direction = -1f;
         if (Progress <= 0f) Progress = 1f;
+        if (ReduceMotion)
+        {
+            Dismiss();
+            OnDismissed?.Invoke();
+            return;
+        }
+
         Status = AnimationStatus.Reverse;
+        AimMotion();
         _ticker?.Start();
     }
 
@@ -114,6 +183,7 @@ public sealed class AnimationController
         _direction = 1f;
         Progress = 0f;
         Status = AnimationStatus.Forward;
+        AimMotion();
         _ticker?.Start();
     }
 
@@ -122,6 +192,7 @@ public sealed class AnimationController
     {
         _repeats = false;
         Progress = 1f;
+        _motion.SnapTo(1f);
         Status = AnimationStatus.Completed;
         _ticker?.Stop();
     }
@@ -135,6 +206,9 @@ public sealed class AnimationController
     {
         _repeats = false;
         Progress = Math.Clamp(value: progress, min: 0f, max: 1f);
+        // A seek is a drag, so the spring keeps the velocity the finger gave it and only moves its
+        // value — that is what lets a released sheet fling on from where it was let go.
+        _motion.Value = Progress;
         Status = AnimationStatus.Idle;
         _ticker?.Stop();
         OnTick?.Invoke();
@@ -146,6 +220,7 @@ public sealed class AnimationController
     {
         _repeats = false;
         Progress = 0f;
+        _motion.SnapTo(0f);
         Status = AnimationStatus.Dismissed;
         _ticker?.Stop();
     }
@@ -157,7 +232,15 @@ public sealed class AnimationController
 
         // Delta-time driven so a given animation runs at the same wall-clock speed on any frame rate;
         // clamped to MaxFrameDelta so a stalled frame can't jump/finish it (see MaxFrameDelta).
-        dt = Math.Clamp(value: dt, min: 0f, max: MaxFrameDelta);
+        // Speed and TimeScale scale what is left — the clamp is about frame hitches, not intent.
+        dt = Math.Clamp(value: dt, min: 0f, max: MaxFrameDelta) * Speed * TimeScale;
+        if (dt <= 0f) return;
+
+        if (Spec is { Kind: not MotionKind.Duration })
+        {
+            TickSpring(dt);
+            return;
+        }
 
         float step = (Duration > 0f ? dt / Duration : 1f) * _direction;
         Progress = Math.Clamp(value: Progress + step, min: 0f, max: 1f);
@@ -182,6 +265,60 @@ public sealed class AnimationController
                 OnCompleted?.Invoke();
             }
             else if (Progress <= 0f)
+            {
+                Status = AnimationStatus.Dismissed;
+                _ticker?.Stop();
+                OnDismissed?.Invoke();
+            }
+        }
+
+        OnTick?.Invoke();
+        RequestFrameAction?.Invoke();
+    }
+
+    // Point the spring at whichever end the current direction is heading for, WITHOUT touching its
+    // velocity — a Forward that interrupts a Reverse mid-flight bends the motion around instead of
+    // restarting it from a standstill.
+    private void AimMotion()
+    {
+        if (Spec is not { Kind: not MotionKind.Duration } spec) return;
+        _motion.Spec = spec;
+        _motion.Value = Progress;
+        _motion.Retarget(_direction > 0f ? 1f : 0f);
+    }
+
+    private void TickSpring(float dt)
+    {
+        bool moving = _motion.Tick(dt);
+        Progress = ClampProgress
+            ? Math.Clamp(value: _motion.Value, min: 0f, max: 1f)
+            : _motion.Value;
+
+        if (!moving)
+        {
+            if (_repeats)
+            {
+                if (_reverseRepeat)
+                    _direction = -_direction;
+                else
+                {
+                    Progress = 0f;
+                    _motion.SnapTo(0f);
+                    _direction = 1f;
+                }
+
+                AimMotion();
+                Status = _direction > 0f
+                    ? AnimationStatus.Forward
+                    : AnimationStatus.Reverse;
+            }
+            else if (_direction > 0f)
+            {
+                Status = AnimationStatus.Completed;
+                _ticker?.Stop();
+                OnCompleted?.Invoke();
+            }
+            else
             {
                 Status = AnimationStatus.Dismissed;
                 _ticker?.Stop();

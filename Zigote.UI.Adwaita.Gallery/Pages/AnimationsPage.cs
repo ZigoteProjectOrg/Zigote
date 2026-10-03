@@ -4,7 +4,10 @@ namespace AdwaitaGallery.Pages;
 
 /// <summary>
 ///     Animations — a square that slides left to right as the animation value goes 0 → 1, with the
-///     demo's transport controls and the Timed / Spring parameter groups.
+///     demo's transport controls and the Timed / Spring parameter groups. The Timed group runs the
+///     real easing behind each of the 35 names; the Spring group runs a real
+///     <see cref="Motion" />, so mass, stiffness, damping, initial velocity and epsilon all do what
+///     they say.
 /// </summary>
 public sealed class AnimationsPage : ComposedWidget
 {
@@ -59,6 +62,9 @@ public sealed class AnimationsPage : ComposedWidget
     private readonly AdwButton _skip;
     private readonly Align _slot;
     private readonly AdwViewStack _stack;
+
+    /// <summary>Live read-out, so the spring parameters can be seen doing something.</summary>
+    private readonly Label _readout = new(text: "0.000", fontSize: 12f);
     private bool _alternate;
     private bool _clamp;
 
@@ -69,8 +75,12 @@ public sealed class AnimationsPage : ComposedWidget
     private Func<float, float> _easing = Curves.EaseInOut;
     private bool _flip;
 
-    // Spring parameters that actually drive the approximation.
+    // Spring parameters — every one of them drives the real Motion below.
+    private double _damping = 10;
+    private double _epsilon = 0.001;
+    private double _initialVelocity;
     private double _mass = 1;
+    private Motion _spring;
     private Phase _phase = Phase.Idle;
     private double _repeatCount = 1;
     private bool _reverse;
@@ -110,17 +120,29 @@ public sealed class AnimationsPage : ComposedWidget
 
     private bool IsSpring => _stack.VisibleName == "Spring";
 
+    private float DurationSeconds => (float)(_duration / 1000);
+
     /// <summary>
-    ///     ponytail: the spring is approximated by <see cref="Curves.Spring" /> over a period derived
-    ///     from mass and stiffness — initial velocity, damping and epsilon are shown but not applied.
+    ///     The spin rows in the Spring group, in the physicist's units (mass, stiffness, damping
+    ///     coefficient), translated into the response/damping-ratio pair a <see cref="MotionSpec" />
+    ///     takes: ω = √(k/m), response = 2π/ω, ζ = c / 2√(k·m).
     /// </summary>
-    private float DurationSeconds => IsSpring
-        ? MathF.Tau * MathF.Sqrt((float)(_mass / Math.Max(val1: _stiffness, val2: 1)))
-        : (float)(_duration / 1000);
+    private MotionSpec SpringSpec()
+    {
+        float m = MathF.Max(x: (float)_mass, y: 0.001f);
+        float k = MathF.Max(x: (float)_stiffness, y: 0.001f);
+        float response = MathF.Tau * MathF.Sqrt(m / k);
+        float zeta = (float)_damping / (2f * MathF.Sqrt(k * m));
+        return MotionSpec.Spring(response: response, damping: zeta) with {
+            Epsilon = MathF.Max(x: (float)_epsilon, y: 1e-5f),
+        };
+    }
 
     protected override Widget Build(BuildContext context)
     {
-        _sample.Background = ThemeProvider.Of(context).Accent;
+        var theme = ThemeProvider.Of(context);
+        _sample.Background = theme.Accent;
+        _readout.Color = theme.Hint;
 
         return new GalleryPage(
             title: "Animations",
@@ -138,7 +160,9 @@ public sealed class AnimationsPage : ComposedWidget
                             child: new SizedBox(height: 32f, child: _slot),
                             maximumSize: 400f
                         ),
-                        new SizedBox(height: 30f),
+                        new SizedBox(height: 8f),
+                        new Center { Child = _readout },
+                        new SizedBox(height: 22f),
                         new Center {
                             Child = new Row(spacing: Spacing.Xl, mainAxisSize: MainAxisSize.Min) {
                                 Children = {
@@ -214,16 +238,18 @@ public sealed class AnimationsPage : ComposedWidget
             Rows = {
                 new AdwSpinRow(
                     title: "Initial Velocity",
-                    subtitle: "Not implemented",
-                    min: -1000,
-                    max: 1000
+                    subtitle: "Value units per second, at release",
+                    min: -100,
+                    max: 100,
+                    onChanged: v => _initialVelocity = v
                 ),
                 new AdwSpinRow(
                     title: "Damping",
-                    subtitle: "Not implemented",
+                    subtitle: "Below critical (2√(k·m)) it overshoots",
                     value: 10,
                     min: 0,
-                    max: 1000
+                    max: 1000,
+                    onChanged: v => _damping = v
                 ),
                 new AdwSpinRow(
                     title: "Mass",
@@ -241,11 +267,12 @@ public sealed class AnimationsPage : ComposedWidget
                 ),
                 new AdwSpinRow(
                     title: "Epsilon",
-                    subtitle: "Not implemented",
+                    subtitle: "How close counts as arrived",
                     value: 0.001,
                     min: 0.0001,
                     max: 0.01,
-                    step: 0.001
+                    step: 0.001,
+                    onChanged: v => _epsilon = v
                 ),
                 new AdwSwitchRow(title: "Clamp", onChanged: v => _clamp = v),
             },
@@ -253,26 +280,90 @@ public sealed class AnimationsPage : ComposedWidget
     }
 
     /// <summary>
-    ///     ponytail: the toolkit ships 8 curves, so the 35 AdwEasing names map onto the nearest one
-    ///     by family — a full version would need the easing formulas themselves.
+    ///     Every AdwEasing name mapped to the curve that actually bears it — the quadratic family
+    ///     under the bare names, and the three CSS keywords as the cubic Béziers they are defined as.
     /// </summary>
     private static Func<float, float> CurveFor(string name)
     {
-        if (name.Contains("Bounce")) return Curves.BounceOut;
-        if (name.Contains("Elastic")) return Curves.ElasticOut;
-        if (name.Contains("Back")) return Curves.EaseOutBack;
-        if (name == "Linear") return Curves.Linear;
-        if (name.StartsWith(value: "Ease-in-out", comparisonType: StringComparison.Ordinal))
-            return Curves.EaseInOut;
-        if (name.StartsWith(value: "Ease-in", comparisonType: StringComparison.Ordinal))
-            return Curves.EaseIn;
-        if (name.StartsWith(value: "Ease-out", comparisonType: StringComparison.Ordinal))
-            return Curves.EaseOut;
-        return Curves.EaseInOut;
+        return name switch {
+            "Linear" => Curves.Linear,
+            "Ease-in (Quadratic)" => Curves.EaseIn,
+            "Ease-out (Quadratic)" => Curves.EaseOut,
+            "Ease-in-out (Quadratic)" => Curves.EaseInOut,
+            "Ease-in (Cubic)" => Curves.EaseInCubic,
+            "Ease-out (Cubic)" => Curves.EaseOutCubic,
+            "Ease-in-out (Cubic)" => Curves.EaseInOutCubic,
+            "Ease-in (Quartic)" => Curves.EaseInQuart,
+            "Ease-out (Quartic)" => Curves.EaseOutQuart,
+            "Ease-in-out (Quartic)" => Curves.EaseInOutQuart,
+            "Ease-in (Quintic)" => Curves.EaseInQuint,
+            "Ease-out (Quintic)" => Curves.EaseOutQuint,
+            "Ease-in-out (Quintic)" => Curves.EaseInOutQuint,
+            "Ease-in (Sine)" => Curves.EaseInSine,
+            "Ease-out (Sine)" => Curves.EaseOutSine,
+            "Ease-in-out (Sine)" => Curves.EaseInOutSine,
+            "Ease-in (Exponential)" => Curves.EaseInExpo,
+            "Ease-out (Exponential)" => Curves.EaseOutExpo,
+            "Ease-in-out (Exponential)" => Curves.EaseInOutExpo,
+            "Ease-in (Circular)" => Curves.EaseInCirc,
+            "Ease-out (Circular)" => Curves.EaseOutCirc,
+            "Ease-in-out (Circular)" => Curves.EaseInOutCirc,
+            "Ease-in (Elastic)" => Curves.EaseInElastic,
+            "Ease-out (Elastic)" => Curves.ElasticOut,
+            "Ease-in-out (Elastic)" => Curves.EaseInOutElastic,
+            "Ease-in (Back)" => Curves.EaseInBack,
+            "Ease-out (Back)" => Curves.EaseOutBack,
+            "Ease-in-out (Back)" => Curves.EaseInOutBack,
+            "Ease-in (Bounce)" => Curves.EaseInBounce,
+            "Ease-out (Bounce)" => Curves.BounceOut,
+            "Ease-in-out (Bounce)" => Curves.EaseInOutBounce,
+            "Ease" => Curves.Ease,
+            "Ease-in" => CssEaseIn,
+            "Ease-out" => CssEaseOut,
+            "Ease-in-out" => CssEaseInOut,
+            _ => Curves.EaseInOut,
+        };
     }
+
+    // The CSS keyword curves, which are Béziers rather than polynomials.
+    private static readonly Func<float, float> CssEaseIn = Curves.Bezier(
+        x1: 0.42f,
+        y1: 0f,
+        x2: 1f,
+        y2: 1f
+    );
+
+    private static readonly Func<float, float> CssEaseOut = Curves.Bezier(
+        x1: 0f,
+        y1: 0f,
+        x2: 0.58f,
+        y2: 1f
+    );
+
+    private static readonly Func<float, float> CssEaseInOut = Curves.Bezier(
+        x1: 0.42f,
+        y1: 0f,
+        x2: 0.58f,
+        y2: 1f
+    );
 
     private void Tick(float dt)
     {
+        if (IsSpring)
+        {
+            // The spring owns its own clock: it stops itself when it has arrived and is no longer
+            // moving, which is also what lets the frame loop go back to sleep.
+            if (!_spring.Tick(dt))
+            {
+                _phase = Phase.Finished;
+                _ticker?.Stop();
+            }
+
+            _t = _spring.Value;
+            Apply();
+            return;
+        }
+
         _t += dt / MathF.Max(x: 0.001f, y: DurationSeconds);
         while (_t >= 1f)
         {
@@ -303,6 +394,16 @@ public sealed class AnimationsPage : ComposedWidget
                 _t = 0f;
                 _cycles = 0;
                 _flip = false;
+                if (IsSpring)
+                {
+                    _spring = new Motion(
+                        spec: SpringSpec(),
+                        value: 0f,
+                        target: 1f,
+                        velocity: (float)_initialVelocity
+                    );
+                }
+
                 _phase = Phase.Playing;
                 _ticker?.Start();
                 break;
@@ -324,6 +425,7 @@ public sealed class AnimationsPage : ComposedWidget
         _t = 0f;
         _cycles = 0;
         _flip = false;
+        _spring.SnapTo(0f);
         _phase = Phase.Idle;
         _ticker?.Stop();
         Apply();
@@ -332,28 +434,36 @@ public sealed class AnimationsPage : ComposedWidget
     private void Skip()
     {
         _t = 1f;
+        _spring.SnapTo(1f);
         _phase = Phase.Finished;
         _ticker?.Stop();
         Apply();
     }
 
-    private Func<float, float> CurrentCurve()
-    {
-        if (!IsSpring) return _easing;
-        // Clamping a spring means no overshoot, so a plain ease-out stands in for it.
-        if (_clamp) return Curves.EaseOut;
-        return Curves.Spring;
-    }
-
     private void Apply()
     {
-        // Elastic, back and spring curves overshoot, so the sample is clamped to the track.
-        float value = Math.Clamp(
-            value: CurrentCurve()(Math.Clamp(value: _t, min: 0f, max: 1f)),
-            min: 0f,
-            max: 1f
-        );
-        if (!IsSpring && _reverse ^ _flip) value = 1f - value;
+        float value;
+        if (IsSpring)
+        {
+            // Clamp means "no overshoot"; unclamped, the sample is allowed a little way past each
+            // end of the track so a bouncy spring can actually be seen bouncing.
+            value = _clamp
+                ? Math.Clamp(value: _t, min: 0f, max: 1f)
+                : Math.Clamp(value: _t, min: -0.08f, max: 1.08f);
+            _readout.Text =
+                $"value {_t:0.000}   ·   velocity {_spring.Velocity:0.00}/s";
+        }
+        else
+        {
+            // Elastic and back curves overshoot, so the timed sample is clamped to the track.
+            value = Math.Clamp(
+                value: _easing(Math.Clamp(value: _t, min: 0f, max: 1f)),
+                min: 0f,
+                max: 1f
+            );
+            if (_reverse ^ _flip) value = 1f - value;
+            _readout.Text = $"value {value:0.000}";
+        }
 
         _slot.Alignment = new Alignment(X: value, Y: 0.5f);
         _slot.MarkNeedsLayout();

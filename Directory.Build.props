@@ -7,6 +7,9 @@
     <PropertyGroup>
         <LangVersion Condition="'$(MSBuildProjectExtension)' == '.csproj'">14.0</LangVersion>
         <LangVersion Condition="'$(MSBuildProjectExtension)' == '.fsproj'">10.0</LangVersion>
+        <!-- Keep dotnet test on VSTest for the mixed xUnit v2/v3 test projects.
+             xUnit v3 4.0 defaults to MTP, which .NET 10 rejects in VSTest mode. -->
+        <IsTestingPlatformApplication>false</IsTestingPlatformApplication>
     </PropertyGroup>
 
     <!-- Package identity and one version for everything that ships (build/pack.sh). -->

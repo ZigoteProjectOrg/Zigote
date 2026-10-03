@@ -4,7 +4,7 @@ namespace Zigote.UI.Material;
 ///     The check-mark tick, drawn as two rounded strokes inside its bounds. The entrance/exit
 ///     animation and all the plumbing live in <see cref="ToggleGlyph" />; this is only the geometry.
 /// </summary>
-public sealed class CheckGlyph() : ToggleGlyph(Motion.Standard)
+public sealed class CheckGlyph() : ToggleGlyph(Durations.Standard)
 {
     protected override void PaintGlyph(PaintList paint, float t)
     {

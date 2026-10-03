@@ -2,13 +2,14 @@ namespace Zigote.UI.Theme;
 
 /// <summary>
 ///     Animation timing tokens (seconds) — the motion counterpart of <see cref="Spacing" /> /
-///     <see cref="Radii" />. Every widget transition feeds one of these into an
+///     <see cref="Radii" />. For motion that has to survive being interrupted, feed one of these to
+///     a <c>MotionSpec.Spring</c> response instead of a controller duration. Every widget transition feeds one of these into an
 ///     <c>AnimationController</c>, so the whole set shares one calm, consistent feel and can be retuned
 ///     in a single place. The controller is delta-time driven, so these are wall-clock durations that
 ///     look the same at any frame rate.
 ///     <para>Mutable statics: set them once at app startup to globally speed up or slow down motion.</para>
 /// </summary>
-public static class Motion
+public static class Durations
 {
     /// <summary>Small, high-frequency flips — radio dot, chip colour crossfade, menu pop.</summary>
     public static float Fast = 0.2f;

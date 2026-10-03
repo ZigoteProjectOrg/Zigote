@@ -36,6 +36,9 @@ public sealed class AdwOverlaySplitView : ComposedWidget
     {
         _anim = new AnimationController(durationSeconds: 0.25f, vsync: this) {
             Curve = Curves.EaseOut,
+            // The sidebar that gets folded while it is still unfolding — the case a restarting
+            // curve visibly kinks on.
+            Spec = AdwMotion.Reveal,
         };
         _anim.OnTick += OnAnimTick;
         _anim.OnDismissed += OnHidden;

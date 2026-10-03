@@ -14,11 +14,9 @@ namespace Zigote.UI.Material;
 /// </summary>
 public sealed class SegmentedControl : Widget
 {
-    private readonly AnimationController _slide;
+    private readonly AnimatedFloat _pill;
     private int _hovered = -1;
-    private float _pillFrom;
     private bool _pillInit;
-    private float _pillTo;
     private int _pressed = -1;
     private int _selected;
     private Size _size;
@@ -31,16 +29,17 @@ public sealed class SegmentedControl : Widget
         Segments = new List<string>(segments);
         _selected = selected;
         OnChanged = onChanged;
-        _slide = new AnimationController(durationSeconds: Motion.Standard, vsync: this) {
-            Curve = Curves.EaseOut,
-        };
-        _slide.OnTick += MarkNeedsPaint;
+        // A spring rather than a curve: tapping along the segments retargets the pill mid-slide,
+        // and it should carry on rather than stop and start again at each tap.
+        _pill = new AnimatedFloat(
+            spec: MotionSpec.Spring(response: Durations.Standard, damping: 1f),
+            onChanged: MarkNeedsPaint,
+            value: selected
+        );
     }
 
-
     /// <summary>The animated (possibly fractional) index the selection pill is drawn at.</summary>
-    private float PillPos =>
-        _pillInit ? _pillFrom + ((_pillTo - _pillFrom) * _slide.Value) : SelectedIndex;
+    private float PillPos => _pillInit ? _pill.Value : SelectedIndex;
 
 
     public List<string> Segments { get; set; }
@@ -71,7 +70,7 @@ public sealed class SegmentedControl : Widget
 
     // Mount-scoped: the ticker CreateTicker hands out is disposed on unmount, so a
     // re-attach rebinds instead of leaking one per attach cascade.
-    protected override void OnMount() => _slide.AttachTicker(this);
+    protected override void OnMount() => _pill.AttachTicker(this);
 
     public override void UpdateFrom(Widget newWidget)
     {
@@ -145,19 +144,14 @@ public sealed class SegmentedControl : Widget
         float segW = Bounds.Width / count;
         float inset = Spacing.Xxs;
 
-        // Retarget the sliding pill whenever the selection changed since the last paint.
+        // The pill follows the selection; the first paint places it without a slide.
         if (!_pillInit)
         {
             _pillInit = true;
-            _pillFrom = _pillTo = SelectedIndex;
+            _pill.SnapTo(SelectedIndex);
         }
-        else if (Math.Abs(_pillTo - SelectedIndex) > 0.001f)
-        {
-            _pillFrom = PillPos;
-            _pillTo = SelectedIndex;
-            _slide.Dismiss();
-            _slide.Forward();
-        }
+        else
+            _pill.To(SelectedIndex);
 
         // Raised selection pill, drawn once at its (possibly fractional) animated position.
         float pillX = Bounds.X + (segW * PillPos);

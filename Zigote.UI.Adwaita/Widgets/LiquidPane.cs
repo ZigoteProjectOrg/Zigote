@@ -27,7 +27,15 @@ namespace Zigote.UI.Adwaita;
 ///         <item>
 ///             Two variants: <see cref="Regular" /> for chrome over a known surface, and
 ///             <see cref="Clear" /> for chrome over media, which leans on the shader's adaptive
-///             anchor instead of a heavier scrim.
+///             anchor instead of a heavier scrim. <see cref="Tinted" /> is the dial between them,
+///             so a control can blend a pane from one to the other live, the way the system's own
+///             settings do.
+///         </item>
+///         <item>
+///             Glass is captured once per cluster, not once per pane. The panes of a toolbar, a
+///             control centre, a lock screen go in one <see cref="LiquidGroup" />, which lays every
+///             lens down before any of their content — one backdrop copy and one render-pass break
+///             for the lot.
 ///         </item>
 ///         <item>
 ///             Interactive glass is a gel: hover thickens the lens, press compresses it. Wire it
@@ -48,10 +56,12 @@ namespace Zigote.UI.Adwaita;
 ///     </para>
 /// </summary>
 /// <remarks>
-///     Not cheap, and deliberately so: each pane is a render-pass break plus a backdrop copy, and
-///     any glass on screen disables partial repaint for the frame. That is what makes a page full
-///     of these a workload rather than just a look, and the reason an app that uses them should
-///     have a preference that turns them off.
+///     Not cheap, and deliberately so: every run of lenses is a render-pass break plus a backdrop
+///     copy — one per pane left on its own, one per <see cref="LiquidGroup" /> — and a lens never
+///     repaints a patch of itself: a change anywhere under one redraws the whole lens and captures
+///     again, so a ticking label inside a glass bar costs a bar-sized redraw. That is what makes a
+///     page full of these a workload rather than just a look, and the reason an app that uses them
+///     should have a preference that turns them off.
 /// </remarks>
 public sealed class LiquidPane : Widget
 {
@@ -77,48 +87,113 @@ public sealed class LiquidPane : Widget
 
     /// <summary>
     ///     The clear variant's haze: barely there, because it floats on media the page is *about*,
-    ///     so it lifts rather than shades.
+    ///     so it lifts rather than shades. Also the floor <see cref="Tinted" /> blends up from.
     /// </summary>
-    private static readonly Color ClearTint = new(
-        r: 1f,
-        g: 1f,
-        b: 1f,
-        a: 0.10f
-    );
+    private const float ClearHaze = 0.10f;
 
+    /// <summary>
+    ///     The two rims, as fractions of the theme's slab thickness. Tiny on purpose: the
+    ///     reference capsules bend what is behind them in a hairline at the very edge and are
+    ///     clear right up to it — a wide bevel turns a capsule into a frosted ring. At the theme's
+    ///     10px slab these are 2.5 and 3.5 logical pixels.
+    /// </summary>
+    private const float ThinBevel = 0.25f;
+
+    /// <inheritdoc cref="ThinBevel" />
+    private const float RegularBevel = 0.35f;
+
+    private float _adapt = Legibility;
+    private float _bevel = ThinBevel;
+    private float _elevation;
+    private LiquidGroup? _group;
+    private float _radius = AdwMetrics.Pill;
     private Size _size;
     private ThemeData _theme = ThemeData.Dark;
+    private Color? _tint;
+    private float _tinted = 1f;
 
     public Widget? Child { get; set; }
 
     /// <summary>Corner radius. The default — <see cref="AdwMetrics.Pill" /> — makes a chip or a bar
     ///     a capsule; a pane carrying more than one row wants something nearer a card.</summary>
-    public float Radius { get; set; } = AdwMetrics.Pill;
+    public float Radius
+    {
+        get => _radius;
+        set => SetPaint(field: ref _radius, value: value);
+    }
 
     /// <summary>
-    ///     Scrim colour; its alpha is the strength (0 = a clear lens, 1 = opaque paint). Null — the
-    ///     default — follows the theme: a light haze in <b>both</b> themes, milkier in the light
-    ///     one. Set it only to force one family regardless of theme.
+    ///     Scrim colour; its alpha is the strength at <see cref="Tinted" /> = 1. Null — the default
+    ///     — follows the theme: a light haze in <b>both</b> themes, milkier in the light one. Set it
+    ///     only to force one family regardless of theme, or to colour the glass.
     /// </summary>
-    public Color? Tint { get; set; }
+    public Color? Tint
+    {
+        get => _tint;
+        set => SetPaint(field: ref _tint, value: value);
+    }
+
+    /// <summary>
+    ///     Where the pane sits between the two variants: 0 is <see cref="Clear" /> — the barest
+    ///     white haze, the lens doing the work — and 1 is <see cref="Regular" />, the full scrim
+    ///     of <see cref="Tint" /> or the theme. Between them the scrim's colour and strength and
+    ///     the adaptive pull all blend, and the pane repaints live, so a slider can drive it
+    ///     without rebuilding anything. The clear end is white whatever the tint: a dark tint
+    ///     faded to a whisper is a faintly darker hole in the page, not clear glass.
+    /// </summary>
+    public float Tinted
+    {
+        get => _tinted;
+        set => SetPaint(
+            field: ref _tinted,
+            value: Math.Clamp(
+                value: value,
+                min: 0f,
+                max: 1f
+            )
+        );
+    }
 
     /// <summary>
     ///     How hard the shader pulls the backdrop toward the scrim's luminance anchor: 0 shows the
     ///     backdrop as it is, 1 is a full legibility clamp. This is what keeps a title readable
     ///     over artwork the pane cannot see, and it is why glass over media needs no heavy fill.
+    ///     Eased down toward the clear variant as <see cref="Tinted" /> falls.
     /// </summary>
-    public float Adapt { get; set; } = Legibility;
+    public float Adapt
+    {
+        get => _adapt;
+        set => SetPaint(field: ref _adapt, value: value);
+    }
 
     /// <summary>
     ///     Bevel width as a fraction of the theme's slab thickness — the material's <i>weight</i>,
     ///     Apple's thin-to-thick vibrancy scale collapsed to the two variants that earn their keep.
     ///     Thin glass is clearer, so it is the default and what <see cref="Clear" /> uses; a
-    ///     <see cref="Regular" /> pane carries a fuller rim.
+    ///     <see cref="Regular" /> pane carries a slightly fuller rim. Both are hairlines: the rim
+    ///     is where the lens bends, and the reference material keeps that to the very edge.
     /// </summary>
-    public float Bevel { get; set; } = 0.35f;
+    public float Bevel
+    {
+        get => _bevel;
+        set => SetPaint(field: ref _bevel, value: value);
+    }
 
     /// <summary>Soft float shadow size; 0 for a pane riding inline on what is behind it.</summary>
-    public float Elevation { get; set; }
+    public float Elevation
+    {
+        get => _elevation;
+        set
+        {
+            if (_elevation == value) return;
+            // The shadow paints outside Bounds, and DamageBounds is read when the repaint is
+            // requested — so a shrinking shadow must damage the ring it is about to leave
+            // before the field changes, or that ring stays on the persistent scene.
+            MarkNeedsPaint();
+            _elevation = value;
+            MarkNeedsPaint();
+        }
+    }
 
     /// <summary>Gel inputs, driven by whatever <see cref="Pressable" /> owns the pane. Setting
     ///     one animates the lens toward its new state rather than snapping — a gel deforms, it
@@ -173,6 +248,10 @@ public sealed class LiquidPane : Widget
         (_gelThick, _gelPinch, _gelScrim) = GelTarget;
     }
 
+    // A pane that leaves the tree leaves its group, or the group would keep drawing a lens at
+    // wherever the pane last was. A re-attach lays out again, and Layout joins again.
+    protected override void OnUnmount() => Join(null);
+
     private void WakeGel()
     {
         if (_ticker is { } ticker && Mounted)
@@ -209,8 +288,15 @@ public sealed class LiquidPane : Widget
     private static float Approach(float value, float target, float k) =>
         value + (target - value) * (1f - MathF.Exp(-k));
 
+    /// <summary>A straight channel blend; the alpha is decided separately.</summary>
+    private static Color Mix(Color from, Color to, float t) => new(
+        r: from.R + ((to.R - from.R) * t),
+        g: from.G + ((to.G - from.G) * t),
+        b: from.B + ((to.B - from.B) * t)
+    );
+
     /// <summary>
-    ///     Chrome over the app's own surfaces — a player bar, a floating control cluster. A light
+    ///     Chrome over the app's own surfaces — a player bar, a floating control cluster. The full
     ///     scrim and a fuller bevel, because the theme already knows roughly what is behind it.
     /// </summary>
     public static LiquidPane Regular(
@@ -219,7 +305,7 @@ public sealed class LiquidPane : Widget
             Child = child,
             Radius = radius,
             Elevation = elevation,
-            Bevel = 0.6f,
+            Bevel = RegularBevel,
         };
 
     /// <summary>
@@ -233,8 +319,7 @@ public sealed class LiquidPane : Widget
             Child = child,
             Radius = radius,
             Elevation = elevation,
-            Adapt = Legibility * 0.7f,
-            Tint = ClearTint,
+            Tinted = 0f,
         };
 
     /// <summary>
@@ -276,8 +361,7 @@ public sealed class LiquidPane : Widget
     /// <inheritdoc cref="OnGlass" />
     public static Color OnGlassMuted(ThemeData theme) => OnGlass(theme).WithAlpha(0.72f);
 
-    // The float shadow paints outside Bounds. A frame with glass on it is a full redraw anyway,
-    // but the damage contract stays honest for the day that stops being true.
+    // The float shadow paints outside Bounds, and partial repaint trusts this to cover it.
     public override Rect DamageBounds =>
         Elevation > 0f ? Bounds.Inflate(Elevation * 2.4f) : Bounds;
 
@@ -290,8 +374,23 @@ public sealed class LiquidPane : Widget
         return _size;
     }
 
+    private void Join(LiquidGroup? group)
+    {
+        if (ReferenceEquals(objA: _group, objB: group)) return;
+        _group?.Remove(this);
+        _group = group;
+        group?.Add(this);
+    }
+
     public override void Layout(Offset origin)
     {
+        // The group is resolved here, not in Measure: the inherited scope is in force in both, but
+        // Layout is never cached. A build that wraps retained content in a group, or unwraps it,
+        // re-parents the content without detaching it — no unmount, and a measure cache above
+        // the pane still valid — so a pane that only joined on measure would keep pointing at a
+        // group no longer in the tree and paint no glass at all. Layout reaches every live pane
+        // every pass, so the pane follows on the next one.
+        Join(BuildContext.Current.FindAncestor<LiquidGroup>());
         Bounds = new Rect(
             x: origin.X,
             y: origin.Y,
@@ -303,29 +402,53 @@ public sealed class LiquidPane : Widget
 
     public override void Paint(PaintList paint)
     {
-        if (Elevation > 0f)
+        // Inside a group the lens is already down: the group drew every pane's shadow and glass
+        // before any of their content, so what is left of this pane is its content.
+        if (_group is null)
         {
-            paint.AddShadow(
-                bounds: Bounds,
-                color: Color.Rgba(
-                    r: 0,
-                    g: 0,
-                    b: 0,
-                    a: 0.22f
-                ),
-                borderRadius: Radius,
-                blurRadius: Elevation * 2.2f,
-                spread: Elevation * 0.12f
-            );
+            PaintShadow(paint);
+            PaintLens(paint);
         }
 
+        Child?.Paint(paint);
+    }
+
+    /// <summary>
+    ///     The float shadow alone. A <see cref="LiquidGroup" /> draws every pane's shadow before
+    ///     any pane's lens: the shadow is an ordinary draw, and one between two lenses is exactly
+    ///     what makes the engine capture the backdrop twice.
+    /// </summary>
+    internal void PaintShadow(PaintList paint)
+    {
+        if (Elevation <= 0f) return;
+        paint.AddShadow(
+            bounds: Bounds,
+            color: Color.Rgba(
+                r: 0,
+                g: 0,
+                b: 0,
+                a: 0.22f
+            ),
+            borderRadius: Radius,
+            blurRadius: Elevation * 2.2f,
+            spread: Elevation * 0.12f
+        );
+    }
+
+    /// <summary>
+    ///     The lens alone — no shadow, no content. What a <see cref="LiquidGroup" /> draws for each
+    ///     of its panes ahead of all their content, so the lenses land consecutively and share one
+    ///     backdrop capture.
+    /// </summary>
+    internal void PaintLens(PaintList paint)
+    {
         // The shader's optical model is a clear middle inside a bevel that lenses at the rim — and
-        // the bevel is `thickness` pixels wide. On anything shorter than about four times that the
-        // bevel swallows the surface and the whole thing reads as frosted rim: a milky pill rather
-        // than glass. Scaling the bevel to the shape as well as to the material is what keeps a
-        // clear centre for the backdrop to show through, which is the entire effect.
+        // the bevel is `thickness` pixels wide. On anything shorter than about ten times that the
+        // bevel starts to swallow the surface and the whole thing reads as frosted rim: a milky
+        // pill rather than glass. Scaling the bevel to the shape as well as to the material is
+        // what keeps a clear centre for the backdrop to show through, which is the entire effect.
         float side = MathF.Min(x: Bounds.Width, y: Bounds.Height);
-        float bevel = MathF.Min(x: _theme.GlassThickness * Bevel, y: side * 0.22f);
+        float bevel = MathF.Min(x: _theme.GlassThickness * Bevel, y: side * 0.1f);
 
         // A light haze in BOTH themes, which is the correction that made this look like glass.
         // Dark-mode glass is not a dark scrim: on Apple's dark surfaces the pane is visibly
@@ -334,7 +457,7 @@ public sealed class LiquidPane : Widget
         // own backdrop, and a hole in the page reads as a box with a rim round it no matter how the
         // rest is tuned. It also flips the shader's anchor: a light tint lifts what is behind the
         // glass, which is the lift you actually see in the reference designs.
-        Color tint = Tint ?? (_theme.IsDark
+        Color haze = Tint ?? (_theme.IsDark
             ? new Color(
                 r: 1f,
                 g: 1f,
@@ -348,38 +471,53 @@ public sealed class LiquidPane : Widget
                 a: 0.34f
             ));
 
+        // Clear to tinted: the scrim runs from the clear variant's white floor up to the haze's
+        // own colour and strength, and the adaptive pull eases in alongside it — at 0 this is the
+        // clear variant exactly, at 1 the regular one, and a slider between them moves the
+        // material, not the widget tree. A Tint fainter than the floor is its own floor, so the
+        // dial never runs backwards.
+        float floor = MathF.Min(x: ClearHaze, y: haze.A);
+        float strength = floor + ((haze.A - floor) * Tinted);
+        Color colour = Mix(from: Color.White, to: haze, t: Tinted);
+        float adapt = Adapt * (0.7f + (0.3f * Tinted));
+
         // The gel: hover thickens the lens a touch, press compresses it and squeezes the
         // refraction — the same response Glass.Surface gives the system controls, eased through
         // the animated factors above rather than snapped.
         float thickness = bevel * _gelThick;
         float pinch = _theme.GlassPinch * _gelPinch;
         float scrim = Math.Clamp(
-            value: tint.A * _gelScrim,
+            value: strength * _gelScrim,
             min: 0f,
             max: 1f
         );
 
-        // The anchor follows the CONTENT, not the tint. What sits on this pane is OnGlass: white in
-        // the dark theme, near-black in the light one — so over an arbitrary backdrop the shader
-        // must pull toward whichever tone gives that ink contrast: dark under white content, light
-        // under dark content. Deriving the sign from the tint's own luminance (the obvious
-        // heuristic, and the first version of this) inverted exactly when it mattered most:
-        // dark-mode glass is a *milky* tint, whose high luminance anchored the backdrop light —
-        // lifting a bright album cover toward white directly underneath white text.
+        // The anchor follows the CONTENT, not the page. With no Tint the content is the theme's
+        // OnGlass ink, so the theme decides: dark under white content, light under dark content.
+        // Deriving that default from the haze's own luminance (the obvious heuristic, and the
+        // first version of this) inverted exactly when it mattered most: dark-mode glass is a
+        // *milky* tint, whose high luminance anchored the backdrop light — lifting a bright album
+        // cover toward white directly underneath white text. An explicit Tint is different: it
+        // declares a family the theme knows nothing about, and its content was chosen against it
+        // (white on dark or accent glass, ink on light) — so there, and only there, the tint's own
+        // luminance is the truth. Matters most at the clear end of the dial, where the scrim has
+        // faded and the pull is all that keeps a forced family's ink readable.
+        bool lightContent = Tint is { } family
+            ? (family.R * 0.299f) + (family.G * 0.587f) + (family.B * 0.114f) < 0.5f
+            : _theme.IsDark;
         paint.AddLiquidGlass(
             bounds: Bounds,
-            color: tint.WithAlpha(scrim),
+            color: colour.WithAlpha(scrim),
             radius: Radius,
             thickness: thickness,
             glowX: _theme.GlassGlowX,
             glowY: _theme.GlassGlowY,
             pinch: pinch,
-            adapt: _theme.IsDark ? -Adapt : Adapt
+            adapt: lightContent ? -adapt : adapt
         );
 
         // No drawn border. The rim light IS the shader's directional specular and fresnel; a flat
         // outline painted over it is exactly what makes glass read as brushed aluminium.
-        Child?.Paint(paint);
     }
 
     public override Widget? HitTest(Offset point)

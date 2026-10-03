@@ -55,4 +55,11 @@ scroll, ECS iteration — must allocate zero managed bytes per frame. Two guards
   hot loop gets one.
 
 Benchmarks for throughput (as opposed to allocation) live in the standalone
-`Zigote.Ecs.Benchmark`, `Zigote.Bloc.Benchmark` and `Zigote.Reactive.Benchmark` console apps.
+`Zigote.Ecs.Benchmark`, `Zigote.Bloc.Benchmark`, `Zigote.Reactive.Benchmark` and
+`Zigote.Runtime.Benchmark` console apps.
+
+`Zigote.Runtime.Benchmark` is the gameplay-side probe — `-- vfx`, `-- physics2d`, `-- all`. It
+reports each pass in ns/element **and** what the subsystem costs as a share of one core at the
+120 Hz fixed step, because a ratio on its own has twice justified a rewrite that would have
+returned a fraction of a percent. See
+[`notes/parallelism-simd-and-atomics.md`](notes/parallelism-simd-and-atomics.md).

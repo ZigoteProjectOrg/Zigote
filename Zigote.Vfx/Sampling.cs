@@ -81,7 +81,15 @@ public sealed class FloatCurve
 
     public IReadOnlyList<CurveKey> Keys => _keys;
 
-    public static FloatCurve Constant(float v) => new(
+        /// <summary>
+    ///     The same curve as the delegate the animation core eases with, so a curve authored over
+    ///     particle lifetime in the VFX editor can drive a widget transition unchanged. One
+    ///     evaluation contract, two storage shapes — the keys stay keys because they serialise and
+    ///     bake to the GPU, which a delegate cannot.
+    /// </summary>
+    public Func<float, float> AsCurve() => Evaluate;
+
+public static FloatCurve Constant(float v) => new(
         [new CurveKey(position: 0f, value: v), new CurveKey(position: 1f, value: v)]
     );
 

@@ -17,6 +17,15 @@ public partial class App
     ///     essentially nothing next to a 60 Hz render loop.
     /// </summary>
     private const int HiddenFrameIntervalMs = 100;
+
+    /// <summary>
+    ///     Ceiling on one frame's <see cref="Zigote.Core.Threading.Background" /> slice, however much
+    ///     of the frame budget is left. A slow panel has a large budget but no more appetite for a
+    ///     single burst of thumbnail decoding than a fast one; past this, spreading over more frames
+    ///     is what keeps input latency down. See <c>App.BackgroundBudget</c>.
+    /// </summary>
+    private const double MaxBackgroundBudgetMs = 4d;
+
     // ── Titlebar drag arbitration ─────────────────────────────────────────────
     // The native SDL hit-test asks the app, per pointer position, whether the point is a
     // draggable titlebar area. This is what lets real controls live in the titlebar band:

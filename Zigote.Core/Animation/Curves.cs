@@ -1,7 +1,12 @@
 namespace Zigote.Core.Animation;
 
-/// <summary>Easing curve functions. Each maps a normalized t in [0,1] to [0,1].</summary>
-public static class Curves
+/// <summary>
+///     Easing curve functions. Each maps a normalized t in [0,1] to [0,1] (the overshooting
+///     families leave that range in the middle and come back to it). The full CSS/Adwaita easing
+///     set lives in <c>Curves.Easing.cs</c> alongside the combinators that build new curves out of
+///     these ones.
+/// </summary>
+public static partial class Curves
 {
     public static float Linear(float t) => t;
 

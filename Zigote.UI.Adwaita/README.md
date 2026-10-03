@@ -31,6 +31,8 @@ new AdwaitaApp(new Shell(), title: "My App").Run();
 - [Feedback: toasts, banners, dialogs](#feedback-toasts-banners-dialogs)
 - [A complete app](#a-complete-app)
 - [Style, type and metrics](#style-type-and-metrics)
+- [Motion](#motion)
+- [Liquid Glass](#liquid-glass)
 - [Differences from libadwaita](#differences-from-libadwaita)
 
 ---
@@ -274,6 +276,79 @@ sealed class CounterPage : ComposedWidget
 | `AdwStyle`       | State → colour resolution: `ButtonFill`, `ButtonForeground`, the five row ladders, `TroughFill`, `SliderKnob`, the disabled/dim opacities, and the ~100 ms fill transitions every button-like control fades with.                                                          |
 | `AdwButtonStyle` | `Regular`, `Suggested`, `Destructive`, `Flat`, `Opaque` — plus `Pill`, `Circular` and `Compact` as shape flags on `AdwButton`.                                                                                                                                             |
 | `AdwPalette`     | The tokens with no `ThemeData` slot, plus `Fill(theme, percent)` / `Mix` for one-off `color-mix` values.                                                                                                                                                                   |
+| `AdwMotion`      | The four springs the kit animates with — `Control`, `Overlay`, `Reveal`, `Value`. Retune the whole library's feel in one place, the way `AdwMetrics` retunes its shape.                                                                                                    |
+
+## Motion
+
+Adwaita motion is **interruptible by default**. Nearly every animation here is one the user can change their mind
+about halfway through — a switch flipped twice, a sidebar folded while it is still unfolding, a sheet flicked, caught
+and flicked again. A duration-and-curve animation restarts from a standstill each time that happens, which is what
+makes a double-tapped switch look broken; a spring keeps the speed it already had and bends toward the new target.
+
+So the kit's widgets set a `MotionSpec` rather than a duration:
+
+| Token | Response · damping | Used by |
+|---|---|---|
+| `AdwMotion.Control` | 0.24 s · 0.9 | `AdwSwitch`'s knob, `AdwExpanderRow`'s chevron — small things that flip |
+| `AdwMotion.Overlay` | 0.30 s · 0.95 | `AdwDialog`, `AdwPopover`, `AdwToast` — things that appear over the content |
+| `AdwMotion.Reveal` | 0.36 s · 1.0 | `AdwBanner`, `AdwExpanderRow`'s body, `AdwOverlaySplitView`, `AdwNavigationView` — surfaces that change size or slide. Critically damped: the thing that would overshoot is a layout edge |
+| `AdwMotion.Value` | 0.45 s · 1.0 | `AdwProgressBar` — a value settling, so it reads as the number moving rather than the widget animating |
+
+Four consequences worth knowing:
+
+- **`AdwToggleGroup`'s selection slides between segments** instead of jumping — one surface with a
+  moving marker, the way libadwaita 1.7 draws it. It reads the laid-out segment bounds rather than
+  assuming equal widths, so the marker grows and shrinks as it crosses, and the hairlines it passes
+  fade out. `AdwInlineViewSwitcher` keeps its group across page changes so the slide is visible
+  there too.
+
+- **`AdwProgressBar` eases to each new `Value`** instead of jumping. A download that reports every few hundred
+  milliseconds now reads as one continuous fill. It stops itself the moment it arrives, so an idle bar costs nothing.
+- **`AdwBottomSheet` hands the finger's velocity to the settle.** The flick speed no longer only *chooses* which
+  detent to snap to — it carries into the motion, so a thrown sheet keeps moving at the speed it was thrown.
+- **`AdwStatusPage` fades up on first appearance** (`Animated`, default on). It plays once per mount, never on a
+  rebuild.
+
+Colour is the exception: hover and press fills still cross-fade on a ~100 ms curve (`AdwStyle`), because a colour has
+no velocity to preserve. Timings that are not springs live in `Durations` (`Fast`/`Standard`/`Slow`).
+
+Everything here honours `AnimationController.ReduceMotion`, which jumps transitions to their end state — except
+spinners and indeterminate progress bars, which keep moving, because a frozen spinner reads as a hung app.
+
+## Liquid Glass
+
+Adwaita in structure, Apple in material. GNOME decides where things go; the chrome that *floats over content* — a
+player bar, a toolbar riding a picture, a lock-screen card — is made of `LiquidPane`, the engine's refractive glass,
+instead of another flat fill. The rules, in the order they matter:
+
+- **Glass is the navigation layer, never the content layer.** The list scrolling underneath a pane stays opaque, so
+  there is something to refract.
+- **Glass never stacks on glass.** A pane's children are drawn flat; a glass button on a glass bar reads as a smudge.
+- **Two variants, and the dial between them.** `LiquidPane.Regular` for chrome over a surface the theme knows,
+  `LiquidPane.Clear` for chrome over media, and `Tinted` (0 = clear, 1 = regular) to blend a pane between them live —
+  a slider can drive it without rebuilding anything.
+- **One capture per cluster.** Every pane inside a `LiquidGroup` lays its lens down before any pane's content, so a
+  toolbar of three panes is one backdrop copy and one render-pass break, not three.
+- **Content takes its colour from the glass** — `LiquidPane.OnGlass(theme)` / `OnGlassMuted` — and interactive glass
+  is a gel: `LiquidPane.Interactive(pane, onPressed)` wires hover and press into the lens.
+
+```csharp
+var toolbar = new LiquidGroup(
+    new Row(spacing: 12f) {
+        Children = {
+            LiquidPane.Interactive(pane: menu, onPressed: OpenMenu, semantics: "Menu"),
+            new Expanded(LiquidPane.Interactive(pane: search, onPressed: Search, semantics: "Search")),
+        },
+    }
+);
+```
+
+Not free: each run of lenses costs a scene copy and a render-pass break, and a lens never repaints a patch of itself
+— anything changing under one redraws the whole lens. An app that uses it should offer a preference that turns it off.
+The gallery's *Liquid Glass* page is the material study: a toolbar over an article with a lab that dials every
+property of the glass live (clear↔tinted, float, rim, family, shape — and a switch to the flat Adwaita chrome), an app
+window whose header bar and view switcher are GNOME's structure in this material, and a control centre and lock screen
+over photographs where every tile latches, drags or folds.
 
 ## Differences from libadwaita
 

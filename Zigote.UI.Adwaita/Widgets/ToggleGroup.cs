@@ -1,3 +1,5 @@
+using Zigote.Core.Animation;
+
 namespace Zigote.UI.Adwaita;
 
 /// <summary>AdwToggle — one segment of an <see cref="AdwToggleGroup" />: a label, an icon, or both.</summary>
@@ -8,9 +10,16 @@ public sealed record AdwToggle(
 
 /// <summary>
 ///     AdwToggleGroup — the libadwaita 1.7 joined toggle group: one rounded container of segments
-///     separated by 1px hairlines, exactly one active (ButtonFillActive); inactive segments are
-///     transparent and fill on hover. <see cref="Flat" /> drops the group background,
-///     <see cref="Round" /> makes it a pill.
+///     separated by 1px hairlines, exactly one active; inactive segments are transparent and fill
+///     on hover. <see cref="Flat" /> drops the group background, <see cref="Round" /> makes it a
+///     pill.
+///     <para>
+///         The selection is one surface that <em>slides</em> between segments rather than a fill
+///         that jumps from one to the next, so a group is legible as a single control with a moving
+///         marker. It is a spring (<see cref="AdwMotion.Control" />): tapping along the segments
+///         retargets it mid-slide and it carries on instead of restarting at each tap. The
+///         hairlines it passes fade out as it crosses them.
+///     </para>
 /// </summary>
 public sealed class AdwToggleGroup : ComposedWidget
 {
@@ -147,6 +156,24 @@ public sealed class AdwToggleGroup : ComposedWidget
             );
         }
 
+        var pill = new SelectionPill(child: row, segments: boxes, index: Active) {
+            Radius = radius,
+        };
+
+        // The hairline between two segments disappears while the pill is over it — the marker must
+        // not look fenced in, and the pair it is between reads as one slot as it crosses.
+        void ApplySeparators(float position)
+        {
+            for (int i = 1; i < separators.Length; i++)
+            {
+                if (separators[i] is not { } sep) continue;
+                bool crossed = position > i - 1.02f && position < i + 0.02f;
+                sep.Background = Flat || crossed ? Color.Transparent : p.Border;
+            }
+        }
+
+        pill.OnMoved = ApplySeparators;
+
         var fills = new FillTransition[boxes.Length];
         for (int i = 0; i < boxes.Length; i++)
         {
@@ -167,42 +194,160 @@ public sealed class AdwToggleGroup : ComposedWidget
                 // change too, which otherwise left the segments reporting the old selection.
                 bool active = i == Active;
                 pressables[i].SelectedState = active;
-
-                // The checked segment of a non-flat group is --active-toggle-bg-color: a raised
-                // white (dark: white 20%) card with the card shadow under it, NOT a darker fill.
-                // A flat group has no card to raise, so it keeps the neutral $selected_* ladder.
-                boxes[i].Elevation = active && !Flat ? AdwMetrics.CardShadow : null;
                 contents[i].Color = active && !Flat ? p.ActiveToggleFg : theme.OnBackground;
 
+                // A segment now paints only its own hover/press wash. The selection itself is the
+                // pill sliding underneath, so the active segment stays clear — a hover fill on top
+                // of the pill would tint it, which is not what a checked toggle does.
                 fills[i].Target(
-                    active
-                        ? Flat
-                            ? pressables[i].Pressed ? p.SelectedFillActive
-                            : pressables[i].Hovered ? p.SelectedFillHover
-                            : p.SelectedFill
-                            : p.ActiveToggleBg
-                        : pressables[i].Pressed
-                            ? p.ActiveFill
-                            : pressables[i].Hovered
-                                ? p.HoverFill
-                                : Color.Transparent
+                    active ? Color.Transparent
+                    : pressables[i].Pressed ? p.ActiveFill
+                    : pressables[i].Hovered ? p.HoverFill
+                    : Color.Transparent
                 );
-
-                if (separators[i] is { } sep)
-                {
-                    sep.Background = Flat || active || i - 1 == Active
-                        ? Color.Transparent
-                        : p.Border;
-                }
             }
+
+            // The checked segment of a non-flat group is --active-toggle-bg-color: a raised white
+            // (dark: white 20%) card with the card shadow under it, NOT a darker fill. A flat group
+            // has no card to raise, so it keeps the neutral $selected_* ladder — including that
+            // ladder's hover and press steps, which the pill wears because it IS the fill there.
+            var selected = Active >= 0 && Active < pressables.Length ? pressables[Active] : null;
+            pill.Index = Active;
+            pill.Shadow = Flat ? null : AdwMetrics.CardShadow;
+            pill.Fill = Flat
+                ? selected is { Pressed: true } ? p.SelectedFillActive
+                : selected is { Hovered: true } ? p.SelectedFillHover
+                : p.SelectedFill
+                : p.ActiveToggleBg;
+            pill.MarkNeedsPaint();
+            ApplySeparators(pill.Position);
         };
         _applyColors();
 
         Widget group = new DecoratedBox {
             Radius = groupRadius,
             Fill = Flat ? Color.Transparent : p.ButtonFill,
-            Child = pad > 0f ? new Padding(padding: EdgeInsets.All(pad), child: row) : row,
+            Child = pad > 0f ? new Padding(padding: EdgeInsets.All(pad), child: pill) : pill,
         };
         return Enabled ? group : new Opacity(opacity: AdwStyle.DisabledOpacity, child: group);
+    }
+
+    /// <summary>
+    ///     Draws the selection behind the segments and slides it between them. It reads the laid-out
+    ///     bounds of the segment widgets rather than assuming equal widths — a group of "All",
+    ///     "Unread" and "Archived" has three different ones — and blends between the two it is
+    ///     passing, so the marker grows and shrinks on its way across.
+    /// </summary>
+    private sealed class SelectionPill : Widget
+    {
+        private readonly DecoratedBox[] _segments;
+        private readonly AnimatedFloat _slide;
+        private bool _placed;
+        private Size _size;
+
+        public SelectionPill(Widget child, DecoratedBox[] segments, int index)
+        {
+            Child = child;
+            _segments = segments;
+            _slide = new AnimatedFloat(
+                spec: AdwMotion.Control,
+                onChanged: Moved,
+                value: index
+            );
+            Index = index;
+        }
+
+        public Widget Child { get; }
+
+        /// <summary>The segment the pill is heading for. Assigning retargets the slide.</summary>
+        public int Index
+        {
+            get;
+            set
+            {
+                field = value;
+                _slide.To(value);
+            }
+        }
+
+        /// <summary>Where the pill is right now, as a fractional segment index.</summary>
+        public float Position => _slide.Value;
+
+        public Color Fill { get; set; }
+        public float Radius { get; set; }
+
+        /// <summary>The card shadow under a non-flat group's selection; null for a flat one.</summary>
+        public ShadowStyle? Shadow { get; set; }
+
+        /// <summary>Raised every frame with <see cref="Position" /> — the hairlines follow it.</summary>
+        public Action<float>? OnMoved { get; set; }
+
+        protected override void OnMount() => _slide.AttachTicker(this);
+
+        public override Size Measure(Constraints c) => _size = Child.Measure(c);
+
+        public override void Layout(Offset origin)
+        {
+            Bounds = new Rect(
+                x: origin.X,
+                y: origin.Y,
+                width: _size.Width,
+                height: _size.Height
+            );
+            Child.Layout(origin);
+
+            // The first layout is where the segments finally have bounds: place the pill on the
+            // active one outright, or it would slide in from wherever index 0 happens to be.
+            if (_placed) return;
+            _placed = true;
+            _slide.SnapTo(Index);
+        }
+
+        public override void Paint(PaintList paint)
+        {
+            if (PillRect() is { } rect && Fill.A > 0.001f)
+            {
+                if (Shadow is { IsNone: false } shadow)
+                    paint.AddElevation(bounds: rect, radius: Radius, style: shadow);
+                paint.AddRect(bounds: rect, color: Fill, radius: Radius);
+            }
+
+            Child.Paint(paint);
+        }
+
+        public override Widget? HitTest(Offset point) => Child.HitTest(point);
+
+        public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Child);
+
+        private void Moved()
+        {
+            OnMoved?.Invoke(_slide.Value);
+            MarkNeedsPaint();
+        }
+
+        private Rect? PillRect()
+        {
+            if (_segments.Length == 0) return null;
+
+            // No selection (libadwaita's GTK_INVALID_LIST_POSITION) means no marker at all, rather
+            // than one parked on the nearest segment.
+            if (Index < 0 || Index >= _segments.Length) return null;
+
+            float pos = Math.Clamp(value: _slide.Value, min: 0f, max: _segments.Length - 1f);
+            int lo = (int)MathF.Floor(pos);
+            int hi = Math.Min(val1: lo + 1, val2: _segments.Length - 1);
+            float f = pos - lo;
+
+            var a = _segments[lo].Bounds;
+            var b = _segments[hi].Bounds;
+            if (a.Width <= 0f) return null; // painted before the first layout
+
+            return new Rect(
+                x: a.X + ((b.X - a.X) * f),
+                y: a.Y,
+                width: a.Width + ((b.Width - a.Width) * f),
+                height: a.Height
+            );
+        }
     }
 }

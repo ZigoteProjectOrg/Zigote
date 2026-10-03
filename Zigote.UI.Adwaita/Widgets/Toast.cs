@@ -69,6 +69,8 @@ public sealed class AdwToastOverlay : ComposedWidget
         _present =
             new AnimationController(durationSeconds: EnterDuration, vsync: this) {
                 Curve = Curves.EaseOut,
+                // Dismissed mid-entrance (a second toast, a swipe) more often than not.
+                Spec = AdwMotion.Overlay,
             };
         _present.OnTick += MarkNeedsLayout;
         _present.OnDismissed += ShowNext;

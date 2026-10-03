@@ -36,6 +36,7 @@ internal abstract class AdwPopoverBase : Widget, IDismissableOverlay
         _anchor = anchor;
         _enter = new AnimationController(durationSeconds: 0.15f, vsync: this) {
             Curve = Curves.EaseOut,
+            Spec = AdwMotion.Overlay,
         };
         _enter.OnTick += MarkNeedsPaint;
         _enter.OnDismissed += FinishDismiss;

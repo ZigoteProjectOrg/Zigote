@@ -50,18 +50,30 @@ public sealed class BottomSheetController : ITickerProvider, IDisposable
         IsCollapsible = isCollapsible;
         Extent = new Signal<float>(Math.Clamp(value: initExtent, min: MinExtent, max: MaxExtent));
 
+        // A spring, because a sheet is the one surface the user is holding: the speed the finger
+        // let go at flows straight into the settle (see AnimateTo's velocity), and a second flick
+        // landing mid-snap bends the motion instead of restarting it from a standstill.
         _snap = new AnimationController(durationSeconds: 0.22f, vsync: this) {
             Curve = Curves.EaseOut,
+            Spec = MotionSpec.Spring(response: 0.22f, damping: 1f),
         };
         _snap.OnTick += () =>
             SetExtent(_snapFrom + ((_snapTo - _snapFrom) * _snap.Value));
     }
 
-    /// <summary>Seconds a snap to an anchor (or an <see cref="AnimateTo" />) takes.</summary>
+    /// <summary>
+    ///     Roughly how long a snap to an anchor (or an <see cref="AnimateTo" />) takes. The settle is
+    ///     a spring, so this is its response — the period it converges over — rather than a hard
+    ///     duration: a snap that starts with the finger's speed behind it arrives sooner.
+    /// </summary>
     public float SnapDuration
     {
-        get => _snap.Duration;
-        set => _snap.Duration = value;
+        get => _snap.Spec?.Response ?? _snap.Duration;
+        set
+        {
+            _snap.Duration = value;
+            if (_snap.Spec is { } spec) _snap.Spec = spec with { Response = MathF.Max(x: value, y: 0.01f) };
+        }
     }
 
     /// <summary>Current fraction of the available height the sheet occupies. Reactive.</summary>
@@ -129,13 +141,19 @@ public sealed class BottomSheetController : ITickerProvider, IDisposable
     /// <summary>Dismiss the sheet, completing the <c>Show…</c> task with <paramref name="result" />.</summary>
     public void Close(object? result = null) => OnClose?.Invoke(result);
 
-    /// <summary>Animate to <paramref name="extent" /> (clamped to the sheet's range).</summary>
-    public void AnimateTo(float extent)
+    /// <summary>
+    ///     Animate to <paramref name="extent" /> (clamped to the sheet's range).
+    ///     <paramref name="velocity" /> is the lift-off speed in extent fractions per second,
+    ///     positive upwards — pass the release velocity of the drag that chose this target and the
+    ///     sheet keeps moving at that speed into the settle instead of stopping first.
+    /// </summary>
+    public void AnimateTo(float extent, float velocity = 0f)
     {
         _snapTo = Math.Clamp(value: extent, min: MinExtent, max: MaxExtent);
         _snapFrom = Value;
         Settling?.Invoke(_snapTo);
-        if (MathF.Abs(_snapTo - _snapFrom) < 0.001f)
+        float span = _snapTo - _snapFrom;
+        if (MathF.Abs(span) < 0.001f)
         {
             SetExtent(_snapTo);
             return;
@@ -143,6 +161,10 @@ public sealed class BottomSheetController : ITickerProvider, IDisposable
 
         _snap.Dismiss();
         _snap.Forward();
+        // The controller runs 0→1 across the span, so the extent velocity has to be divided by it
+        // to become progress per second. A flick away from the target arrives with the opposite
+        // sign, which is correct: the sheet overshoots backwards a touch and comes back.
+        if (velocity != 0f) _snap.Velocity = velocity / span;
     }
 
     /// <summary>Jump to <paramref name="extent" /> without animating.</summary>
@@ -191,7 +213,8 @@ public sealed class BottomSheetController : ITickerProvider, IDisposable
             return;
         }
 
-        if (NearestAnchor(velocity) is { } target) AnimateTo(target);
+        // `velocity` is positive downwards (finger units); extents grow upwards, hence the flip.
+        if (NearestAnchor(velocity) is { } target) AnimateTo(extent: target, velocity: -velocity);
         else
         {
             JumpTo(

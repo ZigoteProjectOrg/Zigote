@@ -84,6 +84,7 @@ public class Label : Widget
         FontFamily = style.FontFamily;
         Color = color;
         Shadow = style.Shadow;
+        LetterSpacing = style.LetterSpacing;
     }
 
     public TextAlign Align { get; set; } = TextAlign.Left;

@@ -44,7 +44,7 @@ All use the platform command modifier — ⌘ on macOS, Ctrl elsewhere.
 | **Lists**      | Boxed Lists · Preferences · Large Lists (2 000 rows, recycled while you scroll)                                         |
 | **Feedback**   | Banners · Toasts · Alert Dialogs · Spinner · Status Pages · Avatar                                                      |
 | **Layout**     | Clamp · Wrap Box · Adaptive                                                                                             |
-| **Style**      | Style Classes · Typography · Colors · Animations                                                                        |
+| **Style**      | Liquid Glass · Style Classes · Typography · Colors · Animations                                                                        |
 | **Zigote**     | Reactivity · Concurrency · Drag and Drop                                                                                |
 
 The last section is the framework rather than the design system: signals and computed values driving a live order total,

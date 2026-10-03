@@ -24,6 +24,7 @@ ARG ZIG_VERSION=0.16.0
 
 ENV DOTNET_NOLOGO=1 \
     DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    MSBUILDTERMINALLOGGER=off \
     DOTNET_GENERATE_ASPNET_CERTIFICATE=false \
     PATH=/usr/share/dotnet:$PATH
 
@@ -44,6 +45,20 @@ RUN arch="$(uname -m)" \
     && curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-${arch}-linux-${ZIG_VERSION}.tar.xz" \
        | tar -xJ -C /opt \
     && ln -s "/opt/zig-${arch}-linux-${ZIG_VERSION}/zig" /usr/local/bin/zig
+
+# Rust, for native/zigote-svg (the resvg-based SVG renderer Zigote.UI links). rustup rather than
+# Debian's rustc so the crate's pinned rust-toolchain.toml channel is the one that gets used; the
+# toolchain is installed at image build time so a --container publish downloads nothing. RUSTUP_HOME
+# and CARGO_HOME live outside $HOME and are world-writable because the build runs as the host user,
+# who has no home inside the image and still needs cargo's registry cache to be writable.
+ARG RUST_VERSION=1.97.1
+ENV RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo PATH=/opt/cargo/bin:$PATH
+RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl --proto '=https' --tlsv1.2 -fsSL https://sh.rustup.rs \
+       | sh -s -- -y --no-modify-path --profile minimal \
+            --default-toolchain "$RUST_VERSION" --component rustfmt clippy \
+    && chmod -R a+rwX /opt/rustup /opt/cargo
 
 # publish.sh runs as the invoking host user (podman --userns=keep-id / docker --user) so build output
 # is not root-owned. That user has no passwd entry and no home inside the image, so HOME is pointed

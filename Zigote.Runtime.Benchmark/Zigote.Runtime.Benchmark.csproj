@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <AssemblyName>Zigote.Runtime.Benchmark</AssemblyName>
+        <RootNamespace>Zigote.RuntimeBench</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Zigote.Vfx\Zigote.Vfx.csproj"/>
+        <ProjectReference Include="..\Zigote.Physics2D\Zigote.Physics2D.csproj"/>
+        <ProjectReference Include="..\Zigote.Render2D\Zigote.Render2D.csproj"/>
+        <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
+    </ItemGroup>
+</Project>

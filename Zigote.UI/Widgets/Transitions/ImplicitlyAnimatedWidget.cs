@@ -23,15 +23,40 @@ public abstract class ImplicitlyAnimatedWidget : Widget
     private Ticker _ticker;
 
     protected ImplicitlyAnimatedWidget(float durationSeconds = 0.25f,
-        Func<float, float>? curve = null)
+        Func<float, float>? curve = null, MotionSpec? spec = null)
     {
-        Controller = new AnimationController(durationSeconds) { Curve = curve ?? Curves.EaseOut };
+        Controller = new AnimationController(durationSeconds) {
+            Curve = curve ?? Curves.EaseOut,
+            Spec = spec,
+        };
         Controller.OnTick += OnControllerTick;
         _ticker = new Ticker(Step);
     }
 
     /// <summary>The eased animation progress in [0,1] for the in-flight transition.</summary>
     protected float Progress => Controller.Value;
+
+    /// <summary>
+    ///     Drive the transition with a spring instead of a duration and curve. Worth it for anything
+    ///     whose target can change while it is still moving — a panel that folds while it is still
+    ///     unfolding arrives without the kink a restarted curve leaves.
+    /// </summary>
+    public MotionSpec? Spec
+    {
+        get => Controller.Spec;
+        set => Controller.Spec = value;
+    }
+
+    /// <summary>
+    ///     Let a bouncy <see cref="Spec" /> carry the interpolation past its target and back. Off by
+    ///     default: overshoot is a deliberate look, not something a widget should start doing
+    ///     because someone picked a springy spec.
+    /// </summary>
+    public bool AllowOvershoot
+    {
+        get => !Controller.ClampProgress;
+        set => Controller.ClampProgress = !value;
+    }
 
     /// <summary>Animation duration in seconds.</summary>
     public float Duration
@@ -43,8 +68,15 @@ public abstract class ImplicitlyAnimatedWidget : Widget
     /// <summary>Restart the 0→1 transition (call after updating the from/to values).</summary>
     protected void Animate()
     {
+        // Subclasses re-snapshot their "from" at the current interpolated value, so restarting
+        // progress at 0 is continuous in position. Carrying the spring's velocity across the
+        // restart makes it continuous in speed too.
+        // ponytail: carried in progress space, not rescaled by the change in from→to distance —
+        // the base class does not know the value type. Rescale if a large retarget ever kinks.
+        float carried = Controller.Spec is null ? 0f : Controller.Velocity;
         Controller.Dismiss();
         Controller.Forward();
+        if (carried != 0f) Controller.Velocity = carried;
         _ticker.Start();
     }
 

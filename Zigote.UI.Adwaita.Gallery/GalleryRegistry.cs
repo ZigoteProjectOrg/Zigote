@@ -234,7 +234,7 @@ internal static class GalleryRegistry
             Entries: [
                 new GalleryEntry(
                     Title: "Liquid Glass",
-                    Subtitle: "Glass chrome over photos — a control centre and a lock screen",
+                    Subtitle: "A toolbar over content, a control centre and a lock screen",
                     IconName: MaterialIcons.WaterDrop,
                     Build: () => new LiquidGlassPage()
                 ),
@@ -261,6 +261,12 @@ internal static class GalleryRegistry
                     Subtitle: "Curves, transitions and implicit animation",
                     IconName: MaterialIcons.Animation,
                     Build: () => new AnimationsPage()
+                ),
+                new GalleryEntry(
+                    Title: "Motion",
+                    Subtitle: "Composable presets, staggered lists and interruptible springs",
+                    IconName: MaterialIcons.AutoAwesome,
+                    Build: () => new MotionPage()
                 ),
             ]
         ),

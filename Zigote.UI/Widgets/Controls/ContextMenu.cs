@@ -72,7 +72,7 @@ public sealed class ContextMenu : Widget
         _app = app ?? AppInstance.Active ??
             throw new InvalidOperationException("No active App found.");
         Items = [.. items];
-        _enter = new AnimationController(durationSeconds: Motion.Fast, vsync: this) {
+        _enter = new AnimationController(durationSeconds: Durations.Fast, vsync: this) {
             Curve = Curves.EaseOut,
         };
         _enter.OnTick += MarkNeedsLayout;
