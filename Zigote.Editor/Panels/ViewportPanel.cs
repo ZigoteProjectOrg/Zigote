@@ -2165,6 +2165,7 @@ public sealed partial class ViewportPanel : Widget
         }
 
         _orbitDistance = Math.Clamp(value: _orbitDistance - (dy * 0.5f), min: 0.5f, max: 200f);
+        MarkNeedsPaint();
     }
 
     public override void OnKey(char keyChar, uint scancode, bool down, Modifiers mods)
