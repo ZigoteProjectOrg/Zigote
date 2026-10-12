@@ -84,4 +84,51 @@ public class FramePacingTests
     [Fact]
     public void AnimationDt_NoInterval_PassesThrough() =>
         Assert.Equal(expected: 0.016f, actual: App.ComputeAnimationDt(dt: 0.016f, interval: 0f));
+
+    // ── background budget: slack minus what the rest of the frame still needs ──
+
+    private static long Ms(double ms) => (long)(ms * Stopwatch.Frequency / 1000);
+
+    [Fact]
+    public void BackgroundBudget_ReservesTheRestOfTheFrame()
+    {
+        // 120 Hz, 1 ms spent, 5 ms of layout+paint expected: 8.33 - 1 - 5 ≈ 2.33 ms left.
+        double budget = App.BackgroundBudgetMs(
+            intervalTicks: TicksFor(120),
+            spentTicks: Ms(1),
+            reserveTicks: Ms(5)
+        );
+        Assert.InRange(actual: budget, low: 2.2, high: 2.4);
+    }
+
+    [Fact]
+    public void BackgroundBudget_IsCapped_AndNeverNegative()
+    {
+        Assert.Equal(
+            expected: 4d,
+            actual: App.BackgroundBudgetMs(intervalTicks: TicksFor(30), spentTicks: 0, reserveTicks: 0)
+        );
+        Assert.Equal(
+            expected: 0d,
+            actual: App.BackgroundBudgetMs(
+                intervalTicks: TicksFor(120),
+                spentTicks: Ms(2),
+                reserveTicks: Ms(20)
+            )
+        );
+    }
+
+    [Fact]
+    public void FrameReserve_JumpsUp_AndDecaysSlowly()
+    {
+        long reserve = App.NextFrameReserve(currentTicks: Ms(1), sampleTicks: Ms(6));
+        Assert.Equal(expected: Ms(6), actual: reserve);
+
+        // One cheap frame barely moves it; a second of them brings it most of the way back.
+        reserve = App.NextFrameReserve(currentTicks: reserve, sampleTicks: Ms(1));
+        Assert.InRange(actual: reserve, low: Ms(5.7), high: Ms(5.8));
+        for (int i = 0; i < 120; i++)
+            reserve = App.NextFrameReserve(currentTicks: reserve, sampleTicks: Ms(1));
+        Assert.InRange(actual: reserve, low: Ms(1), high: Ms(1.1));
+    }
 }

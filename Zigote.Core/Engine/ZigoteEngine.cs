@@ -2532,6 +2532,20 @@ public sealed unsafe class ZigoteEngine : IDisposable
     ///     <c>tools/bmpdiff.py</c>). Additive on the native side (reuses <c>renderToTexture</c> + the
     ///     BMP readback), so it never perturbs the live present path. Returns false on failure.
     /// </summary>
+    /// <summary>
+    ///     Dump the main window's persistent scene texture to a BMP: the retained pixels that
+    ///     partial repaint draws into, exactly as they are, with nothing re-rendered. Comparing it
+    ///     after a partial frame and after a forced full frame is how stale regions are caught.
+    ///     False until a frame has allocated the texture.
+    /// </summary>
+    public bool CaptureSceneBmp(string path)
+    {
+        EnsureReady();
+        byte[] buf = Encoding.UTF8.GetBytes(path);
+        fixed (byte* p = buf)
+            return NativeEngine.CaptureSceneBmp(pathPtr: p, pathLen: (nuint)buf.Length) == ZgResult.Ok;
+    }
+
     public bool CaptureUiBmp(string path, uint width, uint height, float scale = 1f)
     {
         EnsureReady();
@@ -2711,12 +2725,39 @@ public sealed unsafe class ZigoteEngine : IDisposable
     ///     Execute the render graph, present the frame, and clear per-frame state.
     ///     Replaces the <see cref="RenderFrameV2" /> + <see cref="EndFrame" /> pair.
     /// </summary>
-    public void FrameEnd()
+    /// <summary>
+    ///     Where the main window's last UI-only frame spent its time inside native rendering, in
+    ///     milliseconds: waiting for the swapchain image, CPU work building, encoding and submitting
+    ///     the frame, and the present call. Wall durations on the calling thread — none is GPU
+    ///     execution time. Not updated by frames that render the 3D scene.
+    /// </summary>
+    public static void GetFrameTimings(out double acquireMs, out double encodeMs, out double presentMs)
+    {
+        acquireMs = encodeMs = presentMs = 0;
+        var engine = Instance;
+        if (engine is null || engine._disposed) return;
+        NativeEngine.FrameTimings(
+            outAcquireNs: out ulong acquire,
+            outEncodeNs: out ulong encode,
+            outPresentNs: out ulong present
+        );
+        acquireMs = acquire / 1e6;
+        encodeMs = encode / 1e6;
+        presentMs = present / 1e6;
+    }
+
+    /// <returns>
+    ///     False when the frame was skipped because the swapchain image was unavailable (window
+    ///     occluded, surface outdated, acquire timeout): nothing was drawn, so the frame's damage is
+    ///     still owed.
+    /// </returns>
+    public bool FrameEnd()
     {
         EnsureReady();
         var result = NativeEngine.FrameEnd(window: 0);
         if (result != ZgStatus.Ok)
             throw new InvalidOperationException("zigote_frame_end failed.");
+        return !NativeEngine.FrameWasDropped();
     }
 
     /// <summary>Update render graph feature flags.</summary>

@@ -44,6 +44,16 @@ public sealed class Image : Widget, IDisposable
     private static readonly SemaphoreSlim DecodeGate =
         new(initialCount: Environment.ProcessorCount, maxCount: Environment.ProcessorCount);
 
+    // Held from before the fetch until the decode is done, so the encoded payloads alive at once
+    // are bounded too — the decode gate alone let every fetch finish and park its bytes behind it.
+    // A load cancelled while it waits here never fetches at all.
+    // ponytail: fixed cap, and a fetch that never completes holds its slot until cancelled; make it
+    // a byte budget with visible-first ordering if a real feed shows either one biting.
+    internal static readonly int MaxInFlightLoads = Environment.ProcessorCount * 4;
+
+    private static readonly SemaphoreSlim LoadGate =
+        new(initialCount: MaxInFlightLoads, maxCount: MaxInFlightLoads);
+
     private bool _disposed;
 
     private CancellationTokenSource? _loadCts;
@@ -283,31 +293,42 @@ public sealed class Image : Widget, IDisposable
                 uint w, h;
                 try
                 {
-                    byte[] bytes = await fetch(token).ConfigureAwait(false);
-                    token.ThrowIfCancellationRequested();
-
-                    await DecodeGate.WaitAsync(token).ConfigureAwait(false);
+                    await LoadGate.WaitAsync(token).ConfigureAwait(false);
                     try
                     {
-                        // Re-checked after the queue: a tile that scrolled away while it waited is
-                        // the common case in a fast-flung grid, and its decode is pure waste.
+                        // A release can hand the slot to a waiter whose cancellation has not been
+                        // processed yet; without this it would still start its fetch.
                         token.ThrowIfCancellationRequested();
-                        handle = maxDim == 0
-                            ? ZigoteEngine.LoadTextureFromMemory(
-                                data: bytes,
-                                outW: out w,
-                                outH: out h
-                            )
-                            : ZigoteEngine.LoadTextureFromMemoryScaled(
-                                data: bytes,
-                                maxDim: maxDim,
-                                outW: out w,
-                                outH: out h
-                            );
+                        byte[] bytes = await fetch(token).ConfigureAwait(false);
+                        token.ThrowIfCancellationRequested();
+
+                        await DecodeGate.WaitAsync(token).ConfigureAwait(false);
+                        try
+                        {
+                            // Re-checked after the queue: a tile that scrolled away while it waited
+                            // is the common case in a fast-flung grid, and its decode is pure waste.
+                            token.ThrowIfCancellationRequested();
+                            handle = maxDim == 0
+                                ? ZigoteEngine.LoadTextureFromMemory(
+                                    data: bytes,
+                                    outW: out w,
+                                    outH: out h
+                                )
+                                : ZigoteEngine.LoadTextureFromMemoryScaled(
+                                    data: bytes,
+                                    maxDim: maxDim,
+                                    outW: out w,
+                                    outH: out h
+                                );
+                        }
+                        finally
+                        {
+                            DecodeGate.Release();
+                        }
                     }
                     finally
                     {
-                        DecodeGate.Release();
+                        LoadGate.Release();
                     }
                 }
                 catch (OperationCanceledException)

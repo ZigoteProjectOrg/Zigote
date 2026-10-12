@@ -20,3 +20,21 @@ public class PlayTimeTests
         Assert.Equal(expected: 0f, actual: Time.Elapsed);
     }
 }
+
+public class FixedStepBacklogTests
+{
+    // GameSession.MaxStepsPerUpdate drops the whole ticks it did not run and keeps the sub-tick
+    // remainder, so interpolation stays continuous.
+    [Fact]
+    public void DropBacklog_RemovesWholeSteps_AndKeepsTheRemainder()
+    {
+        const float step = 1f / 120f;
+        float accumulator = step * 5.5f;
+
+        float dropped = Zigote.Runtime.Scene.GameSession.DropBacklog(accumulator: ref accumulator, step: step);
+
+        Assert.Equal(expected: step * 5f, actual: dropped, precision: 5);
+        Assert.InRange(actual: accumulator, low: 0f, high: step);
+        Assert.Equal(expected: step * 0.5f, actual: accumulator, precision: 5);
+    }
+}

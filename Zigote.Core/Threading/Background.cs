@@ -99,7 +99,9 @@ public sealed class Background : IDisposable
     private readonly List<Background> _children = [];
 
     /// <summary>Root-only. Results that asked to wait for a frame with room, in arrival order.</summary>
-    private readonly Queue<Action>? _idle;
+    // Stored unwrapped (scope, callback, origin) rather than as a closure over Guarded, so queueing
+    // an idle result allocates nothing once the queue has grown.
+    private readonly Queue<(Background Scope, Action Ui, string Origin, long Queued)>? _idle;
 
     private readonly CancellationTokenSource _lifetime;
 
@@ -113,6 +115,14 @@ public sealed class Background : IDisposable
     private readonly List<SliceJob>? _slices;
 
     private readonly Action<Action>? _toUi;
+
+    /// <summary>Stopwatch-tick time source; null is the real clock. Tests pass a fake one.</summary>
+    private readonly Func<long>? _clock;
+
+    private int _idleRejected;
+
+    /// <summary>Root-only. When <see cref="RunFrame(TimeSpan,TimeSpan)" /> last did not skip.</summary>
+    private long _lastServiced;
     private int _pending;
 
     /// <summary>Which slice gets the frame first. Bumped per frame so none of them starves.</summary>
@@ -129,12 +139,21 @@ public sealed class Background : IDisposable
     ///     half-filled list on screen. Optional: without it, leftovers wait for whatever the next
     ///     frame happens to be.
     /// </param>
-    public Background(Action<Action> toUi, Action? requestFrame = null)
+    public Background(Action<Action> toUi, Action? requestFrame = null) : this(
+        toUi: toUi,
+        requestFrame: requestFrame,
+        clock: null
+    )
     {
+    }
+
+    private Background(Action<Action> toUi, Action? requestFrame, Func<long>? clock)
+    {
+        _clock = clock;
         _toUi = toUi;
         _requestFrame = requestFrame;
         _lifetime = new CancellationTokenSource();
-        _idle = new Queue<Action>();
+        _idle = new Queue<(Background Scope, Action Ui, string Origin, long Queued)>();
         _slices = [];
         _sliceScratch = [];
         Path = "app";
@@ -143,6 +162,7 @@ public sealed class Background : IDisposable
     private Background(Background parent, string name)
     {
         _parent = parent;
+        _clock = parent._clock;
         _lifetime = CancellationTokenSource.CreateLinkedTokenSource(parent.Lifetime);
         Path = $"{parent.Path}/{name}";
     }
@@ -183,6 +203,50 @@ public sealed class Background : IDisposable
     }
 
     private Background Root => _parent?.Root ?? this;
+
+    private long Now() => _clock is { } clock ? clock() : Stopwatch.GetTimestamp();
+
+    /// <summary>
+    ///     Opt-in ceiling on results waiting for an idle frame, shared by the whole scope tree and
+    ///     enforced only by <see cref="TryPost" />. Zero (the default) means no ceiling.
+    /// </summary>
+    public int IdleCapacity
+    {
+        get => Volatile.Read(ref Root._idleCapacity);
+        set => Volatile.Write(ref Root._idleCapacity, value);
+    }
+
+    private int _idleCapacity;
+
+    /// <summary>Results waiting for an idle frame, across the whole scope tree.</summary>
+    public int IdleQueued
+    {
+        get
+        {
+            var root = Root;
+            lock (root._idle!) return root._idle.Count;
+        }
+    }
+
+    /// <summary>How long the oldest waiting idle result has been queued; zero when none is.</summary>
+    public TimeSpan OldestIdleWait
+    {
+        get
+        {
+            var root = Root;
+            long queued;
+            lock (root._idle!)
+            {
+                if (!root._idle.TryPeek(out var oldest)) return TimeSpan.Zero;
+                queued = oldest.Queued;
+            }
+
+            return Stopwatch.GetElapsedTime(startingTimestamp: queued, endingTimestamp: Now());
+        }
+    }
+
+    /// <summary>Results <see cref="TryPost" /> has refused, across the whole scope tree.</summary>
+    public int IdleRejected => Volatile.Read(ref Root._idleRejected);
 
     /// <summary>
     ///     Stop this scope and everything under it. In-flight work is cancelled and its results are
@@ -286,15 +350,48 @@ public sealed class Background : IDisposable
 
         if (deliver == Deliver.Next)
         {
-            Root._toUi!(() => Guarded(ui: ui, origin: origin));
+            PostNext(ui: ui, origin: origin);
             return;
         }
 
         var root = Root;
-        lock (root._idle!) root._idle.Enqueue(() => Guarded(ui: ui, origin: origin));
+        lock (root._idle!) root._idle.Enqueue((this, ui, origin, Now()));
 
         root._requestFrame?.Invoke();
     }
+
+    /// <summary>
+    ///     <see cref="Post" /> with <see cref="Deliver.WhenIdle" /> for work the caller can afford to
+    ///     have refused: returns false, without queueing, when the scope is disposed or
+    ///     <see cref="IdleCapacity" /> results are already waiting. For replaceable or retryable
+    ///     producers (progress, prefetch) — the caller keeps ownership of what the callback would
+    ///     have delivered and must release or retry it.
+    /// </summary>
+    public bool TryPost(Action ui, [CallerMemberName] string origin = "")
+    {
+        if (_lifetime.IsCancellationRequested) return false;
+
+        var root = Root;
+        int capacity = Volatile.Read(ref root._idleCapacity);
+        lock (root._idle!)
+        {
+            if (capacity > 0 && root._idle.Count >= capacity)
+            {
+                root._idleRejected++;
+                return false;
+            }
+
+            root._idle.Enqueue((this, ui, origin, Now()));
+        }
+
+        root._requestFrame?.Invoke();
+        return true;
+    }
+
+    // Its own method: a lambda capturing Post's parameters would allocate its closure at Post's
+    // entry, on the idle path too.
+    private void PostNext(Action ui, string origin) =>
+        Root._toUi!(() => Guarded(ui: ui, origin: origin));
 
     /// <summary>
     ///     Do <paramref name="count" /> units of UI work across as many frames as the budget takes,
@@ -342,7 +439,7 @@ public sealed class Background : IDisposable
         // "one unit now, the rest later" would be indistinguishable from one that said nothing.
         Advance(
             job: job,
-            deadline: Stopwatch.GetTimestamp() + BudgetTicks(firstFrame ?? DefaultSliceBudget)
+            deadline: Now() + BudgetTicks(firstFrame ?? DefaultSliceBudget)
         );
         if (!job.Done) return;
 
@@ -358,12 +455,30 @@ public sealed class Background : IDisposable
     ///         does not fit asks for another frame and continues there, in order.
     ///     </para>
     /// </summary>
-    public void RunFrame(TimeSpan budget)
+    public void RunFrame(TimeSpan budget) => RunFrame(budget: budget, maxDeferral: TimeSpan.Zero);
+
+    /// <summary>
+    ///     <see cref="RunFrame(TimeSpan)" /> for a host that knows when a frame is already late. With
+    ///     no budget left, the frame's guaranteed unit of progress is skipped as well — but only
+    ///     while work was last serviced less than <paramref name="maxDeferral" /> ago, so a run of
+    ///     late frames slows the queues to that cadence instead of stopping them.
+    ///     <see cref="TimeSpan.Zero" /> never skips, which is the single-argument behaviour.
+    /// </summary>
+    public void RunFrame(TimeSpan budget, TimeSpan maxDeferral)
     {
         var root = Root;
         if (root._lifetime.IsCancellationRequested) return;
 
-        long deadline = Stopwatch.GetTimestamp() + BudgetTicks(budget);
+        long now = root.Now();
+        if (budget <= TimeSpan.Zero && maxDeferral > TimeSpan.Zero &&
+            now - root._lastServiced < BudgetTicks(maxDeferral))
+        {
+            if (!FrameIdle) root._requestFrame?.Invoke();
+            return;
+        }
+
+        root._lastServiced = now;
+        long deadline = now + BudgetTicks(budget);
 
         // Results first, slices second: a result may replace the very list a slice is filling, and
         // doing it the other way round means building rows that are thrown away on the same frame.
@@ -374,12 +489,13 @@ public sealed class Background : IDisposable
         // is a list that stays empty forever rather than a list that fills in slowly.
         while (true)
         {
-            Action? next;
-            lock (root._idle!) next = root._idle.Count > 0 ? root._idle.Dequeue() : null;
+            (Background Scope, Action Ui, string Origin, long Queued) next;
+            bool any;
+            lock (root._idle!) any = root._idle.TryDequeue(out next);
 
-            if (next is null) break;
-            next();
-            if (Stopwatch.GetTimestamp() >= deadline) break;
+            if (!any) break;
+            next.Scope.Guarded(ui: next.Ui, origin: next.Origin);
+            if (root.Now() >= deadline) break;
         }
 
         // The overwhelmingly common frame: nothing deferred, nothing filling. Checked before any
@@ -416,7 +532,7 @@ public sealed class Background : IDisposable
                     root._slices!.Remove(job);
             }
 
-            if (Stopwatch.GetTimestamp() >= deadline) break;
+            if (root.Now() >= deadline) break;
         }
 
         jobs.Clear(); // do not pin finished jobs until the next frame
@@ -430,15 +546,23 @@ public sealed class Background : IDisposable
     ///     until <see cref="RunFrame" /> or <see cref="Drain" /> runs it — on the calling thread. What
     ///     a self-test uses, so "the result landed" is an assertion rather than a sleep.
     /// </summary>
-    public static Background Manual()
+    /// <param name="clock">
+    ///     Replaces the real clock for budgets and queue ages, in <see cref="Stopwatch" /> ticks — so a
+    ///     test decides exactly how much time each unit "took". <see cref="Drain" /> still waits in
+    ///     real time.
+    /// </param>
+    public static Background Manual(Func<long>? clock = null)
     {
         Background? made = null;
         // The closure needs the instance it is being handed to; assigned before anything can post.
-        made = new Background(action =>
+        made = new Background(
+            toUi: action =>
             {
                 var root = made!;
-                lock (root._idle!) root._idle.Enqueue(action);
-            }
+                lock (root._idle!) root._idle.Enqueue((root, action, "Manual", root.Now()));
+            },
+            requestFrame: null,
+            clock: clock
         );
         return made;
     }
@@ -525,7 +649,7 @@ public sealed class Background : IDisposable
             // depend on the budget being generous enough for a single step.
             do
                 job.Step(job.Next++);
-            while (!job.Done && Stopwatch.GetTimestamp() < deadline);
+            while (!job.Done && Now() < deadline);
         }
         catch (Exception ex)
         {

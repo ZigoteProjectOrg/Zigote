@@ -285,4 +285,112 @@ public class BackgroundTests
             iterations: 200
         );
     }
+
+    [Fact]
+    public void Idle_result_queued_and_delivered_allocates_zero()
+    {
+        using var background = Background.Manual();
+        int delivered = 0;
+        Action callback = () => delivered++;
+
+        // The queue stores the callback unwrapped; a wrapper per result was 104 bytes each.
+        AllocGuard.AssertZeroAlloc(
+            iteration: () =>
+            {
+                background.Post(ui: callback, deliver: Deliver.WhenIdle);
+                background.RunFrame(TimeSpan.FromMilliseconds(4));
+            },
+            warmup: 20,
+            iterations: 200
+        );
+        Assert.True(delivered >= 200);
+    }
+
+    // ── admission, age, and a clock the test owns ──────────────────────────────
+
+    [Fact]
+    public void TryPost_refuses_past_IdleCapacity_and_Post_never_does()
+    {
+        using var background = Background.Manual();
+        var child = background.Child("feed");
+        child.IdleCapacity = 2; // one ceiling for the whole tree
+        int ran = 0;
+
+        Assert.True(background.TryPost(() => ran++));
+        Assert.True(child.TryPost(() => ran++));
+        Assert.False(background.TryPost(() => ran++));
+        background.Post(ui: () => ran++, deliver: Deliver.WhenIdle); // not subject to the cap
+        Assert.Equal(expected: 1, actual: background.IdleRejected);
+        Assert.Equal(expected: 3, actual: background.IdleQueued);
+
+        background.RunFrame(TimeSpan.FromSeconds(1));
+        Assert.Equal(expected: 3, actual: ran);
+        Assert.True(background.TryPost(() => ran++)); // room again
+
+        child.Dispose();
+        Assert.False(child.TryPost(() => ran++)); // a dead scope accepts nothing
+    }
+
+    [Fact]
+    public void Fake_clock_makes_the_budget_and_queue_age_exact()
+    {
+        long now = 0;
+        long ms = System.Diagnostics.Stopwatch.Frequency / 1000;
+        using var background = Background.Manual(() => now);
+        int ran = 0;
+        for (int i = 0; i < 10; i++)
+            background.Post(ui: () => { ran++; now += ms; }, deliver: Deliver.WhenIdle);
+
+        now += 7 * ms;
+        Assert.Equal(expected: TimeSpan.FromMilliseconds(7), actual: background.OldestIdleWait);
+
+        // Each callback "takes" exactly 1 ms, so a 3 ms budget runs exactly three.
+        background.RunFrame(TimeSpan.FromMilliseconds(3));
+        Assert.Equal(expected: 3, actual: ran);
+        Assert.Equal(expected: 7, actual: background.IdleQueued);
+
+        // Zero budget still makes one unit of progress.
+        background.RunFrame(TimeSpan.Zero);
+        Assert.Equal(expected: 4, actual: ran);
+
+        background.RunFrame(TimeSpan.FromSeconds(1));
+        Assert.Equal(expected: 10, actual: ran);
+        Assert.Equal(expected: TimeSpan.Zero, actual: background.OldestIdleWait);
+    }
+
+    [Fact]
+    public void Late_frames_defer_the_guaranteed_unit_but_only_up_to_maxDeferral()
+    {
+        long now = 0;
+        long ms = System.Diagnostics.Stopwatch.Frequency / 1000;
+        using var background = Background.Manual(() => now);
+        var deferral = TimeSpan.FromMilliseconds(50);
+        int ran = 0;
+
+        background.RunFrame(budget: TimeSpan.Zero, maxDeferral: deferral); // serviced at t=0
+        for (int i = 0; i < 3; i++) background.Post(ui: () => ran++, deliver: Deliver.WhenIdle);
+
+        // Late frames inside the window do nothing at all…
+        for (int frame = 0; frame < 5; frame++)
+        {
+            now += 8 * ms;
+            background.RunFrame(budget: TimeSpan.Zero, maxDeferral: deferral);
+        }
+
+        Assert.Equal(expected: 0, actual: ran);
+
+        // …the first one past it makes the usual single unit of progress…
+        now += 16 * ms;
+        background.RunFrame(budget: TimeSpan.Zero, maxDeferral: deferral);
+        Assert.Equal(expected: 1, actual: ran);
+
+        // …and a frame with slack is never deferred.
+        background.RunFrame(budget: TimeSpan.FromSeconds(1), maxDeferral: deferral);
+        Assert.Equal(expected: 3, actual: ran);
+
+        // Without a deferral, a zero budget still runs one unit — the compatibility contract.
+        background.Post(ui: () => ran++, deliver: Deliver.WhenIdle);
+        background.RunFrame(TimeSpan.Zero);
+        Assert.Equal(expected: 4, actual: ran);
+    }
 }

@@ -95,7 +95,8 @@ public partial class App : IDisposable
     // and the focus to restore when each is popped (modal focus save/restore).
     private readonly List<Widget> _pendingAutoFocus = [];
 
-    private readonly ConcurrentQueue<Action> _posted = new();
+    // Each entry carries its enqueue timestamp so a drain can report how long work waited.
+    private readonly ConcurrentQueue<(Action Action, long Queued)> _posted = new();
 
     // Lazily-created root Background scope (see the Background property). Nullable so an app that
     // never touches it pays nothing — the frame loop skips RunFrame and the idle gate skips FrameIdle.
@@ -1035,13 +1036,42 @@ public partial class App : IDisposable
     public void Post(Action action)
     {
         ArgumentNullException.ThrowIfNull(action);
-        _posted.Enqueue(action);
+        _posted.Enqueue((action, Stopwatch.GetTimestamp()));
         // No RequestPaint: the idle gate checks _posted.IsEmpty, and the action marks its own
         // damage — SetTexture calls MarkNeedsLayout, a signal write invalidates its binds.
         // Marking full-frame damage here defeated partial repaint for every background completion.
         // If the UI thread is parked in WaitEvents, wake it now instead of riding out the timeout
         // — an image decode landing mid-idle paints immediately, not one frame-budget later.
         if (Volatile.Read(ref _inWaitEvents)) Engine.WakeEventLoop();
+    }
+
+    /// <summary>
+    ///     Opt-in ceiling on callbacks waiting in the <see cref="Post" /> queue, enforced only by
+    ///     <see cref="TryPost" />. Zero (the default) means no ceiling.
+    /// </summary>
+    public int PostCapacity { get; set; }
+
+    /// <summary>
+    ///     <see cref="Post" /> for work the caller can afford to have refused: returns false, without
+    ///     queueing, when <see cref="PostCapacity" /> callbacks are already waiting. For replaceable
+    ///     or retryable producers (progress ticks, prefetch results) — the caller keeps ownership of
+    ///     whatever the callback would have delivered and must release or retry it. Plain
+    ///     <see cref="Post" /> never refuses.
+    /// </summary>
+    public bool TryPost(Action action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        int capacity = PostCapacity;
+        // ponytail: count-then-enqueue is not atomic, so racing producers can overshoot the cap by
+        // one each; take a lock here if the cap ever has to be exact.
+        if (capacity > 0 && _posted.Count >= capacity)
+        {
+            Interlocked.Increment(ref _postRejected);
+            return false;
+        }
+
+        Post(action);
+        return true;
     }
 
     /// <summary>
@@ -1162,19 +1192,77 @@ public partial class App : IDisposable
         )
     );
 
-    private void DrainPosted()
+    /// <summary>
+    ///     Opt-in cap, in milliseconds, on the time one frame spends running <see cref="Post" />
+    ///     callbacks. Zero (the default) drains until the queue is empty, including callbacks posted
+    ///     by the drain itself. When positive, a frame runs only what was queued when its drain began
+    ///     and stops once the budget is spent; the rest keeps its order and runs on following frames,
+    ///     with input polled in between. Nothing is dropped, and at least one callback runs per frame.
+    ///     A callback is never interrupted, so one slow callback still overruns the budget.
+    /// </summary>
+    public double PostDrainBudgetMs { get; set; }
+
+    /// <summary>Callbacks queued by <see cref="Post" /> that have not run yet.</summary>
+    public int PostedPending => _posted.Count;
+
+    private int _postRejected;
+
+    /// <summary>Callbacks <see cref="TryPost" /> has refused since the app started.</summary>
+    public int PostRejected => Volatile.Read(ref _postRejected);
+
+    /// <summary>
+    ///     What the most recent frame that ran any <see cref="Post" /> callbacks did. UI thread.
+    /// </summary>
+    public PostDrainStats LastPostDrain { get; private set; }
+
+    internal void DrainPosted()
     {
-        while (_posted.TryDequeue(out var action))
+        if (_posted.IsEmpty) return; // the common frame: no timestamps, no stats
+        double budgetMs = PostDrainBudgetMs;
+        bool bounded = budgetMs > 0;
+        // Bounded: callbacks posted during this drain wait for the next frame, so a self-reposting
+        // callback cannot extend it.
+        int remaining = bounded ? _posted.Count : int.MaxValue;
+        long start = Stopwatch.GetTimestamp();
+        long last = start, oldest = start, slowest = 0;
+        int ran = 0;
+        while (remaining-- > 0 && _posted.TryDequeue(out var entry))
         {
+            if (ran++ == 0) oldest = entry.Queued;
             try
             {
-                action();
+                entry.Action();
             }
             catch (Exception ex)
             {
                 DebugLog.Error($"App.Post action threw: {ex}");
             }
+
+            // Per-callback timing only where the budget already pays for the clock read.
+            if (!bounded) continue;
+            long now = Stopwatch.GetTimestamp();
+            slowest = Math.Max(val1: slowest, val2: now - last);
+            last = now;
+            if (Stopwatch.GetElapsedTime(startingTimestamp: start, endingTimestamp: now)
+                    .TotalMilliseconds >= budgetMs)
+                break;
         }
+
+        if (ran == 0) return;
+        long end = bounded ? last : Stopwatch.GetTimestamp();
+        LastPostDrain = new PostDrainStats(
+            Ran: ran,
+            Pending: _posted.Count,
+            ElapsedMs: Stopwatch.GetElapsedTime(startingTimestamp: start, endingTimestamp: end)
+                .TotalMilliseconds,
+            OldestWaitMs: Math.Max(
+                val1: 0d,
+                val2: Stopwatch.GetElapsedTime(startingTimestamp: oldest, endingTimestamp: start)
+                    .TotalMilliseconds
+            ),
+            SlowestMs: Stopwatch.GetElapsedTime(startingTimestamp: 0, endingTimestamp: slowest)
+                .TotalMilliseconds
+        );
     }
 
     /// <summary>
@@ -1461,7 +1549,11 @@ public partial class App : IDisposable
         // only the editor's loop drained its scope).
         if (_background is { } bg)
             using (Profiler.Scope("Loop.Background"))
-                bg.RunFrame(BackgroundBudget());
+                bg.RunFrame(
+                    budget: BackgroundBudget(),
+                    maxDeferral: TimeSpan.FromMilliseconds(BackgroundMaxDeferralMs)
+                );
+        _afterBackgroundTicks = _clock.ElapsedTicks;
 
         // Bring layout current BEFORE dispatching events so HitTest sees valid Bounds.
         // Layout runs only when structure/size actually changed (MarkNeedsLayout) or the
@@ -1552,7 +1644,11 @@ public partial class App : IDisposable
         // Secondary windows run BEFORE the main window's dirty gate: their routed events must be
         // dispatched (and their surfaces rendered) even on frames where the main window is idle —
         // clicking inside the settings window while the editor sits still is exactly that case.
+        // Their rendering (and present waits) is not this window's remaining work: slide the
+        // reserve's start mark past it.
+        long beforeSecondary = _clock.ElapsedTicks;
         PumpSecondaryWindows();
+        _afterBackgroundTicks += _clock.ElapsedTicks - beforeSecondary;
 
         if (!_repaint.AnyDirty && !ContinuousUpdate && !ForceContinuousRender)
             return;
@@ -1584,12 +1680,60 @@ public partial class App : IDisposable
     ///         deadline, so the queues still advance — one item per frame instead of a burst.
     ///     </para>
     /// </remarks>
-    private TimeSpan BackgroundBudget()
-    {
-        long spent = _clock.ElapsedTicks - _lastTicks;
-        double leftMs = (FrameIntervalTicks - spent) * 1000.0 / Stopwatch.Frequency;
-        return TimeSpan.FromMilliseconds(Math.Clamp(value: leftMs, min: 0d, max: MaxBackgroundBudgetMs));
-    }
+    /// <summary>
+    ///     Opt-in: how long <see cref="Background" /> idle results and slices may be held back by
+    ///     frames that have no slack left, in milliseconds. Zero (the default) keeps the guarantee
+    ///     that every frame advances each queue by one unit even when it is already late; a positive
+    ///     value lets late frames skip that unit, and guarantees service at least this often instead.
+    /// </summary>
+    public double BackgroundMaxDeferralMs { get; set; }
+
+    private TimeSpan BackgroundBudget() => TimeSpan.FromMilliseconds(
+        BackgroundBudgetMs(
+            intervalTicks: FrameIntervalTicks,
+            spentTicks: _clock.ElapsedTicks - _lastTicks,
+            reserveTicks: _frameReserveTicks
+        )
+    );
+
+    /// <summary>
+    ///     Slack left for discretionary work: the frame interval minus what is already spent and
+    ///     minus <paramref name="reserveTicks" /> — the estimated cost of the layout, dispatch, paint
+    ///     and submit still to come — capped at <see cref="MaxBackgroundBudgetMs" />.
+    /// </summary>
+    internal static double BackgroundBudgetMs(long intervalTicks, long spentTicks, long reserveTicks) =>
+        Math.Clamp(
+            value: (intervalTicks - spentTicks - reserveTicks) * 1000.0 / Stopwatch.Frequency,
+            min: 0d,
+            max: MaxBackgroundBudgetMs
+        );
+
+    /// <summary>
+    ///     Fold one frame's measured remaining-work cost into the reserve: jump straight up to a
+    ///     costlier frame, decay slowly (about 5% a frame) after a cheaper one — so one heavy frame
+    ///     protects the next few, and a workload that got lighter gets its slack back within a second.
+    /// </summary>
+    internal static long NextFrameReserve(long currentTicks, long sampleTicks) =>
+        sampleTicks >= currentTicks ? sampleTicks : currentTicks - (currentTicks - sampleTicks) / 20;
+
+    private bool _presentSkipped;
+
+    /// <summary>
+    ///     Frames submitted but not presented because the surface was unavailable (occluded,
+    ///     outdated, acquire timeout). Each one is repaid with a full repaint.
+    /// </summary>
+    public long DroppedFrames { get; private set; }
+
+    // Rolling estimate of what a painting frame costs between its Background slice and the present
+    // wait. Excludes Engine.FrameEnd, whose CPU encode work is not separable from the vsync wait.
+    private long _frameReserveTicks;
+    private long _afterBackgroundTicks;
+
+    /// <summary>
+    ///     The estimated cost of a frame's layout, dispatch, paint and submit that
+    ///     <see cref="Background" /> work is kept clear of, in milliseconds. Diagnostics only.
+    /// </summary>
+    public double FrameReserveMs => _frameReserveTicks * 1000.0 / Stopwatch.Frequency;
 
     /// <summary>
     ///     dt handed to animations (<see cref="Ticker.AdvanceAll" />). Present jitter makes
@@ -1652,6 +1796,12 @@ public partial class App : IDisposable
         // Hidden: there is no surface to present to, and the GPU work would be thrown away. The
         // damage is left dirty on purpose — Show() repaints everything anyway.
         if (Root is null || Hidden) return;
+
+        if (_presentSkipped)
+        {
+            _presentSkipped = false;
+            _repaint.MarkAll();
+        }
 
         bool rootWalked = _repaint.RootDirty;
         bool overlayWalked = _repaint.OverlayDirty;
@@ -1782,7 +1932,27 @@ public partial class App : IDisposable
             // SSAO → SSR → bloom → tonemap → TAA → overlay composite) plus the swapchain present.
             // FrameEnd = render + end-of-frame in one FFI transition (zigote_frame_end delegates to
             // the same pair the old two calls hit).
-            using (Profiler.Scope("Render.GPU")) Engine.FrameEnd();
+            // Secondary windows paint through here too; only the frame that set the mark samples.
+            if (_afterBackgroundTicks != 0)
+            {
+                _frameReserveTicks = NextFrameReserve(
+                    currentTicks: _frameReserveTicks,
+                    sampleTicks: _clock.ElapsedTicks - _afterBackgroundTicks
+                );
+                _afterBackgroundTicks = 0;
+            }
+
+            bool presented;
+            using (Profiler.Scope("Render.GPU")) presented = Engine.FrameEnd();
+            // A skipped frame drew nothing into the persistent scene texture, yet its damage is
+            // about to be reset: owe a full repaint to the next frame that paints, or the region
+            // stays stale under later partial frames. No frame is requested for it — an occluded
+            // window must stay idle.
+            if (!presented)
+            {
+                _presentSkipped = true;
+                DroppedFrames++;
+            }
 
             // Damage is consumed — clear it so the next frame starts fresh (and only becomes full again
             // if something marks it so). Kept inside the render block so a skipped/early-returned frame
@@ -2311,3 +2481,19 @@ public partial class App : IDisposable
         Engine.SetCursor(cursor);
     }
 }
+
+/// <summary>One frame's <see cref="App.Post" /> drain, as <see cref="App.LastPostDrain" /> reports it.</summary>
+/// <param name="Ran">Callbacks run by the drain.</param>
+/// <param name="Pending">Callbacks still queued when it stopped.</param>
+/// <param name="ElapsedMs">Time the drain took.</param>
+/// <param name="OldestWaitMs">How long the first callback it ran had been queued.</param>
+/// <param name="SlowestMs">
+///     The longest single callback. Measured only under <see cref="App.PostDrainBudgetMs" />; zero
+///     otherwise.
+/// </param>
+public readonly record struct PostDrainStats(
+    int Ran,
+    int Pending,
+    double ElapsedMs,
+    double OldestWaitMs,
+    double SlowestMs);

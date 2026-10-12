@@ -47,6 +47,32 @@ public sealed class GameSession : IWorldSessionHooks
     private const float
         MaxCatchUp = 0.25f; // simulate at most 250 ms of backlog in a single render frame
 
+    /// <summary>
+    ///     Opt-in ceiling on fixed ticks run by one <see cref="Update" />. Zero (the default) leaves
+    ///     only the 250 ms backlog cap, under which a stalled render frame can ask for about thirty
+    ///     ticks in a row. With a ceiling, whole ticks beyond it are dropped — the simulation falls
+    ///     behind wall time instead of holding the frame — and counted in
+    ///     <see cref="DroppedSimulationTime" />. Leave at zero for simulation that must not skip time
+    ///     (replays, lockstep networking).
+    /// </summary>
+    public int MaxStepsPerUpdate { get; set; }
+
+    /// <summary>Seconds of simulation dropped by <see cref="MaxStepsPerUpdate" /> since the session began.</summary>
+    public double DroppedSimulationTime { get; private set; }
+
+    /// <summary>Remove every whole <paramref name="step" /> from the backlog, keeping the sub-tick remainder.</summary>
+    internal static float DropBacklog(ref float accumulator, float step)
+    {
+        float dropped = 0f;
+        while (accumulator >= step)
+        {
+            accumulator -= step;
+            dropped += step;
+        }
+
+        return dropped;
+    }
+
     // ── Input (written by ViewportPanel, read by Update) ──────────────────────
 
     /// <summary>
@@ -519,7 +545,8 @@ public sealed class GameSession : IWorldSessionHooks
         //    frame-rate independent. The render dt only sets how many slices run; the remainder carries over.
         _accumulator = MathF.Min(x: _accumulator + dt, y: MaxCatchUp);
         int tick = 0;
-        while (_accumulator >= FixedDt)
+        int maxSteps = MaxStepsPerUpdate;
+        while (_accumulator >= FixedDt && (maxSteps <= 0 || tick < maxSteps))
         {
             // Immediate-mode debug-draw queue: clear at the start of each tick so the render frame draws the
             // LAST tick's lines (re-emitting into a live queue would stack one copy per tick). The widget HUD
@@ -553,6 +580,9 @@ public sealed class GameSession : IWorldSessionHooks
                 LookDy = 0f;
             }
         }
+
+        if (maxSteps > 0)
+            DroppedSimulationTime += DropBacklog(accumulator: ref _accumulator, step: FixedDt);
 
         // Publish the leftover sub-tick time as a fraction of a tick, so a render-side script can
         // interpolate between the last two ticks' states (0-tick frames repeat identical state).
