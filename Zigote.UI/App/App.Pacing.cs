@@ -35,30 +35,138 @@ public partial class App
     private int _tooltipDueInMs; // 0 = no tooltip waiting out its hover delay
     private int _snackbarDueInMs; // 0 = no resting snackbar waiting to fade out
 
+    /// <summary>
+    ///     Advance the things that change on a timer rather than on input — the tooltip hover delay,
+    ///     snackbars, the caret blink — for this window, marking a repaint only on the frames where
+    ///     one of them actually looks different, and recording when the next such frame is due so
+    ///     the idle wait can end for it. Shared by the main frame and every secondary window's.
+    /// </summary>
+    private void AdvanceTransients(float dt)
+    {
+        // Advance tooltip timer
+        AdvanceTooltip(dt);
+
+        // Advance and prune finished snackbars. A toast only changes while it slides in and fades
+        // out; for the seconds in between it is a static picture, so the overlay is repainted
+        // only while one is animating and the idle wait is cut short to catch the next fade-out.
+        _snackbarDueInMs = 0;
+        for (int i = _snackbars.Count - 1; i >= 0; i--)
+        {
+            var s = _snackbars[i];
+            s.Tick(dt);
+            if (s.IsDone)
+            {
+                PopOverlay(s);
+                _snackbars.RemoveAt(i);
+            }
+            else if (s.Animating)
+                _repaint.MarkOverlay();
+            else
+            {
+                int dueMs = Math.Max(val1: 1, val2: (int)MathF.Ceiling(s.RestingFor * 1000f) + 1);
+                _snackbarDueInMs = _snackbarDueInMs == 0 ? dueMs : Math.Min(val1: _snackbarDueInMs, val2: dueMs);
+            }
+        }
+
+        // A tooltip pending its hover delay repaints the overlay only until the bubble is up — the
+        // show/hide frames are marked by PushOverlay/PopOverlay, so a settled bubble idles instead of
+        // producing full-damage frames forever. A blinking caret lives in whichever layer its field is
+        // in; a read-only / caret-less text client (e.g. the docked read-only CodeEditor) opts out of
+        // the per-frame caret repaint via WantsCaretBlink, so a focused viewer idles too.
+        // Nothing is drawn while the delay runs, so nothing is repainted: the idle wait is simply
+        // cut short to end when the bubble is due (it used to repaint the overlay every frame for
+        // the whole delay just to keep the loop turning).
+        _tooltipDueInMs = _tooltipTimer > 0 && _tooltipOverlay is null
+            ? Math.Max(val1: 1, val2: (int)MathF.Ceiling((TooltipDelaySeconds - _tooltipTimer) * 1000f) + 1)
+            : 0;
+        _caretChangeInMs = 0;
+        if (FocusedWidget is ITextInputClient { WantsCaretBlink: true } caret)
+        {
+            if (caret.CaretBlinkBase is not { } blinkBase)
+                MarkPaintFor(FocusedWidget); // unknown animation: every frame
+            else
+            {
+                // A standard blink changes twice a cycle. Repaint on those edges only, and tell
+                // the idle wait when the next one is due so it wakes for it.
+                float time = Time;
+                bool shown = CaretBlink.Shown(time: time, blinkBase: blinkBase);
+                if (shown != _caretShown || !ReferenceEquals(FocusedWidget, _caretOwner))
+                    MarkPaintFor(FocusedWidget);
+                _caretShown = shown;
+                _caretOwner = FocusedWidget;
+                _caretChangeInMs = Math.Max(
+                    val1: 1,
+                    val2: (int)MathF.Ceiling(CaretBlink.ChangeIn(time: time, blinkBase: blinkBase) * 1000f)
+                );
+            }
+        }
+        else
+            _caretOwner = null;
+    }
+
+    /// <summary>Milliseconds until this window's next timed repaint is due; 0 when none is pending.</summary>
+    private int TransientDueInMs()
+    {
+        int due = 0;
+        if (_caretChangeInMs > 0) due = _caretChangeInMs;
+        if (_tooltipDueInMs > 0) due = due == 0 ? _tooltipDueInMs : Math.Min(val1: due, val2: _tooltipDueInMs);
+        if (_snackbarDueInMs > 0) due = due == 0 ? _snackbarDueInMs : Math.Min(val1: due, val2: _snackbarDueInMs);
+        return due;
+    }
+
     /// <summary>Work handed over from another thread that an idle wait must not sleep on.</summary>
-    private bool HasCrossThreadWork() =>
-        !_posted.IsEmpty || !_postedAfterFrame.IsEmpty || !_crossThreadInvalidations.IsEmpty ||
-        _repaint.AnyDirty || _needsLayout ||
-        Reactive.HasPendingDeferred || _background is { FrameIdle: false } ||
-        HotReload.HasPendingReload || PlatformChannel.HasPending;
+    private bool HasCrossThreadWork()
+    {
+        if (HasFrameWork() || !_postedAfterFrame.IsEmpty || !_crossThreadInvalidations.IsEmpty ||
+            Reactive.HasPendingDeferred || _background is { FrameIdle: false } ||
+            HotReload.HasPendingReload || PlatformChannel.HasPending)
+            return true;
+        // Secondary windows are serviced by this loop, so work queued on one of them counts too.
+        for (int i = 0; i < _secondaryWindows.Count; i++)
+        {
+            if (_secondaryWindows[i].HasFrameWork()) return true;
+        }
+
+        return false;
+    }
+
+    // Only what every window's frame consumes: a secondary window's frame never drains the
+    // after-frame or cross-thread-invalidation queues, so counting those there would keep the
+    // loop awake forever on an entry nothing removes.
+    private bool HasFrameWork() => !_posted.IsEmpty || _repaint.AnyDirty || _needsLayout;
 
     private int IdleWaitTimeoutMs()
     {
         int frameMs = (int)(FrameIntervalTicks * 1000 / Stopwatch.Frequency);
         // Stay at frame cadence just after activity, and for as long as something is serviced by
         // per-frame polling rather than by events: a native file dialog, a held finger ripening
-        // into a long-press, a one-shot sound waiting to be silenced, secondary windows.
+        // into a long-press, a one-shot sound waiting to be silenced.
         if (++_idleStreak < IdleFramesBeforeLongWait || IdleWaitMs <= frameMs ||
-            FileDialog.IsBusy || _touchPrimaryFinger >= 0 || _secondaryWindows.Count > 0 ||
-            Engine.AudioHasActiveOneShots())
+            FileDialog.IsBusy || AnyTouchHeld() || Engine.AudioHasActiveOneShots())
             return frameMs;
         // A blinking caret must be repainted on its next edge, and a pending tooltip shown when
         // its delay ends — not whenever the wait happens to expire.
+        // Any window's: secondary windows are driven from this loop.
         int wait = IdleWaitMs;
-        if (_caretChangeInMs > 0) wait = Math.Min(val1: wait, val2: _caretChangeInMs);
-        if (_tooltipDueInMs > 0) wait = Math.Min(val1: wait, val2: _tooltipDueInMs);
-        if (_snackbarDueInMs > 0) wait = Math.Min(val1: wait, val2: _snackbarDueInMs);
+        if (TransientDueInMs() is > 0 and var mine) wait = Math.Min(val1: wait, val2: mine);
+        for (int i = 0; i < _secondaryWindows.Count; i++)
+        {
+            if (_secondaryWindows[i].TransientDueInMs() is > 0 and var theirs)
+                wait = Math.Min(val1: wait, val2: theirs);
+        }
+
         return wait;
+    }
+
+    private bool AnyTouchHeld()
+    {
+        if (_touchPrimaryFinger >= 0) return true;
+        for (int i = 0; i < _secondaryWindows.Count; i++)
+        {
+            if (_secondaryWindows[i]._touchPrimaryFinger >= 0) return true;
+        }
+
+        return false;
     }
 
     /// <summary>

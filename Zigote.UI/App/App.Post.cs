@@ -39,7 +39,9 @@ public partial class App
     /// </summary>
     public void WakeIfWaiting()
     {
-        if (Volatile.Read(ref _inWaitEvents)) Engine.WakeEventLoop();
+        // A secondary window never waits itself — the main app's loop drives it.
+        var loop = ParentApp ?? this;
+        if (Volatile.Read(ref loop._inWaitEvents)) Engine.WakeEventLoop();
     }
 
     /// <summary>

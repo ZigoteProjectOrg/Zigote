@@ -485,6 +485,13 @@ not application work. The probe now waits for 30 consecutive paced acquires befo
   120 Hz). It is now repainted only while animating, and the idle wait ends when the fade-out is
   due. Checked in the widget gallery: slides in, rests, and is gone on time.
 
+- **Secondary windows.** Apps with a second OS window were excluded from the long idle wait, and a
+  caret blinking in one kept the whole loop at frame rate. The timed-repaint logic (caret, tooltip,
+  snackbar) is now one method shared by the main and secondary frames, the idle wait takes the
+  earliest due time across all windows, and work posted to a secondary window wakes the main loop.
+  Checked in the Adwaita gallery with two windows open: about 10 loop turns a second at idle, and
+  the second window still answers inspect commands.
+
 The frame pacer used under an explicit FPS cap was measured too (sleep to 2 ms before the deadline,
 then spin). A two-stage sleep gave no consistent CPU saving and run-to-run variance was larger than
 the difference, so it is unchanged.

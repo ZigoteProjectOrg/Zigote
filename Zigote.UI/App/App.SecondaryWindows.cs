@@ -58,7 +58,8 @@ public partial class App
             var w = _secondaryWindows[i];
             if (w._repaint.AnyDirty || w._needsLayout || w._pendingRelayout) return true;
             if (w.WantsContinuousFrame()) return true;
-            if (w.FocusedWidget is ITextInputClient { WantsCaretBlink: true }) return true;
+            // A blinking caret, a pending tooltip or a resting snackbar there does not need every
+            // frame: the idle wait ends when that window's next timed repaint is due.
         }
 
         return false;
@@ -109,23 +110,7 @@ public partial class App
             if (WantsContinuousFrame()) _repaint.MarkOverlay();
             FrameTick?.Invoke(DeltaTime);
 
-            AdvanceTooltip(DeltaTime);
-
-            if (_snackbars.Count > 0) _repaint.MarkOverlay();
-            for (int i = _snackbars.Count - 1; i >= 0; i--)
-            {
-                var s = _snackbars[i];
-                s.Tick(DeltaTime);
-                if (s.IsDone)
-                {
-                    PopOverlay(s);
-                    _snackbars.RemoveAt(i);
-                }
-            }
-
-            if (_tooltipTimer > 0 && _tooltipOverlay is null) _repaint.MarkOverlay();
-            if (FocusedWidget is ITextInputClient { WantsCaretBlink: true })
-                MarkPaintFor(FocusedWidget);
+            AdvanceTransients(DeltaTime);
 
             if (_needsLayout || _pendingRelayout)
                 LayoutTree();
