@@ -213,6 +213,9 @@ public partial class App : IDisposable
         bool transparentWindow = false)
     {
         Active = this;
+        // Cross-thread producers in Core cannot see the app; they wake its idle wait through these.
+        Reactive.DeferredQueued = WakeIfWaiting;
+        PlatformChannel.Arrived = WakeIfWaiting;
         MainApp = this;
         Title = title;
         Engine = new ZigoteEngine();
@@ -691,7 +694,11 @@ public partial class App : IDisposable
     ///     screen come from <c>Background.Child</c>.
     /// </summary>
     public Zigote.Core.Threading.Background Background =>
-        ParentApp?.Background ?? (_background ??= new Zigote.Core.Threading.Background(Post));
+        ParentApp?.Background ?? (_background ??= new Zigote.Core.Threading.Background(
+            toUi: Post,
+            // An idle result queued from a worker must end a long idle wait, not ride it out.
+            requestFrame: WakeIfWaiting
+        ));
 
     public void Dispose()
     {
@@ -1013,7 +1020,8 @@ public partial class App : IDisposable
     public void InvalidateLayoutFromAnyThread(Widget widget)
     {
         _crossThreadInvalidations.Enqueue(widget);
-        RequestLayout(); // sets _needsLayout + marks repaint; WaitEvents' 16 ms timeout picks it up
+        RequestLayout(); // sets _needsLayout + marks repaint
+        WakeIfWaiting();
     }
 
     // Drained at the top of each frame on the UI thread, before layout — see InvalidateLayoutFromAnyThread.
@@ -1042,6 +1050,18 @@ public partial class App : IDisposable
         // Marking full-frame damage here defeated partial repaint for every background completion.
         // If the UI thread is parked in WaitEvents, wake it now instead of riding out the timeout
         // — an image decode landing mid-idle paints immediately, not one frame-budget later.
+        WakeIfWaiting();
+    }
+
+    /// <summary>
+    ///     Thread-safe: end the frame loop's idle wait now, if it is in one. Everything that hands
+    ///     the UI thread work from another thread calls this — the idle wait can be many frames
+    ///     long (<see cref="IdleWaitMs" />), so work that only sets a flag would sit until it expired.
+    ///     The loop raises the flag BEFORE its last check for such work, so a caller that queues
+    ///     first and wakes second can never slip between the check and the sleep.
+    /// </summary>
+    public void WakeIfWaiting()
+    {
         if (Volatile.Read(ref _inWaitEvents)) Engine.WakeEventLoop();
     }
 
@@ -1084,9 +1104,10 @@ public partial class App : IDisposable
     {
         ArgumentNullException.ThrowIfNull(action);
         _postedAfterFrame.Enqueue(action);
-        // No RequestPaint: the drain runs on every frame exit, and WaitEvents' frame-budget timeout
-        // bounds the wait. Marking dirty here would make a 30 fps stream full-repaint an idle app
-        // continuously — the capture wants to observe frames, not manufacture them.
+        // No RequestPaint: the drain runs on every frame exit. Marking dirty here would make a
+        // 30 fps stream full-repaint an idle app continuously — the capture wants to observe
+        // frames, not manufacture them. A wake only turns the loop over once.
+        WakeIfWaiting();
     }
 
     // Runs on every exit path of Frame (including the idle early-returns) so a posted capture can
@@ -1456,14 +1477,17 @@ public partial class App : IDisposable
                  !AnySecondaryWindowWantsFrame())
         {
             _idledInWait = true;
+            // Flag first, check second: a producer on another thread queues its work and then
+            // wakes us only if it sees this flag. Checking before raising it would leave a window
+            // where work lands unseen and the wait runs its whole (possibly long) timeout.
             Volatile.Write(ref _inWaitEvents, true);
-            using (Profiler.Scope("WaitEvents"))
-                // Time out after one frame budget rather than a hardcoded 16 ms, so the idle
-                // wake-up rate follows the monitor (and any app FPS cap) instead of pinning
-                // everything to ~60 on a 144 Hz panel.
-                Engine.WaitEvents((int)(FrameIntervalTicks * 1000 / Stopwatch.Frequency));
+            if (!HasCrossThreadWork())
+                using (Profiler.Scope("WaitEvents"))
+                    Engine.WaitEvents(IdleWaitTimeoutMs());
             Volatile.Write(ref _inWaitEvents, false);
         }
+        else
+            _idleStreak = 0;
 
         using (Profiler.Scope("Loop.PollEvents")) Engine.PollEventsInto(_events);
         // Move events belonging to secondary OS windows out of the main batch and into each
@@ -1534,8 +1558,29 @@ public partial class App : IDisposable
         // in; a read-only / caret-less text client (e.g. the docked read-only CodeEditor) opts out of
         // the per-frame caret repaint via WantsCaretBlink, so a focused viewer idles too.
         if (_tooltipTimer > 0 && _tooltipOverlay is null) _repaint.MarkOverlay();
-        if (FocusedWidget is ITextInputClient { WantsCaretBlink: true })
-            MarkPaintFor(FocusedWidget);
+        _caretChangeInMs = 0;
+        if (FocusedWidget is ITextInputClient { WantsCaretBlink: true } caret)
+        {
+            if (caret.CaretBlinkBase is not { } blinkBase)
+                MarkPaintFor(FocusedWidget); // unknown animation: every frame
+            else
+            {
+                // A standard blink changes twice a cycle. Repaint on those edges only, and tell
+                // the idle wait when the next one is due so it wakes for it.
+                float time = Time;
+                bool shown = CaretBlink.Shown(time: time, blinkBase: blinkBase);
+                if (shown != _caretShown || !ReferenceEquals(FocusedWidget, _caretOwner))
+                    MarkPaintFor(FocusedWidget);
+                _caretShown = shown;
+                _caretOwner = FocusedWidget;
+                _caretChangeInMs = Math.Max(
+                    val1: 1,
+                    val2: (int)MathF.Ceiling(CaretBlink.ChangeIn(time: time, blinkBase: blinkBase) * 1000f)
+                );
+            }
+        }
+        else
+            _caretOwner = null;
 
         // Apply off-thread layout requests (a timer/async signal change a reactive bind reads) on the UI
         // thread, BEFORE layout — so the Parent-chain walk is race-free and the marked ancestors don't
@@ -1680,6 +1725,48 @@ public partial class App : IDisposable
     ///         deadline, so the queues still advance — one item per frame instead of a burst.
     ///     </para>
     /// </remarks>
+    /// <summary>
+    ///     How long the frame loop may sleep in one go once the app has been idle for a moment, in
+    ///     milliseconds. An idle app otherwise wakes once per display frame — 120 times a second on
+    ///     a 120 Hz panel — to find nothing to do. OS input and every cross-thread hand-off
+    ///     (<see cref="Post" />, background results, deferred reactive effects, platform messages)
+    ///     end the sleep at once, so this only bounds how stale code that silently polls from the
+    ///     frame loop can get. Zero, or anything at or below the frame interval, restores the
+    ///     once-per-frame wake.
+    /// </summary>
+    public int IdleWaitMs { get; set; } = 100;
+
+    /// <summary>Consecutive idle frames before the long wait: about a quarter second at 120 Hz.</summary>
+    private const int IdleFramesBeforeLongWait = 30;
+
+    private int _idleStreak;
+
+    // Blink-edge tracking for a focused standard caret; see the caret block in FrameCore.
+    private bool _caretShown;
+    private Widget? _caretOwner;
+    private int _caretChangeInMs; // 0 = no blinking caret to wake for
+
+    /// <summary>Work handed over from another thread that an idle wait must not sleep on.</summary>
+    private bool HasCrossThreadWork() =>
+        !_posted.IsEmpty || !_postedAfterFrame.IsEmpty || !_crossThreadInvalidations.IsEmpty ||
+        _repaint.AnyDirty || _needsLayout ||
+        Reactive.HasPendingDeferred || _background is { FrameIdle: false } ||
+        HotReload.HasPendingReload || PlatformChannel.HasPending;
+
+    private int IdleWaitTimeoutMs()
+    {
+        int frameMs = (int)(FrameIntervalTicks * 1000 / Stopwatch.Frequency);
+        // Stay at frame cadence just after activity, and for as long as something is serviced by
+        // per-frame polling rather than by events: a native file dialog, a held finger ripening
+        // into a long-press, a one-shot sound waiting to be silenced, secondary windows.
+        if (++_idleStreak < IdleFramesBeforeLongWait || IdleWaitMs <= frameMs ||
+            FileDialog.IsBusy || _touchPrimaryFinger >= 0 || _secondaryWindows.Count > 0 ||
+            Engine.AudioHasActiveOneShots())
+            return frameMs;
+        // A blinking caret must be repainted on its next edge, not whenever the wait expires.
+        return _caretChangeInMs > 0 ? Math.Min(val1: IdleWaitMs, val2: _caretChangeInMs) : IdleWaitMs;
+    }
+
     /// <summary>
     ///     Opt-in: how long <see cref="Background" /> idle results and slices may be held back by
     ///     frames that have no slack left, in milliseconds. Zero (the default) keeps the guarantee

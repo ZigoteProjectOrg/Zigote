@@ -280,6 +280,8 @@ public class TextField : Widget, ITextInputClient
     /// <summary>Make the caret solid now; it resumes blinking after the dwell interval.</summary>
     private void ResetCaretBlink() => _caretBase = App.Active?.Time ?? 0f;
 
+    float? ITextInputClient.CaretBlinkBase => _caretBase;
+
     /// <summary>Select the complete value for replacement on the next keystroke.</summary>
     public void SelectAll()
     {
@@ -685,7 +687,7 @@ public class TextField : Widget, ITextInputClient
         if (Focused && !ReadOnly)
         {
             float time = App.Active?.Time ?? 0f;
-            if ((time - _caretBase) % 1.06f < 0.6f)
+            if (CaretBlink.Shown(time: time, blinkBase: _caretBase))
             {
                 float cx = bx + CaretX(_cursorPos);
                 if (_compositionText.Length > 0)
@@ -945,7 +947,7 @@ public class TextField : Widget, ITextInputClient
             float time = App.Active?.Time ?? 0f;
             float cx = innerX - _scrollX + caretX;
             float cy = innerTop + (caretLine * lineH) - _scrollY;
-            if ((time - _caretBase) % 1.06f < 0.6f)
+            if (CaretBlink.Shown(time: time, blinkBase: _caretBase))
             {
                 paint.AddRect(
                     bounds: new Rect(

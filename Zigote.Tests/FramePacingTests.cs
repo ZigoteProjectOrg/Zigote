@@ -131,4 +131,39 @@ public class FramePacingTests
             reserve = App.NextFrameReserve(currentTicks: reserve, sampleTicks: Ms(1));
         Assert.InRange(actual: reserve, low: Ms(1), high: Ms(1.1));
     }
+
+    // ── caret blink: the frame loop repaints on its edges and sleeps between them ──
+
+    [Theory]
+    [InlineData(0f, true, 0.6f)] // just restarted: solid, hides in 0.6 s
+    [InlineData(0.5f, true, 0.1f)]
+    [InlineData(0.7f, false, 0.36f)] // hidden, reappears at the end of the cycle
+    [InlineData(1.06f + 0.2f, true, 0.4f)] // second cycle
+    public void CaretBlink_ReportsStateAndTimeToNextEdge(float sinceRestart, bool shown, float changeIn)
+    {
+        const float blinkBase = 12.5f;
+        float time = blinkBase + sinceRestart;
+
+        Assert.Equal(expected: shown, actual: Zigote.UI.Widgets.CaretBlink.Shown(time: time, blinkBase: blinkBase));
+        Assert.Equal(
+            expected: changeIn,
+            actual: Zigote.UI.Widgets.CaretBlink.ChangeIn(time: time, blinkBase: blinkBase),
+            tolerance: 0.001f
+        );
+    }
+
+    [Fact]
+    public void CaretBlink_EdgeTimesAgreeWithShown()
+    {
+        // Stepping exactly to each reported edge must flip the state every time.
+        float time = 3f;
+        bool shown = Zigote.UI.Widgets.CaretBlink.Shown(time: time, blinkBase: 0f);
+        for (int i = 0; i < 8; i++)
+        {
+            time += Zigote.UI.Widgets.CaretBlink.ChangeIn(time: time, blinkBase: 0f) + 0.001f;
+            bool next = Zigote.UI.Widgets.CaretBlink.Shown(time: time, blinkBase: 0f);
+            Assert.NotEqual(expected: shown, actual: next);
+            shown = next;
+        }
+    }
 }

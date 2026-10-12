@@ -39,6 +39,7 @@ builds use `ReleaseFast`; headless cases do not initialize the engine.
 | `window.post_*.frame` | `App.Frame` draining a burst of `App.Post` callbacks | Callbacks do not invalidate UI; does not force rendering. 100 µs callback work is injected. |
 | `window.post_400_100us.bounded_1ms.frame` | The same 400-callback flood with `App.PostDrainBudgetMs = 1`; each `App.Frame` until the queue empties is one sample | Unpaced frames with nothing to paint; shows per-frame drain time, not display latency. Not in the 2026-10-12 archive. |
 | `window.*.native_acquire_wait`, `.native_encode_submit`, `.native_present` | Native split of each frame in the section (warmup included): time blocked acquiring the swapchain image, CPU work building/encoding/submitting, and the present call | Wall durations on the UI thread; none is GPU execution time. UI-only frames; the 3D composite path is not covered. |
+| `window.idle.wakeups_per_second`, `window.idle.cpu_percent_of_one_core` | Three seconds with nothing changing: frame-loop iterations per second and process CPU time as a share of one core | One sample per run. Pointer movement over the window or other events raise both. Profiler scopes are on. |
 | `window.unpaced.*` | The same frames with vsync and the software pacer off | On the baseline Metal setup these stayed vsync-paced, so they are not a CPU-cost measurement there. |
 | `images.64x512.*` | 64 concurrent `Image.LoadAsync` calls, actual decode and texture delivery, then a final submitted frame | In-memory RGB PNGs, full resolution, no file/network I/O or codec comparison. |
 
@@ -77,6 +78,8 @@ measured section is not presentation-paced and should be discarded. After the im
 The run ends with a partial-versus-full check: 24 partial repaints of a 48-cell grid, each
 compared byte for byte against a forced full repaint of the retained scene texture.
 The display must be awake: an occluded or sleeping display skips every frame.
+
+A failed workload check prints `probe failed: …` and exits with code 2.
 
 These are baseline probes, not CI wall-clock assertions. Correctness checks fail on lost work,
 wrong paint-diff outcomes, stalled scrolling, decode failure, or a 30-second image timeout.

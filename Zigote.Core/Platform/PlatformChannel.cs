@@ -480,8 +480,20 @@ public static class PlatformChannel
     ///     the listener runs later on the app thread. Used by a managed platform head directly, and
     ///     reached from native code through <c>zigote_channel_send</c>.
     /// </summary>
-    public static void Send(string channel, string payload = "") =>
+    public static void Send(string channel, string payload = "")
+    {
         Inbox.Enqueue((channel, payload));
+        Arrived?.Invoke();
+    }
+
+    /// <summary>Messages are waiting for <see cref="Dispatch" />.</summary>
+    public static bool HasPending => !Inbox.IsEmpty;
+
+    /// <summary>
+    ///     Called on the sending thread whenever a message is queued — the host's hook for waking
+    ///     a sleeping frame loop. Must be cheap and thread-safe.
+    /// </summary>
+    public static Action? Arrived;
 
     /// <summary>
     ///     Deliver everything the platform sent since the last call, on the calling thread. The app
@@ -569,6 +581,7 @@ public static class PlatformChannel
                 ? string.Empty
                 : Encoding.UTF8.GetString(bytes: payload, byteCount: (int)payloadLen);
             Inbox.Enqueue((channel, body));
+            Arrived?.Invoke();
         }
         catch
         {

@@ -16,6 +16,19 @@ internal static class Program
 {
     private static int Main(string[] args)
     {
+        try
+        {
+            return Run(args);
+        }
+        catch (ProbeFailedException failed)
+        {
+            Console.Error.WriteLine($"probe failed: {failed.Message}");
+            return 2;
+        }
+    }
+
+    private static int Run(string[] args)
+    {
         string probe = args.Length > 0 ? args[0].ToLowerInvariant() : "all";
         string[] rest = args.Length > 1 ? args[1..] : [];
 

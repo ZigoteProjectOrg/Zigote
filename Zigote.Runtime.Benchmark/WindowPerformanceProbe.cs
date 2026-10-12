@@ -52,6 +52,7 @@ internal static class WindowPerformanceProbe
             acquire = encode = present = null;
         }
 
+        long readyStart = Stopwatch.GetTimestamp();
         long dropsSeen = 0;
         void Drops(string section)
         {
@@ -61,7 +62,6 @@ internal static class WindowPerformanceProbe
 
         // A successful FrameEnd can still mean the surface was unavailable. Require evidence
         // that the main-window persistent scene texture was actually allocated before timing.
-        long readyStart = Stopwatch.GetTimestamp();
         while (app.Engine.GetEngineStats().GpuTextureMemory <= initialTextureBytes)
         {
             app.RequestPaint();
@@ -74,6 +74,23 @@ internal static class WindowPerformanceProbe
         Split("window.full_repaint", () =>
             report.Measure("window.full_repaint", 120, 240, Frame, app.RequestPaint));
         report.Measure("window.idle_wait", 20, 120, Frame);
+        // Idle cost: nothing changes for three seconds. Wakeups and CPU are what an idle app
+        // costs the battery; frame time here is intentional sleep.
+        {
+            using var self = Process.GetCurrentProcess();
+            for (int i = 0; i < 30; i++) app.Frame(); // settle
+            self.Refresh();
+            var cpuBefore = self.TotalProcessorTime;
+            long idleStart = Stopwatch.GetTimestamp();
+            int wakeups = 0;
+            while (Stopwatch.GetElapsedTime(idleStart).TotalSeconds < 3) { app.Frame(); wakeups++; }
+            double seconds = Stopwatch.GetElapsedTime(idleStart).TotalSeconds;
+            self.Refresh();
+            double cpuMs = (self.TotalProcessorTime - cpuBefore).TotalMilliseconds;
+            report.Add("window.idle.wakeups_per_second", "1/s", [wakeups / seconds]);
+            report.Add("window.idle.cpu_percent_of_one_core", "%", [cpuMs / (seconds * 10)]);
+        }
+
         int frame = 0;
         report.Measure("window.warm_scroll", 120, 240, Frame,
             () => list.OffsetY = (frame++ % 64) * 12);
@@ -192,7 +209,7 @@ internal static class WindowPerformanceProbe
             app.Frame(); // ensure every delivered texture has been submitted at least once
             Zigote.Core.Engine.ZigoteEngine.GetImageStats(out int resident, out long cpuBytes, out long gpuBytes);
             PerformanceReport.Require(gpuBytes >= (long)count * dimension * dimension * 4,
-                $"Images delivered but not all uploaded: count={resident}, cpu={cpuBytes}, gpu={gpuBytes}.");
+                $"Images delivered but not all uploaded: count={resident}, cpu={cpuBytes}, gpu={gpuBytes}, dropped={app.DroppedFrames}.");
             report.Add("images.64x512.end_to_end", "ms", [Stopwatch.GetElapsedTime(start).TotalMilliseconds]);
             report.Add("images.64x512.frames", "ms", frameTimes.ToArray());
             report.Add("images.64x512.ui_alloc", "bytes", frameAllocations.ToArray());

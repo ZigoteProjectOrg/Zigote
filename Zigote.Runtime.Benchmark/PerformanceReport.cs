@@ -65,7 +65,7 @@ internal sealed class PerformanceReport(string mode)
 
     public static void Require(bool condition, string message)
     {
-        if (!condition) throw new InvalidOperationException(message);
+        if (!condition) throw new ProbeFailedException(message);
     }
 
     /// <summary>Injected callback service time, not an estimate of any application callback.</summary>
@@ -75,3 +75,9 @@ internal sealed class PerformanceReport(string mode)
         while (Stopwatch.GetTimestamp() < end) Thread.SpinWait(4);
     }
 }
+
+/// <summary>
+///     A probe's workload check did not hold. Caught in <c>Main</c> and turned into a message and a
+///     nonzero exit code: left unhandled it aborts the process, which the OS files as a crash.
+/// </summary>
+internal sealed class ProbeFailedException(string message) : Exception(message);

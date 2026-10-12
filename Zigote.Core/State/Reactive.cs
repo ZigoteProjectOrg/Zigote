@@ -706,6 +706,14 @@ public static class Reactive
     /// </summary>
     public static bool HasPendingDeferred => Volatile.Read(ref _deferredCount) > 0;
 
+    /// <summary>
+    ///     Called on the writing thread when the first <see cref="EffectAffinity.Deferred" /> effect
+    ///     is parked — the host's hook for waking a sleeping frame loop so
+    ///     <see cref="DrainDeferred" /> runs promptly. Invoked under the graph lock: it must be cheap,
+    ///     thread-safe, and must not read or write signals.
+    /// </summary>
+    public static Action? DeferredQueued;
+
     /// <summary>Set for the duration of a reaction body; restores the previous value (bodies nest).</summary>
     internal static bool EnterReaction()
     {
@@ -875,6 +883,9 @@ public static class Reactive
                 e.QueuedDeferred = true;
                 Deferred.Add(e);
                 Volatile.Write(location: ref _deferredCount, value: Deferred.Count);
+                // Tell a sleeping host there is something to drain. Under the graph lock, so the
+                // hook must not touch the graph — a flag check and an event push is the contract.
+                if (Deferred.Count == 1) DeferredQueued?.Invoke();
             }
 
             return;

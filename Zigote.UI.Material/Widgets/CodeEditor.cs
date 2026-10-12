@@ -208,6 +208,9 @@ public sealed class CodeEditor : Widget, ITextInputClient
     // loop can stop repainting it every frame (see App's focus repaint gate / ITextInputClient).
     public bool WantsCaretBlink => Focused && !ReadOnly;
 
+    // A drag holds the caret solid, but its pointer events repaint the editor anyway.
+    public float? CaretBlinkBase => 0f;
+
     public override MouseCursor? GetCursor(Offset point) => MouseCursor.Text;
 
     public override void DescribeSemantics(SemanticsConfiguration config)
@@ -1245,7 +1248,7 @@ public sealed class CodeEditor : Widget, ITextInputClient
         if (Focused && !ReadOnly)
         {
             float time = App.Active?.Time ?? 0f;
-            if (time % 1.06f < 0.6f || _isDragging)
+            if (CaretBlink.Shown(time: time, blinkBase: 0f) || _isDragging)
             {
                 int caretRow = RowForCaret(line: _caretLine, col: _caretCol);
                 float cx = TextLeft - _scrollX + ColToX(line: _caretLine, col: _caretCol);

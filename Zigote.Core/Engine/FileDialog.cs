@@ -238,6 +238,9 @@ public static class FileDialog
     ///     (on the calling thread). Zigote.UI's App calls this every frame — only hosts that run
     ///     their own loop without App need to call it themselves.
     /// </summary>
+    /// <summary>A dialog is open or queued, so <see cref="Pump" /> must keep being called.</summary>
+    public static bool IsBusy => _active is not null || Pending.Count > 0;
+
     public static void Pump()
     {
         // Whoever pumps is the UI thread, by definition: this is where a completed dialog's task is

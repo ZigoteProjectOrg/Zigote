@@ -1518,6 +1518,12 @@ public sealed unsafe class ZigoteEngine : IDisposable
         if (!_disposed) NativeEngine.AudioUpdate(dt: dt);
     }
 
+    /// <summary>
+    ///     Whether a fire-and-forget one-shot is still sounding, and so still needs
+    ///     <see cref="AudioUpdate" /> every frame to be silenced on time.
+    /// </summary>
+    public bool AudioHasActiveOneShots() => !_disposed && NativeEngine.AudioHasActiveOneshots();
+
     /// <summary>Set the spatial listener pose; every spatialised sound is panned + attenuated against it.</summary>
     public void AudioSetListener(Vec3 position, Vec3 forward, Vec3 up)
     {

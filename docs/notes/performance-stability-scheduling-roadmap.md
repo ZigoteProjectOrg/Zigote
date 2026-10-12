@@ -450,6 +450,24 @@ window-probe runs on the baseline machine after the changes; they are not a re-a
 | P5 | Decision per the gate: **keep the synchronous renderer.** | Across three runs a 120 Hz frame was 6.1–8.0 ms (p50) blocked acquiring the swapchain image, 0.2–1.3 ms (p50; p99 ≤ 2.1 ms) of native encode+submit, under 1 ms of managed layout/paint, and ~0.02 ms in present. CPU critical path p99 ≈ 3 ms, about 37% of the interval against a 75% target. No CPU bottleneck exists for a render thread to remove on this workload. | Revisit with a workload whose encode or paint cost approaches the interval (editor with 3D viewport, 4K, mobile). The 3D composite path is not covered by the timing split. |
 | P6 | Nothing, by its own rule: no trace justifies it. | Same split as P5. | — |
 
+**Idle energy (2026-10-13).** An idle app used to wake once per display frame to find nothing to
+do. After about a quarter second of idleness the frame loop now sleeps up to `App.IdleWaitMs`
+(default 100 ms). OS input ends the sleep at once, and so does every cross-thread hand-off, each
+of which now wakes the loop explicitly through `App.WakeIfWaiting`: `Post`, `PostAfterFrame`,
+cross-thread layout invalidation, `Background` idle results, deferred reactive effects
+(`Reactive.DeferredQueued`) and platform messages (`PlatformChannel.Arrived`). The loop raises its
+waiting flag before its last check for such work, which closes the window where work could land
+unseen. It stays at frame cadence while something is serviced by polling: a native file dialog, a
+held touch, a sounding one-shot, secondary windows. A focused text field with a standard caret
+(`ITextInputClient.CaretBlinkBase`) is repainted on the two blink edges per cycle instead of every
+frame, and the idle sleep is cut short to land on the next edge.
+
+Measured on the baseline machine with the window probe: idle wakeups 116/s → about 10/s, idle CPU
+2.35% → 0.25–0.45% of one core (target: under 1%). In the widget gallery with a text field
+focused the process showed 0.0% CPU and the caret still blinked. Not measured: battery drain,
+other platforms, or anything that polls from `FrameTick` — such code now runs about ten times a
+second while idle and must request frames if it needs more.
+
 Turning vsync off did not unpace frames on this Metal configuration (frames stayed ~8.3 ms), so
 the native split, not an unpaced run, is the evidence for CPU cost. The window probe also needs the
 display awake: with it asleep every frame is a skipped acquire and the readiness check fails.
