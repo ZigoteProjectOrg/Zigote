@@ -1411,9 +1411,10 @@ public partial class App : IDisposable
         // Advance tooltip timer
         AdvanceTooltip(DeltaTime);
 
-        // Advance and prune finished snackbars (transient — repaint while any is showing). Snackbars
-        // are overlays, so only the overlay layer needs re-walking.
-        if (_snackbars.Count > 0) _repaint.MarkOverlay();
+        // Advance and prune finished snackbars. A toast only changes while it slides in and fades
+        // out; for the seconds in between it is a static picture, so the overlay is repainted
+        // only while one is animating and the idle wait is cut short to catch the next fade-out.
+        _snackbarDueInMs = 0;
         for (int i = _snackbars.Count - 1; i >= 0; i--)
         {
             var s = _snackbars[i];
@@ -1422,6 +1423,13 @@ public partial class App : IDisposable
             {
                 PopOverlay(s);
                 _snackbars.RemoveAt(i);
+            }
+            else if (s.Animating)
+                _repaint.MarkOverlay();
+            else
+            {
+                int dueMs = Math.Max(val1: 1, val2: (int)MathF.Ceiling(s.RestingFor * 1000f) + 1);
+                _snackbarDueInMs = _snackbarDueInMs == 0 ? dueMs : Math.Min(val1: _snackbarDueInMs, val2: dueMs);
             }
         }
 

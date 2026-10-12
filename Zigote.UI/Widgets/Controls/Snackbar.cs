@@ -54,6 +54,19 @@ public sealed class Snackbar(
 
     public void Tick(float dt) => Remaining = MathF.Max(x: 0f, y: Remaining - dt);
 
+    // Set by Paint once the toast has been drawn fully appeared and not yet dismissing.
+    private bool _settledPainted;
+
+    /// <summary>
+    ///     Whether the toast still changes from frame to frame: sliding in, fading out, or not yet
+    ///     drawn in its resting state. Between those it is a static picture and needs no repaint.
+    /// </summary>
+    public bool Animating =>
+        !_settledPainted || Duration - Remaining < AppearSeconds || Remaining < DismissSeconds;
+
+    /// <summary>Seconds until the fade-out begins — when a resting toast next needs frames.</summary>
+    public float RestingFor => MathF.Max(x: 0f, y: Remaining - DismissSeconds);
+
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
@@ -88,6 +101,7 @@ public sealed class Snackbar(
         float dismissT = Remaining < DismissSeconds ? Remaining / DismissSeconds : 1f;
         float alpha = appearT * dismissT;
         float yOff = (1f - appearT) * 24f;
+        _settledPainted = appearT >= 1f && dismissT >= 1f;
 
         var sRect = new Rect(
             x: surface.X,

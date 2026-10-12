@@ -33,6 +33,7 @@ public partial class App
     private Widget? _caretOwner;
     private int _caretChangeInMs; // 0 = no blinking caret to wake for
     private int _tooltipDueInMs; // 0 = no tooltip waiting out its hover delay
+    private int _snackbarDueInMs; // 0 = no resting snackbar waiting to fade out
 
     /// <summary>Work handed over from another thread that an idle wait must not sleep on.</summary>
     private bool HasCrossThreadWork() =>
@@ -56,6 +57,7 @@ public partial class App
         int wait = IdleWaitMs;
         if (_caretChangeInMs > 0) wait = Math.Min(val1: wait, val2: _caretChangeInMs);
         if (_tooltipDueInMs > 0) wait = Math.Min(val1: wait, val2: _tooltipDueInMs);
+        if (_snackbarDueInMs > 0) wait = Math.Min(val1: wait, val2: _snackbarDueInMs);
         return wait;
     }
 

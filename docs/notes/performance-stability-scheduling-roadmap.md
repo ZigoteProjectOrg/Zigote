@@ -480,6 +480,11 @@ frames of about 0.5 ms each whose acquires returned immediately. That is the win
 appearing — images handed out unpaced, then one long block while the window server catches up —
 not application work. The probe now waits for 30 consecutive paced acquires before measuring.
 
+- **Snackbars.** A toast animates for 0.18 s coming in and 0.3 s going out, but the overlay was
+  repainted every frame for its whole life (about 300 extra frames for a default 3 s toast at
+  120 Hz). It is now repainted only while animating, and the idle wait ends when the fade-out is
+  due. Checked in the widget gallery: slides in, rests, and is gone on time.
+
 The frame pacer used under an explicit FPS cap was measured too (sleep to 2 ms before the deadline,
 then spin). A two-stage sleep gave no consistent CPU saving and run-to-run variance was larger than
 the difference, so it is unchanged.
