@@ -474,6 +474,12 @@ Two more cases of frames produced for nobody (2026-10-13, second pass):
   only to keep the loop turning. Nothing is repainted now; the idle wait ends when the bubble is
   due. Checked in the widget gallery: the tooltip still appears.
 
+**The full-repaint outlier is assigned.** The ~295 ms frame in the first baseline reappeared once
+(281 ms) with the native split on: 244 ms of it was a single swapchain acquire, preceded by 176
+frames of about 0.5 ms each whose acquires returned immediately. That is the window still
+appearing — images handed out unpaced, then one long block while the window server catches up —
+not application work. The probe now waits for 30 consecutive paced acquires before measuring.
+
 The frame pacer used under an explicit FPS cap was measured too (sleep to 2 ms before the deadline,
 then spin). A two-stage sleep gave no consistent CPU saving and run-to-run variance was larger than
 the difference, so it is unchanged.

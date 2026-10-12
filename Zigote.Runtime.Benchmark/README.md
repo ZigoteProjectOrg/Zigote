@@ -79,6 +79,10 @@ The run ends with a partial-versus-full check: 24 partial repaints of a 48-cell 
 compared byte for byte against a forced full repaint of the retained scene texture.
 The display must be awake: an occluded or sleeping display skips every frame.
 
+Before timing, the window probe waits for 30 consecutive vsync-paced swapchain acquires
+(`settle_seconds` in the metadata): while a window is still appearing, frames run unpaced and then
+one acquire blocks for hundreds of milliseconds.
+
 A failed workload check prints `probe failed: …` and exits with code 2.
 
 These are baseline probes, not CI wall-clock assertions. Correctness checks fail on lost work,

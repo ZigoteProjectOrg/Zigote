@@ -70,6 +70,19 @@ internal static class WindowPerformanceProbe
                 $"No scene texture after five seconds; surface may be occluded/unavailable (paused={app.IsPaused}, hidden={app.Hidden}, dropped={app.DroppedFrames}).");
         }
 
+        // While a window is still appearing the swapchain hands out images without pacing (frames
+        // of ~0.5 ms), then blocks one acquire for hundreds of milliseconds as the window server
+        // catches up. That transient was the ~295 ms "full repaint" outlier in the first baseline.
+        // Wait for presentation to be paced before timing anything.
+        long settleStart = Stopwatch.GetTimestamp();
+        for (int paced = 0; paced < 30 && Stopwatch.GetElapsedTime(settleStart).TotalSeconds < 3;)
+        {
+            app.RequestPaint();
+            Frame();
+            Zigote.Core.Engine.ZigoteEngine.GetFrameTimings(out double acquireMs, out _, out _);
+            paced = acquireMs > 2 ? paced + 1 : 0;
+        }
+        report.Metadata["settle_seconds"] = Stopwatch.GetElapsedTime(settleStart).TotalSeconds.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
         Drops("startup");
         Split("window.full_repaint", () =>
             report.Measure("window.full_repaint", 120, 240, Frame, app.RequestPaint));
