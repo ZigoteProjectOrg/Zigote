@@ -42,9 +42,15 @@ public sealed class AdwSwitch : Widget
         {
             if (_value == value) return;
             _value = value;
-            // External/controlled set: snap, don't animate (a user Toggle animates instead).
-            if (value) _anim.Complete();
-            else _anim.Dismiss();
+            // On screen the knob slides, as gtk_switch_set_active does — this is the path a
+            // switch ROW's click takes. Off screen there is nobody to watch: snap.
+            if (!Mounted)
+            {
+                if (value) _anim.Complete();
+                else _anim.Dismiss();
+            }
+            else if (value) _anim.Forward();
+            else _anim.Reverse();
             MarkNeedsPaint();
         }
     }
@@ -130,18 +136,22 @@ public sealed class AdwSwitch : Widget
 
         // Off, a switch is a TROUGH (currentColor 15/20/25%), the same ladder as a scale or a
         // check — a switch is not a button and does not carry the button fill.
-        var track = _value
-            ? AdwStyle.Solid(
+        // The colour rides the knob: trough → accent over the same travel, so the track never
+        // flips ahead of the thing moving across it. Clamped — the spring overshoots, a mix can't.
+        var track = AdwPalette.Mix(
+            a: AdwStyle.Solid(
                 baseColor: _theme.Accent,
                 hovered: _hovered,
                 pressed: _pressed,
                 enabled: Enabled
-            )
-            : AdwStyle.TroughFill(
+            ),
+            b: AdwStyle.TroughFill(
                 theme: _theme,
                 hovered: _hovered && Enabled,
                 pressed: _pressed && Enabled
-            );
+            ),
+            t: Math.Clamp(value: _anim.Value, min: 0f, max: 1f)
+        );
         paint.AddRect(bounds: Bounds, color: track, radius: Radii.Capsule);
 
         // `> slider { min-width: 20px }` inside 3px of trough padding, on the knob colour every

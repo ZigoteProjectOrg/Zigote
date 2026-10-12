@@ -10,17 +10,30 @@ namespace Zigote.Tests;
 /// </summary>
 public class AdwShortcutLabelTests
 {
+    // The caps are platform-specific (macOS uses glyphs and maps <Primary> to Command), so the
+    // spelling under test is pinned rather than taken from the machine running the tests.
+    private static List<string> Parse(string accel, bool mac = false) =>
+        AdwShortcutLabel.Parse(accelerator: accel, mac: mac);
+
+    [Fact]
+    public void MacUsesGlyphsAndMapsPrimaryToCommand()
+    {
+        Assert.Equal(expected: ["⌃", "⌥", "⇧", "N"], actual: Parse("<Shift><Alt><Ctrl>n", mac: true));
+        Assert.Equal(expected: ["⌘", "S"], actual: Parse("<Primary>s", mac: true));
+        Assert.Equal(expected: ["⌃", "↩"], actual: Parse("<Ctrl>Return", mac: true));
+    }
+
     [Fact]
     public void ModifiersAreEmittedInNaturalOrderRegardlessOfHowTheyWereTyped()
     {
         // Ctrl, Alt, Shift, Super — whatever order the accelerator lists them in.
         Assert.Equal(
-            expected: AdwShortcutLabel.Parse("<Control><Shift>n"),
-            actual: AdwShortcutLabel.Parse("<Shift><Control>n")
+            expected: Parse("<Control><Shift>n"),
+            actual: Parse("<Shift><Control>n")
         );
         Assert.Equal(
             expected: ["Ctrl", "Alt", "Shift", "N"],
-            actual: AdwShortcutLabel.Parse("<Shift><Alt><Ctrl>n")
+            actual: Parse("<Shift><Alt><Ctrl>n")
         );
     }
 
@@ -30,37 +43,37 @@ public class AdwShortcutLabelTests
     [InlineData("<Primary>s", "Ctrl", "S")]
     public void ControlSpellingsAreEquivalent(string accel, string mod, string key) => Assert.Equal(
         expected: [mod, key],
-        actual: AdwShortcutLabel.Parse(accel)
+        actual: Parse(accel)
     );
 
     [Fact]
     public void NamedKeysGetTheirPrintableCap()
     {
-        Assert.Equal(expected: ["Ctrl", "Enter"], actual: AdwShortcutLabel.Parse("<Ctrl>Return"));
-        Assert.Equal(expected: ["←"], actual: AdwShortcutLabel.Parse("Left"));
-        Assert.Equal(expected: ["Ctrl", "+"], actual: AdwShortcutLabel.Parse("<Ctrl>plus"));
+        Assert.Equal(expected: ["Ctrl", "Enter"], actual: Parse("<Ctrl>Return"));
+        Assert.Equal(expected: ["←"], actual: Parse("Left"));
+        Assert.Equal(expected: ["Ctrl", "+"], actual: Parse("<Ctrl>plus"));
         // F-keys keep their spelling; a bare letter is capitalised.
-        Assert.Equal(expected: ["F11"], actual: AdwShortcutLabel.Parse("F11"));
-        Assert.Equal(expected: ["A"], actual: AdwShortcutLabel.Parse("a"));
+        Assert.Equal(expected: ["F11"], actual: Parse("F11"));
+        Assert.Equal(expected: ["A"], actual: Parse("a"));
     }
 
     [Fact]
     public void AnUnknownModifierIsDroppedRatherThanShownAsABogusCap() => Assert.Equal(
         expected: ["Ctrl", "K"],
-        actual: AdwShortcutLabel.Parse("<Hyper><Ctrl>k")
+        actual: Parse("<Hyper><Ctrl>k")
     );
 
     [Fact]
     public void AnEmptyAcceleratorParsesToNothing()
     {
-        Assert.Empty(AdwShortcutLabel.Parse(""));
-        Assert.Empty(AdwShortcutLabel.Parse("   "));
+        Assert.Empty(Parse(""));
+        Assert.Empty(Parse("   "));
     }
 
     /// <summary>A modifier-only accelerator is legal input; it must not invent a key cap.</summary>
     [Fact]
     public void ModifierOnlyAcceleratorsYieldOnlyModifiers() => Assert.Equal(
         expected: ["Ctrl"],
-        actual: AdwShortcutLabel.Parse("<Ctrl>")
+        actual: Parse("<Ctrl>")
     );
 }

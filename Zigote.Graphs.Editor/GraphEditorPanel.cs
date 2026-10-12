@@ -17,7 +17,7 @@ namespace Zigote.Graphs.Editor;
 /// </summary>
 public sealed class GraphEditorPanel : Widget
 {
-    private const float ToolbarH = 32f;
+    private const float ToolbarH = 38f;
     private const float DefaultSplitRatio = 0.75f;
     private readonly AppInstance _app;
 
@@ -31,13 +31,13 @@ public sealed class GraphEditorPanel : Widget
     private readonly Label _statusLabel;
     private readonly ThemeData _theme;
 
-    private bool _inspectorVisible = true;
+    private ToolbarButton? _inspectorButton;
     private Size _size;
 
     public GraphEditorPanel(GraphDocument graph, GraphDomainRegistry registry, ThemeData theme,
         AppInstance app,
         float inspectorWidth = 220f, Action<object?>? onCompiled = null,
-        Widget? inspectorHeader = null, bool showToolbar = true)
+        Widget? inspectorHeader = null, bool showToolbar = true, bool inspectorVisible = true)
     {
         _theme = theme;
         _app = app;
@@ -54,8 +54,8 @@ public sealed class GraphEditorPanel : Widget
         // Surface the compiled artifact to callers (e.g., apply a shader graph onto a material).
         if (onCompiled is not null)
         {
-            State.CompileChanged += () => onCompiled(State.LastCompileResult?.CompiledArtifact);
-            onCompiled(State.LastCompileResult?.CompiledArtifact); // initial value
+            State.CompileChanged += () => { if (State.LastCompileResult?.Success == true) onCompiled(State.LastCompileResult.CompiledArtifact); };
+            if (State.LastCompileResult?.Success == true) onCompiled(State.LastCompileResult.CompiledArtifact);
         }
 
 
@@ -77,6 +77,7 @@ public sealed class GraphEditorPanel : Widget
         _split = new SplitPane(theme: theme, first: _canvas, second: inspectorSide) {
             SplitRatio = DefaultSplitRatio,
             DividerW = 4f,
+            SecondVisible = inspectorVisible,
         };
 
         // A host that already has its own chrome (an app header bar, a docked panel) can drop the
@@ -92,12 +93,30 @@ public sealed class GraphEditorPanel : Widget
             }
             : _split;
 
-        _canvas.SearchRequested += (wx, wy) => _search.Show(worldX: wx, worldY: wy);
+        _canvas.SearchRequested += (wx, wy) => _search.Show(wx, wy, _canvas.SearchConnection);
+        _search.VisibilityChanged += MarkNeedsLayout;
+        _search.Closed += () => { _canvas.CancelNodeSearch(); _app.RequestFocus(_canvas); };
         _search.NodeChosen += (defId, wx, wy) =>
-            _canvas.AddNode(definitionId: defId, worldX: wx, worldY: wy);
+            _canvas.AddNodeFromSearch(defId, _search.ChosenPinId, wx, wy);
     }
 
     public GraphEditorState State { get; }
+
+    /// <summary>Controls the entire inspector, including its optional header and divider.</summary>
+    public bool InspectorVisible
+    {
+        get => _split.SecondVisible;
+        set
+        {
+            _split.SecondVisible = value;
+            if (_inspectorButton is not null)
+            {
+                _inspectorButton.Tone = value ? ToolbarTone.Primary : ToolbarTone.Default;
+                _inspectorButton.MarkNeedsPaint();
+            }
+            MarkNeedsLayout();
+        }
+    }
 
     // ── Reactive status ───────────────────────────────────────────────────────
 
@@ -122,7 +141,7 @@ public sealed class GraphEditorPanel : Widget
         {
             int errCount =
                 result.Diagnostics.Count(d => d.Severity == GraphDiagnosticSeverity.Error);
-            _statusLabel.Text = $"✗ {errCount} error(s)";
+            _statusLabel.Text = result.Diagnostics.FirstOrDefault(d => d.Severity == GraphDiagnosticSeverity.Error)?.Message ?? $"{errCount} errors";
             _statusLabel.Color = _theme.Error;
         }
     }
@@ -139,22 +158,8 @@ public sealed class GraphEditorPanel : Widget
         var redoBtn = Tb(icon: Icons.Redo, label: null, onClick: () => State.Commands.Redo());
         var frameBtn = Tb(
             icon: Icons.Fullscreen,
-            label: "Frame",
-            onClick: () => _canvas.FrameAll()
-        );
-
-        var validateBtn = Tb(
-            icon: Icons.CheckCircle,
-            label: "Validate",
-            onClick: () =>
-            {
-                var result = State.Validate();
-                _app.ShowSnackbar(
-                    result.IsValid
-                        ? "Graph is valid"
-                        : $"{result.Diagnostics.Count(d => d.Severity == GraphDiagnosticSeverity.Error)} error(s)"
-                );
-            }
+            label: "Frame all",
+            onClick: () => { _canvas.FrameAll(); _canvas.MarkNeedsLayout(); }
         );
 
         // View toggles — a Primary tone reflects the "on" state (minimap off by default; inspector on).
@@ -177,24 +182,11 @@ public sealed class GraphEditorPanel : Widget
         );
         inspectorBtn.OnPressed = () =>
         {
-            _inspectorVisible = !_inspectorVisible;
-            _split.SplitRatio = _inspectorVisible ? DefaultSplitRatio : 1.0f;
-            _split.MarkNeedsLayout();
-            inspectorBtn.Tone = _inspectorVisible ? ToolbarTone.Primary : ToolbarTone.Default;
-            inspectorBtn.MarkNeedsPaint();
+            InspectorVisible = !InspectorVisible;
         };
 
-        string? domain = State.Registry.TryGetDomain(
-            domainId: State.Graph.DomainId,
-            domain: out var d
-        )
-            ? d?.DisplayName
-            : null;
-        var titleLabel = new Label(
-            text: $"{State.Graph.Name}  [{domain ?? State.Graph.DomainId}]",
-            fontSize: _theme.FontSizeCaption,
-            color: _theme.Hint
-        );
+        _inspectorButton = inspectorBtn;
+        inspectorBtn.Tone = InspectorVisible ? ToolbarTone.Primary : ToolbarTone.Default;
 
         return new ColoredBox(
             color: _theme.Surface,
@@ -204,21 +196,20 @@ public sealed class GraphEditorPanel : Widget
                     MainAxisAlignment = MainAxisAlignment.Start,
                     CrossAxisAlignment = CrossAxisAlignment.Center,
                     Children = {
-                        titleLabel,
-                        new SizedBox(14f),
+                        Tb(Icons.Add, "Add node", () => _canvas.OpenNodeSearch()),
+                        new SizedBox(12f),
                         undoBtn,
                         new SizedBox(2f),
                         redoBtn,
                         new SizedBox(10f),
                         frameBtn,
                         new SizedBox(2f),
-                        validateBtn,
                         new SizedBox(10f),
                         minimapBtn,
                         new SizedBox(2f),
                         inspectorBtn,
                         new SizedBox(12f),
-                        _statusLabel,
+                        new Expanded(_statusLabel),
                     },
                 }
             )
@@ -226,6 +217,13 @@ public sealed class GraphEditorPanel : Widget
     }
 
     // ── Widget lifecycle ──────────────────────────────────────────────────────
+
+    /// <summary>See <see cref="GraphCanvas.AutoFrame" />.</summary>
+    public bool AutoFrame
+    {
+        get => _canvas.AutoFrame;
+        set => _canvas.AutoFrame = value;
+    }
 
     public override Size Measure(Constraints c)
     {
@@ -247,9 +245,10 @@ public sealed class GraphEditorPanel : Widget
         if (_search.IsVisible)
         {
             var cb = _canvas.Bounds;
-            float sx = cb.X + ((cb.Width - 260f) * 0.5f);
-            float sy = cb.Y + ((cb.Height - 320f) * 0.35f);
-            _search.Measure(Constraints.Tight(width: 260f, height: 320f));
+            float width = MathF.Max(0f, MathF.Min(340f, cb.Width - 16f)), height = MathF.Max(0f, MathF.Min(420f, cb.Height - 16f));
+            float sx = Math.Clamp(_canvas.SearchAnchor.X, cb.X + 8f, MathF.Max(cb.X + 8f, cb.Right - width - 8f));
+            float sy = Math.Clamp(_canvas.SearchAnchor.Y, cb.Y + 8f, MathF.Max(cb.Y + 8f, cb.Bottom - height - 8f));
+            _search.Measure(Constraints.Tight(width, height));
             _search.Layout(new Offset(x: sx, y: sy));
         }
     }
@@ -266,12 +265,15 @@ public sealed class GraphEditorPanel : Widget
         if (_search.IsVisible)
         {
             var hit = _search.HitTest(point);
-            if (hit is not null) return hit;
-            if (!_search.Bounds.Contains(px: point.X, py: point.Y))
-                _search.Hide();
+            return hit ?? this; // modal: dismiss on a click, never on hover/hit-testing
         }
 
         return _root.HitTest(point);
+    }
+
+    public override void OnPointerDown(Offset point)
+    {
+        if (_search.IsVisible && !_search.Bounds.Contains(point.X, point.Y)) _search.Hide();
     }
 
     public override IEnumerable<Widget> GetChildren()

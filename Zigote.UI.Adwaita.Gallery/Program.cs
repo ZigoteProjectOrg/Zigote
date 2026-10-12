@@ -55,6 +55,9 @@ public static class Program
         if (ConcurrencyPage.SelfCheck() is { } concurrency)
             failures.Add($"Concurrency: {concurrency}");
 
+        foreach (string failure in GraphsPage.SelfCheck())
+            failures.Add($"Graphs: {failure}");
+
         foreach (string failure in failures) Console.Error.WriteLine($"FAIL {failure}");
         Console.WriteLine(
             failures.Count == 0
@@ -197,5 +200,16 @@ internal sealed class GalleryApp : AdwaitaApp
         {
             _applying = false;
         }
+    }
+
+    /// <summary>
+    ///     The inspector's <c>theme dark|light</c>: a manual choice, so it stops following the
+    ///     system and goes through the same signals as the in-app switch — the accent and every
+    ///     open window stay in step.
+    /// </summary>
+    protected override void SetDarkAppearance(bool dark)
+    {
+        FollowSystem.Value = false;
+        Dark.Value = dark;
     }
 }

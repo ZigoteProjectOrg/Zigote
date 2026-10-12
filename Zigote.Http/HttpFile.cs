@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Globalization;
 using System.Net;
 using Zigote.Http.Transport;
@@ -136,8 +137,6 @@ public sealed class HttpFile : Stream
             request = request
                 .WithHeader("Range", $"bytes={have}-")
                 .WithHeader("If-Range", validator!);
-        if (progress is not null) request = request.Progress(progress);
-
         var result = await runner.SendAsync(request, ct).ConfigureAwait(false);
         if (!result.IsOk) return HttpResult<long>.Fail(result.Error);
 
@@ -157,7 +156,31 @@ public sealed class HttpFile : Stream
                          FileAccess.Write, FileShare.None))
         {
             if (response.ContentStream is { } content)
-                await content.CopyToAsync(file, ct).ConfigureAwait(false);
+            {
+                // Reported here, not by the transport: a streamed body never passes through its
+                // buffered read, which is the only place the request's own Progress is fed. Bytes
+                // already on disk count, so a resumed download picks its bar up where it stopped.
+                long done = append ? have : 0;
+                long total = long.TryParse(response.Header("Content-Length"), NumberStyles.Integer,
+                    CultureInfo.InvariantCulture, out long rest)
+                    ? done + rest
+                    : -1;
+                byte[] buffer = ArrayPool<byte>.Shared.Rent(81920);
+                try
+                {
+                    int read;
+                    while ((read = await content.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
+                    {
+                        await file.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
+                        done += read;
+                        progress?.Report(new HttpProgress(done, total, Uploading: false));
+                    }
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(buffer);
+                }
+            }
             else
                 await file.WriteAsync(response.Body, ct).ConfigureAwait(false);
         }

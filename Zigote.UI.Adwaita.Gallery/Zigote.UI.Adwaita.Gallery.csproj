@@ -20,8 +20,12 @@
         <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
         <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
         <ProjectReference Include="..\Zigote.UI.Adwaita\Zigote.UI.Adwaita.csproj"/>
+        <ProjectReference Include="..\Zigote.Graphs.Editor\Zigote.Graphs.Editor.csproj"/>
         <!-- All network I/O in this app — the art feed and every picture — goes through one HttpRunner. -->
         <ProjectReference Include="..\Zigote.Http\Zigote.Http.csproj"/>
+        <!-- Writes NekosApiClient from the [HttpApi] interface in Art.cs. -->
+        <ProjectReference Include="..\Zigote.Http.Generators\Zigote.Http.Generators.csproj"
+                          OutputItemType="Analyzer" ReferenceOutputAssembly="false"/>
     </ItemGroup>
 
     <!-- No <ZigoteAsset> items: this gallery draws everything from widgets and the bundled fonts. An

@@ -82,7 +82,14 @@ public sealed class EventPool
     }
 
     /// <summary>Rent (or grow) a <see cref="ScrollEvent" /> and overwrite it with the given values.</summary>
-    public ScrollEvent RentScroll(float x, float y, float scrollX, float scrollY, uint windowId)
+    public ScrollEvent RentScroll(
+        float x,
+        float y,
+        float scrollX,
+        float scrollY,
+        uint windowId,
+        bool precise = false
+    )
     {
         ScrollEvent e;
         if (_scrollNext < _scroll.Count)
@@ -99,7 +106,8 @@ public sealed class EventPool
             y: y,
             scrollX: scrollX,
             scrollY: scrollY,
-            windowId: windowId
+            windowId: windowId,
+            precise: precise
         );
         return e;
     }

@@ -27,31 +27,13 @@ public static class AdwPalette
     public static AdwColors For(ThemeData theme) => theme.IsDark ? Dark : Light;
 
     /// <summary>
-    ///     The stylesheet's alphas assume sRGB-space compositing, but the renderer decodes colours
-    ///     to linear before blending (see <c>srgb_decode</c> in shape_shader_source.wgsl), so a
-    ///     literal <c>alpha(black, .08)</c> lands nowhere near the GNOME result — in dark mode
-    ///     white@.10 renders as #5e5e60 instead of #383839. This solves for the alpha that
-    ///     reproduces the stylesheet's colour once blended in linear space over
-    ///     <paramref name="over" />. Do not "simplify" the results back to the CSS numbers; the
-    ///     pre-composited foregrounds below exist for the same reason.
+    ///     The stylesheet's alphas assume sRGB-space compositing while the renderer blends in linear
+    ///     space. The shape shader now compensates (<c>perceptual_alpha</c> in common_color.wgsl),
+    ///     so the CSS alpha is passed through as written. This used to solve a corrected alpha
+    ///     against <paramref name="over" />; doing that again would correct twice, and the fills come
+    ///     out far too heavy. <paramref name="over" /> is unused and only documents the call site.
     /// </summary>
-    private static Color Overlay(Color tint, float alpha, Color over)
-    {
-        static float Lin(float c) => MathF.Pow(x: MathF.Max(x: c, y: 0f), y: 2.2f);
-
-        // Per channel: solve (1-a')*bg_lin + a'*fg_lin = lin((1-a)*bg + a*fg).
-        static float Solve(float fg, float bg, float a)
-        {
-            float fgL = Lin(fg), bgL = Lin(bg);
-            if (MathF.Abs(fgL - bgL) < 1e-6f) return a;
-            return (Lin(((1f - a) * bg) + (a * fg)) - bgL) / (fgL - bgL);
-        }
-
-        float solved = (Solve(fg: tint.R, bg: over.R, a: alpha)
-                        + Solve(fg: tint.G, bg: over.G, a: alpha)
-                        + Solve(fg: tint.B, bg: over.B, a: alpha)) / 3f;
-        return tint.WithAlpha(Math.Clamp(value: solved, min: 0f, max: 1f));
-    }
+    private static Color Overlay(Color tint, float alpha, Color over) => tint.WithAlpha(alpha);
 
     /// <summary>
     ///     The stylesheet's

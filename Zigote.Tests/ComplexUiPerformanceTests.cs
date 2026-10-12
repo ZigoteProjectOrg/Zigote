@@ -238,9 +238,11 @@ public class ComplexUiPerformanceTests
         for (int i = 0; i < 200; i++) Frame(root: root, paint: paint, c: viewport);
 
         const int frames = 300;
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < frames; i++) Frame(root: root, paint: paint, c: viewport);
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        long measured = AllocGuard.Measure(() =>
+        {
+            for (int i = 0; i < frames; i++) Frame(root: root, paint: paint, c: viewport);
+        });
+        long allocated = measured;
         double perFrame = allocated / (double)frames;
 
         _output.WriteLine("Realistic settings page — steady-state managed allocation");

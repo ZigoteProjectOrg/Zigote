@@ -131,6 +131,13 @@ public partial class App
                 LayoutTree();
 
             _pendingRelayout = false;
+            // Synthetic events (the inspect socket's `@ID input …`) join this window's routed batch.
+            if (_injected.Count > 0)
+            {
+                _events.AddRange(_injected);
+                _injected.Clear();
+            }
+
             bool discrete = false;
             foreach (var evt in _events)
             {

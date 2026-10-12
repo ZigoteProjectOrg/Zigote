@@ -529,14 +529,15 @@ public class ChartsTests
         }
 
         const int rounds = 100;
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < rounds; i++)
+        long measured = AllocGuard.Measure(() =>
         {
-            chart.InvalidateData();
-            LaidOut(chart);
-        }
-
-        long perRound = (GC.GetAllocatedBytesForCurrentThread() - before) / rounds;
+            for (int i = 0; i < rounds; i++)
+            {
+                chart.InvalidateData();
+                LaidOut(chart);
+            }
+        });
+        long perRound = measured / rounds;
         Assert.True(
             condition: perRound < 8_000,
             userMessage:
@@ -1040,14 +1041,15 @@ public class ChartsTests
         Assert.True(paint.Count > 10);
 
         const int frames = 300;
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < frames; i++)
+        long measured = AllocGuard.Measure(() =>
         {
-            paint.Clear();
-            chart.Paint(paint);
-        }
-
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            for (int i = 0; i < frames; i++)
+            {
+                paint.Clear();
+                chart.Paint(paint);
+            }
+        });
+        long allocated = measured;
         Assert.True(
             condition: allocated == 0,
             userMessage: $"{kind} chart paint allocated {allocated} B over {frames} frames " +
@@ -1357,19 +1359,20 @@ public class ChartsTests
         }
 
         const int iterations = 200;
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < iterations; i++)
+        long measured = AllocGuard.Measure(() =>
         {
-            StackCompute.Compute(
-                points: points,
-                seriesOrder: order,
-                mode: ChartStacking.Normalized,
-                result: result,
-                scratch: scratch
-            );
-        }
-
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            for (int i = 0; i < iterations; i++)
+            {
+                StackCompute.Compute(
+                    points: points,
+                    seriesOrder: order,
+                    mode: ChartStacking.Normalized,
+                    result: result,
+                    scratch: scratch
+                );
+            }
+        });
+        long allocated = measured;
 
         Assert.True(
             condition: allocated == 0,

@@ -68,9 +68,11 @@ public sealed partial class LiquidGlassPage
                     Checked = on,
                     SemanticsLabel = $"Wallpaper by {art.Artist}",
                     FocusRadius = 12f,
+                    FocusSquircle = true,
                     OnPressed = () => _wallpaper.Value = index,
                     Child = new DecoratedBox {
                         Radius = 12f,
+                        Squircle = true,
                         // Transparent, not a hairline, when off: the ring marks the selection,
                         // and a CardShade hairline is invisible over the dark page anyway.
                         BorderColor = on ? _theme.Accent : Color.Rgba(r: 0, g: 0, b: 0, a: 0f),
@@ -83,7 +85,7 @@ public sealed partial class LiquidGlassPage
                                     size: ThumbSize,
                                     child: Backdrop(art: art, radius: 10f, maxDecode: 96)
                                 )
-                            )
+                            ) { Squircle = true }
                         ),
                     },
                 }

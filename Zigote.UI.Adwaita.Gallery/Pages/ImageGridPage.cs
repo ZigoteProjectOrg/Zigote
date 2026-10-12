@@ -16,6 +16,12 @@ namespace AdwaitaGallery.Pages;
 ///         restarts, while the random feed listing is honestly refetched once per run.
 ///     </para>
 ///     <para>
+///         Hovering a tile raises two glass buttons, and the viewer's toolbar carries the same
+///         pair: <b>copy</b> puts the original file on the clipboard straight from that disk cache,
+///         and <b>save</b> is the runner's resumable download into the Downloads folder, with its
+///         progress on the button.
+///     </para>
+///     <para>
 ///         The page's chrome — every credit chip, the fetch pill, the status toolbar the grid
 ///         scrolls under — is <b>Liquid Glass</b> (<see cref="LiquidPane" />), which also makes
 ///         this the engine's glass stress page: each pane is a render-pass break plus a
@@ -73,7 +79,7 @@ public sealed class ImageGridPage : ComposedWidget
             mainAxisSpacing: Spacing.Md,
             crossAxisSpacing: Spacing.Md,
             childAspectRatio:
-            0.72 // the sources are portraits, so portrait cells waste the least of each tile
+            0.72 // the sources are portraits, so portrait cells crop the least off each tile
         );
         _grid.Padding = EdgeInsets.Only(bottom: DockClearance);
     }
@@ -196,11 +202,9 @@ public sealed class ImageGridPage : ComposedWidget
         {
             if (!_urls.Add(piece.Url)) continue;
             var art = piece;
-            _items.Add(
-                new ArtImage(piece: art, maxDim: TileMaxDim) {
-                    OnPressed = () => ArtViewer.Show(art),
-                }
-            );
+            var tile = new ArtImage(piece: art, maxDim: TileMaxDim, cover: true);
+            tile.OnPressed = () => ArtViewer.Show(piece: art, from: tile);
+            _items.Add(tile);
         }
 
         _loading.Value = false;
@@ -298,7 +302,7 @@ public sealed class ImageGridPage : ComposedWidget
             ? "Scroll to the bottom to fetch the next page"
             : _page >= ArtSource.MaxPages
                 ? $"End of the feed — {fromDisk} answers came straight off the disk"
-                : $"Click a picture to zoom it · {fromDisk} answers came straight off the disk";
+                : $"Open a picture to zoom, copy or save it · {fromDisk} answers came straight off the disk";
 
         // Content colour follows the pane's glass family (see LiquidPane.OnGlass): what is behind
         // this toolbar is whatever the feed served, and the pane's adaptive scrim keeps that

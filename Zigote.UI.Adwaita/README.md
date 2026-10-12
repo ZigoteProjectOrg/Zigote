@@ -294,7 +294,11 @@ So the kit's widgets set a `MotionSpec` rather than a duration:
 | `AdwMotion.Reveal` | 0.36 s · 1.0 | `AdwBanner`, `AdwExpanderRow`'s body, `AdwOverlaySplitView`, `AdwNavigationView` — surfaces that change size or slide. Critically damped: the thing that would overshoot is a layout edge |
 | `AdwMotion.Value` | 0.45 s · 1.0 | `AdwProgressBar` — a value settling, so it reads as the number moving rather than the widget animating |
 
-Four consequences worth knowing:
+Five consequences worth knowing:
+
+- **`AdwSwitch` slides however it is flipped.** Setting `Value` on a mounted switch — which is what
+  an `AdwSwitchRow` click does — animates like a direct tap, and the track colour mixes from trough
+  to accent along the knob's travel instead of flipping ahead of it. Only an unmounted switch snaps.
 
 - **`AdwToggleGroup`'s selection slides between segments** instead of jumping — one surface with a
   moving marker, the way libadwaita 1.7 draws it. It reads the laid-out segment bounds rather than

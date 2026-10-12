@@ -1,6 +1,6 @@
 # Zigote.UI.Adwaita.Gallery
 
-The reference app for [`Zigote.UI.Adwaita`](../Zigote.UI.Adwaita/README.md) — **37 pages**, one per widget family, every
+The reference app for [`Zigote.UI.Adwaita`](../Zigote.UI.Adwaita/README.md) — **40 pages**, one per widget family, every
 one of them live. No screenshots, no mock rows: what you see is the widget doing the thing.
 
 ```sh
@@ -45,10 +45,30 @@ All use the platform command modifier — ⌘ on macOS, Ctrl elsewhere.
 | **Feedback**   | Banners · Toasts · Alert Dialogs · Spinner · Status Pages · Avatar                                                      |
 | **Layout**     | Clamp · Wrap Box · Adaptive                                                                                             |
 | **Style**      | Liquid Glass · Style Classes · Typography · Colors · Animations                                                                        |
-| **Zigote**     | Reactivity · Concurrency · Drag and Drop                                                                                |
+| **Zigote**     | Graphs · Reactivity · Concurrency · Drag and Drop                                                                                |
 
 The last section is the framework rather than the design system: signals and computed values driving a live order total,
 background threads writing signals under a per-frame delivery budget, and draggable payloads with drop targets.
+
+## Graphs
+
+Open **Zigote → Graphs**, or launch directly:
+
+```sh
+ZIGOTE_GALLERY_PAGE=Graphs dotnet run --project Zigote.UI.Adwaita.Gallery
+```
+
+<img src="Screenshots/graphs.png" alt="Graphs playground with typed cables and live preview" width="820">
+
+The full-height editor uses `Zigote.Graphs.Editor` with a standalone demo domain; it does not depend on Palco or audio hardware.
+
+- **Playground:** numeric, text, boolean, integer and enum controls feed a live Preview widget. Colored sockets distinguish numbers, strings and booleans. The Switch starts collapsed; Math's optional B input demonstrates a default value.
+- **Repair wiring:** a deliberately invalid string-to-number cable and a missing required input. Follow the on-screen instructions to restore the preview. Invalid drag targets also reject duplicates, occupied inputs and feedback loops with an explanation.
+- **Large graph:** 29 nodes for zoom, pan, frame-all, minimap, resizing and group selection.
+
+Drop an input or output cable onto empty canvas to search compatible nodes and add-and-connect in one undo step. **Shift+A / Space** opens general search; type, select with **↑/↓**, press **Enter**, or cancel with **Escape**. The **How to use** panel covers inline editing, fine adjustments, collapsing, context actions, deletion, selection, navigation and undo/redo. Inspector and Minimap are available in the editor toolbar.
+
+Switching or resetting examples discards their edits. Theme changes preserve the graph document; editor history restarts when the themed editor is rebuilt. The gallery's `--self-test` also checks evaluation, invalid wiring, repair/undo/redo and feedback rejection.
 
 ## Appearance
 

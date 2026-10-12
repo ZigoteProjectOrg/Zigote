@@ -1,6 +1,7 @@
 using Zigote.Core;
 using Zigote.Core.Paint;
 using Zigote.UI.Host;
+using Zigote.UI.TextShaping;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 
@@ -45,7 +46,7 @@ public sealed class DockLayout : Widget
     private const float DragStart = 6f;
     private const float ArrowSz = 26f;
     private const float MinPanelPx = 60f;
-    private const float TabW = 104f;
+    private const float TabMaxW = 200f;
     private const float CloseSz = 14f;
     private const float HdrBtn = 16f; // collapse / maximize header button size
     private const float CollapsedW = 30f; // width of a region collapsed inside a horizontal split
@@ -280,6 +281,9 @@ public sealed class DockLayout : Widget
         leaf.PanelIds.Add(panelId);
         leaf.ActiveIndex = leaf.PanelIds.Count - 1;
         leaf.Collapsed = false;
+        // Another leaf maximized would keep the just-opened panel hidden behind it.
+        if (_maximizedPanelId != null && !leaf.PanelIds.Contains(_maximizedPanelId))
+            _maximizedPanelId = null;
         RequestLayout();
         LayoutChanged?.Invoke();
     }
@@ -466,26 +470,50 @@ public sealed class DockLayout : Widget
 
     // ── Tab geometry ──────────────────────────────────────────────────────────
 
-    private static IEnumerable<(string PanelId, Rect Tab, int Index)> TabRects(DockLeaf leaf,
-        Rect bounds)
+    /// <summary>
+    ///     Tabs sized to their titles (plus the close slot), not to a fixed width — a short strip
+    ///     no longer truncates "Settings" while half of it sits empty. When the titles do not all
+    ///     fit, every tab shrinks by the same factor and the painter elides.
+    /// </summary>
+    private List<(string PanelId, Rect Tab, int Index)> TabRects(DockLeaf leaf, Rect bounds)
     {
         float avail = Math.Max(
             val1: 40f,
             val2: bounds.Width - 46f
         ); // leave room for the collapse + maximize buttons
-        float w = MathF.Min(
-            x: TabW,
-            y: leaf.PanelIds.Count > 0 ? avail / leaf.PanelIds.Count : avail
-        );
-        for (int i = 0; i < leaf.PanelIds.Count; i++)
+        float fs = _theme.FontSizeCaption - 1f;
+        var widths = new float[leaf.PanelIds.Count];
+        float total = 0f;
+        for (int i = 0; i < widths.Length; i++)
         {
-            yield return (leaf.PanelIds[i], new Rect(
-                x: bounds.X + (i * w),
+            string title = _panels.GetValueOrDefault(leaf.PanelIds[i])?.Title ?? leaf.PanelIds[i];
+            widths[i] = Math.Clamp(
+                // Only the active tab keeps its close slot at rest; the others show × on hover
+                // (over the elided tail), so they do not pay for it in width.
+                value: TextMeasure.Width(text: title, fontSize: fs) + 14f +
+                       (i == leaf.ActiveIndex ? CloseSz + 8f : 6f),
+                min: 36f,
+                max: TabMaxW
+            );
+            total += widths[i];
+        }
+
+        float scale = total > avail ? avail / total : 1f;
+        List<(string, Rect, int)> tabs = new(widths.Length);
+        float x = bounds.X;
+        for (int i = 0; i < widths.Length; i++)
+        {
+            float w = widths[i] * scale;
+            tabs.Add((leaf.PanelIds[i], new Rect(
+                x: x,
                 y: bounds.Y,
                 width: w,
                 height: HeaderH
-            ), i);
+            ), i));
+            x += w;
         }
+
+        return tabs;
     }
 
     private static Rect CloseRect(Rect tab)
@@ -616,8 +644,18 @@ public sealed class DockLayout : Widget
             bool dirty = dp?.Dirty == true;
             // Reserve room for whatever sits in the trailing slot (close × or the unsaved dot).
             bool reserveRight = showClose || dirty;
-            int maxChars = (int)((tab.Width - 16f - (reserveRight ? CloseSz : 0f)) / (fs * 0.52f));
-            if (title.Length > maxChars && maxChars > 1) title = title[..(maxChars - 1)] + "…";
+            // Elide by measured width: drop characters until the title (plus "…") fits the tab.
+            float titleMax = tab.Width - 16f - (reserveRight ? CloseSz : 0f);
+            if (TextMeasure.Width(text: title, fontSize: fs - 1f) > titleMax)
+            {
+                int keep = title.Length;
+                while (keep > 1 && TextMeasure.Width(
+                           text: title[..keep] + "…",
+                           fontSize: fs - 1f
+                       ) > titleMax)
+                    keep--;
+                title = title[..keep] + "…";
+            }
             // Adwaita dims unselected tab labels rather than recolouring them per hover state.
             var titleColor = isActive ? _theme.OnSurface : AdwPalette.For(_theme).DimLabel;
             paint.AddText(

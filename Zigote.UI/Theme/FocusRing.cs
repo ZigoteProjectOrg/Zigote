@@ -20,7 +20,7 @@ public static class FocusRing
     ///     phase, so the policy is window-local.
     /// </summary>
     public static void AddFocusRing(this PaintList paint, Rect bounds, float radius,
-        ThemeData theme)
+        ThemeData theme, bool squircle = false)
     {
         if (App.Active is { FocusRingVisible: false }) return;
 
@@ -35,7 +35,8 @@ public static class FocusRing
             bounds: ring,
             color: theme.FocusRing,
             radius: radius + o,
-            width: theme.FocusRingWidth
+            width: theme.FocusRingWidth,
+            squircle: squircle
         );
     }
 }

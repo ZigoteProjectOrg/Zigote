@@ -205,10 +205,61 @@ public sealed class InfoPanel : Widget
         );
     }
 
+    // "Copy" in the top-right corner: the whole report as text, for bug reports.
+    private Rect CopyRect => new(
+        x: Bounds.Right - 44f,
+        y: Bounds.Y + SectionGap,
+        width: 44f,
+        height: HeaderH
+    );
+
+    public override Widget? HitTest(Offset point) =>
+        Bounds.Contains(px: point.X, py: point.Y) ? this : null;
+
+    public override MouseCursor? GetCursor(Offset point) =>
+        CopyRect.Contains(px: point.X, py: point.Y) ? MouseCursor.Pointer : null;
+
+    public override void OnPointerDown(Offset point)
+    {
+        if (!CopyRect.Contains(px: point.X, py: point.Y)) return;
+        var text = new System.Text.StringBuilder();
+        string? section = null;
+        foreach (var r in BuildRows())
+        {
+            if (r.Section != section) text.AppendLine().AppendLine(section = r.Section);
+            text.AppendLine($"  {r.Label}: {r.Value}");
+        }
+
+        ZigoteEngine.Instance?.SetClipboard(text.ToString().Trim());
+        App.Active?.ShowSnackbar("Copied system info");
+    }
+
     public override void Paint(PaintList paint)
     {
         RefreshLive();
         var rows = BuildRows();
+
+        // The value column gives way in a narrow dock column instead of pushing values off-panel.
+        float valueX = MathF.Min(x: ValueX, y: Bounds.Width * 0.42f);
+        Icons.Draw(
+            paint: paint,
+            glyph: Icons.Copy,
+            box: new Rect(
+                x: CopyRect.X,
+                y: CopyRect.Y,
+                width: 14f,
+                height: CopyRect.Height
+            ),
+            color: _theme.TextMuted,
+            size: 12f
+        );
+        paint.AddText(
+            text: "Copy",
+            baselineX: CopyRect.X + 16f,
+            baselineY: CopyRect.Y + (HeaderH * 0.62f),
+            color: _theme.TextMuted,
+            fontSize: _theme.FontSizeCaption
+        );
 
         float fs = _theme.FontSizeCaption;
         float x = Bounds.X;
@@ -252,7 +303,7 @@ public sealed class InfoPanel : Widget
             );
             paint.AddText(
                 text: r.Value,
-                baselineX: x + ValueX,
+                baselineX: x + valueX,
                 baselineY: y + (RowH * 0.72f),
                 color: _theme.OnSurface,
                 fontSize: fs

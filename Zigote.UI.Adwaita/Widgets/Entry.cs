@@ -1,3 +1,4 @@
+using Zigote.Core.Events;
 using Zigote.UI.Material;
 
 namespace Zigote.UI.Adwaita;
@@ -50,6 +51,12 @@ public class AdwEntry : Widget
 
     public Action<string>? OnChanged { get; set; }
     public Action<string>? OnSubmitted { get; set; }
+
+    /// <summary>
+    ///     Sees every key-down (scancode + modifiers) before the editor does; return true to consume
+    ///     it. For a list driven from the entry — ↑/↓ to move a selection while the caret stays put.
+    /// </summary>
+    public Func<uint, Modifiers, bool>? OnKeyDown { get; set; }
 
     public bool Enabled
     {
@@ -206,6 +213,12 @@ public class AdwEntry : Widget
         {
             if (owner.HitsDecoration(point)) owner.OnPointerDown(point);
             else base.OnPointerDown(point);
+        }
+
+        public override void OnKey(char keyChar, uint scancode, bool down, Modifiers mods)
+        {
+            if (down && owner.OnKeyDown?.Invoke(arg1: scancode, arg2: mods) == true) return;
+            base.OnKey(keyChar: keyChar, scancode: scancode, down: down, mods: mods);
         }
     }
 }

@@ -73,8 +73,34 @@ public class ZigoteApp
 
     // ── Content / styling ────────────────────────────────────────────────────
 
-    /// <summary>App-wide theme. Propagated via the <see cref="ThemeProvider" /> InheritedWidget.</summary>
-    public ThemeData Theme { get; set; } = ThemeData.Dark;
+    // Pushes a new theme into the running window; null until Run has built the tree.
+    private Action<ThemeData>? _applyTheme;
+    private ThemeData _theme = ThemeData.Dark;
+
+    /// <summary>
+    ///     App-wide theme. Propagated via the <see cref="ThemeProvider" /> InheritedWidget, and
+    ///     applied the moment it is assigned: a change made inside a frame (a click on an appearance
+    ///     switch, an inspector command) restyles that same frame. Waiting for the next one left a
+    ///     frame where widgets driven by the app's own state had already flipped and the theme had
+    ///     not.
+    /// </summary>
+    public ThemeData Theme
+    {
+        get => _theme;
+        set
+        {
+            _theme = value;
+            _applyTheme?.Invoke(value);
+            OnThemeChanged(value);
+        }
+    }
+
+    /// <summary>
+    ///     <see cref="Theme" /> was assigned. For an app that themes more than the main window
+    ///     (secondary OS windows), so they change in the same frame rather than on a later poll.
+    ///     Can run before <see cref="Run" />, from a constructor.
+    /// </summary>
+    protected virtual void OnThemeChanged(ThemeData theme) { }
 
     /// <summary>The root content widget.</summary>
     public Widget? Home { get; set; }
@@ -293,15 +319,18 @@ public class ZigoteApp
             uiApp.Engine.AppSetDockVisible(false);
         }
 
+        // Runtime theme changes (a dark/light toggle) go straight to the tree — see Theme.
+        _applyTheme = theme =>
+        {
+            if (ReferenceEquals(objA: themeProvider.Data, objB: theme)) return;
+            themeProvider.Data = theme;
+            uiApp.Theme = theme;
+        };
+        // OnInit may already have changed it (an Adwaita app reading the system appearance).
+        _applyTheme(Theme);
+
         while (!uiApp.ShouldQuit)
         {
-            // Sync theme if the subclass changed it at runtime (e.g., dark/light toggle)
-            if (!ReferenceEquals(objA: themeProvider.Data, objB: Theme))
-            {
-                themeProvider.Data = Theme;
-                uiApp.Theme = Theme;
-            }
-
             try
             {
                 OnUpdate(uiApp.DeltaTime);
@@ -321,32 +350,40 @@ public class ZigoteApp
         }
 
         OnQuit();
+        _applyTheme = null;
         App = null;
         RootNavigator = null;
     }
 
     /// <summary>
-    ///     Swap the theme by name for the inspect socket's <c>theme</c> command.
-    ///     <para>
-    ///         Virtual because <see cref="Theme" /> is only the base framework's notion of one: a design
-    ///         system that carries its own palette (Adwaita, Material) overrides this to switch that
-    ///         instead, and the panel's dark/light toggle then means what the app means by it.
-    ///     </para>
+    ///     Swap the theme by name for the inspect socket's <c>theme</c> command. Understands
+    ///     <c>dark</c> and <c>light</c> and hands them to <see cref="SetDarkAppearance" />; override
+    ///     only to accept more names.
     /// </summary>
     protected internal virtual bool SetThemeByName(string name)
     {
         switch (name.Trim().ToLowerInvariant())
         {
             case "dark":
-                Theme = ThemeData.Dark;
+                SetDarkAppearance(true);
                 return true;
             case "light":
-                Theme = ThemeData.Light;
+                SetDarkAppearance(false);
                 return true;
             default:
                 return false;
         }
     }
+
+    /// <summary>
+    ///     Switch between the dark and light appearance. <see cref="Theme" /> is only the base
+    ///     framework's notion of one, so a design system that carries its own palette (Adwaita)
+    ///     overrides this to install that instead, and an app that keeps appearance in its own state
+    ///     overrides it to write that state — the inspector's dark/light toggle then means what the
+    ///     app means by it.
+    /// </summary>
+    protected virtual void SetDarkAppearance(bool dark) =>
+        Theme = dark ? ThemeData.Dark : ThemeData.Light;
 
     /// <summary>
     ///     Late-binds to <c>Zigote.UI.DevTools.DevTools.Install(app)</c> via reflection so the DevTools

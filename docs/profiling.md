@@ -58,6 +58,13 @@ Benchmarks for throughput (as opposed to allocation) live in the standalone
 `Zigote.Ecs.Benchmark`, `Zigote.Bloc.Benchmark`, `Zigote.Reactive.Benchmark` and
 `Zigote.Runtime.Benchmark` console apps.
 
+For callback admission/delivery, paint diffing, virtualized rows, and actual native-window/image
+bursts, see the [`performance` and `performance-window` probe guide](../Zigote.Runtime.Benchmark/README.md).
+These write raw JSON samples and percentile/allocation summaries. The
+[2026-10-12 baseline](benchmarks/2026-10-12/README.md) and
+[performance/stability roadmap](notes/performance-stability-scheduling-roadmap.md) distinguish
+managed work, native frame wall time, intentional waits, and measurements still needed.
+
 `Zigote.Runtime.Benchmark` is the gameplay-side probe — `-- vfx`, `-- physics2d`, `-- all`. It
 reports each pass in ns/element **and** what the subsystem costs as a share of one core at the
 120 Hz fixed step, because a ratio on its own has twice justified a rewrite that would have

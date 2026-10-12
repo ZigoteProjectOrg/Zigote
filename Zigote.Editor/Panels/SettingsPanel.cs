@@ -10,6 +10,8 @@ using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
 
+using Zigote.Editor.Widgets;
+
 namespace Zigote.Editor.Panels;
 
 /// <summary>
@@ -47,6 +49,24 @@ public sealed class SettingsPanel : Widget
     }
 
     private void Apply() => _state.Apply3D(in _s);
+
+    private string _filter = "";
+
+    /// <summary>
+    ///     Setting filter (case-insensitive substring over row captions and group titles) — the
+    ///     search box above the panel writes it. While set, collapsed groups are searched too.
+    /// </summary>
+    public string Filter
+    {
+        get => _filter;
+        set
+        {
+            value = value.Trim();
+            if (_filter == value) return;
+            _filter = value;
+            Rebuild();
+        }
+    }
 
     private void Rebuild()
     {
@@ -531,6 +551,24 @@ public sealed class SettingsPanel : Widget
     private void AddGroup(Column outer, string title, Action? reset, params Widget[] rows)
     {
         bool collapsed = _collapsedGroups.Contains(title);
+        if (_filter.Length > 0)
+        {
+            const StringComparison ic = StringComparison.OrdinalIgnoreCase;
+            // A matching group title keeps the whole group; otherwise only its matching rows.
+            if (!title.Contains(value: _filter, comparisonType: ic))
+            {
+                rows = rows.Where(r => RowCaption.Of(r)?.Contains(
+                            value: _filter,
+                            comparisonType: ic
+                        ) == true
+                    )
+                    .ToArray();
+            }
+
+            if (rows.Length == 0) return;
+            collapsed = false;
+        }
+
         outer.Children.Add(
             new GroupHeader(
                 title: title,
@@ -690,47 +728,36 @@ public sealed class SettingsPanel : Widget
         );
     }
 
+    /// <summary>One colour row: caption + a swatch that opens the picker (was three RGB sliders).</summary>
     private Widget ColorRows(string label,
         float r, float g, float b, Action<float> sr, Action<float> sg, Action<float> sb)
     {
-        var c = new Column {
-            CrossAxisAlignment = CrossAxisAlignment.Stretch,
-            MainAxisSize = MainAxisSize.Min,
+        var swatch = new AdwColorButton(new Color(r: r, g: g, b: b)) {
+            OnChanged = c =>
+            {
+                sr(c.R);
+                sg(c.G);
+                sb(c.B);
+                Apply();
+            },
         };
-        c.Children.Add(
-            new Padding(
-                padding: EdgeInsets.Only(top: 4f),
-                child: new Label(text: label, fontSize: _theme.FontSizeCaption, color: _theme.Hint)
-            )
+        return new Padding(
+            padding: EdgeInsets.Symmetric(horizontal: 0f, vertical: Spacing.Xxs),
+            child: new Row {
+                CrossAxisAlignment = CrossAxisAlignment.Center,
+                Children = {
+                    new SizedBox(
+                        width: LabelColW,
+                        child: new Label(
+                            text: label,
+                            fontSize: _theme.FontSizeCaption,
+                            color: _theme.OnSurface
+                        )
+                    ),
+                    swatch,
+                },
+            }
         );
-        c.Children.Add(
-            SliderRow(
-                label: "  R",
-                value: r,
-                min: 0f,
-                max: 1f,
-                set: sr
-            )
-        );
-        c.Children.Add(
-            SliderRow(
-                label: "  G",
-                value: g,
-                min: 0f,
-                max: 1f,
-                set: sg
-            )
-        );
-        c.Children.Add(
-            SliderRow(
-                label: "  B",
-                value: b,
-                min: 0f,
-                max: 1f,
-                set: sb
-            )
-        );
-        return c;
     }
 
     private Widget SliderRow(string label, float value, float min, float max, Action<float> set)

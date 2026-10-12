@@ -273,9 +273,11 @@ public class RichTextAllocationTests
         Assert.True(paint.Count > 0);
 
         const int frames = 500;
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < frames; i++) Frame(root: root, paint: paint, c: c);
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        long measured = AllocGuard.Measure(() =>
+        {
+            for (int i = 0; i < frames; i++) Frame(root: root, paint: paint, c: c);
+        });
+        long allocated = measured;
 
         Assert.True(
             condition: allocated == 0,
@@ -299,9 +301,11 @@ public class RichTextAllocationTests
         for (int i = 0; i < 200; i++) Frame(root: root, paint: paint, c: c);
 
         const int frames = 500;
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < frames; i++) Frame(root: root, paint: paint, c: c);
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        long measured = AllocGuard.Measure(() =>
+        {
+            for (int i = 0; i < frames; i++) Frame(root: root, paint: paint, c: c);
+        });
+        long allocated = measured;
 
         Assert.True(
             condition: allocated == 0,
@@ -325,10 +329,12 @@ public class RichTextAllocationTests
         for (int i = 0; i < 100; i++)
             root.OnPointerMove(new Offset(x: 5f + (i % 60), y: 5f + (i % 30)));
 
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < 500; i++)
-            root.OnPointerMove(new Offset(x: 5f + (i % 60), y: 5f + (i % 30)));
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        long measured = AllocGuard.Measure(() =>
+        {
+            for (int i = 0; i < 500; i++)
+                root.OnPointerMove(new Offset(x: 5f + (i % 60), y: 5f + (i % 30)));
+        });
+        long allocated = measured;
         root.OnPointerUp(new Offset(x: 60f, y: 30f));
 
         Assert.True(

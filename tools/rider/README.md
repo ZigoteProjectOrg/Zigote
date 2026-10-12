@@ -230,10 +230,14 @@ a free port and prints it; loopback only, and off unless asked for.
 | `input move X Y` / `input scroll X Y DX DY` | `{"ok":true}` — pointer move / wheel ticks |
 | `input keydown\|keyup NAME [shift+ctrl+alt+cmd]` | `{"ok":true}` — a physical key, by `KeyCode` name |
 | `input text …` | `{"ok":true}` — commit text to the focused widget, verbatim |
+| `input touchdown\|touchmove\|touchup X Y [finger]` | `{"ok":true}` — one finger; a touch drag scrolls and flings lists, which a mouse drag never does |
 | `stream [scale] [fps]` | one JSON header line (`{"format","stream","scale"}` — the density every frame is at, since a raw BMP has nowhere to carry it), then each changed frame as 4-byte big-endian length + BMP, pushed until the client hangs up |
 | `window hide\|show` | `{"ok":true}` |
+| `window size WxH` | `{"ok":true}` — resize the OS window itself (framebuffer included); the new size arrives over the next frames, read it back with `info` |
 | `props ID` | `{"id","type","props":{…},"x","y","w","h"}` |
 | `stats` | `{"fps","fps_min","fps_max","frame_ms","cpu_pct","mem_mb","gc_mb","ui_paint_commands","overlay_paint_commands"}` — the sample DevTools keeps; frame pace is only meaningful under `ZIGOTE_CONTINUOUS=1` |
+| `hit X Y` | `{"hit":{"id","type","desc","x","y","w","h"}\|null,"path":[…]}` — what a click there would land on, and up to eight enclosing widget types |
+| `info` | `{"w","h","preview_size","theme","locale","animating","paint_version","widgets","depth","pointer","focused","hovered","overlays"}` — the app's state in one object |
 
 Injected input takes the exact pipeline OS input does — hit-testing, focus, shortcuts — so a scripted
 click is a real click. `stream` sends nothing while the picture is unchanged — and does no capture

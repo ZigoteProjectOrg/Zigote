@@ -127,8 +127,8 @@ internal sealed class LocalizationPage : ComposedWidget
                     children: [
                         new Text(
                             data: l.DirectionNote,
-                            style: new TextStyle(fontSize: 12, color: Colors.Grey[500])
-                        ),
+                            style: new TextStyle(fontSize: 12)
+                        ) { Style = Label.LabelStyle.Caption },
                         new SizedBox(height: 12),
                         DirectionStrip(
                             context: context,
@@ -166,8 +166,8 @@ internal sealed class LocalizationPage : ComposedWidget
         );
         var counter = new Text(
             data: $"{label}: {(int)_count}",
-            style: new TextStyle(fontSize: 12, color: Colors.Grey[500])
-        );
+            style: new TextStyle(fontSize: 12)
+        ) { Style = Label.LabelStyle.Caption };
         var result = new Text(
             data: message,
             style: new TextStyle(fontSize: 15, fontWeight: FontWeight.Medium)
@@ -195,8 +195,8 @@ internal sealed class LocalizationPage : ComposedWidget
     {
         var labelText = new Text(
             data: label,
-            style: new TextStyle(fontSize: 12, color: Colors.Grey[500])
-        );
+            style: new TextStyle(fontSize: 12)
+        ) { Style = Label.LabelStyle.Caption };
         var valueText = new Text(data: value, style: new TextStyle(14));
 
         // The 120px label column costs 40% of a phone card's width, wrapping the long values (a
@@ -228,8 +228,8 @@ internal sealed class LocalizationPage : ComposedWidget
 
         var labelText = new Text(
             data: label,
-            style: new TextStyle(fontSize: 12, color: Colors.Grey[500])
-        );
+            style: new TextStyle(fontSize: 12)
+        ) { Style = Label.LabelStyle.Caption };
 
         // Label column (140) plus four chips (272) needs more width than a phone card has, so the
         // label takes its own line there.

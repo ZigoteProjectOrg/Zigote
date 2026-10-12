@@ -44,6 +44,7 @@ public sealed class HierarchyPanel : Widget
     /// </summary>
     public Action<float, float>? OnRevealRequested;
 
+    private string _filter = "";
     private SceneNode? _lastClickedNode;
     private Size _size;
     private int _structuralSig;
@@ -57,8 +58,26 @@ public sealed class HierarchyPanel : Widget
         Rebuild();
     }
 
+    /// <summary>
+    ///     Name filter (case-insensitive substring). Non-empty flattens the tree to the matching
+    ///     nodes, collapsed branches included — the search box above the panel writes it.
+    /// </summary>
+    public string Filter
+    {
+        get => _filter;
+        set
+        {
+            if (_filter == value) return;
+            _filter = value;
+            Rebuild();
+        }
+    }
+
     // The panel holds keyboard focus (requested on row click) so arrow keys navigate the tree.
     public override bool Focusable => true;
+
+    // Arrow keys walk the tree; without this the app spends them on directional focus traversal.
+    public override bool HandlesDirectionalKeys => true;
 
     // ── Selection follow (reveal into view) ─────────────────────────────────────
 
@@ -177,9 +196,14 @@ public sealed class HierarchyPanel : Widget
     {
         if (node.IsHidden) return;
 
-        if (node != _state.Scene.Root)
+        bool filtering = _filter.Length > 0;
+        if (node != _state.Scene.Root &&
+            (!filtering || node.Name.Contains(
+                value: _filter,
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )))
         {
-            bool isExpanded = !_collapsed.Contains(node);
+            bool isExpanded = !filtering && !_collapsed.Contains(node);
             _rows.Add(
                 new NodeRow(
                     node: node,
@@ -191,13 +215,15 @@ public sealed class HierarchyPanel : Widget
                     drag: _drag,
                     getNodeAtY: GetNodeAtY,
                     onNodeClick: HandleNodeClick,
-                    renameNode: ShowRenameDialog
+                    renameNode: ShowRenameDialog,
+                    setExpandedRecursive: SetExpandedRecursive
                 )
             );
-            if (!isExpanded) return;
+            if (!isExpanded && !filtering) return;
         }
 
-        int childDepth = depth + (node == _state.Scene.Root ? 0 : 1);
+        // Filtered rows are a flat result list: depth stays 0.
+        int childDepth = filtering ? 0 : depth + (node == _state.Scene.Root ? 0 : 1);
         foreach (var child in node.Children)
             AddRows(node: child, depth: childDepth);
     }
@@ -211,6 +237,9 @@ public sealed class HierarchyPanel : Widget
     private int ComputeStructuralSignature()
     {
         var hash = new HashCode();
+        // ponytail: with a filter the signature still walks only expanded branches, so a node added
+        // inside a collapsed one shows up on the next filter edit rather than immediately.
+        hash.Add(_filter);
         AccumulateSignature(
             hash: ref hash,
             node: _state.Scene.Root,
@@ -249,6 +278,18 @@ public sealed class HierarchyPanel : Widget
     {
         if (!_collapsed.Remove(node))
             _collapsed.Add(node);
+        Rebuild();
+    }
+
+    /// <summary>Expand or collapse <paramref name="node" /> and everything beneath it.</summary>
+    private void SetExpandedRecursive(SceneNode node, bool expanded)
+    {
+        foreach (var n in node.Descendants().Prepend(node))
+        {
+            if (expanded) _collapsed.Remove(n);
+            else if (n.Children.Count > 0) _collapsed.Add(n);
+        }
+
         Rebuild();
     }
 
@@ -317,7 +358,7 @@ public sealed class HierarchyPanel : Widget
 
     public override Size Measure(Constraints c)
     {
-        float h = RowH * _rows.Count;
+        float h = RowH * Math.Max(val1: 1, val2: _rows.Count); // room for the "no match" line
         _size = c.Constrain(new Size(width: c.MaxWidth, height: h));
         foreach (var r in _rows)
             r.Measure(new Constraints(maxWidth: _size.Width, maxHeight: RowH));
@@ -342,6 +383,18 @@ public sealed class HierarchyPanel : Widget
 
     public override void Paint(PaintList paint)
     {
+        if (_rows.Count == 0)
+        {
+            float fs = _theme.FontSizeCaption;
+            paint.AddText(
+                text: _filter.Length > 0 ? "No nodes match" : "Empty scene — use Add to create a node",
+                baselineX: Bounds.X + 10f,
+                baselineY: Bounds.Y + ((RowH - fs) / 2f) + (fs * 0.8f),
+                color: _theme.TextMuted,
+                fontSize: fs
+            );
+        }
+
         foreach (var r in _rows) r.Paint(paint);
     }
 
@@ -419,7 +472,8 @@ public sealed class HierarchyPanel : Widget
         DragState drag,
         Func<float, SceneNode?> getNodeAtY,
         Action<SceneNode, bool, bool> onNodeClick,
-        Action<SceneNode> renameNode)
+        Action<SceneNode> renameNode,
+        Action<SceneNode, bool> setExpandedRecursive)
         : Widget
     {
         private const float RowH = 26f;
@@ -731,6 +785,17 @@ public sealed class HierarchyPanel : Widget
                             new AddNodeCommand(state: state, parent: node, node: map)
                         );
                     }
+                ),
+                new ContextMenuItem(Label: "", OnSelect: null, Separator: true),
+                new ContextMenuItem(
+                    Label: "Expand All",
+                    OnSelect: () => setExpandedRecursive(arg1: node, arg2: true),
+                    Enabled: HasChildren
+                ),
+                new ContextMenuItem(
+                    Label: "Collapse All",
+                    OnSelect: () => setExpandedRecursive(arg1: node, arg2: false),
+                    Enabled: HasChildren
                 ),
                 new ContextMenuItem(Label: "", OnSelect: null, Separator: true),
                 new ContextMenuItem(Label: "Rename...", OnSelect: () => renameNode(node)),

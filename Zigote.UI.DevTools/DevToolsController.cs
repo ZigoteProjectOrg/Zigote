@@ -51,6 +51,12 @@ public sealed class DevToolsController
         PanelOpen || CompactVisible || WindowOpen || AnyDebugDraw;
 
     // ── On-screen inspector flags (read by DevOverlayLayer, driven by the UI Inspector panel) ──
+    /// <summary>
+    ///     The always-on fps badge in the top-right corner. An app that shows its own frame rate —
+    ///     or has chrome in that corner — turns it off; the panel and debug draws are unaffected.
+    /// </summary>
+    public bool ShowFpsBadge { get; set; } = true;
+
     public bool ShowRepaintRainbow { get; set; }
     public bool ShowLayoutBounds { get; set; }
     public bool ShowOverflow { get; set; }

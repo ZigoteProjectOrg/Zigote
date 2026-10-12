@@ -15,7 +15,11 @@ public static class Png
     // CRC-32 (the PNG/zip polynomial) over type + data. A table beats a package dependency.
     private static readonly uint[] CrcTable = BuildCrcTable();
 
-    public static byte[] FromBmp(byte[] bmp)
+    /// <summary>
+    ///     <paramref name="crop" /> is a pixel rectangle in the image's top-down space; it is
+    ///     clamped to the image, so a region that hangs off an edge yields what is there.
+    /// </summary>
+    public static byte[] FromBmp(byte[] bmp, (int X, int Y, int W, int H)? crop = null)
     {
         if (bmp.Length < 54 || bmp[0] != 'B' || bmp[1] != 'M')
             throw new ToolError("the capture reply was not a BMP");
@@ -35,15 +39,25 @@ public static class Png
         if (dataOffset < 54 || dataOffset + ((long)stride * height) > bmp.Length)
             throw new ToolError("truncated BMP");
 
+        int left = 0, top = 0, fullHeight = height;
+        if (crop is { } c)
+        {
+            left = Math.Clamp(value: c.X, min: 0, max: width - 1);
+            top = Math.Clamp(value: c.Y, min: 0, max: height - 1);
+            width = Math.Clamp(value: c.X + c.W, min: left + 1, max: width) - left;
+            height = Math.Clamp(value: c.Y + c.H, min: top + 1, max: height) - top;
+        }
+
         // PNG scanlines: filter byte 0, then RGB triples.
         byte[] scanlines = new byte[height * (1 + (width * 3))];
         for (int y = 0; y < height; y++)
         {
-            int srcRow = dataOffset + ((bottomUp ? height - 1 - y : y) * stride);
+            int row = top + y;
+            int srcRow = dataOffset + ((bottomUp ? fullHeight - 1 - row : row) * stride);
             int dst = (y * (1 + (width * 3))) + 1; // +1 skips the filter byte, already 0
             for (int x = 0; x < width; x++)
             {
-                int src = srcRow + (x * bytesPerPixel);
+                int src = srcRow + ((left + x) * bytesPerPixel);
                 scanlines[dst++] = bmp[src + 2]; // R  (BMP stores BGR)
                 scanlines[dst++] = bmp[src + 1]; // G
                 scanlines[dst++] = bmp[src]; // B
@@ -53,7 +67,7 @@ public static class Png
         using var idat = new MemoryStream();
         using (var zlib = new ZLibStream(
                    stream: idat,
-                   compressionLevel: CompressionLevel.Fastest,
+                   compressionLevel: CompressionLevel.Optimal,
                    leaveOpen: true
                )) zlib.Write(scanlines);
 

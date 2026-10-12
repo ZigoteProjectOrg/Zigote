@@ -86,14 +86,30 @@ public sealed partial class InspectorPanel : Widget
         Rebuild();
     }
 
-    private Widget Placeholder => new Padding(
-        padding: EdgeInsets.All(12f),
-        child: new Label(
-            text: "Nothing selected",
-            fontSize: _theme.FontSizeBody,
-            color: _theme.Hint
-        )
-    );
+    private string _filter = "";
+
+    /// <summary>
+    ///     Property filter (case-insensitive substring over row captions and section titles) — the
+    ///     search box above the panel writes it. While set, collapsed sections are searched too.
+    /// </summary>
+    public string Filter
+    {
+        get => _filter;
+        set
+        {
+            value = value.Trim();
+            if (_filter == value) return;
+            _filter = value;
+            Rebuild();
+        }
+    }
+
+    private static Widget Placeholder => new AdwStatusPage {
+        IconName = Icons.Search,
+        Title = "Nothing Selected",
+        Description = "Pick a node in the Hierarchy or the Viewport to edit its properties.",
+        Compact = true,
+    };
 
     /// <summary>
     ///     While playing, refresh so the inspector reflects the live (physics/script-driven) transform
@@ -1671,8 +1687,23 @@ public sealed partial class InspectorPanel : Widget
             }
         }
 
-        // Drop rows belonging to a collapsed section (everything between a collapsed header and the
-        // next header). Headers always show so the section can be re-expanded.
+        var visible = _filter.Length > 0 ? FilteredRows() : UncollapsedRows();
+
+        var col = new Column {
+            MainAxisAlignment = MainAxisAlignment.Start,
+            CrossAxisAlignment = CrossAxisAlignment.Start,
+        };
+        col.Children.AddRange(visible);
+        SetContent(col);
+        RequestLayout();
+    }
+
+    /// <summary>
+    ///     Rows minus those in a collapsed section (everything between a collapsed header and the
+    ///     next header). Headers always show so the section can be re-expanded.
+    /// </summary>
+    private List<PropRow> UncollapsedRows()
+    {
         var visible = new List<PropRow>(_rows.Count);
         bool collapsing = false;
         foreach (var r in _rows)
@@ -1685,13 +1716,52 @@ public sealed partial class InspectorPanel : Widget
             else if (!collapsing) visible.Add(r);
         }
 
-        var col = new Column {
-            MainAxisAlignment = MainAxisAlignment.Start,
-            CrossAxisAlignment = CrossAxisAlignment.Start,
-        };
-        col.Children.AddRange(visible);
-        SetContent(col);
-        RequestLayout();
+        return visible;
+    }
+
+    /// <summary>
+    ///     Rows matching <see cref="Filter" />: a section whose title matches keeps all its rows,
+    ///     otherwise only the rows whose caption matches — and a section left with none loses its
+    ///     header. The node header above the first section always stays.
+    /// </summary>
+    private List<PropRow> FilteredRows()
+    {
+        bool Matches(string? text) => text?.Contains(
+            value: _filter,
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        ) == true;
+
+        List<PropRow> visible = [];
+        PropRow? pendingHeader = null; // emitted with the section's first surviving row
+        bool inSection = false, sectionMatches = false;
+        foreach (var r in _rows)
+        {
+            if (r.IsSectionHeader)
+            {
+                inSection = true;
+                sectionMatches = Matches(r.SectionTitle);
+                pendingHeader = r;
+                continue;
+            }
+
+            if (!inSection)
+            {
+                if (r.Caption is not null) visible.Add(r); // name + tag; drop the spacers
+                continue;
+            }
+
+            if (!sectionMatches && !Matches(r.Caption)) continue;
+            if (r.Caption is null && !sectionMatches) continue;
+            if (pendingHeader is not null)
+            {
+                visible.Add(pendingHeader);
+                pendingHeader = null;
+            }
+
+            visible.Add(r);
+        }
+
+        return visible;
     }
 
     private Widget BuildWithMultiSelectBanner(int count)

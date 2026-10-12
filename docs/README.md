@@ -44,6 +44,7 @@ current.
 
 | Note | What it records |
 |---|---|
+| [`notes/performance-stability-scheduling-roadmap.md`](notes/performance-stability-scheduling-roadmap.md) | Measured baseline, code and framework review, hardware targets, bounded task delivery, rendering ownership, and phased stability/performance gates. Raw results: [`benchmarks/2026-10-12/`](benchmarks/2026-10-12/README.md). |
 | [`notes/fsharp-module-simplification.md`](notes/fsharp-module-simplification.md) | Why the F# VDOM, attr codegen and MVU loop were deleted — and the rules that replaced them (now user-facing in [`Zigote.UI.FSharp/README.md`](../Zigote.UI.FSharp/README.md)). |
 | [`notes/devtools-widget-tree.md`](notes/devtools-widget-tree.md) | The design behind the DevTools widget-tree inspector: virtualised rows, rainbow guidelines, live selected-info. |
 | [`notes/mobile-port.md`](notes/mobile-port.md) | The iOS/Android bring-up journal — walls hit and how each fell. |

@@ -5,6 +5,7 @@ using Zigote.Core;
 using Zigote.Core.Events;
 using Zigote.UI.Host;
 using Zigote.UI.Semantics;
+using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
 
@@ -195,6 +196,36 @@ public class InspectServerTests
         var text =
             Assert.IsType<TextInputEvent>(InspectServer.ParseInput("text hello there"));
         Assert.Equal(expected: "hello there", actual: text.Text);
+    }
+
+    [Fact]
+    public void TouchCommandsParseIntoFingerEvents()
+    {
+        var down = Assert.IsType<TouchDownEvent>(InspectServer.ParseInput("touchdown 10 20"));
+        Assert.Equal(expected: 20f, actual: down.Y);
+        Assert.Equal(expected: 0, actual: down.Finger);
+
+        var move = Assert.IsType<TouchMoveEvent>(InspectServer.ParseInput("touchmove 10 40 1"));
+        Assert.Equal(expected: 1, actual: move.Finger);
+        Assert.IsType<TouchUpEvent>(InspectServer.ParseInput("touchup 10 40"));
+        Assert.Null(InspectServer.ParseInput("touchdown 10 20 thumb"));
+    }
+
+    [Fact]
+    public void ATreeDeeperThanSixtyFourWidgetsIsNotCutOff()
+    {
+        // Composition-heavy pages nest past 64 without being runaways; the old cap silently
+        // dropped everything below it.
+        Widget root = new Center { Child = new Label("leaf") };
+        for (int i = 0; i < 100; i++) root = new Center { Child = root };
+
+        string json = InspectServer.WidgetTreeJson(root);
+        Assert.Contains(expectedSubstring: "leaf", actualString: json);
+        // Two JSON levels per widget — readers must raise their own depth limit to match.
+        using var doc = JsonDocument.Parse(
+            json: json,
+            options: new JsonDocumentOptions { MaxDepth = 1024 }
+        );
     }
 
     [Theory]

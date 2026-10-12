@@ -21,6 +21,12 @@ internal static class Program
 
         switch (probe)
         {
+            case "performance":
+                PerformanceProbe.Run(rest);
+                break;
+            case "performance-window":
+                WindowPerformanceProbe.Run(rest);
+                break;
             case "vfx":
                 VfxProbe.Run(rest);
                 break;
@@ -43,7 +49,7 @@ internal static class Program
                 Physics2DProbe.Run(rest);
                 break;
             default:
-                Console.Error.WriteLine($"unknown probe '{probe}' — expected vfx, dispatch, physics2d, ui or all");
+                Console.Error.WriteLine($"unknown probe '{probe}' — expected vfx, dispatch, physics2d, ui, all, performance or performance-window");
                 return 1;
         }
 

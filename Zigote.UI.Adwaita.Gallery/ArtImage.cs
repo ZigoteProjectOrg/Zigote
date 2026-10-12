@@ -35,8 +35,23 @@ internal enum ArtState
 /// </remarks>
 internal sealed class ArtImage : ComposedWidget
 {
+    // Larger than the Adwaita card's 12: a picture with nothing drawn around it reads as an object,
+    // and an object wants the rounder corner a photo tile has.
+    private const float TileRadius = 18f;
+
+    // Empty until the pointer is over a pressable tile: the two glass buttons are two more lenses,
+    // and a screenful of tiles should pay for them on one tile at a time.
+    private readonly AnimatedSwitcher _actions;
     private readonly bool _chrome;
+    private readonly bool _cover;
+
+    // 0–1 while this picture is being saved, negative otherwise.
+    private readonly Signal<float> _saving = new(-1f);
+    private Widget? _buttons;
+    private Pressable? _card;
+    private Pressable[] _hot = [];
     private readonly AnimatedOpacity _fade;
+    private readonly Widget _idle = SizedBox.Shrink();
     private readonly Image _image;
     private readonly uint _maxDim;
     private readonly AnimatedSwitcher _overlay;
@@ -46,11 +61,17 @@ internal sealed class ArtImage : ComposedWidget
     ///     The card and the credit chip. Off for a picture that is already framed by something else
     ///     — inside an <see cref="InteractiveViewer" />, where a zooming border reads as a bug.
     /// </param>
-    public ArtImage(ArtPiece piece, uint maxDim, bool chrome = true)
+    /// <param name="cover">
+    ///     Fill the frame and crop the overflow, as a photo grid does, instead of letterboxing the
+    ///     whole picture inside it.
+    /// </param>
+    public ArtImage(ArtPiece piece, uint maxDim, bool chrome = true, bool cover = false)
     {
         _piece = piece;
         _maxDim = maxDim;
         _chrome = chrome;
+        _cover = cover;
+        _actions = new AnimatedSwitcher(child: _idle, duration: 0.18f);
 
         _image = new Image {
             AltText = $"Anime artwork by {piece.Artist}",
@@ -60,6 +81,15 @@ internal sealed class ArtImage : ComposedWidget
         _fade = new AnimatedOpacity(opacity: 0f, child: Picture(), duration: 0.4f);
         _overlay = new AnimatedSwitcher(child: Busy(), duration: 0.25f);
     }
+
+    /// <summary>The corner a framed picture is clipped to.</summary>
+    public const float Radius = TileRadius;
+
+    /// <summary>The decoded image widget — what a transition draws while it carries it elsewhere.</summary>
+    public Image Texture => _image;
+
+    /// <summary>Fires on the UI thread when a load settles, either way.</summary>
+    public Action? OnSettled { get; set; }
 
     /// <summary>Set to make the picture a button — the gallery opens the zoomable viewer with it.</summary>
     public Action? OnPressed { get; set; }
@@ -95,29 +125,70 @@ internal sealed class ArtImage : ComposedWidget
         };
         if (!_chrome) return layers;
 
-        var palette = AdwPalette.For(ThemeProvider.Of(context));
+        // No border and no card colour around a loaded picture: the artwork is the tile. The fill
+        // only shows while it loads, as the placeholder the picture fades up over.
+        var theme = ThemeProvider.Of(context);
         Widget card = new DecoratedBox {
-            Fill = palette.CardBg,
-            Radius = AdwMetrics.CardRadius,
-            BorderColor = palette.CardShade,
-            BorderWidth = 1f,
-            // The clip is what makes a letterboxed portrait sit inside the card's corners instead
-            // of squaring them off.
-            Child = new ClipRRect(radius: AdwMetrics.CardRadius, child: layers),
+            Fill = AdwPalette.For(theme).CardBg,
+            Radius = TileRadius,
+            // The clip is what makes the picture take the tile's corners instead of squaring them off.
+            Child = new ClipRRect(radius: TileRadius, child: layers),
         };
 
-        if (OnPressed is { } pressed)
+        if (OnPressed is not { } pressed) return card;
+
+        _card = new Pressable {
+            OnPressed = pressed,
+            FocusRadius = TileRadius,
+            SemanticsLabel = $"Open artwork by {_piece.Artist}",
+            Child = card,
+            OnStateChanged = QueueHover,
+        };
+
+        // No shell above a page shown on its own in the preview: the buttons still work there,
+        // they just have nowhere to say so.
+        var host = GalleryHost.Find(context);
+        Action<AdwToast> toast = raised => host?.Toast(
+            title: raised.Title,
+            buttonLabel: raised.ButtonLabel,
+            onButtonClicked: raised.OnButtonClicked
+        );
+        var copy = ArtActions.CopyButton(piece: _piece, toast: toast, theme: theme);
+        var save = ArtActions.SaveButton(piece: _piece, toast: toast, theme: theme, saving: _saving, done: QueueHover);
+        _hot = [_card, copy, save];
+        foreach (var button in _hot.AsSpan(1))
         {
-            card = new Pressable {
-                OnPressed = pressed,
-                FocusRadius = AdwMetrics.CardRadius,
-                SemanticsLabel = $"Open artwork by {_piece.Artist}",
-                Child = card,
+            // Interactive() already listens here to drive the pane's gel — keep that and add ours.
+            var gel = button.OnStateChanged;
+            button.OnStateChanged = () =>
+            {
+                gel?.Invoke();
+                QueueHover();
             };
         }
 
-        return card;
+        _buttons = new Row(spacing: Spacing.Xs, mainAxisSize: MainAxisSize.Min) { Children = { copy, save } };
+        return new Stack {
+            Children = {
+                _card,
+                new Align(
+                    alignment: Alignment.TopRight,
+                    child: new Padding(padding: EdgeInsets.All(Spacing.Sm), child: _actions)
+                ),
+            },
+        };
     }
+
+    // Posted, not run in place: the pointer crossing from the picture onto a button is an exit and
+    // then an enter, and deciding between the two would drop the buttons out from under the pointer.
+    private void QueueHover() => App.Active?.Post(() =>
+        {
+            bool show = State.Peek() == ArtState.Ready &&
+                        (_saving.Peek() >= 0f || Array.Exists(array: _hot, match: static p => p.Hovered));
+            var next = show && _buttons is not null ? _buttons : _idle;
+            if (!ReferenceEquals(_actions.Child, next)) _actions.Child = next;
+        }
+    );
 
     private void Load()
     {
@@ -140,6 +211,7 @@ internal sealed class ArtImage : ComposedWidget
         _overlay.Child = state == ArtState.Ready
             ? SizedBox.Shrink()
             : new BrokenArt(reason ?? "Couldn't load");
+        OnSettled?.Invoke();
     }
 
     /// <summary>A line that fits under an icon and still says which layer gave up.</summary>
@@ -157,12 +229,14 @@ internal sealed class ArtImage : ComposedWidget
 
     private Widget Picture()
     {
-        var picture = new Stack { Children = { new Center { Child = _image } } };
+        var picture = new Stack {
+            Children = { _cover ? new Cover(_image) : new Center { Child = _image } },
+        };
         if (_chrome)
         {
             picture.Children.Add(
                 new Align(
-                    alignment: Alignment.BottomCenter,
+                    alignment: Alignment.BottomLeft,
                     child: new Padding(
                         padding: EdgeInsets.All(Spacing.Sm),
                         child: new ArtCredit(_piece.Artist)
@@ -175,6 +249,49 @@ internal sealed class ArtImage : ComposedWidget
     }
 
     private static Widget Busy() => new Center { Child = new AdwSpinner() };
+}
+
+/// <summary>
+///     Aspect-fill: the picture scaled until it covers the frame, centred, the overflow left for the
+///     clip above to cut. <see cref="Image" /> on its own only ever fits inside.
+/// </summary>
+internal sealed class Cover(Image image) : Widget
+{
+    private Size _picture;
+    private Size _size;
+
+    public override Size Measure(Constraints c)
+    {
+        var (w, h) = image.TextureSize;
+        if (w == 0 || h == 0 || !float.IsFinite(c.MaxWidth) || !float.IsFinite(c.MaxHeight))
+        {
+            // Nothing decoded yet, or no frame to cover: behave like the image itself.
+            _size = _picture = image.Measure(c);
+            return _size;
+        }
+
+        _size = new Size(width: c.MaxWidth, height: c.MaxHeight);
+        float scale = MathF.Max(x: _size.Width / w, y: _size.Height / h);
+        _picture = image.Measure(Constraints.Tight(width: w * scale, height: h * scale));
+        return _size;
+    }
+
+    public override void Layout(Offset origin)
+    {
+        Bounds = new Rect(x: origin.X, y: origin.Y, width: _size.Width, height: _size.Height);
+        image.Layout(
+            new Offset(
+                x: origin.X + ((_size.Width - _picture.Width) / 2f),
+                y: origin.Y + ((_size.Height - _picture.Height) / 2f)
+            )
+        );
+    }
+
+    public override void Paint(PaintList paint) => image.Paint(paint);
+
+    public override Widget? HitTest(Offset point) => null;
+
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(image);
 }
 
 /// <summary>The artist credit riding on the bottom of a loaded picture.</summary>

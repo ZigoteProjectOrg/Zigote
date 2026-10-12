@@ -142,6 +142,12 @@ public partial class App
     public Modifiers CurrentModifiers { get; private set; }
 
     /// <summary>
+    ///     Whether the scroll being dispatched came from a precise device (see
+    ///     <see cref="ScrollEvent.Precise" />). Read it inside <c>OnScroll</c>.
+    /// </summary>
+    public bool CurrentScrollPrecise { get; private set; }
+
+    /// <summary>
     ///     True while dispatching an OS auto-repeat key-down (held key) rather than the initial press.
     ///     Widgets can read this inside <see cref="Widget.OnKey" /> to ignore repeats for one-shot
     ///     actions.

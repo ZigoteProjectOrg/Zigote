@@ -1,4 +1,5 @@
 using Zigote.Core;
+using Zigote.Core.Events;
 using Zigote.Core.Math3D;
 using Zigote.Core.Paint;
 using Zigote.Editor.Export;
@@ -6,6 +7,7 @@ using Zigote.Editor.Panels;
 using Zigote.Editor.Panels.AssetPreview;
 using Zigote.Editor.Scene;
 using Zigote.Editor.Settings;
+using Zigote.Editor.Shading;
 using Zigote.Graphs.Core;
 using Zigote.Graphs.Editor;
 using Zigote.Graphs.Registry;
@@ -44,6 +46,9 @@ public sealed class EditorLayout : Widget
     private ConsolePanel? _consolePanel;
     private string? _openFilePath;
     private Size _size;
+
+    // Re-reads the play state into the header-bar transport; set by BuildHeaderBar.
+    private Action? _syncTransport;
 
     public EditorLayout(EditorState state, ThemeData theme, App app, EditorActions actions)
     {
@@ -100,7 +105,14 @@ public sealed class EditorLayout : Widget
         // shell is one strip: header bar over dock, the arrangement AdwToolbarView exists for.
         var menus = BuildMenus();
         var header = BuildHeaderBar(NativeMenuBar.TryInstall(menus) ? null : menus);
-        return new AdwToolbarView(dock) { TopBars = { header } };
+        var status = new StatusBar(
+            state: State,
+            theme: _theme,
+            paletteHint: MenuAccelerators.Display(PaletteShortcut) ?? PaletteShortcut,
+            showConsole: () => dock.OpenPanel("console"),
+            showPalette: ShowCommandPalette
+        );
+        return new AdwToolbarView(dock) { TopBars = { header }, BottomBars = { status } };
     }
 
     // ── Menu bar ────────────────────────────────────────────────────────────────
@@ -149,6 +161,14 @@ public sealed class EditorLayout : Widget
                 new ContextMenuItem(Label: "Undo", OnSelect: DoUndo, Shortcut: "⌘Z"),
                 new ContextMenuItem(Label: "Redo", OnSelect: DoRedo, Shortcut: "⌘⇧Z"),
                 new ContextMenuItem(Label: "", OnSelect: null, Separator: true),
+                new ContextMenuItem(
+                    Label: "Duplicate Node",
+                    OnSelect: State.DuplicateSelected,
+                    Shortcut: "⌘D"
+                ),
+                // No accelerator: Delete/Backspace as a menu key equivalent would eat text editing.
+                new ContextMenuItem(Label: "Delete Node", OnSelect: State.DeleteSelected),
+                new ContextMenuItem(Label: "", OnSelect: null, Separator: true),
                 // A running game can capture the pointer for mouselook, which hides the cursor and
                 // makes every other panel unreachable. Esc in the viewport is the per-session way out
                 // (this menu is not clickable while the cursor is captured); this toggle is the
@@ -158,19 +178,63 @@ public sealed class EditorLayout : Widget
                     OnSelect: ToggleMouseCapture,
                     Checked: _app.Engine.AllowRelativeMouseMode
                 ),
-                new ContextMenuItem(Label: "", OnSelect: null, Separator: true),
-                new ContextMenuItem(Label: "Reset Layout", OnSelect: ResetLayout),
+            ]
+        );
+
+        // View — the palette, then one entry per dock panel (re-opens a closed one, surfaces a
+        // hidden tab), ⌘1…⌘5 for the ones reached for constantly.
+        List<ContextMenuItem> viewItems = [
+            new(Label: "Command Palette…", OnSelect: ShowCommandPalette, Shortcut: PaletteShortcut),
+            new(Label: "", OnSelect: null, Separator: true),
+        ];
+        foreach (var panel in Dock!.Panels)
+        {
+            string id = panel.PanelId;
+            viewItems.Add(
+                new ContextMenuItem(
+                    // The code tab is retitled to the open file; the menu names the panel.
+                    Label: id == "codeeditor" ? "Code" : panel.Title,
+                    OnSelect: () => Dock.OpenPanel(id),
+                    Shortcut: Array.IndexOf(array: PanelShortcutOrder, value: id) is >= 0 and var n
+                        ? $"⌘{n + 1}"
+                        : null
+                )
+            );
+        }
+
+        viewItems.Add(new ContextMenuItem(Label: "", OnSelect: null, Separator: true));
+        viewItems.Add(
+            new ContextMenuItem(
+                Label: "Maximize Viewport",
+                OnSelect: () => Dock.ToggleMaximize("viewport"),
+                Shortcut: "F11"
+            )
+        );
+        viewItems.Add(new ContextMenuItem(Label: "Reset Layout", OnSelect: ResetLayout));
+        var view = new AppMenu(Title: "View", Items: viewItems);
+
+        var run = new AppMenu(
+            Title: "Run",
+            Items: [
+                new ContextMenuItem(Label: "Play / Stop", OnSelect: TogglePlay, Shortcut: "F5"),
+                new ContextMenuItem(Label: "Pause / Resume", OnSelect: TogglePause, Shortcut: "F6"),
             ]
         );
 
         bool nativeBar = NativeMenuBar.Backend is not null && NativeMenuBar.Enabled;
+        var shortcutsItem = new ContextMenuItem(
+            Label: "Keyboard Shortcuts",
+            OnSelect: ShowShortcuts,
+            Shortcut: "⌘/"
+        );
 
         // Native bar only: a Window menu with the AppKit role — the OS appends Minimize/Zoom and
         // the live window list. The in-window bar has nothing useful to render there.
         if (nativeBar)
         {
             var window = new AppMenu(Title: "Window", Items: [], Role: AppMenuRole.Window);
-            return [file, edit, window];
+            var nativeHelp = new AppMenu(Title: "Help", Items: [shortcutsItem]);
+            return [file, edit, view, run, window, nativeHelp];
         }
 
         // On macOS "About Zigote Editor" lives in the native app menu (NativeMenuBar.AboutRequested);
@@ -178,14 +242,235 @@ public sealed class EditorLayout : Widget
         var help = new AppMenu(
             Title: "Help",
             Items: [
+                shortcutsItem,
                 new ContextMenuItem(
                     Label: "About Zigote Editor",
                     OnSelect: () => NativeMenuBar.AboutRequested?.Invoke()
                 ),
             ]
         );
-        return [file, edit, help];
+        return [file, edit, view, run, help];
     }
+
+    // ── Command palette + shortcuts ─────────────────────────────────────────────
+
+    private const string PaletteShortcut = "⌘⇧P";
+
+    // Dock panels that get ⌘1…⌘n, in that order.
+    private static readonly string[] PanelShortcutOrder =
+        ["hierarchy", "viewport", "inspector", "browser", "console"];
+
+    // Viewport keys are handled by the focused panel, not the menu — listed here so the
+    // shortcuts window still documents them. GTK accelerator syntax (AdwShortcutLabel).
+    private static readonly (string Title, string Accel)[] ViewportShortcuts = [
+        ("Move gizmo", "w"),
+        ("Rotate gizmo", "e"),
+        ("Scale gizmo", "r"),
+        ("Frame selection", "f"),
+        ("Frame all", "<Shift>f"),
+        ("Orbit / fly camera", "c"),
+        ("Fly: move", "w a s d"),
+        ("Fly: down / up", "q e"),
+        ("Delete node", "Delete"),
+        ("Rename node (Hierarchy)", "F2"),
+    ];
+
+    /// <summary>Every project-relative file under the asset root, capped — the palette's "Asset" rows.</summary>
+    private IEnumerable<string> AssetFiles()
+    {
+        // ponytail: a fresh disk walk per palette open, capped at 5000 files; cache behind the
+        // asset watcher if a huge project makes ⌘⇧P feel slow.
+        try
+        {
+            return Directory.Exists(State.AssetRoot)
+                ? Directory.EnumerateFiles(
+                        path: State.AssetRoot,
+                        searchPattern: "*",
+                        searchOption: SearchOption.AllDirectories
+                    )
+                    .Where(f => !Path.GetFileName(f).StartsWith('.'))
+                    .Take(5000)
+                    .ToList()
+                : [];
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
+    }
+
+    private void ShowCommandPalette()
+    {
+        List<PaletteCommand> commands = [];
+
+        // Menu actions — the menu model is the single source, so anything added to a menu is
+        // searchable (with its shortcut) for free.
+        foreach (var menu in BuildMenus())
+        {
+            foreach (var item in menu.Items)
+            {
+                if (item.Separator) continue;
+                if (item.Children is { } children)
+                {
+                    foreach (var child in children)
+                    {
+                        if (child.OnSelect is { } openChild)
+                        {
+                            commands.Add(
+                                new PaletteCommand(
+                                    Title: $"{item.Label}: {child.Label}",
+                                    Group: menu.Title,
+                                    Run: openChild
+                                )
+                            );
+                        }
+                    }
+
+                    continue;
+                }
+
+                // Disabled placeholders, and the palette itself (no opening it from inside).
+                if (item.OnSelect is null || item.Shortcut == PaletteShortcut) continue;
+                commands.Add(
+                    new PaletteCommand(
+                        Title: item.Label.TrimEnd('…'),
+                        Group: menu.Title,
+                        Run: item.OnSelect!,
+                        Accel: MenuAccelerators.Display(item.Shortcut)
+                    )
+                );
+            }
+        }
+
+        foreach ((string label, var add) in NodeKinds())
+            commands.Add(new PaletteCommand(Title: label, Group: "Add", Run: add));
+        commands.Add(
+            new PaletteCommand(
+                Title: "Settings",
+                Group: "Editor",
+                Run: () => _actions.OpenSettings?.Invoke()
+            )
+        );
+
+        foreach (var node in State.Scene.Root.Descendants())
+        {
+            commands.Add(
+                new PaletteCommand(
+                    Title: node.Name,
+                    Group: "Node",
+                    Run: () => State.Select(node)
+                )
+            );
+        }
+
+        foreach (string file in AssetFiles())
+        {
+            commands.Add(
+                new PaletteCommand(
+                    Title: Path.GetRelativePath(relativeTo: State.AssetRoot, path: file),
+                    Group: "Asset",
+                    Run: () =>
+                    {
+                        Dock?.OpenPanel("browser");
+                        State.NotifyAssetSelected(file);
+                        State.NotifyOpenFile(file); // text/code opens in the editor; binary is ignored
+                    }
+                )
+            );
+        }
+
+        CommandPalette.Show(commands: commands, theme: _theme);
+    }
+
+    /// <summary>A menu shortcut ("⌘⇧P", "F5") in the GTK syntax AdwShortcutLabel draws key caps from.</summary>
+    private static string GtkAccel(string shortcut)
+    {
+        if (!MenuAccelerators.TryParse(shortcut: shortcut, chord: out var chord)) return shortcut;
+        string s = "";
+        if (chord.Modifiers.HasFlag(KeyChord.PlatformCommand)) s += "<Primary>";
+        if (chord.Modifiers.HasFlag(Modifiers.Alt)) s += "<Alt>";
+        if (chord.Modifiers.HasFlag(Modifiers.Shift)) s += "<Shift>";
+        return s + KeyNames.Display(chord.Key);
+    }
+
+    private void ShowShortcuts()
+    {
+        var dialog = new AdwShortcutsDialog();
+        foreach (var menu in BuildMenus())
+        {
+            var items = menu.Items
+                .Where(i => i is { Shortcut: not null, Separator: false })
+                .Select(i => new AdwShortcutsItem(
+                        title: i.Label.TrimEnd('…'),
+                        accelerator: GtkAccel(i.Shortcut!)
+                    )
+                )
+                .ToArray();
+            if (items.Length > 0) dialog.Add(new AdwShortcutsSection(title: menu.Title, items: items));
+        }
+
+        dialog.Add(
+            new AdwShortcutsSection(
+                title: "Viewport",
+                items: ViewportShortcuts
+                    .Select(v => new AdwShortcutsItem(title: v.Title, accelerator: v.Accel))
+                    .ToArray()
+            )
+        );
+        dialog.Show();
+    }
+
+    // ── Transport ───────────────────────────────────────────────────────────────
+
+    private void TogglePlay()
+    {
+        if (!State.IsPlaying)
+        {
+            if (State.IsScriptBuilding) return; // StartPlay refuses mid-build; the button is disabled
+            if (_actions.Settings.ConsoleClearOnPlay.Value) EditorLog.Clear();
+            State.StartPlay();
+        }
+        else
+            State.StopPlay();
+
+        _syncTransport?.Invoke();
+    }
+
+    private void TogglePause()
+    {
+        if (!State.IsPlaying) return;
+        State.TogglePause();
+        _syncTransport?.Invoke();
+    }
+
+    /// <summary>The kinds the header's Add button and the palette both offer.</summary>
+    private (string Label, Action Add)[] NodeKinds() => [
+        ("Empty Node", () => State.AddNode(name: "Node", kind: NodeKind.Empty)),
+        ("Mesh Node", () => State.AddNode(name: "Mesh", kind: NodeKind.Mesh)),
+        ("Cube", () =>
+            {
+                var n = State.AddNode(name: "Cube", kind: NodeKind.Mesh);
+                n.MeshPath = "#cube";
+                State.NotifySceneChanged();
+            }
+        ),
+        ("Sphere", () =>
+            {
+                var n = State.AddNode(name: "Sphere", kind: NodeKind.Mesh);
+                n.MeshPath = "#sphere";
+                State.NotifySceneChanged();
+            }
+        ),
+        ("Light", () => State.AddNode(name: "Light", kind: NodeKind.Light)),
+        ("Camera", () =>
+            {
+                var n = State.AddNode(name: "Camera", kind: NodeKind.Camera);
+                n.Position = new Vec3(x: 0, y: 0, z: -3f);
+                State.NotifySceneChanged();
+            }
+        ),
+        ("Script Node", () => State.AddNode(name: "Script", kind: NodeKind.Script)),
+    ];
 
     /// <summary>Forbid or re-allow capture entirely. Releases immediately when turning it off.</summary>
     private void ToggleMouseCapture()
@@ -282,9 +567,26 @@ public sealed class EditorLayout : Widget
             new ScrollView(new Padding(padding: EdgeInsets.All(4f), child: hierarchy));
         hierarchy.OnRevealRequested =
             (top, h) => hierarchyScroll.EnsureVisible(top: top + 4f, height: h);
+        var hierarchyPane = new Column {
+            Children = {
+                new Padding(
+                    padding: EdgeInsets.Symmetric(horizontal: 6f, vertical: 4f),
+                    child: new AdwSearchEntry {
+                        Placeholder = "Filter nodes",
+                        OnChanged = f => hierarchy.Filter = f,
+                    }
+                ),
+                new Expanded(hierarchyScroll),
+            },
+        };
         var viewport = new ViewportPanel(state: State, theme: _theme);
         var inspector = new InspectorPanel(state: State, theme: _theme, app: _app);
         var browser = new AssetBrowserPanel(state: State, theme: _theme);
+        var browserScroll = new ScrollView(
+            new Padding(padding: EdgeInsets.Symmetric(horizontal: 6f, vertical: 0f), child: browser)
+        );
+        browser.OnRevealRequested =
+            (top, h) => browserScroll.EnsureVisible(top: top, height: h);
         var settings = new SettingsPanel(state: State, theme: _theme);
         var info = new InfoPanel(_theme);
         var assetPreview = new AssetPreviewPanel(state: State, theme: _theme);
@@ -324,27 +626,26 @@ public sealed class EditorLayout : Widget
         // F11 in the viewport toggles its fullscreen-for-testing maximize via the dock.
         viewport.OnToggleMaximize = () => Dock?.ToggleMaximize("viewport");
 
-        // Demo graph shown in the Graph panel — domain-agnostic empty document.
-        var demoRegistry = new GraphDomainRegistry();
-        var demoGraph = new GraphDocument {
-            Id = Guid.NewGuid(),
-            Name = "New Graph",
-            DomainId = "zigote.shader",
-            SchemaId = "shader.material",
-        };
+        // The Graph tab is a shader-material scratch graph: the real shader node library, seeded
+        // with Principled BSDF → Material Output, not bound to any node (a mesh's own material
+        // graph opens from its Inspector).
+        var demoRegistry = ShaderMaterialDomain.CreateRegistry();
+        var demoGraph = ShaderMaterialDomain.CreateDefaultMaterialGraph("Material Scratch");
         var graphPanel = new GraphEditorPanel(
             graph: demoGraph,
             registry: demoRegistry,
             theme: _theme,
             app: _app
         );
+        // A docked tab opens small and gets maximized: keep the graph in view as it resizes.
+        graphPanel.AutoFrame = true;
 
         // ── Panel descriptors ─────────────────────────────────────────────────
         var panels = new DockPanel[] {
             new() {
                 PanelId = "hierarchy",
                 Title = "Hierarchy",
-                Content = hierarchyScroll,
+                Content = hierarchyPane,
             },
             new() {
                 PanelId = "viewport",
@@ -354,13 +655,44 @@ public sealed class EditorLayout : Widget
             new() {
                 PanelId = "inspector",
                 Title = "Inspector",
-                Content =
-                    new ScrollView(new Padding(padding: EdgeInsets.All(8f), child: inspector)),
+                Content = new Column {
+                    Children = {
+                        new Padding(
+                            padding: EdgeInsets.Symmetric(horizontal: 6f, vertical: 4f),
+                            child: new AdwSearchEntry {
+                                Placeholder = "Filter properties",
+                                OnChanged = f => inspector.Filter = f,
+                            }
+                        ),
+                        new Expanded(
+                            new ScrollView(
+                                new Padding(padding: EdgeInsets.All(8f), child: inspector)
+                            )
+                        ),
+                    },
+                },
             },
             new() {
+                // "Render", not "Settings": these are the scene's render settings — the editor's own
+                // preferences live in the Settings window behind the header gear.
                 PanelId = "settings",
-                Title = "Settings",
-                Content = new ScrollView(new Padding(padding: EdgeInsets.All(8f), child: settings)),
+                Title = "Render",
+                Content = new Column {
+                    Children = {
+                        new Padding(
+                            padding: EdgeInsets.Symmetric(horizontal: 6f, vertical: 4f),
+                            child: new AdwSearchEntry {
+                                Placeholder = "Filter render settings",
+                                OnChanged = f => settings.Filter = f,
+                            }
+                        ),
+                        new Expanded(
+                            new ScrollView(
+                                new Padding(padding: EdgeInsets.All(8f), child: settings)
+                            )
+                        ),
+                    },
+                },
             },
             new() {
                 PanelId = "info",
@@ -372,12 +704,18 @@ public sealed class EditorLayout : Widget
                 PanelId = "browser",
                 Title = "Project",
                 Content = new AdwPaned(
-                    first: new ScrollView(
-                        new Padding(
-                            padding: EdgeInsets.Symmetric(horizontal: 6f, vertical: 4f),
-                            child: browser
-                        )
-                    ),
+                    first: new Column {
+                        Children = {
+                            new Padding(
+                                padding: EdgeInsets.Symmetric(horizontal: 6f, vertical: 4f),
+                                child: new AdwSearchEntry {
+                                    Placeholder = "Search files",
+                                    OnChanged = f => browser.Filter = f,
+                                }
+                            ),
+                            new Expanded(browserScroll),
+                        },
+                    },
                     second: assetPreview,
                     vertical: true
                 ) { Position = 0.6f },
@@ -479,7 +817,7 @@ public sealed class EditorLayout : Widget
     /// <summary>
     ///     Default arrangement — a three-column IDE shell:
     ///     left = Hierarchy / Project (stacked); center = Viewport / Console+Timeline (stacked);
-    ///     right = Inspector / Settings+Info+Graph (stacked).
+    ///     right = Inspector / Render+Info (stacked); Graph tabs with the viewport.
     ///     <code>
     ///     SplitH(0.18)[
     ///         SplitV(0.55)[ hierarchy | browser ]
@@ -502,7 +840,8 @@ public sealed class EditorLayout : Widget
             second: new DockSplit(
                 // Center — viewport over the console/timeline strip.
                 first: new DockSplit(
-                    first: new DockLeaf(["viewport", "codeeditor"]),
+                    // The graph canvas needs room: it shares the big centre leaf, not a side column.
+                    first: new DockLeaf(["viewport", "codeeditor", "graph"]),
                     second: new DockLeaf(["console", "timeline"]),
                     vertical: true,
                     ratio: 0.72f
@@ -510,7 +849,7 @@ public sealed class EditorLayout : Widget
                 // Right — inspector over settings/info/graph tabs.
                 second: new DockSplit(
                     first: new DockLeaf("inspector"),
-                    second: new DockLeaf(["settings", "info", "graph"]),
+                    second: new DockLeaf(["settings", "info"]),
                     vertical: true,
                     ratio: 0.55f
                 ),
@@ -587,23 +926,9 @@ public sealed class EditorLayout : Widget
             _app.RequestPaint();
         }
 
-        playBtn.OnPressed = () =>
-        {
-            if (!State.IsPlaying)
-            {
-                if (_actions.Settings.ConsoleClearOnPlay.Value) EditorLog.Clear();
-                State.StartPlay();
-            }
-            else
-                State.StopPlay();
-
-            SyncTransport();
-        };
-        pauseBtn.OnPressed = () =>
-        {
-            State.TogglePause();
-            SyncTransport();
-        };
+        _syncTransport = SyncTransport;
+        playBtn.OnPressed = TogglePlay;
+        pauseBtn.OnPressed = TogglePause;
 
         // The viewport's P shortcut toggles pause directly on the state — re-sync the buttons when it does.
         State.PlayPausedChanged += SyncTransport;
@@ -613,33 +938,7 @@ public sealed class EditorLayout : Widget
         SyncTransport(); // initial state (Play is disabled while the project's first script build runs)
 
         // Add Node — a split button: pressing it drops an empty node, the arrow picks a kind.
-        (string Label, Action Add)[] nodeKinds = [
-            ("Empty Node", () => State.AddNode(name: "Node", kind: NodeKind.Empty)),
-            ("Mesh Node", () => State.AddNode(name: "Mesh", kind: NodeKind.Mesh)),
-            ("Cube", () =>
-                {
-                    var n = State.AddNode(name: "Cube", kind: NodeKind.Mesh);
-                    n.MeshPath = "#cube";
-                    State.NotifySceneChanged();
-                }
-            ),
-            ("Sphere", () =>
-                {
-                    var n = State.AddNode(name: "Sphere", kind: NodeKind.Mesh);
-                    n.MeshPath = "#sphere";
-                    State.NotifySceneChanged();
-                }
-            ),
-            ("Light", () => State.AddNode(name: "Light", kind: NodeKind.Light)),
-            ("Camera", () =>
-                {
-                    var n = State.AddNode(name: "Camera", kind: NodeKind.Camera);
-                    n.Position = new Vec3(x: 0, y: 0, z: -3f);
-                    State.NotifySceneChanged();
-                }
-            ),
-            ("Script Node", () => State.AddNode(name: "Script", kind: NodeKind.Script)),
-        ];
+        var nodeKinds = NodeKinds();
         var addBtn = new AdwSplitButton(label: "Add", onPressed: nodeKinds[0].Add) {
             IconName = Icons.Add,
             MenuItems = nodeKinds.Select(k => k.Label).ToArray(),
@@ -688,7 +987,11 @@ public sealed class EditorLayout : Widget
                 Icon(icon: Icons.FolderOpen, onPressed: ReloadScene, tooltip: "Reload Scene"),
                 snapDd,
                 new AdwSeparator(vertical: true, margin: 8f) { Length = AdwMetrics.ButtonHeight },
-                new FpsChip(),
+                Icon(
+                    icon: Icons.Search,
+                    onPressed: ShowCommandPalette,
+                    tooltip: "Command Palette"
+                ),
                 Icon(
                     icon: Icons.Settings,
                     onPressed: () => _actions.OpenSettings?.Invoke(),

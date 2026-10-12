@@ -51,7 +51,7 @@ public sealed partial class LiquidGlassPage
     // change what a pane contains, so they rebuild the chrome through one Watch.
     private readonly Signal<float> _tinted = new(0.5f);
     private readonly Signal<float> _elevation = new(4f);
-    private readonly Signal<float> _bevel = new(0.25f);
+    private readonly Signal<float> _bevel = new(0.6f);
     private readonly Signal<int> _chrome = new(0);
     private readonly Signal<int> _family = new(0);
     private readonly Signal<int> _shape = new(0);
@@ -213,8 +213,8 @@ public sealed partial class LiquidGlassPage
                     )
                 ) { HeightFactor = 1f },
                 Demo.Caption(
-                    "Clear is more transparent; tinted increases opacity. The rim is a hairline "
-                    + "on purpose — widen it and the capsule frosts over."
+                    "Clear is more transparent; tinted increases opacity. The rim is how far in "
+                    + "the lens bends — the middle of the pane stays clear."
                 ),
             },
         };
@@ -285,16 +285,16 @@ public sealed partial class LiquidGlassPage
                     ),
                 },
             },
-            new AdwActionRow(title: "Rim", subtitle: "Hairline is right; wider is a frosted ring") {
+            new AdwActionRow(title: "Rim", subtitle: "How far in from the edge the lens bends") {
                 Suffixes = {
                     new SizedBox(
                         width: 180f,
                         child: new AdwSlider(
                             value: _bevel.Peek(),
                             min: 0.1f,
-                            // The pane caps its bevel at a tenth of the shorter side — 5.6px on
+                            // The pane caps its bevel at a fifth of the shorter side — 11.2px on
                             // this 56px chrome — so past this point the dial would move nothing.
-                            max: ToolbarHeight * 0.1f / theme.GlassThickness,
+                            max: ToolbarHeight * 0.2f / theme.GlassThickness,
                             onChanged: v =>
                             {
                                 _bevel.Value = v;

@@ -14,6 +14,8 @@ using Zigote.UI.Widgets.Layout;
 // FilePickerDialog: the in-app file browser. GTK's file chooser is a shell portal with no
 // libadwaita widget behind it, so this stays Material until one exists here.
 
+using Zigote.Editor.Widgets;
+
 namespace Zigote.Editor.Panels;
 
 public sealed partial class InspectorPanel
@@ -576,189 +578,71 @@ public sealed partial class InspectorPanel
             );
         }
 
-        public static PropRow Vec3(string label, NodeBind<Vec3> bind, ThemeData theme)
-        {
-            var current = bind.Value;
-            var tfX = MiniFloat(val: current.X.ToString("F2"), theme: theme);
-            var tfY = MiniFloat(val: current.Y.ToString("F2"), theme: theme);
-            var tfZ = MiniFloat(val: current.Z.ToString("F2"), theme: theme);
+        public static PropRow Vec3(string label, NodeBind<Vec3> bind, ThemeData theme) =>
+            VecRow(label: label, current: bind.Value, set: bind.Set, axes: "XYZ", theme: theme);
 
-            static float Parse(string s)
-            {
-                return float.TryParse(
-                    s: s,
-                    style: NumberStyles.Float,
-                    provider: CultureInfo.InvariantCulture,
-                    result: out float v
-                )
-                    ? v
-                    : 0f;
-            }
-
-            tfX.OnChanged = s =>
-                bind.Set(new Vec3(x: Parse(s), y: Parse(tfY.Text), z: Parse(tfZ.Text)));
-            tfY.OnChanged = s =>
-                bind.Set(new Vec3(x: Parse(tfX.Text), y: Parse(s), z: Parse(tfZ.Text)));
-            tfZ.OnChanged = s =>
-                bind.Set(new Vec3(x: Parse(tfX.Text), y: Parse(tfY.Text), z: Parse(s)));
-
-            return new PropRow(
-                new Padding(
-                    padding: new EdgeInsets(
-                        left: 0f,
-                        top: 0f,
-                        right: 0f,
-                        bottom: 6f
-                    ),
-                    child: new Column {
-                        MainAxisAlignment = MainAxisAlignment.Start,
-                        CrossAxisAlignment = CrossAxisAlignment.Start,
-                        Children = {
-                            new Label(
-                                text: label,
-                                fontSize: theme.FontSizeCaption,
-                                color: theme.Hint
-                            ),
-                            new SizedBox(height: 3f),
-                            new Row {
-                                MainAxisAlignment = MainAxisAlignment.Start,
-                                CrossAxisAlignment = CrossAxisAlignment.Center,
-                                Children = {
-                                    new Label(
-                                        text: "X",
-                                        fontSize: theme.FontSizeCaption,
-                                        color: theme.Accent
-                                    ),
-                                    new SizedBox(2f),
-                                    new SizedBox(width: 64f, child: tfX),
-                                    new SizedBox(8f),
-                                    new Label(
-                                        text: "Y",
-                                        fontSize: theme.FontSizeCaption,
-                                        color: theme.Success
-                                    ),
-                                    new SizedBox(2f),
-                                    new SizedBox(width: 64f, child: tfY),
-                                    new SizedBox(8f),
-                                    new Label(
-                                        text: "Z",
-                                        fontSize: theme.FontSizeCaption,
-                                        color: theme.Primary
-                                    ),
-                                    new SizedBox(2f),
-                                    new SizedBox(width: 64f, child: tfZ),
-                                },
-                            },
-                        },
-                    }
-                )
-            );
-        }
-
-        public static PropRow Vec3Color(string label, NodeBind<Vec3> bind, ThemeData theme)
-        {
-            var current = bind.Value;
-            var tfR = MiniFloat(val: current.X.ToString("F2"), theme: theme);
-            var tfG = MiniFloat(val: current.Y.ToString("F2"), theme: theme);
-            var tfB = MiniFloat(val: current.Z.ToString("F2"), theme: theme);
-
-            static float Parse(string s)
-            {
-                return float.TryParse(
-                    s: s,
-                    style: NumberStyles.Float,
-                    provider: CultureInfo.InvariantCulture,
-                    result: out float v
-                )
-                    ? v
-                    : 0f;
-            }
-
-            tfR.OnChanged = s =>
-                bind.Set(new Vec3(x: Parse(s), y: Parse(tfG.Text), z: Parse(tfB.Text)));
-            tfG.OnChanged = s =>
-                bind.Set(new Vec3(x: Parse(tfR.Text), y: Parse(s), z: Parse(tfB.Text)));
-            tfB.OnChanged = s =>
-                bind.Set(new Vec3(x: Parse(tfR.Text), y: Parse(tfG.Text), z: Parse(s)));
-
-            return new PropRow(
-                new Padding(
-                    padding: new EdgeInsets(
-                        left: 0f,
-                        top: 0f,
-                        right: 0f,
-                        bottom: 6f
-                    ),
-                    child: new Column {
-                        MainAxisAlignment = MainAxisAlignment.Start,
-                        CrossAxisAlignment = CrossAxisAlignment.Start,
-                        Children = {
-                            new Label(
-                                text: label,
-                                fontSize: theme.FontSizeCaption,
-                                color: theme.Hint
-                            ),
-                            new SizedBox(height: 3f),
-                            new Row {
-                                MainAxisAlignment = MainAxisAlignment.Start,
-                                CrossAxisAlignment = CrossAxisAlignment.Center,
-                                Children = {
-                                    new Label(
-                                        text: "R",
-                                        fontSize: theme.FontSizeCaption,
-                                        color: new Color(r: 0.9f, g: 0.35f, b: 0.35f)
-                                    ),
-                                    new SizedBox(2f),
-                                    new SizedBox(height: 22f, width: 56f, child: tfR),
-                                    new SizedBox(6f),
-                                    new Label(
-                                        text: "G",
-                                        fontSize: theme.FontSizeCaption,
-                                        color: new Color(r: 0.3f, g: 0.85f, b: 0.3f)
-                                    ),
-                                    new SizedBox(2f),
-                                    new SizedBox(height: 22f, width: 56f, child: tfG),
-                                    new SizedBox(6f),
-                                    new Label(
-                                        text: "B",
-                                        fontSize: theme.FontSizeCaption,
-                                        color: new Color(r: 0.3f, g: 0.55f, b: 1.0f)
-                                    ),
-                                    new SizedBox(2f),
-                                    new SizedBox(height: 22f, width: 56f, child: tfB),
-                                },
-                            },
-                        },
-                    }
-                )
-            );
-        }
+        public static PropRow Vec3Color(string label, NodeBind<Vec3> bind, ThemeData theme) =>
+            VecRow(label: label, current: bind.Value, set: bind.Set, axes: "RGB", theme: theme);
 
         public static PropRow Vec3Color(string label, Vec3 current, Action<Vec3> setter,
+            ThemeData theme) =>
+            VecRow(label: label, current: current, set: setter, axes: "RGB", theme: theme);
+
+        public static PropRow Vec3(string label, Vec3 current, Action<Vec3> setter,
+            ThemeData theme) =>
+            VecRow(label: label, current: current, set: setter, axes: "XYZ", theme: theme);
+
+        // Axis tints — X/R red, Y/G green, Z/B blue, matching the viewport gizmo.
+        private static readonly Color[] AxisColors = [
+            new(r: 0.9f, g: 0.35f, b: 0.35f),
+            new(r: 0.3f, g: 0.75f, b: 0.3f),
+            new(r: 0.3f, g: 0.55f, b: 1.0f),
+        ];
+
+        /// <summary>
+        ///     A labelled three-component row whose fields share the row's width (so it fits a
+        ///     narrow dock column). Editing one component leaves the other two at their full stored
+        ///     precision, and text that is not yet a number ("-", "1.") is ignored rather than
+        ///     written as 0. Numbers are invariant-culture on both sides: shown the way they parse.
+        /// </summary>
+        private static PropRow VecRow(string label, Vec3 current, Action<Vec3> set, string axes,
             ThemeData theme)
         {
-            var tfR = MiniFloat(val: current.X.ToString("F2"), theme: theme);
-            var tfG = MiniFloat(val: current.Y.ToString("F2"), theme: theme);
-            var tfB = MiniFloat(val: current.Z.ToString("F2"), theme: theme);
-
-            static float Parse(string s)
+            float[] value = [current.X, current.Y, current.Z];
+            var row = new Row {
+                MainAxisAlignment = MainAxisAlignment.Start,
+                CrossAxisAlignment = CrossAxisAlignment.Center,
+            };
+            for (int i = 0; i < 3; i++)
             {
-                return float.TryParse(
-                    s: s,
-                    style: NumberStyles.Float,
-                    provider: CultureInfo.InvariantCulture,
-                    result: out float v
-                )
-                    ? v
-                    : 0f;
+                int axis = i;
+                var field = new AdwEntry {
+                    Text = value[i].ToString(format: "0.###", provider: CultureInfo.InvariantCulture),
+                    Compact = true,
+                    OnChanged = s =>
+                    {
+                        if (!float.TryParse(
+                                s: s,
+                                style: NumberStyles.Float,
+                                provider: CultureInfo.InvariantCulture,
+                                result: out float parsed
+                            ))
+                            return;
+                        value[axis] = parsed;
+                        set(new Vec3(x: value[0], y: value[1], z: value[2]));
+                    },
+                };
+                if (i > 0) row.Children.Add(new SizedBox(6f));
+                row.Children.Add(
+                    new Label(
+                        text: axes[i].ToString(),
+                        fontSize: theme.FontSizeCaption,
+                        color: AxisColors[i]
+                    )
+                );
+                row.Children.Add(new SizedBox(3f));
+                row.Children.Add(new Expanded(field));
             }
-
-            tfR.OnChanged = s =>
-                setter(new Vec3(x: Parse(s), y: Parse(tfG.Text), z: Parse(tfB.Text)));
-            tfG.OnChanged = s =>
-                setter(new Vec3(x: Parse(tfR.Text), y: Parse(s), z: Parse(tfB.Text)));
-            tfB.OnChanged = s =>
-                setter(new Vec3(x: Parse(tfR.Text), y: Parse(tfG.Text), z: Parse(s)));
 
             return new PropRow(
                 new Padding(
@@ -778,124 +662,15 @@ public sealed partial class InspectorPanel
                                 color: theme.Hint
                             ),
                             new SizedBox(height: 3f),
-                            new Row {
-                                MainAxisAlignment = MainAxisAlignment.Start,
-                                CrossAxisAlignment = CrossAxisAlignment.Center,
-                                Children = {
-                                    new Label(
-                                        text: "R",
-                                        fontSize: theme.FontSizeCaption,
-                                        color: new Color(r: 0.9f, g: 0.35f, b: 0.35f)
-                                    ),
-                                    new SizedBox(2f),
-                                    new SizedBox(height: 22f, width: 56f, child: tfR),
-                                    new SizedBox(6f),
-                                    new Label(
-                                        text: "G",
-                                        fontSize: theme.FontSizeCaption,
-                                        color: new Color(r: 0.3f, g: 0.85f, b: 0.3f)
-                                    ),
-                                    new SizedBox(2f),
-                                    new SizedBox(height: 22f, width: 56f, child: tfG),
-                                    new SizedBox(6f),
-                                    new Label(
-                                        text: "B",
-                                        fontSize: theme.FontSizeCaption,
-                                        color: new Color(r: 0.3f, g: 0.55f, b: 1.0f)
-                                    ),
-                                    new SizedBox(2f),
-                                    new SizedBox(height: 22f, width: 56f, child: tfB),
-                                },
-                            },
+                            row,
                         },
                     }
                 )
             );
         }
 
-        public static PropRow Vec3(string label, Vec3 current, Action<Vec3> setter, ThemeData theme)
-        {
-            var tfX = MiniFloat(val: current.X.ToString("F2"), theme: theme);
-            var tfY = MiniFloat(val: current.Y.ToString("F2"), theme: theme);
-            var tfZ = MiniFloat(val: current.Z.ToString("F2"), theme: theme);
-
-            static float Parse(string s)
-            {
-                return float.TryParse(
-                    s: s,
-                    style: NumberStyles.Float,
-                    provider: CultureInfo.InvariantCulture,
-                    result: out float v
-                )
-                    ? v
-                    : 0f;
-            }
-
-            tfX.OnChanged = s =>
-                setter(new Vec3(x: Parse(s), y: Parse(tfY.Text), z: Parse(tfZ.Text)));
-            tfY.OnChanged = s =>
-                setter(new Vec3(x: Parse(tfX.Text), y: Parse(s), z: Parse(tfZ.Text)));
-            tfZ.OnChanged = s =>
-                setter(new Vec3(x: Parse(tfX.Text), y: Parse(tfY.Text), z: Parse(s)));
-
-            return new PropRow(
-                new Padding(
-                    padding: new EdgeInsets(
-                        left: 0f,
-                        top: 0f,
-                        right: 0f,
-                        bottom: 6f
-                    ),
-                    child: new Column {
-                        MainAxisAlignment = MainAxisAlignment.Start,
-                        CrossAxisAlignment = CrossAxisAlignment.Start,
-                        Children = {
-                            new Label(
-                                text: label,
-                                fontSize: theme.FontSizeCaption,
-                                color: theme.Hint
-                            ),
-                            new SizedBox(height: 3f),
-                            new Row {
-                                MainAxisAlignment = MainAxisAlignment.Start,
-                                CrossAxisAlignment = CrossAxisAlignment.Center,
-                                Children = {
-                                    new Label(
-                                        text: "X",
-                                        fontSize: theme.FontSizeCaption,
-                                        color: theme.Accent
-                                    ),
-                                    new SizedBox(2f),
-                                    new SizedBox(width: 64f, child: tfX),
-                                    new SizedBox(8f),
-                                    new Label(
-                                        text: "Y",
-                                        fontSize: theme.FontSizeCaption,
-                                        color: theme.Success
-                                    ),
-                                    new SizedBox(2f),
-                                    new SizedBox(width: 64f, child: tfY),
-                                    new SizedBox(8f),
-                                    new Label(
-                                        text: "Z",
-                                        fontSize: theme.FontSizeCaption,
-                                        color: theme.Primary
-                                    ),
-                                    new SizedBox(2f),
-                                    new SizedBox(width: 64f, child: tfZ),
-                                },
-                            },
-                        },
-                    }
-                )
-            );
-        }
-
-        private static AdwEntry MiniFloat(string val, ThemeData theme) => new() {
-            Text = val,
-            Width = 64f,
-            Compact = true,
-        };
+        /// <summary>The row's caption for the property filter; null for spacers and button rows.</summary>
+        public string? Caption => RowCaption.Of(_inner);
 
         public override Size Measure(Constraints c)
         {

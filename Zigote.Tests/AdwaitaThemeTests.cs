@@ -7,17 +7,25 @@ using Zigote.UI.Widgets;
 namespace Zigote.Tests;
 
 /// <summary>
-///     Pins the Adwaita theme maths that has no visual test: the linear-blend alpha correction and
-///     the contrast-driven standalone accent. Both are easy to "simplify" back to the CSS numbers.
+///     Pins the Adwaita theme maths that has no visual test: that CSS alphas survive the renderer's
+///     linear blend (corrected in the shape shader, not in the palette) and the contrast-driven
+///     standalone accent.
 /// </summary>
 public class AdwaitaThemeTests
 {
     private static float Lin(float c) => MathF.Pow(x: MathF.Max(x: c, y: 0f), y: 2.2f);
 
-    /// <summary>Composite in linear space (what the shader does) and re-encode.</summary>
+    /// <summary>
+    ///     What the shape shader does: remap alpha (<c>perceptual_alpha</c> in common_color.wgsl —
+    ///     keep the constants in step), composite in linear space, re-encode.
+    /// </summary>
     private static float Composite(Color fg, Color bg)
     {
-        float l = ((1f - fg.A) * Lin(bg.G)) + (fg.A * Lin(fg.G));
+        float lum = (0.299f * fg.R) + (0.587f * fg.G) + (0.114f * fg.B);
+        float dark = 1f - MathF.Pow(x: 1f - fg.A, y: 2.2f);
+        float bright = (Lin(fg.A + ((1f - fg.A) * 0.11f)) - 0.00778f) / (1f - 0.00778f);
+        float a = dark + ((bright - dark) * lum);
+        float l = ((1f - a) * Lin(bg.G)) + (a * Lin(fg.G));
         return MathF.Pow(x: l, y: 1f / 2.2f);
     }
 
@@ -38,12 +46,12 @@ public class AdwaitaThemeTests
         float tint = dark ? 1f : 6f / 255f;
         float expected = ((1f - cssAlpha) * surface.G) + (cssAlpha * tint);
 
-        // Overlay() averages the three solved channels, so the green-only reference here lands
-        // within a fraction of a level rather than exactly.
+        // Exact for dark tints; bright tints are solved for a typical dark surface rather than
+        // this one, so allow a few levels.
         Assert.InRange(
             actual: Composite(fg: fill, bg: surface),
-            low: expected - 0.005f,
-            high: expected + 0.005f
+            low: expected - 0.015f,
+            high: expected + 0.015f
         );
     }
 

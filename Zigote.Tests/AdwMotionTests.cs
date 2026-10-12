@@ -64,6 +64,30 @@ public class AdwMotionTests
         }
     }
 
+    /// <summary>
+    ///     A switch row's click sets <c>Value</c> from outside; on screen that has to slide the
+    ///     knob like a direct tap does, and only an unmounted switch may jump.
+    /// </summary>
+    [Fact]
+    public void Switch_Value_Set_Slides_When_Mounted_And_Snaps_When_Not()
+    {
+        var off = new AdwSwitch();
+        int before = off.DebugStateHash();
+        off.Value = true;
+        var snapped = new AdwSwitch(true);
+        Assert.Equal(expected: snapped.DebugStateHash(), actual: off.DebugStateHash());
+        Assert.NotEqual(expected: before, actual: off.DebugStateHash());
+
+        var sw = new AdwSwitch();
+        sw.Attach(owner: null!, parent: null);
+        sw.Value = true;
+        Ticker.AdvanceAll(1f / 60f);
+        Assert.NotEqual(expected: snapped.DebugStateHash(), actual: sw.DebugStateHash());
+        for (int i = 0; i < 240; i++) Ticker.AdvanceAll(1f / 60f);
+        Assert.Equal(expected: snapped.DebugStateHash(), actual: sw.DebugStateHash());
+        sw.Detach();
+    }
+
     [Fact]
     public void ProgressBar_Eases_To_A_New_Value_And_Then_Stands_Still()
     {

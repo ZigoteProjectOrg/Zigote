@@ -20,6 +20,9 @@ public sealed class DecoratedBox : Widget
     public Widget? Child { get; set; }
     public Color Fill { get; set; } = Color.Transparent;
     public float Radius { get; set; }
+
+    /// <summary>Squircle corners instead of circular arcs — the Liquid Glass outline.</summary>
+    public bool Squircle { get; set; }
     public Color BorderColor { get; set; } = Color.Transparent;
     public float BorderWidth { get; set; } = 1f;
 
@@ -53,16 +56,17 @@ public sealed class DecoratedBox : Widget
     public override void Paint(PaintList paint)
     {
         if (Elevation is { } e)
-            paint.AddElevation(bounds: Bounds, radius: Radius, style: e);
+            paint.AddElevation(bounds: Bounds, radius: Radius, style: e, squircle: Squircle);
         if (Fill.A > 0f)
-            paint.AddRect(bounds: Bounds, color: Fill, radius: Radius);
+            paint.AddRect(bounds: Bounds, color: Fill, radius: Radius, squircle: Squircle);
         if (BorderColor.A > 0f)
         {
             paint.AddBorder(
                 bounds: Bounds,
                 color: BorderColor,
                 radius: Radius,
-                width: BorderWidth
+                width: BorderWidth,
+                squircle: Squircle
             );
         }
 

@@ -7,7 +7,7 @@ namespace Zigote.UI.Theme;
 ///     Liquid Glass surface painter — the default material for Zigote UI controls.
 ///     <para>
 ///         Renders a refractive glass plane (dynamic lensing of the backdrop) that floats above the
-///         UI with a soft drop shadow and a hairline rim highlight, and modulates thickness / tint /
+///         UI with a soft drop shadow and the shader's own rim light, and modulates thickness / tint /
 ///         glow for hover and the gel-like press response. Controls call <see cref="Surface" /> in
 ///         their <c>Paint</c> before drawing their content (text / icon) on top.
 ///     </para>
@@ -58,7 +58,8 @@ public static class Glass
                 ),
                 borderRadius: radius,
                 blurRadius: elevation * 2.2f,
-                spread: elevation * 0.12f
+                spread: elevation * 0.12f,
+                squircle: true
             );
         }
 
@@ -83,9 +84,8 @@ public static class Glass
             adapt: adapt ?? AutoAdapt(theme: theme, tint: tint, tintStrength: tintStrength)
         );
 
-        // Rim: a hairline that reads as the glass edge catching light, brighter when interactive.
-        var rim = theme.OnSurface.WithAlpha(hovered || pressed ? 0.30f : 0.16f);
-        paint.AddBorder(bounds: bounds, color: rim, radius: radius);
+        // No drawn border: the rim light is the shader's own directional hairline, and a flat
+        // outline over it reads as brushed metal.
     }
 
     /// <summary>Clear glass surface using the theme's default tint/strength.</summary>
@@ -153,7 +153,8 @@ public static class Glass
                 ),
                 borderRadius: radius,
                 blurRadius: elevation * 2.2f,
-                spread: elevation * 0.12f
+                spread: elevation * 0.12f,
+                squircle: true
             );
         }
 
@@ -173,11 +174,6 @@ public static class Glass
             glowY: theme.GlassGlowY,
             pinch: pinch,
             adapt: AutoAdapt(theme: theme, tint: theme.GlassTint, tintStrength: strength)
-        );
-        paint.AddBorder(
-            bounds: bounds,
-            color: theme.OnSurface.WithAlpha(hovered || pressed ? 0.30f : 0.16f),
-            radius: radius
         );
     }
 }

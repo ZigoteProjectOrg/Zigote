@@ -2221,20 +2221,22 @@ public sealed partial class ViewportPanel : Widget
                 return;
             }
 
-            // Gizmo mode: T / R / S (only without modifier so Ctrl+S etc. fall through)
+            // Gizmo mode: W / E / R — move / rotate / scale, the layout shared by the major
+            // engines (only without a modifier so Ctrl+S etc. fall through, and only in orbit:
+            // fly mode owns WASD). T and S stay as aliases for translate and scale.
             if (mods == Modifiers.None && _cameraMode == CameraNavigationMode.Orbit)
             {
-                switch (char.ToLower(keyChar))
+                GizmoMode? mode = char.ToLower(keyChar) switch {
+                    'w' or 't' => GizmoMode.Translate,
+                    'e' => GizmoMode.Rotate,
+                    'r' or 's' => GizmoMode.Scale,
+                    _ => null,
+                };
+                if (mode is { } picked)
                 {
-                    case 't':
-                        _gizmoMode = GizmoMode.Translate;
-                        return;
-                    case 'r':
-                        _gizmoMode = GizmoMode.Rotate;
-                        return;
-                    case 's':
-                        _gizmoMode = GizmoMode.Scale;
-                        return;
+                    _gizmoMode = picked;
+                    MarkNeedsPaint(); // the gizmo + its toolbar highlight
+                    return;
                 }
             }
         }
@@ -2799,11 +2801,11 @@ public sealed partial class ViewportPanel : Widget
                     ? "RMB orbit  •  Wheel zoom  •  F frame  •  C fly"
                     : _gizmoMode switch {
                         GizmoMode.Rotate =>
-                            "[RMB] orbit  [wheel] zoom  [F] frame  [rings] rotate  [T/S] switch  [C] fly",
+                            "[RMB] orbit  [wheel] zoom  [F] frame  [rings] rotate  [W/R] switch  [C] fly",
                         GizmoMode.Scale =>
-                            "[RMB] orbit  [wheel] zoom  [F] frame  [axes] scale  [T/R] switch  [C] fly",
+                            "[RMB] orbit  [wheel] zoom  [F] frame  [axes] scale  [W/E] switch  [C] fly",
                         _ =>
-                            "[RMB] orbit  [wheel] zoom  [F] frame selection  [T/R/S] gizmo  [C] fly",
+                            "[RMB] orbit  [wheel] zoom  [F] frame selection  [W/E/R] gizmo  [C] fly",
                     };
         float ctrlW = controls.Length * fs * 0.56f;
         paint.AddRect(
@@ -2820,7 +2822,8 @@ public sealed partial class ViewportPanel : Widget
             text: controls,
             baselineX: Bounds.X + ((Bounds.Width - ctrlW) / 2f),
             baselineY: Bounds.Bottom - 8f,
-            color: _theme.Hint,
+            // On the scrim, not the panel: theme text greys vanish against it in the light theme.
+            color: Color.White.WithAlpha(0.92f),
             fontSize: fs
         );
 

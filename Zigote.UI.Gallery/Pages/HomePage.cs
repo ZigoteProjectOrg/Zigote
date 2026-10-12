@@ -109,8 +109,8 @@ internal sealed class HomePage : ComposedWidget
                 new SizedBox(height: 4),
                 new Text(
                     data: l.HomeTagline,
-                    style: new TextStyle(fontSize: 13, color: Colors.Grey[500])
-                ),
+                    style: new TextStyle(fontSize: 13)
+                ) { Style = Label.LabelStyle.Caption },
             ]
         );
 
@@ -137,8 +137,8 @@ internal sealed class HomePage : ComposedWidget
                         children: [
                             new Text(
                                 data: l.HomeLanguage,
-                                style: new TextStyle(color: Colors.Grey[500])
-                            ),
+                                style: new TextStyle(fontSize: 14)
+                            ) { Style = Label.LabelStyle.Caption },
                             new SizedBox(12),
                             LanguageSwitcher(context: context, l: l),
                         ]
@@ -149,8 +149,8 @@ internal sealed class HomePage : ComposedWidget
                         children: [
                             new Text(
                                 data: l.HomeAppearance,
-                                style: new TextStyle(color: Colors.Grey[500])
-                            ),
+                                style: new TextStyle(fontSize: 14)
+                            ) { Style = Label.LabelStyle.Caption },
                             new SizedBox(12),
                             appearance,
                         ]
@@ -164,11 +164,11 @@ internal sealed class HomePage : ComposedWidget
             children: [
                 new Expanded(headline),
                 new SizedBox(24),
-                new Text(data: l.HomeLanguage, style: new TextStyle(color: Colors.Grey[500])),
+                new Text(data: l.HomeLanguage, style: new TextStyle(fontSize: 14)) { Style = Label.LabelStyle.Caption },
                 new SizedBox(12),
                 LanguageSwitcher(context: context, l: l),
                 new SizedBox(24),
-                new Text(data: l.HomeAppearance, style: new TextStyle(color: Colors.Grey[500])),
+                new Text(data: l.HomeAppearance, style: new TextStyle(fontSize: 14)) { Style = Label.LabelStyle.Caption },
                 new SizedBox(12),
                 appearance,
             ]
@@ -229,8 +229,8 @@ internal sealed class HomePage : ComposedWidget
                             new SizedBox(height: 4),
                             new Text(
                                 data: demo.Description(l),
-                                style: new TextStyle(fontSize: 12, color: Colors.Grey[500])
-                            ),
+                                style: new TextStyle(fontSize: 12)
+                            ) { Style = Label.LabelStyle.Caption },
                         ]
                     )
                 )

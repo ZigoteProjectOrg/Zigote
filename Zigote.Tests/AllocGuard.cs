@@ -16,14 +16,39 @@ public static class AllocGuard
     {
         for (int i = 0; i < warmup; i++) iteration();
 
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < iterations; i++) iteration();
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        long allocated = Measure(() =>
+        {
+            for (int i = 0; i < iterations; i++) iteration();
+        });
 
         Assert.True(
             condition: allocated == 0,
             userMessage: $"Hot loop allocated {allocated} B over {iterations} iterations " +
                          $"({allocated / (double)iterations:F2} B/iteration); expected 0."
         );
+    }
+
+    /// <summary>
+    ///     Managed bytes <paramref name="loop" /> allocates on this thread in steady state: the least
+    ///     of up to <paramref name="attempts" /> runs, stopping at the first that allocates nothing.
+    ///     <para>
+    ///         One run is not enough when the suite runs in parallel. Now and then a single burst of
+    ///         4–8 KB lands in the window that the loop did not cause — measured on a particle step
+    ///         that is pure arithmetic: 7856 B in one 25-step slice, 0 B in the 39 slices around it.
+    ///         A loop that really allocates does so on every run, so the minimum still catches it;
+    ///         the loop must therefore be repeatable.
+    ///     </para>
+    /// </summary>
+    public static long Measure(Action loop, int attempts = 3)
+    {
+        long least = long.MaxValue;
+        for (int attempt = 0; attempt < attempts && least != 0; attempt++)
+        {
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            loop();
+            least = Math.Min(val1: least, val2: GC.GetAllocatedBytesForCurrentThread() - before);
+        }
+
+        return least;
     }
 }

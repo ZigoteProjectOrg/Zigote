@@ -612,18 +612,19 @@ public class Render2DTests
         Assert.True(renderer.BatchCount > 1);
 
         const int frames = 500;
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < frames; i++)
+        long measured = AllocGuard.Measure(() =>
         {
-            Frame(
-                renderer: renderer,
-                scene: scene,
-                overlayVp: overlayVp,
-                shared: shared
-            );
-        }
-
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            for (int i = 0; i < frames; i++)
+            {
+                Frame(
+                    renderer: renderer,
+                    scene: scene,
+                    overlayVp: overlayVp,
+                    shared: shared
+                );
+            }
+        });
+        long allocated = measured;
 
         Assert.True(
             condition: allocated == 0,

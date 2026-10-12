@@ -68,6 +68,10 @@ public class AdwaitaApp : ZigoteApp
             : WindowChrome.Resolve();
     }
 
+    /// <summary>The Adwaita palette for the requested appearance, keeping the system accent.</summary>
+    protected override void SetDarkAppearance(bool dark) =>
+        Theme = AdwTheme.Create(accent: SystemAccent, dark: dark);
+
     /// <summary>
     ///     The system appearance or accent changed (and, unless an explicit theme was passed,
     ///     <see cref="ZigoteApp.Theme" /> was already re-created). Apps rebuild their retained
@@ -171,9 +175,13 @@ public class AdwaitaApp : ZigoteApp
         return win;
     }
 
+    /// <summary>Secondary windows follow in the same frame as the main one.</summary>
+    protected override void OnThemeChanged(ThemeData theme) => SyncWindowThemes();
+
     /// <summary>
     ///     Push the live theme into every open secondary window (the base class syncs the main one)
-    ///     and drop the ones that have closed themselves.
+    ///     and drop the ones that have closed themselves. Runs on every theme change, and once a
+    ///     frame from OnUpdate to notice closed windows.
     /// </summary>
     private void SyncWindowThemes()
     {

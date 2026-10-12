@@ -225,18 +225,14 @@
       <_ZigMacLibcFile>$(ZigEngineDir)/zig-out/.zig-libc-macos.txt</_ZigMacLibcFile>
     </PropertyGroup>
     <!-- A non-native CPU query also disables Zig's native libc discovery. Supply the SDK
-         headers to libc/libc++ itself, not just the engine modules' include paths. -->
+         headers to libc/libc++ itself, not just the engine modules' include paths.
+         -Dsysroot repeats the SDK path for build.zig: since zig 0.17 a build script cannot read
+         the sysroot flag itself. -->
     <MakeDir Directories="$(ZigEngineDir)/zig-out" />
-    <!-- Xcode 27 math.h expects Clang's module-aware float.h to provide these macros.
-         Zig 0.16's bundled libc++ float.h does not, so supply the standard definitions
-         after the SDK header when compiling Zig's C++ runtime. -->
-    <MakeDir Directories="$(ZigEngineDir)/zig-out/macos-libc" />
-    <WriteLinesToFile File="$(ZigEngineDir)/zig-out/macos-libc/math.h" Overwrite="true"
-                      Lines="#include &quot;$(_MacSdkPath)/usr/include/math.h&quot;;#ifndef INFINITY;#define INFINITY __builtin_huge_valf();#endif;#ifndef NAN;#define NAN __builtin_nanf(&quot;&quot;);#endif" />
     <WriteLinesToFile File="$(_ZigMacLibcFile)" Overwrite="true"
-                      Lines="include_dir=$(ZigEngineDir)/zig-out/macos-libc;sys_include_dir=$(_MacSdkPath)/usr/include;crt_dir=;msvc_lib_dir=;kernel32_lib_dir=;gcc_dir=" />
+                      Lines="include_dir=$(_MacSdkPath)/usr/include;sys_include_dir=$(_MacSdkPath)/usr/include;cc_dir=;crt_dir=$(_MacSdkPath)/usr/lib;msvc_lib_dir=;kernel32_lib_dir=;darwin_sdk_dir=$(_MacSdkPath)" />
     <PropertyGroup>
-      <ZigSysrootArg>--sysroot "$(_MacSdkPath)" --libc "$(_ZigMacLibcFile)"</ZigSysrootArg>
+      <ZigSysrootArg>--sysroot "$(_MacSdkPath)" -Dsysroot="$(_MacSdkPath)" --libc "$(_ZigMacLibcFile)"</ZigSysrootArg>
     </PropertyGroup>
   </Target>
 
@@ -256,9 +252,9 @@
     </PropertyGroup>
     <MakeDir Directories="$(ZigEngineDir)\zig-out" />
     <WriteLinesToFile File="$(_ZigIosLibcFile)" Overwrite="true"
-                      Lines="include_dir=$(_IosSdkPath)/usr/include;sys_include_dir=$(_IosSdkPath)/usr/include;crt_dir=;msvc_lib_dir=;kernel32_lib_dir=;gcc_dir=" />
+                      Lines="include_dir=$(_IosSdkPath)/usr/include;sys_include_dir=$(_IosSdkPath)/usr/include;cc_dir=;crt_dir=$(_IosSdkPath)/usr/lib;msvc_lib_dir=;kernel32_lib_dir=;darwin_sdk_dir=$(_IosSdkPath)" />
     <PropertyGroup>
-      <ZigSysrootArg>--sysroot "$(_IosSdkPath)" --libc "$(_ZigIosLibcFile)"</ZigSysrootArg>
+      <ZigSysrootArg>--sysroot "$(_IosSdkPath)" -Dsysroot="$(_IosSdkPath)" --libc "$(_ZigIosLibcFile)"</ZigSysrootArg>
     </PropertyGroup>
   </Target>
 
@@ -293,9 +289,9 @@
            Text="Android NDK sysroot not found at '$(_NdkSysroot)'. Set AndroidNdkRoot or ANDROID_NDK_ROOT." />
     <MakeDir Directories="$(ZigEngineDir)/zig-out" />
     <WriteLinesToFile File="$(_ZigAndroidLibcFile)" Overwrite="true"
-                      Lines="include_dir=$(_NdkSysroot)/usr/include;sys_include_dir=$(_NdkSysroot)/usr/include/$(_AndroidTriple);crt_dir=$(_NdkSysroot)/usr/lib/$(_AndroidTriple)/$(AndroidApiLevel);msvc_lib_dir=;kernel32_lib_dir=;gcc_dir=" />
+                      Lines="include_dir=$(_NdkSysroot)/usr/include;sys_include_dir=$(_NdkSysroot)/usr/include/$(_AndroidTriple);cc_dir=;crt_dir=$(_NdkSysroot)/usr/lib/$(_AndroidTriple)/$(AndroidApiLevel);msvc_lib_dir=;kernel32_lib_dir=;darwin_sdk_dir=" />
     <PropertyGroup>
-      <ZigSysrootArg>--sysroot "$(_NdkSysroot)" --libc "$(_ZigAndroidLibcFile)"</ZigSysrootArg>
+      <ZigSysrootArg>--sysroot "$(_NdkSysroot)" -Dsysroot="$(_NdkSysroot)" --libc "$(_ZigAndroidLibcFile)"</ZigSysrootArg>
     </PropertyGroup>
   </Target>
 
@@ -306,8 +302,17 @@
   <Target Name="BuildZigEngine" BeforeTargets="BeforeBuild"
           Condition="'$(ZigoteManagedPack)' != 'true'"
           Inputs="@(ZigSourceFiles)" Outputs="$(ZigOutDir)\$(ZigNativeLib)">
-    <Message Importance="high" Text="Zigote native: zig build $(ZigBuildStep) -Doptimize=$(ZigOptimize) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigCpuArg) $(ZigStripArg) $(ZigSysrootArg)" />
-    <Exec Command="zig build $(ZigBuildStep) -Doptimize=$(ZigOptimize) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigCpuArg) $(ZigStripArg) $(ZigSysrootArg)"
+    <!-- zig 0.17 renamed the optimize modes. ZigOptimize keeps its long-standing values (and
+         accepts the new ones); this is the spelling handed to zig. -->
+    <PropertyGroup>
+      <_ZigOptimizeArg>$(ZigOptimize)</_ZigOptimizeArg>
+      <_ZigOptimizeArg Condition="'$(ZigOptimize)' == 'Debug'">debug</_ZigOptimizeArg>
+      <_ZigOptimizeArg Condition="'$(ZigOptimize)' == 'ReleaseSafe'">safe</_ZigOptimizeArg>
+      <_ZigOptimizeArg Condition="'$(ZigOptimize)' == 'ReleaseFast'">fast</_ZigOptimizeArg>
+      <_ZigOptimizeArg Condition="'$(ZigOptimize)' == 'ReleaseSmall'">small</_ZigOptimizeArg>
+    </PropertyGroup>
+    <Message Importance="high" Text="Zigote native: zig build $(ZigBuildStep) -Doptimize=$(_ZigOptimizeArg) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigCpuArg) $(ZigStripArg) $(ZigSysrootArg)" />
+    <Exec Command="zig build $(ZigBuildStep) -Doptimize=$(_ZigOptimizeArg) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigCpuArg) $(ZigStripArg) $(ZigSysrootArg)"
           WorkingDirectory="$(ZigEngineDir)" IgnoreStandardErrorWarningFormat="true" />
     <!-- Apple's linker rejects zig's archives outright ("member not 8-byte aligned"), and Apple's
          libtool silently drops members when fed one, because zig also writes members with mode

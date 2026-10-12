@@ -326,9 +326,11 @@ public class SpriteAnimationTests
         for (int i = 0; i < 200; i++) Frame(animator);
 
         const int ticks = 500;
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < ticks; i++) Frame(animator);
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        long measured = AllocGuard.Measure(() =>
+        {
+            for (int i = 0; i < ticks; i++) Frame(animator);
+        });
+        long allocated = measured;
 
         Assert.True(
             condition: allocated == 0,

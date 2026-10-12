@@ -128,7 +128,7 @@ internal static class Demo
     ///     <paramref name="headerStart" /> packs one widget at the start of the bar.
     /// </summary>
     public static void ShowDialog(string title, Widget content, float width, float height,
-        bool raised = false, Widget? headerStart = null)
+        bool raised = false, Widget? headerStart = null, Action? onClosing = null)
     {
         AdwDialog? dialog = null;
         var header = new AdwHeaderBar {
@@ -148,6 +148,7 @@ internal static class Demo
         ) {
             ContentWidth = width,
             ContentHeight = height,
+            OnClosing = onClosing,
         };
         dialog.Show();
     }

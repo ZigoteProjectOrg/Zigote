@@ -63,6 +63,20 @@ public class HotPathAllocationTests
         root.Paint(paint);
     }
 
+    /// <summary>The guard's retries forgive a one-off burst; they must not forgive a loop that allocates.</summary>
+    [Fact]
+    public void AllocGuard_StillReportsALoopThatAllocates()
+    {
+        object? sink = null;
+        long measured = AllocGuard.Measure(() =>
+        {
+            for (int i = 0; i < 100; i++) sink = new object();
+        });
+
+        Assert.NotNull(sink);
+        Assert.True(measured >= 100 * 24, $"measured {measured} B");
+    }
+
     [Fact]
     public void MeasureLayoutPaint_AllocatesZero_OnSteadyState()
     {
@@ -77,9 +91,11 @@ public class HotPathAllocationTests
         Assert.True(paint.Count > 0);
 
         const int frames = 500;
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < frames; i++) Frame(root: root, paint: paint, c: c);
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        long measured = AllocGuard.Measure(() =>
+        {
+            for (int i = 0; i < frames; i++) Frame(root: root, paint: paint, c: c);
+        });
+        long allocated = measured;
 
         Assert.True(
             condition: allocated == 0,

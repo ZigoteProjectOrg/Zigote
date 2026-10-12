@@ -35,27 +35,25 @@ public sealed partial class InspectorPanel
             CrossAxisAlignment = CrossAxisAlignment.Start,
             MainAxisSize = MainAxisSize.Min,
         };
-        for (int r = 0; r < presets.Count; r += 3)
+        // Two flexible columns: three fixed ones truncated the names in a narrow dock column.
+        const int perRow = 2;
+        for (int r = 0; r < presets.Count; r += perRow)
         {
             var row = new Row {
                 MainAxisAlignment = MainAxisAlignment.Start,
                 CrossAxisAlignment = CrossAxisAlignment.Center,
             };
-            for (int i = r; i < Math.Min(val1: r + 3, val2: presets.Count); i++)
+            for (int i = r; i < Math.Min(val1: r + perRow, val2: presets.Count); i++)
             {
                 var p = presets[i];
+                if (i > r) row.Children.Add(new SizedBox(4f));
                 row.Children.Add(
-                    new SizedBox(
-                        width: 74f,
-                        child: new AdwButton(
-                            label: p.Name,
-                            onPressed: () => ApplyMaterialPreset(p)
-                        ) {
+                    new Expanded(
+                        new AdwButton(label: p.Name, onPressed: () => ApplyMaterialPreset(p)) {
                             Compact = true,
                         }
                     )
                 );
-                row.Children.Add(new SizedBox(4f));
             }
 
             col.Children.Add(row);

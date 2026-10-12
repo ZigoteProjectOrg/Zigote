@@ -73,9 +73,11 @@ public class CachedTextTests
         for (int i = 0; i < 100; i++) _ = t.Update($"{fps:F0} fps · {ms:F1} ms");
 
         const int frames = 1000;
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < frames; i++) _ = t.Update($"{fps:F0} fps · {ms:F1} ms");
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        long measured = AllocGuard.Measure(() =>
+        {
+            for (int i = 0; i < frames; i++) _ = t.Update($"{fps:F0} fps · {ms:F1} ms");
+        });
+        long allocated = measured;
 
         Assert.True(
             condition: allocated == 0,

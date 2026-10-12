@@ -1,4 +1,4 @@
-using System.Text.Json;
+using System.Text.Json.Serialization;
 using Zigote.Http;
 using Zigote.Http.Cache;
 
@@ -6,6 +6,31 @@ namespace AdwaitaGallery;
 
 /// <summary>One picture and the artist who drew it.</summary>
 internal readonly record struct ArtPiece(string Url, string Artist);
+
+/// <summary>The feed's answer, as <c>nekos.best</c> spells it: <c>{"results":[{"url","artist_name"}]}</c>.</summary>
+internal sealed record ArtFeed(ArtFeedItem[]? Results);
+
+/// <inheritdoc cref="ArtFeed" />
+internal sealed record ArtFeedItem(string? Url, string? ArtistName);
+
+/// <summary>Source-generated contracts for the feed: no reflection for the AOT publish to trim away.</summary>
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower)]
+[JsonSerializable(typeof(ArtFeed))]
+internal sealed partial class ArtJson : JsonSerializerContext;
+
+/// <summary>
+///     The feed as an interface: <c>Zigote.Http.Generators</c> writes <c>NekosApiClient</c> at build
+///     time, so the route, the query pair and the deadline are checked by the compiler rather than
+///     assembled from strings at the call site.
+/// </summary>
+[HttpApi]
+internal interface INekosApi
+{
+    /// <summary>A fresh random set from one category. The origin sends no cache headers, so this is never stored.</summary>
+    [Get("{category}")]
+    [Deadline(15)]
+    Task<HttpResult<ArtFeed>> FeedAsync(string category, int amount, CancellationToken ct = default);
+}
 
 /// <summary>
 ///     Where the gallery's pictures come from: <c>nekos.best</c>, a free API of hand-drawn anime art
@@ -38,6 +63,8 @@ internal static class ArtSource
             else if (entry.Status is not null) Interlocked.Increment(ref NetworkAnswers);
         },
     });
+
+    private static readonly INekosApi Api = new NekosApiClient(runner: Http, json: ArtJson.Default);
 
     /// <summary>Pictures per feed page — one grid screenful, and one API call.</summary>
     public const int PageSize = 12;
@@ -105,35 +132,60 @@ internal static class ArtSource
         // got), and a restart asks again. The pictures those answers point at are the cacheable
         // part, and the runner's disk cache handles them by the origin's own rules.
         string category = Categories[page % Categories.Length];
-        var result = await Http.BytesAsync(
-                HttpRequest.Get(category).WithQuery("amount", PageSize).Deadline(TimeSpan.FromSeconds(15)),
-                ct)
-            .ConfigureAwait(false);
-        return result.Map(Parse);
+        var result = await Api.FeedAsync(category: category, amount: PageSize, ct: ct).ConfigureAwait(false);
+        return result.Map(static feed => (feed.Results ?? [])
+            .Where(static item => item.Url is not null)
+            .Select(static item => new ArtPiece(Url: item.Url!, Artist: item.ArtistName ?? "Unknown artist"))
+            .ToArray());
     }
 
-    private static ArtPiece[] Parse(byte[] json)
+    /// <summary>
+    ///     The picture's original bytes, for the clipboard. The tile already fetched them, so this
+    ///     is the disk cache answering — a copy costs a file read, not a round trip.
+    /// </summary>
+    public static ValueTask<HttpResult<byte[]>> BytesAsync(ArtPiece piece, CancellationToken ct = default) =>
+        Http.BytesAsync(HttpRequest.Get(piece.Url), ct);
+
+    /// <summary>
+    ///     Saves the original to the Downloads folder. This is <see cref="HttpFile.DownloadAsync" />:
+    ///     streamed to a <c>.part</c> beside the target and renamed, so a half-file is never
+    ///     mistaken for a whole one, and a download cut off mid-way resumes with <c>If-Range</c>
+    ///     from the bytes already on disk.
+    /// </summary>
+    /// <returns>Where it landed, or a line saying why not. Both null: it was canceled.</returns>
+    public static async Task<(string? Path, string? Problem)> DownloadAsync(
+        ArtPiece piece, IProgress<HttpProgress>? progress, CancellationToken ct = default)
     {
-        // JsonDocument, not a deserialized model: one shape, two fields, and no reflection for the
-        // AOT publish to trim away.
-        using var document = JsonDocument.Parse(json);
-        if (!document.RootElement.TryGetProperty(
-                propertyName: "results",
-                value: out var results
-            )) return [];
+        // The URL came off the network: only its last segment is used, and only if it is a plain
+        // file name — nothing in a feed answer gets to pick a directory.
+        string name = Uri.TryCreate(piece.Url, UriKind.Absolute, out var uri)
+            ? Path.GetFileName(uri.AbsolutePath)
+            : "";
+        if (name.Length == 0 || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) name = "artwork.png";
 
-        var pieces = new List<ArtPiece>(results.GetArrayLength());
-        foreach (var result in results.EnumerateArray())
+        string folder = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+        string path = Path.Combine(folder, name);
+        try
         {
-            if (!result.TryGetProperty(propertyName: "url", value: out var url) ||
-                url.GetString() is not { } link)
-                continue;
-            string artist = result.TryGetProperty(propertyName: "artist_name", value: out var name)
-                ? name.GetString() ?? "Unknown artist"
-                : "Unknown artist";
-            pieces.Add(new ArtPiece(Url: link, Artist: artist));
+            Directory.CreateDirectory(folder);
+            var result = await HttpFile.DownloadAsync(
+                    Http, HttpRequest.Get(piece.Url).Deadline(TimeSpan.FromMinutes(5)), path, progress, ct)
+                .ConfigureAwait(false);
+            return result.Error switch {
+                null => (path, null),
+                HttpError.Canceled => (null, null),
+                HttpError.Status status => (null, $"The server said {(int)status.Code}"),
+                _ => (null, "Couldn't download — check the connection"),
+            };
         }
-
-        return [.. pieces];
+        catch (OperationCanceledException)
+        {
+            return (null, null);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return (null, "Couldn't write to the Downloads folder");
+        }
     }
 }

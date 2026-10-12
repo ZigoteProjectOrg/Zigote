@@ -114,6 +114,11 @@ public sealed class Signal<T> : Source, IReadableSignal<T>
             if ((before & 1) == 0)
             {
                 var snapshot = _value;
+                // The acquire fence of a volatile read sits AFTER its load, so nothing stopped the
+                // re-check below being satisfied before the copy above had finished — on arm64 a
+                // reader then validated a snapshot whose second word a later write supplied.
+                // This orders the copy's loads before the re-check. No-op on x64.
+                Volatile.ReadBarrier();
                 if (Volatile.Read(ref _seq) == before) return snapshot;
             }
 

@@ -385,6 +385,17 @@ public sealed unsafe class ZigoteEngine : IDisposable
     }
 
     /// <summary>
+    ///     Resize the main window's client area, in logical points. A real OS resize: the size
+    ///     change arrives as the usual resize event over the next frames, and the window manager
+    ///     may clamp or refuse it. False when the platform rejected the request outright.
+    /// </summary>
+    public bool MainWindowSetSize(uint width, uint height)
+    {
+        return !_disposed &&
+               NativeEngine.MainWindowSetSize(width: width, height: height) == ZgStatus.Ok;
+    }
+
+    /// <summary>
     ///     Whether the application appears in the Dock and the ⌘-Tab switcher (macOS; a no-op
     ///     elsewhere). Application-wide, not per-window: hiding the main window leaves the process
     ///     a foreground app, so an app with nothing on screen keeps a Dock tile that brings back
@@ -863,7 +874,8 @@ public sealed unsafe class ZigoteEngine : IDisposable
                     y: raw.Y,
                     scrollX: raw.ScrollX,
                     scrollY: raw.ScrollY,
-                    windowId: raw.WindowId
+                    windowId: raw.WindowId,
+                    precise: raw.Button != 0
                 ),
                 EventKind.TouchMove => _eventPool.RentTouchMove(
                     x: raw.X,
@@ -990,6 +1002,26 @@ public sealed unsafe class ZigoteEngine : IDisposable
         Encoding.UTF8.GetBytes(chars: text, bytes: bytes);
         bytes[len] = 0;
         fixed (byte* p = bytes) NativeEngine.SetClipboard(p); // stateless — no handle
+    }
+
+    /// <summary>
+    ///     Put one binary payload on the system clipboard under <paramref name="mimeType" /> —
+    ///     an encoded picture as <c>image/png</c> is what "Copy Image" means. The bytes are copied.
+    ///     UI thread only, like <see cref="SetClipboard" />.
+    /// </summary>
+    /// <returns>False when the platform refused it.</returns>
+    public bool SetClipboardData(string mimeType, ReadOnlySpan<byte> data)
+    {
+        Span<byte> mime = stackalloc byte[128];
+        if (data.IsEmpty || !Encoding.UTF8.TryGetBytes(chars: mimeType, bytes: mime[..^1], bytesWritten: out int n))
+            return false;
+        mime[n] = 0;
+        fixed (byte* m = mime)
+        fixed (byte* p = data)
+        {
+            return NativeEngine.SetClipboardData(mimePtr: m, dataPtr: p, dataLen: (nuint)data.Length) ==
+                   ZgStatus.Ok;
+        }
     }
 
     /// <summary>

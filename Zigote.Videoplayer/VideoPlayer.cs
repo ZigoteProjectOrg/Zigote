@@ -721,6 +721,7 @@ public sealed class VideoPlayer : IDisposable
         if (newest is null) return false;
 
         Upload(rgba: newest.Value.Buffer, width: pipe.Width, height: pipe.Height);
+        pipe.Presented = true;
         FramesPresented++;
         pipe.ReturnFrame(newest.Value.Buffer);
         return true;
@@ -813,7 +814,11 @@ public sealed class VideoPlayer : IDisposable
     /// <summary>Enough decoded on both sides to start the clock without stuttering immediately.</summary>
     private bool Primed(Pipeline pipe, bool presentedThisTick)
     {
-        bool haveVideo = !pipe.HasVideo || presentedThisTick || TextureHandle != 0;
+        // "A picture is up", not "a texture exists": without an engine, or after a failed upload,
+        // there is no texture. Requiring one meant a decoder that starved right after its first
+        // frame could never resume — the paused clock makes no later frame due, so none is
+        // presented "this tick" again, and the player sat in Buffering for good.
+        bool haveVideo = !pipe.HasVideo || presentedThisTick || pipe.Presented || TextureHandle != 0;
         if (!haveVideo) return false;
 
         if (pipe.AudioStreamId == 0 || _useWallClock || _audio is null) return true;
@@ -918,6 +923,9 @@ public sealed class VideoPlayer : IDisposable
         public readonly double Fps = fps;
         public readonly BlockingCollection<Frame> Frames = new(capacity);
         public readonly double StartSeconds = startSeconds;
+
+        /// <summary>This run has shown at least one frame. Frame-loop thread only.</summary>
+        public bool Presented;
         private readonly CancellationTokenSource _cts = new();
         private readonly StringBuilder _errors = new();
 

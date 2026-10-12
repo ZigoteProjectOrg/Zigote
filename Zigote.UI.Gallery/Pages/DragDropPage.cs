@@ -108,9 +108,8 @@ internal sealed class DragDropPage : ComposedWidget
     // app-to-app drag on a phone, so those sections say so rather than baiting a dead gesture.
     private static Widget DesktopOnly(string note) => new Label(
         text: note,
-        fontSize: 13,
-        color: Colors.Grey[500]
-    );
+        fontSize: 13
+    ) { Style = Label.LabelStyle.Caption };
 
     private void Paste()
     {

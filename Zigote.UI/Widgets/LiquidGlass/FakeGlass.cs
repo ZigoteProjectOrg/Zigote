@@ -62,18 +62,20 @@ public class FakeGlass : Widget
             ),
             borderRadius: BorderRadius,
             blurRadius: 14f,
-            spread: 2f
+            spread: 2f,
+            squircle: true
         );
 
         // 2. Draw the frosted glass base card
-        paint.AddRect(bounds: Bounds, color: Color, radius: BorderRadius);
+        paint.AddRect(bounds: Bounds, color: Color, radius: BorderRadius, squircle: true);
 
         // 3. Draw a crisp white inner border to simulate light reflection on edges
         paint.AddBorder(
             bounds: Bounds,
             color: BorderColor,
             radius: BorderRadius,
-            width: BorderWidth
+            width: BorderWidth,
+            squircle: true
         );
 
         Child?.Paint(paint);

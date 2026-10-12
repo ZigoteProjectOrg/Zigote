@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using Zigote.Core;
+using Zigote.Core.Animation;
 using Zigote.Core.Diagnostics;
 using Zigote.Core.Events;
 using Zigote.UI.Debug;
@@ -59,8 +60,22 @@ namespace Zigote.UI.Host;
 ///             <c>locale &lt;tag&gt;</c> — switch the app's locale (needs a
 ///             <c>LocalizationsScope</c>).
 ///         </item>
+///         <item><c>windows</c> — every open OS window: id, title, layout size, which is main.</item>
+///         <item>
+///             <c>@ID &lt;command&gt;</c> — run <c>widgets</c>, <c>semantics</c>, <c>shot</c>,
+///             <c>input</c>, <c>props</c>, <c>hit</c> or <c>info</c> against that window instead
+///             of the main one. Other commands are app-wide and ignore the prefix.
+///         </item>
 ///         <item><c>window hide|show</c> — the app's own window, which a preview does not want.</item>
+///         <item><c>window size WxH</c> — really resize the OS window (and its framebuffer).</item>
 ///         <item><c>props ID</c> — one widget's properties, by the id the tree reports.</item>
+///         <item>
+///             <c>hit X Y</c> — what a click at that point would land on, and the chain above it.
+///         </item>
+///         <item>
+///             <c>info</c> — layout size, theme, locale, focus, hover, overlays, tree size and
+///             whether anything is animating, as one JSON object.
+///         </item>
 ///         <item>
 ///             <c>stats</c> — the frame/CPU/memory sample <c>DebugStats</c> keeps, as one JSON
 ///             object.
@@ -78,7 +93,10 @@ public static class InspectServer
     // A tree big enough to hit these is a runaway, not a UI; the caps keep one bad frame from turning
     // into a multi-megabyte response the panel then has to parse.
     private const int MaxNodes = 20_000;
-    private const int MaxDepth = 64;
+    // Depth is widget nesting, not JSON nesting (each widget is an object plus a children array,
+    // so a reader needs twice this). Composition-heavy pages pass 64 without being runaways —
+    // a gallery page under a navigator, a split view and a scroller is ~90 deep.
+    private const int MaxDepth = 256;
 
     // Long enough to cover a slow frame under a debugger, short enough that a wedged app fails the
     // request instead of hanging the panel.
@@ -211,6 +229,24 @@ public static class InspectServer
         string? line = reader.ReadLine();
         if (line is null) return;
 
+        // `@ID command …` addresses one OS window by the id `windows` reports; without it, the
+        // main window. Only the verbs that look at or poke a window's own tree honour it (see
+        // PerWindow) — theme, locale, preview and the rest are app-wide whichever window is named.
+        uint windowId = 0;
+        line = line.TrimStart();
+        if (line.StartsWith('@'))
+        {
+            int end = line.IndexOf(' ');
+            if (!uint.TryParse(s: end < 0 ? line[1..] : line[1..end], result: out windowId))
+            {
+                writer.Write(Error("a window is addressed as @ID, with an id from `windows`"));
+                writer.Write('\n');
+                return;
+            }
+
+            line = end < 0 ? "" : line[(end + 1)..];
+        }
+
         int space = line.IndexOf(' ');
         string command = (space < 0 ? line : line[..space]).Trim();
         string argument = space < 0 ? "" : line[(space + 1)..].Trim();
@@ -242,30 +278,66 @@ public static class InspectServer
         // opened. `input` rides the same quiet queue because its post must not force a repaint: the
         // injected events go through the real dispatch pipeline next frame, which repaints exactly as
         // much as the same OS input would — a move flood over nothing repaints nothing.
-        string answer = command is "shot" or "input"
-            ? OnUiThread(
-                app: app,
-                work: () => Answer(
-                    app: app,
-                    command: command,
-                    argument: argument,
-                    setPreview: setPreview,
-                    setTheme: setTheme
-                ),
-                afterFrame: true
-            )
-            : OnUiThread(
-                app: app,
-                work: () => Answer(
-                    app: app,
-                    command: command,
-                    argument: argument,
-                    setPreview: setPreview,
-                    setTheme: setTheme
-                )
+        // Always posted to the MAIN app, whichever window is addressed: its frame is the one that
+        // pumps every other window, so "top of frame" and "end of frame" mean the same for all of
+        // them, and the window list is only safe to read on that thread.
+        string Work()
+        {
+            var target = app;
+            if (windowId != 0 && PerWindow(command) &&
+                (target = FindWindow(app: app, id: windowId)) is null)
+                return Error($"no window @{windowId} — `windows` lists the open ones");
+            return Answer(
+                app: target,
+                command: command,
+                argument: argument,
+                setPreview: setPreview,
+                setTheme: setTheme
             );
+        }
+
+        string answer = OnUiThread(app: app, work: Work, afterFrame: command is "shot" or "input");
         writer.Write(answer);
         writer.Write('\n');
+    }
+
+    /// <summary>The verbs that act on one window's tree, and so honour an <c>@ID</c> prefix.</summary>
+    private static bool PerWindow(string command) =>
+        command is "widgets" or "semantics" or "shot" or "input" or "props" or "hit" or "info";
+
+    private static App? FindWindow(App app, uint id)
+    {
+        if (app.WindowId == id) return app;
+        foreach (var w in app.SecondaryWindows)
+        {
+            if (w.WindowId == id && w.IsOpen) return w;
+        }
+
+        return null;
+    }
+
+    /// <summary>The <c>windows</c> reply: the main window first, then every open secondary one.</summary>
+    private static string WindowsJson(App app)
+    {
+        var json = new StringBuilder("{\"windows\":[");
+        WriteWindow(json: json, w: app, main: true);
+        foreach (var w in app.SecondaryWindows)
+        {
+            if (!w.IsOpen) continue;
+            json.Append(',');
+            WriteWindow(json: json, w: w, main: false);
+        }
+
+        return json.Append("]}").ToString();
+
+        static void WriteWindow(StringBuilder json, App w, bool main)
+        {
+            json.Append("{\"id\":").Append(w.WindowId).Append(",\"title\":");
+            Quote(json: json, text: w.Title);
+            json.Append(",\"main\":").Append(main ? "true" : "false");
+            json.Append(",\"w\":").Append((uint)w.LayoutWidth);
+            json.Append(",\"h\":").Append((uint)w.LayoutHeight).Append('}');
+        }
     }
 
     private static string Answer(App app, string command, string argument,
@@ -304,6 +376,9 @@ public static class InspectServer
             case "shot":
                 return Shot(app: app, argument: argument);
 
+            case "windows":
+                return WindowsJson(app);
+
             case "size":
                 return Size(app: app, argument: argument);
 
@@ -330,12 +405,31 @@ public static class InspectServer
                 if (ParseInput(argument) is not { } evt)
                 {
                     return Error(
-                        $"input wants down|up|move|scroll|keydown|keyup|text …, got '{argument}'"
+                        $"input wants down|up|move|scroll|touchdown|touchmove|touchup|keydown|keyup|text …, got '{argument}'"
                     );
                 }
 
                 app.InjectEvent(evt);
                 return "{\"ok\":true}";
+            }
+
+            case "window" when argument.StartsWith("size "):
+            {
+                // The OS window itself, unlike `size`: the framebuffer and every GPU target
+                // sized to it are rebuilt, through the same resize event a dragged edge sends.
+                // The new size lands over the next frames, so the answer is only "requested".
+                string[] parts = argument[5..].Split('x', 'X');
+                if (parts.Length != 2 ||
+                    !uint.TryParse(s: parts[0], result: out uint w) ||
+                    !uint.TryParse(s: parts[1], result: out uint h) ||
+                    w is < 1 or > 8192 || h is < 1 or > 8192)
+                    return Error($"window size wants WIDTHxHEIGHT in 1..8192, got '{argument}'");
+
+                // A device-size override would hide the very change being asked for.
+                app.PreviewSize = null;
+                return app.Engine.MainWindowSetSize(width: w, height: h)
+                    ? "{\"ok\":true}"
+                    : Error("the platform refused to resize the window");
             }
 
             case "window":
@@ -351,6 +445,12 @@ public static class InspectServer
 
             case "stats":
                 return StatsJson();
+
+            case "hit":
+                return Hit(app: app, argument: argument);
+
+            case "info":
+                return InfoJson(app);
 
             default:
                 return Error($"unknown command '{command}'");
@@ -585,6 +685,111 @@ public static class InspectServer
         return null;
     }
 
+    /// <summary>
+    ///     <c>hit X Y</c> — the widget the dispatch pipeline would hand a click at that point to
+    ///     (overlays first, then the root), with up to eight ancestors. Answers "why did my tap do
+    ///     nothing" without a tree dump: the hit is a scrim, a disabled wrapper, or nothing at all.
+    /// </summary>
+    private static string Hit(App app, string argument)
+    {
+        string[] parts = argument.Split(
+            separator: ' ',
+            options: StringSplitOptions.RemoveEmptyEntries
+        );
+        if (parts.Length != 2 ||
+            !float.TryParse(
+                s: parts[0],
+                style: NumberStyles.Float,
+                provider: CultureInfo.InvariantCulture,
+                result: out float x
+            ) ||
+            !float.TryParse(
+                s: parts[1],
+                style: NumberStyles.Float,
+                provider: CultureInfo.InvariantCulture,
+                result: out float y
+            ))
+            return Error($"hit wants X Y, got '{argument}'");
+
+        var json = new StringBuilder("{\"hit\":");
+        var hit = app.HitTestAt(new Offset(x: x, y: y));
+        WidgetRef(json: json, widget: hit);
+        json.Append(",\"path\":[");
+        // Parent is only set by Attach, so the chain can stop early; it is still the cheapest
+        // answer to "inside what".
+        var node = hit?.Parent;
+        for (int i = 0; i < 8 && node is not null; i++, node = node.Parent)
+        {
+            if (i > 0) json.Append(',');
+            Quote(json: json, text: node.GetType().Name);
+        }
+
+        return json.Append("]}").ToString();
+    }
+
+    /// <summary>
+    ///     Everything a remote driver otherwise has to infer from a screenshot: the layout it is
+    ///     aiming at, what holds focus and hover, whether a dialog is up, how big the tree is, and
+    ///     whether the frame it is about to capture is still mid-animation.
+    /// </summary>
+    private static string InfoJson(App app)
+    {
+        int count = 0, deepest = 0;
+        Count(widget: app.Root, depth: 0);
+
+        var json = new StringBuilder("{\"w\":").Append(Round(app.LayoutWidth));
+        json.Append(",\"h\":").Append(Round(app.LayoutHeight));
+        json.Append(",\"preview_size\":").Append(app.PreviewSize is null ? "false" : "true");
+        json.Append(",\"theme\":\"").Append(app.Theme.IsDark ? "dark" : "light").Append('"');
+        json.Append(",\"locale\":");
+        Quote(json: json, text: app.LocaleInfo?.Invoke().Current);
+        json.Append(",\"animating\":").Append(Ticker.AnyActive ? "true" : "false");
+        json.Append(",\"paint_version\":").Append(app.PaintVersion);
+        json.Append(",\"widgets\":").Append(count);
+        json.Append(",\"depth\":").Append(deepest);
+        json.Append(",\"pointer\":[").Append(Round(app.PointerPosition.X)).Append(',')
+            .Append(Round(app.PointerPosition.Y)).Append(']');
+        json.Append(",\"focused\":");
+        WidgetRef(json: json, widget: app.FocusedWidget);
+        json.Append(",\"hovered\":");
+        WidgetRef(json: json, widget: app.HoveredWidget);
+        json.Append(",\"overlays\":[");
+        for (int i = 0; i < app.Overlays.Count; i++)
+        {
+            if (i > 0) json.Append(',');
+            Quote(json: json, text: app.Overlays[i].GetType().Name);
+        }
+
+        return json.Append("]}").ToString();
+
+        void Count(Widget? widget, int depth)
+        {
+            if (widget is null || depth > MaxDepth || count >= MaxNodes) return;
+            count++;
+            if (depth > deepest) deepest = depth;
+            foreach (var child in WidgetDebug.Children(widget))
+                Count(widget: child, depth: depth + 1);
+        }
+    }
+
+    /// <summary>One widget as the tree would name it — id, type, description, bounds — or null.</summary>
+    private static void WidgetRef(StringBuilder json, Widget? widget)
+    {
+        if (widget is null)
+        {
+            json.Append("null");
+            return;
+        }
+
+        json.Append("{\"id\":").Append(widget.GetHashCode());
+        json.Append(",\"type\":");
+        Quote(json: json, text: widget.GetType().Name);
+        json.Append(",\"desc\":");
+        Quote(json: json, text: WidgetDebug.Describe(widget));
+        Bounds(json: json, bounds: widget.Bounds);
+        json.Append('}');
+    }
+
     /// <summary>The state a panel needs to keep its controls honest after any command that changes it.</summary>
     private static string Ok(App app)
     {
@@ -658,6 +863,7 @@ public static class InspectServer
     ///         <item><c>down X Y [left|right|middle]</c> / <c>up X Y [button]</c> — press / release.</item>
     ///         <item><c>move X Y</c> — pointer move.</item>
     ///         <item><c>scroll X Y DX DY</c> — wheel ticks at a position.</item>
+    ///         <item><c>touchdown X Y [finger]</c> / <c>touchmove</c> / <c>touchup</c> — one finger.</item>
     ///         <item><c>keydown NAME [shift+ctrl+alt+cmd]</c> / <c>keyup NAME [mods]</c> — a physical key.</item>
     ///         <item>
     ///             <c>text …</c> — commit text to the focused widget (everything after the space,
@@ -698,6 +904,24 @@ public static class InspectServer
             case "move" when parts.Length == 2 && Xy(parts: parts, x: out float x, y: out float y):
                 return new MouseMoveEvent(x: x, y: y);
 
+            // A finger, not a mouse: touch drags scroll lists and fling, which a mouse drag never
+            // does — the only way to drive a mobile gesture from outside.
+            case "touchdown" or "touchmove" or "touchup" when parts.Length is 2 or 3 && Xy(
+                parts: parts,
+                x: out float x,
+                y: out float y
+            ):
+            {
+                int finger = 0;
+                if (parts.Length == 3 && !int.TryParse(s: parts[2], result: out finger))
+                    return null;
+                return kind switch {
+                    "touchdown" => new TouchDownEvent(x: x, y: y, finger: finger, pressure: 1f),
+                    "touchmove" => new TouchMoveEvent(x: x, y: y, finger: finger, pressure: 1f),
+                    _ => new TouchUpEvent(x: x, y: y, finger: finger, pressure: 1f),
+                };
+            }
+
             case "scroll" when parts.Length == 4 &&
                                Xy(parts: parts, x: out float x, y: out float y) &&
                                Num(s: parts[2], v: out float dx) && Num(
@@ -736,7 +960,11 @@ public static class InspectServer
 
                 return new KeyEvent(
                     down: kind == "keydown",
-                    keyChar: '\0',
+                    // Letters carry their character, as a real key event does — widgets that
+                    // switch on keyChar (single-key tool shortcuts) are otherwise undrivable.
+                    keyChar: key is >= KeyCode.A and <= KeyCode.Z
+                        ? (char)('a' + (key - KeyCode.A))
+                        : '\0',
                     scancode: (uint)key,
                     modifiers: mods
                 );

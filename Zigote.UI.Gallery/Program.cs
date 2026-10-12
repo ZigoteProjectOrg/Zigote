@@ -85,6 +85,11 @@ internal sealed class GalleryApp : MaterialApp
         _theme.Mode.Changed += _ => Theme = _theme.Data;
     }
 
+    // The inspector's `theme dark|light` writes the store, so the Appearance switch on the home
+    // page follows instead of showing the old choice.
+    protected override void SetDarkAppearance(bool dark) =>
+        _theme.Set(dark ? ThemeMode.Dark : ThemeMode.Light);
+
     // The gallery is a pure 2D/UI app: install the widget/chart devtools overlay with the 2D profile
     // (General + 2D·UI tabs, no 3D renderer tab). Shift+D toggles it. This is also the demo of the
     // overlay running in a non-3D host.

@@ -14,6 +14,7 @@ public sealed class AdwComboRow : ComposedWidget
     private int _selectedIndex;
     private string? _subtitle;
     private string _title;
+    private IconGlyph? _arrow;
     private Label? _valueLabel;
 
     public AdwComboRow(
@@ -80,11 +81,10 @@ public sealed class AdwComboRow : ComposedWidget
             Overflow = TextOverflow.Ellipsis,
         };
 
+        _arrow = new IconGlyph(glyph: Icons.DropDown, size: AdwMetrics.IconSize, color: p.DimLabel);
+
         Widget row = new AdwActionRow(title: Title, subtitle: Subtitle) {
-            Suffixes = {
-                _valueLabel,
-                new IconGlyph(glyph: Icons.DropDown, size: AdwMetrics.IconSize, color: p.DimLabel),
-            },
+            Suffixes = { _valueLabel, _arrow },
             OnActivated = Enabled ? OpenPopup : null,
         };
         // Adwaita disabled rows dim wholesale.
@@ -95,10 +95,20 @@ public sealed class AdwComboRow : ComposedWidget
     {
         var app = App.Active;
         if (app is null || Items.Count == 0) return;
+        // libadwaita parents the popover to the value + arrow box at the row's end, not the row.
+        var anchor = Bounds;
+        if (_valueLabel is not null && _arrow is not null)
+        {
+            float left = MathF.Min(x: _valueLabel.Bounds.X, y: _arrow.Bounds.X);
+            float right = MathF.Max(x: _valueLabel.Bounds.Right, y: _arrow.Bounds.Right);
+            // Stop short of the row's bottom edge so the arrow tip tucks into the row padding.
+            anchor = new Rect(x: left, y: Bounds.Y, width: right - left, height: Bounds.Height - 6f);
+        }
+
         new AdwPopover(
             app: app,
             items: Items,
-            anchor: Bounds,
+            anchor: anchor,
             onPick: i =>
             {
                 SelectedIndex = i;
@@ -106,7 +116,8 @@ public sealed class AdwComboRow : ComposedWidget
             },
             selected: _selectedIndex,
             showCheck: true,
-            minWidth: 140f
+            minWidth: 140f,
+            arrow: true
         ).Show();
     }
 }

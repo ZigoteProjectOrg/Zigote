@@ -33,7 +33,10 @@ public sealed class TimelinePanel : Widget
         _theme = theme;
 
         _playBtn =
-            new AdwButton(label: "Play", onPressed: _state.ToggleAnimationPlay) { Compact = true };
+            new AdwButton(label: "Play", onPressed: _state.ToggleAnimationPlay) {
+                Compact = true,
+                IconName = Icons.Play,
+            };
         _timeLabel = new Label(
             text: "0.00 / 0.00",
             fontSize: theme.FontSizeCaption,
@@ -62,7 +65,8 @@ public sealed class TimelinePanel : Widget
             return new Padding(
                 padding: EdgeInsets.All(10f),
                 child: new Label(
-                    text: "No animation — import an animated glTF.",
+                    text: "No animation clips in this scene. Import an animated glTF (.glb) and " +
+                          "its clips appear here to play and scrub.",
                     fontSize: _theme.FontSizeCaption,
                     color: _theme.Hint
                 )
@@ -80,7 +84,10 @@ public sealed class TimelinePanel : Widget
                         _state.AnimationPlayer.Stop();
                         _state.SeekAnimation(0f);
                     }
-                ) { Compact = true },
+                ) {
+                    Compact = true,
+                    IconName = Icons.Stop,
+                },
                 new SizedBox(10f),
                 new Expanded(_scrub),
                 new SizedBox(10f),
@@ -130,8 +137,9 @@ public sealed class TimelinePanel : Widget
         float dur = p.Clip?.Duration ?? 0f;
         _scrub.Max = MathF.Max(x: dur, y: 0.0001f);
         _scrub.Value = p.Time;
-        _timeLabel.Text = $"{p.Time:0.00} / {dur:0.00}";
+        _timeLabel.Text = $"{p.Time:0.00} / {dur:0.00} s";
         _playBtn.Label = p.Playing ? "Pause" : "Play";
+        _playBtn.IconName = p.Playing ? Icons.Pause : Icons.Play;
     }
 
     public override Size Measure(Constraints c)

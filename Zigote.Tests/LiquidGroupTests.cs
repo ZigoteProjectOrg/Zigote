@@ -203,15 +203,15 @@ public class LiquidPaneTests
     }
 
     [Fact]
-    public void BevelIsAHairlineAndNeverMoreThanATenthOfTheShorterSide()
+    public void BevelIsNeverMoreThanAFifthOfTheShorterSide()
     {
-        // A tall capsule: the material's own rim, a few pixels.
+        // A tall capsule: the material's own rim.
         var capsule = Lens(new LiquidPane { Elevation = 0f, Child = new SizedBox(width: 120f, height: 56f) });
-        Assert.InRange(actual: capsule.BorderWidth, low: 1.5f, high: 4f);
+        Assert.InRange(actual: capsule.BorderWidth, low: 4f, high: 9f);
 
         // A chip: capped by the shape, so the centre stays clear.
         var chip = Lens(new LiquidPane { Elevation = 0f, Child = new SizedBox(width: 60f, height: 16f) });
-        Assert.InRange(actual: chip.BorderWidth, low: 0.5f, high: 1.6f);
+        Assert.InRange(actual: chip.BorderWidth, low: 1f, high: 3.2f);
     }
 
     [Fact]

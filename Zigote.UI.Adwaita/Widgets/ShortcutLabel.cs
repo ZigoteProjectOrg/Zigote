@@ -151,12 +151,17 @@ public sealed class AdwShortcutLabel : Widget
     ///     shows them, then the key itself. Unparsable input degrades to the raw string rather than
     ///     vanishing — a shortcut nobody can read still beats a blank space in the menu.
     /// </summary>
-    internal static List<string> Parse(string accelerator)
+    internal static List<string> Parse(string accelerator) => Parse(
+        accelerator: accelerator,
+        mac: OperatingSystem.IsMacOS()
+    );
+
+    /// <summary><see cref="Parse(string)" /> for a stated platform, so both spellings are testable anywhere.</summary>
+    internal static List<string> Parse(string accelerator, bool mac)
     {
         List<string> keys = [];
         if (string.IsNullOrWhiteSpace(accelerator)) return keys;
 
-        bool mac = OperatingSystem.IsMacOS();
         bool ctrl = false, alt = false, shift = false, super = false;
         string rest = accelerator;
 

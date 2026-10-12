@@ -120,6 +120,9 @@ public partial class App : IDisposable
     // NativeWindow surface. The MAIN app pumps SDL events once per frame and routes them here by
     // window id; CreateWindow() opens one.
     private readonly List<App> _secondaryWindows = [];
+
+    /// <summary>The open secondary OS windows of the main app (empty on a secondary). UI thread only.</summary>
+    internal IReadOnlyList<App> SecondaryWindows => _secondaryWindows;
     private readonly List<Snackbar> _snackbars = [];
 
     private Widget? _capturedWidget;
@@ -436,6 +439,11 @@ public partial class App : IDisposable
             if (ReferenceEquals(objA: _theme, objB: value)) return;
             _theme = value;
             BuildContext.Current.BumpGeneration();
+            // Overlays (dialogs, popovers, menus) sit outside the root's ThemeProvider and resolve
+            // the theme through this scope. Setting it here, not only silently in the layout
+            // pass, rebuilds the widgets that read the theme in Build — otherwise an open dialog
+            // keeps the old theme's text colours over the new background.
+            _appThemeScope.Data = value;
             RequestLayout();
         }
     }
@@ -1075,6 +1083,13 @@ public partial class App : IDisposable
     /// </summary>
     internal void InjectEvent(InputEvent evt) => _injected.Add(evt);
 
+    // What the inspect socket's `hit` and `info` commands read — the dispatch pipeline's own view
+    // of the pointer, so "why did my click miss" is answered by the code that routes the click.
+    internal Widget? HitTestAt(Offset point) => HitTestAll(point);
+    internal Widget? HoveredWidget => _hoveredWidget;
+    internal Offset PointerPosition => _mousePos;
+    internal IReadOnlyList<Widget> Overlays => _overlays;
+
     /// <summary>
     ///     Render the current UI to a 24-bit BMP at <paramref name="path" /> without disturbing the
     ///     window. Used by <see cref="Host.InspectServer" /> to hand a frame to an out-of-process viewer.
@@ -1121,12 +1136,17 @@ public partial class App : IDisposable
             Engine.SubmitPaintCommands(_capturePaint);
         }
 
-        return Engine.CaptureUiBmp(
+        bool captured = Engine.CaptureUiBmp(
             path: path,
             width: (uint)MathF.Max(x: 1f, y: LayoutWidth * density),
             height: (uint)MathF.Max(x: 1f, y: LayoutHeight * density),
             scale: density
         );
+        // The capture goes through the engine's MAIN paint list. A secondary window borrowed it,
+        // so hand the main window its own commands back rather than leave another window's there
+        // until the main one next repaints.
+        if (ParentApp is { } main) Engine.SubmitPaintCommands(main._paint);
+        return captured;
     }
 
     /// <summary>
@@ -2084,11 +2104,12 @@ public partial class App : IDisposable
                 {
                     Console.Error.WriteLine(
                         FormattableString.Invariant(
-                            $"[scroll] raw=({s.ScrollX:F3},{s.ScrollY:F3}) dispatched=({dx:F3},{dy:F3}) orient={Engine.GetScrollOrientation()} target={target?.GetType().Name ?? "null"} mouse=({_mousePos.X:F0},{_mousePos.Y:F0})"
+                            $"[scroll] raw=({s.ScrollX:F3},{s.ScrollY:F3}) dispatched=({dx:F3},{dy:F3}) orient={Engine.GetScrollOrientation()} precise={s.Precise} target={target?.GetType().Name ?? "null"} mouse=({_mousePos.X:F0},{_mousePos.Y:F0})"
                         )
                     );
                 }
 
+                CurrentScrollPrecise = s.Precise;
                 target?.OnScroll(dx: dx, dy: dy);
                 break;
             }

@@ -364,8 +364,29 @@ public sealed class AdwWindowControls : ComposedWidget
     {
         private const float Target = AdwMetrics.FrameButtonSize;
         private const float Diameter = AdwMetrics.FrameButtonCircle;
+        private FillTransition? _fill;
+        private Color _fillColor = theme.Control;
         private bool _hovered;
         private bool _pressed;
+
+        /// <summary>Fades the circle to its hover/press fill (~100ms) instead of snapping.</summary>
+        private void Refill()
+        {
+            if (_fill is null)
+            {
+                _fill = new FillTransition(c =>
+                    {
+                        _fillColor = c;
+                        MarkNeedsPaint();
+                    }
+                );
+                _fill.Snap(_fillColor); // a transition's first Target snaps; start it at rest
+            }
+
+            _fill.Target(
+                _pressed ? theme.ControlPressed : _hovered ? theme.ControlHover : theme.Control
+            );
+        }
 
         /// <summary>The drawn circle, centred in the (larger) hit target.</summary>
         private Rect Circle => new(
@@ -392,8 +413,7 @@ public sealed class AdwWindowControls : ComposedWidget
             var circle = Circle;
             paint.AddRect(
                 bounds: circle,
-                color: _pressed ? theme.ControlPressed :
-                _hovered ? theme.ControlHover : theme.Control,
+                color: _fillColor,
                 radius: Diameter / 2f
             );
 
@@ -442,7 +462,7 @@ public sealed class AdwWindowControls : ComposedWidget
         {
             if (_hovered) return;
             _hovered = true;
-            MarkNeedsPaint();
+            Refill();
         }
 
         public override void OnPointerExit()
@@ -450,20 +470,20 @@ public sealed class AdwWindowControls : ComposedWidget
             if (!_hovered && !_pressed) return;
             _hovered = false;
             _pressed = false;
-            MarkNeedsPaint();
+            Refill();
         }
 
         public override void OnPointerDown(Offset point)
         {
             _pressed = true;
-            MarkNeedsPaint();
+            Refill();
         }
 
         public override void OnPointerUp(Offset point)
         {
             bool inside = _pressed && Bounds.Contains(px: point.X, py: point.Y);
             _pressed = false;
-            MarkNeedsPaint();
+            Refill();
             if (!inside) return;
             switch (kind)
             {

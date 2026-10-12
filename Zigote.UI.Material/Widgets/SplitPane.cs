@@ -18,6 +18,21 @@ public sealed class SplitPane(ThemeData theme, Widget? first = null, Widget? sec
 
     public Widget? First { get; set; } = first;
     public Widget? Second { get; set; } = second;
+    private bool _secondVisible = true;
+
+    /// <summary>Hide the second pane and divider while preserving the split ratio.</summary>
+    public bool SecondVisible
+    {
+        get => _secondVisible;
+        set
+        {
+            if (_secondVisible == value) return;
+            _secondVisible = value;
+            _dragging = false;
+            MarkNeedsLayout();
+        }
+    }
+
     public float SplitRatio { get; set; } = 0.5f;
     public float DividerW { get; set; } = 4f;
     public bool Vertical { get; set; } = false;
@@ -78,6 +93,14 @@ public sealed class SplitPane(ThemeData theme, Widget? first = null, Widget? sec
             height: _size.Height
         );
 
+        if (!SecondVisible)
+        {
+            _dividerRect = default;
+            First?.Measure(Constraints.Tight(width: _size.Width, height: _size.Height));
+            First?.Layout(origin);
+            return;
+        }
+
         float totalSize = Vertical ? _size.Height - DividerW : _size.Width - DividerW;
         (float minRatio, float maxRatio) = RatioBounds(totalSize);
         float ratio = Math.Clamp(value: SplitRatio, min: minRatio, max: maxRatio);
@@ -123,6 +146,7 @@ public sealed class SplitPane(ThemeData theme, Widget? first = null, Widget? sec
     public override void Paint(PaintList paint)
     {
         First?.Paint(paint);
+        if (!SecondVisible) return;
 
         // Divider — an adaptive hairline colour so it stays visible in light mode too (the old
         // SurfaceAlt token is pure white in the light theme, which vanished between white panes).
@@ -135,6 +159,7 @@ public sealed class SplitPane(ThemeData theme, Widget? first = null, Widget? sec
     public override Widget? HitTest(Offset point)
     {
         if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
+        if (!SecondVisible) return First?.HitTest(point) ?? this;
         if (DividerGrab().Contains(px: point.X, py: point.Y)) return this;
         var hit = Second?.HitTest(point) ?? First?.HitTest(point);
         return hit ?? this;
@@ -142,7 +167,7 @@ public sealed class SplitPane(ThemeData theme, Widget? first = null, Widget? sec
 
     public override void OnPointerDown(Offset point)
     {
-        if (!DividerGrab().Contains(px: point.X, py: point.Y)) return;
+        if (!SecondVisible || !DividerGrab().Contains(px: point.X, py: point.Y)) return;
         _dragging = true;
         _dragStart = Vertical ? point.Y : point.X;
         _ratioAtDrag = SplitRatio;
@@ -191,6 +216,6 @@ public sealed class SplitPane(ThemeData theme, Widget? first = null, Widget? sec
     public override IEnumerable<Widget> GetChildren()
     {
         if (First is not null) yield return First;
-        if (Second is not null) yield return Second;
+        if (SecondVisible && Second is not null) yield return Second;
     }
 }

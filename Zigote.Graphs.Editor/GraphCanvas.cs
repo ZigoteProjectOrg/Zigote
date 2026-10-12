@@ -20,14 +20,14 @@ public sealed class GraphCanvas : Widget
 {
     // ── Layout constants ──────────────────────────────────────────────────────
 
-    private const float NodeHeaderH = 22f;
-    private const float NodePinH = 18f;
-    private const float NodePinRadius = 5f;
-    private const float NodePropH = 15f; // height per inline property row
+    private const float NodeHeaderH = 30f;
+    private const float NodePinH = 24f;
+    private const float NodePinRadius = 5.5f;
+    private const float NodePropH = 28f; // height per inline property row
     private const float NodePropSepH = 1f; // separator between pins and properties
-    private const float NodeMinWidth = 150f;
+    private const float NodeMinWidth = 230f;
     private const float NodePadX = 10f;
-    private const float GridSpacing = 40f;
+    private const float GridSpacing = 24f;
     private const float PreviewPad = 8f;
     private const float NodeResizeGrip = 10f; // world units — grab area size for resize handle
 
@@ -58,6 +58,12 @@ public sealed class GraphCanvas : Widget
     private GraphPinEndpoint? _dragSnapPin;
     private float _editDragStartX, _editDragStartFloat;
     private PropEditTarget? _editingProp;
+    private GraphValue _editOriginalValue = GraphValue.Null();
+    private InlineTextField? _textEditor;
+    private string? _textError;
+    private PropEditTarget? _textTarget;
+    private Offset _editPress;
+    private bool _editMoved;
 
     // Edge hover
     private Guid? _hoveredEdgeId;
@@ -89,6 +95,36 @@ public sealed class GraphCanvas : Widget
     private float _resizeStartWorldY, _resizeStartHeight;
     private Size _size;
     private float _zoom = 1f;
+    private Modifiers _modifiers;
+    private string? _connectionError;
+    private readonly HashSet<Guid> _invalidEdges = [];
+
+    // Marquee: what was selected before it started (kept when Shift/Ctrl extends the selection).
+    private Guid[] _boxBase = [];
+
+    // A plain press on one node of a multi-selection keeps the group for a drag; if no drag
+    // follows, the release narrows the selection to that node.
+    private Guid? _collapseOnRelease;
+
+    // The existing cable being re-plugged: picked up by dragging from its input end.
+    private GraphEdge? _rerouteEdge;
+
+    // While one unconnected node is dragged over a cable: where releasing would splice it in.
+    private (GraphEdge Edge, string In, string Out)? _insert;
+
+    /// <summary>Stands in for <c>App.CurrentScrollPrecise</c> when the canvas has no app (tests).</summary>
+    public bool PreciseScroll { get; set; }
+
+    // Tick of the last scroll event the native layer marked as precise (see OnScroll).
+    private long _trackpadTick = -1000; // "long ago", without overflowing the subtraction
+
+    // Copied nodes. Process-wide so a copy in one graph pastes into another of the same domain.
+    private static Snapshot? _clipboard;
+    private int _pasteCount;
+    private readonly Dictionary<Guid, (float X, float Y)> _dragOrigins = [];
+    public GraphPinEndpoint? SearchConnection { get; private set; }
+    public Offset SearchAnchor { get; private set; }
+
 
     public GraphCanvas(GraphEditorState state, ThemeData theme)
     {
@@ -96,6 +132,12 @@ public sealed class GraphCanvas : Widget
         _theme = theme;
 
         _state.CompileChanged += OnCompileChanged;
+        _panX = state.Graph.EditorData.ViewOffsetX;
+        _panY = state.Graph.EditorData.ViewOffsetY;
+        _zoom = Math.Clamp(state.Graph.EditorData.Zoom, 0.15f, 4f);
+        _state.GraphChanged += () => { RefreshConnectionValidity(); InvalidateView(); };
+        RefreshConnectionValidity();
+        _state.SelectionChanged += MarkNeedsPaint;
         OnCompileChanged(); // seed from any compile already done
     }
 
@@ -106,6 +148,19 @@ public sealed class GraphCanvas : Widget
     public bool MinimapVisible { get; set; }
 
     public override bool Focusable => true;
+
+    /// <summary>Arrow keys nudge the selection, so they never move window focus.</summary>
+    public override bool HandlesDirectionalKeys => true;
+
+    // Pointer gestures read the live modifier state. _modifiers only follows key events delivered
+    // while the canvas had focus, so Shift pressed over another control used to be missed and a
+    // release missed the same way left it stuck on.
+    private Modifiers Mods => Owner is { } app ? app.CurrentModifiers : _modifiers;
+
+    private bool Additive => Mods.HasFlag(Modifiers.Shift) || Mods.HasCommand();
+
+    private float NodeWidth(NodeLayoutData layout) =>
+        MathF.Max(x: layout.Width > 0 ? layout.Width : NodeMinWidth, y: NodeMinWidth);
 
     public event Action<float, float>? SearchRequested;
 
@@ -151,6 +206,18 @@ public sealed class GraphCanvas : Widget
         return _size;
     }
 
+    private static void DrawLine(PaintList paint, Offset a, Offset b, Color color, float width) =>
+        paint.AddBezier(a.X, a.Y, a.X, a.Y, b.X, b.Y, b.X, b.Y, color, width);
+
+    /// <summary>
+    ///     Fit the view to the graph when the canvas first gets a size, and again on resize until
+    ///     the user pans or zooms. Off by default: a host that positions the view itself keeps it.
+    /// </summary>
+    public bool AutoFrame { get; set; }
+
+    private Size _framedSize;
+    private float _autoPanX, _autoPanY, _autoZoom;
+
     public override void Layout(Offset origin)
     {
         Bounds = new Rect(
@@ -160,11 +227,24 @@ public sealed class GraphCanvas : Widget
             height: _size.Height
         );
 
+        // Open on the graph, not on wherever world (0,0) happens to be: fit the first time the
+        // canvas has a real size, and keep fitting as it resizes (a docked tab being maximized)
+        // until the user pans or zooms — after that the view is theirs.
+        bool untouched = _panX == _autoPanX && _panY == _autoPanY && _zoom == _autoZoom;
+        if (AutoFrame && _size is { Width: > 0f, Height: > 0f } && _size != _framedSize &&
+            (_framedSize == default || untouched))
+        {
+            _framedSize = _size;
+            FrameAll();
+            (_autoPanX, _autoPanY, _autoZoom) = (_panX, _panY, _zoom);
+        }
+
+        LayoutTextEditor();
         if (_outputPreviewWidget is null || !_outputNodeId.HasValue ||
             !_state.Graph.EditorData.NodeLayouts.TryGetValue(
                 key: _outputNodeId.Value,
                 value: out var outLayout
-            )) return;
+            ) || outLayout.IsCollapsed) return;
         var outNode = _state.Graph.FindNode(_outputNodeId.Value);
         var def = outNode is null ? null : _state.Registry.GetNodeDefinition(outNode.DefinitionId);
         float totalBodyH = EffectiveHeight(layout: outLayout, def: def);
@@ -197,13 +277,31 @@ public sealed class GraphCanvas : Widget
         DrawGrid(paint);
         DrawEdges(paint);
         if (_dragPin.HasValue) DrawDragEdge(paint);
+        else if (SearchConnection is { } pending && GetPinWorldPos(pending) is { } pos)
+        {
+            bool output = GraphConnections.Resolve(_state.Graph, _state.Registry, pending)?.Direction == PinDirection.Output;
+            float x = WorldToScreenX(pos.wx), y = WorldToScreenY(pos.wy);
+            DrawBezier(paint, output ? x : SearchAnchor.X, output ? y : SearchAnchor.Y,
+                output ? SearchAnchor.X : x, output ? SearchAnchor.Y : y, _theme.OnSurface.WithAlpha(0.55f), 2f);
+        }
         DrawNodes(paint);
         // Green halos on every compatible target pin (and a red ring on an invalid hovered pin) while
         // dragging a wire — shows valid/invalid connections live.
         if (_dragPin.HasValue) DrawConnectionBeacons(paint);
         // Render the output node's live widget preview on top of the node card.
-        _outputPreviewWidget?.Paint(paint);
+        if (_outputNodeId is { } outputId && _state.Graph.EditorData.NodeLayouts.TryGetValue(outputId, out var outputLayout) && !outputLayout.IsCollapsed)
+            _outputPreviewWidget?.Paint(paint);
         if (_isBoxSelecting) DrawBoxSelection(paint);
+        _textEditor?.Paint(paint);
+
+        if (_state.Graph.Nodes.Count == 0)
+        {
+            const string hint = "Empty graph — press Shift+A or Space to add a node";
+            float fs = _theme.FontSizeBody;
+            paint.AddText(hint,
+                Bounds.X + (Bounds.Width - Zigote.UI.TextShaping.TextMeasure.Width(hint, fs)) / 2f,
+                Bounds.Y + Bounds.Height / 2f, _theme.TextMuted, fs);
+        }
 
         paint.AddClipEnd();
         DrawHints(paint);
@@ -323,47 +421,13 @@ public sealed class GraphCanvas : Widget
     private void DrawGrid(PaintList paint)
     {
         float spacing = GridSpacing * _zoom;
-        if (spacing < 8f) return;
-
-        // Two-tier grid: faint minor lines, stronger major lines every 5th world cell (which stay
-        // anchored to the graph origin as you pan). Theme-derived so the grid flips with appearance
-        // (white hairline in dark, black in light) instead of vanishing on a light canvas.
-        var major = _theme.Separator;
-        var minor = _theme.Separator.WithAlpha(_theme.Separator.A * 0.5f);
-        const int majorEvery = 5;
-
-        float startX = ((_panX % spacing) + Bounds.X) % spacing;
-        float startY = ((_panY % spacing) + Bounds.Y) % spacing;
-        if (startX > Bounds.X) startX -= spacing;
-        if (startY > Bounds.Y) startY -= spacing;
-
+        while (spacing < 14f) spacing *= 2f;
+        float startX = Bounds.X + ((_panX % spacing) + spacing) % spacing;
+        float startY = Bounds.Y + ((_panY % spacing) + spacing) % spacing;
+        var color = _theme.OnSurface.WithAlpha(0.10f);
         for (float x = startX; x < Bounds.Right; x += spacing)
-        {
-            int cell = (int)MathF.Round(ScreenToWorldX(x) / GridSpacing);
-            paint.AddRect(
-                bounds: new Rect(
-                    x: x,
-                    y: Bounds.Y,
-                    width: 1f,
-                    height: Bounds.Height
-                ),
-                color: cell % majorEvery == 0 ? major : minor
-            );
-        }
-
-        for (float y = startY; y < Bounds.Bottom; y += spacing)
-        {
-            int cell = (int)MathF.Round(ScreenToWorldY(y) / GridSpacing);
-            paint.AddRect(
-                bounds: new Rect(
-                    x: Bounds.X,
-                    y: y,
-                    width: Bounds.Width,
-                    height: 1f
-                ),
-                color: cell % majorEvery == 0 ? major : minor
-            );
-        }
+            for (float y = startY; y < Bounds.Bottom; y += spacing)
+                paint.AddRect(new Rect(x - 0.8f, y - 0.8f, 1.6f, 1.6f), color, 0.8f);
     }
 
     // ── Node height helpers ───────────────────────────────────────────────────
@@ -378,8 +442,32 @@ public sealed class GraphCanvas : Widget
     // Height of just the inline property section (world units).
     private static float PropsBodyH(NodeDefinition? def)
     {
-        int c = def?.Properties.Count ?? 0;
+        int c = InlineIndex(def, null);
         return c > 0 ? NodePropSepH + (c * NodePropH) + 4f : 0f;
+    }
+
+    // Row of `prop` among the properties drawn on the card, or the row count when prop is null.
+    // Inspector-only properties take no row.
+    private static int InlineIndex(NodeDefinition? def, PropertyDefinition? prop)
+    {
+        int row = 0;
+        if (def is null) return 0;
+        foreach (var p in def.Properties)
+        {
+            if (p == prop) return row;
+            if (!p.InspectorOnly) row++;
+        }
+        return row;
+    }
+
+    // True while a node's bypass property (PropertyDefinition.BypassEditor) is switched on.
+    private static bool IsBypassed(GraphNode node, NodeDefinition? def)
+    {
+        if (def is null) return false;
+        foreach (var p in def.Properties)
+            if (p.Editor == PropertyDefinition.BypassEditor && p.Type == GraphTypeRef.Bool)
+                return node.Properties.TryGetValue(p.Id, out var v) && v.Kind == GraphValueKind.Bool && v.AsBool();
+        return false;
     }
 
     // Full node body height including inline property rows (world units).
@@ -389,6 +477,7 @@ public sealed class GraphCanvas : Widget
     // else the auto height (so pins/props never clip; extra height is empty space below props).
     private static float EffectiveHeight(NodeLayoutData layout, NodeDefinition? def)
     {
+        if (layout.IsCollapsed) return MathF.Max(NodeHeaderH, 12f + Math.Max(def?.Inputs.Count ?? 0, def?.Outputs.Count ?? 0) * 12f);
         float min = TotalBodyH(def);
         return layout.Height > min ? layout.Height : min;
     }
@@ -397,7 +486,19 @@ public sealed class GraphCanvas : Widget
     ///     Request a relayout so view-derived widgets (e.g. the output preview / LiquidGlass) track
     ///     pan/zoom/drag.
     /// </summary>
-    private void InvalidateView() => MarkNeedsLayout();
+    private void InvalidateView()
+    {
+        _state.Graph.EditorData.ViewOffsetX = _panX;
+        _state.Graph.EditorData.ViewOffsetY = _panY;
+        _state.Graph.EditorData.Zoom = _zoom;
+        MarkNeedsLayout();
+    }
+
+    // The same geometry drives painting, hit-testing, snapping, beacons, and cable endpoints.
+    private static float PinY(NodeLayoutData layout, NodeDefinition def, int index, bool output) =>
+        layout.Y + (layout.IsCollapsed ? 12f + index * 12f : NodeHeaderH + 3f +
+            ((output ? index : def.Outputs.Count + index) + 0.5f) * NodePinH);
+
 
     // ── Nodes ─────────────────────────────────────────────────────────────────
 
@@ -434,7 +535,7 @@ public sealed class GraphCanvas : Widget
         float totalBodyH = EffectiveHeight(layout: layout, def: def);
         float ww = MathF.Max(x: layout.Width > 0 ? layout.Width : NodeMinWidth, y: NodeMinWidth);
 
-        bool hasPreview = _outputPreviewWidget is not null && node.Id == _outputNodeId;
+        bool hasPreview = !layout.IsCollapsed && _outputPreviewWidget is not null && node.Id == _outputNodeId;
 
         float sx = WorldToScreenX(layout.X);
         float sy = WorldToScreenY(layout.Y);
@@ -447,6 +548,7 @@ public sealed class GraphCanvas : Widget
         // Feature 2: LOD level based on zoom
         int lod = _zoom >= ZoomLodFull ? 2 : _zoom >= ZoomLodMin ? 1 : 0;
 
+        bool missingInput = def?.Inputs.Any(p => GraphInputValidation.IsMissing(_state.Graph, _state.Registry, node, p)) == true;
         bool isSelected = _state.IsSelected(node.Id);
         var nodeRect = new Rect(
             x: sx,
@@ -475,16 +577,18 @@ public sealed class GraphCanvas : Widget
 
         paint.AddRect(bounds: nodeRect, color: _theme.Panel, radius: radius);
 
-        // Neutral raised header with a category-coloured status dot + title (the modern node look),
-        // closed off by a hairline so the header reads as a distinct band over the body.
+        // Category-colored headers keep node roles recognizable even when collapsed.
         var accent = CategoryColor(def?.Category ?? "");
         var headerRect = new Rect(
             x: sx,
             y: sy,
             width: sw,
-            height: Scale(NodeHeaderH)
+            height: Scale(layout.IsCollapsed ? totalBodyH : NodeHeaderH)
         );
-        paint.AddRect(bounds: headerRect, color: _theme.PanelRaised, radius: radius);
+        // A bypassed node keeps its place and wiring but reads as switched off.
+        bool bypassed = IsBypassed(node, def);
+        var headerColor = bypassed ? _theme.PanelRaised : accent;
+        paint.AddRect(bounds: headerRect, color: headerColor, radius: radius);
         paint.AddRect(
             bounds: new Rect(
                 x: sx,
@@ -492,7 +596,7 @@ public sealed class GraphCanvas : Widget
                 width: sw,
                 height: radius * 0.5f
             ),
-            color: _theme.PanelRaised
+            color: headerColor
         );
         paint.AddRect(
             bounds: new Rect(
@@ -504,29 +608,23 @@ public sealed class GraphCanvas : Widget
             color: _theme.Border
         );
 
-        float fs = MathF.Max(x: 7f, y: 11f * _zoom);
-        float dotR = MathF.Max(x: 2f, y: 3f * _zoom);
-        float dotCx = sx + Scale(NodePadX) + dotR;
-        float dotCy = sy + (Scale(NodeHeaderH) * 0.5f);
-        paint.AddRect(
-            bounds: new Rect(
-                x: dotCx - dotR,
-                y: dotCy - dotR,
-                width: dotR * 2f,
-                height: dotR * 2f
-            ),
-            color: accent,
-            radius: dotR
-        );
-
-        string label = def?.DisplayName ?? node.DefinitionId;
-        paint.AddText(
-            text: label,
-            baselineX: dotCx + dotR + Scale(5f),
-            baselineY: dotCy + (fs * 0.36f),
-            color: _theme.OnSurface,
-            fontSize: fs
-        );
+        float fs = MathF.Max(7f, 13f * _zoom);
+        float cx = sx + Scale(15f), cy = sy + Scale(NodeHeaderH * 0.5f);
+        // Disclosure triangle, also usable when the card is collapsed.
+        var ink = bypassed ? _theme.TextMuted : new Color(0.96f, 0.97f, 0.98f);
+        if (layout.IsCollapsed)
+        {
+            DrawLine(paint, new Offset(cx - Scale(2f), cy - Scale(4f)), new Offset(cx + Scale(2f), cy), ink, Scale(1.5f));
+            DrawLine(paint, new Offset(cx + Scale(2f), cy), new Offset(cx - Scale(2f), cy + Scale(4f)), ink, Scale(1.5f));
+        }
+        else
+        {
+            DrawLine(paint, new Offset(cx - Scale(4f), cy - Scale(2f)), new Offset(cx, cy + Scale(2f)), ink, Scale(1.5f));
+            DrawLine(paint, new Offset(cx, cy + Scale(2f)), new Offset(cx + Scale(4f), cy - Scale(2f)), ink, Scale(1.5f));
+        }
+        paint.AddClipStart(new Rect(sx + Scale(29f), sy, sw - Scale(36f), Scale(NodeHeaderH)));
+        paint.AddText((def?.DisplayName ?? node.DefinitionId) + (bypassed ? "  (bypassed)" : ""), sx + Scale(29f), cy + fs * 0.36f, ink, fs);
+        paint.AddClipEnd();
 
         if (def is not null)
         {
@@ -539,7 +637,7 @@ public sealed class GraphCanvas : Widget
                 sw: sw,
                 lod: lod
             );
-            if (def.Properties.Count > 0 && lod >= 2)
+            if (!layout.IsCollapsed && def.Properties.Count > 0 && lod >= 2)
             {
                 DrawInlineProperties(
                     paint: paint,
@@ -553,7 +651,7 @@ public sealed class GraphCanvas : Widget
         }
 
         // Feature 1: resize grip — 3 short diagonal lines at bottom-right corner
-        if (_zoom > 0.4f)
+        if (!layout.IsCollapsed && _zoom > 0.4f)
         {
             var gripColor = _theme.TextMuted.WithAlpha(0.7f);
             float gripSize = Scale(NodeResizeGrip);
@@ -607,9 +705,9 @@ public sealed class GraphCanvas : Widget
         {
             paint.AddBorder(
                 bounds: nodeRect,
-                color: _theme.Border,
+                color: missingInput ? _theme.Error : _theme.Border,
                 radius: radius,
-                width: 0.75f
+                width: missingInput ? 1.5f : 0.75f
             );
         }
     }
@@ -620,7 +718,8 @@ public sealed class GraphCanvas : Widget
         // LOD 0: skip pins entirely
         if (lod < 1) return;
 
-        float fs = MathF.Max(x: 6f, y: 9.5f * _zoom);
+        float fs = MathF.Max(x: 7f, y: 11.5f * _zoom);
+        var layout = _state.Graph.EditorData.NodeLayouts[node.Id];
         float pinR = NodePinRadius * _zoom;
         float rowH = NodePinH * _zoom;
         float baseY = sy + Scale(NodeHeaderH) + Scale(3f);
@@ -628,8 +727,9 @@ public sealed class GraphCanvas : Widget
         for (int i = 0; i < def.Inputs.Count; i++)
         {
             var pin = def.Inputs[i];
-            float pinY = baseY + (i * rowH) + (rowH * 0.5f);
-            var col = PinColor(pin.Type);
+            float pinY = WorldToScreenY(PinY(layout, def, i, false));
+            bool missing = GraphInputValidation.IsMissing(_state.Graph, _state.Registry, node, pin);
+            var col = missing ? _theme.Error : PinColor(pin.Type);
             paint.AddRect(
                 bounds: new Rect(
                     x: sx - pinR,
@@ -641,10 +741,10 @@ public sealed class GraphCanvas : Widget
                 radius: pinR
             );
             // LOD 1: skip pin label text
-            if (lod >= 2)
+            if (lod >= 2 && !layout.IsCollapsed)
             {
                 paint.AddText(
-                    text: pin.DisplayName,
+                    text: missing ? $"{pin.DisplayName} • required" : pin.DisplayName,
                     baselineX: sx + pinR + Scale(4f),
                     baselineY: pinY + (fs * 0.38f),
                     color: _theme.OnSurface,
@@ -656,7 +756,7 @@ public sealed class GraphCanvas : Widget
         for (int i = 0; i < def.Outputs.Count; i++)
         {
             var pin = def.Outputs[i];
-            float pinY = baseY + ((def.Inputs.Count + i) * rowH) + (rowH * 0.5f);
+            float pinY = WorldToScreenY(PinY(layout, def, i, true));
             var col = PinColor(pin.Type);
             paint.AddRect(
                 bounds: new Rect(
@@ -668,7 +768,7 @@ public sealed class GraphCanvas : Widget
                 color: col,
                 radius: pinR
             );
-            if (lod >= 2)
+            if (lod >= 2 && !layout.IsCollapsed)
             {
                 float labelW = pin.DisplayName.Length * fs * 0.55f;
                 paint.AddText(
@@ -685,84 +785,60 @@ public sealed class GraphCanvas : Widget
     private void DrawInlineProperties(PaintList paint, GraphNode node, NodeDefinition def,
         float sx, float sy, float sw)
     {
-        float pinsBottom = sy + Scale(PinsBodyH(def));
-
-        // Subtle separator between pins area and properties area
-        paint.AddRect(
-            bounds: new Rect(
-                x: sx + Scale(4f),
-                y: pinsBottom,
-                width: sw - Scale(8f),
-                height: Scale(NodePropSepH)
-            ),
-            color: _theme.Separator
-        );
-
-        float fs = MathF.Max(x: 5.5f, y: 8f * _zoom);
+        float fs = MathF.Max(7f, 11.5f * _zoom);
         float rowH = Scale(NodePropH);
-        float py = pinsBottom + Scale(NodePropSepH) + Scale(2f);
-
-        for (int i = 0; i < def.Properties.Count; i++)
+        float py = sy + Scale(PinsBodyH(def) + NodePropSepH + 2f);
+        for (int i = 0; i < def.Properties.Count; i++, py += rowH)
         {
             var prop = def.Properties[i];
-            var val = node.Properties.TryGetValue(key: prop.Id, value: out var storedVal) &&
-                      !storedVal.IsNull
-                ? storedVal
-                : prop.DefaultValue;
-            string valueStr = FormatPropValue(prop: prop, val: val);
-            string nameStr = prop.DisplayName;
-
-            // Feature 5: highlight active editing row
-            if (_editingProp.HasValue
-                && _editingProp.Value.NodeId == node.Id
-                && _editingProp.Value.PropId == prop.Id)
+            if (prop.InspectorOnly)
             {
-                paint.AddRect(
-                    bounds: new Rect(
-                        x: sx,
-                        y: py - Scale(1f),
-                        width: sw,
-                        height: rowH
-                    ),
-                    color: _theme.Primary.WithAlpha(0.18f)
-                );
+                py -= rowH;
+                continue;
             }
-
-            // Name — dim
-            paint.AddText(
-                text: nameStr,
-                baselineX: sx + Scale(NodePadX),
-                baselineY: py + (fs * 0.85f),
-                color: _theme.TextMuted,
-                fontSize: fs
-            );
-
-            // Feature 5: scrub indicator for float properties
-            if (prop.Type == GraphTypeRef.Float)
+            var val = node.Properties.TryGetValue(prop.Id, out var stored) && !stored.IsNull ? stored : prop.DefaultValue;
+            var control = new Rect(sx + Scale(10f), py + Scale(2f), sw - Scale(20f), rowH - Scale(4f));
+            bool textEditing = _textTarget is { } textTarget && textTarget.NodeId == node.Id && textTarget.PropId == prop.Id;
+            bool active = textEditing || (_editingProp is { } edit && edit.NodeId == node.Id && edit.PropId == prop.Id);
+            paint.AddRect(control, _theme.PanelRaised, Scale(4f));
+            paint.AddClipStart(control);
+            if (IsNumeric(prop) && prop.Min is { } min && prop.Max is { } max && max > min)
             {
-                paint.AddText(
-                    text: "◀▶",
-                    baselineX: sx + sw - Scale(NodePadX) - (fs * 2.5f),
-                    baselineY: py + (fs * 0.85f),
-                    color: _theme.Info.WithAlpha(0.6f),
-                    fontSize: fs * 0.75f
-                );
+                float v = val.IsNull ? min : prop.Type == GraphTypeRef.Int ? val.AsInt() : val.AsFloat();
+                float fraction = Math.Clamp((v - min) / (max - min), 0, 1);
+                paint.AddRect(new Rect(control.X, control.Y, control.Width * fraction, control.Height),
+                    _theme.Primary.WithAlpha(active ? 0.65f : 0.38f), Scale(4f));
             }
-
-            // Value — right-aligned, brighter; offset left for float to avoid overlapping arrows
-            float valW = valueStr.Length * fs * 0.54f;
-            float valOffX = prop.Type == GraphTypeRef.Float ? fs * 2.5f : 0f;
-            paint.AddText(
-                text: valueStr,
-                baselineX: sx + sw - valW - Scale(NodePadX) - valOffX,
-                baselineY: py + (fs * 0.85f),
-                color: _theme.OnSurface,
-                fontSize: fs
-            );
-
-            py += rowH;
+            string value = FormatPropValue(prop, val);
+            if (!string.IsNullOrEmpty(prop.Unit)) value += " " + prop.Unit;
+            if (prop.EnumLabels is { Length: > 0 }) value += " ▾";
+            float valueWidth = textEditing ? control.Width * 0.55f
+                : MathF.Min(control.Width * 0.48f, value.Length * fs * 0.58f);
+            string name = prop.DisplayName;
+            int maxName = Math.Max(1, (int)((control.Width - valueWidth - Scale(25f)) / (fs * 0.56f)));
+            if (name.Length > maxName) name = name[..Math.Max(0, maxName - 1)] + "…";
+            paint.AddText(name, control.X + Scale(8f), py + rowH * 0.66f, _theme.OnSurface, fs);
+            if (textEditing)
+            {
+                if (!string.IsNullOrEmpty(prop.Unit))
+                {
+                    float unitWidth = prop.Unit.Length * fs * 0.58f;
+                    paint.AddText(prop.Unit, control.Right - unitWidth - Scale(8f), py + rowH * 0.66f, _theme.TextMuted, fs);
+                }
+                paint.AddClipEnd();
+                paint.AddBorder(control, _textError is null ? _theme.Primary : _theme.Error, Scale(4f), Scale(1.5f));
+                continue;
+            }
+            paint.AddClipStart(new Rect(control.Right - valueWidth - Scale(8f), control.Y, valueWidth, control.Height));
+            paint.AddText(value, control.Right - valueWidth - Scale(8f), py + rowH * 0.66f, _theme.OnSurface, fs);
+            paint.AddClipEnd();
+            paint.AddClipEnd();
+            paint.AddBorder(control, active ? _theme.Primary : _theme.Border, Scale(4f));
         }
     }
+
+    private static bool IsNumeric(PropertyDefinition prop) =>
+        prop.Type == GraphTypeRef.Float || (prop.Type == GraphTypeRef.Int && prop.EnumLabels is not { Length: > 0 });
 
     private static string FormatPropValue(PropertyDefinition prop, GraphValue val)
     {
@@ -770,9 +846,11 @@ public sealed class GraphCanvas : Widget
         if (prop.Type == GraphTypeRef.Float)
         {
             float f = val.AsFloat();
-            return f == MathF.Floor(f) ? ((int)f).ToString() : f.ToString("F1");
+            return f.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
         }
 
+        if (prop.Type == GraphTypeRef.Int && prop.EnumLabels is { Length: > 0 } labels)
+            return labels[Math.Clamp(val.AsInt(), 0, labels.Length - 1)];
         if (prop.Type == GraphTypeRef.Bool) return val.AsBool() ? "on" : "off";
         if (prop.Type == GraphTypeRef.String)
         {
@@ -785,10 +863,20 @@ public sealed class GraphCanvas : Widget
 
     // ── Edges ─────────────────────────────────────────────────────────────────
 
+    // Connection policy can traverse the graph; evaluate once per edit, not once per painted cable.
+    private void RefreshConnectionValidity()
+    {
+        _invalidEdges.Clear();
+        foreach (var edge in _state.Graph.Edges)
+            if (!GraphConnections.CanConnect(_state.Graph, _state.Registry, edge.From, edge.To, out _, edge.Id))
+                _invalidEdges.Add(edge.Id);
+    }
+
     private void DrawEdges(PaintList paint)
     {
         foreach (var edge in _state.Graph.Edges)
         {
+            if (edge.Id == _rerouteEdge?.Id) continue; // drawn as the in-flight cable instead
             var fromPin = GetPinWorldPos(edge.From);
             var toPin = GetPinWorldPos(edge.To);
             if (!fromPin.HasValue || !toPin.HasValue) continue;
@@ -834,6 +922,17 @@ public sealed class GraphCanvas : Widget
                 lineWidth = 2f * _zoom;
             }
 
+            if (_invalidEdges.Contains(edge.Id))
+                edgeColor = _theme.Error;
+            if (_insert?.Edge.Id == edge.Id)
+            {
+                // The cable a dragged node would be spliced into on release.
+                edgeColor = _theme.Success;
+                lineWidth = 3.5f * _zoom;
+            }
+
+            // A dark under-stroke keeps a cable readable where it crosses another cable or a card.
+            DrawBezier(paint, fsx, fsy, tsx, tsy, _theme.GraphBackground.WithAlpha(0.85f), lineWidth + (3f * _zoom));
             DrawBezier(
                 paint: paint,
                 x0: fsx,
@@ -913,7 +1012,7 @@ public sealed class GraphCanvas : Widget
                 Beacon(
                     ep: new GraphPinEndpoint(NodeId: node.Id, PinId: def.Inputs[i].Id),
                     wx: layout.X,
-                    wy: baseY + (i * NodePinH) + (NodePinH * 0.5f)
+                    wy: PinY(layout, def, i, false)
                 );
             }
 
@@ -922,7 +1021,7 @@ public sealed class GraphCanvas : Widget
                 Beacon(
                     ep: new GraphPinEndpoint(NodeId: node.Id, PinId: def.Outputs[i].Id),
                     wx: layout.X + ww,
-                    wy: baseY + ((def.Inputs.Count + i) * NodePinH) + (NodePinH * 0.5f)
+                    wy: PinY(layout, def, i, true)
                 );
             }
         }
@@ -981,7 +1080,7 @@ public sealed class GraphCanvas : Widget
     {
         float absDx = MathF.Abs(x1 - x0);
         float absDy = MathF.Abs(y1 - y0);
-        float handleLen = MathF.Max(x: (absDx * 0.5f) + (absDy * 0.25f), y: 80f);
+        float handleLen = MathF.Max(x: (absDx * 0.5f) + (absDy * 0.25f), y: 24f);
         paint.AddBezier(
             x0: x0,
             y0: y0,
@@ -1018,49 +1117,20 @@ public sealed class GraphCanvas : Widget
 
     private void DrawHints(PaintList paint)
     {
-        float fs = _theme.FontSizeCaption;
-        if (_state.Graph.Nodes.Count == 0)
-        {
-            const string hint = "[Space] add node  ·  [Scroll] zoom  ·  [RMB] pan";
-            float w = hint.Length * fs * 0.53f;
-            paint.AddText(
-                text: hint,
-                baselineX: Bounds.X + ((Bounds.Width - w) * 0.5f),
-                baselineY: Bounds.Y + (Bounds.Height * 0.5f) + 14f,
-                color: _theme.Hint.WithAlpha(0.5f),
-                fontSize: fs
-            );
-        }
-        else if (_state.SelectedEdgeId.HasValue)
-        {
-            const string hint = "[Del] disconnect edge";
-            paint.AddText(
-                text: hint,
-                baselineX: Bounds.X + 8f,
-                baselineY: Bounds.Bottom - 6f,
-                color: _theme.Hint,
-                fontSize: fs
-            );
-        }
-
-        string zoomText = $"{_zoom * 100f:F0}%";
-        float zw = zoomText.Length * fs * 0.56f;
-        paint.AddText(
-            text: zoomText,
-            baselineX: Bounds.Right - zw - 8f,
-            baselineY: Bounds.Bottom - 6f,
-            color: _theme.Hint,
-            fontSize: fs
-        );
-
-        string edgeHint = "RMB edge: disconnect";
-        paint.AddText(
-            text: edgeHint,
-            baselineX: Bounds.Right - (edgeHint.Length * fs * 0.53f) - 8f,
-            baselineY: Bounds.Bottom - 20f,
-            color: _theme.Hint.WithAlpha(0.35f),
-            fontSize: fs - 1f
-        );
+        string hint = _textError ?? (_textEditor is not null ? "Enter  Apply value     Esc  Cancel" : null) ?? _connectionError ?? (_dragPin.HasValue
+            ? "Drop on a socket to connect · Drop on empty space to add a node · Esc cancels"
+            : _insert is not null ? "Release to insert this node into the cable"
+            : _state.SelectedNodes.Count > 0
+                ? "Arrows  Nudge     Ctrl C / X / V  Copy, cut, paste     Ctrl D  Duplicate     Del  Delete     H  Collapse     F  Frame     Esc  Deselect"
+                : _state.SelectedEdges.Count > 0
+                    ? "Del  Disconnect     Shift-click  Select more cables     Drag a cable's input end to re-plug it     Alt-click  Cut"
+                    : "Shift A / Space  Add node     Shift-click / drag  Select     Ctrl V  Paste     F  Frame all     Scroll or right-drag  Pan     Ctrl scroll  Zoom");
+        var strip = new Rect(Bounds.X, Bounds.Bottom - 27f, Bounds.Width, 27f);
+        paint.AddRect(strip, _theme.GraphBackground.WithAlpha(0.94f));
+        paint.AddClipStart(new Rect(strip.X + 10f, strip.Y, MathF.Max(0, strip.Width - 70f), strip.Height));
+        paint.AddText(hint, strip.X + 10f, strip.Y + 18f, _connectionError is null && _textError is null ? _theme.TextMuted : _theme.Error, 11f);
+        paint.AddClipEnd();
+        paint.AddText($"{_zoom * 100f:F0}%", Bounds.Right - 48f, strip.Y + 18f, _theme.TextMuted, 11f);
     }
 
     // ── Input ─────────────────────────────────────────────────────────────────
@@ -1071,6 +1141,15 @@ public sealed class GraphCanvas : Widget
 
         float wx = ScreenToWorldX(point.X);
         float wy = ScreenToWorldY(point.Y);
+
+        _connectionError = null;
+        var headerNode = HitTestNode(wx, wy);
+        if (headerNode is { } hn && _state.Graph.EditorData.NodeLayouts.TryGetValue(hn, out var hl)
+            && wx >= hl.X + 6f && wx <= hl.X + 27f && wy <= hl.Y + NodeHeaderH)
+        {
+            _state.Commands.Execute(new CollapseNodesCommand([hn], !hl.IsCollapsed));
+            return;
+        }
 
         // Feature 1: resize grip check — highest priority, before pin hit-test
         var resizeTarget = HitTestResizeGrip(wx: wx, wy: wy);
@@ -1095,40 +1174,25 @@ public sealed class GraphCanvas : Widget
         if (propHit.HasValue)
         {
             var (nid, prop, _) = propHit.Value;
-            if (prop.Type == GraphTypeRef.Float)
+            var node = _state.Graph.FindNode(nid)!;
+            _state.Select(nid);
+            if (IsNumeric(prop) || prop.Type == GraphTypeRef.Bool || prop.EnumLabels is { Length: > 0 })
             {
-                var node = _state.Graph.FindNode(nid);
-                float currentVal = node is not null
-                                   && node.Properties.TryGetValue(
-                                       key: prop.Id,
-                                       value: out var sv
-                                   ) && !sv.IsNull
-                    ? sv.AsFloat()
-                    : prop.DefaultValue.IsNull
-                        ? 0f
-                        : prop.DefaultValue.AsFloat();
-                _editingProp = new PropEditTarget(
-                    NodeId: nid,
-                    PropId: prop.Id,
-                    Def: prop,
-                    ScreenRect: default
-                );
+                _editOriginalValue = node.Properties.GetValueOrDefault(prop.Id) ?? GraphValue.Null();
+                var current = _editOriginalValue.IsNull ? prop.DefaultValue : _editOriginalValue;
+                _editDragStartFloat = current.IsNull ? 0f : prop.Type == GraphTypeRef.Int ? current.AsInt()
+                    : prop.Type == GraphTypeRef.Float ? current.AsFloat() : 0f;
+                _editingProp = new PropEditTarget(nid, prop.Id, prop, default);
                 _editDragStartX = point.X;
-                _editDragStartFloat = currentVal;
+                _editPress = point;
+                _editMoved = false;
+                MarkNeedsPaint();
                 return;
             }
-
-            if (prop.Type == GraphTypeRef.Bool)
-            {
-                // Record intent; commit the toggle on pointer-up to avoid accidental toggles on drag
-                _editingProp = new PropEditTarget(
-                    NodeId: nid,
-                    PropId: prop.Id,
-                    Def: prop,
-                    ScreenRect: default
-                );
-                return;
-            }
+            if (prop.Type == GraphTypeRef.String && prop.Editor is null)
+                BeginTextEdit(new PropEditTarget(nid, prop.Id, prop, default));
+            // A property click selects its node, rather than starting a node drag.
+            return;
         }
 
         // 1) Pin drag (edge creation)
@@ -1141,14 +1205,38 @@ public sealed class GraphCanvas : Widget
             _dragPinWorldY = hitPin.Value.wy;
             _mousePinWorldX = wx;
             _mousePinWorldY = wy;
+            _rerouteEdge = null;
+            // Pulling on an input that holds exactly one cable picks that cable up: drop it on
+            // another input to re-plug it, or on empty canvas to unplug it. (With several cables
+            // on the input there is no single one to mean; start from the output end instead.)
+            if (_dragPinDir == PinDirection.Input)
+            {
+                var incoming = _state.Graph.Edges.Where(e => e.To == hitPin.Value.endpoint).Take(2).ToArray();
+                if (incoming.Length == 1 && GetPinWorldPos(incoming[0].From) is { } source)
+                {
+                    _rerouteEdge = incoming[0];
+                    _dragPin = incoming[0].From;
+                    _dragPinDir = PinDirection.Output;
+                    _dragPinWorldX = source.wx;
+                    _dragPinWorldY = source.wy;
+                }
+            }
+
             return;
         }
 
         // 2) Edge click → select edge
         var hitEdge = HitTestEdge(sx: point.X, sy: point.Y);
-        if (hitEdge.HasValue)
+        if (hitEdge.HasValue && HitTestNode(wx, wy) is null)
         {
-            _state.SelectEdge(hitEdge.Value);
+            // Alt-click cuts the cable outright.
+            if (Mods.HasFlag(Modifiers.Alt))
+            {
+                _state.Commands.Execute(new DeleteEdgeCommand(hitEdge.Value));
+                _hoveredEdgeId = null;
+            }
+            else if (Additive) _state.ToggleEdgeSelection(hitEdge.Value);
+            else _state.SelectEdge(hitEdge.Value);
             return;
         }
 
@@ -1156,7 +1244,15 @@ public sealed class GraphCanvas : Widget
         var hitNode = HitTestNode(wx: wx, wy: wy);
         if (hitNode.HasValue)
         {
-            _state.Select(hitNode.Value);
+            _collapseOnRelease = null;
+            if (Additive) _state.ToggleSelection(hitNode.Value);
+            else if (!_state.IsSelected(hitNode.Value)) _state.Select(hitNode.Value);
+            else if (_state.SelectedNodes.Count > 1) _collapseOnRelease = hitNode.Value;
+            if (!_state.IsSelected(hitNode.Value)) return; // toggled off: nothing to drag
+            _dragOrigins.Clear();
+            foreach (var id in _state.SelectedNodes)
+                if (_state.Graph.EditorData.NodeLayouts.TryGetValue(id, out var origin))
+                    _dragOrigins[id] = (origin.X, origin.Y);
             _dragNodeId = hitNode.Value;
             var layout = _state.Graph.EditorData.NodeLayouts[hitNode.Value];
             _dragNodeStartX = layout.X;
@@ -1166,8 +1262,9 @@ public sealed class GraphCanvas : Widget
             return;
         }
 
-        // 4) Empty space → box select
-        _state.ClearSelection();
+        // 4) Empty space → box select. Shift/Ctrl keeps what is selected and adds to it.
+        _boxBase = Additive ? _state.SelectedNodes.ToArray() : [];
+        if (!Additive) _state.ClearSelection();
         _isBoxSelecting = true;
         _boxStartX = _boxEndX = point.X;
         _boxStartY = _boxEndY = point.Y;
@@ -1226,36 +1323,41 @@ public sealed class GraphCanvas : Widget
             return;
         }
 
-        // Feature 5: float scrub feedback
-        if (_editingProp.HasValue && _editingProp.Value.Def.Type == GraphTypeRef.Float)
+        if (_editingProp is { } editing)
         {
-            float delta = (point.X - _editDragStartX) / _zoom * 0.5f;
-            var propDef = _editingProp.Value.Def;
-            float newVal = _editDragStartFloat + delta;
-            if (propDef.Min.HasValue || propDef.Max.HasValue)
+            _editMoved |= MathF.Abs(point.X - _editPress.X) > 3f || MathF.Abs(point.Y - _editPress.Y) > 3f;
+            if (!_editMoved || !IsNumeric(editing.Def)) return;
+            var prop = editing.Def;
+            float step = prop.Step is > 0 ? prop.Step.Value : prop.Type == GraphTypeRef.Int ? 1f : 0.01f;
+            float value = _editDragStartFloat + (point.X - _editDragStartX) / _zoom * step;
+            if (prop.Min is { } min && prop.Max is { } max && max > min)
             {
-                newVal = Math.Clamp(
-                    value: newVal,
-                    min: propDef.Min ?? float.MinValue,
-                    max: propDef.Max ?? float.MaxValue
-                );
+                var layout = _state.Graph.EditorData.NodeLayouts[editing.NodeId];
+                float width = MathF.Max(layout.Width, NodeMinWidth);
+                float precision = _modifiers.HasFlag(Modifiers.Shift) ? 0.1f : 1f;
+                value = _editDragStartFloat + (point.X - _editDragStartX) / Scale(width - 20f) * (max - min) * precision;
             }
-
-            var editNode = _state.Graph.FindNode(_editingProp.Value.NodeId);
-            if (editNode is not null)
+            value = MathF.Round(value / step) * step;
+            value = Math.Clamp(value, prop.Min ?? float.MinValue, MathF.Max(prop.Min ?? float.MinValue, prop.Max ?? float.MaxValue));
+            var node = _state.Graph.FindNode(editing.NodeId);
+            if (node is not null)
             {
-                editNode.Properties[_editingProp.Value.PropId] = GraphValue.FromFloat(newVal);
-                _state.TriggerCompile();
+                node.Properties[prop.Id] = prop.Type == GraphTypeRef.Int ? GraphValue.FromInt((int)Math.Clamp(Math.Round(value), int.MinValue, int.MaxValue)) : GraphValue.FromFloat(value);
+                if (_state.AutoCompile) _state.TriggerCompile();
+                MarkNeedsPaint();
             }
-
             return;
         }
 
         if (_dragNodeId.HasValue)
         {
             var layout = _state.Graph.EditorData.NodeLayouts[_dragNodeId.Value];
-            layout.X = wx - _dragOffsetX;
-            layout.Y = wy - _dragOffsetY;
+            float dx = wx - _dragOffsetX - _dragNodeStartX;
+            float dy = wy - _dragOffsetY - _dragNodeStartY;
+            foreach (var pair in _dragOrigins)
+                if (_state.Graph.EditorData.NodeLayouts.TryGetValue(pair.Key, out var moved))
+                { moved.X = pair.Value.X + dx; moved.Y = pair.Value.Y + dy; }
+            _insert = InsertTarget(nodeId: _dragNodeId.Value, sx: point.X, sy: point.Y);
             InvalidateView();
             return;
         }
@@ -1276,7 +1378,9 @@ public sealed class GraphCanvas : Widget
             else
                 _dragHoverPin = null;
 
-            _dragSnapPin = NearestCompatiblePin(wx: wx, wy: wy, worldRadius: NodePinRadius * 3f);
+            _connectionError = _dragHoverPin is { } hovered && !GraphConnections.CanConnect(
+                _state.Graph, _state.Registry, _dragPin.Value, hovered, out var reason, _rerouteEdge?.Id) ? reason : null;
+            _dragSnapPin = _dragHoverPin.HasValue && !_dragHoverValid ? null : NearestCompatiblePin(wx: wx, wy: wy, worldRadius: 18f / _zoom);
             if (_dragSnapPin is { } snap && GetPinWorldPos(snap) is { } sp)
             {
                 _mousePinWorldX = sp.wx;
@@ -1330,55 +1434,30 @@ public sealed class GraphCanvas : Widget
             return;
         }
 
-        // Feature 5: commit property edit
-        if (_editingProp.HasValue)
+        if (_editingProp is { } editTarget)
         {
-            var target = _editingProp.Value;
+            var node = _state.Graph.FindNode(editTarget.NodeId);
+            var released = HitTestPropRow(wx: ScreenToWorldX(point.X), wy: ScreenToWorldY(point.Y));
             _editingProp = null;
-
-            if (target.Def.Type == GraphTypeRef.Float)
+            if (node is null) return;
+            var final = node.Properties.GetValueOrDefault(editTarget.PropId) ?? GraphValue.Null();
+            if (!IsNumeric(editTarget.Def))
             {
-                var editNode = _state.Graph.FindNode(target.NodeId);
-                if (editNode is not null
-                    && editNode.Properties.TryGetValue(key: target.PropId, value: out var curVal)
-                    && !curVal.IsNull)
-                {
-                    float finalFloat = curVal.AsFloat();
-                    editNode.Properties[target.PropId] = GraphValue.FromFloat(_editDragStartFloat);
-                    _state.Commands.Execute(
-                        new ChangeNodePropertyCommand(
-                            nodeId: target.NodeId,
-                            propertyKey: target.PropId,
-                            oldValue: GraphValue.FromFloat(_editDragStartFloat),
-                            newValue: GraphValue.FromFloat(finalFloat)
-                        )
-                    );
-                }
+                if (_editMoved || released is not { } hit || hit.nodeId != editTarget.NodeId || hit.prop.Id != editTarget.PropId) return;
+                var current = _editOriginalValue.IsNull ? editTarget.Def.DefaultValue : _editOriginalValue;
+                final = editTarget.Def.Type == GraphTypeRef.Bool
+                    ? GraphValue.FromBool(current.IsNull || !current.AsBool())
+                    : GraphValue.FromInt(((current.IsNull ? -1 : current.AsInt()) + 1) % editTarget.Def.EnumLabels!.Length);
             }
-            else if (target.Def.Type == GraphTypeRef.Bool)
+            RestoreProperty(node, editTarget.PropId);
+            if (IsNumeric(editTarget.Def) && !_editMoved)
             {
-                var editNode = _state.Graph.FindNode(target.NodeId);
-                if (editNode is not null)
-                {
-                    var curVal = editNode.Properties.TryGetValue(
-                                     key: target.PropId,
-                                     value: out var sv
-                                 ) &&
-                                 !sv.IsNull
-                        ? sv
-                        : target.Def.DefaultValue;
-                    bool oldBool = !curVal.IsNull && curVal.AsBool();
-                    _state.Commands.Execute(
-                        new ChangeNodePropertyCommand(
-                            nodeId: target.NodeId,
-                            propertyKey: target.PropId,
-                            oldValue: GraphValue.FromBool(oldBool),
-                            newValue: GraphValue.FromBool(!oldBool)
-                        )
-                    );
-                }
+                BeginTextEdit(editTarget);
+                return;
             }
-
+            if (final.ToString() != _editOriginalValue.ToString())
+                _state.Commands.Execute(new ChangeNodePropertyCommand(editTarget.NodeId, editTarget.PropId, _editOriginalValue, final));
+            MarkNeedsPaint();
             return;
         }
 
@@ -1388,52 +1467,84 @@ public sealed class GraphCanvas : Widget
                 value: out var nodeLayout
             ))
         {
-            float finalX = nodeLayout.X;
-            float finalY = nodeLayout.Y;
-            nodeLayout.X = _dragNodeStartX;
-            nodeLayout.Y = _dragNodeStartY;
-            _state.Commands.Execute(
-                new MoveNodeCommand(nodeId: _dragNodeId.Value, newX: finalX, newY: finalY)
-            );
+            var commands = new List<IGraphCommand>();
+            foreach (var pair in _dragOrigins)
+                if (_state.Graph.EditorData.NodeLayouts.TryGetValue(pair.Key, out var moved))
+                {
+                    float x = moved.X, y = moved.Y;
+                    moved.X = pair.Value.X; moved.Y = pair.Value.Y;
+                    if (x != moved.X || y != moved.Y) commands.Add(new MoveNodeCommand(pair.Key, x, y));
+                }
+            if (commands.Count > 0 && _insert is { } splice)
+            {
+                // Dropped on a cable: the move and the re-wiring are one undo step.
+                commands.Add(new DeleteEdgeCommand(splice.Edge.Id));
+                commands.Add(new AddEdgeCommand(new GraphEdge {
+                    From = splice.Edge.From, To = new GraphPinEndpoint(_dragNodeId.Value, splice.In),
+                }));
+                commands.Add(new AddEdgeCommand(new GraphEdge {
+                    From = new GraphPinEndpoint(_dragNodeId.Value, splice.Out), To = splice.Edge.To,
+                }));
+            }
+
+            if (commands.Count > 0) _state.Commands.Execute(new GraphGesture(commands.ToArray()));
+            else if (_collapseOnRelease == _dragNodeId) _state.Select(_dragNodeId);
+            _dragOrigins.Clear();
         }
 
+        _insert = null;
+        _collapseOnRelease = null;
         _dragNodeId = null;
 
         if (_dragPin.HasValue)
         {
-            // Prefer the snapped compatible pin; otherwise whatever pin is directly under the cursor.
-            var target = _dragSnapPin;
-            if (target is null)
+            var hit = HitTestPin(wx, wy);
+            var target = hit?.endpoint ?? _dragSnapPin;
+            if (_rerouteEdge is { } old)
             {
-                var hitPin = HitTestPin(wx: wx, wy: wy);
-                if (hitPin.HasValue && hitPin.Value.endpoint != _dragPin.Value)
-                    target = hitPin.Value.endpoint;
+                // Re-plug: one undo step moves the cable. Dropped back where it was: no change.
+                // Dropped on empty canvas: unplugged. Dropped anywhere else: left as it was.
+                if (target is { } replug && replug != old.To)
+                {
+                    if (GraphConnections.CanConnect(_state.Graph, _state.Registry, old.From, replug, out var why, old.Id))
+                        _state.Commands.Execute(new GraphGesture(new DeleteEdgeCommand(old.Id),
+                            new AddEdgeCommand(new GraphEdge { From = old.From, To = replug })));
+                    else _connectionError = why;
+                }
+                else if (target is null && HitTestNode(wx, wy) is null && Bounds.Contains(point.X, point.Y))
+                    _state.Commands.Execute(new DeleteEdgeCommand(old.Id));
             }
-
-            // Only create when direction + type + domain all agree (matches the red/green drag feedback).
-            if (target is { } t && IsCompatibleTarget(t))
+            else if (target is { } t)
             {
-                var from = _dragPinDir == PinDirection.Output ? _dragPin.Value : t;
-                var to = _dragPinDir == PinDirection.Input ? _dragPin.Value : t;
-                _state.Commands.Execute(
-                    new AddEdgeCommand(
-                        new GraphEdge {
-                            From = from,
-                            To = to,
-                        }
-                    )
-                );
+                if (GraphConnections.CanConnect(_state.Graph, _state.Registry, _dragPin.Value, t, out var reason))
+                {
+                    var from = _dragPinDir == PinDirection.Output ? _dragPin.Value : t;
+                    var to = _dragPinDir == PinDirection.Input ? _dragPin.Value : t;
+                    _state.Commands.Execute(new AddEdgeCommand(new GraphEdge { From = from, To = to }));
+                    _connectionError = null;
+                }
+                else _connectionError = reason;
             }
+            else if (HitTestNode(wx, wy) is null && Bounds.Contains(point.X, point.Y))
+            {
+                SearchConnection = _dragPin.Value;
+                SearchAnchor = point;
+                SearchRequested?.Invoke(wx, wy);
+            }
+            else _connectionError = "Drop on a socket, or on empty space to add a connected node.";
 
             _dragPin = null;
             _dragHoverPin = null;
             _dragSnapPin = null;
+            _rerouteEdge = null;
+            MarkNeedsPaint();
         }
 
         if (_isBoxSelecting)
         {
             _isBoxSelecting = false;
             UpdateBoxSelection();
+            MarkNeedsPaint();
         }
     }
 
@@ -1460,15 +1571,50 @@ public sealed class GraphCanvas : Widget
 
     public override void OnScroll(float dx, float dy)
     {
-        float oldZoom = _zoom;
-        _zoom = Math.Clamp(value: _zoom + (dy * 0.08f * _zoom), min: 0.15f, max: 4f);
-        float factor = _zoom / oldZoom;
+        // Two fingers on a trackpad pan; a mouse wheel zooms; Ctrl/Cmd + scroll zooms on either.
+        // The native layer says which device scrolled (App.CurrentScrollPrecise). Off macOS that
+        // flag is only "the delta was fractional", so the verdict holds for 400 ms: a whole step
+        // in the middle of a swipe must not zoom.
+        long now = Environment.TickCount64;
+        if (Owner?.CurrentScrollPrecise ?? PreciseScroll) _trackpadTick = now;
+        bool trackpad = now - _trackpadTick < 400;
+        if (trackpad && !Mods.HasCommand())
+        {
+            // Same directions as a ScrollView: content follows the fingers.
+            _panX -= dx * PanPerScroll;
+            _panY += dy * PanPerScroll;
+            InvalidateView();
+            return;
+        }
 
-        // Zoom toward cursor: the world point under _mouseX/_mouseY stays fixed.
-        _panX = ((_mouseX - Bounds.X) * (1f - factor)) + (_panX * factor);
-        _panY = ((_mouseY - Bounds.Y) * (1f - factor)) + (_panY * factor);
-        // Relayout so the output preview / glass re-anchors to the zoomed node (explicit, not reliant on
-        // the frame loop's incidental discrete-event relayout).
+        ZoomAt(factor: 1f + (dy * 0.08f), sx: _mouseX, sy: _mouseY);
+    }
+
+    private const float PanPerScroll = 40f; // the ScrollView's speed, so the canvas feels the same
+
+    /// <summary>Scales the view by <paramref name="factor" />, keeping the screen point fixed.</summary>
+    private void ZoomAt(float factor, float sx, float sy)
+    {
+        float oldZoom = _zoom;
+        _zoom = Math.Clamp(value: _zoom * factor, min: 0.15f, max: 4f);
+        float applied = _zoom / oldZoom;
+        _panX = ((sx - Bounds.X) * (1f - applied)) + (_panX * applied);
+        _panY = ((sy - Bounds.Y) * (1f - applied)) + (_panY * applied);
+        // Relayout so the output preview / glass re-anchors to the zoomed node.
+        InvalidateView();
+    }
+
+    // Touch screens: two fingers pan (their centroid) and pinch to zoom, as one gesture.
+    public override bool CanTouchScale() => true;
+
+    public override void OnTouchScale(float scale, Offset focus) => ZoomAt(factor: scale, sx: focus.X, sy: focus.Y);
+
+    public override bool CanTouchScroll(bool vertical) => true;
+
+    public override void OnTouchScroll(float dx, float dy)
+    {
+        _panX += dx;
+        _panY += dy;
         InvalidateView();
     }
 
@@ -1477,44 +1623,74 @@ public sealed class GraphCanvas : Widget
         const uint scDelete = 76;
         const uint scBackspace = 42;
 
+        _modifiers = mods;
         if (!down) return;
-
-        if (scancode == scDelete || scancode == scBackspace)
+        if (scancode == 41)
         {
-            // Delete selected edge
-            if (_state.SelectedEdgeId.HasValue)
-            {
-                _state.Commands.Execute(new DeleteEdgeCommand(_state.SelectedEdgeId.Value));
-                _state.SelectEdge(null);
-                return;
-            }
-
-            // Delete selected nodes
-            foreach (var id in _state.SelectedNodes.ToList())
-                _state.Commands.Execute(new DeleteNodeCommand(id));
-            _state.ClearSelection();
+            // Escape backs out of whatever is in progress; with nothing in progress it deselects.
+            bool busy = _dragPin.HasValue || _dragNodeId.HasValue || _resizeNodeId.HasValue || _editingProp is not null ||
+                        _isBoxSelecting || _isPanning || SearchConnection.HasValue || _connectionError is not null;
+            OnPointerCancel();
+            CancelNodeSearch();
+            _connectionError = null;
+            if (!busy) _state.ClearSelection();
             return;
         }
 
-        if (keyChar == ' ')
+        // Arrows nudge the selection: one grid cell, or a single unit with Shift for fine placement.
+        if (scancode is >= 79 and <= 82 && _state.SelectedNodes.Count > 0)
         {
-            SearchRequested?.Invoke(
-                arg1: ScreenToWorldX(Bounds.X + (Bounds.Width * 0.5f)),
-                arg2: ScreenToWorldY(Bounds.Y + (Bounds.Height * 0.5f))
+            float step = mods.HasFlag(Modifiers.Shift) ? 1f : GridSpacing;
+            NudgeSelection(
+                dx: scancode == 79 ? step : scancode == 80 ? -step : 0f,
+                dy: scancode == 81 ? step : scancode == 82 ? -step : 0f
             );
             return;
         }
 
-        if (mods.HasFlag(Modifiers.Ctrl))
+        if (mods.HasCommand() && char.ToLowerInvariant(keyChar) == 'd') { DuplicateSelection(); return; }
+        if (mods.HasCommand() && char.ToLowerInvariant(keyChar) == 'c') { CopySelection(); return; }
+        if (mods.HasCommand() && char.ToLowerInvariant(keyChar) == 'x') { CopySelection(); DeleteSelection(); return; }
+        if (mods.HasCommand() && char.ToLowerInvariant(keyChar) == 'v') { PasteClipboard(); return; }
+        if (scancode == 74 || (!mods.HasCommand() && char.ToLowerInvariant(keyChar) == 'f')) { FrameAll(selectionOnly: true); InvalidateView(); return; }
+        if (char.ToLowerInvariant(keyChar) == 'h' && _state.SelectedNodes.Count > 0)
         {
-            if (char.ToLower(keyChar) == 'z') _state.Commands.Undo();
+            var nodes = _state.SelectedNodes.Where(id => _state.Graph.EditorData.NodeLayouts.ContainsKey(id)).ToArray();
+            if (nodes.Length == 0) return;
+            bool collapse = nodes.Any(id => !_state.Graph.EditorData.NodeLayouts[id].IsCollapsed);
+            _state.Commands.Execute(new CollapseNodesCommand(nodes, collapse));
+            return;
+        }
+
+        if (scancode == scDelete || scancode == scBackspace)
+        {
+            // Delete selected edge
+            if (_state.SelectedEdges.Count > 0)
+            {
+                DeleteSelectedEdges();
+                return;
+            }
+
+            DeleteSelection();
+            return;
+        }
+
+        if (keyChar == ' ' || (mods.HasFlag(Modifiers.Shift) && char.ToLowerInvariant(keyChar) == 'a'))
+        {
+            SearchConnection = null;
+            SearchAnchor = Bounds.Contains(_mouseX, _mouseY) ? new Offset(_mouseX, _mouseY)
+                : new Offset(Bounds.X + Bounds.Width * 0.5f, Bounds.Y + Bounds.Height * 0.5f);
+            SearchRequested?.Invoke(ScreenToWorldX(SearchAnchor.X), ScreenToWorldY(SearchAnchor.Y));
+            return;
+        }
+
+        if (mods.HasCommand())
+        {
+            if (char.ToLower(keyChar) == 'z') { if (mods.HasFlag(Modifiers.Shift)) _state.Commands.Redo(); else _state.Commands.Undo(); }
             if (char.ToLower(keyChar) == 'y') _state.Commands.Redo();
             if (char.ToLower(keyChar) == 'a')
             {
-                // Select all nodes
-                _state.ClearSelection();
-                foreach (var n in _state.Graph.Nodes)
-                    _state.AddToSelection(n.Id);
+                _state.SetSelection(_state.Graph.Nodes.Select(n => n.Id));
             }
         }
     }
@@ -1537,6 +1713,7 @@ public sealed class GraphCanvas : Widget
             );
             float wh = EffectiveHeight(layout: layout, def: def);
 
+            if (layout.IsCollapsed) continue;
             float gripX = layout.X + ww - NodeResizeGrip;
             float gripY = layout.Y + wh - NodeResizeGrip;
             if (wx >= gripX && wx <= layout.X + ww && wy >= gripY && wy <= layout.Y + wh)
@@ -1562,7 +1739,7 @@ public sealed class GraphCanvas : Widget
             );
             float wh = EffectiveHeight(layout: layout, def: def);
 
-            if (_outputPreviewWidget is not null && node.Id == _outputNodeId)
+            if (!layout.IsCollapsed && _outputPreviewWidget is not null && node.Id == _outputNodeId)
                 // Preview is fitted to node width; extend height only, not width.
                 wh += ((PreviewPad * 2f) + _outputPreviewMeasuredSize.Height) / _zoom;
 
@@ -1576,7 +1753,7 @@ public sealed class GraphCanvas : Widget
     private (GraphPinEndpoint endpoint, PinDirection dir, float wx, float wy)?
         HitTestPin(float wx, float wy)
     {
-        const float pickRadius = NodePinRadius * 2f;
+        float pickRadius = MathF.Max(NodePinRadius, 10f / _zoom);
         foreach (var node in _state.Graph.Nodes)
         {
             if (!_state.Graph.EditorData.NodeLayouts.TryGetValue(
@@ -1595,7 +1772,7 @@ public sealed class GraphCanvas : Widget
             for (int i = 0; i < def.Inputs.Count; i++)
             {
                 float pinX = layout.X;
-                float pinY = baseY + (i * NodePinH) + (NodePinH * 0.5f);
+                float pinY = PinY(layout, def, i, false);
                 if (MathF.Abs(wx - pinX) < pickRadius && MathF.Abs(wy - pinY) < pickRadius)
                 {
                     return (new GraphPinEndpoint(NodeId: node.Id, PinId: def.Inputs[i].Id),
@@ -1607,7 +1784,7 @@ public sealed class GraphCanvas : Widget
             for (int i = 0; i < def.Outputs.Count; i++)
             {
                 float pinX = layout.X + ww;
-                float pinY = baseY + ((def.Inputs.Count + i) * NodePinH) + (NodePinH * 0.5f);
+                float pinY = PinY(layout, def, i, true);
                 if (MathF.Abs(wx - pinX) < pickRadius && MathF.Abs(wy - pinY) < pickRadius)
                 {
                     return (new GraphPinEndpoint(NodeId: node.Id, PinId: def.Outputs[i].Id),
@@ -1625,40 +1802,44 @@ public sealed class GraphCanvas : Widget
     ///     Returns the first edge whose curve passes within 6 screen pixels of <paramref name="sx" />/
     ///     <paramref name="sy" />.
     /// </summary>
-    private Guid? HitTestEdge(float sx, float sy)
+    private Guid? HitTestEdge(float sx, float sy, float hitRadius = 6f)
     {
-        const float hitRadius = 6f;
         foreach (var edge in _state.Graph.Edges)
+            if (SampleEdge(edge, (x, y) => MathF.Abs(sx - x) < hitRadius && MathF.Abs(sy - y) < hitRadius))
+                return edge.Id;
+        return null;
+    }
+
+    /// <summary>True when <paramref name="hit" /> accepts any of 25 screen points along the cable.</summary>
+    private bool SampleEdge(GraphEdge edge, Func<float, float, bool> hit)
+    {
+        var fromPin = GetPinWorldPos(edge.From);
+        var toPin = GetPinWorldPos(edge.To);
+        if (!fromPin.HasValue || !toPin.HasValue) return false;
+
+        float ex0 = WorldToScreenX(fromPin.Value.wx);
+        float ey0 = WorldToScreenY(fromPin.Value.wy);
+        float ex1 = WorldToScreenX(toPin.Value.wx);
+        float ey1 = WorldToScreenY(toPin.Value.wy);
+
+        float absDx = MathF.Abs(ex1 - ex0);
+        float absDy = MathF.Abs(ey1 - ey0);
+        float handleLen = MathF.Max(x: (absDx * 0.5f) + (absDy * 0.25f), y: 24f);
+        float cx0 = ex0 + handleLen;
+        float cx1 = ex1 - handleLen;
+
+        for (int i = 0; i <= 24; i++)
         {
-            var fromPin = GetPinWorldPos(edge.From);
-            var toPin = GetPinWorldPos(edge.To);
-            if (!fromPin.HasValue || !toPin.HasValue) continue;
-
-            float ex0 = WorldToScreenX(fromPin.Value.wx);
-            float ey0 = WorldToScreenY(fromPin.Value.wy);
-            float ex1 = WorldToScreenX(toPin.Value.wx);
-            float ey1 = WorldToScreenY(toPin.Value.wy);
-
-            float absDx = MathF.Abs(ex1 - ex0);
-            float absDy = MathF.Abs(ey1 - ey0);
-            float handleLen = MathF.Max(x: (absDx * 0.5f) + (absDy * 0.25f), y: 80f);
-            float cx0 = ex0 + handleLen;
-            float cx1 = ex1 - handleLen;
-
-            for (int i = 0; i <= 24; i++)
-            {
-                float t = i / 24f;
-                float it = 1f - t;
-                float nx = (it * it * it * ex0) + (3 * it * it * t * cx0) + (3 * it * t * t * cx1) +
-                           (t * t * t * ex1);
-                float ny = (it * it * it * ey0) + (3 * it * it * t * ey0) + (3 * it * t * t * ey1) +
-                           (t * t * t * ey1);
-                if (MathF.Abs(sx - nx) < hitRadius && MathF.Abs(sy - ny) < hitRadius)
-                    return edge.Id;
-            }
+            float t = i / 24f;
+            float it = 1f - t;
+            float nx = (it * it * it * ex0) + (3 * it * it * t * cx0) + (3 * it * t * t * cx1) +
+                       (t * t * t * ex1);
+            float ny = (it * it * it * ey0) + (3 * it * it * t * ey0) + (3 * it * t * t * ey1) +
+                       (t * t * t * ey1);
+            if (hit(nx, ny)) return true;
         }
 
-        return null;
+        return false;
     }
 
     private (float wx, float wy)? GetPinWorldPos(GraphPinEndpoint ep)
@@ -1676,7 +1857,7 @@ public sealed class GraphCanvas : Widget
         for (int i = 0; i < def.Inputs.Count; i++)
         {
             if (def.Inputs[i].Id == ep.PinId)
-                return (layout.X, baseY + (i * NodePinH) + (NodePinH * 0.5f));
+                return (layout.X, PinY(layout, def, i, false));
         }
 
         for (int i = 0; i < def.Outputs.Count; i++)
@@ -1684,7 +1865,7 @@ public sealed class GraphCanvas : Widget
             if (def.Outputs[i].Id == ep.PinId)
             {
                 return (layout.X + ww,
-                    baseY + ((def.Inputs.Count + i) * NodePinH) + (NodePinH * 0.5f));
+                    PinY(layout, def, i, true));
             }
         }
 
@@ -1722,31 +1903,8 @@ public sealed class GraphCanvas : Widget
     ///     <paramref name="cand" />:
     ///     not the same node, opposite pin direction, compatible types, and accepted by the domain.
     /// </summary>
-    private bool IsCompatibleTarget(GraphPinEndpoint cand)
-    {
-        if (!_dragPin.HasValue) return false;
-        if (cand.NodeId == _dragPin.Value.NodeId) return false; // self-connection
-        var src = ResolvePin(_dragPin.Value);
-        var dst = ResolvePin(cand);
-        if (src is null || dst is null) return false;
-        if (dst.Value.dir == _dragPinDir) return false; // must connect output→input
-        if (!TypesCompatible(a: src.Value.type, b: dst.Value.type)) return false;
-
-        var from = _dragPinDir == PinDirection.Output ? _dragPin.Value : cand;
-        var to = _dragPinDir == PinDirection.Input ? _dragPin.Value : cand;
-        if (_state.Registry.TryGetDomain(domainId: _state.Graph.DomainId, domain: out var d) &&
-            d is not null)
-        {
-            return d.CanCreateEdge(
-                graph: _state.Graph,
-                from: from,
-                to: to,
-                reason: out _
-            );
-        }
-
-        return true;
-    }
+    private bool IsCompatibleTarget(GraphPinEndpoint cand) => _dragPin is { } source &&
+        GraphConnections.CanConnect(_state.Graph, _state.Registry, source, cand, out _, _rerouteEdge?.Id);
 
     /// <summary>Nearest compatible target pin within <paramref name="worldRadius" /> of (wx, wy), or null.</summary>
     private GraphPinEndpoint? NearestCompatiblePin(float wx, float wy, float worldRadius)
@@ -1773,7 +1931,7 @@ public sealed class GraphCanvas : Widget
                 Consider(
                     ep: new GraphPinEndpoint(NodeId: node.Id, PinId: def.Inputs[i].Id),
                     px: layout.X,
-                    py: baseY + (i * NodePinH) + (NodePinH * 0.5f)
+                    py: PinY(layout, def, i, false)
                 );
             }
 
@@ -1782,7 +1940,7 @@ public sealed class GraphCanvas : Widget
                 Consider(
                     ep: new GraphPinEndpoint(NodeId: node.Id, PinId: def.Outputs[i].Id),
                     px: layout.X + ww,
-                    py: baseY + ((def.Inputs.Count + i) * NodePinH) + (NodePinH * 0.5f)
+                    py: PinY(layout, def, i, true)
                 );
             }
         }
@@ -1803,6 +1961,7 @@ public sealed class GraphCanvas : Widget
 
     private (Guid nodeId, PropertyDefinition prop, int propIdx)? HitTestPropRow(float wx, float wy)
     {
+        if (_zoom < ZoomLodFull) return null;
         foreach (var node in _state.Graph.Nodes)
         {
             if (!_state.Graph.EditorData.NodeLayouts.TryGetValue(
@@ -1810,16 +1969,17 @@ public sealed class GraphCanvas : Widget
                     value: out var layout
                 )) continue;
             var def = _state.Registry.GetNodeDefinition(node.DefinitionId);
-            if (def is null || def.Properties.Count == 0) continue;
+            if (def is null || def.Properties.Count == 0 || layout.IsCollapsed) continue;
             float ww = MathF.Max(
                 x: layout.Width > 0 ? layout.Width : NodeMinWidth,
                 y: NodeMinWidth
             );
             if (wx < layout.X || wx > layout.X + ww) continue;
             float propsStartY = layout.Y + TotalBodyH(def) - PropsBodyH(def);
-            for (int i = 0; i < def.Properties.Count; i++)
+            for (int i = 0, row = 0; i < def.Properties.Count; i++)
             {
-                float rowY = propsStartY + NodePropSepH + 2f + (i * NodePropH);
+                if (def.Properties[i].InspectorOnly) continue;
+                float rowY = propsStartY + NodePropSepH + 2f + (row++ * NodePropH);
                 if (wy >= rowY && wy < rowY + NodePropH)
                     return (node.Id, def.Properties[i], i);
             }
@@ -1835,27 +1995,198 @@ public sealed class GraphCanvas : Widget
         float wx1 = ScreenToWorldX(MathF.Max(x: _boxStartX, y: _boxEndX));
         float wy1 = ScreenToWorldY(MathF.Max(x: _boxStartY, y: _boxEndY));
 
-        _state.ClearSelection();
+        // Any overlap with the whole card counts — not just its header band at minimum width.
+        var hits = new List<Guid>(_boxBase);
         foreach (var node in _state.Graph.Nodes)
         {
             if (!_state.Graph.EditorData.NodeLayouts.TryGetValue(
                     key: node.Id,
                     value: out var layout
                 )) continue;
-            if (layout.X < wx1 && layout.X + NodeMinWidth > wx0 &&
-                layout.Y < wy1 && layout.Y + NodeHeaderH > wy0)
-                _state.AddToSelection(node.Id);
+            float height = EffectiveHeight(layout: layout, def: _state.Registry.GetNodeDefinition(node.DefinitionId));
+            if (layout.X < wx1 && layout.X + NodeWidth(layout) > wx0 &&
+                layout.Y < wy1 && layout.Y + height > wy0)
+                hits.Add(node.Id);
         }
+
+        if (hits.Count > 0)
+        {
+            _state.SetSelection(hits);
+            return;
+        }
+
+        // No card under the rectangle: it selects the cables it crosses instead.
+        float sx0 = MathF.Min(x: _boxStartX, y: _boxEndX), sx1 = MathF.Max(x: _boxStartX, y: _boxEndX);
+        float sy0 = MathF.Min(x: _boxStartY, y: _boxEndY), sy1 = MathF.Max(x: _boxStartY, y: _boxEndY);
+        var cables = _state.Graph.Edges
+            .Where(e => SampleEdge(e, (x, y) => x >= sx0 && x <= sx1 && y >= sy0 && y <= sy1))
+            .Select(e => e.Id).ToArray();
+        if (cables.Length > 0) _state.SetEdgeSelection(cables);
+        else _state.SetSelection(hits);
+    }
+
+    // ── Selection operations ──────────────────────────────────────────────────
+
+    private void DeleteSelection()
+    {
+        var ids = _state.SelectedNodes.ToArray();
+        if (ids.Length == 0) return;
+        _state.Commands.Execute(new GraphGesture(ids.Select(id => (IGraphCommand)new DeleteNodeCommand(id)).ToArray()));
+    }
+
+    private void DeleteSelectedEdges()
+    {
+        var cut = _state.SelectedEdges.Select(id => (IGraphCommand)new DeleteEdgeCommand(id)).ToArray();
+        if (cut.Length > 0) _state.Commands.Execute(new GraphGesture(cut));
+        _hoveredEdgeId = null;
+    }
+
+    /// <summary>Nodes lifted off a graph: enough to recreate them, and the cables between them.</summary>
+    private sealed record Snapshot(
+        string DomainId,
+        (string DefinitionId, KeyValuePair<string, GraphValue>[] Properties, float X, float Y, float Width, float Height, bool Collapsed)[] Nodes,
+        (int From, string FromPin, int To, string ToPin)[] Edges);
+
+    private Snapshot? Capture()
+    {
+        var nodes = _state.Graph.Nodes
+            .Where(n => _state.IsSelected(n.Id) && _state.Graph.EditorData.NodeLayouts.ContainsKey(n.Id)).ToArray();
+        if (nodes.Length == 0) return null;
+        var index = nodes.Select((n, i) => (n.Id, i)).ToDictionary(p => p.Id, p => p.i);
+        return new Snapshot(
+            DomainId: _state.Graph.DomainId,
+            Nodes: nodes.Select(n =>
+            {
+                var layout = _state.Graph.EditorData.NodeLayouts[n.Id];
+                return (n.DefinitionId, n.Properties.ToArray(), layout.X, layout.Y, layout.Width, layout.Height, layout.IsCollapsed);
+            }).ToArray(),
+            Edges: _state.Graph.Edges
+                .Where(e => index.ContainsKey(e.From.NodeId) && index.ContainsKey(e.To.NodeId))
+                .Select(e => (index[e.From.NodeId], e.From.PinId, index[e.To.NodeId], e.To.PinId)).ToArray());
+    }
+
+    /// <summary>
+    ///     Recreates a snapshot shifted by (dx, dy) as one undo step and selects the new nodes.
+    ///     Node types this graph's registry does not know are skipped, along with their cables.
+    /// </summary>
+    private void Paste(Snapshot snapshot, float dx, float dy)
+    {
+        var created = new GraphNode?[snapshot.Nodes.Length];
+        var commands = new List<IGraphCommand>();
+        for (int i = 0; i < snapshot.Nodes.Length; i++)
+        {
+            var source = snapshot.Nodes[i];
+            if (_state.Registry.GetNodeDefinition(source.DefinitionId) is null) continue;
+            var node = new GraphNode { DefinitionId = source.DefinitionId };
+            foreach ((string key, var value) in source.Properties) node.Properties[key] = value;
+            created[i] = node;
+            commands.Add(new AddNodeCommand(node: node, x: source.X + dx, y: source.Y + dy));
+        }
+
+        if (commands.Count == 0) return;
+        foreach (var edge in snapshot.Edges)
+            if (created[edge.From] is { } from && created[edge.To] is { } to)
+                commands.Add(new AddEdgeCommand(new GraphEdge {
+                    From = new GraphPinEndpoint(from.Id, edge.FromPin),
+                    To = new GraphPinEndpoint(to.Id, edge.ToPin),
+                }));
+        _state.Commands.Execute(new GraphGesture(commands.ToArray()));
+        // AddNodeCommand seeds a default card; carry the original's size and fold state over.
+        for (int i = 0; i < created.Length; i++)
+        {
+            if (created[i] is not { } node) continue;
+            var target = _state.Graph.EditorData.NodeLayouts[node.Id];
+            target.Width = snapshot.Nodes[i].Width;
+            target.Height = snapshot.Nodes[i].Height;
+            target.IsCollapsed = snapshot.Nodes[i].Collapsed;
+        }
+
+        _state.SetSelection(created.Where(n => n is not null).Select(n => n!.Id));
+        InvalidateView();
+    }
+
+    /// <summary>The selected nodes again, with the cables between them, offset down-right.</summary>
+    private void DuplicateSelection()
+    {
+        if (Capture() is { } snapshot) Paste(snapshot: snapshot, dx: 30f, dy: 30f);
+    }
+
+    private void CopySelection()
+    {
+        if (Capture() is not { } snapshot) return;
+        _clipboard = snapshot;
+        _pasteCount = 0;
+    }
+
+    /// <summary>
+    ///     Pastes at the pointer when it is over the canvas (the group's top-left corner lands
+    ///     there); otherwise beside the originals, stepping further with each repeat.
+    /// </summary>
+    private void PasteClipboard()
+    {
+        // ponytail: an in-process clipboard, not the system one — no pasting between two running
+        // apps. That needs a text format for GraphValue, which the document serializers own.
+        if (_clipboard is not { } snapshot || snapshot.DomainId != _state.Graph.DomainId) return;
+        if (Bounds.Contains(px: _mouseX, py: _mouseY))
+        {
+            Paste(snapshot: snapshot,
+                dx: ScreenToWorldX(_mouseX) - snapshot.Nodes.Min(n => n.X),
+                dy: ScreenToWorldY(_mouseY) - snapshot.Nodes.Min(n => n.Y));
+            return;
+        }
+
+        _pasteCount++;
+        Paste(snapshot: snapshot, dx: 30f * _pasteCount, dy: 30f * _pasteCount);
+    }
+
+    /// <summary>
+    ///     Where dropping the dragged node would splice it into a cable: only for a single node
+    ///     with no cables of its own, over a cable it can take on an input and continue from an
+    ///     output. Both new connections are checked against the same rules as a hand-drawn cable.
+    /// </summary>
+    private (GraphEdge Edge, string In, string Out)? InsertTarget(Guid nodeId, float sx, float sy)
+    {
+        if (_dragOrigins.Count != 1) return null;
+        if (_state.Graph.Edges.Any(e => e.From.NodeId == nodeId || e.To.NodeId == nodeId)) return null;
+        var node = _state.Graph.FindNode(nodeId);
+        var def = node is null ? null : _state.Registry.GetNodeDefinition(node.DefinitionId);
+        if (def is null || def.Inputs.Count == 0 || def.Outputs.Count == 0) return null;
+        if (HitTestEdge(sx: sx, sy: sy, hitRadius: 14f) is not { } edgeId) return null;
+        var edge = _state.Graph.Edges.First(e => e.Id == edgeId);
+        var input = def.Inputs.FirstOrDefault(p => GraphConnections.CanConnect(
+            _state.Graph, _state.Registry, edge.From, new GraphPinEndpoint(nodeId, p.Id), out _, edge.Id));
+        var output = def.Outputs.FirstOrDefault(p => GraphConnections.CanConnect(
+            _state.Graph, _state.Registry, new GraphPinEndpoint(nodeId, p.Id), edge.To, out _, edge.Id));
+        return input is null || output is null ? null : (edge, input.Id, output.Id);
+    }
+
+    private void NudgeSelection(float dx, float dy)
+    {
+        var commands = new List<IGraphCommand>();
+        foreach (var id in _state.SelectedNodes)
+            if (_state.Graph.EditorData.NodeLayouts.TryGetValue(id, out var layout))
+                commands.Add(new MoveNodeCommand(id, layout.X + dx, layout.Y + dy));
+        if (commands.Count > 0) _state.Commands.Execute(new GraphGesture(commands.ToArray()));
     }
 
     // ── Color helpers ─────────────────────────────────────────────────────────
 
-    private static Color CategoryColor(string category)
+    internal static Color CategoryColor(string category)
     {
         string lower = category.ToLowerInvariant();
         if (lower.Contains("math")) return new Color(r: 0.25f, g: 0.48f, b: 0.70f);
         if (lower.Contains("texture")) return new Color(r: 0.55f, g: 0.30f, b: 0.65f);
-        if (lower.Contains("output")) return new Color(r: 0.20f, g: 0.55f, b: 0.35f);
+        if (lower.Contains("output")) return new Color(0.32f, 0.17f, 0.22f);
+        if (lower.Contains("source")) return new Color(0.23f, 0.34f, 0.42f);
+        if (lower.Contains("amp")) return new Color(0.24f, 0.40f, 0.23f);
+        if (lower.Contains("drive")) return new Color(0.46f, 0.29f, 0.17f);
+        if (lower.Contains("dynamics")) return new Color(0.33f, 0.27f, 0.44f);
+        if (lower.Contains("delay")) return new Color(0.18f, 0.37f, 0.40f);
+        if (lower.Contains("modulation")) return new Color(0.20f, 0.33f, 0.52f);
+        if (lower.Contains("filter")) return new Color(0.40f, 0.36f, 0.16f);
+        if (lower.Contains("pitch")) return new Color(0.44f, 0.22f, 0.36f);
+        if (lower.Contains("community")) return new Color(0.26f, 0.36f, 0.34f);
+        if (lower.Contains("bus")) return new Color(0.37f, 0.31f, 0.19f);
         if (lower.Contains("input")) return new Color(r: 0.50f, g: 0.45f, b: 0.20f);
         if (lower.Contains("const")) return new Color(r: 0.48f, g: 0.38f, b: 0.22f);
         if (lower.Contains("flow")) return new Color(r: 0.35f, g: 0.35f, b: 0.55f);
@@ -1892,7 +2223,7 @@ public sealed class GraphCanvas : Widget
         float wy = ScreenToWorldY(screenPos.Y);
 
         var hitEdge = HitTestEdge(sx: screenPos.X, sy: screenPos.Y);
-        if (hitEdge.HasValue)
+        if (hitEdge.HasValue && HitTestNode(wx, wy) is null)
         {
             ShowEdgeContextMenu(edgeId: hitEdge.Value, screenPos: screenPos);
             return;
@@ -1910,114 +2241,85 @@ public sealed class GraphCanvas : Widget
 
     private void ShowEdgeContextMenu(Guid edgeId, Offset screenPos)
     {
-        var menu = new ContextMenu(
-            new ContextMenuItem(
-                Label: "Disconnect edge",
-                OnSelect: () =>
-                {
-                    _state.Commands.Execute(new DeleteEdgeCommand(edgeId));
-                    _state.SelectEdge(null);
-                    _hoveredEdgeId = null;
-                }
-            )
-        );
-        menu.ShowAt(screenPos);
+        // Like nodes: a right-click on one of several selected cables acts on all of them.
+        if (!_state.IsEdgeSelected(edgeId)) _state.SelectEdge(edgeId);
+        int count = _state.SelectedEdges.Count;
+        new ContextMenu(new ContextMenuItem(
+            Label: count > 1 ? $"Disconnect {count} cables" : "Disconnect cable",
+            OnSelect: DeleteSelectedEdges
+        )).ShowAt(screenPos);
     }
 
     private void ShowNodeContextMenu(Guid nodeId, Offset screenPos)
     {
-        _state.Select(nodeId);
+        // Right-clicking one of several selected nodes acts on all of them; right-clicking a node
+        // outside the selection selects just that one first.
+        if (!_state.IsSelected(nodeId)) _state.Select(nodeId);
+        int count = _state.SelectedNodes.Count;
         var node = _state.Graph.FindNode(nodeId);
         var def = node is null ? null : _state.Registry.GetNodeDefinition(node.DefinitionId);
+        var ids = _state.SelectedNodes.Where(id => _state.Graph.EditorData.NodeLayouts.ContainsKey(id)).ToArray();
+        bool collapse = ids.Any(id => !_state.Graph.EditorData.NodeLayouts[id].IsCollapsed);
+        bool wired = _state.Graph.Edges.Any(e => _state.IsSelected(e.From.NodeId) || _state.IsSelected(e.To.NodeId));
 
-        var menu = new ContextMenu(
-            new ContextMenuItem(Label: def?.DisplayName ?? "Node", OnSelect: null),
-            new ContextMenuItem(Label: "", OnSelect: null, Separator: true),
-            new ContextMenuItem(
-                Label: "Delete",
-                OnSelect: () =>
-                {
-                    _state.Commands.Execute(new DeleteNodeCommand(nodeId));
-                    _state.ClearSelection();
-                }
-            ),
-            new ContextMenuItem(
-                Label: "Duplicate",
-                OnSelect: () =>
-                {
-                    if (node is null) return;
-                    var copy = new GraphNode { DefinitionId = node.DefinitionId };
-                    foreach ((string k, var v) in node.Properties) copy.Properties[k] = v;
-                    if (_state.Graph.EditorData.NodeLayouts.TryGetValue(
-                            key: nodeId,
-                            value: out var ol
-                        ))
-                    {
-                        _state.Commands.Execute(
-                            new AddNodeCommand(node: copy, x: ol.X + 30f, y: ol.Y + 30f)
-                        );
-                    }
-                    else
-                    {
-                        _state.Commands.Execute(
-                            new AddNodeCommand(
-                                node: copy,
-                                x: ScreenToWorldX(screenPos.X),
-                                y: ScreenToWorldY(screenPos.Y)
-                            )
-                        );
-                    }
-
-                    _state.Select(copy.Id);
-                }
-            )
-        );
-        menu.ShowAt(screenPos);
-    }
-
-    // Feature 7: hierarchical "add node" menu — categories as submenu parents, nodes as leaves.
-    private void ShowAddNodeContextMenu(float wx, float wy, Offset screenPos)
-    {
-        var items = new List<ContextMenuItem>();
-
-        var defs = _state.Registry
-            .NodeDefinitionsForDomain(_state.Graph.DomainId)
-            .GroupBy(d => d.Category ?? "Other")
-            .OrderBy(g => g.Key);
-
-        foreach (var group in defs)
-        {
-            var categoryChildren = group.Select(def =>
-                {
-                    string defId = def.Id;
-                    float spawnX = wx;
-                    float spawnY = wy;
-                    return new ContextMenuItem(
-                        Label: def.DisplayName,
-                        OnSelect: () =>
-                        {
-                            var node = new GraphNode { DefinitionId = defId };
-                            _state.Commands.Execute(
-                                new AddNodeCommand(node: node, x: spawnX, y: spawnY)
-                            );
-                            _state.Select(node.Id);
-                        }
-                    );
-                }
-            ).ToArray();
-
-            items.Add(
-                new ContextMenuItem(Label: group.Key, OnSelect: null, Children: categoryChildren)
-            );
-        }
-
-        if (items.Count == 0)
-            items.Add(new ContextMenuItem(Label: "No nodes available", OnSelect: null));
-
+        var items = new List<ContextMenuItem> {
+            new(Label: count > 1 ? $"{count} nodes" : def?.DisplayName ?? "Node", OnSelect: null),
+            new(Label: "", OnSelect: null, Separator: true),
+            new(Label: "Copy", OnSelect: CopySelection),
+            new(Label: "Cut", OnSelect: () => { CopySelection(); DeleteSelection(); }),
+            new(Label: "Duplicate", OnSelect: DuplicateSelection),
+            new(Label: collapse ? "Collapse" : "Expand",
+                OnSelect: () => _state.Commands.Execute(new CollapseNodesCommand(ids, collapse))),
+        };
+        if (wired)
+            items.Add(new ContextMenuItem(Label: "Disconnect cables", OnSelect: () =>
+            {
+                var cut = _state.Graph.Edges
+                    .Where(e => _state.IsSelected(e.From.NodeId) || _state.IsSelected(e.To.NodeId))
+                    .Select(e => (IGraphCommand)new DeleteEdgeCommand(e.Id)).ToArray();
+                _state.Commands.Execute(new GraphGesture(cut));
+            }));
+        items.Add(new ContextMenuItem(Label: "", OnSelect: null, Separator: true));
+        items.Add(new ContextMenuItem(Label: count > 1 ? $"Delete {count} nodes" : "Delete", OnSelect: DeleteSelection));
         new ContextMenu(items.ToArray()).ShowAt(screenPos);
     }
 
+    private void ShowAddNodeContextMenu(float wx, float wy, Offset screenPos)
+    {
+        FinishTextEdit(true, true);
+        SearchConnection = null;
+        SearchAnchor = screenPos;
+        SearchRequested?.Invoke(wx, wy);
+    }
+
     // ── Public API ────────────────────────────────────────────────────────────
+
+    public void OpenNodeSearch()
+    {
+        SearchConnection = null;
+        SearchAnchor = new Offset(Bounds.X + Bounds.Width * 0.5f, Bounds.Y + Bounds.Height * 0.35f);
+        SearchRequested?.Invoke(ScreenToWorldX(SearchAnchor.X), ScreenToWorldY(SearchAnchor.Y));
+    }
+
+    public void CancelNodeSearch() { SearchConnection = null; MarkNeedsPaint(); }
+
+    public void AddNodeFromSearch(string definitionId, string? pinId, float worldX, float worldY)
+    {
+        var source = SearchConnection;
+        SearchConnection = null;
+        if (source is null) { AddNode(definitionId, worldX, worldY); return; }
+        if (pinId is null) return;
+        var node = new GraphNode { DefinitionId = definitionId };
+        var endpoint = new GraphPinEndpoint(node.Id, pinId);
+        var preview = GraphConnections.WithCandidate(_state.Graph, node);
+        if (!GraphConnections.CanConnect(preview, _state.Registry, source.Value, endpoint, out var reason))
+        { _connectionError = reason; MarkNeedsPaint(); return; }
+        bool output = GraphConnections.Resolve(_state.Graph, _state.Registry, source.Value)!.Value.Direction == PinDirection.Output;
+        var edge = new GraphEdge { From = output ? source.Value : endpoint, To = output ? endpoint : source.Value };
+        _state.Commands.Execute(new GraphGesture(new AddNodeCommand(node, output ? worldX : worldX - NodeMinWidth, worldY), new AddEdgeCommand(edge)));
+        _state.Select(node.Id);
+        InvalidateView();
+    }
 
     public void AddNode(string definitionId, float worldX, float worldY)
     {
@@ -2026,12 +2328,15 @@ public sealed class GraphCanvas : Widget
         _state.Select(node.Id);
     }
 
-    public void FrameAll()
+    /// <summary>Fits the view to every node, or only to the selected ones.</summary>
+    public void FrameAll(bool selectionOnly = false)
     {
+        selectionOnly &= _state.SelectedNodes.Count > 0;
         if (_state.Graph.Nodes.Count == 0)
         {
             _panX = _panY = 0;
             _zoom = 1f;
+            InvalidateView();
             return;
         }
 
@@ -2042,17 +2347,18 @@ public sealed class GraphCanvas : Widget
 
         foreach (var node in _state.Graph.Nodes)
         {
+            if (selectionOnly && !_state.IsSelected(node.Id)) continue;
             if (!_state.Graph.EditorData.NodeLayouts.TryGetValue(
                     key: node.Id,
                     value: out var layout
                 )) continue;
             var def = _state.Registry.GetNodeDefinition(node.DefinitionId);
             float nodeH = EffectiveHeight(layout: layout, def: def);
-            if (node.Id == _outputNodeId && _outputPreviewMeasuredSize.Height > 0)
+            if (!layout.IsCollapsed && node.Id == _outputNodeId && _outputPreviewMeasuredSize.Height > 0)
                 nodeH += (PreviewPad * 2f) + (_outputPreviewMeasuredSize.Height / _zoom);
             minX = MathF.Min(x: minX, y: layout.X);
             minY = MathF.Min(x: minY, y: layout.Y);
-            maxX = MathF.Max(x: maxX, y: layout.X + NodeMinWidth);
+            maxX = MathF.Max(x: maxX, y: layout.X + MathF.Max(NodeMinWidth, layout.Width));
             maxY = MathF.Max(x: maxY, y: layout.Y + nodeH);
         }
 
@@ -2062,10 +2368,195 @@ public sealed class GraphCanvas : Widget
         _zoom = Math.Clamp(
             value: MathF.Min(x: _size.Width / gw, y: _size.Height / gh),
             min: 0.2f,
-            max: 2f
+            max: 1.25f
         );
         _panX = (_size.Width * 0.5f) - ((minX + (gw * 0.5f) - pad) * _zoom);
         _panY = (_size.Height * 0.5f) - ((minY + (gh * 0.5f) - pad) * _zoom);
+        InvalidateView();
+    }
+
+    public override IEnumerable<Widget> GetChildren()
+    {
+        if (_textEditor is not null) yield return _textEditor;
+    }
+
+    public override Widget? HitTest(Offset point)
+    {
+        if (!Bounds.Contains(point.X, point.Y)) return null;
+        return _textEditor?.HitTest(point) ?? this;
+    }
+
+    private void BeginTextEdit(PropEditTarget target)
+    {
+        var node = _state.Graph.FindNode(target.NodeId);
+        if (node is null) return;
+        var value = node.Properties.GetValueOrDefault(target.PropId) ?? target.Def.DefaultValue;
+        _textTarget = target;
+        _textError = null;
+        _textEditor = new InlineTextField {
+            ShowBackground = false,
+            MinWidth = 0f,
+            // Checked as it is typed: the border and the hint strip say so before Enter does.
+            OnChanged = text => { _textError = LiveError(target.Def, text); MarkNeedsPaint(); },
+            Accept = AcceptFor(target.Def),
+            // A float at its control's precision, not its storage noise (0.46, not 0.45999998).
+            Text = value.IsNull ? "" : target.Def.Type == GraphTypeRef.Float
+                ? Math.Round(value.AsFloat(), Decimals(target.Def)).ToString("0.######", System.Globalization.CultureInfo.InvariantCulture)
+                : value.ToString(),
+            Cancel = () => FinishTextEdit(false),
+            OnSubmitted = _ => FinishTextEdit(true),
+            OnFocusChange = focused => { if (!focused) FinishTextEdit(true, true); },
+        };
+        MarkNeedsLayout();
+        LayoutTextEditor();
+        AppInstance.Active?.RequestFocus(_textEditor);
+        _textEditor?.SelectAll();
+    }
+
+    private void LayoutTextEditor()
+    {
+        if (_textEditor is null || _textTarget is not { } target) return;
+        if (!_state.Graph.EditorData.NodeLayouts.TryGetValue(target.NodeId, out var layout)) return;
+        var node = _state.Graph.FindNode(target.NodeId);
+        var def = node is null ? null : _state.Registry.GetNodeDefinition(node.DefinitionId);
+        if (def is null) return;
+        int index = InlineIndex(def, target.Def);
+        float width = MathF.Max(NodeMinWidth, layout.Width);
+        float controlWidth = Scale(width - 20f);
+        float fontSize = MathF.Max(7f, 11.5f * _zoom);
+        float unitWidth = string.IsNullOrEmpty(target.Def.Unit) ? 0f : target.Def.Unit.Length * fontSize * 0.58f + Scale(8f);
+        _textEditor.FontSize = fontSize;
+        _textEditor.Measure(Constraints.Tight(MathF.Max(0f, controlWidth * 0.55f - unitWidth), Scale(NodePropH - 4f)));
+        _textEditor.Layout(new Offset(WorldToScreenX(layout.X + 10f) + controlWidth * 0.45f,
+            WorldToScreenY(layout.Y + PinsBodyH(def) + NodePropSepH + 4f + index * NodePropH)));
+    }
+
+    /// <summary>Decimals a float control can carry: those of its drag step, three without one.</summary>
+    private static int Decimals(PropertyDefinition def)
+    {
+        if (def.Type != GraphTypeRef.Float) return 0;
+        if (def.Step is not { } step || step <= 0f) return 3;
+        return Math.Clamp((int)Math.Ceiling(-Math.Log10(step) - 1e-6), 0, 6);
+    }
+
+    private static bool TryParseNumber(string text, out float number) =>
+        float.TryParse(text.Trim().Replace(',', '.'),
+            System.Globalization.NumberStyles.AllowLeadingSign | System.Globalization.NumberStyles.AllowDecimalPoint,
+            System.Globalization.CultureInfo.InvariantCulture, out number) && float.IsFinite(number);
+
+    /// <summary>
+    ///     Which typed characters a numeric control lets in: digits, a minus when its range goes
+    ///     negative, a decimal separator when it has decimals. Text properties take anything.
+    /// </summary>
+    private static Func<char, bool>? AcceptFor(PropertyDefinition def)
+    {
+        if (!IsNumeric(def)) return null;
+        bool signed = def.Min is not { } min || min < 0f;
+        bool fractional = Decimals(def) > 0;
+        return ch => char.IsAsciiDigit(ch) || (ch == '-' && signed) || (ch is '.' or ',' && fractional);
+    }
+
+    /// <summary>What is wrong with the text so far, or null. Committing still clamps.</summary>
+    private static string? LiveError(PropertyDefinition def, string text)
+    {
+        if (!IsNumeric(def) || text.Length == 0) return null;
+        if (!TryParseNumber(text, out float number))
+            return text is "-" or "." or "," or "-." ? null : "Not a number · Esc cancels";
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        if (def.Min is { } min && number < min) return $"Below the minimum of {min.ToString(inv)} · Enter clamps";
+        if (def.Max is { } max && number > max) return $"Above the maximum of {max.ToString(inv)} · Enter clamps";
+        return null;
+    }
+
+    private void FinishTextEdit(bool commit, bool losingFocus = false)
+    {
+        if (_textEditor is null || _textTarget is not { } target) return;
+        string text = _textEditor.Text;
+        GraphValue? value = null;
+        if (target.Def.Type == GraphTypeRef.String) value = GraphValue.FromString(text);
+        else if (TryParseNumber(text, out float number))
+        {
+            number = Math.Clamp(number, target.Def.Min ?? float.MinValue,
+                MathF.Max(target.Def.Min ?? float.MinValue, target.Def.Max ?? float.MaxValue));
+            value = target.Def.Type == GraphTypeRef.Int
+                ? GraphValue.FromInt((int)Math.Clamp(Math.Round(number), int.MinValue, int.MaxValue))
+                : GraphValue.FromFloat(number);
+        }
+        if (commit && value is null && !losingFocus)
+        {
+            _textError = "Enter a finite number · Esc cancels";
+            MarkNeedsPaint();
+            return;
+        }
+        _textError = null;
+        _textEditor = null;
+        _textTarget = null;
+        var node = _state.Graph.FindNode(target.NodeId);
+        if (commit && value is not null && node is not null)
+        {
+            var old = node.Properties.GetValueOrDefault(target.PropId) ?? GraphValue.Null();
+            var effective = old.IsNull ? target.Def.DefaultValue : old;
+            if (value.ToString() != effective.ToString())
+                _state.Commands.Execute(new ChangeNodePropertyCommand(target.NodeId, target.PropId, old, value));
+        }
+        if (!losingFocus) AppInstance.Active?.RequestFocus(this);
+        MarkNeedsLayout();
+    }
+
+    private sealed class InlineTextField : TextField
+    {
+        public Action? Cancel { get; init; }
+
+        /// <summary>Typed characters that get in; null lets everything through.</summary>
+        public Func<char, bool>? Accept { get; init; }
+
+        public override void OnTextInput(string text)
+        {
+            if (Accept is { } accept)
+                text = new string(text.Where(accept).Select(ch => ch == ',' ? '.' : ch).ToArray());
+            if (text.Length > 0) base.OnTextInput(text);
+        }
+
+        public override void OnKey(char keyChar, uint scancode, bool down, Modifiers mods)
+        {
+            if (down && scancode == 41) { Cancel?.Invoke(); return; }
+            base.OnKey(keyChar, scancode, down, mods);
+        }
+    }
+
+    private void RestoreProperty(GraphNode node, string key)
+    {
+        if (_editOriginalValue.IsNull) node.Properties.Remove(key);
+        else node.Properties[key] = _editOriginalValue;
+    }
+
+    public override void OnPointerCancel()
+    {
+        if (_editingProp is { } edit)
+        {
+            var node = _state.Graph.FindNode(edit.NodeId);
+            if (node is not null) RestoreProperty(node, edit.PropId);
+            _editingProp = null;
+            if (_state.AutoCompile) _state.TriggerCompile();
+        }
+        foreach (var pair in _dragOrigins)
+            if (_state.Graph.EditorData.NodeLayouts.TryGetValue(pair.Key, out var layout))
+            { layout.X = pair.Value.X; layout.Y = pair.Value.Y; }
+        _dragOrigins.Clear();
+        _dragNodeId = null;
+        if (_resizeNodeId is { } resized && _state.Graph.EditorData.NodeLayouts.TryGetValue(resized, out var size))
+        { size.Width = _resizeStartWidth; size.Height = _resizeStartHeight; }
+        _resizeNodeId = null;
+        _dragPin = null;
+        _dragHoverPin = null;
+        _dragSnapPin = null;
+        _rerouteEdge = null;
+        _insert = null;
+        _collapseOnRelease = null;
+        _isPanning = false;
+        if (_isBoxSelecting) _state.SetSelection(_boxBase); // an abandoned marquee selects nothing new
+        _isBoxSelecting = false;
+        InvalidateView();
     }
 
     // Inline property editing

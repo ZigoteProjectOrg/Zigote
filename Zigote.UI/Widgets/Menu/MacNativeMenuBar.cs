@@ -115,7 +115,7 @@ public sealed class MacNativeMenuBar : INativeMenuBar
             );
         }
 
-        char key = '\0';
+        string rest = "";
         foreach (char ch in shortcut)
         {
             switch (ch)
@@ -124,10 +124,16 @@ public sealed class MacNativeMenuBar : INativeMenuBar
                 case '⇧': mods |= Shift; break;
                 case '⌥': mods |= Option; break;
                 case '⌃': mods |= Control; break;
-                default: key = char.ToLowerInvariant(ch); break;
+                default: rest += ch; break;
             }
         }
 
-        return key == '\0' ? ("", 0) : (key.ToString(), mods);
+        // "F5": AppKit's key equivalent for a function key is one private-use character,
+        // NSF1FunctionKey (U+F704) onwards — not the letters, which would bind the bare "5".
+        if (rest.Length > 1 && rest[0] is 'F' or 'f' &&
+            int.TryParse(s: rest.AsSpan(1), result: out int fn) && fn is >= 1 and <= 35)
+            return (((char)(0xF704 + fn - 1)).ToString(), mods);
+
+        return rest.Length == 0 ? ("", 0) : (char.ToLowerInvariant(rest[^1]).ToString(), mods);
     }
 }

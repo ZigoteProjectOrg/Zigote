@@ -302,14 +302,15 @@ public class Transform2DTests
 
         Assert.True(paint.Count > 0);
 
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < 500; i++)
+        long measured = AllocGuard.Measure(() =>
         {
-            paint.Clear();
-            xf.Paint(paint);
-        }
-
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            for (int i = 0; i < 500; i++)
+            {
+                paint.Clear();
+                xf.Paint(paint);
+            }
+        });
+        long allocated = measured;
         Assert.Equal(expected: 0, actual: allocated);
     }
 }

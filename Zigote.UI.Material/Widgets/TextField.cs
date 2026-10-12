@@ -182,6 +182,11 @@ public class TextField : Widget, ITextInputClient
     public float Height { get; set; } = ControlMetrics.RegularHeight;
     public float MinWidth { get; set; } = 140f;
 
+    /// <summary>Optional text size for embedded editors; caret and selection use the same metrics.</summary>
+    public float? FontSize { get; set; }
+
+    private float EffectiveFontSize => FontSize ?? _theme.FontSizeBody;
+
     /// <summary>When true, the field is selectable/copyable but not editable (no caret, no text input).</summary>
     public bool ReadOnly { get; set; }
 
@@ -275,7 +280,8 @@ public class TextField : Widget, ITextInputClient
     /// <summary>Make the caret solid now; it resumes blinking after the dwell interval.</summary>
     private void ResetCaretBlink() => _caretBase = App.Active?.Time ?? 0f;
 
-    private void SelectAll()
+    /// <summary>Select the complete value for replacement on the next keystroke.</summary>
+    public void SelectAll()
     {
         _selectionAnchor = 0;
         _cursorPos = Text.Length;
@@ -414,23 +420,23 @@ public class TextField : Widget, ITextInputClient
     private float CaretX(int index)
     {
         index = TextNavigation.GraphemeBoundaryAtOrBefore(text: Visible, index: index);
-        var layout = EnsureTextLayout(_theme.FontSizeBody);
+        var layout = EnsureTextLayout(EffectiveFontSize);
         if (layout is not null && layout.TryGetCaretPosition(
                 textOffset: index,
                 position: out var position,
                 height: out _
             ))
             return position.X;
-        EnsureAdvances(_theme.FontSizeBody);
+        EnsureAdvances(EffectiveFontSize);
         return _adv[index];
     }
 
     private int PositionAtX(float screenX)
     {
-        EnsureAdvances(_theme.FontSizeBody);
+        EnsureAdvances(EffectiveFontSize);
         float relX = screenX - (Bounds.X + Spacing.Sm) + _scrollX;
         if (relX <= 0f || Text.Length == 0) return 0;
-        var layout = EnsureTextLayout(_theme.FontSizeBody);
+        var layout = EnsureTextLayout(EffectiveFontSize);
         if (layout is not null) return layout.HitTest(relX);
 
         // Pick the gap nearest the click via the midpoint between adjacent glyph advances.
@@ -455,7 +461,7 @@ public class TextField : Widget, ITextInputClient
     private void UpdateScroll()
     {
         if (Bounds.Width <= 0f) return;
-        float fs = _theme.FontSizeBody;
+        float fs = EffectiveFontSize;
         float padX = Spacing.Sm;
         var layout = EnsureTextLayout(fs);
         if (layout is null) EnsureAdvances(fs);
@@ -547,7 +553,7 @@ public class TextField : Widget, ITextInputClient
             return _size;
         }
 
-        float fs = _theme.FontSizeBody;
+        float fs = EffectiveFontSize;
         int rows = Math.Clamp(
             value: LineCount,
             min: Math.Max(val1: 1, val2: MinLines),
@@ -589,7 +595,7 @@ public class TextField : Widget, ITextInputClient
 
         paint.AddClipStart(Bounds);
 
-        float fs = _theme.FontSizeBody;
+        float fs = EffectiveFontSize;
         float padX = Spacing.Sm;
 
         // Keep the caret visible (symmetric margin + clamp); shared with input so offsets agree.
@@ -785,7 +791,7 @@ public class TextField : Widget, ITextInputClient
             paint.AddBorder(bounds: Bounds, color: _theme.Separator, radius: radius);
         }
 
-        float fs = _theme.FontSizeBody;
+        float fs = EffectiveFontSize;
         float lineH = LineHeightPx(fs);
         float padX = Spacing.Sm;
         float padY = Spacing.Xs;
@@ -988,7 +994,7 @@ public class TextField : Widget, ITextInputClient
     private int IndexAtPoint(Offset p)
     {
         if (!Multiline) return PositionAtX(p.X);
-        float fs = _theme.FontSizeBody;
+        float fs = EffectiveFontSize;
         float lineH = LineHeightPx(fs);
         float relY = p.Y - (Bounds.Y + Spacing.Xs) + _scrollY;
         int line = Math.Clamp(value: (int)(relY / lineH), min: 0, max: LineCount - 1);

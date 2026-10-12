@@ -1,0 +1,204 @@
+using System.Buffers.Binary;
+using System.Diagnostics;
+using System.IO.Compression;
+using Zigote.Core;
+using Zigote.Core.Diagnostics;
+using Zigote.UI.Host;
+using Zigote.UI.Widgets;
+using Zigote.UI.Widgets.Controls;
+using Zigote.UI.Widgets.Layout;
+
+namespace Zigote.RuntimeBench;
+
+/// <summary>Real SDL/wgpu frames. Frame wall time includes waits; it is not GPU execution time.</summary>
+internal static class WindowPerformanceProbe
+{
+    public static void Run(string[] args)
+    {
+        var report = new PerformanceReport("native-window");
+        report.Metadata["scope"] = "App.Frame wall time including native rendering and present waits. No GPU timestamps or display presentation feedback; not input-to-photon.";
+        Profiler.Enabled = true;
+        using var app = new App("Zigote performance probe", 1200, 900);
+        app.Engine.MainWindowSetVisible(true);
+        app.Engine.AppSetDockVisible(true);
+        ulong initialTextureBytes = app.Engine.GetEngineStats().GpuTextureMemory;
+        report.Metadata["gpu"] = app.Engine.ActiveGpu()?.ToString() ?? "unknown";
+        report.Metadata["refresh_hz"] = app.DisplayRefreshHz.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        report.Metadata["scale"] = app.HostScale.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        report.Metadata["pacing"] = "Default vsync, no software FPS cap. Profiler enabled; normal partial repaint except explicit full-repaint case.";
+        var list = PerformanceProbe.BuildList(10000, "native");
+        app.Root = new ColoredBox(Color.Black, list);
+
+        void Frame()
+        {
+            PerformanceReport.Require(!app.ShouldQuit, "Benchmark window was closed.");
+            app.Frame();
+        }
+
+        // A successful FrameEnd can still mean the surface was unavailable. Require evidence
+        // that the main-window persistent scene texture was actually allocated before timing.
+        long readyStart = Stopwatch.GetTimestamp();
+        while (app.Engine.GetEngineStats().GpuTextureMemory <= initialTextureBytes)
+        {
+            app.RequestPaint();
+            Frame();
+            PerformanceReport.Require(Stopwatch.GetElapsedTime(readyStart).TotalSeconds < 5,
+                $"No scene texture after five seconds; surface may be occluded/unavailable (paused={app.IsPaused}, hidden={app.Hidden}).");
+        }
+
+        report.Measure("window.full_repaint", 120, 240, Frame, app.RequestPaint);
+        report.Measure("window.idle_wait", 20, 120, Frame);
+        int frame = 0;
+        report.Measure("window.warm_scroll", 120, 240, Frame,
+            () => list.OffsetY = (frame++ % 64) * 12);
+        float offset = list.OffsetY;
+        report.Measure("window.new_rows", 0, 240, Frame, () => list.OffsetY = offset += 120);
+
+        int completed = 0;
+        Action cheap = () => completed++;
+        report.Measure("window.post_10000.frame", 3, 30, Frame, () =>
+        {
+            completed = 0;
+            for (int i = 0; i < 10000; i++) app.Post(cheap);
+        });
+        PerformanceReport.Require(completed == 10000, "App.Post did not drain every queued action.");
+        Action expensive = () => { PerformanceReport.BusyFor(.1); completed++; };
+        report.Measure("window.post_400_100us.frame", 3, 30, Frame, () =>
+        {
+            completed = 0;
+            for (int i = 0; i < 400; i++) app.Post(expensive);
+        });
+        PerformanceReport.Require(completed == 400, "App.Post burst lost actions.");
+
+        ImageBurst(app, report);
+        report.Save(args);
+    }
+
+    private static void ImageBurst(App app, PerformanceReport report)
+    {
+        const int count = 64;
+        const int dimension = 512;
+        byte[] encoded = MakePng(dimension);
+        var images = new Image[count];
+        var tasks = new Task[count];
+        int delivered = 0, failed = 0;
+        var rows = new List<Widget>();
+        for (int row = 0; row < 8; row++)
+        {
+            var cells = new List<Widget>();
+            for (int column = 0; column < 8; column++)
+            {
+                var image = images[row * 8 + column] = new Image();
+                image.OnLoaded = () => delivered++;
+                image.OnFailed = _ => failed++;
+                cells.Add(new SizedBox(140, 100, image));
+            }
+            rows.Add(new Row(cells));
+        }
+        app.Root = new ColoredBox(Color.Black, new Column(rows));
+        for (int i = 0; i < 10; i++) { app.RequestPaint(); app.Frame(); }
+        var frameTimes = new List<double>();
+        var frameAllocations = new List<double>();
+        using var process = Process.GetCurrentProcess();
+        process.Refresh();
+        long baselineRss = process.WorkingSet64, peakRss = baselineRss;
+        long allAllocated = GC.GetTotalAllocatedBytes(precise: true);
+        long start = Stopwatch.GetTimestamp();
+        try
+        {
+            for (int i = 0; i < count; i++)
+                // Each request gets its own encoded payload. No filesystem/network variation;
+                // this exercises the actual fetch -> decode gate -> native texture -> UI path.
+                tasks[i] = images[i].LoadAsync(_ => Task.FromResult((byte[])encoded.Clone()));
+            while (delivered + failed < count)
+            {
+                PerformanceReport.Require(Stopwatch.GetElapsedTime(start).TotalSeconds < 30,
+                    "Image burst timed out.");
+                PerformanceReport.Require(!app.ShouldQuit, "Benchmark window was closed.");
+                long before = GC.GetAllocatedBytesForCurrentThread();
+                long frameStart = Stopwatch.GetTimestamp();
+                app.Frame();
+                double ms = Stopwatch.GetElapsedTime(frameStart).TotalMilliseconds;
+                long bytes = GC.GetAllocatedBytesForCurrentThread() - before;
+                frameTimes.Add(ms);
+                frameAllocations.Add(bytes);
+                process.Refresh();
+                peakRss = Math.Max(peakRss, process.WorkingSet64);
+            }
+            // This is outside App.Frame; all UI deliveries have arrived, so joining workers
+            // cannot deadlock against UI callbacks.
+            Task.WhenAll(tasks).GetAwaiter().GetResult();
+            app.RequestPaint();
+            app.Frame(); // ensure every delivered texture has been submitted at least once
+            Zigote.Core.Engine.ZigoteEngine.GetImageStats(out int resident, out long cpuBytes, out long gpuBytes);
+            PerformanceReport.Require(gpuBytes >= (long)count * dimension * dimension * 4,
+                $"Images delivered but not all uploaded: count={resident}, cpu={cpuBytes}, gpu={gpuBytes}.");
+            report.Add("images.64x512.end_to_end", "ms", [Stopwatch.GetElapsedTime(start).TotalMilliseconds]);
+            report.Add("images.64x512.frames", "ms", frameTimes.ToArray());
+            report.Add("images.64x512.ui_alloc", "bytes", frameAllocations.ToArray());
+            report.Add("images.64x512.process_alloc", "bytes", [GC.GetTotalAllocatedBytes(true) - allAllocated]);
+            report.Add("images.64x512.sampled_peak_rss_delta", "bytes", [Math.Max(0, peakRss - baselineRss)]);
+            PerformanceReport.Require(delivered == count && failed == 0 && images.All(x => x.HasTexture),
+                $"Image decode failed: delivered={delivered}, failed={failed}");
+            report.Metadata["image_fixture"] = $"{count} independent {dimension}x{dimension} RGB PNG payloads, {encoded.Length} bytes each, full resolution; no I/O, no scaling. RSS sampled between frames, not a true peak or leak test.";
+            report.Metadata["image_gpu_bytes"] = gpuBytes.ToString();
+        }
+        finally
+        {
+            foreach (var image in images) image.Dispose();
+            app.Root = new ColoredBox(Color.Black);
+            for (int i = 0; i < 10; i++) { app.RequestPaint(); app.Frame(); }
+        }
+    }
+
+    // Deterministic RGB PNG fixture, generated before any measured interval. The native
+    // UI loader supports PNG/JPEG, not every format supported by the engine's other importers.
+    private static byte[] MakePng(int size)
+    {
+        using var output = new MemoryStream();
+        output.Write([137, 80, 78, 71, 13, 10, 26, 10]);
+        byte[] header = new byte[13];
+        BinaryPrimitives.WriteInt32BigEndian(header, size);
+        BinaryPrimitives.WriteInt32BigEndian(header.AsSpan(4), size);
+        header[8] = 8; header[9] = 2;
+        WriteChunk(output, "IHDR"u8, header);
+        using var compressed = new MemoryStream();
+        using (var zlib = new ZLibStream(compressed, CompressionLevel.Fastest, leaveOpen: true))
+        {
+            byte[] row = new byte[1 + size * 3]; // filter 0
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    int p = 1 + x * 3;
+                    row[p] = (byte)x; row[p + 1] = (byte)y; row[p + 2] = (byte)(x ^ y);
+                }
+                zlib.Write(row);
+            }
+        }
+        WriteChunk(output, "IDAT"u8, compressed.ToArray());
+        WriteChunk(output, "IEND"u8, []);
+        return output.ToArray();
+    }
+
+    private static void WriteChunk(Stream output, ReadOnlySpan<byte> type, ReadOnlySpan<byte> data)
+    {
+        Span<byte> word = stackalloc byte[4];
+        BinaryPrimitives.WriteInt32BigEndian(word, data.Length);
+        output.Write(word);
+        output.Write(type);
+        output.Write(data);
+        uint crc = uint.MaxValue;
+        foreach (byte b in type) crc = CrcByte(crc, b);
+        foreach (byte b in data) crc = CrcByte(crc, b);
+        BinaryPrimitives.WriteUInt32BigEndian(word, ~crc);
+        output.Write(word);
+    }
+
+    private static uint CrcByte(uint crc, byte value)
+    {
+        crc ^= value;
+        for (int i = 0; i < 8; i++) crc = (crc >> 1) ^ ((crc & 1) == 0 ? 0 : 0xedb88320u);
+        return crc;
+    }
+}

@@ -169,7 +169,7 @@ public sealed class DevOverlayLayer : Widget, INoAutoFocus
 
         // A phone-width panel covers the screen; there is nowhere left to put the badge/stats.
         if (_controller.PanelInsetRight >= _screen.Width - BadgeW) return;
-        PaintBadge(paint);
+        if (_controller.ShowFpsBadge) PaintBadge(paint);
         if (_controller.CompactVisible) PaintCompact(paint);
     }
 

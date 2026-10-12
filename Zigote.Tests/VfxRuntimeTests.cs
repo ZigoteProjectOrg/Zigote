@@ -200,9 +200,11 @@ public class VfxRuntimeTests
         Assert.True(sim.Pool.Count > 0);
 
         const int steps = 600;
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < steps; i++) sim.Tick(Dt);
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        long measured = AllocGuard.Measure(() =>
+        {
+            for (int i = 0; i < steps; i++) sim.Tick(Dt);
+        });
+        long allocated = measured;
 
         Assert.True(
             condition: allocated == 0,

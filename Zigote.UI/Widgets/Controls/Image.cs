@@ -144,6 +144,13 @@ public sealed class Image : Widget, IDisposable
     public bool HasTexture => _textureHandle != 0;
 
     /// <summary>
+    ///     The texture this image paints, 0 when it has none — for a transition that draws the same
+    ///     picture somewhere else for a moment (<c>PaintList.AddImage</c> with it as the cache key).
+    ///     Still owned here: valid only while this image keeps it.
+    /// </summary>
+    public ulong TextureHandle => _textureHandle;
+
+    /// <summary>
     ///     Runs on the UI thread once a <see cref="LoadAsync" /> texture is in place — the hook a
     ///     placeholder or a fade-in hangs off. Set it before starting the load.
     /// </summary>

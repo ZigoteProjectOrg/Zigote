@@ -205,9 +205,9 @@ public sealed class SegmentedControl : Widget
                 );
             }
 
-            // Label: selected uses OnSurface, unselected uses Hint.
+            // Label: selected uses OnSurface, unselected uses TextSecondary (Hint is too faint on the track).
             string label = Segments[i];
-            var fg = isSelected ? _theme.OnSurface : _theme.Hint;
+            var fg = isSelected ? _theme.OnSurface : _theme.TextSecondary;
             if (!Enabled) fg = StateStyle.Disabled(fg);
             float lw = TextMeasure.Width(text: label, fontSize: fs, weight: FontWeight.Medium);
             float bx = segX + ((segW - lw) / 2f);

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using Zigote.Core.Diagnostics;
 using Zigote.Core.Engine;
 using Zigote.Core.Rendering;
@@ -24,6 +25,12 @@ if (cli.Length > 1 && cli[1] == "--export")
     return await ExportCli.RunAsync(cli);
 
 const string appName = "Zigote Editor";
+
+// An authoring tool shows numbers the way they are typed and stored: "0.5", never "0,5". Every
+// panel formats values for display and several parse them back, so the process runs invariant
+// rather than each call site remembering to.
+CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
+CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
 
 // Editor settings and project history: reactive Preference<T>s (Zigote.Preferences) over the
 // SQLite store at preferences.db — two provider groups on one store, so the Settings window's
@@ -65,7 +72,11 @@ var prefs = new EditorPreferences(app: app, settings: settings, history: history
 var theme = prefs.ResolveTheme();
 app.Theme = theme;
 prefs.ApplyAtBoot();
-DevTools.Install(app: app, profile: DevToolsProfile.ThreeD);
+// The status bar carries the frame rate; the DevTools corner badge would sit on the header buttons.
+DevTools.Install(app: app, profile: DevToolsProfile.ThreeD).ShowFpsBadge = false;
+// Opt-in (ZIGOTE_INSPECT): the widget/semantics socket the MCP server and IDE panels drive. The
+// editor runs its own loop rather than ZigoteApp.Run, so it has to start the server itself.
+InspectServer.Start(app);
 
 // Dev tooling: when ZIGOTE_SHOT is set the native engine dumps a one-shot framebuffer
 // capture at frame ZIGOTE_SHOT_FRAME. Force continuous rendering so the frame counter
@@ -438,7 +449,9 @@ void OpenProject(string projectFile)
 // Explicit CLI arg wins; otherwise reopen the last project (if the preference allows);
 // otherwise welcome.
 string[] argsArray = Environment.GetCommandLineArgs();
-if (argsArray.Length > 1 && !string.IsNullOrWhiteSpace(argsArray[1]))
+// A leading "--flag" is not a project path (`dotnet run --nologo` forwards its own switches).
+if (argsArray.Length > 1 && !string.IsNullOrWhiteSpace(argsArray[1]) &&
+    !argsArray[1].StartsWith(value: "--", comparisonType: StringComparison.Ordinal))
     OpenProject(argsArray[1]);
 else if (settings.ReopenLastProject.Value && history.Last.Value is { Length: > 0 } lastProject &&
          File.Exists(lastProject))

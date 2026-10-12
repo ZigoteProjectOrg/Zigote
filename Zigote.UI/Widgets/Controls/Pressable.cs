@@ -41,6 +41,9 @@ public sealed class Pressable : Widget, IPointerCapture
     /// </summary>
     public float FocusRadius { get; set; }
 
+    /// <summary>Squircle focus-ring corners — set when the child is a squircle (Liquid Glass) shape.</summary>
+    public bool FocusSquircle { get; set; }
+
     public bool Hovered { get; private set; }
     public bool Pressed { get; private set; }
 
@@ -97,7 +100,7 @@ public sealed class Pressable : Widget, IPointerCapture
     {
         Child?.Paint(paint);
         if (Focused && Enabled)
-            paint.AddFocusRing(bounds: Bounds, radius: FocusRadius, theme: _theme);
+            paint.AddFocusRing(bounds: Bounds, radius: FocusRadius, theme: _theme, squircle: FocusSquircle);
     }
 
     // Capture all pointer events so the child's visuals are driven entirely by this wrapper — except

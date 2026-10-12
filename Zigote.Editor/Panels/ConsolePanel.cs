@@ -1,6 +1,8 @@
 using Zigote.Core;
+using Zigote.Core.Engine;
 using Zigote.Core.Paint;
 using Zigote.UI.Host;
+using Zigote.UI.TextShaping;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 
@@ -9,12 +11,14 @@ namespace Zigote.Editor.Panels;
 /// <summary>
 ///     Editor console — a tail view over <see cref="EditorLog" /> (which captures the engine's native
 ///     logs + C# stdout). A top bar offers per-severity filter chips (with live counts) and a clear
-///     button; below it the most recent matching lines are shown in the monospace face,
-///     severity-tinted.
+///     button plus a text filter; below it the matching lines are shown in the monospace face,
+///     severity-tinted — pinned to the newest until the wheel scrolls back, and a click copies a line.
 /// </summary>
 public sealed class ConsolePanel : Widget
 {
-    private const float BarH = 28f;
+    private const float BarH = 36f;
+    private const float SearchLeft = 190f; // clear of the three severity chips
+    private const float SearchRightGap = 80f; // clear of the Clear button
     private const float RowH = 18f;
     private readonly List<LogEntry> _all = [];
 
@@ -28,9 +32,32 @@ public sealed class ConsolePanel : Widget
     private int _cachedVersion = -1;
     private Rect _clearRect;
     private bool _filterDirty = true;
-    private Size _size;
+    private float _logTop;
+    private readonly AdwSearchEntry _search;
+    private string _query = "";
 
-    public ConsolePanel(ThemeData theme) => _theme = theme;
+    // Rows scrolled up from the newest line. 0 = pinned to the bottom (follows new output).
+    private int _scrollBack;
+    private Size _size;
+    private int _firstShown;
+
+    public ConsolePanel(ThemeData theme)
+    {
+        _theme = theme;
+        _search = new AdwSearchEntry {
+            Placeholder = "Filter output",
+            Compact = true,
+            OnChanged = q =>
+            {
+                _query = q.Trim();
+                _filterDirty = true;
+                _scrollBack = 0;
+                MarkNeedsPaint();
+            },
+        };
+    }
+
+    public override IEnumerable<Widget> GetChildren() => [_search];
 
     /// <summary>Log font size in points; 0/negative = follow the theme caption size.</summary>
     public float FontSize { get; set; }
@@ -42,6 +69,11 @@ public sealed class ConsolePanel : Widget
     public override Size Measure(Constraints c)
     {
         _size = c.Constrain(new Size(width: c.MaxWidth, height: c.MaxHeight));
+        // Between the severity chips and Clear; hidden (zero width) when the bar is too narrow.
+        float w = Math.Clamp(value: _size.Width - SearchLeft - SearchRightGap, min: 0f, max: 260f);
+        _search.Measure(
+            Constraints.Tight(width: w < 90f ? 0f : w, height: AdwMetrics.CompactControlHeight)
+        );
         return _size;
     }
 
@@ -52,6 +84,12 @@ public sealed class ConsolePanel : Widget
             y: origin.Y,
             width: _size.Width,
             height: _size.Height
+        );
+        _search.Layout(
+            new Offset(
+                x: origin.X + SearchLeft,
+                y: origin.Y + ((BarH - AdwMetrics.CompactControlHeight) / 2f)
+            )
         );
     }
 
@@ -73,7 +111,11 @@ public sealed class ConsolePanel : Widget
             _visible.Clear();
             foreach (var e in _all)
             {
-                if (!_hidden.Contains(FilterKey(e.Severity)))
+                if (!_hidden.Contains(FilterKey(e.Severity)) &&
+                    (_query.Length == 0 || e.Message.Contains(
+                        value: _query,
+                        comparisonType: StringComparison.OrdinalIgnoreCase
+                    )))
                     _visible.Add(e);
             }
         }
@@ -192,8 +234,18 @@ public sealed class ConsolePanel : Widget
         );
         float rowH = RowHeight;
         int maxRows = Math.Max(val1: 0, val2: (int)(areaH / rowH));
-        int start = Math.Max(val1: 0, val2: _visible.Count - maxRows);
-        for (int i = start; i < _visible.Count; i++)
+        // Scrollback: the wheel walks up from the newest line; new output keeps the bottom pinned
+        // only while nothing is scrolled.
+        _scrollBack = Math.Clamp(
+            value: _scrollBack,
+            min: 0,
+            max: Math.Max(val1: 0, val2: _visible.Count - maxRows)
+        );
+        int start = Math.Max(val1: 0, val2: _visible.Count - maxRows - _scrollBack);
+        _firstShown = start;
+        _logTop = areaTop;
+        int end = Math.Min(val1: _visible.Count, val2: start + maxRows + 1);
+        for (int i = start; i < end; i++)
         {
             var e = _visible[i];
             float ry = areaTop + ((i - start) * rowH);
@@ -240,13 +292,67 @@ public sealed class ConsolePanel : Widget
         }
 
         paint.AddClipEnd();
+
+        // Scrolled up: say so, and how to get back.
+        if (_scrollBack > 0)
+        {
+            string note = $"↓ {_scrollBack} newer — click to follow";
+            float nw = TextMeasure.Width(text: note, fontSize: _theme.FontSizeCaption) + 16f;
+            _followRect = new Rect(
+                x: Bounds.Right - nw - 10f,
+                y: Bounds.Bottom - 26f,
+                width: nw,
+                height: 20f
+            );
+            paint.AddRect(bounds: _followRect, color: _theme.Primary, radius: 10f);
+            paint.AddText(
+                text: note,
+                baselineX: _followRect.X + 8f,
+                baselineY: _followRect.Y + 14f,
+                color: _theme.OnPrimary,
+                fontSize: _theme.FontSizeCaption
+            );
+        }
+        else
+            _followRect = default;
+
+        _search.Paint(paint);
     }
 
-    public override Widget? HitTest(Offset point) =>
-        Bounds.Contains(px: point.X, py: point.Y) ? this : null;
+    private Rect _followRect;
+
+    public override Widget? HitTest(Offset point) => !Bounds.Contains(px: point.X, py: point.Y)
+        ? null
+        : _search.HitTest(point) ?? this;
+
+    public override void OnScroll(float dx, float dy)
+    {
+        _scrollBack = Math.Max(val1: 0, val2: _scrollBack + ((int)MathF.Sign(dy) * 3));
+        MarkNeedsPaint(); // Paint clamps to the available history
+    }
 
     public override void OnPointerDown(Offset point)
     {
+        if (_followRect.Contains(px: point.X, py: point.Y))
+        {
+            _scrollBack = 0;
+            MarkNeedsPaint();
+            return;
+        }
+
+        // A click on a log line copies it — the quickest way to get an error into a search box.
+        if (point.Y >= _logTop && _logTop > 0f)
+        {
+            int index = _firstShown + (int)((point.Y - _logTop) / RowHeight);
+            if (index >= 0 && index < _visible.Count)
+            {
+                ZigoteEngine.Instance?.SetClipboard(_visible[index].Message);
+                App.Active?.ShowSnackbar("Copied log line");
+            }
+
+            return;
+        }
+
         if (_clearRect.Contains(px: point.X, py: point.Y))
         {
             EditorLog.Clear();

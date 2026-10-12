@@ -10,15 +10,19 @@ namespace Zigote.UI.Adwaita;
 ///     <see cref="AdwColors.ButtonFill" />
 ///     box (radius 9) with a flat minus button, the centred value, and a flat plus button,
 ///     separated by hairlines. Clamps to [Min, Max]; the unavailable side's glyph drops to half
-///     opacity. Arrow keys step the value. While focused the value area is typeable, GNOME-style:
-///     digits / '-' / '.' start a fresh pending buffer, Enter or focus loss commits (parse + clamp;
-///     invalid text reverts), stepping cancels the buffer. Disabled drops the whole control to
-///     <see cref="AdwStyle.DisabledOpacity" />.
+///     opacity. Arrow keys step the value. The value is typeable, GNOME-style: clicking it selects
+///     the number so the next key replaces it, and typing while focused starts a fresh buffer.
+///     Input is filtered as it arrives — digits only, a leading '-' when the range goes negative,
+///     one decimal separator ('.' or ',') and only as many decimals as <see cref="Step" /> has.
+///     A pending number outside [Min, Max] is drawn in the error colour; Enter or focus loss
+///     commits it rounded and clamped, and empty or unparsable text reverts. Stepping commits the
+///     buffer first. Disabled drops the whole control to <see cref="AdwStyle.DisabledOpacity" />.
 /// </summary>
 public sealed class AdwSpinButton : Widget, ITextInputClient
 {
     private const float SegmentW = AdwMetrics.ButtonHeight; // square end buttons
     private const float MinValueW = 48f;
+    private const int MaxDigits = 15; // a double's exact integer precision; stops runaway input
     private bool _compact;
 
     private string? _edit; // pending typed text; null = not editing
@@ -27,6 +31,7 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
     private double _max;
     private double _min;
     private int _pressZone;
+    private bool _selectAll; // the buffer is the whole committed value, shown selected
     private Size _size;
     private ThemeData _theme = ThemeData.Dark;
     private double _value;
@@ -106,7 +111,44 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
     /// <summary>Arrow keys step the value, so they are never repurposed for focus traversal.</summary>
     public override bool HandlesDirectionalKeys => true;
 
-    private string ValueText => _value.ToString("0.###");
+    // Invariant, like the parser: a comma-decimal locale must not print what Commit can't read.
+    private string ValueText => _value.ToString(format: "0.######", provider: CultureInfo.InvariantCulture);
+
+    /// <summary>Decimals the value can carry: those of <see cref="Step" />, Min and Max.</summary>
+    private int Decimals
+    {
+        get
+        {
+            int digits = 0;
+            foreach (double d in (ReadOnlySpan<double>)[Step, _min, _max])
+            {
+                string t = d.ToString(format: "0.######", provider: CultureInfo.InvariantCulture);
+                int dot = t.IndexOf('.');
+                if (dot >= 0) digits = Math.Max(val1: digits, val2: t.Length - dot - 1);
+            }
+
+            return digits;
+        }
+    }
+
+    private Rect ValueRect => new(
+        x: MinusRect.Right,
+        y: Bounds.Y,
+        width: MathF.Max(x: 0f, y: PlusRect.X - MinusRect.Right),
+        height: Bounds.Height
+    );
+
+    /// <summary>True while the typed number parses but lies outside [Min, Max].</summary>
+    private bool PendingOutOfRange =>
+        _edit is not null && !_selectAll && TryParse(text: _edit, value: out double v) &&
+        (v < Min || v > Max);
+
+    private static bool TryParse(string text, out double value) => double.TryParse(
+        s: text,
+        style: NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint,
+        provider: CultureInfo.InvariantCulture,
+        result: out value
+    ) && double.IsFinite(value);
 
     private string DisplayText => _edit ?? ValueText;
 
@@ -132,6 +174,8 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
         config.Role = SemanticsRole.Slider; // closest role: a steppable numeric value
         config.Label = SemanticsLabel;
         config.Value = DisplayText;
+        if (PendingOutOfRange)
+            config.Hint = $"Out of range, {Min.ToString(CultureInfo.InvariantCulture)} to {Max.ToString(CultureInfo.InvariantCulture)}";
         config.Actions =
             SemanticsAction.Increase | SemanticsAction.Decrease | SemanticsAction.Focus;
         config.AddFlag(flag: SemanticsFlags.Focusable, on: Enabled)
@@ -252,17 +296,33 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
         float textW = TextMeasure.Width(text: DisplayText, fontSize: fs);
         float cx = Bounds.X + (Bounds.Width / 2f);
         float baseline = Bounds.Y + ((Bounds.Height - fs) / 2f) + (fs * 0.8f);
+        // Click-to-edit shows the committed number selected: the next key replaces it.
+        if (_edit is not null && _selectAll)
+        {
+            paint.AddRect(
+                bounds: new Rect(
+                    x: cx - (textW / 2f) - 2f,
+                    y: Bounds.Y + ((Bounds.Height - fs) / 2f) - 2f,
+                    width: textW + 4f,
+                    height: fs + 4f
+                ),
+                color: _theme.Primary.WithAlpha(0.35f),
+                radius: 3f
+            );
+        }
+
         paint.AddText(
             text: DisplayText,
             baselineX: cx - (textW / 2f),
             baselineY: baseline,
-            color: fg,
+            // Out of range reads as an error while typing; committing clamps it.
+            color: PendingOutOfRange ? _theme.Error : fg,
             fontSize: fs
         );
 
         // ponytail: static caret bar as the editing cue — no blink, WantsCaretBlink is false so
         // the frame loop idles; upgrade to a Ticker-driven blink if it ever reads as dead.
-        if (_edit is not null)
+        if (_edit is not null && !_selectAll)
         {
             paint.AddRect(
                 bounds: new Rect(
@@ -285,7 +345,7 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
 
     private void StepBy(int dir)
     {
-        CancelEdit(); // stepping always acts on the committed value
+        CommitEdit(); // a half-typed number is taken first, then stepped from
         double next = Math.Clamp(value: Value + (dir * Step), min: Min, max: Max);
         if (next == Value) return;
         Value = next;
@@ -296,23 +356,24 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
     {
         if (_edit is null) return;
         _edit = null;
+        _selectAll = false;
         MarkNeedsLayout();
     }
 
-    /// <summary>Parse + clamp the pending buffer; invalid text reverts to the current value.</summary>
+    /// <summary>
+    ///     Round to <see cref="Decimals" /> and clamp the pending buffer; empty or unparsable
+    ///     text ("-", ".") reverts to the current value.
+    /// </summary>
     private void CommitEdit()
     {
         if (_edit is null) return;
         string text = _edit;
         _edit = null;
-        if (double.TryParse(
-                s: text,
-                style: NumberStyles.Float,
-                provider: CultureInfo.InvariantCulture,
-                result: out double v
-            ))
+        _selectAll = false;
+        if (TryParse(text: text, value: out double v))
         {
-            v = Math.Clamp(value: v, min: Min, max: Max);
+            v = Math.Round(value: v, digits: Decimals, mode: MidpointRounding.AwayFromZero);
+            v = Math.Clamp(value: v, min: Min, max: Math.Max(val1: Min, val2: Max));
             if (v != _value)
             {
                 _value = v;
@@ -322,6 +383,31 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
 
         MarkNeedsLayout();
     }
+
+    /// <summary>
+    ///     Append <paramref name="ch" /> if the result can still become a valid number for this
+    ///     control: a sign only first and only when the range goes negative, one separator and
+    ///     only when the value has decimals, no more decimals than it can hold.
+    /// </summary>
+    private bool Accept(char ch)
+    {
+        string buffer = _edit is null || _selectAll ? "" : _edit;
+        int dot = buffer.IndexOf('.');
+        if (ch == ',') ch = '.';
+        bool ok = ch switch {
+            '-' => buffer.Length == 0 && Min < 0,
+            '.' => dot < 0 && Decimals > 0,
+            _ => char.IsAsciiDigit(ch) && buffer.Count(char.IsAsciiDigit) < MaxDigits &&
+                 (dot < 0 || buffer.Length - dot - 1 < Decimals),
+        };
+        if (!ok) return false;
+        _edit = buffer + ch;
+        _selectAll = false;
+        return true;
+    }
+
+    public override MouseCursor? GetCursor(Offset point) =>
+        Enabled && ZoneAt(point) == 0 ? MouseCursor.Text : null;
 
     private int ZoneAt(Offset point)
     {
@@ -350,7 +436,15 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
     {
         if (!Enabled) return;
         int zone = ZoneAt(point);
-        if (zone == 0) return;
+        if (zone == 0)
+        {
+            // GtkSpinButton selects its text on click: type to replace, Backspace to clear.
+            _edit = ValueText;
+            _selectAll = true;
+            MarkNeedsLayout();
+            return;
+        }
+
         _pressZone = zone;
         StepBy(zone);
         MarkNeedsPaint();
@@ -387,10 +481,11 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
             case KeyCode.Escape:
                 CancelEdit(); // reached only when focus isn't cleared first (see above)
                 break;
-            case KeyCode.Backspace:
+            case KeyCode.Backspace or KeyCode.Delete:
                 if (_edit is { Length: > 0 })
                 {
-                    _edit = _edit[..^1];
+                    _edit = _selectAll ? "" : _edit[..^1];
+                    _selectAll = false;
                     MarkNeedsLayout();
                 }
 
@@ -402,14 +497,7 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
     {
         if (!Enabled) return;
         bool changed = false;
-        foreach (char ch in text)
-        {
-            if (char.IsAsciiDigit(ch) || ch is '-' or '.')
-            {
-                _edit = (_edit ?? "") + ch; // first char starts a fresh buffer
-                changed = true;
-            }
-        }
+        foreach (char ch in text) changed |= Accept(ch); // first char starts a fresh buffer
 
         if (changed) MarkNeedsLayout();
     }

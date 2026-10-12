@@ -373,7 +373,8 @@ public sealed unsafe class PaintList
         return MathF.Min(x: radius, y: MathF.Min(x: bounds.Width, y: bounds.Height) * 0.5f);
     }
 
-    public void AddRect(Rect bounds, Color color, float radius = 0f)
+    /// <param name="squircle">Squircle corners instead of circular arcs (the Liquid Glass outline).</param>
+    public void AddRect(Rect bounds, Color color, float radius = 0f, bool squircle = false)
     {
         CheckBounds(bounds);
         CheckColor(color);
@@ -381,17 +382,21 @@ public sealed unsafe class PaintList
             Bounds = Xywh(ApplyOffset(bounds)),
             Color = Rgba(ScaleAlpha(color)),
             Radius = ClampRadius(radius: radius, bounds: bounds),
+            Squircle = squircle ? 1f : 0f,
         });
     }
 
-    public void AddBorder(Rect bounds, Color color, float radius = 0f, float width = 1f)
+    /// <param name="squircle">Squircle corners instead of circular arcs (the Liquid Glass outline).</param>
+    public void AddBorder(Rect bounds, Color color, float radius = 0f, float width = 1f,
+        bool squircle = false)
     {
         CheckBounds(bounds);
         CheckColor(color);
+        float r = ClampRadius(radius: radius, bounds: bounds);
         Write(ZgPaintOp.Border, new ZgPaintBorder {
             Bounds = Xywh(ApplyOffset(bounds)),
             Color = Rgba(ScaleAlpha(color)),
-            Radius = ClampRadius(radius: radius, bounds: bounds),
+            Radius = squircle ? -r : r, // the wire's squircle flag is the sign (see abi.zig)
             Width = width,
         });
     }
@@ -482,7 +487,11 @@ public sealed unsafe class PaintList
     ///     radius keeps the scissor at <paramref name="bounds" /> for coarse culling and additionally
     ///     masks shape/text/image fragments to the rounded rect on the GPU (SDF coverage).
     /// </param>
-    public void AddClipStart(Rect bounds, float radius = 0f)
+    /// <param name="squircle">
+    ///     Round the corners as continuous-curvature squircles instead of circular arcs — the
+    ///     outline <see cref="AddLiquidGlass" /> draws, for content clipped inside a glass pane.
+    /// </param>
+    public void AddClipStart(Rect bounds, float radius = 0f, bool squircle = false)
     {
         CheckBounds(bounds);
         var screenBounds = ApplyOffset(bounds);
@@ -498,6 +507,7 @@ public sealed unsafe class PaintList
         Write(ZgPaintOp.ClipStart, new ZgPaintClipStart {
             Bounds = Xywh(screenBounds),
             Radius = ClampRadius(radius: radius, bounds: bounds),
+            Squircle = squircle ? 1f : 0f,
         });
     }
 
@@ -524,17 +534,22 @@ public sealed unsafe class PaintList
         Write(ZgPaintOp.PopOpacity, new ZgPaintBare());
     }
 
+    /// <param name="squircle">
+    ///     Squircle corners instead of circular arcs — the outline <see cref="AddLiquidGlass" />
+    ///     draws, so a glass pane's shadow follows its edge.
+    /// </param>
     public void AddShadow(Rect bounds, Color color, float borderRadius, float blurRadius,
-        float spread = 0f)
+        float spread = 0f, bool squircle = false)
     {
         CheckBounds(bounds);
         CheckColor(color);
         Write(ZgPaintOp.Shadow, new ZgPaintShadow {
             Bounds = Xywh(ApplyOffset(bounds)),
-            Color = Rgba(color),
+            Color = Rgba(ScaleAlpha(color)), // a fading surface takes its shadow with it
             Radius = ClampRadius(radius: borderRadius, bounds: bounds),
             BlurRadius = blurRadius,
             Spread = spread, // directional — NOT offset-shifted
+            Squircle = squircle ? 1f : 0f,
         });
     }
 

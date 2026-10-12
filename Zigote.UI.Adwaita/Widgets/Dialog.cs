@@ -84,6 +84,12 @@ public class AdwDialog : Widget, IDismissableOverlay
     /// <summary>Invoked whenever the dialog leaves the overlay stack, whatever closed it.</summary>
     public Action? OnClosed { get; set; }
 
+    /// <summary>
+    ///     Fires once when a close begins, before the exit animation — the moment to start
+    ///     something that should run alongside it. <see cref="OnClosed" /> follows when it ends.
+    /// </summary>
+    public Action? OnClosing { get; set; }
+
     /// <summary>Escape: close when closable; always consume (modal barrier).</summary>
     public bool RequestDismiss()
     {
@@ -122,6 +128,7 @@ public class AdwDialog : Widget, IDismissableOverlay
     public virtual void Close()
     {
         if (_closing) return;
+        OnClosing?.Invoke();
         if (_host is null || _anim.Progress <= 0f)
         {
             // Never shown / not yet visible: nothing to animate out.

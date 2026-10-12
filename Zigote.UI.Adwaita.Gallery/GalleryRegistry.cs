@@ -274,6 +274,12 @@ internal static class GalleryRegistry
             Title: "Zigote",
             Entries: [
                 new GalleryEntry(
+                    Title: "Graphs",
+                    Subtitle: "Typed node wiring, searchable cable drops and a live preview",
+                    IconName: MaterialIcons.AccountTree,
+                    Build: () => new GraphsPage()
+                ),
+                new GalleryEntry(
                     Title: "Reactivity",
                     Subtitle: "Signals, computed values and effects driving the UI",
                     IconName: MaterialIcons.Bolt,

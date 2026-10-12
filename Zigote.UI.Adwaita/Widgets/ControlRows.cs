@@ -287,9 +287,15 @@ public sealed class AdwButtonRow : ComposedWidget
             Enabled = Enabled,
             SemanticsLabel = Title,
         };
-        pressable.OnStateChanged = () =>
-        {
-            wash.Fill = Suggested
+        var fill = new FillTransition(c =>
+            {
+                wash.Fill = c;
+                wash.MarkNeedsPaint();
+            }
+        );
+        fill.Snap(wash.Fill);
+        pressable.OnStateChanged = () => fill.Target(
+            Suggested
                 ? AdwStyle.Solid(
                     baseColor: theme.Accent,
                     hovered: pressable.Hovered,
@@ -299,9 +305,8 @@ public sealed class AdwButtonRow : ComposedWidget
                     theme: theme,
                     hovered: pressable.Hovered,
                     pressed: pressable.Pressed
-                );
-            wash.MarkNeedsPaint();
-        };
+                )
+        );
         return Enabled
             ? pressable
             : new Opacity(opacity: AdwStyle.DisabledOpacity, child: pressable);

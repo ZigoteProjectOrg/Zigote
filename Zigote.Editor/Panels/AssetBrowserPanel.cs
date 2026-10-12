@@ -1,11 +1,15 @@
 using System.Collections.Immutable;
+using System.Diagnostics;
 using Zigote.Core;
+using Zigote.Core.Engine;
+using Zigote.Core.Events;
 using Zigote.Core.Paint;
 using Zigote.Core.Threading;
 using Zigote.Editor.Scene;
 using Zigote.UI.Host;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
+using Zigote.UI.Widgets.Controls;
 
 namespace Zigote.Editor.Panels;
 
@@ -17,7 +21,7 @@ namespace Zigote.Editor.Panels;
 public sealed class AssetBrowserPanel : Widget, IDisposable
 {
     private const float RowH = 22f;
-    private const float HeaderH = AdwMetrics.CompactControlHeight + 8f;
+    private const float HeaderH = 4f; // top padding; the search box lives above the scroller
     private const float Indent = 14f;
     private const float DragThreshold = 5f;
 
@@ -30,7 +34,6 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
 
     private readonly HashSet<string> _expanded = new(StringComparer.Ordinal);
     private readonly Latest _scan;
-    private readonly AdwSearchEntry _searchField;
     private readonly EditorState _state;
     private readonly FileSystemWatcher? _watcher;
     private readonly Background _work;
@@ -64,15 +67,9 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
         _work = state.Background.Child("assets");
         _scan = _work.Latest();
 
-        _searchField = new AdwSearchEntry {
-            Placeholder = "Search files",
-            Compact = true,
-            OnChanged = f =>
-            {
-                _filter = f;
-                _dirty = true;
-            },
-        };
+        // Start with the asset folder open: it is where everything the user wants lives.
+        if (state.ProjectDir is { } projectDir)
+            _expanded.Add(Path.GetFullPath(path: state.AssetRoot, basePath: projectDir).TrimEnd('/', '\\'));
 
         string? root = RootPath;
         if (root != null && Directory.Exists(root))
@@ -106,6 +103,31 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
             }
         }
     }
+
+    /// <summary>
+    ///     Raised when the selected row should be scrolled into view — <c>(top, height)</c> in the
+    ///     panel's own content space. The shell wires it to the wrapping scroller.
+    /// </summary>
+    public Action<float, float>? OnRevealRequested;
+
+    /// <summary>File-name filter; non-empty flattens the tree to the matching files.</summary>
+    public string Filter
+    {
+        get => _filter;
+        set
+        {
+            if (_filter == value) return;
+            _filter = value;
+            _dirty = true;
+            MarkNeedsLayout();
+        }
+    }
+
+    // Holds keyboard focus (taken on click) so the arrow keys walk the tree.
+    public override bool Focusable => true;
+
+    // Arrow keys walk the tree; without this the app spends them on directional focus traversal.
+    public override bool HandlesDirectionalKeys => true;
 
     private string? RootPath => _state.ProjectDir ??
                                 (Directory.Exists(_state.AssetRoot) ? _state.AssetRoot : null);
@@ -279,10 +301,8 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
             RequestRebuild();
         }
 
-        _searchField.Measure(
-            new Constraints(maxWidth: c.MaxWidth - 12f, maxHeight: AdwMetrics.CompactControlHeight)
-        );
-        float h = HeaderH + (_rows.Length * RowH) + 6f;
+        // One spare row keeps room for the "no matches" line.
+        float h = HeaderH + (Math.Max(val1: 1, val2: _rows.Length) * RowH) + 6f;
         _size = c.Constrain(new Size(width: c.MaxWidth, height: MathF.Max(x: h, y: c.MinHeight)));
         return _size;
     }
@@ -295,18 +315,24 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
             width: _size.Width,
             height: _size.Height
         );
-        _searchField.Layout(new Offset(x: origin.X + 6f, y: origin.Y + 4f));
     }
-
-    public override IEnumerable<Widget> GetChildren() => [_searchField];
 
     // ── Paint ───────────────────────────────────────────────────────────────────
 
     public override void Paint(PaintList paint)
     {
-        _searchField.Paint(paint);
-
         float fs = _theme.FontSizeCaption;
+        if (_rows.Length == 0 && !string.IsNullOrWhiteSpace(_filter))
+        {
+            paint.AddText(
+                text: "No files match",
+                baselineX: Bounds.X + 10f,
+                baselineY: Bounds.Y + HeaderH + ((RowH - fs) / 2f) + (fs * 0.8f),
+                color: _theme.TextMuted,
+                fontSize: fs
+            );
+        }
+
         for (int i = 0; i < _rows.Length; i++)
         {
             var row = _rows[i];
@@ -395,13 +421,8 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
 
     // ── Interaction ─────────────────────────────────────────────────────────────
 
-    public override Widget? HitTest(Offset point)
-    {
-        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
-        var h = _searchField.HitTest(point);
-        if (h is not null) return h;
-        return this; // own the row area for clicks/drag
-    }
+    public override Widget? HitTest(Offset point) =>
+        Bounds.Contains(px: point.X, py: point.Y) ? this : null; // own the row area for clicks/drag
 
     private int RowAt(Offset point)
     {
@@ -410,14 +431,19 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
         return i >= 0 && i < _rows.Length ? i : -1;
     }
 
-    public override void OnPointerEnter() { }
+    private void SetHover(int index)
+    {
+        if (_hoverIndex == index) return;
+        _hoverIndex = index;
+        MarkNeedsPaint();
+    }
 
-    public override void OnPointerExit() => _hoverIndex = -1;
+    public override void OnPointerExit() => SetHover(-1);
 
     public override void OnPointerMove(Offset point)
     {
-        _hoverIndex = RowAt(point);
-        if (_pressIndex >= 0 && !_isDragging &&
+        SetHover(RowAt(point));
+        if (_pressIndex >= 0 && _pressIndex < _rows.Length && !_isDragging &&
             (MathF.Abs(point.X - _dragStart.X) > DragThreshold ||
              MathF.Abs(point.Y - _dragStart.Y) > DragThreshold) &&
             !_rows[_pressIndex].IsDir)
@@ -426,6 +452,7 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
 
     public override void OnPointerDown(Offset point)
     {
+        App.Active?.RequestFocus(this);
         _pressIndex = RowAt(point);
         _dragStart = point;
         _isDragging = false;
@@ -433,13 +460,19 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
 
     public override void OnPointerUp(Offset point)
     {
-        if (_pressIndex < 0) return;
+        // The tree can be swapped by a finished scan between press and release.
+        if (_pressIndex < 0 || _pressIndex >= _rows.Length)
+        {
+            _pressIndex = -1;
+            return;
+        }
+
         var row = _rows[_pressIndex];
 
         if (row.IsDir)
         {
-            if (!_expanded.Remove(row.FullPath)) _expanded.Add(row.FullPath);
-            _dirty = true;
+            Select(row);
+            ToggleFolder(row.FullPath);
         }
         else if (_isDragging)
         {
@@ -450,17 +483,222 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
         {
             long now = Environment.TickCount64;
             bool isDouble = row.FullPath == _lastClickPath && now - _lastClickMs < 400;
-            _selectedPath = row.FullPath;
-            _state.NotifyAssetSelected(row.FullPath);
-            if (isDouble && IsOpenable(row.FullPath))
-                _state.NotifyOpenFile(row.FullPath);
+            Select(row);
+            if (isDouble) Open(row);
             _lastClickPath = row.FullPath;
             _lastClickMs = now;
-            MarkNeedsPaint();
         }
 
         _pressIndex = -1;
         _isDragging = false;
+    }
+
+    private void ToggleFolder(string path)
+    {
+        if (!_expanded.Remove(path)) _expanded.Add(path);
+        _dirty = true;
+        MarkNeedsLayout();
+    }
+
+    private void Select(Entry row)
+    {
+        _selectedPath = row.FullPath;
+        if (!row.IsDir) _state.NotifyAssetSelected(row.FullPath);
+        MarkNeedsPaint();
+    }
+
+    private void Open(Entry row)
+    {
+        if (row.IsDir) ToggleFolder(row.FullPath);
+        else if (IsOpenable(row.FullPath)) _state.NotifyOpenFile(row.FullPath);
+    }
+
+    // ── Keyboard (panel focused) ────────────────────────────────────────────────
+
+    public override void OnKey(char keyChar, uint scancode, bool down, Modifiers mods)
+    {
+        if (!down || _rows.Length == 0) return;
+        int cur = -1;
+        for (int i = 0; i < _rows.Length && cur < 0; i++)
+        {
+            if (_rows[i].FullPath == _selectedPath) cur = i;
+        }
+
+        switch ((KeyCode)scancode)
+        {
+            case KeyCode.Down:
+                MoveTo(cur + 1);
+                break;
+            case KeyCode.Up:
+                MoveTo(cur < 0 ? _rows.Length - 1 : cur - 1);
+                break;
+            case KeyCode.Right when cur >= 0 && _rows[cur].IsDir:
+                if (!_expanded.Contains(_rows[cur].FullPath)) ToggleFolder(_rows[cur].FullPath);
+                else MoveTo(cur + 1);
+                break;
+            case KeyCode.Left when cur >= 0:
+                if (_rows[cur].IsDir && _expanded.Contains(_rows[cur].FullPath))
+                    ToggleFolder(_rows[cur].FullPath);
+                else
+                {
+                    // Step out to the enclosing folder: the nearest shallower row above.
+                    for (int i = cur - 1; i >= 0; i--)
+                    {
+                        if (_rows[i].Depth >= _rows[cur].Depth) continue;
+                        MoveTo(i);
+                        break;
+                    }
+                }
+
+                break;
+            case KeyCode.Enter when cur >= 0:
+                Open(_rows[cur]);
+                break;
+        }
+    }
+
+    private void MoveTo(int index)
+    {
+        index = Math.Clamp(value: index, min: 0, max: _rows.Length - 1);
+        Select(_rows[index]);
+        OnRevealRequested?.Invoke(arg1: HeaderH + (index * RowH), arg2: RowH);
+    }
+
+    // ── Context menu ────────────────────────────────────────────────────────────
+
+    public override void OnRightClick(Offset point)
+    {
+        App.Active?.RequestFocus(this);
+        int index = RowAt(point);
+        string? root = RootPath;
+        if (root is null) return;
+        Entry? row = index >= 0 ? _rows[index] : null;
+        if (row is { } hit) Select(hit);
+
+        // New folders go inside the clicked folder, beside the clicked file, or at the root.
+        string folder = row is null ? root :
+            row.Value.IsDir ? row.Value.FullPath : Path.GetDirectoryName(row.Value.FullPath) ?? root;
+        string target = row?.FullPath ?? root;
+        List<ContextMenuItem> items = [];
+        if (row is { IsDir: false } file && IsOpenable(file.FullPath))
+            items.Add(new ContextMenuItem(Label: "Open", OnSelect: () => Open(file)));
+        items.Add(new ContextMenuItem(Label: RevealLabel, OnSelect: () => Reveal(target)));
+        items.Add(
+            new ContextMenuItem(
+                Label: "Copy Path",
+                OnSelect: () => ZigoteEngine.Instance?.SetClipboard(target)
+            )
+        );
+        items.Add(
+            new ContextMenuItem(
+                Label: "Copy Relative Path",
+                OnSelect: () => ZigoteEngine.Instance?.SetClipboard(
+                    Path.GetRelativePath(relativeTo: root, path: target)
+                        .Replace(oldChar: '\\', newChar: '/')
+                )
+            )
+        );
+        items.Add(new ContextMenuItem(Label: "", OnSelect: null, Separator: true));
+        items.Add(
+            new ContextMenuItem(
+                Label: "New Folder…",
+                OnSelect: () => PromptName(
+                    title: "New Folder",
+                    initial: "New Folder",
+                    action: "Create",
+                    onAccept: name =>
+                    {
+                        Directory.CreateDirectory(Path.Combine(path1: folder, path2: name));
+                        _expanded.Add(folder);
+                    }
+                )
+            )
+        );
+        if (row is { IsDir: false } renamable)
+        {
+            items.Add(
+                new ContextMenuItem(
+                    Label: "Rename…",
+                    OnSelect: () => PromptName(
+                        title: "Rename Asset",
+                        initial: Path.GetFileName(renamable.FullPath),
+                        action: "Rename",
+                        onAccept: name =>
+                        {
+                            // Through the state so the registry and open scene follow the file.
+                            string to = Path.Combine(path1: folder, path2: name);
+                            if (_state.RenameAsset(
+                                    oldRelativePath: Path.GetRelativePath(
+                                        relativeTo: root,
+                                        path: renamable.FullPath
+                                    ),
+                                    newRelativePath: Path.GetRelativePath(relativeTo: root, path: to)
+                                ))
+                                _selectedPath = to;
+                        }
+                    )
+                )
+            );
+        }
+
+        new ContextMenu(items.ToArray()).ShowAt(point);
+    }
+
+    private static string RevealLabel => OperatingSystem.IsMacOS() ? "Reveal in Finder" :
+        OperatingSystem.IsWindows() ? "Show in Explorer" : "Show in File Manager";
+
+    private static void Reveal(string path)
+    {
+        try
+        {
+            var start = OperatingSystem.IsMacOS() ? new ProcessStartInfo("open") {
+                    ArgumentList = { "-R", path },
+                } :
+                OperatingSystem.IsWindows() ? new ProcessStartInfo("explorer") {
+                    ArgumentList = { "/select," + path },
+                } :
+                // No portable "select this file" on Linux — open the folder that holds it.
+                new ProcessStartInfo("xdg-open") {
+                    ArgumentList = { Directory.Exists(path) ? path : Path.GetDirectoryName(path)! },
+                };
+            Process.Start(start)?.Dispose();
+        }
+        catch (Exception e)
+        {
+            EditorLog.Add(severity: LogSeverity.Warning, message: $"Reveal failed: {e.Message}");
+        }
+    }
+
+    /// <summary>Ask for a single file or folder name; rejects empty names and path separators.</summary>
+    private void PromptName(string title, string initial, string action, Action<string> onAccept)
+    {
+        var entry = new AdwEntry { Text = initial };
+        var dlg = new AdwAlertDialog(title) {
+            ExtraChild = entry,
+            DefaultResponse = "ok",
+            CloseResponse = "cancel",
+        };
+        dlg.AddResponse(id: "cancel", label: "Cancel");
+        dlg.AddResponse(id: "ok", label: action, appearance: AdwResponseAppearance.Suggested);
+        dlg.OnResponse = id =>
+        {
+            string name = entry.Text.Trim();
+            if (id != "ok" || name.Length == 0 || name is "." or ".." ||
+                name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+                return;
+            try
+            {
+                onAccept(name);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                EditorLog.Add(severity: LogSeverity.Warning, message: $"{title} failed: {e.Message}");
+            }
+
+            _dirty = true;
+            MarkNeedsLayout();
+        };
+        dlg.Show();
     }
 
     /// <summary>Text/code files the code editor can open on double-click.</summary>
@@ -484,36 +722,6 @@ public sealed class AssetBrowserPanel : Widget, IDisposable
     }
 
     // ── Icons ───────────────────────────────────────────────────────────────────
-
-    private static string Icon(string name)
-    {
-        return name switch {
-            _ when Ext(
-                name: name,
-                ".glb",
-                ".gltf",
-                ".fbx",
-                ".obj"
-            ) => "[3D]",
-            _ when Ext(
-                name: name,
-                ".png",
-                ".jpg",
-                ".jpeg",
-                ".webp",
-                ".gif"
-            ) => "[TX]",
-            _ when Ext(name: name, ".cs", ".lua") => "[CS]",
-            _ when Ext(
-                name: name,
-                ".wav",
-                ".ogg",
-                ".mp3"
-            ) => "[AU]",
-            _ when Ext(name: name, ".scene") => "[SC]",
-            _ => "[··]",
-        };
-    }
 
     private static Color IconColor(string name)
     {

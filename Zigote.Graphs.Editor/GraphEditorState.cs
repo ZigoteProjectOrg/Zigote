@@ -15,6 +15,10 @@ public sealed class GraphEditorState
 
     private readonly HashSet<Guid> _selectedNodes = [];
 
+    // Selection order: the last entry is the primary node (the one the inspector edits). A
+    // HashSet alone has no order to take "last" from.
+    private readonly List<Guid> _selectionOrder = [];
+
     public GraphEditorState(GraphDocument graph, GraphDomainRegistry registry)
     {
         Graph = graph;
@@ -22,9 +26,10 @@ public sealed class GraphEditorState
         Commands = new GraphCommandStack(graph);
         Commands.Changed += () =>
         {
-            SelectedEdgeId = null; // stale selection after structural change
-            GraphChanged?.Invoke();
+            PruneSelection(); // undo/redo and deletes can remove what was selected
             if (AutoCompile) ReactiveCompile();
+            else Validate();
+            GraphChanged?.Invoke();
         };
 
         // Compile once on load so the panel shows initial status immediately.
@@ -35,11 +40,18 @@ public sealed class GraphEditorState
     public GraphCommandStack Commands { get; }
     public GraphDomainRegistry Registry { get; }
     public IReadOnlySet<Guid> SelectedNodes => _selectedNodes;
-    public Guid? PrimarySelection => _selectedNodes.Count > 0 ? _selectedNodes.Last() : null;
+    public Guid? PrimarySelection => _selectionOrder.Count > 0 ? _selectionOrder[^1] : null;
 
     // ── Edge selection ────────────────────────────────────────────────────────
 
-    public Guid? SelectedEdgeId { get; private set; }
+    // In click order, like the nodes: the last one is the primary cable.
+    private readonly List<Guid> _selectedEdges = [];
+
+    /// <summary>Every selected cable. Nodes and cables are never selected together.</summary>
+    public IReadOnlyList<Guid> SelectedEdges => _selectedEdges;
+
+    /// <summary>The primary (most recently selected) cable, or null.</summary>
+    public Guid? SelectedEdgeId => _selectedEdges.Count > 0 ? _selectedEdges[^1] : null;
 
     // ── Validation cache ──────────────────────────────────────────────────────
 
@@ -55,37 +67,86 @@ public sealed class GraphEditorState
 
     public GraphCompileResult? LastCompileResult { get; private set; }
 
-    public void Select(Guid? nodeId)
-    {
-        _selectedNodes.Clear();
-        if (nodeId.HasValue) _selectedNodes.Add(nodeId.Value);
-        SelectedEdgeId = null;
-        SelectionChanged?.Invoke();
-    }
+    public void Select(Guid? nodeId) => SetSelection(nodeId.HasValue ? [nodeId.Value] : []);
 
+    /// <summary>Adds a node and makes it the primary one. Deselects any edge: one kind at a time.</summary>
     public void AddToSelection(Guid nodeId)
     {
+        _selectionOrder.Remove(nodeId);
+        _selectionOrder.Add(nodeId);
         _selectedNodes.Add(nodeId);
+        _selectedEdges.Clear();
         SelectionChanged?.Invoke();
     }
 
-    public void ClearSelection()
+    /// <summary>Shift/Ctrl-click: selects an unselected node, deselects a selected one.</summary>
+    public void ToggleSelection(Guid nodeId)
     {
-        _selectedNodes.Clear();
-        SelectedEdgeId = null;
+        if (!_selectedNodes.Remove(nodeId))
+        {
+            AddToSelection(nodeId);
+            return;
+        }
+
+        _selectionOrder.Remove(nodeId);
         SelectionChanged?.Invoke();
+    }
+
+    /// <summary>
+    ///     Replaces the node selection in one step, firing <see cref="SelectionChanged" /> once and
+    ///     only when the set or its primary node actually changed — a marquee calls this every move.
+    /// </summary>
+    public void SetSelection(IEnumerable<Guid> nodeIds)
+    {
+        var next = nodeIds.Distinct().ToList();
+        if (_selectedEdges.Count == 0 && next.SequenceEqual(_selectionOrder)) return;
+        _selectedNodes.Clear();
+        _selectionOrder.Clear();
+        foreach (var id in next)
+        {
+            _selectedNodes.Add(id);
+            _selectionOrder.Add(id);
+        }
+
+        _selectedEdges.Clear();
+        SelectionChanged?.Invoke();
+    }
+
+    public void ClearSelection() => SetSelection([]);
+
+    private void PruneSelection()
+    {
+        int removed = _selectionOrder.RemoveAll(id => Graph.FindNode(id) is null);
+        if (removed > 0) _selectedNodes.IntersectWith(_selectionOrder);
+        int edgesGone = _selectedEdges.RemoveAll(id => Graph.Edges.All(e => e.Id != id));
+        if (removed > 0 || edgesGone > 0) SelectionChanged?.Invoke();
     }
 
     public bool IsSelected(Guid nodeId) => _selectedNodes.Contains(nodeId);
 
-    public void SelectEdge(Guid? edgeId)
+    public void SelectEdge(Guid? edgeId) => SetEdgeSelection(edgeId.HasValue ? [edgeId.Value] : []);
+
+    /// <summary>Shift/Ctrl-click on a cable: adds it to the selected cables, or removes it.</summary>
+    public void ToggleEdgeSelection(Guid edgeId)
     {
-        SelectedEdgeId = edgeId;
+        var next = _selectedEdges.ToList();
+        if (!next.Remove(edgeId)) next.Add(edgeId);
+        SetEdgeSelection(next);
+    }
+
+    /// <summary>Replaces the cable selection (and drops any node selection) in one step.</summary>
+    public void SetEdgeSelection(IEnumerable<Guid> edgeIds)
+    {
+        var next = edgeIds.Distinct().ToList();
+        if (_selectedNodes.Count == 0 && next.SequenceEqual(_selectedEdges)) return;
+        _selectedEdges.Clear();
+        _selectedEdges.AddRange(next);
         _selectedNodes.Clear();
+        _selectionOrder.Clear();
         SelectionChanged?.Invoke();
     }
 
-    public bool IsEdgeSelected(Guid edgeId) => SelectedEdgeId == edgeId;
+    public bool IsEdgeSelected(Guid edgeId) => _selectedEdges.Contains(edgeId);
 
     public GraphValidationResult Validate()
     {
@@ -94,6 +155,15 @@ public sealed class GraphEditorState
             LastValidation = domain.Validate(Graph);
         else
             LastValidation = GraphValidationResult.Ok;
+        var diagnostics = LastValidation.Diagnostics.ToList();
+        foreach (var diagnostic in GraphInputValidation.Validate(Graph, Registry))
+            if (!diagnostics.Any(d => d.NodeId == diagnostic.NodeId && d.PinId == diagnostic.PinId
+                && d.Severity == GraphDiagnosticSeverity.Error))
+                diagnostics.Add(diagnostic);
+        LastValidation = new GraphValidationResult {
+            IsValid = LastValidation.IsValid && !diagnostics.Any(d => d.Severity == GraphDiagnosticSeverity.Error),
+            Diagnostics = diagnostics,
+        };
         return LastValidation;
     }
 
@@ -105,10 +175,19 @@ public sealed class GraphEditorState
         Validate();
         if (!Registry.TryGetDomain(domainId: Graph.DomainId, domain: out var domain) ||
             domain is null) return;
-        LastCompileResult = domain.Compile(
+        var compiled = domain.Compile(
             graph: Graph,
             context: new GraphCompileContext { TargetPlatform = "gallery" }
         );
+        var diagnostics = compiled.Diagnostics.ToList();
+        foreach (var diagnostic in LastValidation!.Diagnostics)
+            if (!diagnostics.Any(d => d.NodeId == diagnostic.NodeId && d.PinId == diagnostic.PinId && d.Code == diagnostic.Code))
+                diagnostics.Add(diagnostic);
+        LastCompileResult = new GraphCompileResult {
+            Success = compiled.Success && LastValidation.IsValid,
+            Diagnostics = diagnostics,
+            CompiledArtifact = compiled.CompiledArtifact,
+        };
         CompileChanged?.Invoke();
     }
 

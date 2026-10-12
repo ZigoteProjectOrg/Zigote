@@ -99,12 +99,13 @@ public sealed class ScrollEvent : InputEvent
 {
     public ScrollEvent() { }
 
-    public ScrollEvent(float x, float y, float scrollX, float scrollY)
+    public ScrollEvent(float x, float y, float scrollX, float scrollY, bool precise = false)
     {
         X = x;
         Y = y;
         ScrollX = scrollX;
         ScrollY = scrollY;
+        Precise = precise;
     }
 
     public float X { get; private set; }
@@ -112,13 +113,27 @@ public sealed class ScrollEvent : InputEvent
     public float ScrollX { get; private set; }
     public float ScrollY { get; private set; }
 
+    /// <summary>
+    ///     True when the native layer says a precise device (trackpad, Magic Mouse) sent this, false
+    ///     for a notched wheel. Exact on macOS; elsewhere it means the delta was fractional.
+    /// </summary>
+    public bool Precise { get; private set; }
+
     // Reused across polls like MouseMoveEvent (momentum scroll also fires faster than frame rate).
-    internal void Reuse(float x, float y, float scrollX, float scrollY, uint windowId)
+    internal void Reuse(
+        float x,
+        float y,
+        float scrollX,
+        float scrollY,
+        uint windowId,
+        bool precise
+    )
     {
         X = x;
         Y = y;
         ScrollX = scrollX;
         ScrollY = scrollY;
+        Precise = precise;
         WindowId = windowId;
     }
 }
@@ -415,7 +430,8 @@ internal static class EventDecoder
                 x: e.X,
                 y: e.Y,
                 scrollX: e.ScrollX,
-                scrollY: e.ScrollY
+                scrollY: e.ScrollY,
+                precise: e.Button != 0
             ),
             // For key events the (mouse-unused) Button byte carries the SDL auto-repeat flag.
             EventKind.KeyDown => new KeyEvent(

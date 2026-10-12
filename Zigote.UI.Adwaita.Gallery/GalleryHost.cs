@@ -30,6 +30,12 @@ internal sealed class GalleryHost : InheritedWidget
                throw new InvalidOperationException("No GalleryHost above this widget.");
     }
 
+    /// <summary>
+    ///     Null instead of a throw when there is no shell — a page shown on its own in the preview
+    ///     still works, it just has nowhere to raise a toast.
+    /// </summary>
+    public static GalleryHost? Find(BuildContext ctx) => ctx.DependOn<GalleryHost>();
+
     /// <summary>Float a toast over this window.</summary>
     public void Toast(string title, string? buttonLabel = null, Action? onButtonClicked = null)
     {

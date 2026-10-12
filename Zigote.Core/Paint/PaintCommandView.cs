@@ -81,7 +81,7 @@ public readonly struct PaintCommandView
     private static PaintCommandView Of(ZgPaintBorder o) => new() {
         Kind = ZgPaintOp.Border, RectX = o.Bounds.X, RectY = o.Bounds.Y, RectW = o.Bounds.W,
         RectH = o.Bounds.H, ColorR = o.Color.R, ColorG = o.Color.G, ColorB = o.Color.B,
-        ColorA = o.Color.A, Radius = o.Radius, BorderWidth = o.Width,
+        ColorA = o.Color.A, Radius = MathF.Abs(o.Radius), BorderWidth = o.Width,
     };
 
     private static PaintCommandView Of(ZgPaintShadow o) => new() {

@@ -46,7 +46,7 @@ public static class ElevationPaint
     ///     shadow is offset downward per the style, matching macOS's light-from-above convention.
     /// </summary>
     public static void AddElevation(this PaintList paint, Rect bounds, float radius,
-        ShadowStyle style)
+        ShadowStyle style, bool squircle = false)
     {
         if (style.IsNone) return;
         var shifted = new Rect(
@@ -65,7 +65,8 @@ public static class ElevationPaint
             ),
             borderRadius: radius,
             blurRadius: style.Blur,
-            spread: style.Spread
+            spread: style.Spread,
+            squircle: squircle
         );
     }
 }

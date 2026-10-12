@@ -4,6 +4,7 @@ using Zigote.Core;
 using Zigote.Core.Native;
 using Zigote.Core.Paint;
 using Zigote.UI.Adwaita;
+using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Layout;
 
@@ -18,6 +19,46 @@ namespace Zigote.Tests;
 /// </summary>
 public class AdwThemeSwapTests
 {
+    // The inspect socket's `theme dark|light` must land on the Adwaita palette, not the base
+    // framework's ThemeData.Dark/Light — that mix (Adwaita widgets, foreign surfaces) is what
+    // every Adwaita app showed before the base class handled it.
+    [Theory]
+    [InlineData("dark", true)]
+    [InlineData(" Light ", false)]
+    public void ThemeByNameInstallsTheAdwaitaPalette(string name, bool dark)
+    {
+        var app = new AdwaitaApp(theme: dark ? AdwTheme.Light : AdwTheme.Dark);
+        Assert.True(app.SetThemeByName(name));
+        Assert.Equal(expected: dark, actual: app.Theme.IsDark);
+        Assert.Equal(
+            expected: (dark ? AdwTheme.Dark : AdwTheme.Light).Background,
+            actual: app.Theme.Background
+        );
+        Assert.False(app.SetThemeByName("sepia"));
+    }
+
+    private sealed class RecordingApp : AdwaitaApp
+    {
+        public readonly List<ThemeData> Seen = [];
+
+        protected override void OnThemeChanged(ThemeData theme)
+        {
+            base.OnThemeChanged(theme);
+            Seen.Add(theme);
+        }
+    }
+
+    // Secondary windows are re-themed from this hook. It has to fire on the assignment itself:
+    // when they were polled once a frame instead, they trailed the main window by one.
+    [Fact]
+    public void ThemeAssignmentNotifiesSynchronously()
+    {
+        var app = new RecordingApp();
+        app.Seen.Clear(); // the constructor's own assignment
+        app.Theme = AdwTheme.Dark;
+        Assert.Same(expected: AdwTheme.Dark, actual: Assert.Single(app.Seen));
+    }
+
     /// <summary>Every distinct fill colour a subtree emits, in paint order.</summary>
     private static List<Color> Fills(Widget root, ThemeProvider provider, float w = 300f,
         float h = 120f)

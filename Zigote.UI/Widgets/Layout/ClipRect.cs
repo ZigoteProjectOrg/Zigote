@@ -48,13 +48,15 @@ public class ClipRect(Widget? child = null) : Widget
 ///     Clips its child to a rounded rectangle. The corners are masked on the GPU (an SDF coverage
 ///     multiply in the shape/text/image pipelines), so any child content — fills, text, images —
 ///     is cleanly rounded off. Liquid-glass and custom shader-effect children fall back to the
-///     bounding-rect scissor.
+///     bounding-rect scissor. Set <see cref="Squircle" /> for content inside a Liquid Glass pane, so
+///     the clip follows the pane's continuous-curvature corners.
 /// </summary>
 public class ClipRRect(float radius, Widget? child = null) : Widget
 {
     private Size _size;
 
     public float Radius { get; set; } = radius;
+    public bool Squircle { get; set; }
     public Widget? Child { get; set; } = child;
 
     public override Size Measure(Constraints c)
@@ -77,7 +79,7 @@ public class ClipRRect(float radius, Widget? child = null) : Widget
     public override void Paint(PaintList paint)
     {
         if (Child is null) return;
-        paint.AddClipStart(bounds: Bounds, radius: Radius);
+        paint.AddClipStart(bounds: Bounds, radius: Radius, squircle: Squircle);
         Child.Paint(paint);
         paint.AddClipEnd();
     }

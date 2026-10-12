@@ -178,9 +178,11 @@ public class UiPerformanceTests
             for (int i = 0; i < 200; i++) Frame(root: root, paint: paint, c: viewport);
 
             const int frames = 500;
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            for (int i = 0; i < frames; i++) Frame(root: root, paint: paint, c: viewport);
-            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            long measured = AllocGuard.Measure(() =>
+            {
+                for (int i = 0; i < frames; i++) Frame(root: root, paint: paint, c: viewport);
+            });
+            long allocated = measured;
 
             _output.WriteLine(
                 $"  {rows * cols,6} | {frames,6} | {allocated,7} | {allocated / (double)frames,7:F2}"

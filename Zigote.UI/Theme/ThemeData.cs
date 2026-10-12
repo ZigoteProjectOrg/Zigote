@@ -147,7 +147,7 @@ public sealed class ThemeData
             r: 0f,
             g: 0f,
             b: 0f,
-            a: 0.50f
+            a: 0.60f
         ),
         Label3 = new Color(
             r: 0f,
@@ -226,7 +226,7 @@ public sealed class ThemeData
         r: 1f,
         g: 1f,
         b: 1f,
-        a: 0.08f
+        a: 0.12f
     );
 
     /// <summary>Container/control outline (translucent).</summary>
@@ -234,7 +234,7 @@ public sealed class ThemeData
         r: 1f,
         g: 1f,
         b: 1f,
-        a: 0.08f
+        a: 0.16f
     );
 
     // ── Surfaces — viewport / graph / overlay ─────────────────────────────────

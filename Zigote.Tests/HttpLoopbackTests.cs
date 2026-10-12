@@ -281,10 +281,13 @@ public class HttpLoopbackTests
             await File.WriteAllTextAsync(path + ".part.validator", "\"v1\"", TestContext.Current.CancellationToken);
 
             using var runner = Runner(server.Uri);
+            HttpProgress last = default;
             var length = await HttpFile.DownloadAsync(runner, HttpRequest.Get("file"), path,
-                ct: TestContext.Current.CancellationToken);
+                new InlineProgress(p => last = p), TestContext.Current.CancellationToken);
 
             Assert.Equal(expected: 1000L, actual: length.Unwrap());
+            // A streamed download reports its own progress, and a restart counts from zero.
+            Assert.Equal(expected: new HttpProgress(1000, 1000, Uploading: false), actual: last);
             // The whole point: pure v2, not 400 bytes of v1 welded onto 600 of v2.
             Assert.Equal(expected: v2,
                 actual: await File.ReadAllBytesAsync(path, TestContext.Current.CancellationToken));

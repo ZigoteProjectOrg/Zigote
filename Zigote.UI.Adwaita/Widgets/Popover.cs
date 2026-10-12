@@ -16,7 +16,12 @@ namespace Zigote.UI.Adwaita;
 /// </summary>
 internal abstract class AdwPopoverBase : Widget, IDismissableOverlay
 {
+    // GTK's popover arrow: `popover > arrow` is an 18×9 triangle pointing at the trigger.
+    private const float ArrowW = 18f;
+    private const float ArrowH = 9f;
+
     private readonly Rect _anchor;
+    private readonly bool _arrow;
     private readonly App _app;
     private readonly AnimationController _enter;
 
@@ -30,10 +35,16 @@ internal abstract class AdwPopoverBase : Widget, IDismissableOverlay
 
     private bool _closing;
 
-    protected AdwPopoverBase(App app, Rect anchor)
+    /// <param name="arrow">
+    ///     True centres the card on the anchor and draws GTK's pointer arrow at it — the
+    ///     <c>has-arrow</c> popover a combo row or menu button opens. False is the plain
+    ///     start-aligned list a <c>GtkDropDown</c> shows.
+    /// </param>
+    protected AdwPopoverBase(App app, Rect anchor, bool arrow = false)
     {
         _app = app;
         _anchor = anchor;
+        _arrow = arrow;
         _enter = new AnimationController(durationSeconds: 0.15f, vsync: this) {
             Curve = Curves.EaseOut,
             Spec = AdwMotion.Overlay,
@@ -103,11 +114,45 @@ internal abstract class AdwPopoverBase : Widget, IDismissableOverlay
         );
     }
 
-    protected Rect PopupRect() => OverlayPositioning.Anchored(
-        anchor: _anchor,
-        size: new Size(width: PopupW, height: PopupH),
-        screen: Screen
-    );
+    protected Rect PopupRect() => _arrow
+        ? OverlayPositioning.Anchored(
+            anchor: new Rect(
+                x: _anchor.X + ((_anchor.Width - PopupW) / 2f),
+                y: _anchor.Y,
+                width: PopupW,
+                height: _anchor.Height
+            ),
+            size: new Size(width: PopupW, height: PopupH),
+            screen: Screen,
+            gap: ArrowH
+        )
+        : OverlayPositioning.Anchored(
+            anchor: _anchor,
+            size: new Size(width: PopupW, height: PopupH),
+            screen: Screen
+        );
+
+    // The arrow as a triangle grown by `grow` px (the border pass) whose base sinks `sink` px
+    // into the card (the fill pass, so it covers the card's border line beneath it).
+    private void PaintArrow(PaintList paint, Rect mr, Color color, float grow, float sink)
+    {
+        float inset = AdwMetrics.PopoverRadius + (ArrowW / 2f);
+        float cx = Math.Clamp(
+            value: _anchor.X + (_anchor.Width / 2f),
+            min: mr.X + inset,
+            max: MathF.Max(x: mr.X + inset, y: mr.Right - inset)
+        );
+        bool below = mr.Y >= _anchor.Y; // card sits under its anchor: the arrow points up
+        float edge = below ? mr.Y : mr.Bottom;
+        float dir = below ? -1f : 1f;
+        float half = (ArrowW / 2f) + grow;
+        Span<Offset> points = [
+            new Offset(x: cx - half, y: edge - (dir * sink)),
+            new Offset(x: cx, y: edge + (dir * (ArrowH + grow))),
+            new Offset(x: cx + half, y: edge - (dir * sink)),
+        ];
+        paint.AddPolygon(points: points, color: color);
+    }
 
     public override void Paint(PaintList paint)
     {
@@ -130,7 +175,10 @@ internal abstract class AdwPopoverBase : Widget, IDismissableOverlay
             color: AdwPalette.For(Theme).PopoverBg,
             radius: AdwMetrics.PopoverRadius
         );
+        var bg = AdwPalette.For(Theme).PopoverBg;
+        if (_arrow) PaintArrow(paint: paint, mr: mr, color: Theme.Border, grow: 1f, sink: 0f);
         paint.AddBorder(bounds: mr, color: Theme.Border, radius: AdwMetrics.PopoverRadius);
+        if (_arrow) PaintArrow(paint: paint, mr: mr, color: bg, grow: 0f, sink: 1.5f);
         PaintRows(paint: paint, mr: mr);
 
         if (rise > 0.01f) paint.PopTranslate();
@@ -205,8 +253,8 @@ internal abstract class AdwPopoverBase : Widget, IDismissableOverlay
 /// </summary>
 internal sealed class AdwPopover : AdwPopoverBase
 {
-    private const float CheckW = 28f; // left gutter reserved for the selected ✓
-    private const float TextPad = 10f; // row text inset when there is no check gutter
+    private const float CheckW = 28f; // end gutter reserved for the selected ✓
+    private const float TextPad = 10f; // row text inset
     private const float Pad = 6f; // inner padding around the row list
     private const float MaxPopupH = 360f;
 
@@ -227,8 +275,9 @@ internal sealed class AdwPopover : AdwPopoverBase
         Action<int> onPick,
         int selected = -1,
         bool showCheck = false,
-        float minWidth = 0f)
-        : base(app: app, anchor: anchor)
+        float minWidth = 0f,
+        bool arrow = false)
+        : base(app: app, anchor: anchor, arrow: arrow)
     {
         _items = items;
         _onPick = onPick;
@@ -280,7 +329,6 @@ internal sealed class AdwPopover : AdwPopoverBase
     protected override void PaintRows(PaintList paint, Rect mr)
     {
         float fs = Theme.FontSizeBody;
-        float gutter = _showCheck ? CheckW : TextPad;
         paint.AddClipStart(mr);
         for (int i = 0; i < _items.Count; i++)
         {
@@ -304,10 +352,11 @@ internal sealed class AdwPopover : AdwPopoverBase
             float baseline = row.Y + ((RowH - fs) / 2f) + (fs * 0.8f);
             if (_showCheck && i == InitialHighlight)
             {
+                // GtkDropDown's list item: label at the start, the check at the end.
                 Icons.DrawAt(
                     paint: paint,
                     glyph: Icons.Check,
-                    x: row.X + Spacing.Xs,
+                    x: row.Right - TextPad - fs,
                     baselineY: baseline,
                     color: Theme.PrimaryDark,
                     size: fs
@@ -316,7 +365,7 @@ internal sealed class AdwPopover : AdwPopoverBase
 
             paint.AddText(
                 text: _items[i],
-                baselineX: row.X + gutter,
+                baselineX: row.X + TextPad,
                 baselineY: baseline,
                 color: Theme.OnBackground,
                 fontSize: fs

@@ -100,7 +100,7 @@ public static class AppHost
     ///     for the preview target list.
     /// </summary>
     public static (int Port, int Pid) Launch(string project, string? preview, bool watch,
-        int waitSeconds)
+        int waitSeconds, IReadOnlyDictionary<string, string> env)
     {
         var start = new ProcessStartInfo("dotnet") {
             UseShellExecute = false,
@@ -117,6 +117,7 @@ public static class AppHost
         start.ArgumentList.Add(project);
         start.Environment["ZIGOTE_INSPECT"] = "0"; // 0 = any free port, announced on stdout
         if (preview is { Length: > 0 }) start.Environment["ZIGOTE_PREVIEW"] = preview;
+        foreach ((string key, string value) in env) start.Environment[key] = value;
 
         var process = Process.Start(start)
                       ?? throw new ToolError("could not start dotnet — is the .NET SDK on PATH?");
@@ -137,6 +138,7 @@ public static class AppHost
                         lock (app.Log)
                         {
                             app.Log.Enqueue(line);
+                            app.Printed++;
                             while (app.Log.Count > LogLines) app.Log.Dequeue();
                         }
 
@@ -192,7 +194,7 @@ public static class AppHost
     ///     exceptions. By pid, or the most recent launch; exited apps keep their log until
     ///     stopped, because a crash's output is read after the crash.
     /// </summary>
-    public static string Logs(int? pid, int lines)
+    public static string Logs(int? pid, int lines, string? filter, bool newOnly)
     {
         LaunchedApp app;
         lock (Gate)
@@ -206,7 +208,8 @@ public static class AppHost
         }
 
         string state = app.Process.HasExited ? $"exited (code {app.Process.ExitCode})" : "running";
-        return $"pid {app.Process.Id}, {state}, port {app.Port}\n{Tail(app: app, lines: lines)}";
+        return
+            $"pid {app.Process.Id}, {state}, port {app.Port}\n{Tail(app: app, lines: lines, filter: filter, newOnly: newOnly)}";
     }
 
     /// <summary>Stop one launched app by pid, or every app this server launched.</summary>
@@ -256,15 +259,52 @@ public static class AppHost
         }
     }
 
-    private static string Tail(LaunchedApp app, int lines)
+    /// <summary>
+    ///     The log's tail, shaped for a reader who pays per token: optionally only what was
+    ///     printed since the last <paramref name="newOnly" /> read, only lines matching
+    ///     <paramref name="filter" />, and with runs of one repeated line folded into "(×N)".
+    /// </summary>
+    private static string Tail(LaunchedApp app, int lines, string? filter = null,
+        bool newOnly = false)
     {
+        Regex? match;
+        try
+        {
+            match = filter is { Length: > 0 }
+                ? new Regex(pattern: filter, options: RegexOptions.IgnoreCase)
+                : null;
+        }
+        catch (ArgumentException e)
+        {
+            throw new ToolError($"filter is not a valid regex: {e.Message}");
+        }
+
         lock (app.Log)
         {
-            if (app.Log.Count == 0) return "(no output)";
-            return string.Join(
-                separator: '\n',
-                values: app.Log.TakeLast(Math.Clamp(value: lines, min: 1, max: LogLines))
-            );
+            // Printed counts every line ever; the queue holds the last Count of them.
+            int unread = (int)Math.Min(val1: app.Printed - app.Read, val2: app.Log.Count);
+            IEnumerable<string> source = newOnly ? app.Log.TakeLast(unread) : app.Log;
+            if (newOnly) app.Read = app.Printed;
+            if (match is not null) source = source.Where(l => match.IsMatch(l));
+
+            var folded = new List<string>();
+            string? last = null;
+            int run = 0;
+            foreach (string line in source.TakeLast(Math.Clamp(value: lines, min: 1, max: LogLines)))
+            {
+                if (line == last)
+                {
+                    folded[^1] = $"{line} (×{++run})";
+                    continue;
+                }
+
+                folded.Add(line);
+                last = line;
+                run = 1;
+            }
+
+            if (folded.Count > 0) return string.Join(separator: '\n', values: folded);
+            return newOnly ? "(nothing new)" : match is not null ? "(no matching lines)" : "(no output)";
         }
     }
 
@@ -272,6 +312,8 @@ public static class AppHost
     {
         public readonly Queue<string> Log = [];
         public int Port; // updated in place when a watch restart announces a new one
+        public long Printed; // lines ever logged; guarded by Log
+        public long Read; // Printed as of the last new_only read; guarded by Log
         public Process Process { get; } = process;
     }
 }

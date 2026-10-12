@@ -92,15 +92,15 @@ public sealed class LiquidPane : Widget
     private const float ClearHaze = 0.10f;
 
     /// <summary>
-    ///     The two rims, as fractions of the theme's slab thickness. Tiny on purpose: the
-    ///     reference capsules bend what is behind them in a hairline at the very edge and are
-    ///     clear right up to it — a wide bevel turns a capsule into a frosted ring. At the theme's
-    ///     10px slab these are 2.5 and 3.5 logical pixels.
+    ///     The two rims, as fractions of the theme's slab thickness. The shader's bevel is a
+    ///     squircle section — flat nearly to the edge, bending only in its outer third — so these
+    ///     are the lens's full run-in, not the width of the visible distortion. At the theme's
+    ///     10px slab they are 6 and 9 logical pixels.
     /// </summary>
-    private const float ThinBevel = 0.25f;
+    private const float ThinBevel = 0.6f;
 
     /// <inheritdoc cref="ThinBevel" />
-    private const float RegularBevel = 0.35f;
+    private const float RegularBevel = 0.9f;
 
     private float _adapt = Legibility;
     private float _bevel = ThinBevel;
@@ -170,8 +170,8 @@ public sealed class LiquidPane : Widget
     ///     Bevel width as a fraction of the theme's slab thickness — the material's <i>weight</i>,
     ///     Apple's thin-to-thick vibrancy scale collapsed to the two variants that earn their keep.
     ///     Thin glass is clearer, so it is the default and what <see cref="Clear" /> uses; a
-    ///     <see cref="Regular" /> pane carries a slightly fuller rim. Both are hairlines: the rim
-    ///     is where the lens bends, and the reference material keeps that to the very edge.
+    ///     <see cref="Regular" /> pane carries a slightly fuller rim. The lens bends only in the
+    ///     outer third of this width, so the middle of the pane stays clear.
     /// </summary>
     public float Bevel
     {
@@ -431,7 +431,8 @@ public sealed class LiquidPane : Widget
             ),
             borderRadius: Radius,
             blurRadius: Elevation * 2.2f,
-            spread: Elevation * 0.12f
+            spread: Elevation * 0.12f,
+            squircle: true
         );
     }
 
@@ -443,12 +444,11 @@ public sealed class LiquidPane : Widget
     internal void PaintLens(PaintList paint)
     {
         // The shader's optical model is a clear middle inside a bevel that lenses at the rim — and
-        // the bevel is `thickness` pixels wide. On anything shorter than about ten times that the
-        // bevel starts to swallow the surface and the whole thing reads as frosted rim: a milky
-        // pill rather than glass. Scaling the bevel to the shape as well as to the material is
-        // what keeps a clear centre for the backdrop to show through, which is the entire effect.
+        // the bevel is `thickness` pixels wide. Scaling it to the shape as well as to the material
+        // keeps a clear centre on small controls: past a fifth of the shorter side the two rims
+        // start to meet and a capsule reads as a bead rather than a pane.
         float side = MathF.Min(x: Bounds.Width, y: Bounds.Height);
-        float bevel = MathF.Min(x: _theme.GlassThickness * Bevel, y: side * 0.1f);
+        float bevel = MathF.Min(x: _theme.GlassThickness * Bevel, y: side * 0.2f);
 
         // A light haze in BOTH themes, which is the correction that made this look like glass.
         // Dark-mode glass is not a dark scrim: on Apple's dark surfaces the pane is visibly

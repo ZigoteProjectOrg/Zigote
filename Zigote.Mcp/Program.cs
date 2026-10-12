@@ -107,18 +107,18 @@ public static class Program
             ["capabilities"] = new JsonObject { ["tools"] = new JsonObject() },
             ["serverInfo"] = new JsonObject {
                 ["name"] = "zigote",
-                ["version"] = "0.1.0",
+                ["version"] = "0.2.0",
             },
             ["instructions"] =
-                "Drives a running Zigote app. Start one with `launch` (it sets ZIGOTE_INSPECT and " +
-                "remembers the port; watch=true adds hot reload on save), or start it yourself " +
-                "with ZIGOTE_INSPECT=0 and pass the port the app prints " +
-                "(`zigote inspect: 127.0.0.1:PORT`) to any tool. Prefer labels over coordinates: " +
-                "`find` locates widgets, `tap_widget` clicks them by label, `wait_for` handles " +
-                "async UI. Mutating tools take screenshot:true to return the resulting frame in " +
-                "the same call. Coordinates, where needed, are layout points — the space " +
-                "`screenshot` reports and tree bounds use. After anything unexpected, `logs` has " +
-                "the app's own output.",
+                "Drives a running Zigote app. Start one with `launch` (watch=true adds hot reload " +
+                "on save), or start it yourself with ZIGOTE_INSPECT=0 and pass the port it prints " +
+                "(`zigote inspect: 127.0.0.1:PORT`) to any tool. Cheapest first: `info` for " +
+                "state, `find`/`semantics_tree` for what is on screen, a cropped `screenshot` " +
+                "only when pixels matter. Prefer labels over coordinates (`tap_widget`, " +
+                "`wait_for`). Save round trips: mutating tools take screenshot:true, and `batch` " +
+                "runs a whole sequence in one call. Coordinates are layout points. When a tap " +
+                "does nothing, `widget_at` says what took it; after anything unexpected, `logs` " +
+                "(filter: 'error|exception') has the app's own output.",
         };
     }
 
@@ -127,7 +127,7 @@ public static class Program
     private static void Write(TextWriter stdout, JsonObject message)
     {
         // One line per message; the serializer never emits raw newlines inside strings.
-        stdout.Write(message.ToJsonString(new JsonSerializerOptions { WriteIndented = false }));
+        stdout.Write(message.ToJsonString());
         stdout.Write('\n');
         stdout.Flush();
     }
