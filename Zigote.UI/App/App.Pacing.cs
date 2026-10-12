@@ -117,8 +117,7 @@ public partial class App
     /// <summary>Work handed over from another thread that an idle wait must not sleep on.</summary>
     private bool HasCrossThreadWork()
     {
-        if (HasFrameWork() || !_postedAfterFrame.IsEmpty || !_crossThreadInvalidations.IsEmpty ||
-            Reactive.HasPendingDeferred || _background is { FrameIdle: false } ||
+        if (HasFrameWork() || Reactive.HasPendingDeferred || _background is { FrameIdle: false } ||
             HotReload.HasPendingReload || PlatformChannel.HasPending)
             return true;
         // Secondary windows are serviced by this loop, so work queued on one of them counts too.
@@ -130,10 +129,10 @@ public partial class App
         return false;
     }
 
-    // Only what every window's frame consumes: a secondary window's frame never drains the
-    // after-frame or cross-thread-invalidation queues, so counting those there would keep the
-    // loop awake forever on an entry nothing removes.
-    private bool HasFrameWork() => !_posted.IsEmpty || _repaint.AnyDirty || _needsLayout;
+    // Everything a window's frame drains — main and secondary frames drain the same queues.
+    private bool HasFrameWork() =>
+        !_posted.IsEmpty || !_postedAfterFrame.IsEmpty || !_crossThreadInvalidations.IsEmpty ||
+        _repaint.AnyDirty || _needsLayout;
 
     private int IdleWaitTimeoutMs()
     {

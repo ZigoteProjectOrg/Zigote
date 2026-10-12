@@ -112,6 +112,10 @@ public partial class App
 
             AdvanceTransients(DeltaTime);
 
+            // A reactive bind in this window written from another thread queues its widget here;
+            // without this drain the queue only grew and the bind's subtree never re-measured.
+            DrainCrossThreadInvalidations();
+
             if (_needsLayout || _pendingRelayout)
                 LayoutTree();
 
@@ -150,6 +154,7 @@ public partial class App
         }
         finally
         {
+            DrainPostedAfterFrame(); // on every exit path, like the main frame's
             Active = prevActive;
         }
     }
