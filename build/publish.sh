@@ -27,7 +27,8 @@
 # machine, and only for that. A binary inherits the glibc of the machine that built it as a hard
 # load-time floor — so a build on a rolling-release host produces a libzigote.so and (worse, because
 # there is no -Dtarget for it) a NativeAOT binary that will not start inside a Flatpak runtime or on
-# any LTS distro. Linux RIDs only; podman or docker required.
+# any LTS distro. linux-* and win-x64 RIDs (the image cross-builds both; osx-* needs --macos-vm);
+# podman or docker required.
 #
 # --macos-vm: the same idea for osx-*, and the only way to build them from a non-Mac at all. The
 # native lib links Apple frameworks (Metal, Cocoa, CoreAudio) that zig does not bundle, so a cross
@@ -68,7 +69,7 @@ while [ $# -gt 0 ]; do
     --container) CONTAINER=1;  shift ;;
     --macos-vm)  MACOS_VM=1;   shift ;;
     --single-file) SINGLE_FILE=1; shift ;;
-    -h|--help)   sed -n '2,48p' "$0"; exit 0 ;;
+    -h|--help)   sed -n '2,49p' "$0"; exit 0 ;;
     -*)          echo "unknown option: $1" >&2; exit 2 ;;
     *)           RIDS+=("$1"); shift ;;
   esac
@@ -83,65 +84,25 @@ done
 # Everything below this block runs identically inside and outside the container; --container only
 # changes *where*. Re-exec rather than duplicating the publish logic behind a second code path.
 if [ "$CONTAINER" -eq 1 ]; then
-  ENGINE="$(command -v podman || command -v docker)" ||
-    { echo "--container needs podman or docker on PATH" >&2; exit 2; }
-  IMAGE="${ZIGOTE_BUILD_IMAGE:-zigote-build-linux}"
-
-  # Build once; rebuild only when the Dockerfile changes (the layer cache makes a no-op rebuild cheap,
-  # and skipping it entirely would silently keep a stale toolchain).
-  "$ENGINE" build -q -t "$IMAGE" -f "$ROOT/build/Dockerfile.linux" "$ROOT/build" >/dev/null ||
-    { echo "failed to build $IMAGE" >&2; exit 1; }
-
-  # Mount the engine and the app repo at their real paths so ZigoteRoot, relative ProjectReferences and
-  # the artifacts directory all resolve to the same strings they would on the host. For an in-tree app
-  # (the editor, the galleries) these are the same directory, hence the dedupe.
+  # The image, mounts, user mapping and caches live in build/container.sh, shared with development
+  # builds. An out-of-tree app additionally needs its own repo mounted at its real path; for an
+  # in-tree app (the editor, the galleries) that is $ROOT, which container.sh already mounts.
   APP_ROOT="$(cd "$(dirname "$(dirname "$PROJECT")")" && pwd)"
-  MOUNTS=(-v "$ROOT:$ROOT")
-  [ "$APP_ROOT" != "$ROOT" ] && MOUNTS+=(-v "$APP_ROOT:$APP_ROOT")
-  # The package cache is mounted at the SAME absolute path it has on the host, not at the container's
-  # HOME. obj/project.assets.json and obj/*.nuget.g.props record the resolved NuGetPackageRoot as an
-  # absolute path, so a container-relative one leaves every project un-buildable on the host afterwards
-  # ("NETSDK1064: package X was not found ... might have been deleted since NuGet restore") until
-  # something forces a re-restore. Same path in both places means obj/ stays valid either way, and the
-  # cache is shared instead of re-downloaded. DOTNET_CLI_HOME keeps the CLI's own state (~/.dotnet
-  # first-run sentinel, telemetry) inside the container, where HOME is writable.
-  mkdir -p "$HOME/.nuget/packages"
-  MOUNTS+=(-v "$HOME/.nuget:$HOME/.nuget")
+  APP_MOUNT=()
+  [ "$APP_ROOT" != "$ROOT" ] && APP_MOUNT=(-v "$APP_ROOT:$APP_ROOT")
 
-  # Zig's GLOBAL cache (compiler_rt, libc stubs, libc++, fetched packages) otherwise lives at
-  # $HOME/.cache/zig inside the image and dies with the --rm container, so every leg of a multi-arch
-  # publish rebuilt it from scratch — and much of that rebuild is serial, so it reads as a build that
-  # will not use the machine's cores. The engine's LOCAL .zig-cache already survives because it sits
-  # in the mounted source tree; this gives the global one the same treatment. Entries are keyed by
-  # compiler hash, so sharing the host's cache is safe even when the host zig and the image zig differ.
-  mkdir -p "$HOME/.cache/zig"
-  MOUNTS+=(-v "$HOME/.cache/zig:$HOME/.cache/zig")
-
-  # Run as the invoking user so nothing in the source tree comes back root-owned. Rootless podman needs
-  # keep-id for that; docker takes the uid directly.
-  AS_USER=(--user "$(id -u):$(id -g)")
-  [ "$(basename "$ENGINE")" = podman ] && AS_USER=(--userns=keep-id)
-
-  # On an SELinux host (Fedora, RHEL) a bind mount is unreadable from the container without either a
-  # relabel or this. `:z` is the usual answer, but it REWRITES the labels on the mounted directory —
-  # i.e. on the developer's source tree — and a shared label on a checkout is a side effect a build
-  # script has no business causing. Disabling confinement affects only this throwaway container.
-  SELINUX=()
-  [ -e /sys/fs/selinux ] && SELINUX=(--security-opt label=disable)
-
-  echo "Container build in $IMAGE (glibc floor from build/Dockerfile.linux)"
+  echo "Container build (glibc floor from build/Dockerfile.linux)"
   # Drop --container from the forwarded args, or the re-exec would recurse.
   INNER=()
   for a in "${ARGV[@]}"; do [ "$a" = --container ] || INNER+=("$a"); done
-  exec "$ENGINE" run --rm "${MOUNTS[@]}" "${AS_USER[@]}" "${SELINUX[@]}" -w "$ROOT" \
-    -e "NUGET_PACKAGES=$HOME/.nuget/packages" -e DOTNET_CLI_HOME=/build-home \
-    -e "ZIG_GLOBAL_CACHE_DIR=$HOME/.cache/zig" \
+  cd "$ROOT"
+  exec "$ROOT/build/container.sh" "${APP_MOUNT[@]}" \
     -e "CONFIG=$CONFIG" ${ENABLE_3D:+-e "ENABLE_3D=$ENABLE_3D"} \
     ${PHYSICS_3D:+-e "PHYSICS_3D=$PHYSICS_3D"} \
     ${ZIG_OPTIMIZE:+-e "ZIG_OPTIMIZE=$ZIG_OPTIMIZE"} \
     ${ZIG_CPU:+-e "ZIG_CPU=$ZIG_CPU"} \
     ${FONT_SUBSET_TOOL:+-e "FONT_SUBSET_TOOL=$FONT_SUBSET_TOOL"} \
-    "$IMAGE" "$ROOT/build/publish.sh" "${INNER[@]}"
+    "$ROOT/build/publish.sh" "${INNER[@]}"
 fi
 
 # ── macOS VM re-entry ─────────────────────────────────────────────────────────────────────────────

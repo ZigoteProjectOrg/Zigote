@@ -20,7 +20,7 @@
 FROM debian:12-slim
 
 ARG DOTNET_CHANNEL=10.0
-ARG ZIG_VERSION=0.16.0
+ARG ZIG_VERSION=0.17.0
 
 ENV DOTNET_NOLOGO=1 \
     DOTNET_CLI_TELEMETRY_OPTOUT=1 \
@@ -53,12 +53,22 @@ RUN arch="$(uname -m)" \
 # who has no home inside the image and still needs cargo's registry cache to be writable.
 ARG RUST_VERSION=1.97.1
 ENV RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo PATH=/opt/cargo/bin:$PATH
+#
+# Cross targets, so one image covers every RID a Linux container can produce: linux-arm64 and
+# win-x64 next to the native linux-x64. Zig needs nothing for this (-Dtarget, it bundles its libcs);
+# rust needs the target's std plus a linker for it, which is all the two cross gcc packages are here
+# for. Debian 12's arm64 cross libc is the same 2.36 floor as the native one. Windows is the GNU ABI
+# (mingw-w64), matching what the Zig side cross-builds — the MSVC ABI needs Microsoft's SDK. Apple
+# and Android targets are absent because their SDKs are: see build/macos-vm.sh for the former.
 RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev \
+        gcc-aarch64-linux-gnu libc6-dev-arm64-cross gcc-mingw-w64-x86-64 \
     && rm -rf /var/lib/apt/lists/* \
     && curl --proto '=https' --tlsv1.2 -fsSL https://sh.rustup.rs \
        | sh -s -- -y --no-modify-path --profile minimal \
-            --default-toolchain "$RUST_VERSION" --component rustfmt clippy \
+            --default-toolchain "$RUST_VERSION" --component rustfmt,clippy \
+    && rustup target add aarch64-unknown-linux-gnu x86_64-pc-windows-gnu \
     && chmod -R a+rwX /opt/rustup /opt/cargo
+ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
 
 # publish.sh runs as the invoking host user (podman --userns=keep-id / docker --user) so build output
 # is not root-owned. That user has no passwd entry and no home inside the image, so HOME is pointed

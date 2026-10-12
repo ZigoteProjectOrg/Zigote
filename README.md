@@ -46,7 +46,7 @@ See [Games, 3D and the editor](#games-3d-and-the-editor).
 
 ## Quick start
 
-**You need:** the [.NET 10 SDK](https://dotnet.microsoft.com/) (`global.json` pins 10.0.110),
+**You need:** the [.NET 10 SDK](https://dotnet.microsoft.com/) (`global.json` pins 10.0.400),
 [Zig 0.17.0](https://ziglang.org/download/) on `PATH` (pinned in `Zigote.Engine/.zigversion`),
 [Rust](https://rustup.rs) (pinned in `native/zigote-svg/rust-toolchain.toml` — rustup selects it
 automatically), and `git`.

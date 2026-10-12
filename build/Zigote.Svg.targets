@@ -29,6 +29,10 @@
     <_SvgTriple Condition="'$(_SvgRid)' == 'osx-x64'">x86_64-apple-darwin</_SvgTriple>
     <_SvgTriple Condition="'$(_SvgRid)' == 'osx-arm64'">aarch64-apple-darwin</_SvgTriple>
     <_SvgTriple Condition="'$(_SvgRid)' == 'win-x64'">x86_64-pc-windows-msvc</_SvgTriple>
+    <!-- ...except when cross-building from another OS, where there is no MSVC SDK to link against:
+         then it is the GNU ABI, the same switch the Zig cross-build makes. The DLL exports a plain C
+         ABI either way, so the managed side cannot tell them apart. -->
+    <_SvgTriple Condition="'$(_SvgRid)' == 'win-x64' And !$([MSBuild]::IsOSPlatform('Windows'))">x86_64-pc-windows-gnu</_SvgTriple>
     <_SvgTriple Condition="'$(_SvgRid)' == 'android-arm64'">aarch64-linux-android</_SvgTriple>
     <_SvgTriple Condition="'$(_SvgRid)' == 'android-x64'">x86_64-linux-android</_SvgTriple>
     <!-- ponytail: no iOS. A cdylib cannot be loaded from an iOS app sandbox, so that target needs
@@ -53,7 +57,11 @@
 
   <Target Name="BuildSvgNative" BeforeTargets="BeforeBuild"
           Inputs="@(SvgCrateSources)" Outputs="$(_SvgOutDir)\$(_SvgLibName)">
-    <Exec Command="cargo --version" ContinueOnError="true" StandardOutputImportance="low"
+    <!-- Linux and Windows targets: the ones the image carries a rust std and linker for. -->
+    <PropertyGroup>
+      <_SvgExec Condition="'$(_SvgRid)' == '' Or $(_SvgRid.StartsWith('linux')) Or $(_SvgRid.StartsWith('win'))">$(ZigoteContainerExec)</_SvgExec>
+    </PropertyGroup>
+    <Exec Command="$(_SvgExec) cargo --version" ContinueOnError="true" StandardOutputImportance="low"
           StandardErrorImportance="low" ConsoleToMSBuild="true">
       <Output TaskParameter="ExitCode" PropertyName="_SvgCargoMissing" />
       <Output TaskParameter="ConsoleOutput" PropertyName="_SvgCargoVersion" />
@@ -69,7 +77,7 @@
     <Warning Condition="'$(_SvgPinnedRust)' != '' And '$(_SvgCargoVersion)' != '' And !$(_SvgCargoVersion.Contains('$(_SvgPinnedRust)'))"
              Text="cargo is '$(_SvgCargoVersion.Trim())' but native/zigote-svg/rust-toolchain.toml pins $(_SvgPinnedRust). Install rustup (https://rustup.rs) to get the pinned toolchain selected automatically." />
 
-    <Exec Command="cargo build --release $(_SvgCargoTarget)"
+    <Exec Command="$(_SvgExec) cargo build --release $(_SvgCargoTarget)"
           WorkingDirectory="$(SvgCrateDir)" IgnoreStandardErrorWarningFormat="true" />
   </Target>
 

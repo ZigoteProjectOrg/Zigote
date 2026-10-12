@@ -312,7 +312,11 @@
       <_ZigOptimizeArg Condition="'$(ZigOptimize)' == 'ReleaseSmall'">small</_ZigOptimizeArg>
     </PropertyGroup>
     <Message Importance="high" Text="Zigote native: zig build $(ZigBuildStep) -Doptimize=$(_ZigOptimizeArg) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigCpuArg) $(ZigStripArg) $(ZigSysrootArg)" />
-    <Exec Command="zig build $(ZigBuildStep) -Doptimize=$(_ZigOptimizeArg) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigCpuArg) $(ZigStripArg) $(ZigSysrootArg)"
+    <!-- Linux and Windows targets: the image has no Android NDK and no Apple SDK to hand zig. -->
+    <PropertyGroup>
+      <_ZigExec Condition="'$(ZigTargetOS)' == 'linux' Or '$(ZigTargetOS)' == 'windows'">$(ZigoteContainerExec)</_ZigExec>
+    </PropertyGroup>
+    <Exec Command="$(_ZigExec) zig build $(ZigBuildStep) -Doptimize=$(_ZigOptimizeArg) -Denable3d=$(Enable3D) -Dphysics3d=$(EnablePhysics3D) -Decs=$(EnableEcs) $(ZigTargetArg) $(ZigCpuArg) $(ZigStripArg) $(ZigSysrootArg)"
           WorkingDirectory="$(ZigEngineDir)" IgnoreStandardErrorWarningFormat="true" />
     <!-- Apple's linker rejects zig's archives outright ("member not 8-byte aligned"), and Apple's
          libtool silently drops members when fed one, because zig also writes members with mode

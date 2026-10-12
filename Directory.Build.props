@@ -1,6 +1,6 @@
 <Project>
     <!--
-      Repo-wide language pins. The SDK is pinned in global.json (10.0.110); this pins the language
+      Repo-wide language pins. The SDK is pinned in global.json (10.0.400); this pins the language
       levels that SDK ships so a newer SDK on someone's machine can't silently change compilation.
       Per-project <LangVersion> overrides still win — none are set today.
     -->
@@ -10,6 +10,18 @@
         <!-- Keep dotnet test on VSTest for the mixed xUnit v2/v3 test projects.
              xUnit v3 4.0 defaults to MTP, which .NET 10 rejects in VSTest mode. -->
         <IsTestingPlatformApplication>false</IsTestingPlatformApplication>
+    </PropertyGroup>
+
+    <!--
+      Native toolchain steps (zig, cargo) of a Rider build on Linux run inside build/Dockerfile.linux
+      via build/container.sh, so the IDE builds with the pinned zig/rust rather than whatever the
+      distro packages. Only those steps can move: Rider's managed build is its own MSBuild host on
+      this machine. ZigoteContainer=true|false forces it either way (e.g. -p:ZigoteContainer=true for
+      a CLI build); `build/container.sh` with no arguments builds the whole solution in the image.
+      Falls back to the host toolchain when neither podman nor docker is installed.
+    -->
+    <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Linux')) And ('$(ZigoteContainer)' == 'true' Or ('$(ZigoteContainer)' == '' And '$(BuildingByReSharper)' == 'true'))">
+        <ZigoteContainerExec>"$(MSBuildThisFileDirectory)build/container.sh" --or-host</ZigoteContainerExec>
     </PropertyGroup>
 
     <!-- Package identity and one version for everything that ships (build/pack.sh). -->
