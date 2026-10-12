@@ -52,7 +52,7 @@ public sealed class EditorPreferences(App app, EditorSettings settings, ProjectH
     /// <summary>The resolved theme must be re-derived and the UI rebuilt (mode/scale change).</summary>
     public event Action? ThemeChanged;
 
-    /// <summary>The "code" face or editor font size changed (re-style CodeEditor/Console).</summary>
+    /// <summary>The "code" face or editor font size changed (re-style AdwCodeEditor/Console).</summary>
     public event Action? EditorFontChanged;
 
     /// <summary>

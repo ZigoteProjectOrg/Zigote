@@ -6,7 +6,7 @@ open Zigote.Core
 open Zigote.UI.Widgets
 open Zigote.UI.Widgets.Controls
 open Zigote.UI.Widgets.Layout
-open Zigote.UI.Material
+open Zigote.UI.Adwaita
 open Zigote.UI.FSharp
 
 // The F# module is the reactive surface (signals/computeds/effects) plus `watch`/`Host`; the widgets
@@ -265,12 +265,12 @@ let ``a retained child reused across a rebuild keeps its state`` () =
     // before the outgoing one is detached, so they are never torn out; Widget.Detach skips a child
     // another parent has adopted. That half needs an App owner and is covered by the C# suite.)
     let order = signal [ 0; 1 ]
-    let rows = [| w (TextField()); w (TextField()) |]
+    let rows = [| w (AdwTextField()); w (AdwTextField()) |]
 
     let root = watch (fun () -> Column(children = [ for i in order.Value -> rows[i] ]))
 
     measure root
-    let edited = rows[0] :?> TextField
+    let edited = rows[0] :?> AdwTextField
     edited.Text <- "half-typed" // simulate a user edit in flight
 
     order.Value <- [ 1; 0 ] // reorder → the list rebuilds around the same instances

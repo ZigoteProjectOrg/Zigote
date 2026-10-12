@@ -118,7 +118,7 @@ public sealed class EditorPreferences : PreferencesProvider
     }
 }
 
-new Watch(() => new Switch(prefs.ShowGrid.Value, v => prefs.ShowGrid.Value = v))
+new Watch(() => new AdwSwitch(prefs.ShowGrid.Value, v => prefs.ShowGrid.Value = v))
 ```
 
 ### Layout: modifiers become wrappers
@@ -162,34 +162,34 @@ helper method (your `.buttonStyle`).
 |---|---|
 | `Text` | `Label` (or `Text`, an alias taking a `TextStyle`) |
 | `.font(.title2)` | `new Label(s) { Style = … }`, or `new Text(s, style: Typography.Title2)` |
-| `Button` | `Button`, or Material's `ElevatedButton` / `OutlinedButton` / `TextButton` |
+| `Button` | `AdwButton` (`Style` picks suggested / flat / destructive), or the kernel `Button` |
 | `Image` / `AsyncImage` | `Image` / `AsyncImage` |
 | `Label("Title", systemImage:)` | `Row` of `Icon` + `Label`; icons are `MaterialIcons.*` string constants |
-| `TextField` / `SecureField` | `TextField(controller:, obscureText:)` (`Zigote.UI.Material`) |
-| `Toggle` | `Switch` |
-| `Slider` / `Stepper` | `Slider` / `Stepper`, `NumberInput` |
-| `Picker` (menu) | `Dropdown<T>` |
+| `TextField` / `SecureField` | `AdwEntry` / `AdwPasswordEntry` (`Zigote.UI.Adwaita`) |
+| `Toggle` | `AdwSwitch` |
+| `Slider` / `Stepper` | `AdwSlider` / `AdwSpinButton`, `AdwNumberInput` |
+| `Picker` (menu) | `AdwDropDown` |
 | `Picker` (`.segmented`) | `SegmentedControl` |
 | `ProgressView` (determinate) | `ProgressBar` |
 | `ProgressView` (indeterminate) | `Spinner` |
-| `Divider` | `Divider` |
+| `Divider` | `AdwSeparator` |
 | `ScrollView` | `SingleChildScrollView` / `ScrollView` |
 | `List` / `ForEach` | `ListView.Builder` / `SetItems` — see [Lists](#list-and-foreach) |
 | `LazyVGrid` | `GridView.Builder` (lazy), `GridView.Count`, `ResponsiveGrid` |
 | `Form` / `Section` | `AdwPreferencesPage` / `AdwPreferencesGroup` / `AdwActionRow` (Adwaita), or `Column` + `Card` |
 | `.searchable` | `SearchField`, `AutoSuggestField` |
-| `TabView` | `TabBar` + `TabBarView` |
+| `TabView` | `AdwViewSwitcher` + `AdwViewStack` |
 | `NavigationStack` / `NavigationLink` | `Navigator` — `await ctx.Push(page)`, `ctx.Pop(result)` |
-| `NavigationSplitView` | `NavigationSplitView` (Material), `AdwNavigationSplitView` (Adwaita) |
+| `NavigationSplitView` | `AdwNavigationSplitView` |
 | `.sheet` / `.fullScreenCover` | `AdwBottomSheet`, or `ctx.Push(page)` |
 | `.alert` / `.confirmationDialog` | `Dialog.Alert` / `Dialog.Confirm`, `new Dialog(content).Show()` |
 | `.popover` | `Popover` |
-| `.toolbar` | `Toolbar`, `AppBar`, `AdwHeaderBar` |
+| `.toolbar` | `AdwHeaderBar`, `AdwToolbar` |
 | `.commands { CommandMenu … }` | one `AppMenu` model → native `NSMenu` on macOS, in-window `MenuBar` elsewhere |
 | `.draggable` / `.dropDestination` | `Draggable<T>` / `DragTarget<T>` (also OS file/text drops) |
 | `.keyboardShortcut` | `App.Keymap.Bind(action, chord)` + `App.OnShortcut` |
 | `Canvas` / `Shape` / `Path` | subclass `Widget` (or `LeafWidget`) and override `Paint(PaintList)` |
-| `App` / `Scene` / `WindowGroup` | `ZigoteApp` (`AdwaitaApp` / `MaterialApp`); `AdwaitaApp.OpenWindow(...)` for a second window |
+| `App` / `Scene` / `WindowGroup` | `ZigoteApp` (`AdwaitaApp`); `AdwaitaApp.OpenWindow(...)` for a second window |
 
 ### Lifecycle and effects
 

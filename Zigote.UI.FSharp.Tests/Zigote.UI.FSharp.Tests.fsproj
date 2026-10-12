@@ -23,7 +23,7 @@
     <ItemGroup>
         <ProjectReference Include="..\Zigote.UI.FSharp\Zigote.UI.FSharp.fsproj"/>
         <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
-        <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Adwaita\Zigote.UI.Adwaita.csproj"/>
         <ProjectReference Include="..\Zigote.Core\Zigote.Core.csproj"/>
     </ItemGroup>
 

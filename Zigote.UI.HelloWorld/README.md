@@ -13,11 +13,11 @@ private readonly Signal<int> _count = new(0);
 
 new Watch(() => new Text(_count.Value.ToString()))   // rebuilds only this Text
 ...
-new FloatingActionButton(() => _count.Value++, new Icon(MaterialIcons.Add))
+new AdwButton("Increment", () => _count.Value++)
 ```
 
-- **`MaterialApp`** boots the engine, opens the window, installs the theme; `Run()` drives the frame loop.
-- **`Scaffold` / `AppBar` / `FloatingActionButton`** are the Material shell, same names and roles as in Flutter.
+- **`AdwaitaApp`** boots the engine, opens the window, installs the theme; `Run()` drives the frame loop.
+- **`AdwToolbarView` / `AdwHeaderBar` / `AdwButton`** are the Adwaita shell: content under a header bar that hosts the window controls.
 - **`Signal<T>`** is the state. **`Watch`** is the bridge to the widget tree: it runs its builder under dependency
   tracking and rebuilds only the subtree that read the signal — so the button re-runs one `Text`, not the page.
 - The state lives in the signal, so the page just composes. There is no stateless/stateful split: a widget's fields are
@@ -44,5 +44,5 @@ go up by exactly one per press. That is the reactive claim made measurable — t
 
 ## Next
 
-- `Zigote.UI.Gallery` — every widget, plus navigation, localization, charts and devtools.
+- [`Zigote.UI.Adwaita.Gallery`](../Zigote.UI.Adwaita.Gallery/README.md) — every widget, an adaptive shell, multi-window.
 - [`docs/migration/`](../docs/migration/README.md) — coming from Flutter, Compose, SwiftUI or WPF.

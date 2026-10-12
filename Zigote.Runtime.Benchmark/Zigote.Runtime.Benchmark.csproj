@@ -12,6 +12,6 @@
         <ProjectReference Include="..\Zigote.Physics2D\Zigote.Physics2D.csproj"/>
         <ProjectReference Include="..\Zigote.Render2D\Zigote.Render2D.csproj"/>
         <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
-        <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Adwaita\Zigote.UI.Adwaita.csproj"/>
     </ItemGroup>
 </Project>

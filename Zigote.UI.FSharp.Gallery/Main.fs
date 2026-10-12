@@ -22,7 +22,7 @@ open Zigote.UI.Theme
 open Zigote.UI.Widgets
 open Zigote.UI.Widgets.Controls
 open Zigote.UI.Widgets.Layout
-open Zigote.UI.Material
+open Zigote.UI.Adwaita
 open Zigote.UI.DevTools
 open Zigote.UI.Charts
 open Zigote.UI.Charts.Marks
@@ -536,7 +536,7 @@ type private CubeWidget() =
 //     WHOLE TAB on every keystroke or drag. Seed with `sig.Peek()` (an untracked read) instead and
 //     let the widget own its interaction state, writing back through `onChanged`.
 //
-//  2. Never wrap a focusable/editable widget (TextField, and anything mid-drag) in a `watch` keyed
+//  2. Never wrap a focusable/editable widget (AdwTextField, and anything mid-drag) in a `watch` keyed
 //     on what the user is typing into it: the rebuild replaces the instance, so focus and caret go
 //     with it. Keep the instance, push values into it imperatively (see `newTodoField`).
 //
@@ -583,7 +583,7 @@ let private counterTab () =
                 // a dependency, so every drag frame would rebuild it — and the drag would drop.
                 sized
                     240f
-                    (Slider(
+                    (AdwSlider(
                         step.Peek(),
                         min = 1f,
                         max = 10f,
@@ -599,7 +599,7 @@ let private controlsTab () =
             // Uncontrolled (rules 1 + 2): the field owns the text — and therefore the caret and focus —
             // and mirrors each keystroke into `name`. The greeting below is what reacts.
             [
-                TextField(
+                AdwTextField(
                     onChanged = (fun v -> name.Value <- v),
                     Text = name.Peek(),
                     Hint = "Your name"
@@ -616,7 +616,7 @@ let private controlsTab () =
                     spacing = 8f,
                     children =
                         [
-                            w (Checkbox(agree.Peek(), fun v -> agree.Value <- v))
+                            w (AdwCheckButton(value = agree.Peek(), onChanged = fun v -> agree.Value <- v))
                             Text "Accept the functional style"
                         ]
                 )
@@ -625,7 +625,7 @@ let private controlsTab () =
                     spacing = 8f,
                     children =
                         [
-                            w (Switch(notify.Peek(), fun v -> notify.Value <- v))
+                            w (AdwSwitch(notify.Peek(), fun v -> notify.Value <- v))
                             watch (fun () ->
                                 Text(
                                     if notify.Value then
@@ -641,13 +641,13 @@ let private controlsTab () =
             [
                 sized
                     280f
-                    (Slider(
+                    (AdwSlider(
                         volume.Peek(),
                         min = 0f,
                         max = 100f,
                         onChanged = (fun v -> volume.Value <- v)
                     ))
-                watch (fun () -> sized 280f (ProgressBar(volume.Value / 100f)))
+                watch (fun () -> sized 280f (AdwProgressBar(volume.Value / 100f)))
                 watch (fun () -> Text($"%.0f{volume.Value} / 100", muted))
             ]
         section
@@ -655,10 +655,10 @@ let private controlsTab () =
             [
                 sized
                     200f
-                    (Dropdown<string>(
+                    (AdwDropDown(
                         [| "Apple"; "Banana"; "Cherry"; "Durian" |],
                         fruit.Peek(),
-                        fun i _ -> fruit.Value <- i
+                        fun i -> fruit.Value <- i
                     ))
                 watch (fun () -> Text($"Picked index {fruit.Value}", muted))
             ]
@@ -680,7 +680,7 @@ let private todoRows = Dictionary<int, Widget>()
 /// clears the retained instance imperatively; a `watch` reading `newTodo` around this field would
 /// replace the widget on the first character typed and drop focus with it.
 let private newTodoField =
-    TextField(onChanged = (fun v -> newTodo.Value <- v), Hint = "What needs doing?")
+    AdwTextField(onChanged = (fun v -> newTodo.Value <- v), Hint = "What needs doing?")
 
 let private submitTodo () =
     addTodo ()
@@ -707,7 +707,7 @@ let private todoRow (id: int) : Widget =
                 // The checkbox is uncontrolled (it is the only writer of this item's Done flag),
                 // so it animates from its own state; the label below is what follows the model.
                 [
-                    w (Checkbox(isDone, setDone id))
+                    w (AdwCheckButton(value = isDone, onChanged = setDone id))
                     Expanded(
                         watch (fun () ->
                             match item () with
@@ -795,7 +795,7 @@ let private effectsTab () =
             [
                 watch (fun () ->
                     if loading.Value then
-                        sized 240f (ProgressBar(Nullable())) // indeterminate
+                        sized 240f (AdwProgressBar(Indeterminate = true)) // indeterminate
                     else
                         w (Button("Fetch a quote", fetch)))
                 watch (fun () ->
@@ -813,7 +813,7 @@ let private effectsTab () =
 let private sliderRow label (s: Signal<float32>) hi : Widget list =
     [
         watch (fun () -> Text($"{label} = %.0f{s.Value}", muted))
-        sized 220f (Slider(s.Peek(), min = 0f, max = hi, onChanged = (fun v -> s.Value <- v)))
+        sized 220f (AdwSlider(s.Peek(), min = 0f, max = hi, onChanged = (fun v -> s.Value <- v)))
     ]
 
 /// Zero a demo's signals in one batch, so the reset itself settles the graph once.
@@ -843,10 +843,10 @@ let private reactiveTab () =
                              w (Text "track: ")
                              sized
                                  150f
-                                 (Dropdown<string>(
+                                 (AdwDropDown(
                                      [| "Sum"; "Product" |],
                                      opChoice.Peek(),
-                                     fun i _ -> opChoice.Value <- i
+                                     fun i -> opChoice.Value <- i
                                  ))
                          ]
                  )
@@ -937,7 +937,7 @@ let private deskRow (i: Instrument) : Widget =
                 children =
                     [
                         watch (fun () ->
-                            Checkbox(Set.contains i.Symbol selected.Value, setSelected i.Symbol))
+                            AdwCheckButton(value = Set.contains i.Symbol selected.Value, onChanged = setSelected i.Symbol))
                         sized 64f (Text(i.Symbol, heading))
                         w (Expanded(Text(i.Name, muted, maxLines = 1)))
                         // fine-grained: price cell binds ONLY i.Price
@@ -957,7 +957,7 @@ let private deskRow (i: Instrument) : Widget =
                         // its focus and caret while the table re-sorts around it.
                         sized
                             52f
-                            (TextField(
+                            (AdwTextField(
                                 onChanged =
                                     (fun s ->
                                         match Int32.TryParse s with
@@ -1026,21 +1026,21 @@ let private deskTab () =
                         [
                             w (
                                 Expanded(
-                                    TextField(
+                                    AdwTextField(
                                         onChanged = (fun v -> query.Value <- v),
                                         Hint = "Filter symbol / name"
                                     )
                                 )
                             )
-                            Checkbox(heldOnly.Peek(), fun b -> heldOnly.Value <- b)
+                            AdwCheckButton(value = heldOnly.Peek(), onChanged = fun b -> heldOnly.Value <- b)
                             Text "Held"
                             sized
                                 160f
-                                (Dropdown<string>(
+                                (AdwDropDown(
                                     sortOptions |> Array.map fst,
                                     sortOptions
                                     |> Array.findIndex (fun (_, k) -> k = sortKey.Peek()),
-                                    fun i _ -> sortKey.Value <- snd sortOptions[i]
+                                    fun i -> sortKey.Value <- snd sortOptions[i]
                                 ))
                         ]
                 )
@@ -1053,7 +1053,7 @@ let private deskTab () =
                         spacing = 6f,
                         children = [ for i in sorted.Value -> deskRow i ]
                     ))
-                Divider()
+                AdwSeparator()
                 // selection footer — depends on `selected` + selected values only; price ticks on
                 // unselected symbols never wake it.
                 watch (fun () ->
@@ -1091,7 +1091,7 @@ let private tabs: (Tab * string * (unit -> Widget list)) list =
 
 let private appView () : Widget =
     ColoredBox(
-        ThemeData.Dark.Background,
+        AdwTheme.Dark.Background,
         Column(
             crossAxisAlignment = CrossAxisAlignment.Stretch,
             children =
@@ -1108,7 +1108,7 @@ let private appView () : Widget =
                             )
                         )
                     )
-                    Divider()
+                    AdwSeparator()
                     Expanded(
                         ScrollView(
                             Padding.All(
@@ -1150,7 +1150,7 @@ let main _ =
 
     appView ()
     |> Host.run
-        { AppConfig.create "Zigote F# Gallery (reactive)" ThemeData.Dark with
+        { AppConfig.create "Zigote F# Gallery (reactive)" AdwTheme.Dark with
             // Enable the Shift+D debug menu (the app opts in; the F# layer stays DevTools-agnostic).
             OnReady = fun app -> DevTools.Install(app, DevToolsProfile.TwoD) |> ignore
         }

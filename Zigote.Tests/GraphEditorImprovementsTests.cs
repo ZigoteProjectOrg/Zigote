@@ -64,19 +64,19 @@ public class GraphEditorImprovementsTests
     {
         var first = new Box();
         var second = new Box();
-        var split = new SplitPane(ThemeData.Dark, first, second) { SplitRatio = 0.63f };
+        var split = new AdwPaned(first, second) { Position = 0.63f };
         split.Measure(Constraints.Tight(1000, 600));
         split.Layout(new Offset(0, 0));
         float originalWidth = first.Bounds.Width;
-        split.SecondVisible = false;
+        split.Second = null;
         split.Layout(new Offset(0, 0));
         Assert.Equal(1000, first.Bounds.Width);
         Assert.Single(split.GetChildren());
         Assert.Same(first, split.HitTest(new Offset(999, 100)));
-        split.SecondVisible = true;
+        split.Second = second;
         split.Layout(new Offset(0, 0));
         Assert.Equal(originalWidth, first.Bounds.Width);
-        Assert.Equal(0.63f, split.SplitRatio);
+        Assert.Equal(0.63f, split.Position);
     }
 
     [Fact]
@@ -131,7 +131,7 @@ public class GraphEditorImprovementsTests
         canvas.Layout(new Offset(0, 0));
         canvas.OnPointerDown(new Offset(110, 80));
         canvas.OnPointerUp(new Offset(110, 80));
-        var field = Assert.IsAssignableFrom<TextField>(Assert.Single(canvas.GetChildren()));
+        var field = Assert.IsAssignableFrom<AdwTextField>(Assert.Single(canvas.GetChildren()));
         field.Text = "invalid";
         field.OnSubmitted!(field.Text);
         Assert.Single(canvas.GetChildren());
@@ -143,7 +143,7 @@ public class GraphEditorImprovementsTests
         Assert.Empty(state.Graph.Nodes[0].Properties);
         canvas.OnPointerDown(new Offset(110, 80));
         canvas.OnPointerUp(new Offset(110, 80));
-        field = Assert.IsAssignableFrom<TextField>(Assert.Single(canvas.GetChildren()));
+        field = Assert.IsAssignableFrom<AdwTextField>(Assert.Single(canvas.GetChildren()));
         field.Text = "0.75";
         field.OnKey('\0', 41, true, default);
         Assert.Empty(canvas.GetChildren());
@@ -180,7 +180,7 @@ public class GraphEditorImprovementsTests
         canvas.Layout(new Offset(0, 0));
         canvas.OnPointerDown(new Offset(110, 80));
         canvas.OnPointerUp(new Offset(110, 80));
-        var field = Assert.IsAssignableFrom<TextField>(Assert.Single(canvas.GetChildren()));
+        var field = Assert.IsAssignableFrom<AdwTextField>(Assert.Single(canvas.GetChildren()));
         Assert.False(field.ShowBackground);
         Assert.Equal(11.5f, field.FontSize);
         Assert.True(field.Bounds.X > 80f);
@@ -207,7 +207,7 @@ public class GraphEditorImprovementsTests
         menu.Measure(Constraints.Tight(340, 228)); // three result rows
         menu.Layout(new Offset(0, 0));
         menu.OnScroll(0, -1);
-        var field = Assert.IsAssignableFrom<TextField>(Assert.Single(menu.GetChildren()));
+        var field = Assert.IsAssignableFrom<AdwTextField>(Assert.Single(menu.GetChildren()));
         field.OnKey('\0', 40, true, default);
         Assert.Equal("node02", chosen);
         Assert.False(menu.IsVisible);

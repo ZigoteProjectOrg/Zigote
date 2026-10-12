@@ -79,7 +79,6 @@ Or run something that already exists:
 
 ```sh
 dotnet run --project Zigote.UI.HelloWorld        # smallest complete app — start here
-dotnet run --project Zigote.UI.Gallery           # the toolkit end to end: charts, i18n, navigation
 dotnet run --project Zigote.UI.Adwaita.Gallery   # the GNOME design system, 37 pages
 dotnet run --project Zigote.UI.FSharp.Gallery    # the same framework from F#
 ```
@@ -192,7 +191,7 @@ emitted paint commands, no window required.
 | --- | --- |
 | **Layout** | `Column`, `Row`, `Stack`, `Wrap`, `Expanded`, `Padding`, `Align`, `SizedBox`, `ScrollView` (+ `ScrollsWith` for chrome floating over one), virtualized `ListView`/`GridView`, `InteractiveViewer` (pan / pinch-zoom) |
 | **Controls** | `Label`, `Button`, `Card`, `Dialog`, `Snackbar`, `Tooltip`, `ContextMenu`, `Popover`, `RichText`, `SelectableText`, `Pressable` |
-| **Text & input** | Engine-backed shaping and measurement, selection, undo, and the IME seam (`ITextInputClient`). The editable `TextField` itself ships in `Zigote.UI.Material` — see below. |
+| **Text & input** | Engine-backed shaping and measurement, selection, undo, and the IME seam (`ITextInputClient`). The editable `AdwTextField` itself ships in `Zigote.UI.Adwaita` — see below. |
 | **Liquid Glass** | `LiquidGlass` surfaces over media — the shader anchors the backdrop per pixel, the theme picks the glass family — plus `LiquidGlassLayer`, blend groups and `GlassGlow` |
 | **Animation** | Explicit transitions, implicit `AnimatedOpacity`/`AnimatedAlign`/`AnimatedSwitcher`, and a fluent API: `widget.Animate().Fade(500.ms).Scale(delay: 500.ms)` |
 | **Navigation** | Navigator 2.0 — imperative `Push`/`Pop`, named routes, or a declarative page stack driven by a signal |
@@ -201,10 +200,11 @@ emitted paint commands, no window required.
 | **Focus & a11y** | Tab / arrow / Esc traversal with modal traps, and a platform-neutral semantics tree |
 | **Hot reload** | Edit a `Build()` under `dotnet watch` and the running UI updates — instances and fields survive, on the desktop and on an attached Android device (`zigote run`) |
 
-The form controls live one package up, in **[`Zigote.UI.Material`](Zigote.UI.Material/README.md)**,
-and the kernel deliberately does not duplicate them: `TextField` (single- and multi-line with full
-IME composition), `Checkbox`, `Radio<T>`, `Switch`, `Slider`, `Dropdown<T>`, `TabBar`, `Chip`,
-`SplitPane`, `TreeView<T>`, `ReorderableList`, `ColorPicker`, `CurveEditor`, `CodeEditor`.
+The form controls live one package up, in **[`Zigote.UI.Adwaita`](Zigote.UI.Adwaita/README.md)**,
+and the kernel deliberately does not duplicate them: `AdwEntry` / `AdwTextField` (single- and
+multi-line with full IME composition), `AdwCheckButton`, `AdwSwitch`, `AdwSlider`, `AdwDropDown`,
+`AdwTabBar`, `AdwChip`, `AdwPaned`, `AdwTreeView<T>`, `AdwReorderableList`, `AdwColorPicker`,
+`AdwCurveEditor`, `AdwCodeEditor`.
 
 Full detail: [`Zigote.UI/README.md`](Zigote.UI/README.md).
 
@@ -220,16 +220,13 @@ widget: `View`), `Zigote.UI.FSharp` ([F# ergonomics](Zigote.UI.FSharp/README.md)
 
 ## Design systems
 
-A design system in Zigote is a **layer over the kernel, not a fork**. Both of the ones that ship
-compose the same primitives, so they share theming, focus, semantics and hot reload — and mixing
-them in a single app is supported. They are not quite peers, though: `Zigote.UI.Material` doubles
-as the framework's control library, and Adwaita builds on it — `AdwEntry` is Material's `TextField`
-under Adwaita styling.
+A design system in Zigote is a **layer over the kernel, not a fork**. One ships, and it doubles as
+the framework's control library: every form control, editor widget and dialog is an `Adw*` type
+built from the kernel's primitives, sharing its theming, focus, semantics and hot reload.
 
 | | |
 | --- | --- |
 | **[`Zigote.UI.Adwaita`](Zigote.UI.Adwaita/README.md)** | The GNOME **Adwaita** design language, tracking libadwaita 1.10 (GNOME 51): 100 `Adw*` types, both appearances, the nine accents, boxed-list rows, adaptive navigation, and client-side decorations the app draws itself — down to traffic lights that reveal their glyphs on hover, as macOS does. Not a GTK binding — nothing links against GTK, GLib or libadwaita, so an Adwaita app runs unchanged on macOS and Windows. |
-| **[`Zigote.UI.Material`](Zigote.UI.Material/README.md)** | The **Material** vocabulary with the Flutter names and named-argument constructors — `Scaffold`, `AppBar`, `ListTile`, `ElevatedButton`, `FloatingActionButton`. A Material tree ports across almost line for line. |
 
 <table>
 <tr>
@@ -311,8 +308,6 @@ tests.
 
 - **[`Zigote.UI.HelloWorld`](Zigote.UI.HelloWorld/README.md)** — hello world and a counter in one
   annotated file. The place to start.
-- **`Zigote.UI.Gallery`** — the framework end to end: widgets, navigation, theming, charts,
-  localization, DevTools, and a signal-driven shell.
 - **[`Zigote.UI.Adwaita.Gallery`](Zigote.UI.Adwaita.Gallery/README.md)** — 37 pages of the GNOME
   design system, an adaptive shell, multi-window, and a headless `--self-test`.
 - **`Zigote.UI.FSharp.Gallery`** — the same kernel from F#.

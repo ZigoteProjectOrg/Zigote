@@ -11,7 +11,7 @@ files — ships under that string.
 
 <ItemGroup>
     <PackageReference Include="Zigote.UI" Version="$(ZigoteSdkVersion)"/>
-    <PackageReference Include="Zigote.UI.Material" Version="$(ZigoteSdkVersion)"/>
+    <PackageReference Include="Zigote.UI.Adwaita" Version="$(ZigoteSdkVersion)"/>
     <PackageReference Include="Zigote.Engine.runtime.$(ZigoteRuntimeRid)" Version="$(ZigoteSdkVersion)"/>
 </ItemGroup>
 ```
@@ -23,7 +23,7 @@ editing anything is `dotnet build -p:ZigoteSdkVersion=0.2.0`.
 
 | Package | What it carries |
 |---|---|
-| `Zigote.UI`, `Zigote.UI.Material`, `Zigote.UI.DevTools`, … | The managed framework, and the bundled fonts (as content, copied next to your executable) |
+| `Zigote.UI`, `Zigote.UI.Adwaita`, `Zigote.UI.DevTools`, … | The managed framework, and the bundled fonts (as content, copied next to your executable) |
 | `Zigote.Runtime`, `Zigote.Core`, `Zigote.Game`, … | The engine-facing managed layers, restored as dependencies |
 | `Zigote.Engine.runtime.<rid>` | The **native** engine for exactly one RID — `libzigote` plus `zigote_svg`, at `runtimes/<rid>/native/` |
 | `Zigote.Android.Support` | SDL's Java sources, the fonts as APK assets, the hot-reload switch |

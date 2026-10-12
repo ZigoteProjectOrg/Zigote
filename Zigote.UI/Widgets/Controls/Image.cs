@@ -30,7 +30,7 @@ namespace Zigote.UI.Widgets.Controls;
 ///         <b>Load big images off the frame loop.</b> Decoding a multi-megapixel JPEG takes tens of
 ///         milliseconds — several dropped frames if done inline. <see cref="LoadAsync" /> fetches
 ///         and decodes on a worker thread and swaps the result in on the UI thread when it lands.
-///         For a feed or grid tile, <c>Zigote.UI.Material.AsyncImage</c> builds on the same
+///         For a feed or grid tile, <c>Zigote.UI.Adwaita.AdwAsyncImage</c> builds on the same
 ///         mechanics and adds cover/contain fit, a placeholder fill and a fade-in.
 ///     </para>
 /// </remarks>

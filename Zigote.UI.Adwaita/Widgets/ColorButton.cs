@@ -1,4 +1,4 @@
-using Zigote.UI.Material;
+using Zigote.UI.Adwaita;
 using AppInstance = Zigote.UI.Host.App;
 
 namespace Zigote.UI.Adwaita;
@@ -8,7 +8,7 @@ namespace Zigote.UI.Adwaita;
 ///     chooser popover with the GNOME palette on top (the nine named accent hues plus black/grey/
 ///     white) and a full HSV picker below. <see cref="OnChanged" /> fires live while the user drags
 ///     in the picker, so callers can preview.
-///     ponytail: the HSV picker itself is <see cref="Zigote.UI.Material.ColorPicker" /> — a
+///     ponytail: the HSV picker itself is <see cref="AdwColorPicker" /> — a
 ///     design-system-neutral widget that happens to live in the Material package. Move it here when
 ///     that package is retired; nothing about it needs rewriting.
 /// </summary>
@@ -32,7 +32,7 @@ public sealed class AdwColorButton : Widget
 
     private readonly AppInstance? _app;
     private float _height = AdwMetrics.CompactControlHeight;
-    private ColorPicker? _picker;
+    private AdwColorPicker? _picker;
     private Size _size;
     private ThemeData _theme = ThemeData.Dark;
     private Color _value;
@@ -165,7 +165,7 @@ public sealed class AdwColorButton : Widget
         }
 
         col.Children.Add(new SizedBox(height: Spacing.Sm));
-        _picker = new ColorPicker(initial: _value, onChanged: Set);
+        _picker = new AdwColorPicker(initial: _value, onChanged: Set);
         col.Children.Add(_picker);
 
         new Popover(child: new SizedBox(width: 220f, child: col), anchor: Bounds).Show();

@@ -10,7 +10,7 @@ using Zigote.UI.TextShaping;
 namespace Zigote.Tests;
 
 /// <summary>
-///     Guards the CodeEditor paint-cost optimizations: the per-line tokenizer entering-state is cached
+///     Guards the AdwCodeEditor paint-cost optimizations: the per-line tokenizer entering-state is cached
 ///     across frames (no re-lex from line 0 every frame while scrolled), and multi-line lexer state is
 ///     still carried correctly across the visible window.
 /// </summary>
@@ -25,7 +25,7 @@ public class CodeEditorPerfTests
         var tok = new BlockCommentTokenizer();
         var sb = new StringBuilder();
         for (int i = 0; i < 60; i++) sb.Append("line ").Append(i).Append('\n');
-        var ed = new CodeEditor(sb.ToString().TrimEnd('\n')) { Tokenizer = tok };
+        var ed = new AdwCodeEditor(sb.ToString().TrimEnd('\n')) { Tokenizer = tok };
 
         ed.Measure(
             Constraints.Tight(width: 400f, height: 120f)
@@ -68,7 +68,7 @@ public class CodeEditorPerfTests
         var tok = new BlockCommentTokenizer();
         var sb = new StringBuilder();
         for (int i = 0; i < 60; i++) sb.Append("line ").Append(i).Append('\n');
-        var ed = new CodeEditor(sb.ToString().TrimEnd('\n')) { Tokenizer = tok };
+        var ed = new AdwCodeEditor(sb.ToString().TrimEnd('\n')) { Tokenizer = tok };
 
         ed.Measure(Constraints.Tight(width: 400f, height: 120f));
         ed.Layout(Offset.Zero);
@@ -108,7 +108,7 @@ public class CodeEditorPerfTests
     {
         var tok = new BlockCommentTokenizer();
         // code1 | /* | comment | */ | code2  →  Keyword, Comment, Comment, Comment, Keyword
-        var ed = new CodeEditor("code1\n/*\ncomment\n*/\ncode2") { Tokenizer = tok };
+        var ed = new AdwCodeEditor("code1\n/*\ncomment\n*/\ncode2") { Tokenizer = tok };
 
         ed.Measure(
             Constraints.Tight(width: 600f, height: 600f)
@@ -134,7 +134,7 @@ public class CodeEditorPerfTests
     public void WrappedRows_TokenizePhysicalLineOnce()
     {
         var tok = new BlockCommentTokenizer();
-        var ed = new CodeEditor(
+        var ed = new AdwCodeEditor(
             string.Join(
                 separator: ' ',
                 values: Enumerable.Repeat(element: "identifier", count: 80)

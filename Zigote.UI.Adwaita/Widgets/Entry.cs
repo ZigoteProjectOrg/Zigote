@@ -1,5 +1,5 @@
 using Zigote.Core.Events;
-using Zigote.UI.Material;
+using Zigote.UI.Adwaita;
 
 namespace Zigote.UI.Adwaita;
 
@@ -10,7 +10,7 @@ namespace Zigote.UI.Adwaita;
 /// </summary>
 public class AdwEntry : Widget
 {
-    protected readonly TextField Field;
+    protected readonly AdwTextField Field;
     protected ThemeData Theme = ThemeData.Dark;
     private bool _compact;
     private bool _enabled = true;
@@ -207,7 +207,7 @@ public class AdwEntry : Widget
     ///     has to name the field for those presses (see <see cref="HitTest" />), so this is the only
     ///     place left that can run the reveal/clear action.
     /// </summary>
-    private sealed class EntryField(AdwEntry owner) : TextField
+    private sealed class EntryField(AdwEntry owner) : AdwTextField
     {
         public override void OnPointerDown(Offset point)
         {

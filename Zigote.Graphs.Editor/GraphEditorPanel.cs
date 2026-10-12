@@ -25,13 +25,14 @@ public sealed class GraphEditorPanel : Widget
     private readonly GraphInspectorPanel _inspector;
     private readonly Widget _root;
     private readonly GraphSearchMenu _search;
-    private readonly SplitPane _split;
+    private readonly Widget _inspectorSide;
+    private readonly AdwPaned _split;
 
     // Status label — mutated reactively when compile result changes.
     private readonly Label _statusLabel;
     private readonly ThemeData _theme;
 
-    private ToolbarButton? _inspectorButton;
+    private AdwButton? _inspectorButton;
     private Size _size;
 
     public GraphEditorPanel(GraphDocument graph, GraphDomainRegistry registry, ThemeData theme,
@@ -59,7 +60,7 @@ public sealed class GraphEditorPanel : Widget
         }
 
 
-        // Feature 6: use SplitPane instead of a fixed-width SizedBox for the inspector
+        // Feature 6: use a paned split instead of a fixed-width SizedBox for the inspector
         Widget inspectorSide =
             new ScrollView(new Padding(padding: EdgeInsets.All(8f), child: _inspector));
         // An optional header (e.g. a live material preview) pinned above the scrollable inspector.
@@ -74,10 +75,9 @@ public sealed class GraphEditorPanel : Widget
             };
         }
 
-        _split = new SplitPane(theme: theme, first: _canvas, second: inspectorSide) {
-            SplitRatio = DefaultSplitRatio,
-            DividerW = 4f,
-            SecondVisible = inspectorVisible,
+        _inspectorSide = inspectorSide;
+        _split = new AdwPaned(first: _canvas, second: inspectorVisible ? inspectorSide : null) {
+            Position = DefaultSplitRatio,
         };
 
         // A host that already has its own chrome (an app header bar, a docked panel) can drop the
@@ -105,14 +105,13 @@ public sealed class GraphEditorPanel : Widget
     /// <summary>Controls the entire inspector, including its optional header and divider.</summary>
     public bool InspectorVisible
     {
-        get => _split.SecondVisible;
+        get => _split.Second is not null;
         set
         {
-            _split.SecondVisible = value;
+            _split.Second = value ? _inspectorSide : null;
             if (_inspectorButton is not null)
             {
-                _inspectorButton.Tone = value ? ToolbarTone.Primary : ToolbarTone.Default;
-                _inspectorButton.MarkNeedsPaint();
+                _inspectorButton.Style = Toggled(value);
             }
             MarkNeedsLayout();
         }
@@ -148,11 +147,14 @@ public sealed class GraphEditorPanel : Widget
 
     // ── Toolbar ───────────────────────────────────────────────────────────────
 
+    private static AdwButtonStyle Toggled(bool on) => on ? AdwButtonStyle.Suggested : AdwButtonStyle.Flat;
+
     private Widget BuildToolbar()
     {
-        ToolbarButton Tb(string icon, string? label, Action? onClick,
-            ToolbarTone tone = ToolbarTone.Default) =>
-            new(icon: icon, onPressed: onClick, label: label) { Tone = tone };
+        AdwButton Tb(string icon, string? label, Action? onClick) =>
+            new(label: label ?? "", onPressed: onClick) {
+                IconName = icon, Style = AdwButtonStyle.Flat, Compact = true,
+            };
 
         var undoBtn = Tb(icon: Icons.Undo, label: null, onClick: () => State.Commands.Undo());
         var redoBtn = Tb(icon: Icons.Redo, label: null, onClick: () => State.Commands.Redo());
@@ -162,23 +164,21 @@ public sealed class GraphEditorPanel : Widget
             onClick: () => { _canvas.FrameAll(); _canvas.MarkNeedsLayout(); }
         );
 
-        // View toggles — a Primary tone reflects the "on" state (minimap off by default; inspector on).
-        ToolbarButton minimapBtn = null!;
+        // View toggles — the suggested style reflects the "on" state (minimap off by default; inspector on).
+        AdwButton minimapBtn = null!;
         minimapBtn = Tb(icon: Icons.Map, label: "Minimap", onClick: null);
         minimapBtn.OnPressed = () =>
         {
             _canvas.MinimapVisible = !_canvas.MinimapVisible;
-            minimapBtn.Tone = _canvas.MinimapVisible ? ToolbarTone.Primary : ToolbarTone.Default;
-            minimapBtn.MarkNeedsPaint();
+            minimapBtn.Style = Toggled(_canvas.MinimapVisible);
             _canvas.MarkNeedsPaint();
         };
 
-        ToolbarButton inspectorBtn = null!;
+        AdwButton inspectorBtn = null!;
         inspectorBtn = Tb(
             icon: Icons.Tune,
             label: "Inspector",
-            onClick: null,
-            tone: ToolbarTone.Primary
+            onClick: null
         );
         inspectorBtn.OnPressed = () =>
         {
@@ -186,7 +186,7 @@ public sealed class GraphEditorPanel : Widget
         };
 
         _inspectorButton = inspectorBtn;
-        inspectorBtn.Tone = InspectorVisible ? ToolbarTone.Primary : ToolbarTone.Default;
+        inspectorBtn.Style = Toggled(InspectorVisible);
 
         return new ColoredBox(
             color: _theme.Surface,

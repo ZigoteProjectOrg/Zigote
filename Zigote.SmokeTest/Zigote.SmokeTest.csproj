@@ -15,7 +15,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
-        <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Adwaita\Zigote.UI.Adwaita.csproj"/>
         <ProjectReference Include="..\Zigote.Vfx\Zigote.Vfx.csproj"/>
         <ProjectReference Include="..\Zigote.Render2D\Zigote.Render2D.csproj"/>
     </ItemGroup>
@@ -25,7 +25,7 @@
          Zigote.UI project reference — Inter (UI) + Iosevka (code) + Material Icons mirror a real app
          boot so the always-on FPS badge and any icon path render. -->
     <ItemGroup>
-        <Using Include="Zigote.UI.Material"/>
+        <Using Include="Zigote.UI.Adwaita"/>
     </ItemGroup>
 
 </Project>

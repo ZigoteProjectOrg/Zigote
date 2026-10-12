@@ -152,7 +152,7 @@ public class HighlightingPerfTests
         // Same scenario as CodeEditorPerfTests.SixHundredLineEditor_… but through the real
         // XParsec-backed factory tokenizer instead of the built-in C# lexer.
         string source = string.Join(separator: '\n', values: CSharpDocument(600));
-        var ed = new CodeEditor(source) {
+        var ed = new AdwCodeEditor(source) {
             Tokenizer = Highlighting.CSharp,
             SoftWrap = false,
         };

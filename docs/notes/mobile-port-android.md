@@ -10,7 +10,7 @@
 >   `[Application]` subclass (`ZigoteApplication.cs`).
 > - The registration API is **`MobileHost.SetAndroidMain`** (`Zigote.Core/Native/MobileHost.cs`),
 >   not the `RegisterAndroidMain` named below.
-> - The head lives at `Zigote.UI.Gallery.Android/` (and `<App>.Android/` via `zigote add android`),
+> - The head lives at `Zigote.UI.Adwaita.Gallery.Android/` (and `<App>.Android/` via `zigote add android`),
 >   not `mobile/android/ZigoteApp.Android.csproj`; RIDs shipped as `android-arm64` only.
 > - Conflict C1 shipped unresolved as warned: native code targets API 34, `minSdk` is 26 —
 >   revisit before targeting hardware broader than the emulator.

@@ -1,4 +1,4 @@
-using Zigote.UI.Material;
+using Zigote.UI.Adwaita;
 using Zigote.UI.Semantics;
 
 namespace AdwaitaGallery.Pages;

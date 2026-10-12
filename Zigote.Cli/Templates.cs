@@ -89,7 +89,7 @@ public static class Templates
 
              <ItemGroup>
                  <PackageReference Include="Zigote.UI" Version="$(ZigoteSdkVersion)"/>
-                 <PackageReference Include="Zigote.UI.Material" Version="$(ZigoteSdkVersion)"/>
+                 <PackageReference Include="Zigote.UI.Adwaita" Version="$(ZigoteSdkVersion)"/>
                  <PackageReference Include="Zigote.Engine.runtime.$(ZigoteRuntimeRid)" Version="$(ZigoteSdkVersion)"/>
              </ItemGroup>
 
@@ -113,7 +113,7 @@ public static class Templates
 
              <ItemGroup>
                  <ProjectReference Include="$(ZigoteRoot)/Zigote.UI/Zigote.UI.csproj"/>
-                 <ProjectReference Include="$(ZigoteRoot)/Zigote.UI.Material/Zigote.UI.Material.csproj"/>
+                 <ProjectReference Include="$(ZigoteRoot)/Zigote.UI.Adwaita/Zigote.UI.Adwaita.csproj"/>
              </ItemGroup>
 
              <!-- Debug-only: the Shift+D widget inspector and perf overlay. A release must not
@@ -142,7 +142,7 @@ public static class Templates
         $$""""
           using Zigote.Core.Paint;
           using Zigote.Core.State;
-          using Zigote.UI.Material;
+          using Zigote.UI.Adwaita;
           using Zigote.UI.Theme;
           using Zigote.UI.Widgets;
           using Zigote.UI.Widgets.Controls;
@@ -154,12 +154,12 @@ public static class Templates
           ///     The app. Everything here is shared by every platform it ships on — a platform head
           ///     (see <c>zigote add android</c>) starts this same class and adds nothing to it.
           /// </summary>
-          public sealed class {{name}}App : MaterialApp
+          public sealed class {{name}}App : AdwaitaApp
           {
               public {{name}}App() : base(
                   home: new HomePage(),
                   title: "{{name}}",
-                  theme: ThemeData.Dark
+                  theme: AdwTheme.Dark
               )
               {
                   // The desktop window size. Ignored on a phone, where the OS decides.
@@ -191,8 +191,7 @@ public static class Templates
               {
                   var theme = ThemeProvider.Of(context);
 
-                  return new SafeArea(new Scaffold(
-                      new AppBar(new Text("{{name}}"), centerTitle: true),
+                  return new SafeArea(new AdwToolbarView(
                       new Center(
                           new Column(
                               mainAxisAlignment: MainAxisAlignment.Center,
@@ -211,16 +210,16 @@ public static class Templates
                                   new Watch(() => new Text(
                                       _taps.Value.ToString(),
                                       new TextStyle(34, fontWeight: FontWeight.SemiBold)
-                                  ))
+                                  )),
+                                  new SizedBox(height: 16),
+                                  new AdwButton("Tap", () => _taps.Value++) {
+                                      Style = AdwButtonStyle.Suggested,
+                                      Pill = true,
+                                  }
                               ]
                           )
-                      ),
-                      new FloatingActionButton(
-                          () => _taps.Value++,
-                          new Icon(MaterialIcons.Add),
-                          tooltip: "Tap"
                       )
-                  ));
+                  ) { TopBars = { new AdwHeaderBar { Title = "{{name}}" } } });
               }
           }
 
@@ -315,9 +314,8 @@ public static class Templates
 
              <ItemGroup>
                  <!-- The Android SDK's implicit usings put Android.App/Widget/Views in global scope,
-                      where they collide by name with the toolkit's own Dialog, Switch, GridView,
-                      Spinner and Toolbar. The app sources are shared verbatim with the desktop head,
-                      so the platform namespaces come out of global scope and the few Android-facing
+                      where they collide by name with the toolkit's own Dialog, GridView and Button.
+                      The app sources are shared verbatim with the desktop head, so the platform namespaces come out of global scope and the few Android-facing
                       files here import them explicitly. -->
                  <Using Remove="Android.App"/>
                  <Using Remove="Android.Widget"/>
@@ -343,7 +341,7 @@ public static class Templates
                              package's own .targets files the .so under the right ABI folder, which
                              is the step people get wrong by hand. -->
                         <PackageReference Include="Zigote.UI" Version="{version}"/>
-                        <PackageReference Include="Zigote.UI.Material" Version="{version}"/>
+                        <PackageReference Include="Zigote.UI.Adwaita" Version="{version}"/>
                         <PackageReference Include="Zigote.Android.Support" Version="{version}"/>
                         <PackageReference Include="Zigote.Engine.runtime.$(ZigTargetRid)" Version="{version}"/>
                     </ItemGroup>
@@ -358,7 +356,7 @@ public static class Templates
 
                     <ItemGroup>
                         <ProjectReference Include="$(ZigoteRoot)/Zigote.UI/Zigote.UI.csproj"/>
-                        <ProjectReference Include="$(ZigoteRoot)/Zigote.UI.Material/Zigote.UI.Material.csproj"/>
+                        <ProjectReference Include="$(ZigoteRoot)/Zigote.UI.Adwaita/Zigote.UI.Adwaita.csproj"/>
                     </ItemGroup>
                     <ItemGroup Condition="'$(Configuration)' == 'Debug'">
                         <ProjectReference Include="$(ZigoteRoot)/Zigote.UI.DevTools/Zigote.UI.DevTools.csproj"/>
@@ -551,7 +549,7 @@ public static class Templates
                       project's Content into the app bundle, and a bundled dylib is rejected outright
                       by AMFI on a device. Neither can be inherited the way desktop inherits them. -->
                  <PackageReference Include="Zigote.UI" Version="$(ZigoteSdkVersion)"/>
-                 <PackageReference Include="Zigote.UI.Material" Version="$(ZigoteSdkVersion)"/>
+                 <PackageReference Include="Zigote.UI.Adwaita" Version="$(ZigoteSdkVersion)"/>
                  <PackageReference Include="Zigote.iOS.Support" Version="$(ZigoteSdkVersion)"/>
                  <PackageReference Include="Zigote.Engine.runtime.$(RuntimeIdentifier)" Version="$(ZigoteSdkVersion)"/>
              </ItemGroup>
@@ -567,7 +565,7 @@ public static class Templates
 
              <ItemGroup>
                  <ProjectReference Include="$(ZigoteRoot)/Zigote.UI/Zigote.UI.csproj"/>
-                 <ProjectReference Include="$(ZigoteRoot)/Zigote.UI.Material/Zigote.UI.Material.csproj"/>
+                 <ProjectReference Include="$(ZigoteRoot)/Zigote.UI.Adwaita/Zigote.UI.Adwaita.csproj"/>
              </ItemGroup>
 
              <ItemGroup>
@@ -1003,7 +1001,7 @@ public static class Templates
         $$"""
           using {{name}};
           using Zigote.Core.Paint;
-          using Zigote.UI.Material;
+          using Zigote.UI.Adwaita;
           using Zigote.UI.Theme;
           using Zigote.UI.Widgets;
           using Zigote.UI.Widgets.Controls;
@@ -1012,12 +1010,12 @@ public static class Templates
           namespace {{name}}Example;
 
           /// <summary>The example app: proves the plugin end to end on every platform it targets.</summary>
-          public sealed class {{name}}ExampleApp : MaterialApp
+          public sealed class {{name}}ExampleApp : AdwaitaApp
           {
               public {{name}}ExampleApp() : base(
                   home: new HomePage(),
                   title: "{{name}} example",
-                  theme: ThemeData.Dark
+                  theme: AdwTheme.Dark
               )
               {
                   Width = 420;
@@ -1031,8 +1029,7 @@ public static class Templates
               {
                   var theme = ThemeProvider.Of(context);
 
-                  return new SafeArea(new Scaffold(
-                      new AppBar(new Text("{{name}}"), centerTitle: true),
+                  return new SafeArea(new AdwToolbarView(
                       new Center(
                           new Column(
                               mainAxisAlignment: MainAxisAlignment.Center,
@@ -1050,7 +1047,7 @@ public static class Templates
                               ]
                           )
                       )
-                  ));
+                  ) { TopBars = { new AdwHeaderBar { Title = "{{name}}" } } });
               }
           }
 

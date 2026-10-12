@@ -11,7 +11,7 @@ open Zigote.UI.Theme
 open Zigote.UI.Widgets
 open Zigote.UI.Widgets.Controls
 open Zigote.UI.Widgets.Layout
-open Zigote.UI.Material
+open Zigote.UI.Adwaita
 open Zigote.UI.FSharp
 
 let dim = Color(0.62f, 0.66f, 0.72f)

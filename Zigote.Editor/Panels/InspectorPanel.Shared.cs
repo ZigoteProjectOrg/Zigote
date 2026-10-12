@@ -6,12 +6,12 @@ using Zigote.Editor.History;
 using Zigote.Runtime.Scene;
 using Zigote.Scripting.Compilation;
 using Zigote.UI.Host;
-using Zigote.UI.Material;
+using Zigote.UI.Adwaita;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
-// FilePickerDialog: the in-app file browser. GTK's file chooser is a shell portal with no
+// AdwFilePickerDialog: the in-app file browser. GTK's file chooser is a shell portal with no
 // libadwaita widget behind it, so this stays Material until one exists here.
 
 using Zigote.Editor.Widgets;
@@ -305,7 +305,7 @@ public sealed partial class InspectorPanel
                 label: "Browse",
                 onPressed: () =>
                 {
-                    FilePickerDialog.Show(
+                    AdwFilePickerDialog.Show(
                         app: app,
                         title: "Select " + label,
                         rootPath: rootPath,

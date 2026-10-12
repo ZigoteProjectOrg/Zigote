@@ -46,7 +46,6 @@
       "Zigote.UI.Functional\\Zigote.UI.Functional.csproj",
       "Zigote.UI.Localizations.Tests\\Zigote.UI.Localizations.Tests.csproj",
       "Zigote.UI.Localizations\\Zigote.UI.Localizations.csproj",
-      "Zigote.UI.Material\\Zigote.UI.Material.csproj",
       "Zigote.UI\\Zigote.UI.csproj",
       "Zigote.Vfx\\Zigote.Vfx.csproj",
       "Zigote.Videoplayer\\Zigote.Videoplayer.csproj",

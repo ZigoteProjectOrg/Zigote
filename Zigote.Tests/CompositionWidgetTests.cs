@@ -270,18 +270,10 @@ public class CompositionWidgetTests
     // ── Checkbox ──────────────────────────────────────────────────────────────
 
     [Fact]
-    public void Checkbox_MeasuresToSquare()
-    {
-        var size = new Checkbox(false).Measure(Constraints.Loose(width: 100, height: 100));
-        Assert.Equal(expected: ControlMetrics.CheckboxSize, actual: size.Width, precision: 3);
-        Assert.Equal(expected: ControlMetrics.CheckboxSize, actual: size.Height, precision: 3);
-    }
-
-    [Fact]
     public void Checkbox_TapTogglesAndNotifies()
     {
         var changed = new List<bool>();
-        var cb = new Checkbox(value: false, onChanged: changed.Add);
+        var cb = new AdwCheckButton(value: false, onChanged: changed.Add);
         cb.Measure(Constraints.Loose(width: 100, height: 100));
         cb.Layout(Offset.Zero);
         var hit = cb.HitTest(Center(cb))!;
@@ -292,50 +284,13 @@ public class CompositionWidgetTests
         Assert.True(changed[0]);
     }
 
-    // ── Radio ─────────────────────────────────────────────────────────────────
-
-    [Fact]
-    public void Radio_SelectNotifiesWithItsValue()
-    {
-        var picked = new List<string>();
-        var radio = new Radio<string>(
-            value: "a",
-            groupValue: "b",
-            onChanged: picked.Add
-        ); // not selected (a != b)
-        radio.Measure(Constraints.Loose(width: 100, height: 100));
-        radio.Layout(Offset.Zero);
-        var hit = radio.HitTest(Center(radio))!;
-        hit.OnPointerDown(Center(radio));
-        hit.OnPointerUp(Center(radio));
-        Assert.Single(picked);
-        Assert.Equal(expected: "a", actual: picked[0]);
-    }
-
-    [Fact]
-    public void Radio_AlreadySelected_DoesNotRenotify()
-    {
-        var picked = new List<string>();
-        var radio = new Radio<string>(
-            value: "a",
-            groupValue: "a",
-            onChanged: picked.Add
-        ); // already selected
-        radio.Measure(Constraints.Loose(width: 100, height: 100));
-        radio.Layout(Offset.Zero);
-        var hit = radio.HitTest(Center(radio))!;
-        hit.OnPointerDown(Center(radio));
-        hit.OnPointerUp(Center(radio));
-        Assert.Empty(picked);
-    }
-
     // ── Chip ──────────────────────────────────────────────────────────────────
 
     [Fact]
     public void Chip_TapFiresOnTap()
     {
         int taps = 0;
-        var chip = new Chip(label: "Tag", selected: false, onPressed: () => taps++);
+        var chip = new AdwChip(label: "Tag", selected: false, onPressed: () => taps++);
         chip.Measure(Constraints.Loose(width: 200, height: 100));
         chip.Layout(Offset.Zero);
         var hit = chip.HitTest(Center(chip))!;

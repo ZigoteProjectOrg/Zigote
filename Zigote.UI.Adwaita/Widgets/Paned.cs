@@ -97,6 +97,16 @@ public sealed class AdwPaned : Widget
             height: _size.Height
         );
 
+        // As GtkPaned: a lone child takes the whole box and there is no handle to drag.
+        if (First is null || Second is null)
+        {
+            _handleRect = default;
+            var only = First ?? Second;
+            only?.Measure(Constraints.Tight(width: _size.Width, height: _size.Height));
+            only?.Layout(origin);
+            return;
+        }
+
         float span = (Vertical ? _size.Height : _size.Width) - HandleWidth;
         (float min, float max) = PositionBounds(span);
         float firstSpan = MathF.Floor(span * Math.Clamp(value: Position, min: min, max: max));
@@ -134,6 +144,8 @@ public sealed class AdwPaned : Widget
     {
         First?.Paint(paint);
 
+        if (Second is null) return;
+
         // The rule itself is one hairline centred in the gutter — GNOME never widens the line, it
         // only tints it while the handle is active.
         var line = Vertical
@@ -149,12 +161,15 @@ public sealed class AdwPaned : Widget
                 width: 1f,
                 height: _handleRect.Height
             );
-        paint.AddRect(
-            bounds: line,
-            color: _dragging || _hovered ? _theme.Primary : _theme.Separator
-        );
+        if (First is not null)
+        {
+            paint.AddRect(
+                bounds: line,
+                color: _dragging || _hovered ? _theme.Primary : _theme.Separator
+            );
+        }
 
-        Second?.Paint(paint);
+        Second.Paint(paint);
     }
 
     public override Widget? HitTest(Offset point)
@@ -246,7 +261,7 @@ public sealed class AdwPaned : Widget
     /// </summary>
     private Rect Grab()
     {
-        if (!_compact) return _handleRect;
+        if (!_compact || First is null || Second is null) return _handleRect;
         float grow = MathF.Max(x: 0f, y: (ControlMetrics.MinTouchTarget - HandleWidth) / 2f);
         return Vertical
             ? new Rect(

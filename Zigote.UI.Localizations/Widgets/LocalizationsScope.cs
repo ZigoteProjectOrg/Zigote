@@ -5,7 +5,7 @@ namespace Zigote.UI.Localizations;
 /// <summary>
 ///     The declarative entry point: wrap your app's <c>Home</c> in a <see cref="LocalizationsScope" />
 ///     to make translations, the active locale, and text direction available to the subtree — and to
-///     enable runtime locale switching. Works under a plain <c>ZigoteApp</c> / <c>MaterialApp</c>, so
+///     enable runtime locale switching. Works under a plain <c>ZigoteApp</c> / <c>AdwaitaApp</c>, so
 ///     it
 ///     stays modular (no bespoke app subclass required).
 ///     <code>

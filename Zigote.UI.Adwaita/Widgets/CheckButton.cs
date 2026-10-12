@@ -1,4 +1,4 @@
-using Zigote.UI.Material;
+using Zigote.UI.Adwaita;
 using Zigote.UI.Semantics;
 
 namespace Zigote.UI.Adwaita;
@@ -11,10 +11,10 @@ namespace Zigote.UI.Adwaita;
 public class AdwCheckButton : ComposedWidget
 {
     private readonly DecoratedBox _box = new();
-    private readonly CheckGlyph _check = new() { GlyphSize = AdwMetrics.CheckSize };
+    private readonly AdwCheckGlyph _check = new() { GlyphSize = AdwMetrics.CheckSize };
 
-    // RadioDotGlyph's dot is GlyphSize × 0.56 — 14.3 yields the spec's 8px dot inside the 18px ring.
-    private readonly RadioDotGlyph _dot = new() { GlyphSize = 14.3f };
+    // AdwRadioDotGlyph's dot is GlyphSize × 0.56 — 14.3 yields the spec's 8px dot inside the 18px ring.
+    private readonly AdwRadioDotGlyph _dot = new() { GlyphSize = 14.3f };
     private readonly Opacity _fade;
     private readonly FillTransition _fill;
     private readonly Pressable _root;

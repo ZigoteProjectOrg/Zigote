@@ -102,11 +102,11 @@ new Watch(() => _isBusy.Value ? new Spinner() : (Widget)_content)
 Explicit in both directions — a controller in, a callback out:
 
 ```csharp
-private readonly TextEditingController _name = new();
+private readonly AdwTextEditingController _name = new();
 
-new TextField(
+new AdwTextField(
     controller: _name,
-    decoration: new InputDecoration(hintText: "Name"),
+    decoration: new AdwInputDecoration(hintText: "Name"),
     onChanged: v => _draft.Value = _draft.Value with { Name = v })
 ```
 

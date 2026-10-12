@@ -83,7 +83,7 @@ fi
 # Walked rather than listed: a list would be right until the next `dotnet add reference`.
 roots=(
   Zigote.UI/Zigote.UI.csproj
-  Zigote.UI.Material/Zigote.UI.Material.csproj
+  Zigote.UI.Adwaita/Zigote.UI.Adwaita.csproj
   Zigote.UI.DevTools/Zigote.UI.DevTools.csproj
   Zigote.Runtime/Zigote.Runtime.csproj
 )

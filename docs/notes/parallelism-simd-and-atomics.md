@@ -222,7 +222,7 @@ it roughly doubles the layout/paint budget a frame can afford before it drops on
 ### The audit, and what it found
 
 The prerequisite this document named — *"find a widget that touches `EngineState` during `Paint()`
-before moving anything"* — has been run across `Zigote.UI`, `Zigote.UI.Material`,
+before moving anything"* — has been run across `Zigote.UI`, `Zigote.UI.Adwaita`,
 `Zigote.UI.Adwaita` and `Zigote.UI.Charts`.
 
 **Good news: paint recording is already engine-free.** Not one `Paint()` method in any of those

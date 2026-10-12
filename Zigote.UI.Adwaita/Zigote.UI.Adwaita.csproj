@@ -17,7 +17,6 @@
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
-        <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
         <ProjectReference Include="..\Zigote.UI.BottomSheet\Zigote.UI.BottomSheet.csproj"/>
     </ItemGroup>
 </Project>

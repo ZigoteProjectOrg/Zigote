@@ -2,7 +2,7 @@ using System.Globalization;
 using Camera;
 using Zigote.Core;
 using Zigote.Core.State;
-using Zigote.UI.Material;
+using Zigote.UI.Adwaita;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
@@ -14,12 +14,12 @@ namespace CameraExample;
 ///     The plugin end to end: permission, a full-bleed DSLR-neutral preview, a GPU LUT toggle,
 ///     camera switching, and a shutter whose JPEG goes through the same GPU grade as the preview.
 /// </summary>
-public sealed class CameraExampleApp : MaterialApp
+public sealed class CameraExampleApp : AdwaitaApp
 {
     public CameraExampleApp() : base(
         home: new CameraPage(),
         title: "Camera example",
-        theme: ThemeData.Dark
+        theme: AdwTheme.Dark
     )
     {
         Width = 420;
@@ -77,8 +77,7 @@ internal sealed class CameraPage : ComposedWidget
     {
         _view ??= new CameraView(_camera);
 
-        return new SafeArea(new Scaffold(
-            new AppBar(new Text("Camera"), centerTitle: true),
+        return new SafeArea(new AdwToolbarView(
             new Column(children:
                 [
                     new Expanded(_view),
@@ -93,13 +92,13 @@ internal sealed class CameraPage : ComposedWidget
                                     mainAxisAlignment: MainAxisAlignment.Center,
                                     children:
                                     [
-                                        new OutlinedButton(new Text("LUT"), ToggleLut),
+                                        new AdwButton("LUT", ToggleLut),
                                         new SizedBox(width: 8),
-                                        new OutlinedButton(new Text("Manual"), ToggleManual),
+                                        new AdwButton("Manual", ToggleManual),
                                         new SizedBox(width: 8),
-                                        new FilledButton(new Text("Shoot"), () => _ = ShootAsync()),
+                                        new AdwButton("Shoot", () => _ = ShootAsync()) { Style = AdwButtonStyle.Suggested },
                                         new SizedBox(width: 8),
-                                        new OutlinedButton(new Text("Switch"), () => _ = SwitchAsync()),
+                                        new AdwButton("Switch", () => _ = SwitchAsync()),
                                     ]
                                 ),
                             ]
@@ -107,7 +106,7 @@ internal sealed class CameraPage : ComposedWidget
                     ),
                 ]
             )
-        ));
+        ) { TopBars = { new AdwHeaderBar { Title = "Camera" } } });
     }
 
     /// <summary>

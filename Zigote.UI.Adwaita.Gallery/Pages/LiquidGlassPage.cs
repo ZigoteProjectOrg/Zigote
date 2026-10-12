@@ -1,5 +1,5 @@
 using Zigote.Http;
-using Zigote.UI.Material;
+using Zigote.UI.Adwaita;
 
 namespace AdwaitaGallery.Pages;
 
@@ -144,19 +144,19 @@ public sealed partial class LiquidGlassPage : ComposedWidget
     }
 
     /// <summary>
-    ///     A picture cover-cropped to whatever holds it. Null on failure is AsyncImage's contract
+    ///     A picture cover-cropped to whatever holds it. Null on failure is AdwAsyncImage's contract
     ///     for "give up quietly" — OrElse collapses every HttpError into it, which is right for a
     ///     decorative backdrop.
     /// </summary>
     private static Widget Backdrop(ArtPiece art, float radius, int maxDecode)
     {
-        return new AsyncImage(
+        return new AdwAsyncImage(
             loader: async ct =>
                 (await ArtSource.Http.BytesAsync(HttpRequest.Get(art.Url), ct)
                     .ConfigureAwait(false))
                 .OrElse(null!)
         ) {
-            Fit = ImageFit.Cover,
+            Fit = AdwImageFit.Cover,
             MaxDecodeSize = maxDecode,
             Radius = radius,
         };

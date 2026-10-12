@@ -9,9 +9,9 @@ namespace Zigote.Tests;
 /// </summary>
 public class FileBrowserModelTests
 {
-    private static FileBrowserEntry Dir(string name)
+    private static AdwFileBrowserEntry Dir(string name)
     {
-        return new FileBrowserEntry(
+        return new AdwFileBrowserEntry(
             Name: name,
             FullPath: "/root/" + name,
             IsDirectory: true,
@@ -21,9 +21,9 @@ public class FileBrowserModelTests
         );
     }
 
-    private static FileBrowserEntry File(string name, long size = 10, int day = 1)
+    private static AdwFileBrowserEntry File(string name, long size = 10, int day = 1)
     {
-        return new FileBrowserEntry(
+        return new AdwFileBrowserEntry(
             Name: name,
             FullPath: "/root/" + name,
             IsDirectory: false,
@@ -33,9 +33,9 @@ public class FileBrowserModelTests
         );
     }
 
-    private static FileBrowserModel Loaded(params FileBrowserEntry[] entries)
+    private static AdwFileBrowserModel Loaded(params AdwFileBrowserEntry[] entries)
     {
-        var model = new FileBrowserModel();
+        var model = new AdwFileBrowserModel();
         model.SetEntries(directory: "/root", entries: entries);
         return model;
     }
@@ -63,13 +63,13 @@ public class FileBrowserModelTests
             File(name: "small.txt", size: 1),
             Dir("sub")
         );
-        model.SortBy(FileSortColumn.Size);
+        model.SortBy(AdwFileSortColumn.Size);
         Assert.Equal(
             expectedSpan: ["sub", "small.txt", "big.txt"],
             actualArray: model.Visible.Select(e => e.Name).ToArray()
         );
 
-        model.SortBy(FileSortColumn.Size); // same column again flips to descending
+        model.SortBy(AdwFileSortColumn.Size); // same column again flips to descending
         Assert.False(model.SortAscending);
         Assert.Equal(
             expectedSpan: ["sub", "big.txt", "small.txt"],
@@ -180,7 +180,7 @@ public class FileBrowserModelTests
         {
             var child =
                 Directory.CreateDirectory(Path.Combine(path1: rootDir.FullName, path2: "child"));
-            var model = new FileBrowserModel();
+            var model = new AdwFileBrowserModel();
             model.NavigateTo(rootDir.FullName);
             model.NavigateTo(child.FullName);
             Assert.True(model.CanGoBack);
@@ -212,7 +212,7 @@ public class FileBrowserModelTests
         {
             var child =
                 Directory.CreateDirectory(Path.Combine(path1: rootDir.FullName, path2: "child"));
-            var model = new FileBrowserModel { LockRoot = rootDir.FullName };
+            var model = new AdwFileBrowserModel { LockRoot = rootDir.FullName };
             model.NavigateTo(child.FullName);
             Assert.True(model.CanGoUp); // child → root is allowed
 
@@ -245,18 +245,18 @@ public class FileBrowserModelTests
             actualArray: model.Visible.Select(e => e.Name).ToArray()
         );
 
-        Assert.True(FileBrowserModel.NaturalCompare(a: "scene9", b: "scene10") < 0);
+        Assert.True(AdwFileBrowserModel.NaturalCompare(a: "scene9", b: "scene10") < 0);
         Assert.True(
-            FileBrowserModel.NaturalCompare(a: "Scene10", b: "scene9") > 0
+            AdwFileBrowserModel.NaturalCompare(a: "Scene10", b: "scene9") > 0
         ); // case-insensitive
-        Assert.True(FileBrowserModel.NaturalCompare(a: "a07", b: "a7") > 0); // zeros break the tie
-        Assert.Equal(expected: 0, actual: FileBrowserModel.NaturalCompare(a: "Same", b: "same"));
+        Assert.True(AdwFileBrowserModel.NaturalCompare(a: "a07", b: "a7") > 0); // zeros break the tie
+        Assert.Equal(expected: 0, actual: AdwFileBrowserModel.NaturalCompare(a: "Same", b: "same"));
     }
 
     [Fact]
     public void Load_MissingDirectory_ReportsErrorInsteadOfThrowing()
     {
-        var model = new FileBrowserModel();
+        var model = new AdwFileBrowserModel();
         model.Load("/definitely/not/a/real/dir");
         Assert.NotNull(model.LastError);
         Assert.Empty(model.Visible);

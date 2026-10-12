@@ -21,7 +21,7 @@
     <ItemGroup>
         <ProjectReference Include="..\Zigote.Core\Zigote.Core.csproj"/>
         <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
-        <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Adwaita\Zigote.UI.Adwaita.csproj"/>
     </ItemGroup>
 
 </Project>

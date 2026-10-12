@@ -460,7 +460,7 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
     public override void OnPointerCancel() => OnPointerUp(default);
 
     // ponytail: raw key handling only for editing keys; printable characters arrive via
-    // OnTextInput (ITextInputClient engages the host IME), same route as Material TextField.
+    // OnTextInput (ITextInputClient engages the host IME), same route as Material AdwTextField.
     // Escape never reaches OnKey — the app's HandleEscape clears focus first, so Escape ends as a
     // blur-commit instead of a revert; a true revert needs IKeyboardTrap, which would also steal
     // Tab traversal. Tab itself commits via the focus-loss path.

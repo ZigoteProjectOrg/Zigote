@@ -22,7 +22,7 @@ decision, lives in [`notes/mobile-port.md`](notes/mobile-port.md) and
 **iOS simulator** (needs Xcode and the `ios` .NET workload):
 
 ```sh
-dotnet build Zigote.UI.Gallery.iOS -p:ZigTargetRid=iossimulator-arm64
+dotnet build Zigote.UI.Adwaita.Gallery.iOS -p:ZigTargetRid=iossimulator-arm64
 xcrun simctl install booted <built .app>   # then launch com.zigote.gallery
 ```
 

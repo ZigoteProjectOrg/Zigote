@@ -58,7 +58,7 @@ public sealed class FileDialogException(string message) : Exception(message);
 ///     Routing, in order: the native OS dialog (macOS NSOpenPanel/NSSavePanel sheets, Windows
 ///     IFileDialog, Linux xdg-desktop-portal → zenity — via the engine's zigote_file_dialog_*
 ///     FFI), then the in-app fallback (<see cref="ManagedBackend" />, registered automatically by
-///     Zigote.UI.Material's file browser) when native is unavailable, disabled
+///     Zigote.UI.Adwaita's file browser) when native is unavailable, disabled
 ///     (<see cref="Enabled" />), or fails at show time. Design record:
 ///     Zigote.Engine/docs/file-dialogs.md.
 ///     <para>
@@ -111,7 +111,7 @@ public static class FileDialog
 
     /// <summary>
     ///     The in-app (widget-based) dialog implementation. Requests route here when the native
-    ///     path is unavailable, disabled, or errors. Zigote.UI.Material registers its file
+    ///     path is unavailable, disabled, or errors. Zigote.UI.Adwaita registers its file
     ///     browser automatically on assembly load; hosts can substitute their own.
     /// </summary>
     public static Func<FileDialogRequest, Task<string[]>>? ManagedBackend { get; set; }

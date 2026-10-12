@@ -24,7 +24,7 @@ open Zigote.UI.Theme
 open Zigote.UI.Widgets
 open Zigote.UI.Widgets.Controls
 open Zigote.UI.Widgets.Layout
-open Zigote.UI.Material
+open Zigote.UI.Adwaita
 open Zigote.UI.FSharp
 open Zigote.UI.FSharp.Gallery.Ui
 open Zigote.Http
@@ -294,7 +294,7 @@ let private hit = Color(0.42f, 0.72f, 1.00f)
 
 /// The image body goes through the same runner as the listing, so the cache, the deduplicator and
 /// the breaker all apply to a 4 MB PNG too. A `Task` rather than the `async` pipeline only because
-/// that is the shape `AsyncImage` asks for.
+/// that is the shape `AdwAsyncImage` asks for.
 let private fetchImage (url: string) (ct: CancellationToken) : Task<byte[]> =
     task {
         let spec = HttpRequest.Get(url).Cache(mode ()).Deadline(TimeSpan.FromSeconds 30.)
@@ -321,7 +321,7 @@ let private tile (item: Item) : Widget =
                     w (
                         AspectRatio(
                             ratio,
-                            AsyncImage(
+                            AdwAsyncImage(
                                 (fun ct -> fetchImage item.Url ct),
                                 MaxDecodeSize = 720,
                                 Radius = 10f
@@ -358,7 +358,7 @@ let private controls () =
                 children =
                     [
                         w (
-                            SegmentedControl(
+                            AdwToggleGroup(
                                 categories,
                                 category.Peek(),
                                 fun i ->
@@ -369,7 +369,7 @@ let private controls () =
                         Spacer()
                         watch (fun () ->
                             if busy.Value then
-                                w (Spinner 18f)
+                                w (AdwSpinner 18f)
                             else
                                 Button("Fetch", load, Style = ButtonStyle.Elevated))
                     ]
@@ -377,7 +377,7 @@ let private controls () =
             watch (fun () -> Text($"amount = {int amount.Value}", muted))
             sized
                 240f
-                (Slider(
+                (AdwSlider(
                     amount.Peek(),
                     min = 1f,
                     max = 12f,
@@ -395,7 +395,7 @@ let private filters () =
         [
             note
                 "These read the already-fetched list, so they cost nothing: typing re-filters without a request, and the tiles that survive keep their textures."
-            TextField(
+            AdwTextField(
                 onChanged = (fun v -> artistFilter.Value <- v),
                 Text = artistFilter.Peek(),
                 Hint = "Artist contains…"
@@ -406,7 +406,7 @@ let private filters () =
                 children =
                     [
                         w (Text("orientation", muted))
-                        SegmentedControl(
+                        AdwToggleGroup(
                             [| "All"; "Portrait"; "Landscape" |],
                             orientation.Peek(),
                             fun i -> orientation.Value <- i
@@ -430,7 +430,7 @@ let private grid () =
                     "Nothing to show — fetch a category, or relax the filter."
             )
         else
-            ResponsiveGrid([ for item in live -> tile item ], MinColumnWidth = 200f, Gutter = 12f))
+            AdwResponsiveGrid([ for item in live -> tile item ], MinColumnWidth = 200f, Gutter = 12f))
 
 let private logPane () =
     let cell width (text: string) (style: TextStyle) =
@@ -465,7 +465,7 @@ let private logPane () =
                         )
                     ]
             )
-            Divider()
+            AdwSeparator()
             watch (fun () ->
                 Column(
                     crossAxisAlignment = CrossAxisAlignment.Stretch,
@@ -511,7 +511,7 @@ let private cachePane () =
             [
                 note
                     "One origin, two cache stories, and the log shows both. The listing sends no Cache-Control and no ETag, so it is stored but never fresh — every fetch is a real request, which is exactly right for an endpoint that answers randomly. The images send public, max-age=691200 with an ETag, so the second time a picture is needed the cache answers and nothing touches the network."
-                SegmentedControl(
+                AdwToggleGroup(
                     [| "Default"; "Revalidate"; "Bypass"; "CacheOnly" |],
                     cacheChoice.Peek(),
                     fun i -> cacheChoice.Value <- i

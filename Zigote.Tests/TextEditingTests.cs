@@ -38,7 +38,7 @@ public class TextEditingTests
     [Fact]
     public void TextField_ReadOnly_IgnoresTextInputAndBackspace()
     {
-        var tf = new TextField {
+        var tf = new AdwTextField {
             Text = "abc",
             ReadOnly = true,
         };
@@ -55,7 +55,7 @@ public class TextEditingTests
     [Fact]
     public void TextField_Editable_AcceptsTextInput()
     {
-        var tf = new TextField { Text = "" };
+        var tf = new AdwTextField { Text = "" };
         tf.OnTextInput("hi");
         Assert.Equal(expected: "hi", actual: tf.Text);
     }
@@ -69,7 +69,7 @@ public class TextEditingTests
     [Fact]
     public void TextField_ExternalTextShrink_ClampsCaretSoNextInputSucceeds()
     {
-        var tf = new TextField { Text = "" };
+        var tf = new AdwTextField { Text = "" };
         tf.OnTextInput("a long draft message"); // caret now at the end
         tf.Text = ""; // e.g. the app cleared the field after sending
         tf.OnTextInput("x"); // must not throw
@@ -79,7 +79,7 @@ public class TextEditingTests
     [Fact]
     public void TextField_ExternalTextReplace_KeepsCaretWithinBounds()
     {
-        var tf = new TextField { Text = "" };
+        var tf = new AdwTextField { Text = "" };
         tf.OnTextInput("0123456789");
         tf.Text = "abc"; // shorter than the current caret offset
         tf.OnTextInput("!");
@@ -89,7 +89,7 @@ public class TextEditingTests
     [Fact]
     public void TextField_ExternalTextShrink_DropsStaleSelection()
     {
-        var tf = new TextField { Text = "" };
+        var tf = new AdwTextField { Text = "" };
         tf.OnTextInput("select all of this");
         tf.OnKey(
             keyChar: 'a',
@@ -105,7 +105,7 @@ public class TextEditingTests
     [Fact]
     public void TextField_NullText_IsTreatedAsEmpty()
     {
-        var tf = new TextField { Text = "abc" };
+        var tf = new AdwTextField { Text = "abc" };
         tf.Text = null!;
         Assert.Equal(expected: "", actual: tf.Text);
         tf.OnTextInput("x");
@@ -115,7 +115,7 @@ public class TextEditingTests
     [Fact]
     public void CodeEditor_ReadOnly_IgnoresTextInput()
     {
-        var ce = new CodeEditor("abc") { ReadOnly = true };
+        var ce = new AdwCodeEditor("abc") { ReadOnly = true };
         ce.OnTextInput("X");
         Assert.Equal(expected: "abc", actual: ce.Text);
     }
@@ -123,7 +123,7 @@ public class TextEditingTests
     [Fact]
     public void CodeEditor_Editable_AcceptsTextInput()
     {
-        var ce = new CodeEditor();
+        var ce = new AdwCodeEditor();
         ce.OnTextInput("hi");
         Assert.Equal(expected: "hi", actual: ce.Text);
     }
@@ -175,7 +175,7 @@ public class TextEditingTests
     {
         // Regression: PreviousGraphemeBoundary(text, text.Length) used to collapse to 0, so backspacing
         // at the end of a multi-character string wiped the whole field.
-        var typed = new TextField();
+        var typed = new AdwTextField();
         typed.OnTextInput("abc");
         typed.OnKey(
             keyChar: '\0',
@@ -189,7 +189,7 @@ public class TextEditingTests
     [Fact]
     public void TextField_BackspaceDeletesWholeGrapheme()
     {
-        var field = new TextField();
+        var field = new AdwTextField();
         field.OnTextInput("e\u0301");
         field.OnKey(
             keyChar: '\0',
@@ -203,7 +203,7 @@ public class TextEditingTests
     [Fact]
     public void CodeEditor_BackspaceDeletesWholeEmojiSequence()
     {
-        var editor = new CodeEditor();
+        var editor = new AdwCodeEditor();
         editor.OnTextInput("👍🏽");
         editor.OnKey(
             keyChar: '\0',
@@ -217,26 +217,26 @@ public class TextEditingTests
     [Fact]
     public void ImeComposition_IsTransientUntilCommitted()
     {
-        var field = new TextField();
+        var field = new AdwTextField();
         field.OnTextComposition(text: "に", selectionStart: 1, selectionLength: 0);
         Assert.Equal(expected: string.Empty, actual: field.Text);
 
         field.OnTextInput("に");
         Assert.Equal(expected: "に", actual: field.Text);
 
-        var editor = new CodeEditor();
+        var editor = new AdwCodeEditor();
         editor.OnTextComposition(text: "文", selectionStart: 1, selectionLength: 0);
         Assert.Equal(expected: string.Empty, actual: editor.Text);
         editor.OnTextInput("文");
         Assert.Equal(expected: "文", actual: editor.Text);
     }
 
-    // ── Multi-line TextField ────────────────────────────────────────────────────
+    // ── Multi-line AdwTextField ────────────────────────────────────────────────────
 
     [Fact]
     public void Multiline_EnterInsertsNewline_SingleLineEnterSubmits()
     {
-        var ml = new TextField { Multiline = true };
+        var ml = new AdwTextField { Multiline = true };
         ml.OnTextInput("ab");
         ml.OnKey(
             keyChar: '\0',
@@ -248,7 +248,7 @@ public class TextEditingTests
         Assert.Equal(expected: "ab\ncd", actual: ml.Text);
 
         bool submitted = false;
-        var sl = new TextField { OnSubmitted = _ => submitted = true };
+        var sl = new AdwTextField { OnSubmitted = _ => submitted = true };
         sl.OnTextInput("ab");
         sl.OnKey(
             keyChar: '\0',
@@ -264,7 +264,7 @@ public class TextEditingTests
     public void Multiline_CommandEnterSubmitsInsteadOfNewline()
     {
         bool submitted = false;
-        var ml = new TextField {
+        var ml = new AdwTextField {
             Multiline = true,
             OnSubmitted = _ => submitted = true,
         };
@@ -282,7 +282,7 @@ public class TextEditingTests
     [Fact]
     public void Multiline_BackspaceMergesLines()
     {
-        var ml = new TextField { Multiline = true };
+        var ml = new AdwTextField { Multiline = true };
         ml.OnTextInput("a");
         ml.OnKey(
             keyChar: '\0',
@@ -316,13 +316,13 @@ public class TextEditingTests
             minHeight: 0,
             maxHeight: 1000
         );
-        var capped = new TextField {
+        var capped = new AdwTextField {
             Multiline = true,
             MinLines = 1,
             MaxLines = 3,
             Text = "a\nb\nc\nd\ne",
         };
-        var tall = new TextField {
+        var tall = new AdwTextField {
             Multiline = true,
             MinLines = 1,
             MaxLines = 10,
@@ -339,7 +339,7 @@ public class TextEditingTests
     [Fact]
     public void Multiline_ImeComposition_IsTransientUntilCommitted()
     {
-        var ml = new TextField { Multiline = true };
+        var ml = new AdwTextField { Multiline = true };
         ml.OnTextInput("a");
         ml.OnKey(
             keyChar: '\0',
@@ -359,7 +359,7 @@ public class TextEditingTests
     [Fact]
     public void Multiline_PaintEmitsAllVisibleLines()
     {
-        var ml = new TextField {
+        var ml = new AdwTextField {
             Multiline = true,
             Text = "one\ntwo\nthree",
             MaxLines = 8,
@@ -379,7 +379,7 @@ public class TextEditingTests
     [Fact]
     public void CodeEditor_SoftWrapCreatesAdditionalVisualRows()
     {
-        var editor = new CodeEditor("alpha beta gamma delta") { SoftWrap = true };
+        var editor = new AdwCodeEditor("alpha beta gamma delta") { SoftWrap = true };
         editor.Measure(Constraints.Tight(width: 90f, height: 300f));
         editor.Layout(Offset.Zero);
         var paint = new PaintList();
@@ -392,12 +392,12 @@ public class TextEditingTests
         );
     }
 
-    // ── CodeEditor undo / redo / save ───────────────────────────────────────────
+    // ── AdwCodeEditor undo / redo / save ───────────────────────────────────────────
 
     [Fact]
     public void CodeEditor_UndoRevertsTypingThenRedoReapplies()
     {
-        var editor = new CodeEditor();
+        var editor = new AdwCodeEditor();
         editor.OnTextInput("hello");
         Assert.Equal(expected: "hello", actual: editor.Text);
 
@@ -413,7 +413,7 @@ public class TextEditingTests
     {
         // Headless time is fixed at 0, so same-kind edits within the coalesce window collapse — one
         // Undo should revert a whole typed run, not a single character.
-        var editor = new CodeEditor();
+        var editor = new AdwCodeEditor();
         editor.OnTextInput("a");
         editor.OnTextInput("b");
         editor.OnTextInput("c");
@@ -426,7 +426,7 @@ public class TextEditingTests
     [Fact]
     public void CodeEditor_NewlineIsASeparateUndoStepFromTyping()
     {
-        var editor = new CodeEditor();
+        var editor = new AdwCodeEditor();
         editor.OnTextInput("ab");
         editor.OnKey(
             keyChar: '\0',
@@ -446,7 +446,7 @@ public class TextEditingTests
     [Fact]
     public void CodeEditor_UndoIsNoopWhenReadOnly()
     {
-        var editor = new CodeEditor("frozen") { ReadOnly = true };
+        var editor = new AdwCodeEditor("frozen") { ReadOnly = true };
         editor.OnKey(
             keyChar: 'z',
             scancode: 0,
@@ -459,7 +459,7 @@ public class TextEditingTests
     [Fact]
     public void CodeEditor_LoadingNewDocumentClearsUndoHistory()
     {
-        var editor = new CodeEditor();
+        var editor = new AdwCodeEditor();
         editor.OnTextInput("draft");
         editor.Text = "loaded from disk"; // setter resets history
         editor.Undo(); // nothing to undo back into the previous document
@@ -469,7 +469,7 @@ public class TextEditingTests
     [Fact]
     public void CodeEditor_CommandZAndShiftZDriveUndoRedo()
     {
-        var editor = new CodeEditor();
+        var editor = new AdwCodeEditor();
         editor.OnTextInput("x");
         editor.OnKey(
             keyChar: 'z',
@@ -491,7 +491,7 @@ public class TextEditingTests
     public void CodeEditor_CommandSInvokesOnSubmit()
     {
         int saved = 0;
-        var editor = new CodeEditor("contents") { OnSubmit = () => saved++ };
+        var editor = new AdwCodeEditor("contents") { OnSubmit = () => saved++ };
         editor.OnKey(
             keyChar: 's',
             scancode: 0,
@@ -505,7 +505,7 @@ public class TextEditingTests
     public void CodeEditor_EditFiresOnChangedForDirtyTracking()
     {
         int changes = 0;
-        var editor = new CodeEditor { OnChanged = _ => changes++ };
+        var editor = new AdwCodeEditor { OnChanged = _ => changes++ };
         editor.OnTextInput("z");
         Assert.True(
             condition: changes >= 1,

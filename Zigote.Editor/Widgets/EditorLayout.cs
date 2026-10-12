@@ -14,13 +14,13 @@ using Zigote.Graphs.Registry;
 using Zigote.Modules.UI.CodeEditor;
 using Zigote.Runtime.Scene;
 using Zigote.UI.Host;
-using Zigote.UI.Material;
+using Zigote.UI.Adwaita;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
 using Zigote.UI.Widgets.Menu;
-// CodeEditor: Adwaita has no source view (GtkSourceView has no libadwaita counterpart either),
+// AdwCodeEditor: Adwaita has no source view (GtkSourceView has no libadwaita counterpart either),
 // so the editor keeps this one Material widget. The rest of the shell is Adwaita.
 
 namespace Zigote.Editor.Widgets;
@@ -41,7 +41,7 @@ public sealed class EditorLayout : Widget
 
     // The docked code editor + its tab descriptor and the file currently loaded into it. Wired in
     // BuildDock; used by the focus-aware Save/Undo/Redo routing below.
-    private CodeEditor? _codeEditor;
+    private AdwCodeEditor? _codeEditor;
     private DockPanel? _codePanel;
     private ConsolePanel? _consolePanel;
     private string? _openFilePath;
@@ -68,7 +68,7 @@ public sealed class EditorLayout : Widget
     // ── Focus-aware Save / Undo / Redo ──────────────────────────────────────────
     // ⌘S / ⌘Z / ⌘⇧Z mean "the code file" while the docked editor has focus, and "the scene" otherwise.
     // On macOS the native menu eats these keys (the editor never sees them), so the menu actions must
-    // route too — these are wired both to the menu and (via CodeEditor.OnSubmit) to the editor's own keys.
+    // route too — these are wired both to the menu and (via AdwCodeEditor.OnSubmit) to the editor's own keys.
 
     private bool CodeEditorFocused =>
         _codeEditor != null && ReferenceEquals(objA: _app.FocusedWidget, objB: _codeEditor);
@@ -593,7 +593,7 @@ public sealed class EditorLayout : Widget
 
         // Code editor: opened from the asset browser via OpenFileRequested (double-click a text/code file).
         // Editable, with ⌘S save + ⌘Z/⌘⇧Z undo/redo; edits mark the tab dirty until saved.
-        var codeEditor = new CodeEditor();
+        var codeEditor = new AdwCodeEditor();
         _codeEditor = codeEditor;
         // Any edit marks the tab unsaved; ⌘S (when the editor is focused) writes it back to disk.
         codeEditor.OnChanged += _ =>

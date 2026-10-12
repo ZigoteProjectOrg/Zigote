@@ -1,0 +1,387 @@
+namespace Zigote.UI.Adwaita;
+
+public enum AdwFileSortColumn
+{
+    Name,
+    Size,
+    Modified,
+}
+
+/// <summary>One row of a directory listing. Size is -1 for directories.</summary>
+public readonly record struct AdwFileBrowserEntry(
+    string Name,
+    string FullPath,
+    bool IsDirectory,
+    long Size,
+    DateTime Modified,
+    bool IsHidden);
+
+/// <summary>
+///     The pure state behind <see cref="FileBrowserDialog" />: one directory's entries plus the
+///     view pipeline (hidden/extension/search filters → sort → <see cref="Visible" />),
+///     back/forward/up navigation history, and path-keyed multi-selection. File-system access is
+///     confined to <see cref="Load" />; everything else operates on the entry list, so the whole
+///     view pipeline is unit-testable through <see cref="SetEntries" />.
+/// </summary>
+public sealed class AdwFileBrowserModel
+{
+    // Linux is the only case-sensitive-by-convention platform we ship on.
+    private static readonly StringComparer PathComparer =
+        OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
+
+    private static readonly StringComparison PathComparison =
+        OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+
+    private readonly List<string> _back = [];
+    private readonly List<AdwFileBrowserEntry> _entries = [];
+    private readonly List<string> _forward = [];
+    private readonly HashSet<string> _selected = new(PathComparer);
+    private readonly List<AdwFileBrowserEntry> _visible = [];
+    private int _anchor = -1;
+
+    public string CurrentDirectory { get; private set; } = "";
+
+    /// <summary>The filtered + sorted rows the view renders.</summary>
+    public IReadOnlyList<AdwFileBrowserEntry> Visible => _visible;
+
+    public AdwFileSortColumn SortColumn { get; private set; } = AdwFileSortColumn.Name;
+    public bool SortAscending { get; private set; } = true;
+
+    public bool ShowHidden { get; set; }
+
+    /// <summary>Folder-pick mode: list directories only.</summary>
+    public bool DirectoriesOnly { get; set; }
+
+    public bool AllowMultiSelect { get; set; }
+
+    /// <summary>Case-insensitive substring filter on names (the search box).</summary>
+    public string SearchText { get; set; } = "";
+
+    /// <summary>
+    ///     Extensions (without dots) the active filter admits; null or containing "*" = all
+    ///     files. Directories always pass.
+    /// </summary>
+    public string[]? ExtensionFilter { get; set; }
+
+    /// <summary>When set, navigation is clamped to this subtree (project-scoped asset pickers).</summary>
+    public string? LockRoot { get; init; }
+
+    /// <summary>Human-readable reason the current directory could not be listed, or null.</summary>
+    public string? LastError { get; private set; }
+
+    public bool CanGoBack => _back.Count > 0;
+    public bool CanGoForward => _forward.Count > 0;
+
+    public bool CanGoUp =>
+        Path.GetDirectoryName(CurrentDirectory) is { Length: > 0 } parent && IsWithinRoot(parent);
+
+    public IReadOnlyCollection<string> SelectedPaths => _selected;
+
+    /// <summary>Enter a directory, recording history (no-op outside <see cref="LockRoot" />).</summary>
+    public void NavigateTo(string directory)
+    {
+        string full = SafeFullPath(directory);
+        if (!IsWithinRoot(full)) return;
+        if (CurrentDirectory.Length > 0 && !PathComparer.Equals(x: CurrentDirectory, y: full))
+        {
+            _back.Add(CurrentDirectory);
+            _forward.Clear();
+        }
+
+        Load(full);
+    }
+
+    public void GoBack()
+    {
+        if (_back.Count == 0) return;
+        string target = _back[^1];
+        _back.RemoveAt(_back.Count - 1);
+        _forward.Add(CurrentDirectory);
+        Load(target);
+    }
+
+    public void GoForward()
+    {
+        if (_forward.Count == 0) return;
+        string target = _forward[^1];
+        _forward.RemoveAt(_forward.Count - 1);
+        _back.Add(CurrentDirectory);
+        Load(target);
+    }
+
+    public void GoUp()
+    {
+        if (!CanGoUp) return;
+        NavigateTo(Path.GetDirectoryName(CurrentDirectory)!);
+    }
+
+    /// <summary>Re-list the current directory (after a New Folder, external change, …).</summary>
+    public void Refresh()
+    {
+        if (CurrentDirectory.Length > 0) Load(CurrentDirectory);
+    }
+
+    /// <summary>Toggle direction when the column is already active, else sort ascending by it.</summary>
+    public void SortBy(AdwFileSortColumn column)
+    {
+        if (SortColumn == column)
+            SortAscending = !SortAscending;
+        else
+        {
+            SortColumn = column;
+            SortAscending = true;
+        }
+
+        ApplyView();
+    }
+
+    /// <summary>
+    ///     Rebuild <see cref="Visible" /> from the raw entries (call after mutating any
+    ///     filter property). Selection survives when the paths remain visible.
+    /// </summary>
+    public void ApplyView()
+    {
+        _visible.Clear();
+        foreach (var e in _entries)
+        {
+            if (!ShowHidden && e.IsHidden) continue;
+            if (DirectoriesOnly && !e.IsDirectory) continue;
+            if (!e.IsDirectory && !MatchesExtensionFilter(e.Name)) continue;
+            if (SearchText.Length > 0 &&
+                !e.Name.Contains(
+                    value: SearchText,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                )) continue;
+            _visible.Add(e);
+        }
+
+        _visible.Sort(Compare);
+
+        if (_selected.Count > 0)
+        {
+            var visiblePaths = new HashSet<string>(
+                collection: _visible.Select(v => v.FullPath),
+                comparer: PathComparer
+            );
+            _selected.RemoveWhere(p => !visiblePaths.Contains(p));
+        }
+
+        if (_anchor >= _visible.Count) _anchor = -1;
+    }
+
+    // ── Selection ─────────────────────────────────────────────────────────────
+
+    public bool IsSelected(in AdwFileBrowserEntry entry) => _selected.Contains(entry.FullPath);
+
+    /// <summary>Entries of <see cref="Visible" /> currently selected, in view order.</summary>
+    public List<AdwFileBrowserEntry> SelectedEntries() =>
+        _visible.Where(e => _selected.Contains(e.FullPath)).ToList();
+
+    public void ClearSelection()
+    {
+        _selected.Clear();
+        _anchor = -1;
+    }
+
+    /// <summary>
+    ///     Click/keyboard selection: plain replaces, <paramref name="toggle" /> (Cmd/Ctrl)
+    ///     toggles, <paramref name="range" /> (Shift) selects anchor→index. Toggle/range only
+    ///     apply with <see cref="AllowMultiSelect" />.
+    /// </summary>
+    public void SelectIndex(int index, bool toggle = false, bool range = false)
+    {
+        if ((uint)index >= (uint)_visible.Count) return;
+        string path = _visible[index].FullPath;
+
+        if (range && AllowMultiSelect && _anchor >= 0 && _anchor < _visible.Count)
+        {
+            _selected.Clear();
+            int lo = Math.Min(val1: _anchor, val2: index);
+            int hi = Math.Max(val1: _anchor, val2: index);
+            for (int i = lo; i <= hi; i++) _selected.Add(_visible[i].FullPath);
+            return; // the anchor stays put so a further shift-click re-ranges from it
+        }
+
+        if (toggle && AllowMultiSelect)
+        {
+            if (!_selected.Remove(path)) _selected.Add(path);
+            _anchor = index;
+            return;
+        }
+
+        _selected.Clear();
+        _selected.Add(path);
+        _anchor = index;
+    }
+
+    /// <summary>
+    ///     Type-ahead: index of the next visible name starting with <paramref name="prefix" />,
+    ///     scanning forward from <paramref name="from" /> + 1 and wrapping; -1 when none match.
+    /// </summary>
+    public int TypeAheadIndex(string prefix, int from)
+    {
+        if (prefix.Length == 0 || _visible.Count == 0) return -1;
+        for (int step = 1; step <= _visible.Count; step++)
+        {
+            int i = (((from + step) % _visible.Count) + _visible.Count) % _visible.Count;
+            if (_visible[i].Name.StartsWith(
+                    value: prefix,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                )) return i;
+        }
+
+        return -1;
+    }
+
+    // ── Listing ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    ///     List <paramref name="directory" /> from disk. Failures land in
+    ///     <see cref="LastError" /> with an empty listing rather than throwing.
+    /// </summary>
+    public void Load(string directory)
+    {
+        LastError = null;
+        var list = new List<AdwFileBrowserEntry>();
+        try
+        {
+            foreach (var info in new DirectoryInfo(directory).EnumerateFileSystemInfos())
+            {
+                try
+                {
+                    bool isDir = (info.Attributes & FileAttributes.Directory) != 0;
+                    bool hidden = info.Name.StartsWith('.') ||
+                                  (info.Attributes & FileAttributes.Hidden) != 0;
+                    list.Add(
+                        new AdwFileBrowserEntry(
+                            Name: info.Name,
+                            FullPath: info.FullName,
+                            IsDirectory: isDir,
+                            Size: isDir ? -1L : (info as FileInfo)?.Length ?? 0L,
+                            Modified: info.LastWriteTime,
+                            IsHidden: hidden
+                        )
+                    );
+                }
+                catch
+                {
+                    // A single unreadable entry (dangling symlink, permission hole) must not
+                    // take down the whole listing.
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            LastError = ex.Message;
+        }
+
+        SetEntries(directory: directory, entries: list);
+    }
+
+    /// <summary>Replace the raw listing (the seam <see cref="Load" /> and tests feed).</summary>
+    public void SetEntries(string directory, IEnumerable<AdwFileBrowserEntry> entries)
+    {
+        CurrentDirectory = SafeFullPath(directory);
+        _entries.Clear();
+        _entries.AddRange(entries);
+        ClearSelection();
+        ApplyView();
+    }
+
+    private bool MatchesExtensionFilter(string name)
+    {
+        if (ExtensionFilter is not { Length: > 0 } exts) return true;
+        string ext = Path.GetExtension(name).TrimStart('.');
+        foreach (string e in exts)
+        {
+            if (e == "*") return true;
+            if (string.Equals(
+                    a: e,
+                    b: ext,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                )) return true;
+        }
+
+        return false;
+    }
+
+    private int Compare(AdwFileBrowserEntry a, AdwFileBrowserEntry b)
+    {
+        // Folders group before files regardless of column or direction (every OS browser does).
+        if (a.IsDirectory != b.IsDirectory) return a.IsDirectory ? -1 : 1;
+        int c = SortColumn switch {
+            AdwFileSortColumn.Size => a.Size.CompareTo(b.Size),
+            AdwFileSortColumn.Modified => a.Modified.CompareTo(b.Modified),
+            _ => 0,
+        };
+        if (c == 0) c = NaturalCompare(a: a.Name, b: b.Name);
+        return SortAscending ? c : -c;
+    }
+
+    /// <summary>
+    ///     Case-insensitive name order with digit runs compared numerically — "file2" before
+    ///     "file10", like every OS file manager. Leading zeros are ignored for magnitude but
+    ///     break ties ("07" groups with "7").
+    /// </summary>
+    public static int NaturalCompare(string a, string b)
+    {
+        int i = 0, j = 0;
+        while (i < a.Length && j < b.Length)
+        {
+            if (char.IsAsciiDigit(a[i]) && char.IsAsciiDigit(b[j]))
+            {
+                int startA = i;
+                while (i < a.Length && char.IsAsciiDigit(a[i])) i++;
+                int startB = j;
+                while (j < b.Length && char.IsAsciiDigit(b[j])) j++;
+
+                int trimA = startA;
+                while (trimA < i - 1 && a[trimA] == '0') trimA++;
+                int trimB = startB;
+                while (trimB < j - 1 && b[trimB] == '0') trimB++;
+
+                int lenA = i - trimA;
+                int lenB = j - trimB;
+                if (lenA != lenB) return lenA - lenB; // more significant digits = bigger number
+                for (int k = 0; k < lenA; k++)
+                {
+                    int d = a[trimA + k].CompareTo(b[trimB + k]);
+                    if (d != 0) return d;
+                }
+
+                // Equal magnitude — fewer leading zeros first, then keep scanning.
+                int zeros = (trimA - startA).CompareTo(trimB - startB);
+                if (zeros != 0) return zeros;
+                continue;
+            }
+
+            int ci = char.ToUpperInvariant(a[i]).CompareTo(char.ToUpperInvariant(b[j]));
+            if (ci != 0) return ci;
+            i++;
+            j++;
+        }
+
+        return (a.Length - i).CompareTo(b.Length - j);
+    }
+
+    private bool IsWithinRoot(string directory)
+    {
+        if (LockRoot is null) return true;
+        string root = Path.TrimEndingDirectorySeparator(SafeFullPath(LockRoot));
+        string dir = Path.TrimEndingDirectorySeparator(SafeFullPath(directory));
+        if (!dir.StartsWith(value: root, comparisonType: PathComparison)) return false;
+        return dir.Length == root.Length || dir[root.Length] is '/' or '\\';
+    }
+
+    private static string SafeFullPath(string path)
+    {
+        try
+        {
+            return Path.GetFullPath(path);
+        }
+        catch
+        {
+            return path;
+        }
+    }
+}

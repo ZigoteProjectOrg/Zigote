@@ -44,7 +44,7 @@ public class DialogContentLayoutTests
             child: new Row {
                 CrossAxisAlignment = CrossAxisAlignment.Start,
                 Children = {
-                    new Checkbox(false),
+                    new AdwCheckButton(value: false),
                     new SizedBox(8f),
                     text,
                 },
@@ -120,7 +120,7 @@ public class DialogContentLayoutTests
         };
         var row = new Row {
             Children = {
-                new Checkbox(false),
+                new AdwCheckButton(value: false),
                 inner,
             },
         };

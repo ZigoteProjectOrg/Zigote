@@ -72,7 +72,7 @@ public class WidgetOwnEffectTests
     }
 
     // Regression: LeafWidget used to override Attach/Detach without calling base, which skipped the
-    // mount lifecycle entirely — every leaf that binds a ticker in OnMount (CheckGlyph, RadioDotGlyph)
+    // mount lifecycle entirely — every leaf that binds a ticker in OnMount (AdwCheckGlyph, AdwRadioDotGlyph)
     // silently stopped animating.
     [Fact]
     public void LeafWidget_Mounts_AndUnmounts_LikeAnyOtherWidget()

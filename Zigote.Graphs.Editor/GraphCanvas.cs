@@ -2503,7 +2503,7 @@ public sealed class GraphCanvas : Widget
         MarkNeedsLayout();
     }
 
-    private sealed class InlineTextField : TextField
+    private sealed class InlineTextField : AdwTextField
     {
         public Action? Cancel { get; init; }
 

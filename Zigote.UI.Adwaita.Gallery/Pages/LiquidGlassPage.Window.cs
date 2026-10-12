@@ -1,4 +1,4 @@
-using Zigote.UI.Material;
+using Zigote.UI.Adwaita;
 
 namespace AdwaitaGallery.Pages;
 
@@ -281,7 +281,7 @@ public sealed partial class LiquidGlassPage
                 mainAxisSize: MainAxisSize.Min
             ) {
                 Children = {
-                    // AsyncImage.Radius rounds only the placeholder; the decoded texture needs
+                    // AdwAsyncImage.Radius rounds only the placeholder; the decoded texture needs
                     // the clip for its corners.
                     new ClipRRect(
                         radius: AdwMetrics.CardRadius,

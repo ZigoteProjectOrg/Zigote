@@ -26,66 +26,15 @@ public class UiReleaseFixTests
     // ── Keyed reconcile keeps config in sync (UpdateFrom) ──────────────────────
 
     [Fact]
-    public void Radio_KeyedReconcile_UpdatesGroupValue()
-    {
-        var a = new Radio<string>(value: "x", groupValue: "x") {
-            Key = new ValueKey<int>(1),
-        }; // selected (x == x)
-        var row = new Row([a]);
-        Assert.True(a.IsSelected);
-
-        // New instance, same key, group now "y" — reconciler reuses `a` and must carry the new config in.
-        row.SetChildren(
-            [new Radio<string>(value: "x", groupValue: "y") { Key = new ValueKey<int>(1) }]
-        );
-
-        Assert.Same(expected: a, actual: row.Children[0]);
-        Assert.False(a.IsSelected); // was stale-true before the UpdateFrom fix
-    }
-
-    [Fact]
     public void Switch_KeyedReconcile_UpdatesValue()
     {
-        var a = new Switch(false) { Key = new ValueKey<int>(1) };
+        var a = new AdwSwitch(false) { Key = new ValueKey<int>(1) };
         var row = new Row([a]);
 
-        row.SetChildren([new Switch(true) { Key = new ValueKey<int>(1) }]);
+        row.SetChildren([new AdwSwitch(true) { Key = new ValueKey<int>(1) }]);
 
         Assert.Same(expected: a, actual: row.Children[0]);
         Assert.True(a.Value); // UpdateFrom previously dropped Value
-    }
-
-    [Fact]
-    public void TabBar_MutatingTabs_RebuildsCells_AndDoesNotThrow()
-    {
-        var tabs = new TabBar([new Tab("Alpha"), new Tab("Beta"), new Tab("Gamma")]);
-        tabs.Measure(Constraints.Loose(width: 400, height: 40));
-
-        tabs.Tabs = ["Solo"]; // shorter list — stale cells would index past Tabs.Count
-
-        var ex = Record.Exception(() =>
-            {
-                tabs.Measure(Constraints.Loose(width: 400, height: 40));
-                tabs.Layout(Offset.Zero);
-            }
-        );
-        Assert.Null(ex);
-    }
-
-    [Fact]
-    public void TabBar_KeyedReconcile_DoesNotThrow_OnShorterTabList()
-    {
-        var a = new TabBar([new Tab("A"), new Tab("B"), new Tab("C")]) {
-            Key = new ValueKey<int>(1),
-        };
-        var row = new Row([a]);
-        row.Measure(Constraints.Loose(width: 400, height: 40));
-
-        row.SetChildren([new TabBar([new Tab("X")]) { Key = new ValueKey<int>(1) }]);
-
-        Assert.Same(expected: a, actual: row.Children[0]);
-        var ex = Record.Exception(() => row.Measure(Constraints.Loose(width: 400, height: 40)));
-        Assert.Null(ex);
     }
 
     [Fact]

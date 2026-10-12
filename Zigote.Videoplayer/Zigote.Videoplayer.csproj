@@ -11,6 +11,6 @@
         <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
         <!-- VideoControls is built from the Material slider/buttons; the player and the view
              themselves only need Core + UI. -->
-        <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Adwaita\Zigote.UI.Adwaita.csproj"/>
     </ItemGroup>
 </Project>

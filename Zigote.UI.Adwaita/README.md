@@ -385,8 +385,7 @@ Stated up front so nothing surprises you:
 
 ## Dependencies
 
-`Zigote.UI` (the kernel), `Zigote.UI.Material` (icon constants and shared controls) and
-`Zigote.UI.BottomSheet`. Internals that are pure logic — accelerator parsing, layout maths — are unit-tested directly
+`Zigote.UI` (the kernel) and `Zigote.UI.BottomSheet`. Internals that are pure logic — accelerator parsing, layout maths — are unit-tested directly
 from `Zigote.Tests` rather than pushed into the public surface: this kit mirrors libadwaita's API and should not grow
 extras.
 

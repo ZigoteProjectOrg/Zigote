@@ -18,7 +18,7 @@
 
     <ItemGroup>
         <ProjectReference Include="$(ZigoteRoot)/Zigote.UI/Zigote.UI.csproj"/>
-        <ProjectReference Include="$(ZigoteRoot)/Zigote.UI.Material/Zigote.UI.Material.csproj"/>
+        <ProjectReference Include="$(ZigoteRoot)/Zigote.UI.Adwaita/Zigote.UI.Adwaita.csproj"/>
         <ProjectReference Include="../../Camera/Camera.csproj"/>
     </ItemGroup>
 

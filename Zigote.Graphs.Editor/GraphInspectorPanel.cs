@@ -54,6 +54,13 @@ public sealed class GraphInspectorPanel : Widget
 
     private void Gap(float height) => Add(new SizedBox(height: height));
 
+    private static AdwButton ActionButton(string icon, string label, Action onPressed, bool destructive = false) =>
+        new(label: label, onPressed: onPressed) {
+            IconName = icon,
+            Style = destructive ? AdwButtonStyle.Destructive : AdwButtonStyle.Regular,
+            Compact = true,
+        };
+
     private Label Text(string text, float size, Color color, bool oneLine = false)
     {
         var label = new Label(text: text, fontSize: size, color: color);
@@ -74,7 +81,7 @@ public sealed class GraphInspectorPanel : Widget
             LetterSpacing = 0.6f,
         });
         Gap(4f);
-        Add(new Divider());
+        Add(new AdwSeparator());
         Gap(4f);
     }
 
@@ -176,8 +183,8 @@ public sealed class GraphInspectorPanel : Widget
         Add(new Row {
             MainAxisAlignment = MainAxisAlignment.Start,
             Children = {
-                new ToolbarButton(icon: MaterialIcons.LinkOff, label: "Disconnect",
-                    onPressed: () => _state.Commands.Execute(new DeleteEdgeCommand(edge.Id))) { Tone = ToolbarTone.Danger },
+                ActionButton(destructive: true, label: "Disconnect", icon: MaterialIcons.LinkOff,
+                    onPressed: () => _state.Commands.Execute(new DeleteEdgeCommand(edge.Id))),
             },
         });
         Gap(10f);
@@ -197,9 +204,9 @@ public sealed class GraphInspectorPanel : Widget
         Add(new Row {
             MainAxisAlignment = MainAxisAlignment.Start,
             Children = {
-                new ToolbarButton(icon: MaterialIcons.LinkOff, label: "Disconnect all",
+                ActionButton(destructive: true, label: "Disconnect all", icon: MaterialIcons.LinkOff,
                     onPressed: () => _state.Commands.Execute(new GraphGesture(
-                        _state.SelectedEdges.Select(id => (IGraphCommand)new DeleteEdgeCommand(id)).ToArray()))) { Tone = ToolbarTone.Danger },
+                        _state.SelectedEdges.Select(id => (IGraphCommand)new DeleteEdgeCommand(id)).ToArray()))),
             },
         });
     }
@@ -220,12 +227,12 @@ public sealed class GraphInspectorPanel : Widget
         Add(new Row {
             MainAxisAlignment = MainAxisAlignment.Start,
             Children = {
-                new ToolbarButton(icon: collapse ? Icons.UnfoldLess : Icons.UnfoldMore, label: collapse ? "Collapse" : "Expand",
+                ActionButton(label: collapse ? "Collapse" : "Expand", icon: collapse ? Icons.UnfoldLess : Icons.UnfoldMore,
                     onPressed: () => _state.Commands.Execute(new CollapseNodesCommand(ids, collapse))),
                 new SizedBox(6f),
-                new ToolbarButton(icon: Icons.Delete, label: "Delete",
+                ActionButton(destructive: true, label: "Delete", icon: Icons.Delete,
                     onPressed: () => _state.Commands.Execute(new GraphGesture(
-                        _state.SelectedNodes.Select(id => (IGraphCommand)new DeleteNodeCommand(id)).ToArray()))) { Tone = ToolbarTone.Danger },
+                        _state.SelectedNodes.Select(id => (IGraphCommand)new DeleteNodeCommand(id)).ToArray()))),
             },
         });
         Gap(10f);
@@ -289,15 +296,15 @@ public sealed class GraphInspectorPanel : Widget
         var value = current is null || current.IsNull ? prop.DefaultValue : current;
         string name = string.IsNullOrEmpty(prop.Unit) ? prop.DisplayName : $"{prop.DisplayName} ({prop.Unit})";
 
-        ToolbarButton reset = null!;
-        reset = new ToolbarButton(icon: Icons.Undo, onPressed: () =>
+        AdwButton reset = null!;
+        reset = new AdwButton(onPressed: () =>
         {
             // A structural edit as far as this panel goes: rebuild so the control shows the default.
             var live = _state.Graph.FindNode(nodeId);
             if (live is null) return;
             _state.Commands.Execute(new ChangeNodePropertyCommand(nodeId: nodeId, propertyKey: prop.Id,
                 oldValue: live.Properties.GetValueOrDefault(prop.Id) ?? GraphValue.Null(), newValue: prop.DefaultValue));
-        }) { IconSize = 13f, Enabled = IsModified(node: node, def: prop) };
+        }) { IconName = Icons.Undo, Style = AdwButtonStyle.Flat, Compact = true, Enabled = IsModified(node: node, def: prop) };
 
         void Edited(GraphValue next)
         {
@@ -306,26 +313,24 @@ public sealed class GraphInspectorPanel : Widget
             bool modified = live is not null && IsModified(node: live, def: prop);
             if (reset.Enabled == modified) return;
             reset.Enabled = modified;
-            reset.MarkNeedsPaint();
         }
 
         Widget? control = null;
         Widget? below = null; // editors too wide for the value column go under the label
         if (prop.Editor == "gradient" && prop.Type == GraphTypeRef.String)
-            below = new SizedBox(height: 46f, child: new GradientEditor(
+            below = new SizedBox(height: 46f, child: new AdwGradientEditor(
                 gradient: ParseGradient(value.IsNull ? "" : value.AsString()),
                 onChanged: g => Edited(GraphValue.FromString(SerializeGradient(g)))));
         else if (prop.Type == GraphTypeRef.Int && prop.EnumLabels is { Length: > 0 } labels)
-            control = new Dropdown<string>(
+            control = new AdwDropDown(
                 items: labels,
                 selectedIndex: value.IsNull ? 0 : Math.Clamp(value: value.AsInt(), min: 0, max: labels.Length - 1),
-                displayText: label => label,
-                onChanged: (index, _) => Edited(GraphValue.FromInt(index))
-            ) { Height = 26f };
+                onSelected: index => Edited(GraphValue.FromInt(index))
+            ) { Compact = true };
         else if (prop.Type == GraphTypeRef.Float || prop.Type == GraphTypeRef.Int)
         {
             bool integer = prop.Type == GraphTypeRef.Int;
-            control = new NumberInput(value.IsNull ? 0f : integer ? value.AsInt() : value.AsFloat()) {
+            control = new AdwNumberInput(value.IsNull ? 0f : integer ? value.AsInt() : value.AsFloat()) {
                 Step = prop.Step ?? (integer ? 1f : 0.01f),
                 Decimals = Decimals(prop),
                 Min = prop.Min ?? float.NegativeInfinity,
@@ -338,10 +343,10 @@ public sealed class GraphInspectorPanel : Widget
         else if (prop.Type == GraphTypeRef.Bool)
             control = new Row {
                 MainAxisAlignment = MainAxisAlignment.Start,
-                Children = { new Checkbox(value: !value.IsNull && value.AsBool(), onChanged: v => Edited(GraphValue.FromBool(v))) },
+                Children = { new AdwCheckButton(value: !value.IsNull && value.AsBool(), onChanged: v => Edited(GraphValue.FromBool(v))) },
             };
         else if (prop.Type == GraphTypeRef.String)
-            control = new TextField(decoration: new InputDecoration(prop.DisplayName)) {
+            control = new AdwTextField(decoration: new AdwInputDecoration(prop.DisplayName)) {
                 Text = value.IsNull ? "" : value.AsString(),
                 OnChanged = text => Edited(GraphValue.FromString(text)),
             };
@@ -424,7 +429,7 @@ public sealed class GraphInspectorPanel : Widget
 
         Widget Channel(string label, float value, Action<float> set)
         {
-            var slider = new Slider(value) {
+            var slider = new AdwSlider(value) {
                 Min = 0f,
                 Max = 1f,
                 OnChanged = v =>
@@ -467,11 +472,11 @@ public sealed class GraphInspectorPanel : Widget
         };
     }
 
-    // ── Gradient (Color Ramp) property — flat "pos,r,g,b,a,…" string ↔ ColorGradient ─────────────
+    // ── Gradient (Color Ramp) property — flat "pos,r,g,b,a,…" string ↔ AdwColorGradient ─────────────
 
-    private static ColorGradient ParseGradient(string s)
+    private static AdwColorGradient ParseGradient(string s)
     {
-        var stops = new List<GradientStop>();
+        var stops = new List<AdwGradientStop>();
         if (!string.IsNullOrWhiteSpace(s))
         {
             string[] parts = s.Split(
@@ -481,7 +486,7 @@ public sealed class GraphInspectorPanel : Widget
             for (int i = 0; i + 4 < parts.Length; i += 5)
             {
                 stops.Add(
-                    new GradientStop(
+                    new AdwGradientStop(
                         position: P(parts[i]),
                         color: new Color(
                             r: P(parts[i + 1]),
@@ -494,7 +499,7 @@ public sealed class GraphInspectorPanel : Widget
             }
         }
 
-        return stops.Count >= 2 ? new ColorGradient(stops) : new ColorGradient();
+        return stops.Count >= 2 ? new AdwColorGradient(stops) : new AdwColorGradient();
 
         static float P(string x)
         {
@@ -509,7 +514,7 @@ public sealed class GraphInspectorPanel : Widget
         }
     }
 
-    private static string SerializeGradient(ColorGradient g)
+    private static string SerializeGradient(AdwColorGradient g)
     {
         var fields = new List<string>(g.Stops.Count * 5);
         foreach (var s in g.Stops)

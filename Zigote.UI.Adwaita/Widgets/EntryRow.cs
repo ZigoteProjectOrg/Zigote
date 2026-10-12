@@ -1,5 +1,5 @@
 using Zigote.Core.Animation;
-using Zigote.UI.Material;
+using Zigote.UI.Adwaita;
 using Zigote.UI.Widgets.Transitions;
 
 namespace Zigote.UI.Adwaita;
@@ -13,7 +13,7 @@ public sealed class AdwEntryRow : ComposedWidget
 {
     private Label? _caption;
     private SizedBox? _captionBox;
-    private TextField? _field;
+    private AdwTextField? _field;
     private bool _floating;
     private bool _obscure;
     private Widget? _suffix;
@@ -74,7 +74,7 @@ public sealed class AdwEntryRow : ComposedWidget
         var theme = ThemeProvider.Of(context);
         var p = AdwPalette.For(theme);
 
-        _field = new TextField(
+        _field = new AdwTextField(
             onChanged: v =>
             {
                 _text = v;

@@ -27,7 +27,6 @@
         <ProjectReference Include="..\Zigote.Cli\Zigote.Cli.csproj"/>
         <ProjectReference Include="..\Zigote.Bloc\Zigote.Bloc.csproj"/>
         <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
-        <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
         <ProjectReference Include="..\Zigote.UI.Adwaita\Zigote.UI.Adwaita.csproj"/>
         <ProjectReference Include="..\Zigote.UI.Charts\Zigote.UI.Charts.csproj"/>
         <ProjectReference Include="..\Zigote.UI.BottomSheet\Zigote.UI.BottomSheet.csproj"/>
@@ -60,7 +59,7 @@
                           OutputItemType="Analyzer" ReferenceOutputAssembly="false"/>
     </ItemGroup>
     <ItemGroup>
-        <Using Include="Zigote.UI.Material"/>
+        <Using Include="Zigote.UI.Adwaita"/>
     </ItemGroup>
     <ItemGroup>
         <Compile Remove="FrameArenaTests.cs"/>

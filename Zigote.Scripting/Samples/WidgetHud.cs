@@ -18,11 +18,11 @@ namespace Samples.Scripting;
 ///     lays
 ///     out, paints, and routes input to it every frame — so anything from the widget framework works
 ///     here
-///     (layout, <c>Card</c>/<c>ProgressBar</c>/<c>Label</c>, even interactive controls).
+///     (layout, <c>Card</c>/<c>AdwProgressBar</c>/<c>Label</c>, even interactive controls).
 /// </summary>
 public sealed class WidgetHud : Component
 {
-    private ProgressBar? _bar;
+    private AdwProgressBar? _bar;
     private float _elapsed;
     private Widget? _root;
     private Label? _valueLabel;
@@ -38,7 +38,7 @@ public sealed class WidgetHud : Component
             fontSize: 13f,
             color: new Color(r: 0.96f, g: 0.97f, b: 0.99f)
         );
-        _bar = new ProgressBar();
+        _bar = new AdwProgressBar();
 
         var card = new Card(
             new Column {

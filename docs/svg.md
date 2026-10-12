@@ -71,14 +71,6 @@ database, and enumerating it costs ~20 ms once per process. A compiled document 
 so an app that ships only compiled SVGs never triggers that (the binding checks the bytes for a
 text element before deciding to load fonts at all).
 
-## Seeing it run
-
-The widget gallery's **SVG** page (`Zigote.UI.Gallery/Pages/SvgPage.cs`) is the live demo: a tiger
-whose size animates between 96 and 260 px — re-rasterized at every frame it passes through — one
-parsed star tinted five ways, a sideways-scrolling strip of sixteen samples fetched from
-[dev.w3.org](https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/) through a `Zigote.Http` runner with a disk cache, and
-the compiled-vs-authored parse timings above, measured on the spot rather than quoted.
-
 ## Building the native library
 
 The binding lives in `native/zigote-svg` (a small C ABI over resvg) and is built by

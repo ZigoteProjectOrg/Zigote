@@ -1,7 +1,7 @@
 using Zigote.Core.Paint;
 using Zigote.Core.State;
 using Zigote.UI.DevTools;
-using Zigote.UI.Material;
+using Zigote.UI.Adwaita;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
@@ -12,7 +12,7 @@ namespace HelloWorld;
 /// <summary>
 ///     The smallest complete Zigote UI app: a greeting and a counter.
 ///     <para>
-///         <c>MaterialApp</c> boots the engine, opens the window and installs the theme; <c>Run()</c>
+///         <c>AdwaitaApp</c> boots the engine, opens the window and installs the theme; <c>Run()</c>
 ///         drives the frame loop until the window closes.
 ///     </para>
 /// </summary>
@@ -21,12 +21,11 @@ public static class Program
     public static void Main() => new HelloWorldApp().Run();
 }
 
-internal sealed class HelloWorldApp : MaterialApp
+internal sealed class HelloWorldApp : AdwaitaApp
 {
     public HelloWorldApp() : base(
         home: new CounterPage(),
-        title: "Zigote Hello World",
-        theme: ThemeData.Dark
+        title: "Zigote Hello World"
     )
     {
         Width = 420;
@@ -67,16 +66,15 @@ internal sealed class CounterPage : ComposedWidget
 {
     // Safe as a field here because this page instance is retained for the app's lifetime. A signal
     // that must outlive rebuilds of its *owner* belongs above it — in a store the page is handed,
-    // the way Zigote.UI.Gallery does it — or the state resets when the owner is reconstructed.
+    // the way Zigote.UI.Adwaita.Gallery does it — or the state resets when the owner is reconstructed.
     private readonly Signal<int> _count = new(0);
 
     protected override Widget Build(BuildContext context)
     {
         var theme = ThemeProvider.Of(context);
 
-        return new Scaffold(
-            appBar: new AppBar(title: new Text("Hello World"), centerTitle: true),
-            body: new Center(
+        return new AdwToolbarView(
+            new Center(
                 new Column(
                     mainAxisAlignment: MainAxisAlignment.Center,
                     children: [
@@ -97,18 +95,18 @@ internal sealed class CounterPage : ComposedWidget
                             )
                         ),
                         new SizedBox(height: 24),
+                        new AdwButton(label: "Increment", onPressed: () => _count.Value++) {
+                            Style = AdwButtonStyle.Suggested,
+                            Pill = true,
+                        },
+                        new SizedBox(height: 24),
                         new Text(
                             data: "Press Shift+D for devtools",
                             style: new TextStyle(fontSize: 12, color: theme.TextMuted)
                         ),
                     ]
                 )
-            ),
-            floatingActionButton: new FloatingActionButton(
-                onPressed: () => _count.Value++,
-                child: new Icon(MaterialIcons.Add),
-                tooltip: "Increment"
             )
-        );
+        ) { TopBars = { new AdwHeaderBar { Title = "Hello World" } } };
     }
 }

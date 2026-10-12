@@ -1,0 +1,118 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      iOS head for the Adwaita gallery: compiles the SAME gallery sources (no fork) against
+      net10.0-ios and bundles the iOS-simulator build of the native engine. The entry point is
+      the gallery's own Program.Main — ZigoteApp.Run routes through MobileHost/zigote_run_app
+      (SDL's UIApplicationMain wrapper) on iOS, so no platform-specific app code exists here.
+
+      Build (simulator):
+        dotnet build Zigote.UI.Adwaita.Gallery.iOS -p:ZigTargetRid=iossimulator-arm64
+      ZigTargetRid must be passed on the COMMAND LINE: it is how build/Zigote.Native.targets
+      (imported via Zigote.Core) learns to cross-build the engine for the simulator — a plain
+      csproj property would not reach the referenced project's evaluation.
+    -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0-ios</TargetFramework>
+        <RuntimeIdentifier>iossimulator-arm64</RuntimeIdentifier>
+        <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <ApplicationTitle>Zigote Gallery</ApplicationTitle>
+        <ApplicationId>com.zigote.gallery</ApplicationId>
+        <!-- SdkOnly: the app assemblies stay untrimmed (the UI stack leans on reflection —
+             DevTools late-bind, widget inspector), but the linker pipeline still runs, which is
+             what collects @(NativeReference) for the native link. MtouchLink=None skips that
+             step entirely and the engine archives never reach the linker. -->
+        <MtouchLink>SdkOnly</MtouchLink>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Adwaita\Zigote.UI.Adwaita.csproj"/>
+        <!-- The gallery's own pages need these: GraphsPage → Zigote.Graphs.Editor, the art feed →
+             Zigote.Http. The heads compile the desktop gallery's sources verbatim, so a reference
+             the desktop project gains is one this head has to gain with it — the symptom otherwise
+             is CS0234 on a page nobody here edited. -->
+        <ProjectReference Include="..\Zigote.Graphs.Editor\Zigote.Graphs.Editor.csproj"/>
+        <ProjectReference Include="..\Zigote.Http\Zigote.Http.csproj"/>
+        <ProjectReference Include="..\Zigote.Http.Generators\Zigote.Http.Generators.csproj"
+                          OutputItemType="Analyzer" ReferenceOutputAssembly="false"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- The desktop gallery's sources verbatim (its Program.Main is the entry point). -->
+        <Compile Include="..\Zigote.UI.Adwaita.Gallery\**\*.cs"
+                 Exclude="..\Zigote.UI.Adwaita.Gallery\bin\**;..\Zigote.UI.Adwaita.Gallery\obj\**"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- The bundled fonts. On desktop these flow transitively as Content from Zigote.UI;
+             the iOS resource pipeline does not lift referenced-project Content into the app
+             bundle, so the app declares them itself. BundleResource paths keep the same
+             Fonts/ layout App.cs probes under AppContext.BaseDirectory (= bundle root). -->
+        <BundleResource Include="..\Zigote.UI\Fonts\Inter\static\Inter_18pt-Regular.ttf"
+                        Link="Fonts\Inter-Regular.ttf"/>
+        <BundleResource Include="..\Zigote.UI\Fonts\PkgTTC-SGr-Iosevka-34\SGr-Iosevka-Regular.ttc"
+                        Link="Fonts\Iosevka-Regular.ttc"/>
+        <BundleResource Include="..\Zigote.UI\Fonts\Noto_Emoji\static\NotoEmoji-Regular.ttf"
+                        Link="Fonts\NotoEmoji-Regular.ttf"/>
+        <BundleResource Include="..\Zigote.UI\Fonts\MaterialIcons\MaterialIcons-Regular.ttf"
+                        Link="Fonts\MaterialIcons-Regular.ttf"/>
+        <BundleResource Include="..\Zigote.UI\Fonts\Inter\OFL.txt"
+                        Link="Fonts\LICENSE-Inter-OFL.txt"/>
+        <BundleResource Include="..\Zigote.UI\Fonts\PkgTTC-SGr-Iosevka-34\OFL.txt"
+                        Link="Fonts\LICENSE-Iosevka-OFL.txt"/>
+    </ItemGroup>
+
+    <!-- iOS DEVICE: the engine is linked INTO the app binary. AMFI rejects a loose dylib in the
+         bundle ("invalid code signature"), and a device .NET app links everything else — Mono
+         included — statically anyway. The archives come from `zig build static-lib` (engine +
+         each dependency, which a static archive does not absorb); ForceLoad keeps the engine's
+         exports alive, since every zigote_* entry is resolved at runtime by DllImport and the
+         linker therefore sees no references to them. Simulator builds keep the bundled dylib. -->
+    <Target Name="AddZigoteStaticArchives" BeforeTargets="ResolveAssemblyReferences"
+            Condition="'$(RuntimeIdentifier)' == 'ios-arm64'">
+        <ItemGroup>
+            <!-- The engine archive is force-loaded: every zigote_* entry point is reached only
+                 through runtime DllImport resolution, so the linker sees no reference to any of
+                 them and would otherwise drop the whole archive. (ForceLoad must be set on its
+                 own item — a %(Filename) condition while the item is being created does not
+                 batch, which silently left the archive out.) The dependency archives are pulled
+                 normally, by the references the engine objects make into them. -->
+            <NativeReference Include="$(MSBuildThisFileDirectory)..\Zigote.Engine\zig-out\lib\libzigote.a">
+                <Kind>Static</Kind>
+                <IsCxx>True</IsCxx>
+                <ForceLoad>True</ForceLoad>
+                <Frameworks>UIKit Metal QuartzCore Foundation CoreGraphics CoreVideo CoreMotion GameController CoreAudio AudioToolbox AVFoundation</Frameworks>
+                <WeakFrameworks>CoreHaptics</WeakFrameworks>
+                <LinkerFlags>-liconv -Wl,-export_dynamic</LinkerFlags>
+            </NativeReference>
+            <_ZigoteDepArchive Include="$(MSBuildThisFileDirectory)..\Zigote.Engine\zig-out\lib\*.a"
+                               Exclude="$(MSBuildThisFileDirectory)..\Zigote.Engine\zig-out\lib\libzigote.a"/>
+            <NativeReference Include="@(_ZigoteDepArchive)">
+                <Kind>Static</Kind>
+                <IsCxx>True</IsCxx>
+            </NativeReference>
+        </ItemGroup>
+    </Target>
+
+    <!-- libzigote.dylib flows as Content from Zigote.Core through EVERY project that references
+         it (UI, Adwaita, Graphs.Editor, …), and the iOS SDK's native-library collection keeps each
+         copy — several parallel install_name_tool runs then race on the same output file and
+         the build dies. Collapse the duplicates (same file, identical metadata) to one before
+         the tool runs. -->
+    <Target Name="DedupeNativeLibrariesToReidentify"
+            AfterTargets="_ComputeDynamicLibrariesToReidentify"
+            BeforeTargets="_InstallNameTool">
+        <RemoveDuplicates Inputs="@(_DynamicLibraryToReidentify)">
+            <Output TaskParameter="Filtered" ItemName="_DedupedDynamicLibraryToReidentify"/>
+        </RemoveDuplicates>
+        <ItemGroup>
+            <_DynamicLibraryToReidentify Remove="@(_DynamicLibraryToReidentify)"/>
+            <_DynamicLibraryToReidentify Include="@(_DedupedDynamicLibraryToReidentify)"/>
+        </ItemGroup>
+    </Target>
+
+</Project>

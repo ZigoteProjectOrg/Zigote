@@ -25,21 +25,21 @@ public class WidgetDebugTests
     [Fact]
     public void Strings_AreQuotedAndNewlineEscaped()
     {
-        var props = WidgetDebug.Properties(new TextField { Text = "hi\nthere" });
+        var props = WidgetDebug.Properties(new AdwTextField { Text = "hi\nthere" });
         Assert.Equal(expected: "\"hi⏎there\"", actual: Val(p: props, name: "Text"));
     }
 
     [Fact]
     public void EmptyString_ShowsAsQuotes_NotBlank()
     {
-        var props = WidgetDebug.Properties(new TextField { Text = "" });
+        var props = WidgetDebug.Properties(new AdwTextField { Text = "" });
         Assert.Equal(expected: "\"\"", actual: Val(p: props, name: "Text"));
     }
 
     [Fact]
     public void Delegate_ShowsAsFunctionGlyph_NotTypeName()
     {
-        var props = WidgetDebug.Properties(new TextField { OnChanged = _ => { } });
+        var props = WidgetDebug.Properties(new AdwTextField { OnChanged = _ => { } });
         string v = Val(p: props, name: "OnChanged");
         Assert.StartsWith(expectedStartString: "ƒ", actualString: v);
         Assert.DoesNotContain(expectedSubstring: "System.Action", actualString: v);
@@ -49,7 +49,7 @@ public class WidgetDebugTests
     public void Booleans_AreLowercased()
     {
         var props = WidgetDebug.Properties(
-            new TextField {
+            new AdwTextField {
                 Multiline = true,
                 ReadOnly = false,
             }
@@ -61,7 +61,7 @@ public class WidgetDebugTests
     [Fact]
     public void WholeNumberFloats_RenderWithoutDecimals()
     {
-        var props = WidgetDebug.Properties(new TextField { MinWidth = 140f });
+        var props = WidgetDebug.Properties(new AdwTextField { MinWidth = 140f });
         Assert.Equal(expected: "140", actual: Val(p: props, name: "MinWidth"));
     }
 
@@ -77,15 +77,15 @@ public class WidgetDebugTests
     public void NullProperties_AreOmitted()
     {
         // OnChanged defaults to null → no row for it.
-        var props = WidgetDebug.Properties(new TextField());
+        var props = WidgetDebug.Properties(new AdwTextField());
         Assert.False(Has(p: props, name: "OnChanged"));
     }
 
     [Fact]
     public void HeaderRows_ArePresent()
     {
-        var props = WidgetDebug.Properties(new TextField());
-        Assert.Equal(expected: "TextField", actual: Val(p: props, name: "Type"));
+        var props = WidgetDebug.Properties(new AdwTextField());
+        Assert.Equal(expected: "AdwTextField", actual: Val(p: props, name: "Type"));
         Assert.True(Has(p: props, name: "Bounds"));
         Assert.True(Has(p: props, name: "Dirty"));
     }
@@ -93,7 +93,7 @@ public class WidgetDebugTests
     [Fact]
     public void LongValues_AreTruncated()
     {
-        var props = WidgetDebug.Properties(new TextField { Text = new string(c: 'x', count: 500) });
+        var props = WidgetDebug.Properties(new AdwTextField { Text = new string(c: 'x', count: 500) });
         Assert.True(Val(p: props, name: "Text").Length <= 161); // 160 cap + ellipsis
         Assert.EndsWith(expectedEndString: "…", actualString: Val(p: props, name: "Text"));
     }

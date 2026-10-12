@@ -22,9 +22,9 @@ Each layer depends only on the one below it:
 ┌────────────────────────────────────────────────────────────────────────┐
 │  Your app                                                              │
 ├────────────────────────────────────────────────────────────────────────┤
-│  Design systems   Zigote.UI.Adwaita (GNOME) — builds on Material       │
-│  and add-ons      Zigote.UI.Material — Material vocabulary and the     │
-│                   framework's control library (TextField, Checkbox, …) │
+│  Design system    Zigote.UI.Adwaita (GNOME) — the design system and    │
+│  and add-ons      the framework's control library (entries, switches,  │
+│                   sliders, editors, file dialogs, …)                   │
 │                   Charts · Localizations · DevTools · BottomSheet      │
 ├────────────────────────────────────────────────────────────────────────┤
 │  Kernel           Zigote.UI — widgets, layout, paint, input, focus,    │
@@ -40,12 +40,10 @@ Each layer depends only on the one below it:
 
 Two things follow from that shape:
 
-- **Design systems are layers over one kernel, not forks.** Adwaita and Material compose the same
-  primitives and share the theme, focus, semantics and hot-reload machinery, so mixing them in one
-  app is normal and supported. They are stacked, not siblings: `Zigote.UI.Material` doubles as the
-  framework's control library — the kernel deliberately does not duplicate `TextField`, `Checkbox`
-  or `Slider` — and `Zigote.UI.Adwaita` builds on it (`AdwEntry` derives from Material's
-  `TextField`).
+- **The design system is a layer over the kernel, not a fork.** `Zigote.UI.Adwaita` composes the
+  kernel's primitives and shares its theme, focus, semantics and hot-reload machinery. It doubles as
+  the framework's control library — the kernel deliberately does not carry a text field, check
+  button or slider (`AdwEntry` wraps `AdwTextField`, the editing engine).
 - **`Zigote.UI` depends on nothing above the GPU.** The whole widget layer is headlessly testable —
   build a tree, lay it out, dispatch synthetic input, assert on the emitted paint commands. Every
   test in `Zigote.Tests` runs without a window.
@@ -300,8 +298,7 @@ reactive graph.
 |---|---|
 | `Zigote.Core` | `Signal`/`Computed`/`Effect`/`LinkedSignal`/`Trigger`/`Reactive`, `Threading.Background`, plus the native seam: paint & event ABI, math, animation, assets, diagnostics registries |
 | `Zigote.UI` | Widgets, layout, theming, navigation (Navigator 2.0), focus, semantics, `Watch` |
-| `Zigote.UI.Material` | The Material vocabulary with the Flutter names, and the framework's control library — `TextField`, `Checkbox`, `Slider`, `TabBar` live here, not in the kernel ([README](../Zigote.UI.Material/README.md)) |
-| `Zigote.UI.Adwaita` | The GNOME Adwaita design system, over the kernel and Material — 100 `Adw*` types, live system theming, client-side decorations ([README](../Zigote.UI.Adwaita/README.md)) |
+| `Zigote.UI.Adwaita` | The GNOME Adwaita design system and the framework's control library, over the kernel — 100 `Adw*` types, live system theming, client-side decorations ([README](../Zigote.UI.Adwaita/README.md)) |
 | `Zigote.UI.Charts`, `.Localizations`, `.BottomSheet` | Charting, i18n, draggable sheets |
 | `Zigote.UI.Functional` | Components as plain functions, via one widget: `View` ([README](../Zigote.UI.Functional/README.md)) |
 | `Zigote.UI.FSharp` | F# reactive ergonomics (`signal`/`computed`/`effect`/`watch`) + `Host.run` ([README](../Zigote.UI.FSharp/README.md)) |

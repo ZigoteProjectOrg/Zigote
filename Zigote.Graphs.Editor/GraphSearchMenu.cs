@@ -147,7 +147,7 @@ public sealed class GraphSearchMenu : Widget
         ? null : _field.HitTest(point) ?? this;
     public override IEnumerable<Widget> GetChildren() => IsVisible ? [_field] : [];
 
-    private sealed class SearchField(GraphSearchMenu owner) : TextField(decoration: new InputDecoration(hintText: "Search nodes…"))
+    private sealed class SearchField(GraphSearchMenu owner) : AdwTextField(decoration: new AdwInputDecoration(hintText: "Search nodes…"))
     {
         public override void OnKey(char keyChar, uint scancode, bool down, Modifiers mods)
         {

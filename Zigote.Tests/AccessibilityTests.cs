@@ -67,11 +67,11 @@ public class AccessibilityTests
     [Fact]
     public void Checkbox_ExposesCheckableAndCheckedState()
     {
-        var on = First(root: Tree(new Checkbox(true)), role: SemanticsRole.Checkbox)!;
+        var on = First(root: Tree(new AdwCheckButton(value: true)), role: SemanticsRole.Checkbox)!;
         Assert.True(on.HasFlag(SemanticsFlags.Checkable));
         Assert.True(on.HasFlag(SemanticsFlags.Checked));
 
-        var off = First(root: Tree(new Checkbox(false)), role: SemanticsRole.Checkbox)!;
+        var off = First(root: Tree(new AdwCheckButton(value: false)), role: SemanticsRole.Checkbox)!;
         Assert.True(off.HasFlag(SemanticsFlags.Checkable));
         Assert.False(off.HasFlag(SemanticsFlags.Checked));
     }
@@ -80,7 +80,7 @@ public class AccessibilityTests
     public void Switch_HasSwitchRoleAndCheckedState()
     {
         var node = First(
-            root: Tree(new Switch(true) { SemanticsLabel = "Wi-Fi" }),
+            root: Tree(new AdwSwitch(true) { SemanticsLabel = "Wi-Fi" }),
             role: SemanticsRole.Switch
         )!;
         Assert.Equal(expected: "Wi-Fi", actual: node.Label);
@@ -90,7 +90,7 @@ public class AccessibilityTests
     [Fact]
     public void Slider_ReportsValueAndIncrementActions()
     {
-        var node = First(root: Tree(new Slider(0.5f)), role: SemanticsRole.Slider)!;
+        var node = First(root: Tree(new AdwSlider(0.5f)), role: SemanticsRole.Slider)!;
         Assert.Equal(expected: "50%", actual: node.Value);
         Assert.True(node.HasAction(SemanticsAction.Increase));
         Assert.True(node.HasAction(SemanticsAction.Decrease));
@@ -101,7 +101,7 @@ public class AccessibilityTests
     {
         var ro = First(
             root: Tree(
-                new TextField {
+                new AdwTextField {
                     Text = "hi",
                     ReadOnly = true,
                 }
@@ -114,7 +114,7 @@ public class AccessibilityTests
 
         var ml = First(
             root: Tree(
-                new TextField {
+                new AdwTextField {
                     Text = "a\nb",
                     Multiline = true,
                 }
@@ -184,16 +184,16 @@ public class AccessibilityTests
         )!;
         Assert.Equal(expected: "Button: Save", actual: button.Describe());
 
-        var check = First(root: Tree(new Checkbox(true)), role: SemanticsRole.Checkbox)!;
+        var check = First(root: Tree(new AdwCheckButton(value: true)), role: SemanticsRole.Checkbox)!;
         Assert.Contains(expectedSubstring: "checked", actualString: check.Describe());
     }
 
     [Fact]
     public void DirectionalKeyOwnership_TextAndSliderKeepArrows_ButtonDoesNot()
     {
-        Assert.True(new TextField().HandlesDirectionalKeys);
-        Assert.True(new CodeEditor().HandlesDirectionalKeys);
-        Assert.True(new Slider(0f).HandlesDirectionalKeys);
+        Assert.True(new AdwTextField().HandlesDirectionalKeys);
+        Assert.True(new AdwCodeEditor().HandlesDirectionalKeys);
+        Assert.True(new AdwSlider(0f).HandlesDirectionalKeys);
         Assert.False(new Pressable().HandlesDirectionalKeys);
     }
 }

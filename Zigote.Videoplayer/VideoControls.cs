@@ -4,7 +4,7 @@ using Zigote.Core.Animation;
 using Zigote.Core.Paint;
 using Zigote.Core.State;
 using Zigote.UI.Host;
-using Zigote.UI.Material;
+using Zigote.UI.Adwaita;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
@@ -40,12 +40,12 @@ public sealed class VideoControls : ComposedWidget
     private readonly BufferedBar _bufferBar = new();
     private readonly Icon _muteGlyph = new(MaterialIcons.VolumeUp);
     private readonly Icon _playGlyph = new(MaterialIcons.PlayArrow);
-    private readonly Slider _seekBar;
+    private readonly AdwSlider _seekBar;
     private readonly Stopwatch _sinceScrub = new();
     private readonly Text _speedLabel;
     private readonly Text _statusLabel;
     private readonly Text _timeLabel;
-    private readonly Slider _volumeBar;
+    private readonly AdwSlider _volumeBar;
 
     /// <summary>Where the thumb is during a drag, before the seek is committed. Null when not scrubbing.</summary>
     private float? _pendingScrub;
@@ -63,13 +63,13 @@ public sealed class VideoControls : ComposedWidget
         _timeLabel = new Text(data: "0:00 / 0:00", style: new TextStyle(13));
         _statusLabel = new Text(data: "", style: new TextStyle(12));
         _speedLabel = new Text("1×");
-        _seekBar = new Slider(
+        _seekBar = new AdwSlider(
             value: 0,
             min: 0,
             max: 1,
             onChanged: OnScrub
         );
-        _volumeBar = new Slider(
+        _volumeBar = new AdwSlider(
             value: 1,
             min: 0,
             max: 1,
@@ -116,23 +116,24 @@ public sealed class VideoControls : ComposedWidget
                 new Row(
                     crossAxisAlignment: CrossAxisAlignment.Center,
                     children: [
-                        new IconButton(
-                            icon: _playGlyph,
-                            onPressed: P.TogglePlayPause,
-                            tooltip: "Play / pause"
+                        new Tooltip(
+                            message: "Play / pause",
+                            child: new AdwButton(onPressed: P.TogglePlayPause) { Content = _playGlyph, Style = AdwButtonStyle.Flat }
                         ),
-                        new IconButton(
-                            icon: new Icon(MaterialIcons.Replay),
-                            onPressed: () => P.Seek(TimeSpan.Zero),
-                            tooltip: "Restart"
+                        new Tooltip(
+                            message: "Restart",
+                            child: new AdwButton(onPressed: () => P.Seek(TimeSpan.Zero)) { Content = new Icon(MaterialIcons.Replay), Style = AdwButtonStyle.Flat }
                         ),
                         new SizedBox(8),
                         _timeLabel,
                         new Spacer(),
                         _statusLabel,
                         new SizedBox(8),
-                        new TextButton(child: _speedLabel, onPressed: CycleSpeed),
-                        new IconButton(icon: _muteGlyph, onPressed: ToggleMute, tooltip: "Mute"),
+                        new AdwButton(onPressed: CycleSpeed) { Content = _speedLabel, Style = AdwButtonStyle.Flat },
+                        new Tooltip(
+                            message: "Mute",
+                            child: new AdwButton(onPressed: ToggleMute) { Content = _muteGlyph, Style = AdwButtonStyle.Flat }
+                        ),
                         new SizedBox(width: 100, child: _volumeBar),
                     ]
                 ),

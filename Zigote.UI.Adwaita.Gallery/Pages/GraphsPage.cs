@@ -1,7 +1,7 @@
 using Zigote.Graphs.Core;
 using Zigote.Graphs.Editor;
 using Zigote.Graphs.Commands;
-using Zigote.UI.Material;
+using Zigote.UI.Adwaita;
 
 namespace AdwaitaGallery.Pages;
 
@@ -119,7 +119,7 @@ public sealed class GraphsPage : ComposedWidget
         string? chosen = null;
         menu.NodeChosen += (id, _, _) => chosen = id;
         menu.Show(0, 0, new GraphPinEndpoint(operation.Id, "b"));
-        var field = (TextField)menu.GetChildren().Single();
+        var field = (AdwTextField)menu.GetChildren().Single();
         field.Text = "number";
         field.OnChanged?.Invoke(field.Text);
         field.OnKey('\0', 40, true, default);

@@ -8,7 +8,7 @@
 #   build/publish.sh                                          # editor, RIDs for the current host
 #   build/publish.sh osx-arm64 win-x64 linux-x64             # editor, all desktop RIDs (cross-built)
 #   build/publish.sh --project ~/ZigoteProjects/Signals/Signals.csproj --name signals win-x64
-#   build/publish.sh --aot --project Zigote.UI.Gallery/Zigote.UI.Gallery.csproj osx-arm64  # NativeAOT
+#   build/publish.sh --aot --project Zigote.UI.Adwaita.Gallery/Zigote.UI.Adwaita.Gallery.csproj osx-arm64  # NativeAOT
 #
 # Default: each RID → a self-contained, NON-trimmed JIT bundle (the engine's reflection-based scripting/
 # serialization is trim-unsafe) with the native libzigote (+ wgpu_native.dll on Windows) and the app's

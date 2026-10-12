@@ -160,8 +160,8 @@ public sealed class SearchBloc(ISearchApi api)
 The field wires straight in:
 
 ```csharp
-new TextField(
-    decoration: new InputDecoration(hintText: "Search"),
+new AdwTextField(
+    decoration: new AdwInputDecoration(hintText: "Search"),
     onChanged: text => bloc.Add(new SearchEvent.QueryChanged(text)));
 ```
 
@@ -317,7 +317,7 @@ the retained model is for. Building fresh instances per branch would reset the f
 If you only need the raw constraints rather than a named class, use `LayoutBuilder`.
 
 For a real sidebar/content shell with a collapse threshold and a back button, use
-`NavigationSplitView` (Material) or `AdwNavigationSplitView` (Adwaita) instead of hand-rolling it.
+`AdwNavigationSplitView` instead of hand-rolling it.
 
 ---
 
@@ -373,8 +373,8 @@ public sealed class SignupForm : ComposedWidget
             spacing: Spacing.Xxs,
             children:
             [
-                new TextField(
-                    decoration: new InputDecoration(hintText: hint),
+                new AdwTextField(
+                    decoration: new AdwInputDecoration(hintText: hint),
                     onChanged: onChanged,
                     obscureText: obscure),
 

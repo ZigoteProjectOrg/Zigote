@@ -99,9 +99,9 @@ public class TouchInputTests
     // never be moved, and a horizontal slider that lost the gesture whenever the finger settled
     // downward before setting off sideways.
 
-    private static Slider PressedSlider(float value = 0.5f)
+    private static AdwSlider PressedSlider(float value = 0.5f)
     {
-        var slider = new Slider(value);
+        var slider = new AdwSlider(value);
         slider.Measure(Constraints.Tight(width: 200, height: 44));
         slider.Layout(Offset.Zero);
         slider.OnPointerDown(new Offset(x: 100, y: 22));
@@ -126,7 +126,7 @@ public class TouchInputTests
     [Fact]
     public void Slider_NotPressed_ClaimsNothing()
     {
-        var slider = new Slider(0.5f);
+        var slider = new AdwSlider(0.5f);
         slider.Measure(Constraints.Tight(width: 200, height: 44));
         slider.Layout(Offset.Zero);
 
@@ -136,7 +136,7 @@ public class TouchInputTests
         Assert.False(slider.CanTouchDrag(false));
 
         // A disabled control starts no scrub either, so its row stays a scroll surface.
-        var off = new Slider(0.5f) { Enabled = false };
+        var off = new AdwSlider(0.5f) { Enabled = false };
         off.Measure(Constraints.Tight(width: 200, height: 44));
         off.Layout(Offset.Zero);
         off.OnPointerDown(new Offset(x: 100, y: 22));

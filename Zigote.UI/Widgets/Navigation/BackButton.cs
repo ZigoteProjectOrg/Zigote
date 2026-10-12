@@ -5,7 +5,7 @@ namespace Zigote.UI.Widgets.Navigation;
 
 /// <summary>
 ///     A flat back button that pops the nearest <see cref="Navigator" /> when tapped. Suitable as an
-///     <c>AppBar.Leading</c>. Renders nothing when the navigator has nothing to pop.
+///     <c>AdwHeaderBar.Start</c>. Renders nothing when the navigator has nothing to pop.
 /// </summary>
 public sealed class BackButton : ComposedWidget
 {

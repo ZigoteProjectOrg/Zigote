@@ -3,7 +3,7 @@
 Zigote's widget vocabulary was taken from Flutter deliberately: `Widget`, `BuildContext`,
 `InheritedWidget`, `Column`/`Row`/`Expanded`/`Stack`, `Navigator` with `Push`/`Pop`,
 `MediaQuery`, `AnimationController`, `Tween`, implicit and explicit transitions. A Flutter tree ports
-across close to line for line, and `Zigote.UI.Material` exists to make that literal.
+across with the same structure; the controls take their names from `Zigote.UI.Adwaita`.
 
 The vocabulary is the same. **The execution model is not.** Read [`concepts.md`](concepts.md) first —
 in particular §1 (`Build` runs once) and §4 (changing state does not rebuild). Those two differences
@@ -24,14 +24,14 @@ void main() => runApp(MaterialApp(
 
 ```csharp
 // Zigote
-new MaterialApp(
+new AdwaitaApp(
     title: "Demo",
-    theme: ThemeData.Dark,
+    theme: AdwTheme.Dark,
     home: new HomePage()
 ).Run();
 ```
 
-`MaterialApp` is a named-argument constructor over `ZigoteApp`. It boots the engine, injects
+`AdwaitaApp` is a named-argument constructor over `ZigoteApp`. It boots the engine, injects
 `ThemeProvider` + `MediaQuery`, and wraps `Home` in a root `Navigator`, so `context.Push` / `Pop`,
 `Routes`, `InitialRoute`, `OnGenerateRoute` and declarative `Pages` / `OnPopPage` all work the way
 you expect. `ZigoteApp` is the same thing with object-initializer syntax.
@@ -69,16 +69,19 @@ public sealed class Counter : ComposedWidget
     private readonly Label _text = new("Count: 0");   // hoisted: Build runs once
     private int _count;
 
-    protected override Widget Build(BuildContext ctx) => new Scaffold(
-        appBar: new AppBar(title: new Label("Counter")),
-        body: new Center(_text),
-        floatingActionButton: new FloatingActionButton(
-            child: new Icon(MaterialIcons.Add),
-            onPressed: () =>
-            {
-                _text.Text = $"Count: {++_count}";
-                MarkNeedsLayout();
-            }));
+    protected override Widget Build(BuildContext ctx) => new AdwToolbarView(
+        new Center(new Column(
+            mainAxisAlignment: MainAxisAlignment.Center,
+            children:
+            [
+                _text,
+                new AdwButton("Add", () =>
+                {
+                    _text.Text = $"Count: {++_count}";
+                    MarkNeedsLayout();
+                }),
+            ]))
+    ) { TopBars = { new AdwHeaderBar { Title = "Counter" } } };
 }
 ```
 
@@ -93,12 +96,15 @@ public sealed class CounterPage : ComposedWidget
 {
     private readonly Signal<int> _count = new(0);
 
-    protected override Widget Build(BuildContext ctx) => new Scaffold(
-        appBar: new AppBar(title: new Label("Counter")),
-        body: new Center(new Watch(() => new Label($"Count: {_count.Value}"))),
-        floatingActionButton: new FloatingActionButton(
-            child: new Icon(MaterialIcons.Add),
-            onPressed: () => _count.Value++));
+    protected override Widget Build(BuildContext ctx) => new AdwToolbarView(
+        new Center(new Column(
+            mainAxisAlignment: MainAxisAlignment.Center,
+            children:
+            [
+                new Watch(() => new Label($"Count: {_count.Value}")),
+                new AdwButton("Add", () => _count.Value++),
+            ]))
+    ) { TopBars = { new AdwHeaderBar { Title = "Counter" } } };
 }
 ```
 
@@ -133,20 +139,20 @@ widget, not a separate base class.
 | `Icon(Icons.add)` | `new Icon(MaterialIcons.Add)` | Icon names are strings; `MaterialIcons` is generated |
 | `Image.network` | `AsyncImage` | `Image` for local/decoded |
 | `GestureDetector` | `GestureDetector` | `OnTap`, `OnDoubleTap`, `OnLongPressed`, hover callbacks |
-| `InkWell` | `InkWell` (Material) / `Pressable` (kernel) | `Pressable` is the composable interaction primitive |
+| `InkWell` | `Pressable` | The composable interaction primitive |
 | `SingleChildScrollView` | `SingleChildScrollView` / `ScrollView` | |
 | `ListView(children:)` | `ListView(children:)` | Virtualized layout; construction is O(n) — see [Lists](#lists) |
 | `ListView.builder` | `ListView.Builder(count, i => …)` | Virtualizes construction too — rows built on demand |
-| `GridView` | `GridView.Count(...)`, `ResponsiveGrid` (Material) | Sizes to content; wrap in a scroll view |
+| `GridView` | `GridView.Count(...)`, `AdwResponsiveGrid` | Sizes to content; wrap in a scroll view |
 | `GridView.builder` | `GridView.Builder(cols, count, i => …)` | Virtualized and self-scrolling |
 | `ReorderableListView` | `ReorderableList` | |
 | `Draggable`/`DragTarget` | `Draggable<T>`/`DragTarget<T>` | Also handles OS file/text drops |
-| `Scaffold`/`AppBar`/`FAB` | `Scaffold`/`AppBar`/`FloatingActionButton` | `Zigote.UI.Material` |
-| `TextField`/`TextEditingController` | `TextField`/`TextEditingController` | `Zigote.UI.Material`; IME wired end to end |
-| `DropdownButton` | `Dropdown<T>`/`DropdownButton` | |
-| `Checkbox`/`Radio`/`Switch`/`Slider` | same names | `Zigote.UI.Material` |
-| `TabBar`/`TabBarView` | `TabBar`/`TabBarView` | |
-| `Card`/`Chip`/`Badge`/`Divider` | same names | |
+| `Scaffold`/`AppBar`/`FAB` | `AdwToolbarView`/`AdwHeaderBar`/`AdwButton` | `Zigote.UI.Adwaita`; the header bar hosts the window controls |
+| `TextField`/`TextEditingController` | `AdwEntry`, or `AdwTextField`/`AdwTextEditingController` | `Zigote.UI.Adwaita`; IME wired end to end |
+| `DropdownButton` | `AdwDropDown` | Items are strings; `onSelected` receives the index |
+| `Checkbox`/`Radio`/`Switch`/`Slider` | `AdwCheckButton`/`AdwRadioButton`/`AdwSwitch`/`AdwSlider` | `Zigote.UI.Adwaita` |
+| `TabBar`/`TabBarView` | `AdwViewSwitcher` + `AdwViewStack`, or `AdwTabBar` + `AdwTabView` | |
+| `Card`/`Chip`/`Badge`/`Divider` | `Card`/`AdwChip`/`AdwBadge`/`AdwSeparator` | |
 | `SnackBar` | `app.ShowSnackbar(...)` | |
 | `showDialog` | `new Dialog(content).Show()`, `Dialog.Alert/Confirm` | |
 | `Tooltip` | `Tooltip`, or override `Widget.TooltipText` | |
@@ -308,12 +314,12 @@ every rebuild. Here it evaluates once, at first measure. Move it into a `Watch` 
 either mutate the existing ones (`_switcher.Child = _pages[i]`) or call `MarkNeedsBuild`.
 `MarkNeedsLayout` only relayouts what is already there.
 
-**Recreating widgets loses state.** In Flutter, constructing an `ElevatedButton` in `build` every
+**Recreating widgets loses state.** In Flutter, constructing a button in `build` every
 frame is free — the element tree preserves state behind it. Here it is a new object with no hover,
 no focus, no animation. Hoist to a field and mutate.
 
 **A `Watch` swap tears down its subtree.** Anything stateful inside it (a `ListView`'s scroll offset,
-a focused `TextField`) is destroyed on every swap. Hoist the stateful child to a field, mutate it
+a focused `AdwEntry`) is destroyed on every swap. Hoist the stateful child to a field, mutate it
 inside the `Watch`, and return the same instance.
 
 **The root background must be opaque.** wgpu clears with alpha 0. `ZigoteApp` handles this, but a raw

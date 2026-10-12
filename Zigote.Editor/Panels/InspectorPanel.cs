@@ -17,12 +17,12 @@ using Zigote.Runtime.Prefab;
 using Zigote.Runtime.Scene;
 using Zigote.Scripting.Compilation;
 using Zigote.UI.Host;
-using Zigote.UI.Material;
+using Zigote.UI.Adwaita;
 using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
-// CodeEditor: Adwaita has no source view (nor does libadwaita — GtkSourceView is its own
+// AdwCodeEditor: Adwaita has no source view (nor does libadwaita — GtkSourceView is its own
 // library), so this one Material widget stays. Everything else in the panel is Adwaita.
 
 // Dropdown<T> must be referenced with a concrete type — alias for clarity:
@@ -144,7 +144,7 @@ public sealed partial class InspectorPanel : Widget
         var registry = ShaderMaterialDomain.CreateRegistry();
         var graph = ShaderMaterialDomain.CreateGraphFromNode(node);
         var preview = new MaterialPreviewWidget(_theme);
-        var wgslView = new CodeEditor {
+        var wgslView = new AdwCodeEditor {
             ReadOnly = true,
             Tokenizer = Highlighting.ForExtension(".wgsl"),
         };

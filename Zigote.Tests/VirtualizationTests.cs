@@ -91,7 +91,7 @@ public class VirtualizationTests
     {
         var roots = Enumerable.Range(start: 0, count: 1000).ToList();
         var tree =
-            new TreeView<int>(roots: roots, childrenOf: _ => [], labelOf: i => i.ToString()) {
+            new AdwTreeView<int>(roots: roots, childrenOf: _ => [], labelOf: i => i.ToString()) {
                 RowHeight = 24f,
             };
 

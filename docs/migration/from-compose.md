@@ -129,17 +129,17 @@ object per stage. If a wrapper stack gets deep enough to hurt readability, facto
 | `Box` | `Stack` |
 | `Spacer(Modifier.weight(1f))` | `new Spacer()` |
 | `LazyColumn` | `ListView.Builder` — see [Lists](#lazycolumn-and-lazyverticalgrid) |
-| `LazyVerticalGrid` | `GridView.Builder` (lazy); `ResponsiveGrid` (Material, materialized) |
+| `LazyVerticalGrid` | `GridView.Builder` (lazy); `AdwResponsiveGrid` (materialized) |
 | `Text` | `Label` (or `Text`, an alias taking a `TextStyle`) |
-| `Button` / `OutlinedButton` / `TextButton` | `Button`, or Material's `ElevatedButton` / `OutlinedButton` / `TextButton` |
+| `Button` / `OutlinedButton` / `TextButton` | `AdwButton` with `Style` = `Regular` / `Flat` / `Suggested` (or the kernel `Button`) |
 | `Icon` / `IconButton` | `Icon` / `IconButton` |
-| `TextField` / `OutlinedTextField` | `TextField` (`Zigote.UI.Material`) |
-| `Checkbox` / `RadioButton` / `Switch` / `Slider` | same names |
-| `Scaffold` / `TopAppBar` / `FAB` | `Scaffold` / `AppBar` / `FloatingActionButton` |
+| `TextField` / `OutlinedTextField` | `AdwEntry` (`Zigote.UI.Adwaita`) |
+| `Checkbox` / `RadioButton` / `Switch` / `Slider` | `AdwCheckButton` / `AdwRadioButton` / `AdwSwitch` / `AdwSlider` |
+| `Scaffold` / `TopAppBar` / `FAB` | `AdwToolbarView` / `AdwHeaderBar` / `AdwButton` |
 | `ModalBottomSheet` | `AdwBottomSheet` (Adwaita), or a `Dialog` / overlay |
 | `AlertDialog` | `Dialog.Alert` / `Dialog.Confirm`, or `new Dialog(content).Show()` |
 | `Snackbar` / `SnackbarHostState` | `app.ShowSnackbar(message, …)` |
-| `TabRow` / `HorizontalPager` | `TabBar` / `TabBarView` |
+| `TabRow` / `HorizontalPager` | `AdwViewSwitcher` + `AdwViewStack`, `AdwCarousel` |
 | `NavHost` / `navController` | `Navigator` — `ctx.Push(page)`, `ctx.Pop(result)`, `Routes`, `Pages` |
 | `AnimatedVisibility` | `AnimatedOpacity`, `AnimatedSize`, `FadeTransition` |
 | `AnimatedContent` / `Crossfade` | `AnimatedSwitcher` |

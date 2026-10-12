@@ -11,7 +11,7 @@
         <!-- Scripting can build full widget HUDs (Hud.Root), so it references the widget framework.
              Zigote.UI depends only on Zigote.Core, so this introduces no dependency cycle. -->
         <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
-        <ProjectReference Include="..\Zigote.UI.Material\Zigote.UI.Material.csproj"/>
+        <ProjectReference Include="..\Zigote.UI.Adwaita\Zigote.UI.Adwaita.csproj"/>
         <ProjectReference Include="..\Zigote.Vfx\Zigote.Vfx.csproj"/>
         <ProjectReference Include="..\Zigote.ECS\Zigote.ECS.csproj"/>
         <ProjectReference Include="..\Zigote.Cinematics\Zigote.Cinematics.csproj"/>
@@ -23,6 +23,6 @@
         <ProjectReference Include="..\Zigote.Physics2D\Zigote.Physics2D.csproj"/>
     </ItemGroup>
     <ItemGroup>
-        <Using Include="Zigote.UI.Material"/>
+        <Using Include="Zigote.UI.Adwaita"/>
     </ItemGroup>
 </Project>

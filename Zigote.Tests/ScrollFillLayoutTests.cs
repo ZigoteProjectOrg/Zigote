@@ -10,7 +10,7 @@ namespace Zigote.Tests;
 /// <summary>
 ///     Guards the "fill widget inside an unbounded scroll" crash: a vertical <see cref="ScrollView" />
 ///     gives its child an infinite max-height, so a widget that naively returns <c>c.MaxHeight</c>
-///     (TabView / ListView / Scaffold) reported an infinite size. That infinity then flowed into flex
+///     (ListView and friends) reported an infinite size. That infinity then flowed into flex
 ///     alignment math (<c>∞ − ∞ → NaN</c>), producing NaN paint coordinates that crashed
 ///     <see cref="PaintList" />'s NaN guard. Fill widgets must size to their content on an unbounded
 ///     axis, and <c>FlexLayout</c> must never emit NaN even when a child is genuinely infinite.
@@ -48,32 +48,6 @@ public class ScrollFillLayoutTests
     }
 
     [Fact]
-    public void TabView_InVerticalScroll_SizesToActiveChild()
-    {
-        var tabs = new TabView();
-        tabs.Children.Add(new SizedBox(width: 0, height: 100));
-
-        // Unbounded height (as a vertical ScrollView supplies) → size to the active child, not ∞.
-        var measured = tabs.Measure(new Constraints(minWidth: 0, maxWidth: 776));
-        Assert.Equal(expected: 100f, actual: measured.Height, precision: 1);
-        Assert.Equal(expected: 776f, actual: measured.Width, precision: 1);
-
-        // Same shape that crashed in the gallery: a TabView inside a Card inside the scroll.
-        var card = new Card(new Column([tabs]) { CrossAxisAlignment = CrossAxisAlignment.Stretch });
-        var page = new Column([card]) { CrossAxisAlignment = CrossAxisAlignment.Start };
-        LayoutInVerticalScroll(page);
-
-        AssertFinite(card.Bounds);
-        AssertFinite(tabs.Bounds);
-        Assert.Equal(
-            expected: 100f,
-            actual: tabs.Bounds.Height,
-            precision: 1
-        ); // sized to its page, not to ∞
-        PaintNoThrow(page);
-    }
-
-    [Fact]
     public void ListView_InVerticalScroll_SizesToContentHeight()
     {
         var list = new ListView { ItemHeight = 40f };
@@ -87,23 +61,6 @@ public class ScrollFillLayoutTests
 
         AssertFinite(list.Bounds);
         Assert.Equal(expected: 200f, actual: list.Bounds.Height, precision: 1); // 5 × 40, not ∞
-        PaintNoThrow(page);
-    }
-
-    [Fact]
-    public void Scaffold_InVerticalScroll_SizesToContent()
-    {
-        var scaffold = new Scaffold { Body = new SizedBox(width: 0, height: 150) };
-
-        var page = new Column([scaffold]) { CrossAxisAlignment = CrossAxisAlignment.Start };
-        LayoutInVerticalScroll(page);
-
-        AssertFinite(scaffold.Bounds);
-        Assert.Equal(
-            expected: 150f,
-            actual: scaffold.Bounds.Height,
-            precision: 1
-        ); // body content, not ∞
         PaintNoThrow(page);
     }
 

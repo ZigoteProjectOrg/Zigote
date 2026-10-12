@@ -7,16 +7,15 @@ using Zigote.UI.Theme;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
 using Zigote.UI.Widgets.Layout;
-// Slider / Switch / TextField / Divider / ProgressBar / Badge come from Zigote.UI.Material,
+// Slider / Switch / AdwTextField / Divider / ProgressBar / Badge come from Zigote.UI.Adwaita,
 // which the test project pulls in via a global <Using> in Zigote.Tests.csproj. Alias Switch to
 // disambiguate it from System.Diagnostics.Switch (pulled in for Stopwatch).
-using Switch = Zigote.UI.Material.Switch;
 
 namespace Zigote.Tests;
 
 /// <summary>
 ///     Performance benchmark over a <em>realistic</em> interactive widget tree — a scrollable settings
-///     page built from the actual control set (Buttons, Checkboxes, Switches, Sliders, TextField,
+///     page built from the actual control set (Buttons, Checkboxes, Switches, Sliders, AdwTextField,
 ///     Cards, Dividers, ProgressBar, Chips, Badge) wrapped in a <see cref="ThemeProvider" />, plus a
 ///     virtualized <see cref="ListView" />. This is the counterpart to the uniform-grid
 ///     <c>UiPerformanceTests</c>: it drives the same headless Measure → Layout → Paint pipeline that a
@@ -50,32 +49,32 @@ public class ComplexUiPerformanceTests
                             [
                                 new Label($"Section {index}"),
                                 new Spacer(),
-                                new Badge(child: new Label("beta"), count: index + 1),
+                                new AdwBadge(child: new Label("beta"), count: index + 1),
                             ]
                         ),
-                        new Divider(),
-                        LabeledRow(label: "Dark mode", control: new Switch(index % 2 == 0)),
-                        LabeledRow(label: "Notifications", control: new Checkbox(index % 3 == 0)),
+                        new AdwSeparator(),
+                        LabeledRow(label: "Dark mode", control: new AdwSwitch(index % 2 == 0)),
+                        LabeledRow(label: "Notifications", control: new AdwCheckButton(value: index % 3 == 0)),
                         LabeledRow(
                             label: "Volume",
                             control: new SizedBox(
                                 width: 160f,
                                 height: null,
-                                child: new Slider(value: 0.5f + (index * 0.05f), min: 0, max: 1)
+                                child: new AdwSlider(value: 0.5f + (index * 0.05f), min: 0, max: 1)
                             )
                         ),
                         new SizedBox(width: 0f, height: 8f),
                         new Label("Display name"),
                         new SizedBox(width: 0f, height: 4f),
-                        new TextField(),
+                        new AdwTextField(),
                         new SizedBox(width: 0f, height: 8f),
-                        new ProgressBar(0.35f + (index * 0.05f)),
+                        new AdwProgressBar(0.35f + (index * 0.05f)),
                         new SizedBox(width: 0f, height: 8f),
                         new Row(
                             [
-                                new Chip(label: "All", selected: index == 0),
+                                new AdwChip(label: "All", selected: index == 0),
                                 new SizedBox(width: 6f, height: 0f),
-                                new Chip(label: "Unread", selected: index == 1),
+                                new AdwChip(label: "Unread", selected: index == 1),
                                 new Spacer(),
                                 new Button(label: "Reset", onPressed: null) {
                                     Style = ButtonStyle.Flat,

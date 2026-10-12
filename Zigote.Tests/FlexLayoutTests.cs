@@ -65,7 +65,7 @@ public class FlexLayoutTests
     [Fact]
     public void Column_NonFlexMaxSibling_StarvesExpanded_UnlessMinSized()
     {
-        // Pins the CodeEditor-demo layout gotcha: a plain Column defaults to MainAxisSize.Max, so a
+        // Pins the AdwCodeEditor-demo layout gotcha: a plain Column defaults to MainAxisSize.Max, so a
         // *non-flex* Column used as a header/content block greedily consumes the whole main axis,
         // starving an Expanded sibling below it (the editors collapsed to zero height). Shrinking that
         // block to MainAxisSize.Min frees the remaining space for the Expanded child.

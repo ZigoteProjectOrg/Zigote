@@ -98,7 +98,7 @@ class Counter : ComposedWidget
 |------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Layout** (`Widgets/Layout/`)           | `Column`/`Row`/`Expanded`/`Stack`/`Wrap`, `Padding`/`Align`/`Center`, `SizedBox`/`ConstrainedBox`, `DecoratedBox`, `Opacity`/`ClipRect`/`Transform`, `InteractiveViewer` (drag-pan, pinch/⌘-wheel zoom, double-tap), `ScrollView`/`ListView` (virtualized; `ListView.Builder`/`GridView.Builder` build rows on demand, `GridView.Rebind` grows one in place), `PagedListView<T>` (loads page by page as the tail comes into view), `StaggeredGrid` (fixed columns, tiles keep their own height) |
 | **Controls** (`Widgets/Controls/`)       | `Label`, `Text`, `RichText`, `SelectableText`, `Button`, `Card`, `Dialog`, `Snackbar`, `Tooltip`, `ContextMenu`, `Icon`, `Image`, `GestureDetector`, `Pressable`, `Skeleton` (shimmering loading placeholder)                                                                                                                                                                                          |
-| **Form controls** (`Zigote.UI.Material`) | Deliberately **not** in the kernel — `Zigote.UI.Material` is the framework's control library: `TextField` (single/multiline + IME), `Checkbox`, `Radio<T>`, `Switch`, `Slider`, `Dropdown<T>`, `TabBar`/`TabView`, `ProgressBar`, `Badge`, `NumberInput`, `SegmentedControl`, `SearchField`, `Chip`, `SplitPane`, `TreeView<T>`, `ReorderableList`, `NavigationSplitView`, `ColorPicker`, `CurveEditor`, `GradientEditor`, `CodeEditor` |
+| **Form controls** (`Zigote.UI.Adwaita`) | Deliberately **not** in the kernel — `Zigote.UI.Adwaita` is the framework's control library: `AdwEntry`/`AdwTextField` (single/multiline + IME), `AdwCheckButton`, `AdwRadioButton`, `AdwSwitch`, `AdwSlider`, `AdwDropDown`, `AdwTabBar`/`AdwTabView`, `AdwProgressBar`, `AdwBadge`, `AdwNumberInput`, `AdwToggleGroup`, `AdwSearchEntry`, `AdwChip`, `AdwPaned`, `AdwTreeView<T>`, `AdwReorderableList`, `AdwNavigationSplitView`, `AdwColorPicker`, `AdwCurveEditor`, `AdwGradientEditor`, `AdwCodeEditor` |
 | **Liquid Glass** (`Widgets/LiquidGlass/`) | `LiquidGlass` surfaces over media — per-pixel backdrop anchoring, theme-adaptive glass family — plus `LiquidGlassLayer`, `LiquidGlassBlendGroup`, `LiquidStretch`, `GlassGlow`                                                                                                                                                                            |
 | **Transitions** (`Widgets/Transitions/`) | Explicit (`FadeTransition`/`SlideTransition`/`ScaleTransition`/`AnimatedContainer`) + implicit (`AnimatedOpacity`/`AnimatedAlign`/`AnimatedPadding`/`AnimatedSwitcher`/`TweenAnimationBuilder<T>`) driven by `AnimationController` — set `Spec = MotionSpec.Snappy` on any of them for a spring that survives being interrupted |
 | **Animate** (`Widgets/Animate/`)         | flutter_animate-style fluent API: `widget.Animate().Fade(500.ms).Rotate().Scale(delay: 500.ms)`, plus named presets (`PopIn`, `FadeInUp`, `Attention`, `Pulse`, `Spin`) and `children.Stagger()` |
@@ -163,13 +163,11 @@ Three things the engine adds so text always renders as asked:
 
 ## Design systems on top
 
-`Zigote.UI` is the flat-macOS base. Two full design languages layer on top of it rather than forking it — they share
-the theme, focus, semantics and hot-reload machinery, and mixing them in one app is supported. They stack: Material
-doubles as the framework's control library, and Adwaita builds on Material (`AdwEntry` derives from its `TextField`):
+`Zigote.UI` is the flat-macOS base. One full design language layers on top of it rather than forking it — it shares
+the theme, focus, semantics and hot-reload machinery, and doubles as the framework's control library:
 
 - **[`Zigote.UI.Adwaita`](../Zigote.UI.Adwaita/README.md)** — the GNOME Adwaita design system, with live system theming
   and client-side decorations.
-- **[`Zigote.UI.Material`](../Zigote.UI.Material/README.md)** — the Material vocabulary with the Flutter names.
 
 Alongside them: **[`Zigote.UI.Charts`](../Zigote.UI.Charts/README.md)** (declarative charting), **[
 `Zigote.UI.Localizations`](../Zigote.UI.Localizations/README.md)** (i18n), **[

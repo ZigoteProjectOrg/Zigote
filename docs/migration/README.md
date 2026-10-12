@@ -66,8 +66,7 @@ Three things to notice, because they all differ from where you came from:
 | Package | You want it when |
 |---|---|
 | `Zigote.UI` | Always. The kernel: layout, controls, focus, navigation, animation, semantics. Terse, positional constructors, Zigote-native names. |
-| `Zigote.UI.Material` | You are porting Material or Flutter code. Material names (`Scaffold`, `AppBar`, `ElevatedButton`, `ListTile`, `TextField`) with named-argument constructors, over the same kernel. Also the home of `TextField`, `Dropdown`, `Slider`, `Switch`, `TabBar` — the kernel does not duplicate them. |
-| `Zigote.UI.Adwaita` | You want the GNOME look — on any OS. 100 `Adw*` types: `AdwHeaderBar`, `AdwNavigationSplitView`, the boxed-list rows, `AdwPreferencesDialog`, adaptive breakpoints, and client-side decorations the app draws itself. On GNOME it follows the system light/dark and accent live; on macOS it hosts the traffic lights in its own header bar. See [`Zigote.UI.Adwaita/README.md`](../../Zigote.UI.Adwaita/README.md). |
+| `Zigote.UI.Adwaita` | Almost always. The design system and the control library — the home of `AdwEntry`, `AdwDropDown`, `AdwSlider`, `AdwSwitch`, `AdwTabBar`; the kernel does not duplicate them. The GNOME look on any OS: `AdwHeaderBar`, `AdwNavigationSplitView`, the boxed-list rows, `AdwPreferencesDialog`, adaptive breakpoints, and client-side decorations the app draws itself. On GNOME it follows the system light/dark and accent live; on macOS it hosts the traffic lights in its own header bar. See [`Zigote.UI.Adwaita/README.md`](../../Zigote.UI.Adwaita/README.md). |
 | `Zigote.Bloc` | Logic that outgrows plain signals — events in, ordered, one at a time; state out as signals. (The shipped sample apps stay on signals alone; reach for a bloc when ordering and cancellation start to matter.) |
 | `Zigote.UI.Charts` | Declarative charts. |
 | `Zigote.UI.Localizations` | Locales, plural rules, typed message codegen. |
@@ -107,7 +106,7 @@ By hand, if you would rather see every line:
 
   <ItemGroup>
     <ProjectReference Include="$(ZigoteRoot)/Zigote.UI/Zigote.UI.csproj" />
-    <ProjectReference Include="$(ZigoteRoot)/Zigote.UI.Material/Zigote.UI.Material.csproj" />
+    <ProjectReference Include="$(ZigoteRoot)/Zigote.UI.Adwaita/Zigote.UI.Adwaita.csproj" />
     <ProjectReference Include="$(ZigoteRoot)/Zigote.Bloc/Zigote.Bloc.csproj" />
   </ItemGroup>
 </Project>
@@ -122,7 +121,7 @@ global using Zigote.Core.Paint;
 global using Zigote.Core.State;
 global using Zigote.Core.Threading;            // Background, Latest, Deliver
 global using Zigote.UI.Host;
-global using Zigote.UI.Material;               // TextField, Scaffold, Checkbox — the control library
+global using Zigote.UI.Adwaita;                // AdwEntry, AdwHeaderBar, AdwSwitch — the control library
 global using Zigote.UI.Theme;
 global using Zigote.UI.Widgets;
 global using Zigote.UI.Widgets.Controls;
@@ -162,7 +161,7 @@ manual — most of them explain *why*, not just *what*.
 | What is the widget contract? | `Zigote.UI/Widgets/Widget.cs` |
 | How does state work? | `Zigote.UI/Widgets/ComposedWidget.cs`, `Zigote.Core/State/Signal.cs` |
 | What does the frame loop do? | `Zigote.UI/App/App.cs` |
-| What controls exist? | `Zigote.UI/Widgets/Controls/`, `Zigote.UI.Material/Widgets/` |
+| What controls exist? | `Zigote.UI/Widgets/Controls/`, `Zigote.UI.Adwaita/Widgets/` |
 | How do I test this? | `Zigote.Tests/` — every test is headless |
-| An app end to end | `Zigote.UI.Gallery/` — navigation, theming, charts, i18n, a signal-driven shell |
+| An app end to end | `Zigote.UI.Adwaita.Gallery/` — an adaptive shell, navigation, theming, multi-window |
 | The smallest possible app | [`Zigote.UI.HelloWorld/`](../../Zigote.UI.HelloWorld/README.md) — one annotated file |
