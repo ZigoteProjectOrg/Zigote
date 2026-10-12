@@ -462,6 +462,22 @@ held touch, a sounding one-shot, secondary windows. A focused text field with a 
 (`ITextInputClient.CaretBlinkBase`) is repainted on the two blink edges per cycle instead of every
 frame, and the idle sleep is cut short to land on the next edge.
 
+Two more cases of frames produced for nobody (2026-10-13, second pass):
+
+- **Skipped surface.** With vsync the present call is the pacer, and a frame the surface refuses
+  (occluded, minimised, display asleep) never reaches it. A window animating behind another one
+  therefore spun the loop unpaced — the window probe logged 6,000–8,000 skipped frames in the few
+  seconds before its window appeared. After three skipped frames in a row the loop now retries at
+  the hidden-window cadence (100 ms) until one is presented. In a probe run after the change the
+  same startup wait logged 8 skipped frames, with none in any measured section.
+- **Tooltip delay.** The overlay layer was repainted every frame for the whole 0.7 s hover delay,
+  only to keep the loop turning. Nothing is repainted now; the idle wait ends when the bubble is
+  due. Checked in the widget gallery: the tooltip still appears.
+
+The frame pacer used under an explicit FPS cap was measured too (sleep to 2 ms before the deadline,
+then spin). A two-stage sleep gave no consistent CPU saving and run-to-run variance was larger than
+the difference, so it is unchanged.
+
 Measured on the baseline machine with the window probe: idle wakeups 116/s → about 10/s, idle CPU
 2.35% → 0.25–0.45% of one core (target: under 1%). In the widget gallery with a text field
 focused the process showed 0.0% CPU and the caret still blinked. Not measured: battery drain,

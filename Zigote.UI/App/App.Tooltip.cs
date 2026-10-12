@@ -6,6 +6,9 @@ public partial class App
 {
     // ── Tooltip ───────────────────────────────────────────────────────────────
 
+    /// <summary>How long the pointer rests on a widget before its tooltip shows.</summary>
+    private const float TooltipDelaySeconds = 0.7f;
+
     private void AdvanceTooltip(float dt)
     {
         string? text = null;
@@ -33,7 +36,7 @@ public partial class App
         if (_tooltipOverlay is null)
         {
             _tooltipTimer += dt;
-            if (_tooltipTimer > 0.7f)
+            if (_tooltipTimer > TooltipDelaySeconds)
             {
                 _tooltipOverlay = new TooltipBubble(text: text, position: _mousePos, theme: Theme);
                 PushOverlay(_tooltipOverlay);

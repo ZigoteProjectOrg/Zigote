@@ -67,7 +67,7 @@ internal static class WindowPerformanceProbe
             app.RequestPaint();
             Frame();
             PerformanceReport.Require(Stopwatch.GetElapsedTime(readyStart).TotalSeconds < 5,
-                $"No scene texture after five seconds; surface may be occluded/unavailable (paused={app.IsPaused}, hidden={app.Hidden}).");
+                $"No scene texture after five seconds; surface may be occluded/unavailable (paused={app.IsPaused}, hidden={app.Hidden}, dropped={app.DroppedFrames}).");
         }
 
         Drops("startup");

@@ -1456,7 +1456,13 @@ public partial class App : IDisposable
         // window precisely because it still has work to do — but at a tenth of the rate and with no
         // rendering at all (see PaintAndPresent).
         // …unless secondary windows are up (a shell hides its main window and lives in its panels).
-        if (Hidden && _secondaryWindows.Count == 0)
+        // A frame the surface refused (occluded, minimised, display asleep) is the same situation
+        // from the loop's side: with vsync the present is the pacer, and a skipped frame never
+        // reaches it — an animation running behind another window would spin a core flat out,
+        // re-painting frames nobody receives. Retry at the background cadence until one lands.
+        // Only after a few in a row: a single acquire timeout on a visible window must not turn
+        // into a 100 ms hitch.
+        if ((Hidden || _dropStreak >= DropsBeforeBackgroundCadence) && _secondaryWindows.Count == 0)
         {
             _idledInWait = true;
             Volatile.Write(ref _inWaitEvents, true);
@@ -1557,7 +1563,12 @@ public partial class App : IDisposable
         // producing full-damage frames forever. A blinking caret lives in whichever layer its field is
         // in; a read-only / caret-less text client (e.g. the docked read-only CodeEditor) opts out of
         // the per-frame caret repaint via WantsCaretBlink, so a focused viewer idles too.
-        if (_tooltipTimer > 0 && _tooltipOverlay is null) _repaint.MarkOverlay();
+        // Nothing is drawn while the delay runs, so nothing is repainted: the idle wait is simply
+        // cut short to end when the bubble is due (it used to repaint the overlay every frame for
+        // the whole delay just to keep the loop turning).
+        _tooltipDueInMs = _tooltipTimer > 0 && _tooltipOverlay is null
+            ? Math.Max(val1: 1, val2: (int)MathF.Ceiling((TooltipDelaySeconds - _tooltipTimer) * 1000f) + 1)
+            : 0;
         _caretChangeInMs = 0;
         if (FocusedWidget is ITextInputClient { WantsCaretBlink: true } caret)
         {
@@ -1745,6 +1756,7 @@ public partial class App : IDisposable
     private bool _caretShown;
     private Widget? _caretOwner;
     private int _caretChangeInMs; // 0 = no blinking caret to wake for
+    private int _tooltipDueInMs; // 0 = no tooltip waiting out its hover delay
 
     /// <summary>Work handed over from another thread that an idle wait must not sleep on.</summary>
     private bool HasCrossThreadWork() =>
@@ -1763,8 +1775,12 @@ public partial class App : IDisposable
             FileDialog.IsBusy || _touchPrimaryFinger >= 0 || _secondaryWindows.Count > 0 ||
             Engine.AudioHasActiveOneShots())
             return frameMs;
-        // A blinking caret must be repainted on its next edge, not whenever the wait expires.
-        return _caretChangeInMs > 0 ? Math.Min(val1: IdleWaitMs, val2: _caretChangeInMs) : IdleWaitMs;
+        // A blinking caret must be repainted on its next edge, and a pending tooltip shown when
+        // its delay ends — not whenever the wait happens to expire.
+        int wait = IdleWaitMs;
+        if (_caretChangeInMs > 0) wait = Math.Min(val1: wait, val2: _caretChangeInMs);
+        if (_tooltipDueInMs > 0) wait = Math.Min(val1: wait, val2: _tooltipDueInMs);
+        return wait;
     }
 
     /// <summary>
@@ -1804,6 +1820,8 @@ public partial class App : IDisposable
         sampleTicks >= currentTicks ? sampleTicks : currentTicks - (currentTicks - sampleTicks) / 20;
 
     private bool _presentSkipped;
+    private int _dropStreak;
+    private const int DropsBeforeBackgroundCadence = 3;
 
     /// <summary>
     ///     Frames submitted but not presented because the surface was unavailable (occluded,
@@ -2038,8 +2056,11 @@ public partial class App : IDisposable
             if (!presented)
             {
                 _presentSkipped = true;
+                _dropStreak++;
                 DroppedFrames++;
             }
+            else
+                _dropStreak = 0;
 
             // Damage is consumed — clear it so the next frame starts fresh (and only becomes full again
             // if something marks it so). Kept inside the render block so a skipped/early-returned frame
