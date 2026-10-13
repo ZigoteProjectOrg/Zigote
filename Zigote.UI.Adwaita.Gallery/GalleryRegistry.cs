@@ -70,6 +70,12 @@ internal static class GalleryRegistry
                     Build: () => new TabViewPage()
                 ),
                 new GalleryEntry(
+                    Title: "Toolbar & Panel",
+                    Subtitle: "An action strip and a floating tool window",
+                    IconName: MaterialIcons.WebAsset,
+                    Build: () => new ToolbarPanelPage()
+                ),
+                new GalleryEntry(
                     Title: "Bottom Sheet",
                     Subtitle: "A sheet you drag up over the content",
                     IconName: MaterialIcons.VerticalAlignBottom,
@@ -129,6 +135,18 @@ internal static class GalleryRegistry
                     Build: () => new ColorAndCompletionPage()
                 ),
                 new GalleryEntry(
+                    Title: "Value Editors",
+                    Subtitle: "Number scrubbing, colour, gradient and curve editors",
+                    IconName: MaterialIcons.Timeline,
+                    Build: () => new ValueEditorsPage()
+                ),
+                new GalleryEntry(
+                    Title: "Chips & Badges",
+                    Subtitle: "Filter pills and corner counts",
+                    IconName: MaterialIcons.Label,
+                    Build: () => new ChipsBadgesPage()
+                ),
+                new GalleryEntry(
                     Title: "Shortcuts",
                     Subtitle: "Key caps and the keyboard-shortcuts dialog",
                     IconName: MaterialIcons.Keyboard,
@@ -163,6 +181,12 @@ internal static class GalleryRegistry
                     IconName: MaterialIcons.FormatListNumbered,
                     Build: () => new LargeListsPage()
                 ),
+                new GalleryEntry(
+                    Title: "Trees & Reordering",
+                    Subtitle: "An expandable hierarchy and a drag-to-order list",
+                    IconName: MaterialIcons.AccountTree,
+                    Build: () => new TreesPage()
+                ),
             ]
         ),
         new(
@@ -185,6 +209,12 @@ internal static class GalleryRegistry
                     Subtitle: "Adaptive dialogs with suggested and destructive responses",
                     IconName: MaterialIcons.WebAsset,
                     Build: () => new AlertsPage()
+                ),
+                new GalleryEntry(
+                    Title: "File Chooser",
+                    Subtitle: "Open, save and folder choosers the app draws itself",
+                    IconName: MaterialIcons.FolderOpen,
+                    Build: () => new FileChooserPage()
                 ),
                 new GalleryEntry(
                     Title: "Spinner",
@@ -220,6 +250,12 @@ internal static class GalleryRegistry
                     Subtitle: "Children that flow onto new lines",
                     IconName: MaterialIcons.WrapText,
                     Build: () => new WrapBoxPage()
+                ),
+                new GalleryEntry(
+                    Title: "Masonry Grid",
+                    Subtitle: "Width-driven columns of tiles with their own heights",
+                    IconName: MaterialIcons.Dashboard,
+                    Build: () => new MasonryGridPage()
                 ),
                 new GalleryEntry(
                     Title: "Adaptive",
@@ -278,6 +314,12 @@ internal static class GalleryRegistry
                     Subtitle: "Typed node wiring, searchable cable drops and a live preview",
                     IconName: MaterialIcons.AccountTree,
                     Build: () => new GraphsPage()
+                ),
+                new GalleryEntry(
+                    Title: "Code Editor",
+                    Subtitle: "A source view with a gutter, highlighting and undo",
+                    IconName: MaterialIcons.Code,
+                    Build: () => new CodeEditorPage()
                 ),
                 new GalleryEntry(
                     Title: "Reactivity",

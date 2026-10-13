@@ -107,10 +107,11 @@ public sealed class AdwColorGradient
 public sealed class AdwGradientEditor : Widget
 {
     // ── Layout metrics ──────────────────────────────────────────────────────
-    private const float RampHeight = 26f;
-    private const float HandleStripHeight = 14f;
-    private const float HandleHalfWidth = 6f;
-    private const float Gap = 4f;
+    private const float RampHeight = AdwMetrics.ButtonHeight;
+    private const float HandleStripHeight = AdwMetrics.SliderKnob;
+    private const float HandleHalfWidth = AdwMetrics.SliderKnob / 2f;
+    private const float Gap = AdwMetrics.ToolbarPadding;
+    private const float RampRadius = AdwMetrics.ControlRadius;
     private const float CheckerSize = 6f;
     private const int RampPixels = 256; // internal raster width; AddImage scales to bounds
     private const double DoubleClickSeconds = 0.35;
@@ -140,7 +141,7 @@ public sealed class AdwGradientEditor : Widget
 
     // Effective metrics. A 12×14 colour stop is a mouse affordance; on a phone the handle grows and
     // the pick tolerance grows further still, so a fingertip lands on the stop it aimed at.
-    private float HalfW => _compact ? 10f : HandleHalfWidth;
+    private float HalfW => _compact ? 12f : HandleHalfWidth;
 
     private float StripH => _compact ? 24f : HandleStripHeight;
 
@@ -202,6 +203,9 @@ public sealed class AdwGradientEditor : Widget
     {
         if (!paint.IsVisible(Bounds)) return;
 
+        // The ramp is a control-shaped swatch: rounded like an entry, so the checkerboard and the
+        // raster are clipped to that shape rather than squared off.
+        paint.AddClipStart(bounds: _rampRect, radius: RampRadius);
         PaintCheckerboard(paint: paint, r: _rampRect);
 
         EnsureRamp();
@@ -215,19 +219,20 @@ public sealed class AdwGradientEditor : Widget
             );
         }
 
-        paint.AddBorder(bounds: _rampRect, color: _theme.Separator, radius: Radii.Sm);
+        paint.AddClipEnd();
+        paint.AddBorder(bounds: _rampRect, color: _theme.Separator, radius: RampRadius);
 
         PaintHandles(paint);
 
         if (Focused)
-            paint.AddFocusRing(bounds: _rampRect, radius: Radii.Sm, theme: _theme);
+            paint.AddFocusRing(bounds: _rampRect, radius: RampRadius, theme: _theme);
     }
 
     private void PaintCheckerboard(PaintList paint, Rect r)
     {
         var light = new Color(r: 0.78f, g: 0.78f, b: 0.78f);
         var dark = new Color(r: 0.55f, g: 0.55f, b: 0.55f);
-        paint.AddRect(bounds: r, color: light, radius: Radii.Sm);
+        paint.AddRect(bounds: r, color: light);
 
         int cols = (int)MathF.Ceiling(r.Width / CheckerSize);
         int rows = (int)MathF.Ceiling(r.Height / CheckerSize);
@@ -254,56 +259,64 @@ public sealed class AdwGradientEditor : Widget
 
     private void PaintHandles(PaintList paint)
     {
-        float stripY = _rampRect.Bottom + Gap;
+        // Each stop is a scale knob — the near-white disc GtkScale slides — carrying its colour as
+        // an inset dot. The selected one takes the accent focus ring.
+        float cy = _rampRect.Bottom + Gap + (StripH / 2f);
+        float r = HalfW;
         var stops = Gradient.Stops;
         for (int i = 0; i < stops.Count; i++)
         {
             float cx = StopCenterX(stops[i].Position);
             bool selected = i == _selected;
-
-            // Triangle marker pointing up at the ramp, built from narrowing dabs (flat, AA-free).
-            float tipY = stripY;
-            var fill = stops[i].Color.A > 0.02f ? stops[i].Color.WithAlpha(1f) : Color.White;
-            var border = selected ? _theme.Primary : _theme.Separator;
-
-            const int steps = 7;
-            for (int s = 0; s < steps; s++)
-            {
-                float t = (s + 0.5f) / steps; // 0 at tip, 1 at base
-                float half = HalfW * t;
-                float y = tipY + (t * StripH);
-                float thickness = (StripH / steps) + 1f;
-                paint.AddRect(
-                    bounds: new Rect(
-                        x: cx - half,
-                        y: y,
-                        width: MathF.Max(x: half * 2f, y: 1f),
-                        height: thickness
-                    ),
-                    color: fill
-                );
-            }
-
-            // Outline: base bar + a hairline frame so the marker reads against any ramp color.
-            var baseRect = new Rect(
-                x: cx - HalfW,
-                y: stripY + StripH - 2f,
-                width: HalfW * 2f,
-                height: 2f
+            var knob = new Rect(
+                x: cx - r,
+                y: cy - r,
+                width: r * 2f,
+                height: r * 2f
             );
-            paint.AddRect(bounds: baseRect, color: border);
+
+            // `scale > trough > slider { box-shadow: 0 2px 4px rgb(0 0 6 / 20%) }`, first layer.
+            paint.AddRect(
+                bounds: new Rect(
+                    x: knob.X - 1f,
+                    y: knob.Y,
+                    width: knob.Width + 2f,
+                    height: knob.Height + 2f
+                ),
+                color: AdwStyle.Ink.WithAlpha(0.2f),
+                radius: r + 1f
+            );
+            paint.AddRect(
+                bounds: knob,
+                color: AdwStyle.SliderKnob(theme: _theme, hot: selected),
+                radius: r
+            );
+
+            const float inset = 4f;
+            var fill = stops[i].Color.A > 0.02f ? stops[i].Color.WithAlpha(1f) : Color.White;
+            paint.AddRect(
+                bounds: new Rect(
+                    x: knob.X + inset,
+                    y: knob.Y + inset,
+                    width: knob.Width - (inset * 2f),
+                    height: knob.Height - (inset * 2f)
+                ),
+                color: fill,
+                radius: r - inset
+            );
+
             if (selected)
             {
                 paint.AddBorder(
                     bounds: new Rect(
-                        x: cx - HalfW - 1f,
-                        y: stripY,
-                        width: (HalfW * 2f) + 2f,
-                        height: StripH
+                        x: knob.X - 2f,
+                        y: knob.Y - 2f,
+                        width: knob.Width + 4f,
+                        height: knob.Height + 4f
                     ),
-                    color: _theme.Primary,
-                    radius: 0f,
-                    width: 1.5f
+                    color: _theme.FocusRing,
+                    radius: r + 2f,
+                    width: 2f
                 );
             }
         }

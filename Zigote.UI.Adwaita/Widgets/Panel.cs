@@ -1,4 +1,5 @@
 using Zigote.UI.Host;
+using Zigote.UI.TextShaping;
 
 namespace Zigote.UI.Adwaita;
 
@@ -17,11 +18,14 @@ internal enum ResizeDir
 }
 
 /// <summary>
-///     A floating panel overlay with a draggable title bar and 8-direction resize handles.
+///     A floating utility window: a dialog-style surface (dialog background, 12px corners, the
+///     popover shadow) under a flat header — a centred bold title and a circular close button, as
+///     a libadwaita dialog's header bar has. Drag it by the header; resize it from any edge or
+///     corner (the cursor is the affordance, there are no painted handles).
 ///     Use <see cref="Show" /> / <see cref="Dismiss" /> to add/remove from the overlay stack.
 ///     <para>Example:</para>
 ///     <code>
-///   var panel = new Panel(theme, "Properties", x: 100f, y: 80f, width: 320f, height: 400f)
+///   var panel = new AdwPanel("Properties", x: 100f, y: 80f, width: 320f, height: 400f)
 ///   {
 ///       Content   = myWidget,
 ///       CanClose  = true,
@@ -32,12 +36,14 @@ internal enum ResizeDir
 /// </summary>
 public sealed class AdwPanel : Widget
 {
-    public const float DefaultTitleHeight = 28f;
+    /// <summary>A compact header bar: the 24px close circle plus the 7px bar padding around it.</summary>
+    public const float DefaultTitleHeight = 38f;
+
+    private const float Radius = AdwMetrics.CardRadius;
     private const float CornerGrab = 12f; // px from corner that triggers corner resize
     private const float EdgeGrab = 5f; // px from edge that triggers edge resize
 
     private readonly App _app;
-    private readonly ThemeData _theme;
 
     // Visual state
     private bool _closeHovered;
@@ -55,11 +61,10 @@ public sealed class AdwPanel : Widget
     // Floating position and size (absolute screen coords, user-controlled)
     private float _w, _h;
 
-    public AdwPanel(App app, ThemeData theme, string title,
+    public AdwPanel(App app, string title,
         float x, float y, float width, float height)
     {
         _app = app;
-        _theme = theme;
         Title = title;
         PanelX = x;
         PanelY = y;
@@ -68,11 +73,10 @@ public sealed class AdwPanel : Widget
     }
 
     /// <summary>Convenience constructor using <see cref="App.Active" />.</summary>
-    public AdwPanel(ThemeData theme, string title,
+    public AdwPanel(string title,
         float x, float y, float width, float height)
         : this(
             app: App.Active!,
-            theme: theme,
             title: title,
             x: x,
             y: y,
@@ -147,10 +151,10 @@ public sealed class AdwPanel : Widget
 
     private Rect CloseButtonRect =>
         new(
-            x: PanelX + _w - TitleH + 4f,
-            y: PanelY + 4f,
-            width: TitleH - 8f,
-            height: TitleH - 8f
+            x: PanelX + _w - AdwMetrics.HeaderBarPaddingX - AdwMetrics.FrameButtonCircle,
+            y: PanelY + ((TitleH - AdwMetrics.FrameButtonCircle) / 2f),
+            width: AdwMetrics.FrameButtonCircle,
+            height: AdwMetrics.FrameButtonCircle
         );
 
     // ── Overlay helpers ───────────────────────────────────────────────────────
@@ -199,60 +203,44 @@ public sealed class AdwPanel : Widget
 
     public override void Paint(PaintList paint)
     {
+        // Resolved per paint, not captured: the panel outlives a light/dark or accent switch.
+        var theme = _app.Theme;
+        var p = AdwPalette.For(theme);
         var pr = PanelRect;
 
-        // Drop shadow
-        paint.AddShadow(
-            bounds: pr,
-            color: new Color(
-                r: 0f,
-                g: 0f,
-                b: 0f,
-                a: 0.4f
-            ),
-            borderRadius: 6f,
-            blurRadius: 14f,
-            spread: 4f
-        );
+        paint.AddElevation(bounds: pr, radius: Radius, style: AdwMetrics.PopoverShadow);
+        paint.AddRect(bounds: pr, color: p.DialogBg, radius: Radius);
 
-        // Body background
-        paint.AddRect(bounds: pr, color: _theme.Surface, radius: 4f);
-
-        // Title bar background (slightly lighter / accent)
-        paint.AddRect(bounds: TitleBarRect, color: _theme.SurfaceAlt, radius: 4f);
-
-        // Grip dots (visual drag indicator, centred on left side of title bar)
-        PaintGripDots(paint);
-
-        // Title text
-        float fs = _theme.FontSizeBody;
-        float titleX = PanelX + 22f; // leave room for grip dots
-        float titleMaxW = _w - 22f - (CanClose ? TitleH : 0f);
+        // `headerbar.flat` — no fill of its own; a centred `.heading` title.
+        float fs = AdwTypography.Heading.Size;
+        float titleW = TextMeasure.Width(text: Title, fontSize: fs, weight: FontWeight.Bold);
         paint.AddText(
             text: Title,
-            baselineX: titleX,
-            baselineY: PanelY + (TitleH * 0.8f),
-            color: _theme.OnSurface,
-            fontSize: fs
+            baselineX: PanelX + ((_w - titleW) / 2f),
+            baselineY: PanelY + ((TitleH - fs) / 2f) + (fs * 0.8f),
+            color: p.DialogFg,
+            fontSize: fs,
+            fontWeight: FontWeight.Bold
         );
-        _ = titleMaxW; // measured for reference; clipping is handled by the renderer
 
-        // Close button
+        // `windowcontrols > button > image` — the 24px circle the close glyph sits on.
         if (CanClose)
         {
             var cr = CloseButtonRect;
-            if (_closeHovered)
-                paint.AddRect(bounds: cr, color: _theme.Error.WithAlpha(0.85f), radius: 3f);
-            paint.AddText(
-                text: "×",
-                baselineX: cr.X + ((cr.Width - (fs * 0.6f)) / 2f),
-                baselineY: cr.Y + (cr.Height * 0.75f),
-                color: _closeHovered ? _theme.OnPrimary : _theme.OnSurface.WithAlpha(0.45f),
-                fontSize: fs - 2f
+            paint.AddRect(
+                bounds: cr,
+                color: _closeHovered ? p.ButtonFillHover : p.ButtonFill,
+                radius: cr.Width / 2f
+            );
+            Icons.Draw(
+                paint: paint,
+                glyph: MaterialIcons.Close,
+                box: cr,
+                color: p.DialogFg,
+                size: AdwMetrics.IconSize
             );
         }
 
-        // Content area (clipped)
         if (_h > TitleH)
         {
             paint.AddClipStart(ContentRect);
@@ -260,82 +248,8 @@ public sealed class AdwPanel : Widget
             paint.AddClipEnd();
         }
 
-        // Outer border
-        paint.AddBorder(bounds: pr, color: _theme.Primary.WithAlpha(0.18f), radius: 4f);
-
-        // Resize corner indicators
-        PaintResizeCorners(paint);
-    }
-
-    private void PaintGripDots(PaintList paint)
-    {
-        var dotColor = _theme.OnSurface.WithAlpha(0.2f);
-        const float dotR = 1.5f;
-        const float dotGap = 4f;
-        float gx = PanelX + 8f;
-        float gy = PanelY + (TitleH / 2f) - dotGap;
-        for (int row = 0; row < 3; row++)
-        for (int col = 0; col < 2; col++)
-        {
-            paint.AddRect(
-                bounds: new Rect(
-                    x: gx + (col * dotGap) - dotR,
-                    y: gy + (row * dotGap) - dotR,
-                    width: dotR * 2f,
-                    height: dotR * 2f
-                ),
-                color: dotColor,
-                radius: dotR
-            );
-        }
-    }
-
-    private void PaintResizeCorners(PaintList paint)
-    {
-        const float sz = 8f;
-        var c = _theme.OnSurface.WithAlpha(0.12f);
-        // Draw a small L-shaped indicator at SE and SW corners
-        float seX = PanelX + _w - sz;
-        float seY = PanelY + _h - sz;
-        paint.AddRect(
-            bounds: new Rect(
-                x: seX,
-                y: seY + sz - 2f,
-                width: sz,
-                height: 2f
-            ),
-            color: c
-        );
-        paint.AddRect(
-            bounds: new Rect(
-                x: seX + sz - 2f,
-                y: seY,
-                width: 2f,
-                height: sz
-            ),
-            color: c
-        );
-
-        float swX = PanelX;
-        float swY = PanelY + _h - sz;
-        paint.AddRect(
-            bounds: new Rect(
-                x: swX,
-                y: swY + sz - 2f,
-                width: sz,
-                height: 2f
-            ),
-            color: c
-        );
-        paint.AddRect(
-            bounds: new Rect(
-                x: swX,
-                y: swY,
-                width: 2f,
-                height: sz
-            ),
-            color: c
-        );
+        // The 1px outline that keeps a floating surface defined against a same-coloured window.
+        paint.AddBorder(bounds: pr, color: p.PopoverShade, radius: Radius);
     }
 
     public override Widget? HitTest(Offset point)

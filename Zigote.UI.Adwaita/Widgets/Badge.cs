@@ -3,10 +3,10 @@ using Zigote.UI.TextShaping;
 namespace Zigote.UI.Adwaita;
 
 /// <summary>
-///     Overlays a small accent count pill on the top-right corner of its child.
-///     A flat, macOS-style badge: capsule shape, white caption text on
-///     <see cref="Color" /> (defaults to the theme accent). Hides when
-///     <see cref="Count" /> is 0; collapses to a circle for single digits.
+///     Overlays a count pill on the top-right corner of its child — the same indicator
+///     <see cref="AdwViewSwitcher" /> shows for a page that needs attention: a pill in the accent
+///     colour (or <see cref="Color" />) with bold 10px numerals, inset into the corner rather than
+///     hanging off it. Hides when <see cref="Count" /> is 0; a single digit is a circle.
 /// </summary>
 public sealed class AdwBadge(Widget? child = null, int count = 0) : Widget
 {
@@ -45,15 +45,16 @@ public sealed class AdwBadge(Widget? child = null, int count = 0) : Widget
         if (Count <= 0) return;
 
         string text = Count > 99 ? "99+" : _countText.Update($"{Count}");
-        float fs = _theme.FontSizeCaption;
+        const float fs = 10f; // `indicatorbin > .badge { font-size: 0.7em }`
         var textSize = TextMeasure.Measure(text: text, fontSize: fs, weight: FontWeight.Bold);
 
         // Capsule pill: fixed compact height; min width equals height so single digits are a circle.
         float bh = MathF.Max(x: 16f, y: textSize.Height + Spacing.Xxs);
-        float bw = MathF.Max(x: bh, y: textSize.Width + Spacing.Sm);
-        // Anchor the pill to the child's top-right corner (its centre sits on the corner).
-        float bx = Bounds.Right - (bw * 0.5f);
-        float by = Bounds.Y - (bh * 0.5f);
+        float bw = MathF.Max(x: bh, y: textSize.Width + 12f);
+        // Inset into the child's top-right corner, as AdwIndicatorBin places it: a quarter of the
+        // pill overhangs, so it reads as belonging to the child instead of floating beside it.
+        float bx = Bounds.Right - (bw * 0.75f);
+        float by = Bounds.Y - (bh * 0.25f);
 
         // Explicit half-height radius → guaranteed capsule regardless of renderer radius clamping.
         paint.AddRect(

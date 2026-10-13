@@ -928,13 +928,14 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
     private Color ColorFor(TokenKind kind)
     {
         return kind switch {
-            TokenKind.Keyword => _theme.Primary,
-            TokenKind.Type => _theme.Accent,
-            TokenKind.String => _theme.Success,
-            TokenKind.Comment => _theme.Hint,
-            TokenKind.Number => _theme.Error,
-            TokenKind.Operator => _theme.Label2,
-            TokenKind.Punctuation => _theme.Label2,
+            // The GNOME source-view scheme, drawn from the Adwaita accent hues in their standalone
+            // (readable-as-text) variants so it holds in both appearances: orange keywords, teal
+            // types, green strings, purple literals, and comments simply dimmed.
+            TokenKind.Keyword => AdwAccentColors.Standalone(accent: AdwAccent.Orange, dark: _theme.IsDark),
+            TokenKind.Type => AdwAccentColors.Standalone(accent: AdwAccent.Teal, dark: _theme.IsDark),
+            TokenKind.String => AdwAccentColors.Standalone(accent: AdwAccent.Green, dark: _theme.IsDark),
+            TokenKind.Number => AdwAccentColors.Standalone(accent: AdwAccent.Purple, dark: _theme.IsDark),
+            TokenKind.Comment => _theme.OnSurface.WithAlpha(AdwStyle.DimOpacity),
             _ => _theme.OnSurface,
         };
     }
@@ -1121,26 +1122,15 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
 
     public override void Paint(PaintList paint)
     {
-        float radius = Radii.Sm;
-        paint.AddRect(bounds: Bounds, color: _theme.Surface, radius: radius);
-        paint.AddBorder(bounds: Bounds, color: _theme.Separator, radius: radius);
-
-        // Gutter background.
+        // A source view is a `.view`: the view background edge to edge, with no frame or radius of
+        // its own (whatever holds it — a card, a pane — supplies those). The gutter shares that
+        // background and is set apart only by its dimmed numerals, as in GNOME Text Editor.
+        paint.AddRect(bounds: Bounds, color: AdwPalette.For(_theme).ViewBg);
         var gutterRect = new Rect(
             x: Bounds.X,
             y: Bounds.Y,
             width: _gutterWidth,
             height: Bounds.Height
-        );
-        paint.AddRect(bounds: gutterRect, color: _theme.Background);
-        paint.AddRect(
-            bounds: new Rect(
-                x: Bounds.X + _gutterWidth - 0.5f,
-                y: Bounds.Y,
-                width: 1f,
-                height: Bounds.Height
-            ),
-            color: _theme.Separator
         );
 
         float innerH = Bounds.Height - (Pad * 2f);
@@ -1187,7 +1177,7 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
                         width: MathF.Max(x: 2f, y: MathF.Abs(x1 - x0)),
                         height: _lineHeight
                     ),
-                    color: _theme.Selection.WithAlpha(0.3f)
+                    color: _theme.Accent.WithAlpha(0.3f)
                 );
             }
         }
@@ -1337,7 +1327,9 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
             float w = num.Length * _charWidth; // monospace
             float nx = Bounds.X + _gutterWidth - GutterPadRight - w;
             float ny = TextTop - _scrollY + (visual * _lineHeight) + (_fontSize * 0.8f);
-            var col = l == _caretLine ? _theme.Label2 : _theme.Label3;
+            var col = l == _caretLine
+                ? _theme.OnSurface
+                : _theme.OnSurface.WithAlpha(AdwStyle.DimOpacity * 0.7f);
             DrawSegment(
                 paint: paint,
                 s: num,
@@ -1384,8 +1376,7 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
             );
         }
 
-        if (Focused)
-            paint.AddFocusRing(bounds: Bounds, radius: radius, theme: _theme);
+        // No focus ring: a text view's focus cue is its caret.
     }
 
     // ── Pointer input ─────────────────────────────────────────────────────────

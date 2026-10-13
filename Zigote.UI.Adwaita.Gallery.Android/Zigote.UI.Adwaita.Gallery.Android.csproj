@@ -47,11 +47,13 @@
     <ItemGroup>
         <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
         <ProjectReference Include="..\Zigote.UI.Adwaita\Zigote.UI.Adwaita.csproj"/>
-        <!-- The gallery's own pages need these: GraphsPage → Zigote.Graphs.Editor, the art feed →
+        <!-- The gallery's own pages need these: GraphsPage → Zigote.Graphs.Editor, CodeEditorPage →
+             Zigote.Modules.UI.CodeEditor, the art feed →
              Zigote.Http. The heads compile the desktop gallery's sources verbatim, so a reference
              the desktop project gains is one this head has to gain with it — the symptom otherwise
              is CS0234 on a page nobody here edited. -->
         <ProjectReference Include="..\Zigote.Graphs.Editor\Zigote.Graphs.Editor.csproj"/>
+        <ProjectReference Include="..\Zigote.Modules.UI.CodeEditor\Zigote.Modules.UI.CodeEditor.fsproj"/>
         <ProjectReference Include="..\Zigote.Http\Zigote.Http.csproj"/>
         <ProjectReference Include="..\Zigote.Http.Generators\Zigote.Http.Generators.csproj"
                           OutputItemType="Analyzer" ReferenceOutputAssembly="false"/>

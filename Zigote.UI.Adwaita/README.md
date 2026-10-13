@@ -15,7 +15,7 @@ new AdwaitaApp(new Shell(), title: "My App").Run();
 > widgets are Zigote widgets, laid out and painted by Zigote's own renderer. An Adwaita app therefore
 > builds and runs unchanged on macOS and Windows; the screenshot above is macOS.
 
-**See it all:** from the repo root, `dotnet run --project Zigote.UI.Adwaita.Gallery` — 37 pages, one per widget family
+**See it all:** from the repo root, `dotnet run --project Zigote.UI.Adwaita.Gallery` — 47 pages, one per widget family
 ([gallery README](../Zigote.UI.Adwaita.Gallery/README.md)).
 
 ---
@@ -33,6 +33,7 @@ new AdwaitaApp(new Shell(), title: "My App").Run();
 - [Style, type and metrics](#style-type-and-metrics)
 - [Motion](#motion)
 - [Liquid Glass](#liquid-glass)
+- [Beyond libadwaita: tool widgets](#beyond-libadwaita-tool-widgets)
 - [Differences from libadwaita](#differences-from-libadwaita)
 
 ---
@@ -354,6 +355,29 @@ property of the glass live (clear↔tinted, float, rim, family, shape — and a 
 window whose header bar and view switcher are GNOME's structure in this material, and a control centre and lock screen
 over photographs where every tile latches, drags or folds.
 
+## Beyond libadwaita: tool widgets
+
+libadwaita stops at document apps. An editor needs more, so the kit carries a set of widgets that have no libadwaita
+counterpart and are drawn to its rules instead — the same fill ladders, radii, knob and focus ring as the widgets that
+do. Each has a live page in the gallery.
+
+| Widget | What it is | Drawn as |
+|---|---|---|
+| `AdwTextField` | The editing engine under `AdwEntry` — single or multi-line, IME, undo | Use `AdwEntry` unless you are building a control around it |
+| `AdwNumberInput` | A float field you can type in, step, or drag sideways to scrub | GTK's spin button: one entry box, flat −/+ buttons, plus a grip |
+| `AdwColorPicker` | Saturation/value plane, hue and alpha scales, hex entry | GtkColorPlane and GtkColorScale: rounded troughs, scale knobs |
+| `AdwGradientEditor` | A colour ramp with movable, recolourable stops | A control-shaped swatch; each stop is a scale knob |
+| `AdwCurveEditor` | Keys and tangents over a grid | A `.view` in a card frame; keys are scale knobs |
+| `AdwCodeEditor` | A source view: gutter, highlighting, undo, soft wrap | GNOME Text Editor: bare view, dim gutter, accent-palette syntax colours |
+| `AdwTreeView<T>` | An expandable hierarchy over any data | Navigation-sidebar rows with GtkTreeExpander indents |
+| `AdwReorderableList` | Rows put in order by dragging | A boxed list with a drag-handle prefix; the held row lifts onto a card |
+| `AdwChip` | A pill toggle for tags and filters | A small `.pill` toggle button — neutral when checked, not accent |
+| `AdwBadge` | A count pinned to a corner of its child | The view switcher's needs-attention indicator |
+| `AdwToolbar` | A strip of leading and trailing controls | GTK's `.toolbar` box: 6px padding and spacing, no background |
+| `AdwPanel` | A floating, movable, resizable utility window | A dialog surface under a flat header with a circular close button |
+| `AdwFileBrowserDialog` | The in-app file chooser `FileDialog` falls back to | GtkFileChooser: places sidebar, path bar, sortable list, suggested accept |
+| `AdwResponsiveGrid` | A masonry grid whose column count follows the width | Layout only — it paints nothing |
+
 ## Differences from libadwaita
 
 Stated up front so nothing surprises you:
@@ -391,6 +415,6 @@ extras.
 
 ## Related
 
-- [`../Zigote.UI.Adwaita.Gallery`](../Zigote.UI.Adwaita.Gallery/README.md) — the 37-page gallery.
+- [`../Zigote.UI.Adwaita.Gallery`](../Zigote.UI.Adwaita.Gallery/README.md) — the 47-page gallery.
 - [`../docs/migration/`](../docs/migration/README.md) — retained mode, and per-framework guides.
 - [`../docs/architecture.md`](../docs/architecture.md) — how the kernel underneath works.

@@ -128,9 +128,13 @@ internal sealed class AdwFileBrowserList : Widget
             var entry = rows[i];
             float rowY = Bounds.Y + (i * RowH);
             bool selected = _model.IsSelected(entry);
-            var bg = selected ? _theme.Primary.WithAlpha(0.26f)
-                : i == _hover ? _theme.OnSurface.WithAlpha(0.06f)
-                : default;
+            // Rows of a `.view`: the accent wash when selected, the view hover step otherwise.
+            var bg = AdwStyle.ViewRowFill(
+                theme: _theme,
+                hovered: i == _hover,
+                pressed: false,
+                selected: selected
+            );
             if (bg.A > 0f)
             {
                 paint.AddRect(
@@ -141,7 +145,7 @@ internal sealed class AdwFileBrowserList : Widget
                         height: RowH - 2f
                     ),
                     color: bg,
-                    radius: Radii.Sm
+                    radius: 6f
                 );
             }
 

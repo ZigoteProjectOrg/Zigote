@@ -1,19 +1,16 @@
 namespace Zigote.UI.Adwaita;
 
 /// <summary>
-///     A flat, macOS-style window toolbar. A horizontal bar of
-///     <see cref="ControlMetrics.ToolbarHeight" />
-///     painted on the opaque <see cref="ThemeData.Surface" /> with a 1px
-///     <see cref="ThemeData.Separator" />
-///     hairline along its bottom edge. <see cref="Leading" /> children are packed against the left, a
-///     flexible spacer follows, then <see cref="Trailing" /> children pack against the right — all
-///     vertically centred, with horizontal padding of <see cref="Spacing.Md" /> and a gap of
-///     <see cref="Spacing.Sm" /> between siblings.
+///     GTK's <c>.toolbar</c> box: a horizontal strip of controls with 6px of padding and 6px between
+///     siblings, and no background of its own — it takes whatever it sits on (a card, a raised
+///     bar of an <see cref="AdwToolbarView" />, an OSD). <see cref="Leading" /> children pack at the
+///     start, <see cref="Trailing" /> at the end, all vertically centred. A strip wider than its
+///     bar scrolls sideways rather than clipping.
 /// </summary>
 public sealed class AdwToolbar : Widget
 {
-    private const float HPad = Spacing.Md;
-    private const float Gap = Spacing.Sm;
+    private const float HPad = AdwMetrics.ToolbarPadding;
+    private const float Gap = AdwMetrics.ToolbarPadding;
 
     private Size[] _leadSizes = [];
     private float _overflow;
@@ -37,14 +34,11 @@ public sealed class AdwToolbar : Widget
     /// <summary>Children packed against the trailing (right) edge.</summary>
     public List<Widget> Trailing { get; } = [];
 
-    /// <summary>
-    ///     Opt-in translucency. When set <em>and</em> the ambient theme has
-    ///     <see cref="ThemeData.UseLiquidGlass" /> enabled, the bar fill is left to the glass chrome
-    ///     behind it rather than painting an opaque <see cref="ThemeData.Surface" />. Default flat.
-    /// </summary>
-    public bool Translucent { get; set; }
+    /// <summary>A hairline under the bar, for a toolbar that sits directly above scrolling content.</summary>
+    public bool ShowSeparator { get; set; }
 
-    public float Height { get; set; } = ControlMetrics.ToolbarHeight;
+    /// <summary>Bar height: a 34px control plus the 6px padding above and below.</summary>
+    public float Height { get; set; } = AdwMetrics.ButtonHeight + (AdwMetrics.ToolbarPadding * 2f);
 
     public override Size Measure(Constraints c)
     {
@@ -120,20 +114,18 @@ public sealed class AdwToolbar : Widget
 
     public override void Paint(PaintList paint)
     {
-        bool glass = Translucent;
-        if (!glass)
-            paint.AddRect(bounds: Bounds, color: _theme.Surface);
-
-        // 1px hairline along the bottom edge.
-        paint.AddRect(
-            bounds: new Rect(
-                x: Bounds.X,
-                y: Bounds.Y + Bounds.Height - 1f,
-                width: Bounds.Width,
-                height: 1f
-            ),
-            color: _theme.Separator
-        );
+        if (ShowSeparator)
+        {
+            paint.AddRect(
+                bounds: new Rect(
+                    x: Bounds.X,
+                    y: Bounds.Y + Bounds.Height - 1f,
+                    width: Bounds.Width,
+                    height: 1f
+                ),
+                color: _theme.Separator
+            );
+        }
 
         paint.AddClipStart(Bounds);
         foreach (var w in Leading) w.Paint(paint);

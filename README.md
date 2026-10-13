@@ -79,7 +79,7 @@ Or run something that already exists:
 
 ```sh
 dotnet run --project Zigote.UI.HelloWorld        # smallest complete app — start here
-dotnet run --project Zigote.UI.Adwaita.Gallery   # the GNOME design system, 37 pages
+dotnet run --project Zigote.UI.Adwaita.Gallery   # the GNOME design system, 47 pages
 dotnet run --project Zigote.UI.FSharp.Gallery    # the same framework from F#
 ```
 
@@ -239,7 +239,7 @@ built from the kernel's primitives, sharing its theming, focus, semantics and ho
 </tr>
 </table>
 
-The Adwaita gallery is the spec — **37 live pages**, plus a headless self-test that constructs every
+The Adwaita gallery is the spec — **47 live pages**, plus a headless self-test that constructs every
 one of them:
 
 ```sh
@@ -308,7 +308,7 @@ tests.
 
 - **[`Zigote.UI.HelloWorld`](Zigote.UI.HelloWorld/README.md)** — hello world and a counter in one
   annotated file. The place to start.
-- **[`Zigote.UI.Adwaita.Gallery`](Zigote.UI.Adwaita.Gallery/README.md)** — 37 pages of the GNOME
+- **[`Zigote.UI.Adwaita.Gallery`](Zigote.UI.Adwaita.Gallery/README.md)** — 47 pages of the GNOME
   design system, an adaptive shell, multi-window, and a headless `--self-test`.
 - **`Zigote.UI.FSharp.Gallery`** — the same kernel from F#.
 - **`examples/PorscheDemo`** — a full 3D driving demo. It carries large binary assets, so it is

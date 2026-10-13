@@ -20,6 +20,8 @@
         <ProjectReference Include="..\Zigote.UI\Zigote.UI.csproj"/>
         <ProjectReference Include="..\Zigote.UI.Adwaita\Zigote.UI.Adwaita.csproj"/>
         <ProjectReference Include="..\Zigote.Graphs.Editor\Zigote.Graphs.Editor.csproj"/>
+        <!-- Syntax highlighters for the Code Editor page. -->
+        <ProjectReference Include="..\Zigote.Modules.UI.CodeEditor\Zigote.Modules.UI.CodeEditor.fsproj"/>
         <!-- All network I/O in this app — the art feed and every picture — goes through one HttpRunner. -->
         <ProjectReference Include="..\Zigote.Http\Zigote.Http.csproj"/>
         <!-- Writes NekosApiClient from the [HttpApi] interface in Art.cs. -->

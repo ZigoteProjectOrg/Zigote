@@ -50,6 +50,7 @@ public sealed class AdwTreeView<T> : Widget where T : notnull
         Comparer = comparer ?? EqualityComparer<T>.Default;
         _expand = new AnimationController(durationSeconds: Durations.Standard, vsync: this) {
             Curve = Curves.EaseOut,
+            Spec = AdwMotion.Reveal, // collapsed again while still opening: keep the speed
         };
         _expand.OnTick += MarkNeedsPaint;
         _expand.OnCompleted += () =>
@@ -73,12 +74,18 @@ public sealed class AdwTreeView<T> : Widget where T : notnull
     public Func<T, string>? IconOf { get; set; }
 
     /// <summary>Per-row height in logical pixels.</summary>
-    public float RowHeight { get; set; } = 24f;
+    public float RowHeight { get; set; } = AdwMetrics.MenuRowHeight;
 
     /// <summary>Indentation added per depth level.</summary>
     public float IndentPerLevel { get; set; } = 16f;
 
-    // Effective metrics. 24pt rows and a chevron inside them are a pointer rhythm; on a phone the
+    /// <summary>Where a depth-0 row's expander starts: the list margin plus the row's own padding.</summary>
+    private const float RowInset = AdwMetrics.MenuMargin + AdwMetrics.SidebarRowPaddingX;
+
+    /// <summary>GtkTreeExpander's 16px disclosure slot.</summary>
+    private const float Expander = 16f;
+
+    // Effective metrics. 32pt rows and a chevron inside them are a pointer rhythm; on a phone the
     // rows grow to a finger target and the per-level indent tightens so deep nodes keep their label.
     private float RowH => _compact ? MathF.Max(x: RowHeight, y: AdwTouchMetrics.MinTarget) : RowHeight;
 
@@ -208,7 +215,7 @@ public sealed class AdwTreeView<T> : Widget where T : notnull
         (int first, int last) = VisibleRange(paint.CurrentClip);
         (int animStart, int animEnd) = AnimatingRange();
         float animT = _expand.Value;
-        float fs = _theme.FontSizeCaption;
+        float fs = AdwTypography.Body.Size;
         for (int i = first; i <= last; i++)
         {
             var row = _flat[i];
@@ -225,29 +232,29 @@ public sealed class AdwTreeView<T> : Widget where T : notnull
             bool isSelected = Selected is not null && Comparer.Equals(x: Selected, y: row.Node);
             bool isHover = i == _hoverIndex;
 
-            var bg = isSelected ? _theme.Primary.WithAlpha(0.22f)
-                : isHover ? _theme.OnSurface.WithAlpha(0.06f)
-                : new Color(
-                    r: 0,
-                    g: 0,
-                    b: 0,
-                    a: 0
-                );
+            // `.navigation-sidebar > row`: a 6px-radius wash inset from the list edge — neutral when
+            // selected, as the sidebar rows are, not an accent slab.
+            var bg = AdwStyle.SidebarRowFill(
+                theme: _theme,
+                hovered: isHover,
+                pressed: false,
+                selected: isSelected
+            );
             if (bg.A > 0f)
             {
                 paint.AddRect(
                     bounds: new Rect(
-                        x: Bounds.X + 4f,
+                        x: Bounds.X + AdwMetrics.MenuMargin,
                         y: rowY + 1f,
-                        width: _size.Width - 8f,
+                        width: _size.Width - (AdwMetrics.MenuMargin * 2f),
                         height: RowH - 2f
                     ),
                     color: bg,
-                    radius: Radii.Sm
+                    radius: 6f
                 );
             }
 
-            float indent = 8f + (row.Depth * Indent);
+            float indent = RowInset + (row.Depth * Indent);
 
             // Disclosure chevron — only when the node has children.
             if (row.HasChildren)
@@ -259,15 +266,15 @@ public sealed class AdwTreeView<T> : Widget where T : notnull
                     box: new Rect(
                         x: Bounds.X + indent,
                         y: rowY,
-                        width: 14f,
+                        width: Expander,
                         height: RowH
                     ),
-                    color: _theme.TextMuted,
-                    size: 14f
+                    color: _theme.OnSurface.WithAlpha(AdwStyle.DimOpacity),
+                    size: AdwMetrics.IconSize
                 );
             }
 
-            float contentX = Bounds.X + indent + 16f;
+            float contentX = Bounds.X + indent + Expander + AdwMetrics.RowSpacing;
 
             // Optional leading icon.
             if (IconOf is not null)
@@ -281,17 +288,17 @@ public sealed class AdwTreeView<T> : Widget where T : notnull
                         box: new Rect(
                             x: contentX,
                             y: rowY,
-                            width: 16f,
+                            width: AdwMetrics.IconSize,
                             height: RowH
                         ),
                         color: _theme.OnSurface,
-                        size: 15f
+                        size: AdwMetrics.IconSize
                     );
-                    contentX += 20f;
+                    contentX += AdwMetrics.IconSize + AdwMetrics.SidebarRowPaddingX;
                 }
             }
 
-            var fg = isSelected ? _theme.OnSurface : _theme.OnSurface.WithAlpha(0.9f);
+            var fg = _theme.OnSurface;
             float textY = rowY + ((RowH - fs) / 2f) + (fs * 0.8f);
             paint.AddText(
                 text: _labelOf(row.Node),
@@ -343,9 +350,9 @@ public sealed class AdwTreeView<T> : Widget where T : notnull
         var row = _flat[idx];
 
         // Click on the disclosure chevron toggles expansion.
-        float indent = 8f + (row.Depth * Indent);
+        float indent = RowInset + (row.Depth * Indent);
         float chevronLeft = Bounds.X + indent;
-        float chevronW = _compact ? 24f : 14f;
+        float chevronW = _compact ? 24f : Expander;
         if (row.HasChildren && point.X >= chevronLeft && point.X <= chevronLeft + chevronW)
         {
             ToggleExpanded(row.Node);

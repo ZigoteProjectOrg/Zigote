@@ -5,15 +5,16 @@ using Zigote.UI.Host;
 namespace Zigote.UI.Adwaita;
 
 /// <summary>
-///     Numeric spin-box: a flat text field flanked by compact square ▲/▼ step buttons, with a
-///     Blender/Unity-style horizontal drag-scrub grip on the leading edge. Dragging the grip
-///     left/right nudges <see cref="Value" /> live; hold Shift for fine (0.1×) precision.
-///     Value stays within [<see cref="Min" />, <see cref="Max" />].
+///     A numeric field for tools: GTK's spin button — one entry-filled box holding the value and
+///     flat −/+ buttons divided from it by their own hairlines — with a drag-scrub grip on the
+///     leading edge. Dragging the grip left/right nudges <see cref="Value" /> live; hold Shift for
+///     fine (0.1×) precision. Unlike <see cref="AdwSpinButton" /> it is a float with a decimal
+///     count and may be unbounded. Value stays within [<see cref="Min" />, <see cref="Max" />].
 /// </summary>
 public sealed class AdwNumberInput : Widget
 {
-    private readonly Button _btnDown;
-    private readonly Button _btnUp;
+    private readonly StepButton _btnDown;
+    private readonly StepButton _btnUp;
 
     private readonly AdwTextField _field;
     private readonly ScrubGrip _grip;
@@ -37,8 +38,10 @@ public sealed class AdwNumberInput : Widget
 
         _field = new AdwTextField {
             Text = Format(value),
-            Height = ControlMetrics.RegularHeight,
-            MinWidth = 60f,
+            Height = AdwMetrics.EntryHeight,
+            MinWidth = 40f,
+            // This widget owns the box and the focus ring; the field renders text only.
+            ShowBackground = false,
             OnChanged = s =>
             {
                 _editingText = true;
@@ -52,8 +55,8 @@ public sealed class AdwNumberInput : Widget
             },
         };
 
-        _btnUp = SmallButton(label: "+", onClick: () => Commit(Value + Step));
-        _btnDown = SmallButton(label: "-", onClick: () => Commit(Value - Step));
+        _btnUp = new StepButton(glyph: Icons.Add, onPressed: () => Commit(Value + Step));
+        _btnDown = new StepButton(glyph: MaterialIcons.Remove, onPressed: () => Commit(Value - Step));
 
         _grip = new ScrubGrip(this);
 
@@ -62,9 +65,7 @@ public sealed class AdwNumberInput : Widget
             CrossAxisAlignment = CrossAxisAlignment.Center,
             Children = {
                 _grip,
-                new SizedBox { Width = Spacing.Xxs },
                 new Expanded(_field),
-                new SizedBox { Width = Spacing.Xs },
                 _btnDown,
                 _btnUp,
             },
@@ -199,13 +200,6 @@ public sealed class AdwNumberInput : Widget
     public override Size Measure(Constraints c)
     {
         _theme = ThemeProvider.Of(BuildContext.Current);
-        // On a phone the ± buttons are the only usable way to change the value (the scrub grip
-        // measures itself away), so they get finger-sized padding instead of the dense 4×2.
-        var pad = AdwTouchMetrics.IsCompact
-            ? EdgeInsets.Symmetric(horizontal: Spacing.Md, vertical: Spacing.Md)
-            : EdgeInsets.Symmetric(horizontal: Spacing.Xs, vertical: Spacing.Xxs);
-        _btnUp.Padding = pad;
-        _btnDown.Padding = pad;
         _size = _row.Measure(c);
         return _size;
     }
@@ -221,7 +215,29 @@ public sealed class AdwNumberInput : Widget
         _row.Layout(origin);
     }
 
-    public override void Paint(PaintList paint) => _row.Paint(paint);
+    public override void Paint(PaintList paint)
+    {
+        // `spinbutton @extend %entry` — the whole control is one entry box; the buttons and the
+        // grip are flat regions inside it, clipped to it.
+        paint.AddRect(
+            bounds: Bounds,
+            color: AdwPalette.For(_theme).ButtonFill,
+            radius: AdwMetrics.ControlRadius
+        );
+        paint.AddClipStart(Bounds);
+        _row.Paint(paint);
+        paint.AddClipEnd();
+
+        if (_field.Focused)
+        {
+            paint.AddBorder(
+                bounds: Bounds,
+                color: _theme.FocusRing,
+                radius: AdwMetrics.ControlRadius,
+                width: _theme.FocusRingWidth
+            );
+        }
+    }
 
     public override Widget? HitTest(Offset point)
     {
@@ -239,14 +255,93 @@ public sealed class AdwNumberInput : Widget
         );
     }
 
-    private static Button SmallButton(string label, Action onClick)
+    /// <summary>
+    ///     One of the spin button's flat −/+ buttons: a glyph over the box fill that washes on
+    ///     hover and press, divided from the value by a 1px <c>currentColor 10%</c> border.
+    /// </summary>
+    private sealed class StepButton(string glyph, Action onPressed) : Widget
     {
-        return new Button(label: label, onPressed: onClick) {
-            Style = ButtonStyle.Outlined,
-            Radius = Radii.Md,
-            Padding = EdgeInsets.Symmetric(horizontal: Spacing.Xs, vertical: Spacing.Xxs),
-            FontSize = ThemeData.Dark.FontSizeBody,
-        };
+        private bool _hovered;
+        private bool _pressed;
+        private Size _size;
+        private ThemeData _theme = ThemeData.Dark;
+
+        public override int DebugStateHash() => HashCode.Combine(value1: _hovered, value2: _pressed);
+
+        public override Size Measure(Constraints c)
+        {
+            _theme = ThemeProvider.Of(BuildContext.Current);
+            // Square at the entry height; a finger target on a touch layout.
+            float side = AdwTouchMetrics.IsCompact ? AdwTouchMetrics.MinTarget : AdwMetrics.EntryHeight;
+            _size = c.Constrain(new Size(width: side, height: AdwMetrics.EntryHeight));
+            return _size;
+        }
+
+        public override void Layout(Offset origin)
+        {
+            Bounds = new Rect(
+                x: origin.X,
+                y: origin.Y,
+                width: _size.Width,
+                height: _size.Height
+            );
+        }
+
+        public override void Paint(PaintList paint)
+        {
+            var p = AdwPalette.For(_theme);
+            if (_pressed || _hovered)
+                paint.AddRect(bounds: Bounds, color: _pressed ? p.ActiveFill : p.HoverFill);
+            paint.AddRect(
+                bounds: new Rect(
+                    x: Bounds.X,
+                    y: Bounds.Y,
+                    width: 1f,
+                    height: Bounds.Height
+                ),
+                color: p.ButtonFill
+            );
+            Icons.Draw(
+                paint: paint,
+                glyph: glyph,
+                box: Bounds,
+                color: _theme.OnBackground,
+                size: AdwMetrics.IconSize
+            );
+        }
+
+        public override void OnPointerEnter()
+        {
+            _hovered = true;
+            MarkNeedsPaint();
+        }
+
+        public override void OnPointerExit()
+        {
+            _hovered = false;
+            _pressed = false;
+            MarkNeedsPaint();
+        }
+
+        public override void OnPointerDown(Offset point)
+        {
+            _pressed = true;
+            MarkNeedsPaint();
+        }
+
+        public override void OnPointerUp(Offset point)
+        {
+            if (!_pressed) return;
+            _pressed = false;
+            MarkNeedsPaint();
+            if (Bounds.Contains(px: point.X, py: point.Y)) onPressed();
+        }
+
+        public override void OnPointerCancel()
+        {
+            _pressed = false;
+            MarkNeedsPaint();
+        }
     }
 
     /// <summary>
@@ -256,7 +351,7 @@ public sealed class AdwNumberInput : Widget
     /// </summary>
     private sealed class ScrubGrip(AdwNumberInput owner) : Widget
     {
-        private const float GripWidth = 14f;
+        private const float GripWidth = 16f;
 
         private bool _dragging;
         private bool _hovered;
@@ -275,11 +370,11 @@ public sealed class AdwNumberInput : Widget
             _theme = ThemeProvider.Of(BuildContext.Current);
             float h = float.IsFinite(c.MaxHeight)
                 ? Math.Clamp(
-                    value: ControlMetrics.RegularHeight,
+                    value: AdwMetrics.EntryHeight,
                     min: c.MinHeight,
                     max: c.MaxHeight
                 )
-                : ControlMetrics.RegularHeight;
+                : AdwMetrics.EntryHeight;
             _measureH = h;
             // A 14pt drag strip whose only cue is a hover cursor is dead weight on a phone; collapse
             // it so the field and the ± buttons get the whole row.
@@ -300,7 +395,9 @@ public sealed class AdwNumberInput : Widget
         public override void Paint(PaintList paint)
         {
             // Subtle dotted "grip" affordance — three vertical dots, brighter while dragging.
-            var color = _dragging || _hovered ? _theme.Label2 : _theme.Label3;
+            var color = _theme.OnBackground.WithAlpha(
+                _dragging || _hovered ? AdwStyle.DimOpacity : AdwStyle.DimOpacity * 0.5f
+            );
             float cx = Bounds.X + (Bounds.Width / 2f);
             float cy = Bounds.Y + (Bounds.Height / 2f);
             const float dot = 1.5f;
@@ -372,6 +469,8 @@ public sealed class AdwNumberInput : Widget
             owner.OnScrubEnd?.Invoke();
             MarkNeedsPaint();
         }
+
+        public override MouseCursor? GetCursor(Offset point) => MouseCursor.ResizeEW;
 
         /// <summary>A scrub in progress owns the gesture, the way a slider's does.</summary>
         public override bool CanTouchDrag(bool vertical) => _dragging;

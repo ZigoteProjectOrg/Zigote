@@ -111,6 +111,9 @@ public class AdwEntry : Widget
     /// </summary>
     public void Focus() => Owner?.RequestFocus(Field);
 
+    /// <summary>The editable inside the box — what a host focuses when this entry is not mounted yet.</summary>
+    internal Widget Editable => Field;
+
     /// <summary>Called whenever the text changes (edit, external set, clear).</summary>
     protected virtual void OnTextChanged() { }
 

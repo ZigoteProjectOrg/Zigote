@@ -1,18 +1,18 @@
 namespace Zigote.UI.Adwaita;
 
 /// <summary>
-///     A vertical list of fixed-height child widgets that can be reordered by dragging a grip handle
-///     on the
-///     left of each row. Pointer capture (App routes Move/Up to the widget that received Down until
-///     release)
-///     drives the drag: while dragging, the picked row follows the cursor as a translucent ghost and
-///     an
-///     insertion indicator marks where it will land; on release <see cref="OnReorder" /> fires with
-///     (fromIndex, toIndex). Content is clipped to <see cref="Widget.Bounds" />.
+///     A boxed list whose rows are put in order by dragging — the shape libadwaita apps build from
+///     an <c>AdwActionRow</c> with a <c>list-drag-handle-symbolic</c> prefix. Rows are the 50px
+///     boxed-list rows with a hairline between them and a dim drag handle at the start. While a
+///     row is dragged it lifts onto a card with a shadow and follows the pointer, and an accent
+///     line marks where it will land; on release <see cref="OnReorder" /> fires with
+///     (fromIndex, toIndex). Paints no background of its own — put it on a card.
 /// </summary>
 public sealed class AdwReorderableList : Widget
 {
-    private const float PointerGripWidth = 24f;
+    // The row's start padding, the 16px handle, and the gap before the row content.
+    private const float PointerGripWidth =
+        AdwMetrics.RowPaddingX + AdwMetrics.IconSize + AdwMetrics.RowPaddingX;
 
     private readonly IList<Widget> _items;
 
@@ -35,7 +35,7 @@ public sealed class AdwReorderableList : Widget
     public Action<int, int>? OnReorder { get; set; }
 
     /// <summary>Per-row height in logical pixels.</summary>
-    public float RowHeight { get; set; } = ControlMetrics.RegularHeight;
+    public float RowHeight { get; set; } = AdwMetrics.RowMinHeight;
 
     // Effective metrics: a 24×28 grip is a pointer affordance. On a phone both axes reach a finger
     // target so the handle can actually be grabbed.
@@ -94,17 +94,26 @@ public sealed class AdwReorderableList : Widget
             );
             if (!paint.IsVisible(rowRect)) continue;
 
+            // `row.activatable:hover` — the faint card wash, edge to edge like any boxed-list row.
             if (i == _hoverIndex && _dragFrom < 0)
             {
                 paint.AddRect(
+                    bounds: rowRect,
+                    color: AdwStyle.RowFill(theme: _theme, hovered: true, pressed: false)
+                );
+            }
+
+            // The boxed list's hairline between rows.
+            if (i > 0)
+            {
+                paint.AddRect(
                     bounds: new Rect(
-                        x: Bounds.X + 2f,
-                        y: rowY + 1f,
-                        width: _size.Width - 4f,
-                        height: RowH - 2f
+                        x: Bounds.X,
+                        y: rowY,
+                        width: _size.Width,
+                        height: 1f
                     ),
-                    color: _theme.OnSurface.WithAlpha(0.05f),
-                    radius: Radii.Sm
+                    color: AdwPalette.For(_theme).CardShade
                 );
             }
 
@@ -119,12 +128,12 @@ public sealed class AdwReorderableList : Widget
             lineY = Math.Clamp(value: lineY, min: Bounds.Y, max: Bounds.Bottom - 2f);
             paint.AddRect(
                 bounds: new Rect(
-                    x: Bounds.X + 2f,
+                    x: Bounds.X,
                     y: lineY - 1f,
-                    width: _size.Width - 4f,
+                    width: _size.Width,
                     height: 2f
                 ),
-                color: _theme.Primary,
+                color: _theme.Accent,
                 radius: 1f
             );
         }
@@ -143,17 +152,14 @@ public sealed class AdwReorderableList : Widget
                 width: _size.Width,
                 height: RowH
             );
-            paint.AddElevation(bounds: ghostRect, radius: Radii.Sm, style: Elevation.Z2);
-            paint.AddRect(
+            // The lifted row is a card of its own: opaque card fill, card radius, a drop shadow.
+            var p = AdwPalette.For(_theme);
+            paint.AddElevation(
                 bounds: ghostRect,
-                color: _theme.SurfaceAlt.WithAlpha(0.96f),
-                radius: Radii.Sm
+                radius: AdwMetrics.CardRadius,
+                style: AdwMetrics.PopoverShadow
             );
-            paint.AddBorder(
-                bounds: ghostRect,
-                color: _theme.Primary.WithAlpha(0.6f),
-                radius: Radii.Sm
-            );
+            paint.AddRect(bounds: ghostRect, color: p.PopoverBg, radius: AdwMetrics.CardRadius);
 
             // Translate the dragged child + grip to the ghost position.
             var item = _items[_dragFrom];
@@ -169,28 +175,19 @@ public sealed class AdwReorderableList : Widget
 
     private void PaintGrip(PaintList paint, float rowY, bool active)
     {
-        // Six-dot grip (⠿) drawn as small squares — robust regardless of font glyph coverage.
-        var color = active ? _theme.OnSurface.WithAlpha(0.8f) : _theme.TextMuted.WithAlpha(0.55f);
-        float cx = Bounds.X + (Grip / 2f);
-        float cy = rowY + (RowH / 2f);
-        const float gap = 4f;
-        const float dot = 2f;
-        for (int col = 0; col < 2; col++)
-        for (int r = 0; r < 3; r++)
-        {
-            float dx = cx + (col == 0 ? -gap / 2f : gap / 2f) - (dot / 2f);
-            float dyy = cy + ((r - 1) * gap) - (dot / 2f);
-            paint.AddRect(
-                bounds: new Rect(
-                    x: dx,
-                    y: dyy,
-                    width: dot,
-                    height: dot
-                ),
-                color: color,
-                radius: 1f
-            );
-        }
+        // `list-drag-handle-symbolic`, dim at rest and full strength while its row is held.
+        Icons.Draw(
+            paint: paint,
+            glyph: MaterialIcons.DragIndicator,
+            box: new Rect(
+                x: Bounds.X,
+                y: rowY,
+                width: Grip,
+                height: RowH
+            ),
+            color: _theme.OnSurface.WithAlpha(active ? 1f : AdwStyle.DimOpacity),
+            size: AdwMetrics.IconSize
+        );
     }
 
     private int RowIndexAt(float y)
@@ -220,7 +217,7 @@ public sealed class AdwReorderableList : Widget
     public override MouseCursor? GetCursor(Offset point)
     {
         if (_dragFrom >= 0) return MouseCursor.Move; // a row is being dragged
-        if (point.X < Bounds.X + Grip) return MouseCursor.Pointer; // hovering the drag grip
+        if (point.X < Bounds.X + Grip) return MouseCursor.Move; // hovering the drag handle
         return null;
     }
 

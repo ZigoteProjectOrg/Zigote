@@ -11,16 +11,20 @@ namespace Zigote.UI.Adwaita;
 /// </summary>
 public sealed class AdwColorPicker : Widget
 {
-    private const float PickerWidth = 220f;
-    private const float SvHeight = 150f;
-    private const float BarWidth = 14f;
-    private const float BarGap = 10f;
-    private const float SectionGap = 10f;
-    private const float HexHeight = ControlMetrics.RegularHeight;
+    private const float PickerWidth = 240f;
+    private const float SvHeight = 160f;
+
+    // The hue and alpha strips are GtkColorScales: a trough as tall as a scale's knob, rounded to
+    // a pill, with the knob riding inside it.
+    private const float BarWidth = AdwMetrics.SliderKnob;
+    private const float BarGap = AdwMetrics.RowPaddingX;
+    private const float SectionGap = AdwMetrics.RowPaddingX;
+    private const float HexHeight = AdwMetrics.EntryHeight;
     private const float ReadoutHeight = 16f;
+    private const float Knob = AdwMetrics.SliderKnob / 2f;
     private const int SvResolution = 96; // SV square raster grid (square texture, scaled to fit)
 
-    private readonly AdwTextField _hexField;
+    private readonly HexEntry _hexField;
 
     // R/G/B/A readout painted every repaint frame during a drag; allocate only on value change.
     private readonly CachedText _readoutText = new(32);
@@ -50,21 +54,20 @@ public sealed class AdwColorPicker : Widget
         (_h, _s, _v) = AdwColorMath.ToHsv(initial);
         _a = initial.A;
 
-        _hexField = new AdwTextField(decoration: new AdwInputDecoration("RRGGBB")) {
+        // Committed on submit / blur, not per keystroke.
+        _hexField = new HexEntry(onBlur: CommitHex) {
             Text = AdwColorMath.ToHex(initial),
-            MinWidth = 70f,
+            Placeholder = "RRGGBB",
             OnSubmitted = CommitHex,
-            OnChanged = _ => { }, // committed on submit / blur, not per keystroke
-        };
-        _hexField.OnFocusChange = focused =>
-        {
-            if (!focused) CommitHex(_hexField.Text);
         };
     }
 
     // Effective metrics: the hue/alpha strips are drag targets, and 14pt of them is thinner than a
     // fingertip. Widen them (and the hex field) at phone width; the picker's own width is unchanged.
     private float BarW => _compact ? 28f : BarWidth;
+
+    /// <summary>The knob's radius — it fills the trough, so it tracks the trough's thickness.</summary>
+    private float KnobR => BarW / 2f;
 
     private float HexH => _compact ? AdwTouchMetrics.MinTarget : HexHeight;
 
@@ -107,7 +110,8 @@ public sealed class AdwColorPicker : Widget
                   ReadoutHeight;
 
         // Measure the hex field at the width it will occupy (right portion of the hex row).
-        _hexField.Measure(new Constraints(maxWidth: _width * 0.6f, maxHeight: HexH));
+        _hexField.Width = _width * 0.5f;
+        _hexField.Measure(new Constraints(maxWidth: _width * 0.5f, maxHeight: HexH));
 
         var size = c.Constrain(new Size(width: _width, height: _height));
         _width = size.Width;
@@ -151,8 +155,8 @@ public sealed class AdwColorPicker : Widget
 
         y += BarW + SectionGap;
 
-        // Hex row: label "#" handled in paint; field takes the right ~60%.
-        float fieldW = _width * 0.6f;
+        // Hex row: the "Hex" label is painted; the entry takes the trailing half.
+        float fieldW = _width * 0.5f;
         var fieldSize = _hexField.Measure(new Constraints(maxWidth: fieldW, maxHeight: HexH));
         _hexField.Layout(new Offset(x: x + _width - fieldSize.Width, y: y));
     }
@@ -173,7 +177,7 @@ public sealed class AdwColorPicker : Widget
             text: "Hex",
             baselineX: Bounds.X,
             baselineY: labelBaseline,
-            color: _theme.Hint,
+            color: _theme.OnSurface.WithAlpha(AdwStyle.DimOpacity),
             fontSize: _theme.FontSizeBody
         );
         _hexField.Paint(paint);
@@ -184,45 +188,46 @@ public sealed class AdwColorPicker : Widget
 
     private void PaintSvSquare(PaintList paint)
     {
+        // GtkColorPlane: a rounded plane, not a square raster — clip the image to the control radius.
         EnsureSvBuffer();
+        paint.AddClipStart(bounds: _svRect, radius: AdwMetrics.ControlRadius);
         paint.AddImage(
             bounds: _svRect,
             pixelWidth: SvResolution,
             pixelHeight: SvResolution,
             pixels: _svBuf
         );
-        paint.AddBorder(bounds: _svRect, color: _theme.Separator, radius: Radii.Xs);
+        paint.AddClipEnd();
+        paint.AddBorder(
+            bounds: _svRect,
+            color: _theme.Separator,
+            radius: AdwMetrics.ControlRadius
+        );
 
-        // Cursor: ring at (s, 1-v).
-        float cx = _svRect.X + (_s * _svRect.Width);
-        float cy = _svRect.Y + ((1f - _v) * _svRect.Height);
-        cx = Math.Clamp(value: cx, min: _svRect.X, max: _svRect.Right);
-        cy = Math.Clamp(value: cy, min: _svRect.Y, max: _svRect.Bottom);
-        const float r = 5f;
-        var ring = new Rect(
-            x: cx - r,
-            y: cy - r,
-            width: r * 2f,
-            height: r * 2f
+        // The cursor is a knob carrying the picked colour, kept inside the plane.
+        float cx = Math.Clamp(
+            value: _svRect.X + (_s * _svRect.Width),
+            min: _svRect.X + Knob,
+            max: _svRect.Right - Knob
         );
-        // White ring with a dark inner edge so it reads on both light and dark cells.
-        paint.AddBorder(
-            bounds: ring,
-            color: Color.Black.WithAlpha(0.5f),
-            radius: r,
-            width: 3f
+        float cy = Math.Clamp(
+            value: _svRect.Y + ((1f - _v) * _svRect.Height),
+            min: _svRect.Y + Knob,
+            max: _svRect.Bottom - Knob
         );
-        paint.AddBorder(
-            bounds: ring,
-            color: Color.White,
-            radius: r,
-            width: 1.5f
+        PaintKnob(
+            paint: paint,
+            cx: cx,
+            cy: cy,
+            r: Knob,
+            fill: AdwColorMath.FromHsv(h: _h, s: _s, v: _v)
         );
     }
 
     private void PaintHueBar(PaintList paint)
     {
-        // Stacked colour bands top→bottom across the full hue wheel.
+        // Stacked colour bands top→bottom across the full hue wheel, clipped to the pill trough.
+        paint.AddClipStart(bounds: _hueRect, radius: KnobR);
         const int bands = 60;
         float bandH = _hueRect.Height / bands;
         for (int i = 0; i < bands; i++)
@@ -241,24 +246,21 @@ public sealed class AdwColorPicker : Widget
             );
         }
 
-        paint.AddBorder(bounds: _hueRect, color: _theme.Separator, radius: Radii.Xs);
+        paint.AddClipEnd();
+        paint.AddBorder(bounds: _hueRect, color: _theme.Separator, radius: KnobR);
 
-        // Marker at the current hue.
-        float my = _hueRect.Y + (_h / 360f * _hueRect.Height);
-        my = Math.Clamp(value: my, min: _hueRect.Y, max: _hueRect.Bottom);
-        PaintBarMarker(
+        PaintKnob(
             paint: paint,
-            r: new Rect(
-                x: _hueRect.X - 2f,
-                y: my - 2f,
-                width: _hueRect.Width + 4f,
-                height: 4f
-            )
+            cx: _hueRect.X + KnobR,
+            cy: _hueRect.Y + KnobR + (_h / 360f * Travel(_hueRect.Height)),
+            r: KnobR,
+            fill: AdwColorMath.FromHsv(h: _h, s: 1f, v: 1f)
         );
     }
 
     private void PaintAlphaBar(PaintList paint)
     {
+        paint.AddClipStart(bounds: _alphaRect, radius: KnobR);
         PaintCheckerboard(paint: paint, r: _alphaRect);
 
         // Gradient from transparent → opaque current RGB, left to right.
@@ -279,25 +281,58 @@ public sealed class AdwColorPicker : Widget
             );
         }
 
-        paint.AddBorder(bounds: _alphaRect, color: _theme.Separator, radius: Radii.Xs);
+        paint.AddClipEnd();
+        paint.AddBorder(bounds: _alphaRect, color: _theme.Separator, radius: KnobR);
 
-        float mx = _alphaRect.X + (_a * _alphaRect.Width);
-        mx = Math.Clamp(value: mx, min: _alphaRect.X, max: _alphaRect.Right);
-        PaintBarMarker(
+        PaintKnob(
             paint: paint,
-            r: new Rect(
-                x: mx - 2f,
-                y: _alphaRect.Y - 2f,
-                width: 4f,
-                height: _alphaRect.Height + 4f
-            )
+            cx: _alphaRect.X + KnobR + (_a * Travel(_alphaRect.Width)),
+            cy: _alphaRect.Y + KnobR,
+            r: KnobR,
+            fill: rgb
         );
     }
 
-    private void PaintBarMarker(PaintList paint, Rect r)
+    /// <summary>How far a knob's centre travels along a trough of <paramref name="length" />.</summary>
+    private float Travel(float length) => MathF.Max(x: 1f, y: length - (KnobR * 2f));
+
+    /// <summary>
+    ///     The GtkScale knob — the near-white disc with its soft drop shadow — carrying the colour it
+    ///     stands for as an inset dot, so each knob reads against any part of its own trough.
+    /// </summary>
+    private void PaintKnob(PaintList paint, float cx, float cy, float r, Color fill)
     {
-        paint.AddRect(bounds: r, color: Color.White, radius: 1f);
-        paint.AddBorder(bounds: r, color: Color.Black.WithAlpha(0.55f), radius: 1f);
+        paint.AddRect(
+            bounds: new Rect(
+                x: cx - r - 1f,
+                y: cy - r,
+                width: (r * 2f) + 2f,
+                height: (r * 2f) + 2f
+            ),
+            color: AdwStyle.Ink.WithAlpha(0.2f),
+            radius: r + 1f
+        );
+        paint.AddRect(
+            bounds: new Rect(
+                x: cx - r,
+                y: cy - r,
+                width: r * 2f,
+                height: r * 2f
+            ),
+            color: AdwStyle.SliderKnob(theme: _theme, hot: true),
+            radius: r
+        );
+        const float inset = 4f;
+        paint.AddRect(
+            bounds: new Rect(
+                x: cx - r + inset,
+                y: cy - r + inset,
+                width: (r - inset) * 2f,
+                height: (r - inset) * 2f
+            ),
+            color: fill.WithAlpha(1f),
+            radius: r - inset
+        );
     }
 
     private void PaintCheckerboard(PaintList paint, Rect r)
@@ -344,7 +379,7 @@ public sealed class AdwColorPicker : Widget
             text: text,
             baselineX: Bounds.X,
             baselineY: baseline,
-            color: _theme.Hint,
+            color: _theme.OnSurface.WithAlpha(AdwStyle.DimOpacity),
             fontSize: _theme.FontSizeCaption,
             fontFamily: "code"
         );
@@ -455,11 +490,11 @@ public sealed class AdwColorPicker : Widget
                 _v = 1f - Clamp01((point.Y - _svRect.Y) / MathF.Max(x: _svRect.Height, y: 1f));
                 break;
             case DragTarget.Hue:
-                _h = Clamp01((point.Y - _hueRect.Y) / MathF.Max(x: _hueRect.Height, y: 1f)) * 360f;
+                _h = Clamp01((point.Y - _hueRect.Y - KnobR) / Travel(_hueRect.Height)) * 360f;
                 _svBufHue = -1f; // hue changed → SV raster stale
                 break;
             case DragTarget.Alpha:
-                _a = Clamp01((point.X - _alphaRect.X) / MathF.Max(x: _alphaRect.Width, y: 1f));
+                _a = Clamp01((point.X - _alphaRect.X - KnobR) / Travel(_alphaRect.Width));
                 break;
             case DragTarget.None:
                 return;
@@ -488,6 +523,18 @@ public sealed class AdwColorPicker : Widget
             value4: _a,
             value5: _drag
         );
+    }
+
+    /// <summary>The hex entry: an <see cref="AdwEntry" /> that also commits when it loses focus.</summary>
+    private sealed class HexEntry : AdwEntry
+    {
+        public HexEntry(Action<string> onBlur)
+        {
+            Field.OnFocusChange = focused =>
+            {
+                if (!focused) onBlur(Field.Text);
+            };
+        }
     }
 
     private enum DragTarget

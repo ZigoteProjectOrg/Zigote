@@ -162,7 +162,8 @@ public sealed class AdwCurveEditor : Widget
 {
     private const float HitRadius = 8f;
 
-    private const float KeyRadius = 4.5f;
+    private const float KeyRadius = 6f;
+    private const float PlotRadius = AdwMetrics.CardRadius;
     private const float HandleRadius = 3.5f;
     private const float TangentLen = 36f; // screen-space length of a tangent handle arm
     private const int Samples = 48; // total samples across the visible curve
@@ -214,7 +215,14 @@ public sealed class AdwCurveEditor : Widget
 
     // ── Coordinate transforms (data <-> screen) ───────────────────────────────
 
-    private Rect Plot => Bounds; // the whole widget is the plot area
+    // Inset sideways by a key's radius, so a key sitting on the first or last time is a whole knob
+    // rather than half of one cut off by the frame.
+    private Rect Plot => new(
+        x: Bounds.X + KeyRadius + 4f,
+        y: Bounds.Y,
+        width: MathF.Max(x: 1f, y: Bounds.Width - ((KeyRadius + 4f) * 2f)),
+        height: Bounds.Height
+    );
 
     public override int DebugStateHash()
     {
@@ -277,9 +285,9 @@ public sealed class AdwCurveEditor : Widget
     {
         if (!paint.IsVisible(Bounds)) return;
 
-        // Backdrop.
-        paint.AddRect(bounds: Bounds, color: _theme.SurfaceAlt, radius: Radii.Md);
-        paint.AddClipStart(Bounds);
+        // The plot is a `.view`: the view background inside a card-rounded frame, clipped to it.
+        paint.AddRect(bounds: Bounds, color: AdwPalette.For(_theme).ViewBg, radius: PlotRadius);
+        paint.AddClipStart(bounds: Bounds, radius: PlotRadius);
 
         DrawGrid(paint);
         DrawCurve(paint);
@@ -288,9 +296,9 @@ public sealed class AdwCurveEditor : Widget
 
         paint.AddClipEnd();
 
-        paint.AddBorder(bounds: Bounds, color: _theme.Separator, radius: Radii.Md);
+        paint.AddBorder(bounds: Bounds, color: _theme.Separator, radius: PlotRadius);
         if (Focused && Enabled)
-            paint.AddFocusRing(bounds: Bounds, radius: Radii.Md, theme: _theme);
+            paint.AddFocusRing(bounds: Bounds, radius: PlotRadius, theme: _theme);
     }
 
     private void DrawGrid(PaintList paint)
@@ -363,7 +371,9 @@ public sealed class AdwCurveEditor : Widget
     private void DrawCurve(PaintList paint)
     {
         var keys = Curve.Keys;
-        var color = Enabled ? _theme.Primary : StateStyle.Disabled(_theme.Primary);
+        var color = Enabled
+            ? _theme.Accent
+            : _theme.Accent.WithAlpha(_theme.Accent.A * AdwStyle.DisabledOpacity);
         const float width = 2f;
 
         if (keys.Count == 0) return;
@@ -452,7 +462,7 @@ public sealed class AdwCurveEditor : Widget
         var key = keys[_selected];
         var center = DataToScreen(time: key.Time, value: key.Value);
         var handleColor = _theme.Accent;
-        var armColor = _theme.Label2;
+        var armColor = _theme.OnSurface.WithAlpha(AdwStyle.DimOpacity);
 
         // Out tangent (to the right): use explicit or auto slope.
         if (_selected < keys.Count - 1)
@@ -529,27 +539,30 @@ public sealed class AdwCurveEditor : Widget
         for (int i = 0; i < keys.Count; i++)
         {
             var s = DataToScreen(time: keys[i].Time, value: keys[i].Value);
-            var fill = i == _selected
-                ? _theme.Accent
-                : i == _hoverKey
-                    ? _theme.OnSurface
-                    : _theme.OnSurface.WithAlpha(0.75f);
+            // A key is a small scale knob: the near-white disc and its drop shadow, with the
+            // accent filling it once selected.
+            bool selected = i == _selected;
+            DrawDot(
+                paint: paint,
+                c: new Offset(x: s.X, y: s.Y + 1f),
+                r: KeyRadius + 1f,
+                color: AdwStyle.Ink.WithAlpha(0.2f)
+            );
             DrawDot(
                 paint: paint,
                 c: s,
                 r: KeyRadius,
-                color: fill
+                color: AdwStyle.SliderKnob(theme: _theme, hot: selected || i == _hoverKey)
             );
-            paint.AddBorder(
-                bounds: new Rect(
-                    x: s.X - KeyRadius,
-                    y: s.Y - KeyRadius,
-                    width: KeyRadius * 2f,
-                    height: KeyRadius * 2f
-                ),
-                color: _theme.SurfaceAlt,
-                radius: KeyRadius
-            );
+            if (selected)
+            {
+                DrawDot(
+                    paint: paint,
+                    c: s,
+                    r: KeyRadius - 2.5f,
+                    color: _theme.Accent
+                );
+            }
         }
     }
 

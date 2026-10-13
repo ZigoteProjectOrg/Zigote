@@ -67,7 +67,7 @@ public sealed class AdwFileBrowserDialog : ComposedWidget, IDismissableOverlay
     private AdwFileBrowserHeader _header = null!;
     private AdwFileBrowserList _list = null!;
     private AdwFileBrowserModel _model = null!;
-    private AdwTextField _nameField = null!;
+    private AdwEntry _nameField = null!;
     private List<AdwFileBrowserPlaces.Place> _places = [];
     private ScrollView _scroll = null!;
     private AdwSearchEntry _search = null!;
@@ -217,18 +217,19 @@ public sealed class AdwFileBrowserDialog : ComposedWidget, IDismissableOverlay
             },
         };
         _search = new AdwSearchEntry { OnChanged = OnSearchChanged };
-        _nameField = new AdwTextField(
-            onChanged: _ => MarkNeedsBuild(),
-            onSubmitted: _ => Confirm(),
-            decoration: new AdwInputDecoration("File name")
-        ) { Text = o.SuggestedName ?? "" };
+        _nameField = new AdwEntry {
+            Placeholder = "File name",
+            Text = o.SuggestedName ?? "",
+            OnChanged = _ => MarkNeedsBuild(),
+            OnSubmitted = _ => Confirm(),
+        };
 
         _places = o.LockRoot is null ? AdwFileBrowserPlaces.Build() : [];
 
         _model.NavigateTo(ResolveStartDirectory());
 
         // Owner is the hosting window's App when the browser runs as a separate OS window.
-        (Owner ?? App.Active)?.RequestFocus(o.Kind == FileDialogKind.SaveFile ? _nameField : _list);
+        (Owner ?? App.Active)?.RequestFocus(o.Kind == FileDialogKind.SaveFile ? _nameField.Editable : _list);
     }
 
     private string ResolveStartDirectory()
@@ -429,14 +430,11 @@ public sealed class AdwFileBrowserDialog : ComposedWidget, IDismissableOverlay
             b: _model.CurrentDirectory,
             comparisonType: StringComparison.OrdinalIgnoreCase
         );
-        return new Button(
-            label: segment.Label,
-            onPressed: isCurrent ? null : () => NavigateTo(segment.Path)
-        ) {
-            Style = ButtonStyle.Flat,
-            FontSize = theme.FontSizeCaption,
-            TextColor = isCurrent ? theme.OnSurface : theme.TextSecondary,
-            Padding = EdgeInsets.All(4f),
+        // GtkPathBar: flat buttons, with the current folder the one raised button of the row
+        // rather than a dead, dimmed one.
+        return new AdwButton(label: segment.Label, onPressed: () => NavigateTo(segment.Path)) {
+            Style = isCurrent ? AdwButtonStyle.Regular : AdwButtonStyle.Flat,
+            Compact = true,
         };
     }
 
@@ -457,7 +455,16 @@ public sealed class AdwFileBrowserDialog : ComposedWidget, IDismissableOverlay
         var row = new Row { CrossAxisAlignment = CrossAxisAlignment.Stretch };
         if (_places.Count > 0)
         {
-            row.Children.Add(new SizedBox(width: 156f, child: BuildSidebar()));
+            // `placessidebar` — the places pane sits on the sidebar background, not the view's.
+            row.Children.Add(
+                new SizedBox(
+                    width: 180f,
+                    child: new ColoredBox(
+                        color: AdwPalette.For(ThemeProvider.Of(BuildContext.Current)).SidebarBg,
+                        child: BuildSidebar()
+                    )
+                )
+            );
             row.Children.Add(new AdwSeparator(vertical: true));
         }
 
@@ -549,10 +556,7 @@ public sealed class AdwFileBrowserDialog : ComposedWidget, IDismissableOverlay
         {
             options.Children.Add(new SizedBox(14f));
             options.Children.Add(
-                new Button(label: "New Folder", onPressed: PromptNewFolder) {
-                    Style = ButtonStyle.Outlined,
-                    FontSize = theme.FontSizeCaption,
-                }
+                new AdwButton(label: "New Folder", onPressed: PromptNewFolder) { Compact = true }
             );
         }
 
@@ -582,12 +586,13 @@ public sealed class AdwFileBrowserDialog : ComposedWidget, IDismissableOverlay
         }
 
         commit.Children.Add(
-            new Button(label: "Cancel", onPressed: Cancel) { Style = ButtonStyle.Outlined }
+            new AdwButton(label: "Cancel", onPressed: Cancel)
         );
         commit.Children.Add(new SizedBox(8f));
         commit.Children.Add(
-            new Button(label: AcceptLabel(), onPressed: CanAccept() ? Confirm : null) {
-                BackgroundColor = theme.Primary,
+            new AdwButton(label: AcceptLabel(), onPressed: Confirm) {
+                Style = AdwButtonStyle.Suggested,
+                Enabled = CanAccept(),
             }
         );
 
@@ -935,9 +940,7 @@ public sealed class AdwFileBrowserDialog : ComposedWidget, IDismissableOverlay
     {
         var app = App.Active;
         if (app is null) return;
-        var field = new AdwTextField(decoration: new AdwInputDecoration("New name")) {
-            Text = entry.Name,
-        };
+        var field = new AdwEntry { Placeholder = "New name", Text = entry.Name };
         Dialog? prompt = null;
         field.OnSubmitted = _ => Apply();
 
@@ -956,11 +959,9 @@ public sealed class AdwFileBrowserDialog : ComposedWidget, IDismissableOverlay
                         new Row {
                             MainAxisAlignment = MainAxisAlignment.End,
                             Children = {
-                                new Button(label: "Cancel", onPressed: () => prompt?.Dismiss()) {
-                                    Style = ButtonStyle.Outlined,
-                                },
+                                new AdwButton(label: "Cancel", onPressed: () => prompt?.Dismiss()),
                                 new SizedBox(8f),
-                                new Button(label: "Rename", onPressed: Apply),
+                                new AdwButton(label: "Rename", onPressed: Apply) { Style = AdwButtonStyle.Suggested },
                             },
                         },
                     },
@@ -1024,9 +1025,7 @@ public sealed class AdwFileBrowserDialog : ComposedWidget, IDismissableOverlay
     {
         var app = App.Active;
         if (app is null) return;
-        var field = new AdwTextField(decoration: new AdwInputDecoration("Folder name")) {
-            Text = "untitled folder",
-        };
+        var field = new AdwEntry { Placeholder = "Folder name", Text = "untitled folder" };
         Dialog? prompt = null;
         field.OnSubmitted = _ => Create();
 
@@ -1045,11 +1044,9 @@ public sealed class AdwFileBrowserDialog : ComposedWidget, IDismissableOverlay
                         new Row {
                             MainAxisAlignment = MainAxisAlignment.End,
                             Children = {
-                                new Button(label: "Cancel", onPressed: () => prompt?.Dismiss()) {
-                                    Style = ButtonStyle.Outlined,
-                                },
+                                new AdwButton(label: "Cancel", onPressed: () => prompt?.Dismiss()),
                                 new SizedBox(8f),
-                                new Button(label: "Create", onPressed: Create),
+                                new AdwButton(label: "Create", onPressed: Create) { Style = AdwButtonStyle.Suggested },
                             },
                         },
                     },

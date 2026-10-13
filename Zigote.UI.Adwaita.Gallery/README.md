@@ -1,6 +1,6 @@
 # Zigote.UI.Adwaita.Gallery
 
-The reference app for [`Zigote.UI.Adwaita`](../Zigote.UI.Adwaita/README.md) — **40 pages**, one per widget family, every
+The reference app for [`Zigote.UI.Adwaita`](../Zigote.UI.Adwaita/README.md) — **47 pages**, one per widget family, every
 one of them live. No screenshots, no mock rows: what you see is the widget doing the thing.
 
 ```sh
@@ -39,13 +39,13 @@ All use the platform command modifier — ⌘ on macOS, Ctrl elsewhere.
 
 | Section        | Pages                                                                                                                   |
 |----------------|-------------------------------------------------------------------------------------------------------------------------|
-| **Navigation** | Navigation View · Split Views · Paned · Breakpoints · View Switcher · Tab View · Bottom Sheet · Carousel · Image Grid   |
-| **Controls**   | Buttons · Toggles · Checks & Radios · Sliders & Progress · Entries · Colour & Completion · Shortcuts · Menus & Popovers |
-| **Lists**      | Boxed Lists · Preferences · Large Lists (2 000 rows, recycled while you scroll)                                         |
-| **Feedback**   | Banners · Toasts · Alert Dialogs · Spinner · Status Pages · Avatar                                                      |
-| **Layout**     | Clamp · Wrap Box · Adaptive                                                                                             |
+| **Navigation** | Navigation View · Split Views · Paned · Breakpoints · View Switcher · Tab View · Toolbar & Panel · Bottom Sheet · Carousel · Image Grid   |
+| **Controls**   | Buttons · Toggles · Checks & Radios · Sliders & Progress · Entries · Colour & Completion · Value Editors · Chips & Badges · Shortcuts · Menus & Popovers |
+| **Lists**      | Boxed Lists · Preferences · Large Lists (2 000 rows, recycled while you scroll) · Trees & Reordering                                         |
+| **Feedback**   | Banners · Toasts · Alert Dialogs · File Chooser · Spinner · Status Pages · Avatar                                                      |
+| **Layout**     | Clamp · Wrap Box · Masonry Grid · Adaptive                                                                                             |
 | **Style**      | Liquid Glass · Style Classes · Typography · Colors · Animations                                                                        |
-| **Zigote**     | Graphs · Reactivity · Concurrency · Drag and Drop                                                                                |
+| **Zigote**     | Graphs · Code Editor · Reactivity · Concurrency · Drag and Drop                                                                                |
 
 The last section is the framework rather than the design system: signals and computed values driving a live order total,
 background threads writing signals under a per-frame delivery budget, and draggable payloads with drop targets.
