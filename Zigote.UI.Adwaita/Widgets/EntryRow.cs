@@ -106,7 +106,7 @@ public sealed class AdwEntryRow : ComposedWidget
             // AnimatedSize eases the caption slot between 0 and its natural height, clipping while
             // in flight — the ~150ms title float.
             Children = {
-                new AnimatedSize(child: _captionBox, duration: 0.15f, curve: Curves.EaseOut),
+                new AnimatedSize(child: _captionBox, duration: 0.15f, curve: Curves.EaseOut) { Spec = AdwMotion.Control },
                 _field,
             },
         };

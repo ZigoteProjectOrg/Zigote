@@ -65,7 +65,8 @@ internal sealed class ArtImage : ComposedWidget
     ///     Fill the frame and crop the overflow, as a photo grid does, instead of letterboxing the
     ///     whole picture inside it.
     /// </param>
-    public ArtImage(ArtPiece piece, uint maxDim, bool chrome = true, bool cover = false)
+    /// <param name="spinner">Off when something else already stands in for the picture while it loads.</param>
+    public ArtImage(ArtPiece piece, uint maxDim, bool chrome = true, bool cover = false, bool spinner = true)
     {
         _piece = piece;
         _maxDim = maxDim;
@@ -78,8 +79,9 @@ internal sealed class ArtImage : ComposedWidget
             OnLoaded = () => Settle(state: ArtState.Ready, reason: null),
             OnFailed = error => Settle(state: ArtState.Failed, reason: Describe(error)),
         };
-        _fade = new AnimatedOpacity(opacity: 0f, child: Picture(), duration: 0.4f);
-        _overlay = new AnimatedSwitcher(child: Busy(), duration: 0.25f);
+        // Tagged with this picture itself: whatever opens it flies it out of here by that tag.
+        _fade = new AnimatedOpacity(opacity: 0f, child: new AdwHero(tag: this, child: Picture()), duration: 0.4f);
+        _overlay = new AnimatedSwitcher(child: spinner ? Busy() : SizedBox.Shrink(), duration: 0.25f);
     }
 
     /// <summary>The corner a framed picture is clipped to.</summary>
@@ -88,8 +90,6 @@ internal sealed class ArtImage : ComposedWidget
     /// <summary>The decoded image widget — what a transition draws while it carries it elsewhere.</summary>
     public Image Texture => _image;
 
-    /// <summary>Fires on the UI thread when a load settles, either way.</summary>
-    public Action? OnSettled { get; set; }
 
     /// <summary>Set to make the picture a button — the gallery opens the zoomable viewer with it.</summary>
     public Action? OnPressed { get; set; }
@@ -211,7 +211,6 @@ internal sealed class ArtImage : ComposedWidget
         _overlay.Child = state == ArtState.Ready
             ? SizedBox.Shrink()
             : new BrokenArt(reason ?? "Couldn't load");
-        OnSettled?.Invoke();
     }
 
     /// <summary>A line that fits under an icon and still says which layer gave up.</summary>
@@ -230,7 +229,9 @@ internal sealed class ArtImage : ComposedWidget
     private Widget Picture()
     {
         var picture = new Stack {
-            Children = { _cover ? new Cover(_image) : new Center { Child = _image } },
+            // Unframed means the viewer, where the picture fills what it is given — scaled up too,
+            // so a small original lands where its thumbnail did instead of shrinking on arrival.
+            Children = { _cover || !_chrome ? new Cover(image: _image, cover: _cover) : new Center { Child = _image } },
         };
         if (_chrome)
         {
@@ -253,9 +254,10 @@ internal sealed class ArtImage : ComposedWidget
 
 /// <summary>
 ///     Aspect-fill: the picture scaled until it covers the frame, centred, the overflow left for the
-///     clip above to cut. <see cref="Image" /> on its own only ever fits inside.
+///     clip above to cut — or, with <paramref name="cover" /> off, scaled until it just fits, up as
+///     well as down. <see cref="Image" /> on its own only ever shrinks to fit.
 /// </summary>
-internal sealed class Cover(Image image) : Widget
+internal sealed class Cover(Image image, bool cover = true) : Widget
 {
     private Size _picture;
     private Size _size;
@@ -271,7 +273,8 @@ internal sealed class Cover(Image image) : Widget
         }
 
         _size = new Size(width: c.MaxWidth, height: c.MaxHeight);
-        float scale = MathF.Max(x: _size.Width / w, y: _size.Height / h);
+        float sx = _size.Width / w, sy = _size.Height / h;
+        float scale = cover ? MathF.Max(x: sx, y: sy) : MathF.Min(x: sx, y: sy);
         _picture = image.Measure(Constraints.Tight(width: w * scale, height: h * scale));
         return _size;
     }

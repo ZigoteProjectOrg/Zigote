@@ -21,6 +21,13 @@ public sealed class AdwPreferencesDialog : AdwDialog
     /// <summary>The <see cref="AdwPreferencesPage" />s. Populate before showing.</summary>
     public List<Widget> Pages { get; init; } = [];
 
+    /// <summary>The page shown, by index — set before showing to open on a page other than the first.</summary>
+    public int VisiblePage
+    {
+        get => _page.Peek();
+        set => _page.Value = value;
+    }
+
     // init: the content sheet is built in the constructor, so a later assignment never shows.
     public string Title { get; init; } = "Preferences";
 

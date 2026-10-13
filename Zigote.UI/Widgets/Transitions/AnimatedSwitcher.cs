@@ -102,7 +102,13 @@ public sealed class AnimatedSwitcher : ImplicitlyAnimatedWidget
     {
         if (_outgoing is not null && Progress < 0.999f)
         {
-            float outAlpha = 1f - Progress;
+            // Not 1-p and p: two layers at half alpha cover only three quarters of what is behind
+            // them, so a plain cross-fade between opaque children dips toward the background at
+            // its midpoint and reads as a flicker. Holding the old child longer and bringing the
+            // new one up sooner keeps the pair within ~6% of opaque the whole way across.
+            float p = Progress;
+            float outAlpha = 1f - (p * p);
+            float inAlpha = p * (2f - p);
             if (outAlpha > 0.001f)
             {
                 paint.PushAlpha(outAlpha);
@@ -110,9 +116,9 @@ public sealed class AnimatedSwitcher : ImplicitlyAnimatedWidget
                 paint.PopAlpha();
             }
 
-            if (Progress > 0.001f)
+            if (inAlpha > 0.001f)
             {
-                paint.PushAlpha(Progress);
+                paint.PushAlpha(inAlpha);
                 _current?.Paint(paint);
                 paint.PopAlpha();
             }

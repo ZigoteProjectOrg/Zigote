@@ -46,6 +46,16 @@ public class AdwDialog : Widget, IDismissableOverlay
     }
 
 
+    /// <summary>
+    ///     How the sheet arrives and leaves. <see cref="AdwMotion.Overlay" /> unless set — give one
+    ///     dialog a calmer or livelier entrance without retuning every overlay in the app.
+    /// </summary>
+    public MotionSpec Motion
+    {
+        get => _anim.Spec ?? AdwMotion.Overlay;
+        set => _anim.Spec = value;
+    }
+
     /// <summary>The sheet's corner radius — <c>$dialog_radius</c> unless a subclass says otherwise.</summary>
     protected virtual float Radius => AdwMetrics.DialogRadius;
 
@@ -129,6 +139,8 @@ public class AdwDialog : Widget, IDismissableOverlay
     {
         if (_closing) return;
         OnClosing?.Invoke();
+        // After OnClosing, so a hero flies home from wherever that left its destination.
+        AdwHero.ReturnAll(this);
         if (_host is null || _anim.Progress <= 0f)
         {
             // Never shown / not yet visible: nothing to animate out.
@@ -230,7 +242,9 @@ public class AdwDialog : Widget, IDismissableOverlay
     // Modal barrier: consume everything inside the window; the card gets first pick.
     public override Widget? HitTest(Offset point)
     {
-        if (!Bounds.Contains(px: point.X, py: point.Y)) return null;
+        // On its way out it is no longer a barrier: a click meant for what is underneath should
+        // not be swallowed by a sheet that is already leaving.
+        if (_closing || !Bounds.Contains(px: point.X, py: point.Y)) return null;
         return _card.HitTest(point) ?? this;
     }
 

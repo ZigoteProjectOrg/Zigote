@@ -30,7 +30,7 @@ public sealed class AdwActionRow : ComposedWidget
         _title = title;
         _subtitle = subtitle;
         _washAnim =
-            new AnimationController(durationSeconds: 0.1f, vsync: this) { Curve = Curves.EaseOut };
+            new AnimationController(durationSeconds: AdwMotion.Hover, vsync: this) { Curve = Curves.EaseOut };
         _washAnim.OnTick += () =>
         {
             if (_wash is null) return;

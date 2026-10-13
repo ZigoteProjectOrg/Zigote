@@ -53,6 +53,13 @@ internal abstract class AdwPopoverBase : Widget, IDismissableOverlay
         _enter.OnDismissed += FinishDismiss;
     }
 
+    /// <summary>How the popover arrives and leaves. <see cref="AdwMotion.Overlay" /> unless set.</summary>
+    public MotionSpec Motion
+    {
+        get => _enter.Spec ?? AdwMotion.Overlay;
+        set => _enter.Spec = value;
+    }
+
     // Auto-focused when pushed, so Up/Down/Enter arrive at OnKey (Esc stays with the app's
     // dismiss chain); HandlesDirectionalKeys keeps arrows from moving window focus instead.
     public override bool Focusable => true;

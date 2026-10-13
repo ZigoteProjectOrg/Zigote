@@ -441,6 +441,7 @@ public partial class App : IDisposable
         set
         {
             if (ReferenceEquals(objA: _theme, objB: value)) return;
+            FadeFromLastFrame();
             _theme = value;
             BuildContext.Current.BumpGeneration();
             // Overlays (dialogs, popovers, menus) sit outside the root's ThemeProvider and resolve
@@ -1116,17 +1117,7 @@ public partial class App : IDisposable
         // texture past what the backend will allocate (and a shot that large is not a preview).
         density = CaptureDensity(scale);
 
-        if (_paint.Count == 0) return false;
-        if (_overlayPaint.Count == 0)
-            Engine.SubmitPaintCommands(_paint);
-        else
-        {
-            _capturePaint.Clear();
-            _capturePaint.AppendFrom(_paint);
-            _capturePaint.AppendFrom(_overlayPaint);
-            Engine.SubmitPaintCommands(_capturePaint);
-        }
-
+        if (!SubmitLastFrame()) return false;
         bool captured = Engine.CaptureUiBmp(
             path: path,
             width: (uint)MathF.Max(x: 1f, y: LayoutWidth * density),
@@ -1138,6 +1129,37 @@ public partial class App : IDisposable
         // until the main one next repaints.
         if (ParentApp is { } main) Engine.SubmitPaintCommands(main._paint);
         return captured;
+    }
+
+    /// <summary>
+    ///     The frame on screen as a GPU texture, at the window's own density — an image handle to
+    ///     draw by <c>cacheKey</c> and free with <see cref="ZigoteEngine.ReleaseTexture" />, or 0.
+    ///     Same rules as <see cref="CaptureUi(string,float)" />: between frames only. The pixels
+    ///     stay on the GPU, so unlike the BMP path this is cheap enough to use mid-interaction.
+    /// </summary>
+    internal ulong CaptureUiTexture(out uint width, out uint height)
+    {
+        float density = CaptureDensity(HostScale);
+        width = (uint)MathF.Max(x: 1f, y: LayoutWidth * density);
+        height = (uint)MathF.Max(x: 1f, y: LayoutHeight * density);
+        return SubmitLastFrame() ? Engine.CaptureUiTexture(width: width, height: height, scale: density) : 0;
+    }
+
+    // Puts the last painted frame — root and overlays — back in the engine for a capture to render.
+    private bool SubmitLastFrame()
+    {
+        if (_paint.Count == 0) return false;
+        if (_overlayPaint.Count == 0)
+            Engine.SubmitPaintCommands(_paint);
+        else
+        {
+            _capturePaint.Clear();
+            _capturePaint.AppendFrom(_paint);
+            _capturePaint.AppendFrom(_overlayPaint);
+            Engine.SubmitPaintCommands(_capturePaint);
+        }
+
+        return true;
     }
 
     /// <summary>

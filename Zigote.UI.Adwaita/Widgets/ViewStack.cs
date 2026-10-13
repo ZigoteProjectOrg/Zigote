@@ -84,6 +84,6 @@ public sealed class AdwViewStack : ComposedWidget
     protected override Widget Build(BuildContext context)
     {
         // Retained AnimatedSwitcher does the two-layer crossfade; the VisibleName setter feeds it.
-        return _switcher = new AnimatedSwitcher(child: Resolve(Visible.Peek()), duration: 0.2f);
+        return _switcher = new AnimatedSwitcher(child: Resolve(Visible.Peek()), duration: AdwMotion.Crossfade);
     }
 }

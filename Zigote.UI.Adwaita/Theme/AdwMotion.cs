@@ -44,4 +44,13 @@ public static class AdwMotion
     ///     reads as the number moving, not as the widget animating.
     /// </summary>
     public static MotionSpec Value = MotionSpec.Spring(response: 0.45f, damping: 1f);
+
+    /// <summary>
+    ///     Seconds a control's fill takes to follow the pointer — hover, press, selection. A colour
+    ///     has no velocity to keep, so this one is a duration.
+    /// </summary>
+    public static float Hover = 0.1f;
+
+    /// <summary>Seconds one piece of content takes to dissolve into another — a view stack's pages.</summary>
+    public static float Crossfade = 0.2f;
 }

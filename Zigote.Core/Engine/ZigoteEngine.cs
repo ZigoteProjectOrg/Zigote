@@ -2552,6 +2552,17 @@ public sealed unsafe class ZigoteEngine : IDisposable
             return NativeEngine.CaptureSceneBmp(pathPtr: p, pathLen: (nuint)buf.Length) == ZgResult.Ok;
     }
 
+    /// <summary>
+    ///     Renders the last submitted UI paint list into a GPU texture and returns it as an image
+    ///     handle (0 on failure) — drawable by <c>cacheKey</c>, freed with
+    ///     <see cref="ReleaseTexture" />. Nothing is read back to the CPU. Main window only.
+    /// </summary>
+    public ulong CaptureUiTexture(uint width, uint height, float scale = 1f)
+    {
+        EnsureReady();
+        return NativeEngine.CaptureUiTexture(width: ClampDim(width), height: ClampDim(height), scale: scale);
+    }
+
     public bool CaptureUiBmp(string path, uint width, uint height, float scale = 1f)
     {
         EnsureReady();

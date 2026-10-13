@@ -77,4 +77,11 @@ public sealed class AnimatedOpacity : ImplicitlyAnimatedWidget
     }
 
     public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(Child);
+
+    /// <summary>
+    ///     Faded all the way out is not on screen: it must not take focus or be announced either,
+    ///     exactly as <see cref="Opacity" /> at zero — otherwise Tab lands on, and a screen reader
+    ///     reads out, a panel nobody can see.
+    /// </summary>
+    public override IEnumerable<Widget> GetVisibleChildren() => Current <= 0.001f ? [] : GetChildren();
 }

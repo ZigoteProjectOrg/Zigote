@@ -35,28 +35,40 @@ internal static class ArtViewer
     public static void Show(ArtPiece piece, ArtImage? from = null)
     {
         var zoom = new Signal<float>(1f);
-        var full = new ArtImage(piece: piece, maxDim: FullMaxDim, chrome: false);
         bool hero = from is { Texture.HasTexture: true };
+        // No spinner over a picture that is already there: the tile's own texture stands in.
+        var full = new ArtImage(piece: piece, maxDim: FullMaxDim, chrome: false, spinner: !hero);
 
-        // Hidden while the tile's picture is in flight, then swapped in under it: the flight lands
-        // exactly where this one sits, so the hand-over is a change of resolution and nothing else.
-        var reveal = new AnimatedOpacity(opacity: hero ? 0f : 1f, child: full, duration: 0.01f);
-        var viewer = new InteractiveViewer(reveal) {
+        // Hidden while the tile's picture is in flight, and shown the frame it lands. Under the
+        // full picture sits the tile's texture at the same fit, so the landing is seamless and the
+        // sharper decode fades up over it whenever it arrives — nothing waits on the load.
+        var landing = hero
+            ? new AdwHero(tag: from!, child: new Stack { Children = { new Poster(from!.Texture), full } }) {
+                Flight = ArtFlight.Uncrop(from!.Texture),
+            }
+            : null;
+        var viewer = new InteractiveViewer(landing ?? (Widget)full) {
             MaxScale = 10f,
             DoubleTapScale = 3f,
             OnScaleChanged = scale => zoom.Value = scale,
         };
-        var flight = hero ? new HeroFlight(from: from!, frame: viewer) : null;
-        if (flight is not null)
-        {
-            flight.OnLanded = () => reveal.Opacity = 1f;
-            full.OnSettled = flight.Ready;
-        }
 
         // The dialog raises its own toasts: the window's host sits under this dialog, so a toast
         // sent there would land where nobody can see it.
         AdwToastOverlay? toasts = null;
-        var bar = new ViewerBar(piece: piece, toast: toast => toasts?.AddToast(Brief(toast)), viewer: viewer, zoom: zoom);
+        // The flight passes over where the toolbar sits, so the toolbar waits for it to land and
+        // fades up then, rather than popping out from under it.
+        var bar = new AnimatedOpacity(
+            opacity: hero ? 0f : 1f,
+            child: new ViewerBar(
+                piece: piece,
+                toast: toast => toasts?.AddToast(Brief(toast)),
+                viewer: viewer,
+                zoom: zoom
+            ),
+            duration: 0.2f
+        );
+        if (landing is not null) landing.OnLanded = () => bar.Opacity = 1f;
 
         Demo.ShowDialog(
             title: $"Art by {piece.Artist}",
@@ -75,135 +87,43 @@ internal static class ArtViewer
             height: 720f,
             onClosing: () =>
             {
-                if (flight is null) return;
-                // Back from where the whole picture sits, whatever it was zoomed or panned to.
+                if (landing is null) return;
+                // The flight home starts from where the whole picture sits, whatever it was zoomed
+                // or panned to — the dialog sends the hero back right after this.
                 viewer.Reset(animate: false);
-                reveal.Opacity = 0f;
-                flight.Return();
+                bar.Opacity = 0f;
             }
         );
-        flight?.Fly();
     }
 }
 
 /// <summary>
-///     The shared-element transition between a grid tile and the viewer: an overlay that draws the
-///     tile's own texture while it travels from the tile's frame to where the whole picture sits
-///     in the viewer, un-cropping and squaring its corners on the way — and the reverse on close.
+///     The flight between a grid tile and the viewer: the tile's own texture, un-cropping and
+///     squaring its corners on the way out, and the reverse on the way home.
 /// </summary>
-internal sealed class HeroFlight : Widget
+internal static class ArtFlight
 {
-    private readonly AnimationController _anim;
-    private readonly Widget _frame;
-    private readonly ArtImage _from;
-    private bool _arrived;
-    private App? _host;
-    private bool _ready;
-    private Size _size;
-
-    public HeroFlight(ArtImage from, Widget frame)
+    public static AdwHeroPainter Uncrop(Image picture) => (paint, from, to, t) =>
     {
-        _from = from;
-        _frame = frame;
-        _anim = new AnimationController(durationSeconds: 0.35f, vsync: this) { Spec = AdwMotion.Reveal };
-        _anim.OnTick += MarkNeedsPaint;
-        _anim.OnCompleted += () =>
-        {
-            _arrived = true;
-            Land();
-        };
-        _anim.OnDismissed += Leave;
-    }
-
-    /// <summary>Called when the flight has landed and the viewer's own picture is there to take over.</summary>
-    public Action? OnLanded { get; set; }
-
-    protected override void OnMount() => _anim.AttachTicker(this);
-
-    /// <summary>Tile → viewer.</summary>
-    public void Fly()
-    {
-        Enter();
-        _anim.Forward();
-    }
-
-    /// <summary>Viewer → tile, from wherever the flight is: landed, or still on its way out.</summary>
-    public void Return()
-    {
-        if (_host is null)
-        {
-            Enter();
-            _anim.Seek(1f);
-        }
-
-        _arrived = false;
-        _anim.Reverse();
-    }
-
-    /// <summary>The viewer's full-resolution picture has settled. Until it has, the flight holds its place.</summary>
-    public void Ready()
-    {
-        _ready = true;
-        Land();
-    }
-
-    private void Land()
-    {
-        if (!_arrived || !_ready || _host is null) return;
-        OnLanded?.Invoke();
-        Leave();
-    }
-
-    private void Enter()
-    {
-        if (_host is not null) return;
-        _host = App.Active;
-        _host?.PushOverlay(this);
-    }
-
-    private void Leave()
-    {
-        _host?.PopOverlay(this);
-        _host = null;
-    }
-
-    public override Size Measure(Constraints c)
-    {
-        _size = c.Constrain(new Size(width: c.MaxWidth, height: c.MaxHeight));
-        return _size;
-    }
-
-    public override void Layout(Offset origin) =>
-        Bounds = new Rect(x: origin.X, y: origin.Y, width: _size.Width, height: _size.Height);
-
-    public override void Paint(PaintList paint)
-    {
-        var picture = _from.Texture;
         var (w, h) = picture.TextureSize;
-        var tile = _from.Bounds;
-        var frame = _frame.Bounds;
-        if (!picture.HasTexture || h == 0 || tile.Width <= 0f || frame.Width <= 0f) return;
+        if (!picture.HasTexture || h == 0) return;
 
         // In the tile the picture covers its frame and the frame crops it; in the viewer the whole
         // picture fits. Moving the crop and the picture separately between those is the un-crop.
         float aspect = (float)w / h;
-        var whole = Fit(frame: frame, aspect: aspect, cover: false);
-        float t = _anim.Value;
-        paint.AddClipStart(bounds: Lerp(a: tile, b: whole, t: t), radius: ArtImage.Radius * (1f - t));
+        var whole = Fit(frame: to, aspect: aspect, cover: false);
+        paint.AddClipStart(bounds: Lerp(a: from, b: whole, t: t), radius: ArtImage.Radius * (1f - t));
         paint.AddImage(
-            bounds: Lerp(a: Fit(frame: tile, aspect: aspect, cover: true), b: whole, t: t),
+            bounds: Lerp(a: Fit(frame: from, aspect: aspect, cover: true), b: whole, t: t),
             pixelWidth: (int)w,
             pixelHeight: (int)h,
             pixels: null,
             cacheKey: picture.TextureHandle
         );
         paint.AddClipEnd();
-    }
+    };
 
-    // Never in the way: the dialog underneath keeps every click, the close button included.
-    public override Widget? HitTest(Offset point) => null;
-
-    private static Rect Fit(Rect frame, float aspect, bool cover)
+    public static Rect Fit(Rect frame, float aspect, bool cover)
     {
         bool byWidth = frame.Width / frame.Height < aspect != cover;
         float width = byWidth ? frame.Width : frame.Height * aspect;
@@ -222,6 +142,36 @@ internal sealed class HeroFlight : Widget
         width: a.Width + ((b.Width - a.Width) * t),
         height: a.Height + ((b.Height - a.Height) * t)
     );
+}
+
+/// <summary>The tile's texture, whole, fitted to the frame — what the flight lands on.</summary>
+internal sealed class Poster(Image picture) : Widget
+{
+    private Size _size;
+
+    public override Size Measure(Constraints c)
+    {
+        _size = c.Constrain(new Size(width: c.MaxWidth, height: c.MaxHeight));
+        return _size;
+    }
+
+    public override void Layout(Offset origin) =>
+        Bounds = new Rect(x: origin.X, y: origin.Y, width: _size.Width, height: _size.Height);
+
+    public override void Paint(PaintList paint)
+    {
+        var (w, h) = picture.TextureSize;
+        if (!picture.HasTexture || h == 0) return;
+        paint.AddImage(
+            bounds: ArtFlight.Fit(frame: Bounds, aspect: (float)w / h, cover: false),
+            pixelWidth: (int)w,
+            pixelHeight: (int)h,
+            pixels: null,
+            cacheKey: picture.TextureHandle
+        );
+    }
+
+    public override Widget? HitTest(Offset point) => null;
 }
 
 /// <summary>

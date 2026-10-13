@@ -1,3 +1,4 @@
+using Zigote.Core.Animation;
 using Zigote.Core.Events;
 using Zigote.UI.Semantics;
 
@@ -13,6 +14,12 @@ public sealed class AdwSlider : Widget
 {
     private bool _dragging;
     private bool _enabled = true;
+
+    // A click on the trough or a key step is a jump, and the knob travels it instead of
+    // teleporting: the painted position eases from where it was shown to where the value now is.
+    // A drag that follows the click just moves the target, so the knob catches the pointer up.
+    private readonly AnimationController _glide;
+    private float _glideFrom;
     private bool _hovered;
     private float _max;
     private float _min;
@@ -38,6 +45,34 @@ public sealed class AdwSlider : Widget
         _min = min;
         _max = max;
         OnChanged = onChanged;
+        _glide = new AnimationController(durationSeconds: 0.15f, vsync: this) { Spec = AdwMotion.Control };
+        _glide.OnTick += MarkNeedsPaint;
+    }
+
+    /// <summary>How the knob travels a click or key jump. <see cref="AdwMotion.Control" /> unless set.</summary>
+    public MotionSpec Motion
+    {
+        get => _glide.Spec ?? AdwMotion.Control;
+        set => _glide.Spec = value;
+    }
+
+    protected override void OnMount() => _glide.AttachTicker(this);
+
+    // Where the knob is drawn, 0–1 along the track — the value's place, or on its way there.
+    private float Shown
+    {
+        get
+        {
+            float t = Max > Min ? Math.Clamp(value: (Value - Min) / (Max - Min), min: 0f, max: 1f) : 0f;
+            return _glide.Status == AnimationStatus.Forward ? _glideFrom + ((t - _glideFrom) * _glide.Value) : t;
+        }
+    }
+
+    private void Glide()
+    {
+        _glideFrom = Shown;
+        _glide.Dismiss();
+        _glide.Forward();
     }
 
     public float Value
@@ -162,7 +197,7 @@ public sealed class AdwSlider : Widget
         if (!Enabled) paint.PushAlpha(AdwStyle.DisabledOpacity);
 
         var p = AdwPalette.For(_theme);
-        float t = Max > Min ? Math.Clamp(value: (Value - Min) / (Max - Min), min: 0f, max: 1f) : 0f;
+        float t = Shown;
         float thickness = AdwMetrics.SliderTrack;
 
         // The centre line across the axis, and the knob's position along it — vertically the value
@@ -262,6 +297,7 @@ public sealed class AdwSlider : Widget
     {
         if (!Enabled) return;
         _dragging = true;
+        Glide();
         UpdateValue(point); // click-to-seek
     }
 
@@ -310,6 +346,7 @@ public sealed class AdwSlider : Widget
     {
         float newVal = Math.Clamp(value: Value + delta, min: Min, max: Max);
         if (MathF.Abs(newVal - Value) <= 0.0001f) return;
+        Glide();
         Value = newVal;
         OnChanged?.Invoke(Value);
     }

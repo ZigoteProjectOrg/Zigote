@@ -17,8 +17,6 @@ namespace Zigote.UI.Adwaita;
 /// </summary>
 internal sealed class FillTransition
 {
-    private const float Duration = 0.1f;
-
     private readonly AnimationController _anim;
     private readonly Action<Color> _apply;
     private readonly Ticker _ticker;
@@ -32,7 +30,7 @@ internal sealed class FillTransition
     public FillTransition(Action<Color> apply)
     {
         _apply = apply;
-        _anim = new AnimationController(Duration) { Curve = Curves.EaseOut };
+        _anim = new AnimationController(AdwMotion.Hover) { Curve = Curves.EaseOut };
         _anim.OnTick += () => _apply(_tween.Evaluate(_anim.Value));
         _ticker = new Ticker(Step);
     }

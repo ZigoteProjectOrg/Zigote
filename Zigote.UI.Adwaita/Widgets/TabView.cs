@@ -1,3 +1,4 @@
+using Zigote.UI.Widgets.Transitions;
 using Zigote.Core.State;
 
 namespace Zigote.UI.Adwaita;
@@ -50,6 +51,32 @@ public sealed class AdwTabView : ComposedWidget
 
     public Action<AdwTabPage>? OnClosed { get; set; }
 
+    /// <summary>Seconds a page takes to dissolve into the next. 0 swaps instantly.</summary>
+    public float Crossfade { get; set; } = AdwMotion.Crossfade;
+
+    private Widget Current() => Pages.Count == 0
+        ? _empty
+        : Pages[Math.Clamp(value: Selected.Peek(), min: 0, max: Pages.Count - 1)].Child;
+
+    private readonly Widget _empty = new SizedBox();
+
+    // libadwaita swaps tab pages outright; a short dissolve is kinder to the eye and costs
+    // nothing a tab strip needs.
+    // Made with its first page already in it, so the first show is not itself a fade.
+    private AnimatedSwitcher? _switcher;
+
+    private AnimatedSwitcher Switcher =>
+        _switcher ??= new AnimatedSwitcher(child: Current(), duration: Crossfade);
+
+    protected override void OnMount() => OwnEffect(() =>
+        {
+            PagesChanged.Depend();
+            _ = Selected.Value;
+            Switcher.Duration = Crossfade;
+            Switcher.Child = Current();
+        }
+    );
+
     /// <summary>Add a page at the end and select it.</summary>
     public void Append(AdwTabPage page)
     {
@@ -79,14 +106,6 @@ public sealed class AdwTabView : ComposedWidget
 
     protected override Widget Build(BuildContext context)
     {
-        return new Watch(() =>
-            {
-                PagesChanged.Depend();
-                int index = Selected.Value;
-                if (Pages.Count == 0) return new SizedBox();
-                index = Math.Clamp(value: index, min: 0, max: Pages.Count - 1);
-                return Pages[index].Child;
-            }
-        );
+        return Switcher;
     }
 }
