@@ -384,6 +384,14 @@ public class ScrollView : Widget
         MarkNeedsPaint();
     }
 
+    protected override void AdoptStateFrom(Widget previous)
+    {
+        var old = (ScrollView)previous;
+        _sx.AdoptFrom(old._sx);
+        _sy.AdoptFrom(old._sy);
+        base.AdoptStateFrom(previous);
+    }
+
     public override void Detach()
     {
         base.Detach();

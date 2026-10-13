@@ -610,6 +610,12 @@ public class ListView : Widget
         MarkNeedsPaint();
     }
 
+    protected override void AdoptStateFrom(Widget previous)
+    {
+        _sy.AdoptFrom(((ListView)previous)._sy);
+        base.AdoptStateFrom(previous);
+    }
+
     public override void Detach()
     {
         base.Detach();

@@ -51,6 +51,10 @@ public abstract class ComposedWidget : Widget
     private Widget[]? _childCache;
     private int _measuredGen = -1;
 
+    // The built child of the widget this one replaced, held until our own (lazy) build has a
+    // child to pair it with — see AdoptStateFrom.
+    private Widget? _predecessor;
+
     public override string? TooltipText => _child?.TooltipText;
 
     /// <summary>
@@ -93,6 +97,10 @@ public abstract class ComposedWidget : Widget
 
         _childCache = _child is not null ? [_child] : null;
 
+        // Before the swap detaches it: the outgoing subtree hands its scroll positions over.
+        CarryState(from: previous ?? _predecessor, to: _child);
+        _predecessor = null;
+
         SwapChild(previous: previous, next: _child);
 
         NeedsBuild = false;
@@ -104,6 +112,15 @@ public abstract class ComposedWidget : Widget
         // IndexOutOfRange in the frame loop at worst. Reachable whenever NeedsBuild is set without
         // NeedsLayout (hot reload, a re-attached subtree).
         _measuredGen = -1;
+    }
+
+    protected override void AdoptStateFrom(Widget previous)
+    {
+        // A fresh instance has not built yet, so there is nothing to pair with: keep the old
+        // child and pair it in EnsureBuilt.
+        var old = ((ComposedWidget)previous)._child;
+        if (_child is null) _predecessor = old;
+        else CarryState(from: old, to: _child);
     }
 
     // ── Widget protocol ───────────────────────────────────────────────────────

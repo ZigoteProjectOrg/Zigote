@@ -91,6 +91,16 @@ public sealed class SmoothScroller(Action onChanged) : IDisposable
         return true;
     }
 
+    /// <summary>
+    ///     Start where <paramref name="previous" /> was heading — for a scroller rebuilt in place of
+    ///     another. Max comes along so the offset survives until the first Layout re-clamps it.
+    /// </summary>
+    public void AdoptFrom(SmoothScroller previous)
+    {
+        Max = previous.Max;
+        Offset = Target = previous.Target;
+    }
+
     /// <summary>Re-clamp current + target after a content/viewport size change (call in Layout).</summary>
     public void Reclamp()
     {

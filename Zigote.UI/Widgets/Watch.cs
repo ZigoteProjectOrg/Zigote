@@ -120,6 +120,7 @@ public sealed class Watch : Widget
         }
 
         _child = next;
+        CarryState(from: previous, to: _child);
         SwapChild(
             previous: previous,
             next: _child

@@ -2,6 +2,7 @@ using Xunit;
 using Zigote.Core;
 using Zigote.Core.Paint;
 using Zigote.UI.Widgets;
+using Zigote.UI.Widgets.Layout;
 
 namespace Zigote.Tests;
 
@@ -39,6 +40,41 @@ public class ComposedWidgetRebuildTests
             condition: ProbeChild.MeasureCalls > before,
             userMessage: "the rebuilt child must be measured before it is laid out"
         );
+    }
+
+    [Fact]
+    public void RebuiltScrollView_KeepsItsOffset_ThroughNestedComposedWidgets()
+    {
+        var c = Constraints.Tight(width: 100, height: 100);
+        var page = new ScrollPage();
+        page.Measure(c);
+        page.Layout(Offset.Zero);
+        page.Scroll!.OffsetY = 300f;
+        var first = page.Scroll;
+
+        page.NeedsBuild = true; // what a theme switch does to every theme-dependent widget
+        page.Measure(c);
+        page.Layout(Offset.Zero);
+
+        Assert.NotSame(expected: first, actual: page.Scroll);
+        Assert.Equal(expected: 300f, actual: page.Scroll!.OffsetY);
+    }
+
+    // Page → fresh inner ComposedWidget → Padding → fresh ScrollView: the gallery's page shape.
+    private sealed class ScrollPage : ComposedWidget
+    {
+        public ScrollView? Scroll;
+
+        protected override Widget Build(BuildContext context) => new Inner(this);
+
+        private sealed class Inner(ScrollPage page) : ComposedWidget
+        {
+            protected override Widget Build(BuildContext context)
+            {
+                page.Scroll = new ScrollView(new SizedBox(width: 100, height: 1000));
+                return new Padding(padding: EdgeInsets.Zero, child: page.Scroll);
+            }
+        }
     }
 
     private sealed class ProbeWidget : ComposedWidget

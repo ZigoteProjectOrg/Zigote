@@ -703,4 +703,30 @@ public abstract class Widget : ITickerProvider
     ///     Default: no-op — the instance keeps its current configuration.
     /// </summary>
     public virtual void UpdateFrom(Widget newWidget) { }
+
+    /// <summary>
+    ///     Hand transient state (scroll position) from a subtree that a rebuild is replacing to the
+    ///     freshly-built one taking its place. Widgets are matched by position and runtime type, so
+    ///     a build that returns new instances for the same UI — every theme switch — keeps the
+    ///     user where they were. No-op for the same instance or a different type.
+    /// </summary>
+    protected internal static void CarryState(Widget? from, Widget? to)
+    {
+        if (from is null || to is null || ReferenceEquals(objA: from, objB: to)) return;
+        if (from.GetType() != to.GetType()) return;
+        to.AdoptStateFrom(from);
+    }
+
+    /// <summary>
+    ///     Take over the transient state of <paramref name="previous" />, the same-typed widget
+    ///     this one replaces. The default pairs the children by index and recurses; a widget with
+    ///     state of its own (a scroller's offset) copies it and calls base.
+    /// </summary>
+    protected virtual void AdoptStateFrom(Widget previous)
+    {
+        using var olds = previous.GetChildren().GetEnumerator();
+        using var news = GetChildren().GetEnumerator();
+        while (olds.MoveNext() && news.MoveNext())
+            CarryState(from: olds.Current, to: news.Current);
+    }
 }
