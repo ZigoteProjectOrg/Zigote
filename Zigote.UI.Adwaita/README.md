@@ -368,7 +368,7 @@ do. Each has a live page in the gallery.
 | `AdwColorPicker` | Saturation/value plane, hue and alpha scales, hex entry | GtkColorPlane and GtkColorScale: rounded troughs, scale knobs |
 | `AdwGradientEditor` | A colour ramp with movable, recolourable stops | A control-shaped swatch; each stop is a scale knob |
 | `AdwCurveEditor` | Keys and tangents over a grid | A `.view` in a card frame; keys are scale knobs |
-| `AdwCodeEditor` | A source view: gutter, highlighting, undo, soft wrap | GNOME Text Editor: bare view, dim gutter, accent-palette syntax colours |
+| `AdwCodeEditor` | A source view: gutter, highlighting, undo, soft wrap, multi-cursor (⌘D / ⌘⇧L / ⌘⌥↑↓ / Alt+click), bracket pairs + matching, line commands (⌘/, Alt+↑↓, ⇧Alt+↑↓, ⌘⇧K, Tab/⇧Tab), word movement, incremental find (⌘F) | GNOME Text Editor: bare view, dim gutter, accent-palette syntax colours |
 | `AdwTreeView<T>` | An expandable hierarchy over any data | Navigation-sidebar rows with GtkTreeExpander indents |
 | `AdwReorderableList` | Rows put in order by dragging | A boxed list with a drag-handle prefix; the held row lifts onto a card |
 | `AdwChip` | A pill toggle for tags and filters | A small `.pill` toggle button — neutral when checked, not accent |

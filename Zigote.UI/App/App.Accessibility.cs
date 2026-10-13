@@ -84,7 +84,11 @@ public partial class App
         return Root;
     }
 
-    private void MoveFocusByTab(bool backwards)
+    /// <summary>
+    ///     Tab / Shift+Tab focus traversal. Public so an <see cref="IKeyboardTrap" /> that has no use
+    ///     for Tab right now (a read-only editor) can hand it back.
+    /// </summary>
+    public void MoveFocusByTab(bool backwards)
     {
         // Tab order, not the raw focusable list: an IFocusGroup (a navigation sidebar, any list
         // that navigates with arrows) is one stop here while arrows still reach every row.

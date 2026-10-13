@@ -81,6 +81,36 @@ public static class TextNavigation
     public static bool IsWordChar(char c) => char.IsLetterOrDigit(c) || c == '_';
 
     /// <summary>
+    ///     Where word-wise caret movement (Alt/Ctrl+arrow) from <paramref name="index" /> lands
+    ///     within one line: past any whitespace, then past one run of word characters or one run of
+    ///     punctuation. <paramref name="direction" /> is -1 (left) or +1 (right).
+    /// </summary>
+    public static int WordBoundary(string text, int index, int direction)
+    {
+        // Stepped by grapheme and classified by each one's first char (as WordAt does), so a
+        // letter + combining mark stays one word character.
+        int i = GraphemeBoundaryAtOrBefore(text: text, index: index);
+        bool? word = null; // class of the run being crossed, once past the whitespace
+        while (direction < 0 ? i > 0 : i < text.Length)
+        {
+            int next = direction < 0
+                ? PreviousGraphemeBoundary(text: text, index: i)
+                : NextGraphemeBoundary(text: text, index: i);
+            char c = text[Math.Min(val1: i, val2: next)];
+            if (char.IsWhiteSpace(c))
+            {
+                if (word is not null) break;
+            }
+            else if (word is null) word = IsWordChar(c);
+            else if (IsWordChar(c) != word) break;
+
+            i = next;
+        }
+
+        return i;
+    }
+
+    /// <summary>
     ///     The half-open span <c>[Start, End)</c> of the "word" at <paramref name="pos" /> within
     ///     <paramref name="text" />: the run of word characters when the cursor is on/just-after one,
     ///     otherwise the single character under the cursor. Returns <c>(pos, pos)</c> when there is

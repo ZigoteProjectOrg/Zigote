@@ -163,7 +163,7 @@ public sealed class EditorLayout : Widget
                 new ContextMenuItem(Label: "", OnSelect: null, Separator: true),
                 new ContextMenuItem(
                     Label: "Duplicate Node",
-                    OnSelect: State.DuplicateSelected,
+                    OnSelect: DoDuplicate,
                     Shortcut: "⌘D"
                 ),
                 // No accelerator: Delete/Backspace as a menu key equivalent would eat text editing.
@@ -224,7 +224,7 @@ public sealed class EditorLayout : Widget
         bool nativeBar = NativeMenuBar.Backend is not null && NativeMenuBar.Enabled;
         var shortcutsItem = new ContextMenuItem(
             Label: "Keyboard Shortcuts",
-            OnSelect: ShowShortcuts,
+            OnSelect: DoShortcutsOrComment,
             Shortcut: "⌘/"
         );
 
@@ -531,6 +531,19 @@ public sealed class EditorLayout : Widget
     {
         if (CodeEditorFocused && _openFilePath != null) SaveOpenFile();
         else SaveScene();
+    }
+
+    // ⌘D and ⌘/ are editing commands inside the code editor (next occurrence, toggle comment).
+    private void DoDuplicate()
+    {
+        if (CodeEditorFocused) _codeEditor!.SelectNextOccurrence();
+        else State.DuplicateSelected();
+    }
+
+    private void DoShortcutsOrComment()
+    {
+        if (CodeEditorFocused) _codeEditor!.ToggleLineComment();
+        else ShowShortcuts();
     }
 
     private void DoUndo()

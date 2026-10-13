@@ -150,6 +150,10 @@ internal sealed class GalleryApp : AdwaitaApp
 
         window.OnShortcut = action =>
         {
+            // ⌘F and ⌘D are editing commands (find, next occurrence) while the source view has focus.
+            if (action is ActionSearch or ActionToggleDark && window.FocusedWidget is AdwCodeEditor)
+                return false;
+
             switch (action)
             {
                 case ActionSearch:

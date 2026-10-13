@@ -22,9 +22,14 @@ namespace Zigote.UI.Adwaita;
 ///         <see cref="OnTextInput" /> even though it isn't a <c>AdwTextField</c>.
 ///     </para>
 /// </summary>
-public sealed class AdwCodeEditor : Widget, ITextInputClient
+public sealed class AdwCodeEditor : Widget, ITextInputClient, IKeyboardTrap
 {
     private const int TabWidth = 4;
+    private const string Openers = "([{\"'`";
+    private const string Closers = ")]}\"'`";
+
+    // Bracket matching gives up after this many lines so an unbalanced bracket can't scan the file.
+    private const int BracketScanLines = 2000;
 
     // Undo: cap the snapshot history and coalesce same-kind edits made within this window into one step
     // (so undo walks back by word-ish runs, not per keystroke).
@@ -88,6 +93,10 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
     // is loaded (SetTextInternal). See RecordEdit / Undo / Redo.
     private readonly List<DocSnapshot> _undo = [];
     private readonly List<VisualRow> _visualRows = [];
+    // Multi-cursor: the primary caret lives in the _caret*/_anchor* fields, so everything written
+    // for one caret keeps working untouched; the additional carets park here and ForEachCaret swaps
+    // them through those fields one at a time.
+    private readonly List<Sel> _extra = [];
     private int _anchorCol;
     private int _anchorLine = -1;
     private int _barDrag; // 0 = none, 1 = vertical scrollbar, 2 = horizontal scrollbar
@@ -96,6 +105,20 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
 
     // Caret + selection as (line, col). Anchor < 0 means no selection.
     private int _caretLine;
+    private int _clickCount; // consecutive clicks on one spot: 2 = word, 3 = line
+    private float _desiredX = float.NaN; // sticky column for ↑/↓ (NaN = take it from the caret)
+
+    // Incremental find (⌘F): the query while the bar is open, null when closed. Typed text goes to
+    // the query instead of the document.
+    private string? _find;
+    private string? _findLabel; // "3/17" — rebuilt lazily after the query, selection or text changes
+
+    // The whole-line text last put on the clipboard by a selection-less copy/cut; pasting that exact
+    // text inserts it as a line above the caret rather than splitting the current line.
+    private string? _lineClip;
+
+    // ⌘D started from a bare caret (it selected the word) → further matches must be whole words.
+    private bool _occWholeWord;
     private float _charWidth; // monospace advance of one glyph in the code face
     private int _compositionSelectionLength;
     private int _compositionSelectionStart;
@@ -164,6 +187,9 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
 
     public bool ReadOnly { get; set; }
 
+    /// <summary>The line-comment prefix ⌘/ toggles; <c>null</c> disables the command.</summary>
+    public string? LineComment { get; set; } = "//";
+
     /// <summary>Wrap long physical lines into viewport-width visual rows without changing the document.</summary>
     public bool SoftWrap
     {
@@ -183,6 +209,18 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
 
     private bool HasSelection =>
         _anchorLine >= 0 && (_anchorLine != _caretLine || _anchorCol != _caretCol);
+
+    private Sel Primary
+    {
+        get => new(
+            AnchorLine: _anchorLine,
+            AnchorCol: _anchorCol,
+            CaretLine: _caretLine,
+            CaretCol: _caretCol,
+            DesiredX: _desiredX
+        );
+        set => (_anchorLine, _anchorCol, _caretLine, _caretCol, _desiredX) = value;
+    }
 
     /// <summary>Content origin (top-left of the text area, after the gutter), excluding scroll.</summary>
     private float TextLeft => Bounds.X + _gutterWidth + Pad;
@@ -206,7 +244,7 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
 
     // Only an editable, focused editor blinks a caret; a read-only docked viewer doesn't, so the frame
     // loop can stop repainting it every frame (see App's focus repaint gate / ITextInputClient).
-    public bool WantsCaretBlink => Focused && !ReadOnly;
+    public bool WantsCaretBlink => Focused && (!ReadOnly || _find is not null);
 
     // A drag holds the caret solid, but its pointer events repaint the editor anyway.
     public float? CaretBlinkBase => 0f;
@@ -239,6 +277,8 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
         _undo.Clear(); // a freshly loaded document has no edit history to step back into
         _redo.Clear();
         _lastEditKind = EditKind.Other;
+        _extra.Clear();
+        _find = null;
         ClampCaret();
         ClearSelection();
         _scrollX = _scrollY = _targetX = _targetY = 0f; // new document starts at the top
@@ -248,12 +288,132 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
 
     private void ClearSelection() => _anchorLine = -1;
 
-    /// <summary>Ordered (start, end) selection bounds as (line, col), start &lt;= end.</summary>
-    private ((int Line, int Col) Start, (int Line, int Col) End) OrderedSelection()
+    /// <summary>
+    ///     Ordered (start, end) selection bounds as (line, col), start &lt;= end — both the caret
+    ///     when nothing is selected.
+    /// </summary>
+    private ((int Line, int Col) Start, (int Line, int Col) End) OrderedSelection() =>
+        Range(Primary);
+
+    private static ((int Line, int Col) Start, (int Line, int Col) End) Range(Sel x)
     {
-        var a = (_anchorLine, _anchorCol);
-        var b = (_caretLine, _caretCol);
+        var b = (x.CaretLine, x.CaretCol);
+        if (x.AnchorLine < 0) return (b, b);
+        var a = (x.AnchorLine, x.AnchorCol);
         return Before(a: a, b: b) ? (a, b) : (b, a);
+    }
+
+    // ── Multi-cursor ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    ///     Run a single-caret operation once per caret, in document order, with each caret loaded
+    ///     into the primary fields in turn. Edits go through <see cref="Splice" />, which keeps the
+    ///     carets still waiting their turn (and those already done) pointing at the same text.
+    /// </summary>
+    private void ForEachCaret(Action op)
+    {
+        if (_extra.Count == 0)
+        {
+            op();
+            return;
+        }
+
+        var primary = Primary;
+        _extra.Add(primary);
+        _extra.Sort(
+            static (a, b) =>
+            {
+                var (sa, sb) = (Range(a).Start, Range(b).Start);
+                return sa.Line != sb.Line ? sa.Line.CompareTo(sb.Line) : sa.Col.CompareTo(sb.Col);
+            }
+        );
+        int primaryIndex = _extra.IndexOf(primary);
+        for (int i = 0; i < _extra.Count; i++)
+        {
+            Primary = _extra[i];
+            op();
+            _extra[i] = Primary;
+        }
+
+        Primary = _extra[primaryIndex];
+        _extra.RemoveAt(primaryIndex);
+        MergeCarets();
+    }
+
+    /// <summary>Drop carets that landed on, or selections that grew into, another one.</summary>
+    private void MergeCarets()
+    {
+        // ponytail: O(n²) overlap sweep; sort + one linear pass if thousands of carets ever lag.
+        for (int i = _extra.Count - 1; i >= 0; i--)
+        {
+            bool dup = Overlaps(a: _extra[i], b: Primary);
+            for (int j = 0; j < i && !dup; j++) dup = Overlaps(a: _extra[i], b: _extra[j]);
+            if (dup) _extra.RemoveAt(i);
+        }
+    }
+
+    private static bool Overlaps(Sel a, Sel b)
+    {
+        var (sa, ea) = Range(a);
+        var (sb, eb) = Range(b);
+        // Two selections may touch end-to-start (adjacent ⌘D matches); a bare caret may not sit
+        // on another selection's edge.
+        return sa == ea || sb == eb
+            ? Before(a: sa, b: eb) && Before(a: sb, b: ea)
+            : !Before(a: eb, b: sa) && !Before(a: ea, b: sb);
+    }
+
+    /// <summary>Pass every caret and anchor (primary and parked) through <paramref name="f" />.</summary>
+    private void MapCarets(Func<(int Line, int Col), (int Line, int Col)> f)
+    {
+        (_caretLine, _caretCol) = f((_caretLine, _caretCol));
+        if (_anchorLine >= 0) (_anchorLine, _anchorCol) = f((_anchorLine, _anchorCol));
+        for (int i = 0; i < _extra.Count; i++)
+        {
+            var x = _extra[i];
+            (int cl, int cc) = f((x.CaretLine, x.CaretCol));
+            (int al, int ac) = x.AnchorLine < 0 ? (-1, 0) : f((x.AnchorLine, x.AnchorCol));
+            _extra[i] = x with {
+                AnchorLine = al,
+                AnchorCol = ac,
+                CaretLine = cl,
+                CaretCol = cc,
+            };
+        }
+    }
+
+    private void ResetStickyColumn()
+    {
+        _desiredX = float.NaN;
+        for (int i = 0; i < _extra.Count; i++) _extra[i] = _extra[i] with { DesiredX = float.NaN };
+    }
+
+    /// <summary>Every line any caret or selection touches, ascending, each once.</summary>
+    private List<int> TouchedLines()
+    {
+        var set = new SortedSet<int>();
+        for (int i = -1; i < _extra.Count; i++)
+        {
+            var (s, e) = Range(i < 0 ? Primary : _extra[i]);
+            // A selection that ends at column 0 doesn't reach into that last line.
+            int last = e.Col == 0 && e.Line > s.Line ? e.Line - 1 : e.Line;
+            for (int l = s.Line; l <= last; l++) set.Add(l);
+        }
+
+        return [.. set];
+    }
+
+    /// <summary><see cref="TouchedLines" /> grouped into contiguous (first, last) blocks.</summary>
+    private List<(int First, int Last)> TouchedRuns()
+    {
+        var runs = new List<(int First, int Last)>();
+        foreach (int l in TouchedLines())
+        {
+            if (runs.Count > 0 && runs[^1].Last == l - 1) runs[^1] = (runs[^1].First, l);
+            else runs.Add((l, l));
+        }
+
+        return runs;
     }
 
     private static bool Before((int Line, int Col) a, (int Line, int Col) b) =>
@@ -284,56 +444,64 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
 
     // ── Edit primitives ───────────────────────────────────────────────────────
 
+    /// <summary>
+    ///     The one place the document changes: replace <c>[s, e)</c> with <paramref name="text" />
+    ///     and shift every caret and anchor so it still points at the same text. Returns the end of
+    ///     the inserted text.
+    /// </summary>
+    private (int Line, int Col) Splice((int Line, int Col) s, (int Line, int Col) e, string text)
+    {
+        // ponytail: O(lines) list surgery + O(carets) remap per call, so an edit at N carets is
+        // O(N·(lines + N)) — fine into the low thousands; batch the splices if select-all-
+        // occurrences on huge files ever stutters.
+        string[] parts = text.Split('\n');
+        (int Line, int Col) end = (s.Line + parts.Length - 1,
+            (parts.Length == 1 ? s.Col : 0) + parts[^1].Length);
+        parts[0] = _lines[s.Line][..s.Col] + parts[0];
+        parts[^1] += _lines[e.Line][e.Col..];
+        _lines.RemoveRange(index: s.Line, count: e.Line - s.Line + 1);
+        _lines.InsertRange(index: s.Line, collection: parts);
+        MapCarets(p => !Before(a: e, b: p) // p strictly before e: untouched, or swallowed by the edit
+            ? Before(a: p, b: s) ? p : end
+            : p.Line == e.Line
+                ? (end.Line, end.Col + p.Col - e.Col)
+                : (p.Line + end.Line - e.Line, p.Col)
+        );
+        return end;
+    }
+
+    /// <summary><see cref="Splice" />, leaving the (collapsed) caret after the inserted text.</summary>
+    private void Replace((int Line, int Col) s, (int Line, int Col) e, string text)
+    {
+        (_caretLine, _caretCol) = Splice(s: s, e: e, text: text);
+        ClearSelection();
+    }
+
+    private void ReplaceSelection(string text)
+    {
+        var (s, e) = OrderedSelection();
+        Replace(s: s, e: e, text: text);
+    }
+
     private void DeleteSelection()
     {
-        if (!HasSelection) return;
-        var (s, e) = OrderedSelection();
-        if (s.Line == e.Line)
-            _lines[s.Line] = _lines[s.Line][..s.Col] + _lines[s.Line][e.Col..];
-        else
-        {
-            string head = _lines[s.Line][..s.Col];
-            string tail = _lines[e.Line][e.Col..];
-            _lines[s.Line] = head + tail;
-            _lines.RemoveRange(index: s.Line + 1, count: e.Line - s.Line);
-        }
+        if (HasSelection) ReplaceSelection(string.Empty);
+    }
 
-        _caretLine = s.Line;
-        _caretCol = s.Col;
-        ClearSelection();
+    /// <summary>One undoable user edit: snapshot, run the per-caret operation at every caret, commit.</summary>
+    private void Edit(EditKind kind, Action perCaret)
+    {
+        if (ReadOnly) return;
+        RecordEdit(kind);
+        ForEachCaret(perCaret);
+        Commit();
     }
 
     private void InsertText(string text, EditKind kind = EditKind.Other)
     {
-        if (ReadOnly || string.IsNullOrEmpty(text)) return;
-        RecordEdit(kind);
-        if (HasSelection) DeleteSelection();
-
+        if (string.IsNullOrEmpty(text)) return;
         text = text.Replace(oldValue: "\r\n", newValue: "\n").Replace(oldChar: '\r', newChar: '\n');
-        string cur = _lines[_caretLine];
-        string before = cur[.._caretCol];
-        string after = cur[_caretCol..];
-
-        if (!text.Contains('\n'))
-        {
-            _lines[_caretLine] = before + text + after;
-            _caretCol += text.Length;
-        }
-        else
-        {
-            string[] parts = text.Split('\n');
-            _lines[_caretLine] = before + parts[0];
-            int insertAt = _caretLine + 1;
-            for (int k = 1; k < parts.Length - 1; k++)
-                _lines.Insert(index: insertAt++, item: parts[k]);
-            string last = parts[^1];
-            _lines.Insert(index: insertAt, item: last + after);
-            _caretLine = insertAt;
-            _caretCol = last.Length;
-        }
-
-        ClearSelection();
-        Commit();
+        Edit(kind: kind, perCaret: () => ReplaceSelection(text));
     }
 
     private void Commit()
@@ -344,6 +512,7 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
         // the viewport. Entries for shifted/removed indices self-invalidate by reference compare;
         // bound the stragglers a shrink leaves behind.
         _lineStates.Clear();
+        _findLabel = null;
         if (_tokenCache.Count > (_lines.Count * 2) + 64) _tokenCache.Clear();
         if (Bounds.Width > 0f)
         {
@@ -401,7 +570,8 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
             CaretLine: _caretLine,
             CaretCol: _caretCol,
             AnchorLine: _anchorLine,
-            AnchorCol: _anchorCol
+            AnchorCol: _anchorCol,
+            Extra: _extra.Count == 0 ? [] : _extra.ToArray()
         );
     }
 
@@ -432,6 +602,8 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
         _caretCol = s.CaretCol;
         _anchorLine = s.AnchorLine;
         _anchorCol = s.AnchorCol;
+        _extra.Clear();
+        _extra.AddRange(s.Extra);
         ClampCaret();
         Commit(); // rebuild caches/rows, fire OnChanged, keep the caret in view
     }
@@ -440,7 +612,6 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
 
     private string SelectedText()
     {
-        if (!HasSelection) return string.Empty;
         var (s, e) = OrderedSelection();
         if (s.Line == e.Line) return _lines[s.Line][s.Col..e.Col];
         var sb = new StringBuilder();
@@ -452,40 +623,298 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
 
     private void CopyAction()
     {
-        if (HasSelection) ZigoteEngine.Instance?.SetClipboard(SelectedText());
+        // Every caret contributes its selection — or, with nothing selected, its whole line.
+        var parts = new List<string>();
+        bool lines = !HasSelection && _extra.Count == 0;
+        ForEachCaret(() => parts.Add(HasSelection ? SelectedText() : _lines[_caretLine]));
+        string text = string.Join(separator: '\n', values: parts) + (lines ? "\n" : "");
+        _lineClip = lines ? text : null;
+        ZigoteEngine.Instance?.SetClipboard(text);
     }
 
     private void CutAction()
     {
-        if (ReadOnly)
-        {
-            CopyAction();
-            return;
-        }
-
+        bool wholeLine = !HasSelection && _extra.Count == 0;
         CopyAction();
-        if (HasSelection)
-        {
-            RecordEdit(EditKind.Other);
-            DeleteSelection();
-            Commit();
-        }
+        if (wholeLine) DeleteLines();
+        else Edit(kind: EditKind.Other, perCaret: DeleteSelection);
     }
 
     private void PasteAction()
     {
-        string pasted = ZigoteEngine.Instance?.GetClipboard() ?? string.Empty;
-        if (pasted.Length > 0) InsertText(pasted);
+        string pasted = (ZigoteEngine.Instance?.GetClipboard() ?? string.Empty)
+            .Replace(oldValue: "\r\n", newValue: "\n").Replace(oldChar: '\r', newChar: '\n');
+        if (pasted.Length == 0) return;
+        if (pasted == _lineClip && !HasSelection && _extra.Count == 0)
+        {
+            // A line copied without a selection goes back in as a line, above the caret's.
+            Edit(
+                kind: EditKind.Other,
+                perCaret: () => Splice(s: (_caretLine, 0), e: (_caretLine, 0), text: pasted)
+            );
+            return;
+        }
+
+        // One clipboard line per caret (the shape a multi-cursor copy produces) → deal them out.
+        string[] parts = pasted.Split('\n');
+        if (_extra.Count > 0 && parts.Length == _extra.Count + 1)
+        {
+            int n = 0;
+            Edit(kind: EditKind.Other, perCaret: () => ReplaceSelection(parts[n++]));
+        }
+        else
+            InsertText(pasted);
     }
 
     private void SelectAll()
     {
+        _extra.Clear();
         _anchorLine = 0;
         _anchorCol = 0;
         _caretLine = _lines.Count - 1;
         _caretCol = _lines[_caretLine].Length;
         EnsureCaretVisible();
         MarkNeedsPaint();
+    }
+
+    // ── Occurrences + find ────────────────────────────────────────────────────
+
+    /// <summary>First match of <paramref name="needle" /> in <paramref name="s" /> at or after <paramref name="from" />, or -1.</summary>
+    private static int NextMatch(
+        string s,
+        ReadOnlySpan<char> needle,
+        int from,
+        bool wholeWord,
+        StringComparison cmp)
+    {
+        for (int i = from; i <= s.Length - needle.Length; i++)
+        {
+            int found = s.AsSpan(i).IndexOf(value: needle, comparisonType: cmp);
+            if (found < 0) return -1;
+            i += found;
+            int end = i + needle.Length;
+            if (!wholeWord ||
+                ((i == 0 || !TextNavigation.IsWordChar(s[i - 1])) &&
+                 (end == s.Length || !TextNavigation.IsWordChar(s[end]))))
+                return i;
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    ///     The next match starting at or after <paramref name="from" /> (forward), or the last one
+    ///     starting before it (backward), wrapping around the document.
+    /// </summary>
+    private (int Line, int Col)? FindNext(
+        string needle,
+        (int Line, int Col) from,
+        bool forward,
+        bool wholeWord,
+        StringComparison cmp)
+    {
+        int n = _lines.Count;
+        for (int k = 0; k <= n; k++) // k == n revisits the starting line for the wrapped half
+        {
+            int l = (((from.Line + (forward ? k : -k)) % n) + n) % n;
+            string s = _lines[l];
+            if (forward)
+            {
+                int i = NextMatch(
+                    s: s,
+                    needle: needle,
+                    from: k == 0 ? from.Col : 0,
+                    wholeWord: wholeWord,
+                    cmp: cmp
+                );
+                if (i >= 0) return (l, i);
+                continue;
+            }
+
+            int limit = k == 0 ? from.Col : int.MaxValue;
+            int last = -1;
+            for (int i = NextMatch(s: s, needle: needle, from: 0, wholeWord: wholeWord, cmp: cmp);
+                 i >= 0 && i < limit;
+                 i = NextMatch(s: s, needle: needle, from: i + 1, wholeWord: wholeWord, cmp: cmp))
+                last = i;
+            if (last >= 0) return (l, last);
+        }
+
+        return null;
+    }
+
+    // Smart case, as in Zed/ripgrep: a query with no capitals matches any case.
+    private StringComparison FindComparison =>
+        _find is { } q && q.Any(char.IsUpper)
+            ? StringComparison.Ordinal
+            : StringComparison.OrdinalIgnoreCase;
+
+    /// <summary>
+    ///     ⌘D. With a bare caret, select the word under it; with a selection, add a cursor on its
+    ///     next occurrence (wrapping), which becomes the primary so the view follows it.
+    /// </summary>
+    public void SelectNextOccurrence()
+    {
+        if (!HasSelection)
+        {
+            (int ws, int we) = TextNavigation.WordAt(text: _lines[_caretLine], pos: _caretCol);
+            if (ws == we) return;
+            (_anchorLine, _anchorCol, _caretCol) = (_caretLine, ws, we);
+            _occWholeWord = true;
+        }
+        else
+        {
+            var (s, e) = OrderedSelection();
+            if (s.Line != e.Line) return; // ponytail: single-line needles only
+            string needle = _lines[s.Line][s.Col..e.Col];
+            var from = e;
+            for (int guard = 0; guard <= _extra.Count + 1; guard++)
+            {
+                var m = FindNext(
+                    needle: needle,
+                    from: from,
+                    forward: true,
+                    wholeWord: _occWholeWord,
+                    cmp: StringComparison.Ordinal
+                );
+                if (m is not { } hit || hit == s) break; // wrapped back onto ourselves
+                from = (hit.Line, hit.Col + needle.Length);
+                if (_extra.Exists(x => Range(x).Start == hit)) continue; // already has a cursor
+                _extra.Add(Primary);
+                Primary = new Sel(
+                    AnchorLine: hit.Line,
+                    AnchorCol: hit.Col,
+                    CaretLine: hit.Line,
+                    CaretCol: from.Col
+                );
+                break;
+            }
+        }
+
+        EnsureCaretVisible();
+        MarkNeedsPaint();
+    }
+
+    /// <summary>
+    ///     ⌘⇧L. A cursor on every occurrence of the find query, the selection, or the word under
+    ///     the caret — type to replace them all.
+    /// </summary>
+    public void SelectAllOccurrences()
+    {
+        string needle;
+        bool wholeWord = false;
+        var cmp = StringComparison.Ordinal;
+        var (s, e) = OrderedSelection();
+        if (!string.IsNullOrEmpty(_find))
+        {
+            needle = _find;
+            cmp = FindComparison;
+        }
+        else if (HasSelection)
+        {
+            if (s.Line != e.Line) return;
+            needle = _lines[s.Line][s.Col..e.Col];
+            wholeWord = _occWholeWord;
+        }
+        else
+        {
+            (int ws, int we) = TextNavigation.WordAt(text: _lines[_caretLine], pos: _caretCol);
+            if (ws == we) return;
+            needle = _lines[_caretLine][ws..we];
+            wholeWord = true;
+            s = (_caretLine, ws);
+        }
+
+        var all = new List<Sel>();
+        int primary = 0;
+        for (int l = 0; l < _lines.Count; l++)
+        {
+            for (int i = NextMatch(s: _lines[l], needle: needle, from: 0, wholeWord: wholeWord, cmp: cmp);
+                 i >= 0;
+                 i = NextMatch(
+                     s: _lines[l],
+                     needle: needle,
+                     from: i + needle.Length,
+                     wholeWord: wholeWord,
+                     cmp: cmp
+                 ))
+            {
+                if ((l, i) == s) primary = all.Count;
+                all.Add(new Sel(AnchorLine: l, AnchorCol: i, CaretLine: l, CaretCol: i + needle.Length));
+            }
+        }
+
+        if (all.Count == 0) return;
+        _find = null;
+        Primary = all[primary];
+        all.RemoveAt(primary);
+        _extra.Clear();
+        _extra.AddRange(all);
+        MarkNeedsPaint();
+    }
+
+    private void OpenFind()
+    {
+        var (s, e) = OrderedSelection();
+        _find = HasSelection && s.Line == e.Line ? _lines[s.Line][s.Col..e.Col] : string.Empty;
+        _findLabel = null;
+        MarkNeedsPaint();
+    }
+
+    /// <summary>
+    ///     Select the next/previous match of the find query. <paramref name="refine" /> (the query
+    ///     just changed) searches from the current match's start so it stays put while it still fits.
+    /// </summary>
+    private void FindStep(bool forward, bool refine = false)
+    {
+        _findLabel = null;
+        MarkNeedsPaint();
+        if (string.IsNullOrEmpty(_find)) return;
+        var (s, e) = OrderedSelection();
+        var m = FindNext(
+            needle: _find,
+            from: forward && !refine ? e : s,
+            forward: forward,
+            wholeWord: false,
+            cmp: FindComparison
+        );
+        if (m is not { } hit) return;
+        _extra.Clear();
+        Primary = new Sel(
+            AnchorLine: hit.Line,
+            AnchorCol: hit.Col,
+            CaretLine: hit.Line,
+            CaretCol: hit.Col + _find.Length
+        );
+        EnsureCaretVisible();
+    }
+
+    /// <summary>"3/17" for the find bar: which match is selected, of how many.</summary>
+    private string FindLabel()
+    {
+        if (_findLabel is not null) return _findLabel;
+        if (string.IsNullOrEmpty(_find)) return _findLabel = string.Empty;
+        var start = OrderedSelection().Start;
+        var cmp = FindComparison;
+        int total = 0, current = 0;
+        for (int l = 0; l < _lines.Count; l++)
+        {
+            for (int i = NextMatch(s: _lines[l], needle: _find, from: 0, wholeWord: false, cmp: cmp);
+                 i >= 0;
+                 i = NextMatch(
+                     s: _lines[l],
+                     needle: _find,
+                     from: i + _find.Length,
+                     wholeWord: false,
+                     cmp: cmp
+                 ))
+            {
+                total++;
+                if ((l, i) == start) current = total;
+            }
+        }
+
+        return _findLabel = total == 0 ? "no results" : $"{current}/{total}";
     }
 
     // ── Geometry ──────────────────────────────────────────────────────────────
@@ -507,6 +936,9 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
                 );
             }
         }
+
+        // Unwrapped: one row per line, so the row IS the line — no scan (matters with many carets).
+        if (!SoftWrap && line < _visualRows.Count && _visualRows[line].Line == line) return line;
 
         for (int i = 0; i < _visualRows.Count; i++)
         {
@@ -1155,9 +1587,110 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
             )
         );
 
-        if (HasSelection)
+        int firstLine = first <= last ? _visualRows[first].Line : 0;
+        int lastLine = first <= last ? _visualRows[last].Line : -1;
+
+        // Tint columns [c0, c1) of one visual row.
+        void Band(int visual, int c0, int c1, Color color, bool newline = false)
+        {
+            var row = _visualRows[visual];
+            float x0 = TextLeft - _scrollX + ColToX(row: row, col: c0);
+            float x1 = TextLeft - _scrollX + ColToX(row: row, col: c1);
+            // Trailing newline selected lines get a small caret-width sliver.
+            if (newline) x1 += _fontSize * 0.4f;
+            paint.AddRect(
+                bounds: new Rect(
+                    x: MathF.Min(x: x0, y: x1),
+                    y: TextTop - _scrollY + (visual * _lineHeight),
+                    width: MathF.Max(x: 2f, y: MathF.Abs(x1 - x0)),
+                    height: _lineHeight
+                ),
+                color: color
+            );
+        }
+
+        bool lone = Focused && !HasSelection && _extra.Count == 0;
+
+        // Current line: a faint band under the caret's row while nothing is selected.
+        if (lone && _find is null && _caretLine >= firstLine && _caretLine <= lastLine)
+        {
+            paint.AddRect(
+                bounds: new Rect(
+                    x: Bounds.X + _gutterWidth,
+                    y: TextTop - _scrollY +
+                       (RowForCaret(line: _caretLine, col: _caretCol) * _lineHeight),
+                    width: Bounds.Width - _gutterWidth,
+                    height: _lineHeight
+                ),
+                color: _theme.OnSurface.WithAlpha(0.04f)
+            );
+        }
+
+        // Other occurrences of the find query, or of a single-line selection.
         {
             var (s, e) = OrderedSelection();
+            ReadOnlySpan<char> needle = !string.IsNullOrEmpty(_find)
+                ? _find
+                : HasSelection && s.Line == e.Line
+                    ? _lines[s.Line].AsSpan()[s.Col..e.Col]
+                    : default;
+            var cmp = !string.IsNullOrEmpty(_find) ? FindComparison : StringComparison.Ordinal;
+            if (!needle.IsWhiteSpace())
+            {
+                for (int visual = first; visual <= last; visual++)
+                {
+                    var row = _visualRows[visual];
+                    string text = _lines[row.Line];
+                    for (int i = NextMatch(s: text, needle: needle, from: 0, wholeWord: false, cmp: cmp);
+                         i >= 0 && i < row.End;
+                         i = NextMatch(
+                             s: text,
+                             needle: needle,
+                             from: i + needle.Length,
+                             wholeWord: false,
+                             cmp: cmp
+                         ))
+                    {
+                        int c0 = Math.Max(val1: row.Start, val2: i);
+                        int c1 = Math.Min(val1: row.End, val2: i + needle.Length);
+                        if (c1 > c0)
+                        {
+                            Band(
+                                visual: visual,
+                                c0: c0,
+                                c1: c1,
+                                color: _theme.OnSurface.WithAlpha(0.12f)
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // The bracket at the caret and its partner.
+        if (lone && TryMatchBracket(
+                line: _caretLine,
+                col: _caretCol,
+                bracket: out var bracket,
+                match: out var partner
+            ))
+        {
+            foreach ((int bl, int bc) in (ReadOnlySpan<(int, int)>)[bracket, partner])
+            {
+                if (bl < firstLine || bl > lastLine) continue;
+                Band(
+                    visual: RowForCaret(line: bl, col: bc),
+                    c0: bc,
+                    c1: bc + 1,
+                    color: _theme.OnSurface.WithAlpha(0.18f)
+                );
+            }
+        }
+
+        for (int n = -1; n < _extra.Count; n++)
+        {
+            var (s, e) = Range(n < 0 ? Primary : _extra[n]);
+            if (s == e || e.Line < firstLine || s.Line > lastLine) continue;
             for (int visual = first; visual <= last; visual++)
             {
                 var row = _visualRows[visual];
@@ -1165,19 +1698,12 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
                 int c0 = Math.Max(val1: row.Start, val2: row.Line == s.Line ? s.Col : row.Start);
                 int c1 = Math.Min(val1: row.End, val2: row.Line == e.Line ? e.Col : row.End);
                 if (c1 < c0) continue;
-                float x0 = TextLeft - _scrollX + ColToX(row: row, col: c0);
-                float x1 = TextLeft - _scrollX + ColToX(row: row, col: c1);
-                // Trailing newline selected lines get a small caret-width sliver.
-                if (row.Line < e.Line && row.End == _lines[row.Line].Length) x1 += _fontSize * 0.4f;
-                float y = TextTop - _scrollY + (visual * _lineHeight);
-                paint.AddRect(
-                    bounds: new Rect(
-                        x: MathF.Min(x: x0, y: x1),
-                        y: y,
-                        width: MathF.Max(x: 2f, y: MathF.Abs(x1 - x0)),
-                        height: _lineHeight
-                    ),
-                    color: _theme.Accent.WithAlpha(0.3f)
+                Band(
+                    visual: visual,
+                    c0: c0,
+                    c1: c1,
+                    color: _theme.Accent.WithAlpha(0.3f),
+                    newline: row.Line < e.Line && row.End == _lines[row.Line].Length
                 );
             }
         }
@@ -1286,6 +1812,21 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
                     ),
                     color: _theme.Primary
                 );
+
+                foreach (var x in _extra)
+                {
+                    if (x.CaretLine < firstLine || x.CaretLine > lastLine) continue;
+                    paint.AddRect(
+                        bounds: new Rect(
+                            x: TextLeft - _scrollX + ColToX(line: x.CaretLine, col: x.CaretCol),
+                            y: TextTop - _scrollY +
+                               (RowForCaret(line: x.CaretLine, col: x.CaretCol) * _lineHeight),
+                            width: 1.5f,
+                            height: _lineHeight
+                        ),
+                        color: _theme.Primary
+                    );
+                }
             }
 
             int imeRow = RowForCaret(line: _caretLine, col: _caretCol);
@@ -1376,7 +1917,128 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
             );
         }
 
+        if (_find is not null) PaintFindBar(paint);
+
         // No focus ring: a text view's focus cue is its caret.
+    }
+
+    /// <summary>The ⌘F strip, floating at the top right: query, its caret, and "3/17".</summary>
+    private void PaintFindBar(PaintList paint)
+    {
+        string query = _find!;
+        string label = FindLabel();
+        var dim = _theme.OnSurface.WithAlpha(AdwStyle.DimOpacity);
+        float queryW = IsFastGridText(query)
+            ? query.Length * _charWidth
+            : TextMeasure.Width(text: query, fontSize: _fontSize, fontFamily: "code");
+        float w = MathF.Min(
+            x: Bounds.Width - _gutterWidth - 24f,
+            y: MathF.Max(x: queryW, y: _charWidth * 16f) + ((label.Length + 3) * _charWidth) +
+               (Pad * 2f)
+        );
+        var box = new Rect(
+            x: Bounds.Right - w - 16f,
+            y: Bounds.Y + 6f,
+            width: w,
+            height: _lineHeight + Pad
+        );
+        // A hairline ring, then the fill — popover and view backgrounds are the same white in light.
+        paint.AddRect(
+            bounds: new Rect(
+                x: box.X - 1f,
+                y: box.Y - 1f,
+                width: box.Width + 2f,
+                height: box.Height + 2f
+            ),
+            color: _theme.OnSurface.WithAlpha(0.2f),
+            radius: 7f
+        );
+        paint.AddRect(bounds: box, color: AdwPalette.For(_theme).PopoverBg, radius: 6f);
+
+        paint.AddClipStart(box);
+        float x = box.X + Pad;
+        float baseline = box.Y + (Pad / 2f) + (_fontSize * 0.8f);
+        DrawSegment(
+            paint: paint,
+            s: query.Length > 0 ? query : "Find",
+            x: x,
+            baseline: baseline,
+            color: query.Length > 0 ? _theme.OnSurface : dim
+        );
+        if (CaretBlink.Shown(time: App.Active?.Time ?? 0f, blinkBase: 0f))
+        {
+            paint.AddRect(
+                bounds: new Rect(
+                    x: x + queryW,
+                    y: box.Y + (Pad / 2f),
+                    width: 1.5f,
+                    height: _lineHeight
+                ),
+                color: _theme.Primary
+            );
+        }
+
+        if (label.Length > 0)
+        {
+            DrawSegment(
+                paint: paint,
+                s: label,
+                x: box.Right - Pad - (label.Length * _charWidth),
+                baseline: baseline,
+                color: dim
+            );
+        }
+
+        paint.AddClipEnd();
+    }
+
+    /// <summary>
+    ///     The bracket touching the caret (the one after it first, then the one before) and the
+    ///     bracket that pairs with it.
+    /// </summary>
+    private bool TryMatchBracket(
+        int line,
+        int col,
+        out (int Line, int Col) bracket,
+        out (int Line, int Col) match)
+    {
+        bracket = match = default;
+        string s = _lines[line];
+        for (int c = col; c >= col - 1 && c >= 0; c--)
+        {
+            if (c >= s.Length) continue;
+            int open = "([{".IndexOf(s[c]);
+            int close = ")]}".IndexOf(s[c]);
+            if (open < 0 && close < 0) continue;
+            char self = s[c];
+            char other = open >= 0 ? ")]}"[open] : "([{"[close];
+            int dir = open >= 0 ? 1 : -1;
+            int depth = 0;
+            // ponytail: counts brackets inside strings and comments too; skip String/Comment
+            // tokens from _tokenCache if that ever mis-pairs in practice.
+            for (int l = line, n = 0;
+                 l >= 0 && l < _lines.Count && n < BracketScanLines;
+                 l += dir, n++)
+            {
+                string t = _lines[l];
+                for (int i = l == line ? c : dir > 0 ? 0 : t.Length - 1;
+                     i >= 0 && i < t.Length;
+                     i += dir)
+                {
+                    if (t[i] == self) depth++;
+                    else if (t[i] == other && --depth == 0)
+                    {
+                        bracket = (line, c);
+                        match = (l, i);
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        return false;
     }
 
     // ── Pointer input ─────────────────────────────────────────────────────────
@@ -1421,25 +2083,50 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
         }
 
         (int l, int col) = HitPosition(point);
+        var mods = App.Active?.CurrentModifiers ?? Modifiers.None;
+        ResetStickyColumn();
+        _occWholeWord = false;
 
-        // Double-click selects the word under the cursor.
+        // Double-click selects the word under the cursor; a third click, the whole line.
         float now = App.Active?.Time ?? 0f;
-        if (now - _lastClickTime < DoubleClickSeconds && l == _lastClickLine &&
-            Math.Abs(col - _lastClickCol) <= 1)
+        bool repeat = now - _lastClickTime < DoubleClickSeconds && l == _lastClickLine &&
+                      Math.Abs(col - _lastClickCol) <= 1;
+        _clickCount = repeat ? _clickCount + 1 : 1;
+        _lastClickTime = now;
+        _lastClickLine = l;
+        _lastClickCol = col;
+        if (_clickCount == 2)
         {
-            _lastClickTime = -1f; // consume so a third click doesn't chain
             SelectWordAt(line: l, col: col);
             return;
         }
 
-        _lastClickTime = now;
-        _lastClickLine = l;
-        _lastClickCol = col;
+        if (_clickCount == 3)
+        {
+            _clickCount = 0; // a fourth click starts over
+            _isDragging = false;
+            _caretLine = _anchorLine = l;
+            _anchorCol = 0;
+            _caretCol = _lines[l].Length;
+            MarkNeedsPaint();
+            return;
+        }
+
+        // Alt+click plants an additional cursor; a plain click goes back to one.
+        if (mods.HasFlag(Modifiers.Alt)) _extra.Add(Primary);
+        else _extra.Clear();
+
+        // Shift+click extends the selection from where it was anchored.
+        if (mods.HasFlag(Modifiers.Shift) && !mods.HasFlag(Modifiers.Alt))
+        {
+            if (_anchorLine < 0) (_anchorLine, _anchorCol) = (_caretLine, _caretCol);
+        }
+        else
+            (_anchorLine, _anchorCol) = (l, col);
 
         _caretLine = l;
         _caretCol = col;
-        _anchorLine = l;
-        _anchorCol = col;
+        MergeCarets();
         _isDragging = true;
         MarkNeedsPaint();
     }
@@ -1589,9 +2276,84 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
 
     public override void OnTextInput(string text)
     {
+        if (_find is not null)
+        {
+            _find += text;
+            FindStep(forward: true, refine: true);
+            return;
+        }
+
         if (ReadOnly) return;
         _compositionText = string.Empty;
-        InsertText(text: text, kind: EditKind.Typing);
+        ResetStickyColumn();
+        _occWholeWord = false;
+        if (text.Length == 1)
+        {
+            char c = text[0];
+            Edit(kind: EditKind.Typing, perCaret: () => TypeChar(c));
+        }
+        else
+            InsertText(text: text, kind: EditKind.Typing);
+    }
+
+    /// <summary>
+    ///     One typed character at one caret, with the bracket/quote conveniences: wrap a selection,
+    ///     auto-close a pair, type over a closer that is already there, and pull a lone <c>}</c> back
+    ///     one indent level.
+    /// </summary>
+    private void TypeChar(char c)
+    {
+        string line = _lines[_caretLine];
+        int open = Openers.IndexOf(c);
+        if (HasSelection)
+        {
+            if (open < 0)
+            {
+                ReplaceSelection(c.ToString());
+                return;
+            }
+
+            // Wrap the selection and keep it selected inside the new pair.
+            var (s, e) = OrderedSelection();
+            bool caretLast = (_caretLine, _caretCol) == e;
+            Replace(s: s, e: e, text: c + SelectedText() + Closers[open]);
+            (int Line, int Col) innerStart = (s.Line, s.Col + 1);
+            (int Line, int Col) innerEnd = (_caretLine, _caretCol - 1);
+            (_anchorLine, _anchorCol) = caretLast ? innerStart : innerEnd;
+            (_caretLine, _caretCol) = caretLast ? innerEnd : innerStart;
+            return;
+        }
+
+        var caret = (_caretLine, _caretCol);
+        char prev = _caretCol > 0 ? line[_caretCol - 1] : ' ';
+        char next = _caretCol < line.Length ? line[_caretCol] : ' ';
+
+        // ponytail: types over ANY matching closer, not only ones we auto-inserted; track
+        // inserted closers if stepping over a pre-existing one ever surprises.
+        if (next == c && Closers.Contains(c))
+        {
+            _caretCol++;
+            return;
+        }
+
+        if (c == '}' && _caretCol >= TabWidth && line.AsSpan(start: 0, length: _caretCol).IsWhiteSpace())
+        {
+            Replace(s: (_caretLine, _caretCol - TabWidth), e: caret, text: "}");
+            return;
+        }
+
+        // Auto-close only where the closer can't glue onto following text, and never turn an
+        // apostrophe inside a word into a pair.
+        bool quote = open >= 3;
+        if (open >= 0 && (char.IsWhiteSpace(next) || ")]}".Contains(next)) &&
+            !(quote && TextNavigation.IsWordChar(prev)))
+        {
+            Replace(s: caret, e: caret, text: $"{c}{Closers[open]}");
+            _caretCol--;
+            return;
+        }
+
+        Replace(s: caret, e: caret, text: c.ToString());
     }
 
     public override void OnTextComposition(string text, int selectionStart, int selectionLength)
@@ -1625,16 +2387,85 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
         const uint scDown = 81;
         const uint scHome = 74;
         const uint scEnd = 77;
+        const uint scPageUp = 75;
+        const uint scPageDown = 78;
         const uint scReturn = 40;
         const uint scKpEnter = 88;
+        const uint scEscape = 41;
         const uint scTab = 43;
+        const uint scF3 = 60;
+        const uint scSlash = 56;
+        const uint scLeftBracket = 47;
+        const uint scRightBracket = 48;
+        const uint scBackslash = 49;
+
+        // A modifier going down on its own is not a command (and must not close the find bar on
+        // the way to Shift+Enter).
+        if (scancode is >= 224 and <= 231) return;
 
         bool shift = mods.HasFlag(Modifiers.Shift);
+        bool alt = mods.HasFlag(Modifiers.Alt);
         bool cmd = mods.HasCommand(); // Ctrl or ⌘
+        // ⌘ jumps to line/document edges (macOS); Alt — or Ctrl where ⌘ doesn't exist — moves by word.
+        bool meta = mods.HasFlag(Modifiers.Cmd);
+        bool word = alt || mods.HasFlag(Modifiers.Ctrl);
+        char key = char.ToLowerInvariant(keyChar);
+        bool enter = scancode is scReturn or scKpEnter;
+
+        if (scancode is not (scUp or scDown or scPageUp or scPageDown)) ResetStickyColumn();
+        if (!(cmd && key == 'd')) _occWholeWord = false;
+
+        // We hold Tab and Escape (IKeyboardTrap), so Escape has to peel back our own state before
+        // it finally lets go of focus.
+        if (scancode == scEscape)
+        {
+            if (_find is not null) _find = null;
+            else if (_extra.Count > 0) _extra.Clear();
+            else if (HasSelection) ClearSelection();
+            else App.Active?.ClearFocus();
+            MarkNeedsPaint();
+            return;
+        }
+
+        if (_find is not null)
+        {
+            if (enter || scancode == scF3 || (cmd && key == 'g'))
+            {
+                FindStep(forward: !shift);
+                return;
+            }
+
+            if (scancode == scBackspace)
+            {
+                _find = _find[..TextNavigation.PreviousGraphemeBoundary(
+                    text: _find,
+                    index: _find.Length
+                )];
+                FindStep(forward: true, refine: true);
+                return;
+            }
+
+            if (cmd && key == 'v')
+            {
+                string clip = ZigoteEngine.Instance?.GetClipboard() ?? string.Empty;
+                _find += clip.Split('\r', '\n')[0];
+                FindStep(forward: true, refine: true);
+                return;
+            }
+
+            // Printable keys are followed by their text input, which is what feeds the query —
+            // only commands and navigation leave the bar and act on the document.
+            bool leaves = (cmd && key != 'f') || scancode is scLeft or scRight or scUp or scDown
+                or scHome or scEnd or scPageUp or scPageDown or scTab or scDelete;
+            if (!leaves) return;
+            // ⌘⇧L still needs the query, so it closes the bar itself.
+            if (!(cmd && shift && key == 'l')) _find = null;
+            MarkNeedsPaint();
+        }
 
         if (cmd)
         {
-            switch (char.ToLowerInvariant(keyChar))
+            switch (key)
             {
                 case 'a':
                     SelectAll();
@@ -1646,7 +2477,7 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
                     CutAction();
                     return;
                 case 'v':
-                    PasteAction();
+                    if (!ReadOnly) PasteAction();
                     return;
                 case 's':
                     OnSubmit?.Invoke();
@@ -1658,125 +2489,478 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
                 case 'y':
                     Redo();
                     return;
+                case 'd':
+                    SelectNextOccurrence();
+                    return;
+                case 'l':
+                    if (shift) SelectAllOccurrences();
+                    else Navigate(SelectLine);
+                    return;
+                case 'f':
+                    OpenFind();
+                    return;
+                case 'g':
+                    OpenFind();
+                    FindStep(forward: !shift);
+                    return;
+                case 'k' when shift:
+                    DeleteLines();
+                    return;
             }
+
+            if (key == '/' || scancode == scSlash)
+            {
+                ToggleLineComment();
+                return;
+            }
+
+            if (key == ']' || scancode == scRightBracket)
+            {
+                IndentLines(+1);
+                return;
+            }
+
+            if (key == '[' || scancode == scLeftBracket)
+            {
+                IndentLines(-1);
+                return;
+            }
+
+            if (shift && (key is '\\' or '|' || scancode == scBackslash))
+            {
+                Navigate(() =>
+                    {
+                        if (!TryMatchBracket(
+                                line: _caretLine,
+                                col: _caretCol,
+                                bracket: out _,
+                                match: out var m
+                            )) return;
+                        ClearSelection();
+                        (_caretLine, _caretCol) = m;
+                    }
+                );
+                return;
+            }
+
+            if (enter)
+            {
+                Edit(kind: EditKind.Other, perCaret: shift ? OpenLineAbove : OpenLineBelow);
+                return;
+            }
+        }
+
+        if (scancode == scF3)
+        {
+            OpenFind();
+            FindStep(forward: !shift);
+            return;
         }
 
         switch (scancode)
         {
             case scLeft:
-                MoveCaret(extend: shift, dCol: -1);
-                return;
             case scRight:
-                MoveCaret(extend: shift, dCol: +1);
-                return;
-            case scUp:
-                MoveCaretVertical(extend: shift, dLine: -1);
-                return;
-            case scDown:
-                MoveCaretVertical(extend: shift, dLine: +1);
-                return;
-            case scHome:
-                StartOrExtendSelection(shift);
-                _caretCol = SoftWrap
-                    ? _visualRows[RowForCaret(line: _caretLine, col: _caretCol)].Start
-                    : 0;
-                EnsureCaretVisible();
-                MarkNeedsPaint();
-                return;
-            case scEnd:
-                StartOrExtendSelection(shift);
-                _caretCol = SoftWrap
-                    ? _visualRows[RowForCaret(line: _caretLine, col: _caretCol)].End
-                    : _lines[_caretLine].Length;
-                EnsureCaretVisible();
-                MarkNeedsPaint();
-                return;
-        }
-
-        if (ReadOnly) return;
-
-        switch (scancode)
-        {
-            case scReturn:
-            case scKpEnter:
             {
-                RecordEdit(EditKind.Other);
-                if (HasSelection) DeleteSelection();
-                string cur = _lines[_caretLine];
-                string indent = LeadingWhitespace(cur);
-                string before = cur[.._caretCol];
-                string after = cur[_caretCol..];
-                _lines[_caretLine] = before;
-                _lines.Insert(index: _caretLine + 1, item: indent + after);
-                _caretLine++;
-                _caretCol = indent.Length;
-                ClearSelection();
-                Commit();
+                int dir = scancode == scLeft ? -1 : +1;
+                if (meta) Navigate(() => MoveLineEdge(extend: shift, dir: dir));
+                else if (word) Navigate(() => MoveWord(extend: shift, dir: dir));
+                else Navigate(() => MoveCaret(extend: shift, dCol: dir));
                 return;
             }
 
+            case scUp:
+            case scDown:
+            {
+                int dir = scancode == scUp ? -1 : +1;
+                if (cmd && alt) AddCaretVertical(dir);
+                else if (alt && shift) DuplicateLines(up: dir < 0);
+                else if (alt) MoveLines(dir);
+                else if (meta) Navigate(() => MoveDocumentEdge(extend: shift, dir: dir));
+                else Navigate(() => MoveCaretVertical(extend: shift, dLine: dir));
+                return;
+            }
+
+            case scPageUp:
+            case scPageDown:
+            {
+                int page = Math.Max(
+                    val1: 1,
+                    val2: (int)((Bounds.Height - (Pad * 2f)) / MathF.Max(x: 1f, y: _lineHeight)) - 1
+                );
+                int rows = scancode == scPageUp ? -page : page;
+                Navigate(() => MoveCaretVertical(extend: shift, dLine: rows));
+                return;
+            }
+
+            case scHome:
+            case scEnd:
+            {
+                int dir = scancode == scHome ? -1 : +1;
+                if (cmd) Navigate(() => MoveDocumentEdge(extend: shift, dir: dir));
+                else Navigate(() => MoveLineEdge(extend: shift, dir: dir));
+                return;
+            }
+        }
+
+        if (ReadOnly)
+        {
+            // Nothing to indent in a viewer: hand Tab back to focus traversal.
+            if (scancode == scTab) App.Active?.MoveFocusByTab(shift);
+            return;
+        }
+
+        if (enter)
+        {
+            Edit(kind: EditKind.Other, perCaret: NewLine);
+            return;
+        }
+
+        switch (scancode)
+        {
             case scTab:
-                InsertText(new string(c: ' ', count: TabWidth));
+                if (shift) IndentLines(-1);
+                else if (SpansLines()) IndentLines(+1);
+                else
+                {
+                    // To the next tab stop, not a fixed four.
+                    Edit(
+                        kind: EditKind.Other,
+                        perCaret: () =>
+                        {
+                            DeleteSelection();
+                            ReplaceSelection(
+                                new string(c: ' ', count: TabWidth - (_caretCol % TabWidth))
+                            );
+                        }
+                    );
+                }
+
                 return;
 
             case scBackspace:
-                RecordEdit(EditKind.Deleting);
-                if (HasSelection)
-                {
-                    DeleteSelection();
-                    Commit();
-                    return;
-                }
-
-                if (_caretCol > 0)
-                {
-                    int previous = TextNavigation.PreviousGraphemeBoundary(
-                        text: _lines[_caretLine],
-                        index: _caretCol
-                    );
-                    _lines[_caretLine] =
-                        _lines[_caretLine][..previous] + _lines[_caretLine][_caretCol..];
-                    _caretCol = previous;
-                }
-                else if (_caretLine > 0)
-                {
-                    int prevLen = _lines[_caretLine - 1].Length;
-                    _lines[_caretLine - 1] += _lines[_caretLine];
-                    _lines.RemoveAt(_caretLine);
-                    _caretLine--;
-                    _caretCol = prevLen;
-                }
-
-                Commit();
+                Edit(
+                    kind: EditKind.Deleting,
+                    perCaret: () => DeleteBackward(word: word, toLineStart: meta)
+                );
                 return;
 
             case scDelete:
-                RecordEdit(EditKind.Deleting);
-                if (HasSelection)
-                {
-                    DeleteSelection();
-                    Commit();
-                    return;
-                }
-
-                if (_caretCol < _lines[_caretLine].Length)
-                {
-                    int next = TextNavigation.NextGraphemeBoundary(
-                        text: _lines[_caretLine],
-                        index: _caretCol
-                    );
-                    _lines[_caretLine] =
-                        _lines[_caretLine][.._caretCol] + _lines[_caretLine][next..];
-                }
-                else if (_caretLine < _lines.Count - 1)
-                {
-                    _lines[_caretLine] += _lines[_caretLine + 1];
-                    _lines.RemoveAt(_caretLine + 1);
-                }
-
-                Commit();
+                Edit(kind: EditKind.Deleting, perCaret: () => DeleteForward(word));
                 return;
         }
+    }
+
+    // ── Per-caret editing operations (run through Edit / ForEachCaret) ────────
+
+    private void NewLine()
+    {
+        DeleteSelection();
+        string line = _lines[_caretLine];
+        string indent = LeadingWhitespace(line);
+        if (indent.Length > _caretCol) indent = indent[.._caretCol]; // caret inside the indent
+        var caret = (_caretLine, _caretCol);
+        int open = _caretCol > 0 ? "([{".IndexOf(line[_caretCol - 1]) : -1;
+        if (open < 0)
+        {
+            Replace(s: caret, e: caret, text: "\n" + indent);
+            return;
+        }
+
+        // After an opening bracket the new line goes one level deeper; between a pair, the closer
+        // drops to its own line below.
+        string inner = indent + new string(c: ' ', count: TabWidth);
+        if (_caretCol < line.Length && line[_caretCol] == ")]}"[open])
+        {
+            Replace(s: caret, e: caret, text: "\n" + inner + "\n" + indent);
+            _caretLine--;
+            _caretCol = inner.Length;
+        }
+        else
+            Replace(s: caret, e: caret, text: "\n" + inner);
+    }
+
+    private void OpenLineBelow()
+    {
+        ClearSelection();
+        _caretCol = _lines[_caretLine].Length;
+        NewLine();
+    }
+
+    private void OpenLineAbove()
+    {
+        string indent = LeadingWhitespace(_lines[_caretLine]);
+        Replace(s: (_caretLine, 0), e: (_caretLine, 0), text: indent + "\n");
+        _caretLine--;
+        _caretCol = indent.Length;
+    }
+
+    private void DeleteBackward(bool word, bool toLineStart)
+    {
+        if (HasSelection)
+        {
+            DeleteSelection();
+            return;
+        }
+
+        string line = _lines[_caretLine];
+        var caret = (_caretLine, _caretCol);
+        if (_caretCol == 0)
+        {
+            if (_caretLine > 0)
+                Replace(s: (_caretLine - 1, _lines[_caretLine - 1].Length), e: caret, text: "");
+            return;
+        }
+
+        int start;
+        if (toLineStart) start = 0;
+        else if (word) start = TextNavigation.WordBoundary(text: line, index: _caretCol, direction: -1);
+        else if (_caretCol < line.Length && Openers.IndexOf(line[_caretCol - 1]) is >= 0 and var o &&
+                 line[_caretCol] == Closers[o])
+        {
+            // An empty pair goes as one.
+            Replace(s: (_caretLine, _caretCol - 1), e: (_caretLine, _caretCol + 1), text: "");
+            return;
+        }
+        else if (line.AsSpan(start: 0, length: _caretCol).TrimStart(' ').IsEmpty)
+            start = (_caretCol - 1) / TabWidth * TabWidth; // in the indent: back one tab stop
+        else start = TextNavigation.PreviousGraphemeBoundary(text: line, index: _caretCol);
+
+        Replace(s: (_caretLine, start), e: caret, text: "");
+    }
+
+    private void DeleteForward(bool word)
+    {
+        if (HasSelection)
+        {
+            DeleteSelection();
+            return;
+        }
+
+        string line = _lines[_caretLine];
+        var caret = (_caretLine, _caretCol);
+        if (_caretCol == line.Length)
+        {
+            if (_caretLine < _lines.Count - 1) Replace(s: caret, e: (_caretLine + 1, 0), text: "");
+            return;
+        }
+
+        int end = word
+            ? TextNavigation.WordBoundary(text: line, index: _caretCol, direction: +1)
+            : TextNavigation.NextGraphemeBoundary(text: line, index: _caretCol);
+        Replace(s: caret, e: (_caretLine, end), text: "");
+    }
+
+    // ── Line commands (act once on every line any caret touches) ──────────────
+
+    private bool SpansLines()
+    {
+        if (_anchorLine >= 0 && _anchorLine != _caretLine) return true;
+        return _extra.Exists(static x => x.AnchorLine >= 0 && x.AnchorLine != x.CaretLine);
+    }
+
+    private void IndentLines(int direction)
+    {
+        if (ReadOnly) return;
+        RecordEdit(EditKind.Other);
+        foreach (int l in TouchedLines())
+        {
+            if (direction > 0)
+            {
+                if (_lines[l].Length > 0)
+                    Splice(s: (l, 0), e: (l, 0), text: new string(c: ' ', count: TabWidth));
+                continue;
+            }
+
+            int n = 0;
+            while (n < TabWidth && n < _lines[l].Length && _lines[l][n] == ' ') n++;
+            if (n == 0 && _lines[l].StartsWith('\t')) n = 1;
+            if (n > 0) Splice(s: (l, 0), e: (l, n), text: "");
+        }
+
+        Commit();
+    }
+
+    /// <summary>⌘/. Comment the touched lines out, or back in when every one of them already is.</summary>
+    public void ToggleLineComment()
+    {
+        if (ReadOnly || LineComment is not { Length: > 0 } prefix) return;
+        var lines = TouchedLines();
+        if (lines.Count > 1) lines.RemoveAll(l => string.IsNullOrWhiteSpace(_lines[l]));
+        if (lines.Count == 0) return;
+        bool remove = lines.TrueForAll(l => _lines[l].AsSpan().TrimStart().StartsWith(prefix));
+        // Comments line up at the shallowest indent of the block, as in every IDE.
+        int column = lines.Min(l => LeadingWhitespace(_lines[l]).Length);
+        RecordEdit(EditKind.Other);
+        foreach (int l in lines)
+        {
+            if (!remove)
+            {
+                Splice(s: (l, column), e: (l, column), text: prefix + " ");
+                continue;
+            }
+
+            int at = LeadingWhitespace(_lines[l]).Length;
+            int end = at + prefix.Length;
+            if (end < _lines[l].Length && _lines[l][end] == ' ') end++;
+            Splice(s: (l, at), e: (l, end), text: "");
+        }
+
+        Commit();
+    }
+
+    private void DeleteLines()
+    {
+        if (ReadOnly) return;
+        RecordEdit(EditKind.Other);
+        var runs = TouchedRuns();
+        for (int r = runs.Count - 1; r >= 0; r--)
+        {
+            (int a, int b) = runs[r];
+            if (b < _lines.Count - 1) Splice(s: (a, 0), e: (b + 1, 0), text: "");
+            else if (a > 0) Splice(s: (a - 1, _lines[a - 1].Length), e: (b, _lines[b].Length), text: "");
+            else Splice(s: (0, 0), e: (b, _lines[b].Length), text: "");
+        }
+
+        _anchorLine = -1;
+        for (int i = 0; i < _extra.Count; i++) _extra[i] = _extra[i] with { AnchorLine = -1 };
+        MergeCarets();
+        Commit();
+    }
+
+    private void MoveLines(int direction)
+    {
+        if (ReadOnly) return;
+        var runs = TouchedRuns();
+        if (direction < 0 ? runs[0].First == 0 : runs[^1].Last == _lines.Count - 1) return;
+        RecordEdit(EditKind.Other);
+        // Each block trades places with the line it moves past. Blocks are walked away from the
+        // direction of travel so one never lands on a line the next still has to read.
+        for (int r = 0; r < runs.Count; r++)
+        {
+            (int a, int b) = runs[direction < 0 ? r : runs.Count - 1 - r];
+            int from = direction < 0 ? a - 1 : b + 1; // the line being jumped over
+            int to = direction < 0 ? b : a; // where it ends up
+            string jumped = _lines[from];
+            _lines.RemoveAt(from);
+            _lines.Insert(index: to, item: jumped);
+            MapCarets(p => p.Line >= a && p.Line <= b ? (p.Line + direction, p.Col)
+                : p.Line == from ? (to, Math.Min(val1: p.Col, val2: jumped.Length))
+                : p
+            );
+        }
+
+        Commit();
+    }
+
+    private void DuplicateLines(bool up)
+    {
+        if (ReadOnly) return;
+        RecordEdit(EditKind.Other);
+        var runs = TouchedRuns();
+        for (int r = runs.Count - 1; r >= 0; r--)
+        {
+            (int a, int b) = runs[r];
+            int n = b - a + 1;
+            // The copy goes below when duplicating up (carets stay put), above when duplicating
+            // down (carets ride down onto the lower copy).
+            int at = up ? b + 1 : a;
+            _lines.InsertRange(index: at, collection: _lines.GetRange(index: a, count: n));
+            MapCarets(p => p.Line >= at ? (p.Line + n, p.Col) : p);
+        }
+
+        Commit();
+    }
+
+    // ── Caret movement (run per caret through Navigate) ───────────────────────
+
+    /// <summary>Run a caret movement at every caret, then bring the primary one into view.</summary>
+    private void Navigate(Action perCaret)
+    {
+        ForEachCaret(perCaret);
+        EnsureCaretVisible();
+        MarkNeedsPaint();
+    }
+
+    private void SelectLine()
+    {
+        var (s, e) = OrderedSelection();
+        (_anchorLine, _anchorCol) = (s.Line, 0);
+        (_caretLine, _caretCol) = e.Line < _lines.Count - 1
+            ? (e.Line + 1, 0)
+            : (e.Line, _lines[e.Line].Length);
+    }
+
+    private void MoveWord(bool extend, int dir)
+    {
+        StartOrExtendSelection(extend);
+        string line = _lines[_caretLine];
+        if (dir < 0 && _caretCol == 0)
+        {
+            if (_caretLine > 0) _caretCol = _lines[--_caretLine].Length;
+        }
+        else if (dir > 0 && _caretCol == line.Length)
+        {
+            if (_caretLine < _lines.Count - 1) (_caretLine, _caretCol) = (_caretLine + 1, 0);
+        }
+        else
+            _caretCol = TextNavigation.WordBoundary(text: line, index: _caretCol, direction: dir);
+    }
+
+    /// <summary>
+    ///     Home / End. Home is "smart": it stops at the first non-blank character, and goes on to
+    ///     column 0 when pressed there.
+    /// </summary>
+    private void MoveLineEdge(bool extend, int dir)
+    {
+        StartOrExtendSelection(extend);
+        string line = _lines[_caretLine];
+        var row = SoftWrap
+            ? _visualRows[RowForCaret(line: _caretLine, col: _caretCol)]
+            : new VisualRow(Line: _caretLine, Start: 0, End: line.Length, Width: 0f, FastGrid: true);
+        if (dir > 0)
+        {
+            _caretCol = row.End;
+            return;
+        }
+
+        int indent = LeadingWhitespace(line).Length;
+        _caretCol = row.Start == 0 && _caretCol != indent ? indent : row.Start;
+    }
+
+    private void MoveDocumentEdge(bool extend, int dir)
+    {
+        StartOrExtendSelection(extend);
+        (_caretLine, _caretCol) = dir < 0 ? (0, 0) : (_lines.Count - 1, _lines[^1].Length);
+    }
+
+    /// <summary>⌘⌥↑/↓: plant another cursor on the row above/below the outermost one.</summary>
+    private void AddCaretVertical(int dir)
+    {
+        var edge = Primary;
+        foreach (var x in _extra)
+        {
+            if (dir < 0 ? x.CaretLine < edge.CaretLine : x.CaretLine > edge.CaretLine) edge = x;
+        }
+
+        int row = RowForCaret(line: edge.CaretLine, col: edge.CaretCol);
+        int target = row + dir;
+        if (target < 0 || target >= _visualRows.Count) return;
+        float x0 = float.IsNaN(edge.DesiredX)
+            ? ColToX(row: _visualRows[row], col: edge.CaretCol)
+            : edge.DesiredX;
+        var targetRow = _visualRows[target];
+        _extra.Add(Primary);
+        Primary = new Sel(
+            AnchorLine: -1,
+            AnchorCol: 0,
+            CaretLine: targetRow.Line,
+            CaretCol: XToCol(row: targetRow, localX: x0),
+            DesiredX: x0
+        );
+        MergeCarets();
+        EnsureCaretVisible();
+        MarkNeedsPaint();
     }
 
     private static string LeadingWhitespace(string s)
@@ -1795,8 +2979,6 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
             var (s, e) = OrderedSelection();
             (_caretLine, _caretCol) = dCol < 0 ? s : e;
             ClearSelection();
-            EnsureCaretVisible();
-            MarkNeedsPaint();
             return;
         }
 
@@ -1849,9 +3031,6 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
                 );
             }
         }
-
-        EnsureCaretVisible();
-        MarkNeedsPaint();
     }
 
     private void MoveCaretVertical(bool extend, int dLine)
@@ -1860,12 +3039,12 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
         int current = RowForCaret(line: _caretLine, col: _caretCol);
         int target = Math.Clamp(value: current + dLine, min: 0, max: _visualRows.Count - 1);
         if (target == current) return;
-        float desiredX = ColToX(row: _visualRows[current], col: _caretCol);
+        // The column the run of ↑/↓ started from sticks, so passing through a short line doesn't
+        // drag the caret left for good.
+        if (float.IsNaN(_desiredX)) _desiredX = ColToX(row: _visualRows[current], col: _caretCol);
         var targetRow = _visualRows[target];
         _caretLine = targetRow.Line;
-        _caretCol = XToCol(row: targetRow, localX: desiredX);
-        EnsureCaretVisible();
-        MarkNeedsPaint();
+        _caretCol = XToCol(row: targetRow, localX: _desiredX);
     }
 
     /// <summary>Classifies an edit for undo coalescing — same-kind runs collapse into one undo step.</summary>
@@ -1881,7 +3060,16 @@ public sealed class AdwCodeEditor : Widget, ITextInputClient
         int CaretLine,
         int CaretCol,
         int AnchorLine,
-        int AnchorCol);
+        int AnchorCol,
+        Sel[] Extra);
+
+    /// <summary>One caret + selection; <c>AnchorLine &lt; 0</c> means no selection.</summary>
+    private readonly record struct Sel(
+        int AnchorLine,
+        int AnchorCol,
+        int CaretLine,
+        int CaretCol,
+        float DesiredX = float.NaN);
 
     private readonly record struct VisualRow(
         int Line,
