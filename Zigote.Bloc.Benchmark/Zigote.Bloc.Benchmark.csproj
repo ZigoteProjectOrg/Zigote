@@ -9,6 +9,11 @@
     </PropertyGroup>
     <ItemGroup>
         <PackageReference Include="BenchmarkDotNet" Version="0.15.8"/>
+        <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="5.9.0">
+          <PrivateAssets>all</PrivateAssets>
+          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
     </ItemGroup>
     <ItemGroup>
         <!-- Zigote.Bloc pulls in Zigote.Core; nothing else, same as the library itself. The stream
