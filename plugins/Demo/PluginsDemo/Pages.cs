@@ -15,6 +15,7 @@ using SecureStorage;
 using Sensors;
 using Share;
 using UrlLauncher;
+using Wakelock;
 using Zigote.UI.Adwaita;
 using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Controls;
@@ -112,6 +113,15 @@ internal sealed class BatteryPage : ComposedWidget
                 new Watch(() => Demo.Fact("Battery present", _reading.Value.Present ? "Yes" : "No")),
                 Demo.Action("Read again", "BatteryPlugin.Read()", "Refresh",
                     () => _reading.Value = BatteryPlugin.Read()),
+            },
+        },
+        new AdwPreferencesGroup("Wakelock", "wakelock_plus — on macOS, watch it in `pmset -g assertions`")
+        {
+            Rows =
+            {
+                Demo.Fact("Supported", WakelockPlugin.Supported ? "Yes" : "No"),
+                new AdwSwitchRow("Keep the screen awake", "WakelockPlugin.Set(on)", WakelockPlugin.Enabled,
+                    on => WakelockPlugin.Set(on)),
             },
         });
 }

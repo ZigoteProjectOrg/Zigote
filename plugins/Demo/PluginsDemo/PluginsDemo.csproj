@@ -44,6 +44,7 @@
         <ProjectReference Include="../../Sensors/Sensors/Sensors.csproj"/>
         <ProjectReference Include="../../Share/Share/Share.csproj"/>
         <ProjectReference Include="../../UrlLauncher/UrlLauncher/UrlLauncher.csproj"/>
+        <ProjectReference Include="../../Wakelock/Wakelock/Wakelock.csproj"/>
     </ItemGroup>
 
 </Project>

@@ -10,7 +10,7 @@ Already covered — do not build: `shared_preferences` → **Zigote.Preferences*
 
 **Built** (see `plugins/`): DeviceInfo, PathProvider, UrlLauncher, Permissions, FilePicker,
 Notifications, Tray, WebView, Share, Battery, Haptics, AppSettings, Connectivity, SecureStorage,
-Geolocation, Sensors — every slot below. Timbre consumes them: its hand-rolled
+Geolocation, Sensors, Wakelock — every slot below. Timbre consumes them: its hand-rolled
 StatusNotifierItem, notification transport, XDG paths, url opening and Android SystemDialogs were
 replaced by the plugins.
 
@@ -20,6 +20,7 @@ for Geolocation (GeoClue2 / WinRT / CoreLocation) and Sensors (Linux IIO), a nat
 Windows and macOS, and Keychain via SecItem interop instead of the `security` tool. A second pass
 over the pub.dev top list — [Round two](#round-two--what-a-pass-over-the-pubdev-top-list-still-exposes)
 — is where the remaining real gaps are: barcode scanning, in-app purchase, Lottie, forms.
+[Round three](#round-three--gaps-the-pubdev-pass-missed) lists what that pass missed.
 
 ## Tier 1 — almost every app needs these
 
@@ -70,7 +71,7 @@ what genuinely has no answer in Zigote today, ranked by how many real apps hit t
 | ~~`Zigote.Plugins.AppLinks`~~ | app_links / uni_links | **Built** (plugins/AppLinks): argv plus a named-pipe single-instance handoff on desktop (a second launch feeds the running app and exits), head-forwarded intents and user activities on mobile. | Done. |
 | `Zigote.Plugins.BarcodeScanner` | mobile_scanner | Ticket scanning, QR sign-in, inventory. The Camera plugin already delivers frames; what is missing is a decoder. A zxing-cpp binding under `native/` decodes on every platform at once and avoids ML Kit's Play Services dependency. | Medium — one native binding, then a widget over Camera frames. |
 | `Zigote.Plugins.InAppPurchase` | in_app_purchase | The money path: Play Billing v7 and StoreKit 2. Nothing else can substitute for it, and receipt validation has to be done right. No lazy version — a half-built billing flow charges real cards. | Large. Build it when an app ships a paid tier. |
-| `Zigote.Plugins.Wakelock` | wakelock_plus | Keep the screen awake during video, navigation or a long game session. `FLAG_KEEP_SCREEN_ON`, `idleTimerDisabled`, the screensaver inhibit on desktop. | Tiny — an afternoon. |
+| ~~`Zigote.Plugins.Wakelock`~~ | wakelock_plus | **Built** (plugins/Wakelock): `FLAG_KEEP_SCREEN_ON` on Android, `idleTimerDisabled` on iOS, an IOKit assertion on macOS, a power request on Windows, the freedesktop screensaver inhibit on Linux. | Done. |
 | `Zigote.Plugins.InAppReview` | in_app_review | Ask for a store rating without leaving the app. One API call per platform, no-op on desktop. | Tiny. |
 
 ### Tier B — framework features, not packages
@@ -122,6 +123,20 @@ Roughly half the pub.dev top list is Dart filling gaps the BCL does not have.
 | animations | the transitions and `Animate` effects in Zigote.UI |
 | cupertino_icons, font_awesome_flutter | the bundled icon fonts + asset/font tree shaking |
 | firebase_core | nothing to answer — Firebase is a backend choice, not a framework feature |
+
+## Round three — gaps the pub.dev pass missed
+
+Found by checking the code rather than the ranking (October 2026). Ordered by value.
+
+| Item | pub.dev equivalent | Kind | Note |
+|---|---|---|---|
+| `Zigote.Plugins.MediaSession` | audio_service | plugin | Lock-screen / headset / media-key controls and now-playing metadata for Audioplayer and Videoplayer: MPRIS on Linux, SMTC on Windows, `MPNowPlayingInfoCenter` + `MPRemoteCommandCenter` on Apple, `MediaSession` + a foreground service on Android (without which background audio dies). `PlatformChannel`'s own doc comment uses this as its example; nothing implements it. |
+| `Image.FromUrl` + disk cache | cached_network_image | framework | `Image` loads files, assets, bytes and resources only. Fetch through Zigote.Http, cache next to its response cache. |
+| `Zigote.Plugins.AudioRecorder` | record | plugin | Microphone capture — miniaudio, already in the engine, supports capture everywhere; the work is a capture FFI, permissions and an encoder. Prerequisite for speech-to-text. |
+| `Zigote.Plugins.Hotkeys` / `LaunchAtLogin` / `Updater` | hotkey_manager, launch_at_startup, auto_updater | plugins | The desktop trio a Tray app wants next. Hotkeys and launch-at-login are small; the updater (Sparkle / WinSparkle / AppImage) is not. |
+| QR generation | qr_flutter | framework | Pure managed encoder + a painter; the other half of BarcodeScanner. |
+| Markdown widget | flutter_markdown | framework | Over RichText / SelectableText — chat, docs and release-notes views. |
+| System accent colour | dynamic_color | framework | `NSColor.controlAccentColor`, GNOME `accent-color`, Windows `UISettings`, Material You — feed it into AdwTheme instead of a hard-coded accent. |
 
 ## Not plugins — framework features
 

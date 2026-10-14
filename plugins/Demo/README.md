@@ -11,7 +11,7 @@ dotnet run --project plugins/Demo/PluginsDemo
 | Page | Plugins | What to try |
 |---|---|---|
 | Device | DeviceInfo, PathProvider | read-only facts, no channels involved |
-| Battery | Battery | unplug the charger and hit Refresh — the plugin is a snapshot, not a stream |
+| Battery | Battery, Wakelock | unplug the charger and hit Refresh — the plugin is a snapshot, not a stream; flip the wakelock and check `pmset -g assertions` |
 | Network | Connectivity | pull the cable or toggle Wi-Fi; the change arrives on the event, not on a poll |
 | Secrets | SecureStorage | write, read back, delete against the real keyring (`secret-tool` on Linux) |
 | Share | Share | desktop answers `Unavailable` and leaves the payload on the clipboard — paste it |
