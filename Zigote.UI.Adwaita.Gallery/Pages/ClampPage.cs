@@ -58,7 +58,7 @@ public sealed class ClampPage : ComposedWidget
                                         style: AdwTypography.Body,
                                         color: theme.OnBackground
                                     ),
-                                    new AdwButton("A button inside the clamp") { Pill = true },
+                                    new AdwButton(label: "A button inside the clamp", onPressed: static () => { }) { Pill = true },
                                 },
                             },
                             maximumSize: _max.Value

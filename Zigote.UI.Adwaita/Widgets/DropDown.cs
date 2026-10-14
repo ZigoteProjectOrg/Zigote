@@ -8,7 +8,7 @@ namespace Zigote.UI.Adwaita;
 /// <summary>
 ///     AdwDropDown — the GNOME drop-down: a Regular-fill button showing the selected item and a
 ///     drop arrow, opening a floating popover list (popover surface, radius 12, Z2 lift) with a
-///     check on the selected row (the shared <see cref="AdwPopover" />).
+///     check on the selected row (the shared <see cref="AdwListPopover" />).
 /// </summary>
 public sealed class AdwDropDown : Widget
 {
@@ -209,7 +209,7 @@ public sealed class AdwDropDown : Widget
         var app = App.Active;
         if (!Enabled || app is null || Items.Count == 0) return;
 
-        new AdwPopover(
+        new AdwListPopover(
             app: app,
             items: Items,
             anchor: Bounds,

@@ -214,6 +214,11 @@ public class AdwButton : ComposedWidget
             OnPressed = b.OnPressed;
             Style = b.Style;
             Enabled = b.Enabled;
+            Pill = b.Pill;
+            Circular = b.Circular;
+            Compact = b.Compact;
+            IconShadow = b.IconShadow;
+            Content = b.Content;
         }
     }
 

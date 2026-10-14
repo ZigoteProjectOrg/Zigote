@@ -141,6 +141,12 @@ internal static class GalleryRegistry
                     Build: () => new ValueEditorsPage()
                 ),
                 new GalleryEntry(
+                    Title: "Date & Time",
+                    Subtitle: "Calendar, time picker, and the buttons and rows that open them",
+                    IconName: MaterialIcons.CalendarMonth,
+                    Build: () => new DateTimePage()
+                ),
+                new GalleryEntry(
                     Title: "Chips & Badges",
                     Subtitle: "Filter pills and corner counts",
                     IconName: MaterialIcons.Label,
@@ -180,6 +186,12 @@ internal static class GalleryRegistry
                     Subtitle: "Two thousand rows, recycled while you scroll",
                     IconName: MaterialIcons.FormatListNumbered,
                     Build: () => new LargeListsPage()
+                ),
+                new GalleryEntry(
+                    Title: "Data Table",
+                    Subtitle: "Sortable, resizable columns over virtualized rows",
+                    IconName: MaterialIcons.TableChart,
+                    Build: () => new DataTablePage()
                 ),
                 new GalleryEntry(
                     Title: "Trees & Reordering",

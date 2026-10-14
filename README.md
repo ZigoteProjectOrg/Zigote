@@ -79,7 +79,7 @@ Or run something that already exists:
 
 ```sh
 dotnet run --project Zigote.UI.HelloWorld        # smallest complete app — start here
-dotnet run --project Zigote.UI.Adwaita.Gallery   # the GNOME design system, 47 pages
+dotnet run --project Zigote.UI.Adwaita.Gallery   # the GNOME design system, 49 pages
 dotnet run --project Zigote.UI.FSharp.Gallery    # the same framework from F#
 ```
 
@@ -226,7 +226,7 @@ built from the kernel's primitives, sharing its theming, focus, semantics and ho
 
 | | |
 | --- | --- |
-| **[`Zigote.UI.Adwaita`](Zigote.UI.Adwaita/README.md)** | The GNOME **Adwaita** design language, tracking libadwaita 1.10 (GNOME 51): 100 `Adw*` types, both appearances, the nine accents, boxed-list rows, adaptive navigation, and client-side decorations the app draws itself — down to traffic lights that reveal their glyphs on hover, as macOS does. Not a GTK binding — nothing links against GTK, GLib or libadwaita, so an Adwaita app runs unchanged on macOS and Windows. |
+| **[`Zigote.UI.Adwaita`](Zigote.UI.Adwaita/README.md)** | The GNOME **Adwaita** design language, tracking libadwaita 1.10 (GNOME 51): 147 `Adw*` types, both appearances, the nine accents, boxed-list rows, adaptive navigation, and client-side decorations the app draws itself — down to traffic lights that reveal their glyphs on hover, as macOS does. Not a GTK binding — nothing links against GTK, GLib or libadwaita, so an Adwaita app runs unchanged on macOS and Windows. |
 
 <table>
 <tr>
@@ -239,7 +239,7 @@ built from the kernel's primitives, sharing its theming, focus, semantics and ho
 </tr>
 </table>
 
-The Adwaita gallery is the spec — **47 live pages**, plus a headless self-test that constructs every
+The Adwaita gallery is the spec — **49 live pages**, plus a headless self-test that constructs every
 one of them:
 
 ```sh
@@ -308,7 +308,7 @@ tests.
 
 - **[`Zigote.UI.HelloWorld`](Zigote.UI.HelloWorld/README.md)** — hello world and a counter in one
   annotated file. The place to start.
-- **[`Zigote.UI.Adwaita.Gallery`](Zigote.UI.Adwaita.Gallery/README.md)** — 47 pages of the GNOME
+- **[`Zigote.UI.Adwaita.Gallery`](Zigote.UI.Adwaita.Gallery/README.md)** — 49 pages of the GNOME
   design system, an adaptive shell, multi-window, and a headless `--self-test`.
 - **`Zigote.UI.FSharp.Gallery`** — the same kernel from F#.
 - **`examples/PorscheDemo`** — a full 3D driving demo. It carries large binary assets, so it is

@@ -101,7 +101,7 @@ public sealed class AdwColorGradient
 ///     <see cref="PaintList.AddImage" />. Draggable triangle handles below the ramp move each stop's
 ///     position; double-click / right-click on the ramp inserts a stop (colored by sampling the ramp
 ///     there); <c>Delete</c>/<c>Backspace</c> removes the selected stop (a minimum of two are kept);
-///     double-clicking a handle opens a <see cref="Popover" /> hosting a <c>AdwColorPicker</c> bound live
+///     double-clicking a handle opens an <see cref="AdwPopover" /> hosting a <c>AdwColorPicker</c> bound live
 ///     to that stop's color. <see cref="OnChanged" /> fires after every edit.
 /// </summary>
 public sealed class AdwGradientEditor : Widget
@@ -124,7 +124,7 @@ public sealed class AdwGradientEditor : Widget
 
     private float _measureH;
     private float _measureW;
-    private Popover? _picker;
+    private AdwPopover? _picker;
     private byte[]? _rampPixels;
 
     // Cached geometry from Layout (screen space).
@@ -558,7 +558,7 @@ public sealed class AdwGradientEditor : Widget
         var stops = Gradient.Stops;
         if (stopIndex < 0 || stopIndex >= stops.Count) return;
 
-        _picker?.Dismiss();
+        _picker?.Close();
 
         // Anchor the popover at the handle, in screen space.
         float cx = StopCenterX(stops[stopIndex].Position);
@@ -591,7 +591,7 @@ public sealed class AdwGradientEditor : Widget
             }
         );
 
-        _picker = new Popover(child: picker, anchor: anchor) { PreferredSide = OverlaySide.Below };
+        _picker = new AdwPopover(child: new SizedBox(width: 240f, child: picker), anchor: anchor, app: Owner);
         _picker.Show();
     }
 

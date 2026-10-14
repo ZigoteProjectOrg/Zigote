@@ -51,17 +51,17 @@ public sealed class ButtonsPage : ComposedWidget
                     "Pills for status pages and dialogs, circles for icons, compact for toolbars.",
                     child: Demo.Stage(
                         Demo.Bar(
-                            new AdwButton("Pill") { Pill = true },
-                            new AdwButton("Pill Suggested") {
+                            new AdwButton(label: "Pill", onPressed: () => host.Toast("Pill")) { Pill = true },
+                            new AdwButton(label: "Pill Suggested", onPressed: () => host.Toast("Pill Suggested")) {
                                 Pill = true,
                                 Style = AdwButtonStyle.Suggested,
                             },
-                            new AdwButton("Compact") { Compact = true },
-                            new AdwButton {
+                            new AdwButton(label: "Compact", onPressed: () => host.Toast("Compact")) { Compact = true },
+                            new AdwButton(label: "Add", onPressed: () => host.Toast("Add")) {
                                 IconName = MaterialIcons.Add,
                                 Circular = true,
                             },
-                            new AdwButton {
+                            new AdwButton(label: "Delete", onPressed: () => host.Toast("Delete")) {
                                 IconName = MaterialIcons.Delete,
                                 Circular = true,
                                 Style = AdwButtonStyle.Destructive,
@@ -75,13 +75,13 @@ public sealed class ButtonsPage : ComposedWidget
                     "An icon and a label in one button — AdwButtonContent, as GNOME packs it.",
                     child: Demo.Stage(
                         Demo.Bar(
-                            new AdwButton {
+                            new AdwButton(onPressed: () => host.Toast("Open")) {
                                 Content = new AdwButtonContent(
                                     iconName: MaterialIcons.FolderOpen,
                                     label: "Open"
                                 ),
                             },
-                            new AdwButton {
+                            new AdwButton(onPressed: () => host.Toast("Send")) {
                                 Content = new AdwButtonContent(
                                     iconName: MaterialIcons.Send,
                                     label: "Send"

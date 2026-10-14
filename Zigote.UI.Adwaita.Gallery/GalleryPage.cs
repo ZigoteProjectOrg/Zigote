@@ -163,7 +163,9 @@ internal static class Demo
     /// <summary>Centered controls that wrap onto more rows when the page is narrow.</summary>
     public static Widget Bar(params Widget[] children)
     {
-        var wrap = new Wrap(spacing: Spacing.Sm, runSpacing: Spacing.Sm);
+        var wrap = new Wrap(spacing: Spacing.Sm, runSpacing: Spacing.Sm) {
+            CrossAlignment = CrossAxisAlignment.Center,
+        };
         foreach (var child in children) wrap.Children.Add(child);
         return new Align(alignment: Alignment.Center, child: wrap) { HeightFactor = 1f };
     }

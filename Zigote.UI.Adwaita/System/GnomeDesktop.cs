@@ -1,3 +1,4 @@
+using Zigote.Core.Animation;
 using System.Diagnostics;
 using System.Globalization;
 
@@ -43,6 +44,13 @@ public static class GnomeDesktop
 
     /// <summary>color-scheme prefers dark — fallback signal for when SDL reports Unknown.</summary>
     public static bool PrefersDark { get; private set; }
+
+    /// <summary>
+    ///     <c>enable-animations</c> — the Accessibility "Reduce Animation" switch, which libadwaita
+    ///     honours by snapping every transition. Null until read (and off GNOME), so an app that set
+    ///     <see cref="AnimationController.ReduceMotion" /> itself is left alone.
+    /// </summary>
+    public static bool? EnableAnimations { get; private set; }
 
     /// <summary>Buttons on the left side of the titlebar, outermost first. Stock GNOME: none.</summary>
     public static IReadOnlyList<AdwWindowButton> LeftButtons { get; private set; } = [];
@@ -123,6 +131,9 @@ public static class GnomeDesktop
         string? scheme = Gsettings(schema: "org.gnome.desktop.interface", key: "color-scheme");
         if (scheme is not null) PrefersDark = scheme.Contains("prefer-dark");
 
+        string? animations = Gsettings(schema: "org.gnome.desktop.interface", key: "enable-animations");
+        if (animations is not null) EnableAnimations = !animations.Contains("false");
+
         string? layout = Gsettings(
             schema: "org.gnome.desktop.wm.preferences",
             key: "button-layout"
@@ -146,6 +157,9 @@ public static class GnomeDesktop
 
         string? accent = Portal(ns: "org.freedesktop.appearance", key: "accent-color");
         if (accent is not null && ParseAccentRgb(accent) is { } hue) Accent = hue;
+
+        string? animations = Portal(ns: "org.gnome.desktop.interface", key: "enable-animations");
+        if (animations is not null) EnableAnimations = !animations.Contains("false");
 
         string? layout = Portal(ns: "org.gnome.desktop.wm.preferences", key: "button-layout");
         if (layout is not null) (LeftButtons, RightButtons) = ParseButtonLayout(layout);

@@ -126,12 +126,12 @@ public sealed class ColorAndCompletionPage : ComposedWidget
                                     height: AdwMetrics.ButtonHeight,
                                     child: new Row(spacing: Spacing.Md) {
                                         Children = {
-                                            new AdwButton("Cut"),
+                                            new AdwButton(label: "Cut", onPressed: static () => { }),
                                             new AdwSeparator(vertical: true, margin: 4f) {
                                                 Length = AdwMetrics.ButtonHeight,
                                             },
-                                            new AdwButton("Copy"),
-                                            new AdwButton("Paste"),
+                                            new AdwButton(label: "Copy", onPressed: static () => { }),
+                                            new AdwButton(label: "Paste", onPressed: static () => { }),
                                         },
                                     }
                                 ),

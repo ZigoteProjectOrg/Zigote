@@ -94,6 +94,7 @@ public sealed class AdwSwitch : Widget
             Value = s.Value;
             OnChanged = s.OnChanged;
             Enabled = s.Enabled;
+            SemanticsLabel = s.SemanticsLabel;
         }
     }
 

@@ -1,5 +1,6 @@
 using Xunit;
 using Zigote.Core;
+using Zigote.UI.Widgets;
 using Zigote.UI.Widgets.Layout;
 
 namespace Zigote.Tests;
@@ -44,5 +45,20 @@ public class WrapLayoutTests
         wrap.Layout(Offset.Zero); // freshly built subtree laid out before its first measure
 
         Assert.True(wrap.NeedsLayout);
+    }
+
+    [Fact]
+    public void CenterAlignment_CentresShortChildrenWithinTheirOwnRun()
+    {
+        var wrap = new Wrap(spacing: 0, runSpacing: 0) { CrossAlignment = CrossAxisAlignment.Center };
+        wrap.Children.Add(new SizedBox(width: 50f, height: 40f));
+        wrap.Children.Add(new SizedBox(width: 50f, height: 20f)); // run 0: centred against 40
+        wrap.Children.Add(new SizedBox(width: 50f, height: 10f)); // run 1: alone, so no shift
+        wrap.Measure(new Constraints(maxWidth: 100f, maxHeight: 600f));
+        wrap.Layout(Offset.Zero);
+
+        Assert.Equal(expected: 0f, actual: wrap.Children[0].Bounds.Y, precision: 3);
+        Assert.Equal(expected: 10f, actual: wrap.Children[1].Bounds.Y, precision: 3);
+        Assert.Equal(expected: 40f, actual: wrap.Children[2].Bounds.Y, precision: 3);
     }
 }

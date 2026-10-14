@@ -8,7 +8,8 @@ namespace Zigote.UI.Adwaita;
 /// <summary>
 ///     The overlay skeleton every Adwaita popover shares: an <see cref="AdwColors.PopoverBg" />
 ///     card at radius 15 (hairline border, Z2 lift) anchored below/above its trigger, entering
-///     with a ~150ms ease-out fade + 6px rise and leaving by reversing the same motion. It
+///     on an <see cref="AdwMotion.Overlay" /> fade + 6px slide out of the trigger and leaving by
+///     reversing the same motion. It
 ///     captures all input while shown — click-outside or Esc dismisses — and takes focus, the way
 ///     a GTK popover grabs it, so Up/Down/Enter reach the list and Tab cannot walk into the page
 ///     behind it. The capture is released during the exit fade so no row can be picked twice.
@@ -105,10 +106,14 @@ internal abstract class AdwPopoverBase : Widget, IDismissableOverlay
         _enter.Reverse();
     }
 
+    /// <summary>Called once the exit motion has finished and the overlay is off the stack.</summary>
+    protected virtual void OnDismissed() { }
+
     private void FinishDismiss()
     {
         _closing = false;
         _app.PopOverlay(this);
+        OnDismissed();
     }
 
     public override void Layout(Offset origin)
@@ -165,11 +170,14 @@ internal abstract class AdwPopoverBase : Widget, IDismissableOverlay
     {
         float t = _enter.Value;
         bool fade = t < 0.999f;
-        float rise = (1f - t) * 6f;
-        if (fade) paint.PushAlpha(t);
-        if (rise > 0.01f) paint.PushTranslate(dx: 0f, dy: -rise);
-
         var mr = PopupRect();
+        // Grow out of the trigger: start 6px toward it and slide away — down under the anchor, up
+        // when the card flipped above it near the bottom of the window.
+        float rise = (1f - t) * 6f * (mr.Y >= _anchor.Y ? -1f : 1f);
+        bool slide = MathF.Abs(rise) > 0.01f;
+        if (fade) paint.PushAlpha(t);
+        if (slide) paint.PushTranslate(dx: 0f, dy: rise);
+
         // `popover > contents { border-radius: $popover_radius }` — 15px, six more than a control
         // and three more than a card, which is what tells a floating surface from an inline one.
         paint.AddElevation(
@@ -188,7 +196,7 @@ internal abstract class AdwPopoverBase : Widget, IDismissableOverlay
         if (_arrow) PaintArrow(paint: paint, mr: mr, color: bg, grow: 0f, sink: 1.5f);
         PaintRows(paint: paint, mr: mr);
 
-        if (rise > 0.01f) paint.PopTranslate();
+        if (slide) paint.PopTranslate();
         if (fade) paint.PopAlpha();
     }
 
@@ -258,7 +266,7 @@ internal abstract class AdwPopoverBase : Widget, IDismissableOverlay
 ///     check on the selected row. Scrolls when tall (wheel + touch, commit-on-lift on compact) and
 ///     navigates with Up/Down/Enter, opening with the current choice already highlighted.
 /// </summary>
-internal sealed class AdwPopover : AdwPopoverBase
+internal sealed class AdwListPopover : AdwPopoverBase
 {
     private const float CheckW = 28f; // end gutter reserved for the selected ✓
     private const float TextPad = 10f; // row text inset
@@ -275,7 +283,7 @@ internal sealed class AdwPopover : AdwPopoverBase
     private float _scrollY;
     private bool _scrolledToSelection;
 
-    public AdwPopover(
+    public AdwListPopover(
         App app,
         IReadOnlyList<string> items,
         Rect anchor,
@@ -479,4 +487,114 @@ internal sealed class AdwPopover : AdwPopoverBase
         _scrollY = Math.Clamp(value: _scrollY - dy, min: 0f, max: _maxScroll);
         MarkNeedsPaint();
     }
+}
+
+/// <summary>The overlay behind <see cref="AdwPopover" />: the popover base hosting one widget.</summary>
+internal sealed class AdwContentPopover : AdwPopoverBase
+{
+    private readonly Widget _child;
+    private Size _childSize;
+
+    /// <param name="child">The content, padded by <see cref="AdwMetrics.PopoverPadding" />.</param>
+    /// <param name="anchor">The trigger's bounds — the card centres under it, arrow pointing up.</param>
+    /// <param name="app">Window to open in; null takes the active one.</param>
+    public AdwContentPopover(Widget child, Rect anchor, App? app = null)
+        : base(
+            app: app ?? App.Active ??
+                 throw new InvalidOperationException("No active App to open the popover in."),
+            anchor: anchor,
+            arrow: true
+        ) => _child = child;
+
+    public Action? OnClosed { get; set; }
+
+    public void Close() => Dismiss();
+
+    protected override void OnDismissed() => OnClosed?.Invoke();
+
+    public override Size Measure(Constraints c)
+    {
+        Theme = ThemeProvider.Of(BuildContext.Current);
+        Screen = new Size(width: c.MaxWidth, height: c.MaxHeight);
+        const float pad = AdwMetrics.PopoverPadding;
+        _childSize = _child.Measure(
+            new Constraints(
+                minWidth: 0f,
+                maxWidth: MathF.Max(x: 0f, y: Screen.Width - Spacing.Lg - (pad * 2f)),
+                minHeight: 0f,
+                maxHeight: MathF.Max(x: 0f, y: Screen.Height - Spacing.Lg - (pad * 2f))
+            )
+        );
+        PopupW = _childSize.Width + (pad * 2f);
+        PopupH = _childSize.Height + (pad * 2f);
+        return Screen;
+    }
+
+    public override void Layout(Offset origin)
+    {
+        base.Layout(origin);
+        var mr = PopupRect();
+        _child.Layout(new Offset(x: mr.X + AdwMetrics.PopoverPadding, y: mr.Y + AdwMetrics.PopoverPadding));
+    }
+
+    protected override void PaintRows(PaintList paint, Rect mr) => _child.Paint(paint);
+
+    protected override int RowAt(Rect mr, float y) => -1;
+
+    protected override void Activate(int idx) { }
+
+    // The base claims the whole window (click-outside dismiss); inside the card the child takes it.
+    public override Widget? HitTest(Offset point)
+    {
+        if (base.HitTest(point) is null) return null;
+        return PopupRect().Contains(px: point.X, py: point.Y) ? _child.HitTest(point) ?? this : this;
+    }
+
+    public override void OnPointerDown(Offset point)
+    {
+        if (!PopupRect().Contains(px: point.X, py: point.Y)) Dismiss();
+    }
+
+    // Not focusable itself: the app's overlay auto-focus then lands on the first focusable in the
+    // content (the calendar, the time picker), which shows its own focus ring and takes the keys
+    // directly. Tab stays inside — an overlay with a focusable traps it — and Escape still closes.
+    public override bool Focusable => false;
+
+    public override IEnumerable<Widget> GetChildren() => ChildOrEmpty(_child);
+}
+
+/// <summary>
+///     GtkPopover with a child: the Adwaita popover card — radius 15, hairline border, shadow, the
+///     pointer arrow, the <see cref="AdwMotion.Overlay" /> entrance — around any widget. Clicks
+///     outside close it, Escape closes it, and the first focusable in the child takes focus (the calendar in
+///     <see cref="AdwDateButton" />, the spinners in <see cref="AdwTimeButton" />).
+/// </summary>
+public sealed class AdwPopover
+{
+    private readonly AdwContentPopover _overlay;
+
+    /// <param name="child">The content, padded by <see cref="AdwMetrics.PopoverPadding" />.</param>
+    /// <param name="anchor">The trigger's bounds — the card centres on it with its arrow at it.</param>
+    /// <param name="app">Window to open in; null takes the active one.</param>
+    public AdwPopover(Widget child, Rect anchor, App? app = null) =>
+        _overlay = new AdwContentPopover(child: child, anchor: anchor, app: app);
+
+    /// <summary>Invoked once the popover has left the screen, whatever closed it.</summary>
+    public Action? OnClosed
+    {
+        get => _overlay.OnClosed;
+        set => _overlay.OnClosed = value;
+    }
+
+    /// <inheritdoc cref="AdwPopoverBase.Motion" />
+    public MotionSpec Motion
+    {
+        get => _overlay.Motion;
+        set => _overlay.Motion = value;
+    }
+
+    public void Show() => _overlay.Show();
+
+    /// <summary>Start the exit motion; the popover leaves the overlay stack when it ends.</summary>
+    public void Close() => _overlay.Close();
 }

@@ -33,7 +33,7 @@ public class AdwDialog : Widget, IDismissableOverlay
         _card = new DecoratedBox {
             Radius = Radius,
             Elevation = Elevation.Z3,
-            Child = _clip,
+            Child = new AdwDialogSurface(_clip),
         };
         // Adwaita dialog presentation: ~150ms ease-out; scrim fades, sheet fades + rises 8px.
         // Reverse plays the same motion out; the overlay pops when the reverse completes.

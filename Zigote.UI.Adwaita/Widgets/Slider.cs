@@ -150,6 +150,8 @@ public sealed class AdwSlider : Widget
             OnChanged = s.OnChanged;
             Enabled = s.Enabled;
             Vertical = s.Vertical;
+            _glide.Spec = s._glide.Spec; // not Motion: its getter resolves the AdwMotion default
+            SemanticsLabel = s.SemanticsLabel;
         }
     }
 

@@ -9,6 +9,7 @@ namespace Zigote.UI.Widgets.Layout;
 /// </summary>
 public class Wrap : MultiChildWidget
 {
+    private float[] _crosses = [];
     private float[] _mains = [];
     private Offset[] _offsets = [];
     private Size _size;
@@ -46,6 +47,13 @@ public class Wrap : MultiChildWidget
     /// <summary>Gap between runs (cross-axis).</summary>
     public float RunSpacing { get; set; } = UI.Theme.Spacing.Sm;
 
+    /// <summary>
+    ///     Where a child shorter than its run sits across it. <c>Start</c> (the default) keeps the
+    ///     old top/leading edge; <c>Center</c> lines up a compact button with the pills beside it.
+    ///     <c>Stretch</c> is treated as <c>Start</c> — children are not re-measured.
+    /// </summary>
+    public CrossAxisAlignment CrossAlignment { get; set; } = CrossAxisAlignment.Start;
+
     public override Size Measure(Constraints c)
     {
         bool horizontal = Direction == Axis.Horizontal;
@@ -60,8 +68,10 @@ public class Wrap : MultiChildWidget
         // 0-alloc, matching the Column/Toolbar pattern). Only the first Children.Count slots are used.
         if (_offsets.Length < Children.Count) _offsets = new Offset[Children.Count];
         if (rtl && _mains.Length < Children.Count) _mains = new float[Children.Count];
+        if (_crosses.Length < Children.Count) _crosses = new float[Children.Count];
 
         float mainCursor = 0f, crossCursor = 0f, runCross = 0f, lineMainExtent = 0f;
+        int runStart = 0;
         var childC = new Constraints(
             minWidth: 0,
             maxWidth: horizontal ? c.MaxWidth : float.PositiveInfinity,
@@ -78,6 +88,8 @@ public class Wrap : MultiChildWidget
             // Wrap to a new run when this child would overflow the current one.
             if (mainCursor > 0f && mainCursor + childMain > maxMain)
             {
+                AlignRun(start: runStart, end: i, runCross: runCross, horizontal: horizontal);
+                runStart = i;
                 crossCursor += runCross + RunSpacing;
                 mainCursor = 0f;
                 runCross = 0f;
@@ -87,12 +99,14 @@ public class Wrap : MultiChildWidget
                 ? new Offset(x: mainCursor, y: crossCursor)
                 : new Offset(x: crossCursor, y: mainCursor);
             if (rtl) _mains[i] = childMain;
+            _crosses[i] = childCross;
 
             mainCursor += childMain + Spacing;
             runCross = MathF.Max(x: runCross, y: childCross);
             lineMainExtent = MathF.Max(x: lineMainExtent, y: mainCursor - Spacing);
         }
 
+        AlignRun(start: runStart, end: Children.Count, runCross: runCross, horizontal: horizontal);
         float totalCross = crossCursor + runCross;
         _size = c.Constrain(
             horizontal
@@ -114,6 +128,23 @@ public class Wrap : MultiChildWidget
         }
 
         return _size;
+    }
+
+    private void AlignRun(int start, int end, float runCross, bool horizontal)
+    {
+        float factor = CrossAlignment switch {
+            CrossAxisAlignment.Center => 0.5f,
+            CrossAxisAlignment.End => 1f,
+            _ => 0f,
+        };
+        if (factor == 0f) return;
+        for (int i = start; i < end; i++)
+        {
+            float shift = (runCross - _crosses[i]) * factor;
+            _offsets[i] = horizontal
+                ? new Offset(x: _offsets[i].X, y: _offsets[i].Y + shift)
+                : new Offset(x: _offsets[i].X + shift, y: _offsets[i].Y);
+        }
     }
 
     public override void Layout(Offset origin)

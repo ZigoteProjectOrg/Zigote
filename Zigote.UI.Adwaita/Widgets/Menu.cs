@@ -152,7 +152,7 @@ internal sealed class AdwMenuPopover : AdwPopoverBase
     private float[] _entryY = [];
 
     public AdwMenuPopover(App app, List<List<AdwMenuItem>> sections, Rect anchor, float minWidth)
-        : base(app: app, anchor: anchor)
+        : base(app: app, anchor: anchor, arrow: true) // GtkMenuButton popovers point at their button
     {
         _minWidth = minWidth;
         foreach (var section in sections)
@@ -210,7 +210,7 @@ internal sealed class AdwMenuPopover : AdwPopoverBase
 
         PopupW = MathF.Max(x: _minWidth, y: widest + (TextPad * 2f));
         PopupW = MathF.Min(x: PopupW, y: MathF.Max(x: 120f, y: Screen.Width - Spacing.Lg));
-        // ponytail: no scrolling — height clamps to the screen; add AdwPopover's scroll
+        // ponytail: no scrolling — height clamps to the screen; add AdwListPopover's scroll
         // machinery if a menu ever outgrows the window.
         PopupH = MathF.Min(x: y + Pad, y: Screen.Height - 16f);
 

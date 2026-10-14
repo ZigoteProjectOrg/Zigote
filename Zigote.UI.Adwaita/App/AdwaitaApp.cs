@@ -1,3 +1,4 @@
+using Zigote.Core.Animation;
 using Zigote.Core.Engine;
 using Zigote.Core.Events;
 using Zigote.UI.Host;
@@ -206,6 +207,7 @@ public class AdwaitaApp : ZigoteApp
         SystemPrefersDark = sdl == SystemTheme.Dark ||
                             (sdl == SystemTheme.Unknown && GnomeDesktop.PrefersDark);
         SystemAccent = GnomeDesktop.Accent;
+        if (GnomeDesktop.EnableAnimations is { } animate) AnimationController.ReduceMotion = !animate;
         if (!_explicitTheme) Theme = AdwTheme.Create(accent: SystemAccent, dark: SystemPrefersDark);
         SystemStyleChanged?.Invoke();
     }

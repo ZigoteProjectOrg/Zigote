@@ -64,15 +64,30 @@ public partial class App
         overlay.Detach();
         RequestLayout();
 
-        // Restore the focus that was active before this overlay auto-focused (if it's still in the tree).
+        // Restore the focus that was active before this overlay auto-focused (if it's still in the tree)
+        // — but only if the focus is still this overlay's to give back. An overlay that finishes
+        // closing after a newer one opened (a popover fading out while the next is already up) must
+        // not pull the focus out of the newer one.
         bool restored = false;
+        bool focusOwned = focusedInside || FocusedWidget is null || FocusedWidget.Owner is null;
         for (int i = _focusRestore.Count - 1; i >= 0; i--)
         {
             if (ReferenceEquals(objA: _focusRestore[i].Overlay, objB: overlay))
             {
                 var prev = _focusRestore[i].PrevFocus;
                 _focusRestore.RemoveAt(i);
-                RequestFocus(prev is { Owner: not null } ? prev : null);
+                if (focusOwned) RequestFocus(prev is { Owner: not null } ? prev : null);
+                else
+                {
+                    // The newer overlay remembered a widget inside this one as the focus to go back
+                    // to; that widget just left the tree, so send it where this overlay would have.
+                    for (int j = 0; j < _focusRestore.Count; j++)
+                    {
+                        if (_focusRestore[j].PrevFocus is { Owner: null })
+                            _focusRestore[j] = (_focusRestore[j].Overlay, prev);
+                    }
+                }
+
                 restored = true;
                 break;
             }

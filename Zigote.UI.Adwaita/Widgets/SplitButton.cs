@@ -111,7 +111,8 @@ public sealed class AdwSplitButton : ComposedWidget
             style: Style,
             enabled: () => Enabled
         );
-        arrow.OnPressed = () => OpenMenu(group.Bounds);
+        // GtkMenuButton inside AdwSplitButton: the popover points at the arrow, sized like the group.
+        arrow.OnPressed = () => OpenMenu(anchor: arrow.Bounds, minWidth: group.Bounds.Width);
 
         group.Child = new Row(mainAxisSize: MainAxisSize.Min) {
             Children = {
@@ -139,16 +140,17 @@ public sealed class AdwSplitButton : ComposedWidget
             );
     }
 
-    private void OpenMenu(Rect anchor)
+    private void OpenMenu(Rect anchor, float minWidth)
     {
         var app = AppInstance.Active;
         if (app is null || MenuItems.Count == 0) return;
-        new AdwPopover(
+        new AdwListPopover(
             app: app,
             items: MenuItems,
             anchor: anchor,
             onPick: i => OnMenuSelected?.Invoke(i),
-            minWidth: anchor.Width
+            minWidth: minWidth,
+            arrow: true
         ).Show();
     }
 }

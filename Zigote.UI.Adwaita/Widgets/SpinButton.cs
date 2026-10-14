@@ -193,6 +193,8 @@ public sealed class AdwSpinButton : Widget, ITextInputClient
             Value = s.Value;
             OnChanged = s.OnChanged;
             Enabled = s.Enabled;
+            Compact = s.Compact;
+            SemanticsLabel = s.SemanticsLabel;
         }
     }
 

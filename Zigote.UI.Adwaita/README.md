@@ -1,6 +1,6 @@
 # Zigote.UI.Adwaita
 
-The **GNOME Adwaita** design system, implemented on Zigote's widget kernel: 100 `Adw*` types, both appearances, the nine
+The **GNOME Adwaita** design system, implemented on Zigote's widget kernel: 147 `Adw*` types, both appearances, the nine
 system accents, the boxed-list row vocabulary, adaptive navigation, and client-side decorations the app draws itself.
 Tokens and metrics track **libadwaita 1.10 (GNOME 51)** — every colour, radius and state fill here has a line of
 `src/stylesheet/` behind it.
@@ -15,7 +15,7 @@ new AdwaitaApp(new Shell(), title: "My App").Run();
 > widgets are Zigote widgets, laid out and painted by Zigote's own renderer. An Adwaita app therefore
 > builds and runs unchanged on macOS and Windows; the screenshot above is macOS.
 
-**See it all:** from the repo root, `dotnet run --project Zigote.UI.Adwaita.Gallery` — 47 pages, one per widget family
+**See it all:** from the repo root, `dotnet run --project Zigote.UI.Adwaita.Gallery` — 49 pages, one per widget family
 ([gallery README](../Zigote.UI.Adwaita.Gallery/README.md)).
 
 ---
@@ -26,6 +26,7 @@ new AdwaitaApp(new Shell(), title: "My App").Run();
 - [Theming](#theming)
 - [Chrome: header bars and window controls](#chrome-header-bars-and-window-controls)
 - [Boxed lists and preferences](#boxed-lists-and-preferences)
+- [Dates, times and data tables](#dates-times-and-data-tables)
 - [Navigation](#navigation)
 - [Adaptive layout](#adaptive-layout)
 - [Feedback: toasts, banners, dialogs](#feedback-toasts-banners-dialogs)
@@ -171,6 +172,32 @@ its own view switcher, exactly as GNOME presents it.
 
 Every row is activatable, focusable and semantics-described; a disabled row dims as a whole and stops activating, as
 Adwaita does.
+
+## Dates, times and data tables
+
+```csharp
+new AdwCalendar(value: today, onChanged: d => …) { MinDate = today, IsMarked = HasEvent };
+new AdwTimePicker(new TimeOnly(9, 30)) { MinuteStep = 5 };         // 24h or AM/PM from the locale
+new AdwDateButton(onChanged: d => …);                               // the value in a button, a calendar on click
+new AdwDateRow("Starts"); new AdwTimeRow("At") { MinuteStep = 15 }; // the same, as boxed-list rows
+
+new AdwColumnView<File>(files,
+    new AdwColumn<File>("Name", f => f.Name) { Expand = true, Icon = f => f.Glyph }.SortBy(f => f.Name),
+    new AdwColumn<File>("Size", f => f.SizeText) { Width = 90, Align = AdwColumnAlign.End }.SortBy(f => f.Bytes)
+) { SelectionMode = AdwSelectionMode.Multiple, OnActivated = Open };
+```
+
+| Widget | What it is |
+|---|---|
+| `AdwCalendar` | GtkCalendar: `‹ Month ›  ‹ Year ›` steppers over a six-week grid, weekday order and names from the culture, today in accent, an accent disc for the selection, marked days, `MinDate`/`MaxDate`. Arrows, Page Up/Down (Shift: a year), Home/End; months slide on `AdwMotion.Reveal`. |
+| `AdwTimePicker` | GNOME Clocks' vertical spinners — hours, minutes, AM/PM when the locale is 12-hour. Both wrap without carrying; digits type straight in and move on; the wheel spins it once it has focus. |
+| `AdwDateButton` / `AdwTimeButton` | The compact form (SwiftUI's compact `DatePicker`): the value in a button, the picker in a popover. |
+| `AdwDateRow` / `AdwTimeRow` | The same as boxed-list rows, laid out like `AdwComboRow`. |
+| `AdwColumnView<T>` | GtkColumnView: a sticky header over painted, clip-virtualized rows — a hundred thousand rows cost what is on screen. Click a title to sort (stable; on a worker thread past 20,000 rows), drag its edge to resize, ellipsized cells, single or multiple selection, keyboard navigation, `.data-table` density via `Compact`. |
+| `AdwPopover` | GtkPopover with any child: the popover card, arrow and motion every Adwaita popover uses; the child takes focus. |
+
+Inside a scrolling page neither picker steals the wheel: the calendar pages months on a sideways swipe, and on the wheel
+only where nothing scrolls (a popover).
 
 ## Navigation
 
@@ -415,6 +442,6 @@ extras.
 
 ## Related
 
-- [`../Zigote.UI.Adwaita.Gallery`](../Zigote.UI.Adwaita.Gallery/README.md) — the 47-page gallery.
+- [`../Zigote.UI.Adwaita.Gallery`](../Zigote.UI.Adwaita.Gallery/README.md) — the 49-page gallery.
 - [`../docs/migration/`](../docs/migration/README.md) — retained mode, and per-framework guides.
 - [`../docs/architecture.md`](../docs/architecture.md) — how the kernel underneath works.

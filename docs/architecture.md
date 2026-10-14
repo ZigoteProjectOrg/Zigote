@@ -298,7 +298,7 @@ reactive graph.
 |---|---|
 | `Zigote.Core` | `Signal`/`Computed`/`Effect`/`LinkedSignal`/`Trigger`/`Reactive`, `Threading.Background`, plus the native seam: paint & event ABI, math, animation, assets, diagnostics registries |
 | `Zigote.UI` | Widgets, layout, theming, navigation (Navigator 2.0), focus, semantics, `Watch` |
-| `Zigote.UI.Adwaita` | The GNOME Adwaita design system and the framework's control library, over the kernel — 100 `Adw*` types, live system theming, client-side decorations ([README](../Zigote.UI.Adwaita/README.md)) |
+| `Zigote.UI.Adwaita` | The GNOME Adwaita design system and the framework's control library, over the kernel — 147 `Adw*` types, live system theming, client-side decorations ([README](../Zigote.UI.Adwaita/README.md)) |
 | `Zigote.UI.Charts`, `.Localizations`, `.BottomSheet` | Charting, i18n, draggable sheets |
 | `Zigote.UI.Functional` | Components as plain functions, via one widget: `View` ([README](../Zigote.UI.Functional/README.md)) |
 | `Zigote.UI.FSharp` | F# reactive ergonomics (`signal`/`computed`/`effect`/`watch`) + `Host.run` ([README](../Zigote.UI.FSharp/README.md)) |

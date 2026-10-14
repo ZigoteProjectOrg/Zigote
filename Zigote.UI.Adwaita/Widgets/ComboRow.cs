@@ -105,7 +105,7 @@ public sealed class AdwComboRow : ComposedWidget
             anchor = new Rect(x: left, y: Bounds.Y, width: right - left, height: Bounds.Height - 6f);
         }
 
-        new AdwPopover(
+        new AdwListPopover(
             app: app,
             items: Items,
             anchor: anchor,

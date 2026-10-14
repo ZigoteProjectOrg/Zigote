@@ -1,6 +1,6 @@
 # Zigote.UI.Adwaita.Gallery
 
-The reference app for [`Zigote.UI.Adwaita`](../Zigote.UI.Adwaita/README.md) — **47 pages**, one per widget family, every
+The reference app for [`Zigote.UI.Adwaita`](../Zigote.UI.Adwaita/README.md) — **49 pages**, one per widget family, every
 one of them live. No screenshots, no mock rows: what you see is the widget doing the thing.
 
 ```sh
@@ -40,8 +40,8 @@ All use the platform command modifier — ⌘ on macOS, Ctrl elsewhere.
 | Section        | Pages                                                                                                                   |
 |----------------|-------------------------------------------------------------------------------------------------------------------------|
 | **Navigation** | Navigation View · Split Views · Paned · Breakpoints · View Switcher · Tab View · Toolbar & Panel · Bottom Sheet · Carousel · Image Grid   |
-| **Controls**   | Buttons · Toggles · Checks & Radios · Sliders & Progress · Entries · Colour & Completion · Value Editors · Chips & Badges · Shortcuts · Menus & Popovers |
-| **Lists**      | Boxed Lists · Preferences · Large Lists (2 000 rows, recycled while you scroll) · Trees & Reordering                                         |
+| **Controls**   | Buttons · Toggles · Checks & Radios · Sliders & Progress · Entries · Colour & Completion · Value Editors · Date & Time · Chips & Badges · Shortcuts · Menus & Popovers |
+| **Lists**      | Boxed Lists · Preferences · Large Lists (2 000 rows, recycled while you scroll) · Data Table (100 000 rows) · Trees & Reordering                                         |
 | **Feedback**   | Banners · Toasts · Alert Dialogs · File Chooser · Spinner · Status Pages · Avatar                                                      |
 | **Layout**     | Clamp · Wrap Box · Masonry Grid · Adaptive                                                                                             |
 | **Style**      | Liquid Glass · Style Classes · Typography · Colors · Animations                                                                        |
