@@ -256,10 +256,10 @@ public class VideoPlayerTests
     [Fact]
     public void Clock_Grows_A_Field_Only_Past_An_Hour()
     {
-        Assert.Equal(expected: "0:00", actual: VideoControls.Clock(0));
-        Assert.Equal(expected: "0:07", actual: VideoControls.Clock(7.4));
-        Assert.Equal(expected: "2:05", actual: VideoControls.Clock(125));
-        Assert.Equal(expected: "1:00:00", actual: VideoControls.Clock(3600));
+        Assert.Equal(expected: "0:00", actual: VideoChrome.Clock(0));
+        Assert.Equal(expected: "0:07", actual: VideoChrome.Clock(7.4));
+        Assert.Equal(expected: "2:05", actual: VideoChrome.Clock(125));
+        Assert.Equal(expected: "1:00:00", actual: VideoChrome.Clock(3600));
     }
 
     /// <summary>

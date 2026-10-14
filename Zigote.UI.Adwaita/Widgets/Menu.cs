@@ -103,22 +103,26 @@ public sealed class AdwMenuButton : ComposedWidget
             Style = AdwButtonStyle.Flat,
             Circular = true,
         };
-        button.OnPressed = () => OpenMenu(button.Bounds);
+        button.OnPressed = () => Show(anchor: button.Bounds, sections: Sections, minWidth: MenuWidth);
         return button;
     }
 
-    private void OpenMenu(Rect anchor)
+    /// <summary>
+    ///     Open a menu popover pointing at <paramref name="anchor" /> — for a control that is not an
+    ///     <see cref="AdwMenuButton" /> but opens one, or whose rows depend on state at open time.
+    /// </summary>
+    public static void Show(Rect anchor, List<List<AdwMenuItem>> sections, float minWidth = 220f)
     {
         var app = App.Active;
         if (app is null) return;
         bool any = false;
-        foreach (var s in Sections) any |= s.Count > 0;
+        foreach (var s in sections) any |= s.Count > 0;
         if (!any) return;
         new AdwMenuPopover(
             app: app,
-            sections: Sections,
+            sections: sections,
             anchor: anchor,
-            minWidth: MenuWidth
+            minWidth: minWidth
         ).Show();
     }
 }

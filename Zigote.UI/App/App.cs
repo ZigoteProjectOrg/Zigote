@@ -1079,7 +1079,8 @@ public partial class App : IDisposable
     // of the pointer, so "why did my click miss" is answered by the code that routes the click.
     internal Widget? HitTestAt(Offset point) => HitTestAll(point);
     internal Widget? HoveredWidget => _hoveredWidget;
-    internal Offset PointerPosition => _mousePos;
+    /// <summary>Where the pointer last was in this window, in layout points.</summary>
+    public Offset PointerPosition => _mousePos;
     internal IReadOnlyList<Widget> Overlays => _overlays;
 
     /// <summary>

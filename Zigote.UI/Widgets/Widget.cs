@@ -300,7 +300,7 @@ public abstract class Widget : ITickerProvider
     ///     </para>
     ///     <para>
     ///         Thread rule: the body runs on whichever thread wrote the signal, so an effect fed from a
-    ///         background thread must marshal to the UI thread itself (see <c>VideoControls</c>).
+    ///         background thread must marshal to the UI thread itself (see <c>VideoChrome.OnUi</c>).
     ///     </para>
     /// </summary>
     protected Effect OwnEffect(Action body) => Own(new Effect(body));

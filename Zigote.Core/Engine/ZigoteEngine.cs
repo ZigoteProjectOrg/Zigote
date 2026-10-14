@@ -485,6 +485,27 @@ public sealed unsafe class ZigoteEngine : IDisposable
         if (!_disposed) NativeEngine.WindowChromeMinimize(windowId);
     }
 
+    /// <summary>Enter or leave desktop fullscreen on the window's current display.</summary>
+    public void WindowSetFullscreen(uint windowId, bool on)
+    {
+        if (!_disposed) NativeEngine.WindowSetFullscreen(windowId: windowId, on: on);
+    }
+
+    /// <summary>Whether the window is fullscreen now — the OS can leave fullscreen on its own.</summary>
+    public bool WindowIsFullscreen(uint windowId) => !_disposed && NativeEngine.WindowIsFullscreen(windowId);
+
+    /// <summary>Keep the window above other applications' windows (picture-in-picture).</summary>
+    public void WindowSetAlwaysOnTop(uint windowId, bool on)
+    {
+        if (!_disposed) NativeEngine.WindowSetAlwaysOnTop(windowId: windowId, on: on);
+    }
+
+    /// <summary>Lock width/height to <paramref name="aspect" /> while the user resizes; 0 unlocks.</summary>
+    public void WindowSetAspectRatio(uint windowId, float aspect)
+    {
+        if (!_disposed) NativeEngine.WindowSetAspectRatio(windowId: windowId, aspect: aspect);
+    }
+
     /// <summary>Maximize the window, or restore it when already maximized.</summary>
     public void WindowChromeToggleMaximize(uint windowId)
     {

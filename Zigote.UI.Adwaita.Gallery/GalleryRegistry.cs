@@ -88,6 +88,12 @@ internal static class GalleryRegistry
                     Build: () => new CarouselPage()
                 ),
                 new GalleryEntry(
+                    Title: "Video Player",
+                    Subtitle: "On-video controls, fullscreen and picture-in-picture",
+                    IconName: MaterialIcons.SmartDisplay,
+                    Build: () => new VideoPlayerPage()
+                ),
+                new GalleryEntry(
                     Title: "Image Grid",
                     Subtitle: "A lazy, virtualized grid that pages as it scrolls",
                     IconName: MaterialIcons.GridView,

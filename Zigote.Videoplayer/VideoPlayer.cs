@@ -47,7 +47,7 @@ namespace Zigote.Videoplayer;
 /// player.Speed.Value = 1.5;
 /// player.Play();
 /// 
-/// // one label, bound to one signal — see VideoControls for the whole transport
+/// // one label, bound to one signal — see VideoPlayerView for the whole transport
 /// var elapsed = new Text("0:00");
 /// player.Position.Observe(() =&gt; elapsed.Text = $"{player.Position.Value:mm\\:ss}");
 /// </code>

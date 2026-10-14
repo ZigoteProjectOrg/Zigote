@@ -73,5 +73,5 @@ scheduled in wall-clock seconds at the old rate), and the next `Tick` re-arms.
   `ponytail:` note in `AudioPlayer.Load`). `Zigote.Core.Threading.Background` is the upgrade when a slow disk shows up
   in a frame trace.
 - **Metadata, artwork, ICY tags.** Read them yourself and hang them on `AudioSource.Tag`.
-- **A transport-bar widget.** `Zigote.Videoplayer.VideoControls` is the worked example to copy; this module stays on
+- **A transport-bar widget.** `Zigote.Videoplayer.VideoPlayerView` is the worked example to copy; this module stays on
   `Zigote.Core` so a headless host can queue audio without pulling in the UI.

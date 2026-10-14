@@ -8,11 +8,18 @@ await player.OpenAsync("/media/clip.mkv", maxHeight: 720);
 player.Speed.Value = 1.5;
 player.Play();
 
-new Column(children: [
-    new VideoView(player, VideoFit.Contain) { AltText = "Lecture recording" },
-    new VideoControls(player),
-])
+new VideoPlayerView(player) { AltText = "Lecture recording" }
 ```
+
+`VideoPlayerView` is the whole player, laid out like a messenger's media viewer: the controls float over the
+bottom of the picture on Liquid Glass (`Glass = false` for a flat dark fill) and fade out three seconds into
+playback. Click plays/pauses, double-click is fullscreen, press-and-hold plays at 2×; on touch a tap shows the
+controls and a double-tap on either side seeks ±10 s. Keys: Space/K, ← → (5 s), J L (10 s), ↑ ↓ volume, M, 0–9,
+F fullscreen, P picture-in-picture, Esc leaves fullscreen. Hovering the scrubber previews the time under the pointer.
+
+`PictureInPicture.Open(player)` floats the same player in a borderless, always-on-top OS window locked to the
+video's aspect (drag it anywhere on the picture); where there are no secondary windows it becomes a card inside
+the app window that snaps to a corner. `VideoView` alone is still there for a bare picture.
 
 ## State is signals, one per thing
 
@@ -25,7 +32,7 @@ player.Position.Observe(() => elapsed.Text = Format(player.Position.Value));  //
 player.Muted.Value = true;                                                    // drives the mixer
 ```
 
-`VideoControls` is the worked example: built once, six subscriptions, no rebuilds. Binding a whole subtree with `Watch`
+`VideoPlayerView` is the worked example: built once, one subscription per signal, no rebuilds. Binding a whole subtree with `Watch`
 also works and is right for state that changes on user actions rather than per frame. `Duration`, `Progress`,
 `IsPlaying`, `TextureHandle` and `FrameSize` are derived reads.
 
